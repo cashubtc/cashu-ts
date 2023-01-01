@@ -6,12 +6,12 @@ Cashu Wallet JS is a JavaScript library written in Typescript.
 
 Wallet Features:
 
-[x] connect to mint (load keys)
-[x] request minting tokens
-[x] minting tokens
-[] sending tokens (get encoded token for chosen value)
-[] melting tokens
-[] ...
+- [x] connect to mint (load keys)
+- [x] request minting tokens
+- [x] minting tokens
+- [] sending tokens (get encoded token for chosen value)
+- [] melting tokens
+- [] ...
 
 ## Usage
 
