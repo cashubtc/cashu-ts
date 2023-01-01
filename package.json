@@ -1,0 +1,33 @@
+{
+  "name": "@gandlaf21/cashu-js",
+  "version": "0.0.1",
+  "description": "cashu library for communicating with a cashu mint",
+  "main": "dist/lib/es6/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gandlaf21/cashu-js"
+   },
+   "bugs": {
+    "url": "https://github.com/gandlaf21/cashu-js/issues"
+   },
+  "scripts": {
+    "compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
+    "test": "jest --coverage --maxWorkers=1"
+  },
+  "keywords": [
+    "cashu"
+  ],
+  "author": "gandlaf21",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jest": "^29.2.4",
+    "jest": "^29.3.1",
+    "ts-jest": "^29.0.3",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "@noble/secp256k1": "^1.7.0",
+    "axios": "^1.2.1",
+    "buffer": "^6.0.3"
+  }
+}
