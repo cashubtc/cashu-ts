@@ -2,7 +2,7 @@
 
 ⚠️ __Don't be reckless:__ This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
 
-Cashu Wallet JS is a JavaScript library written in Typescript.
+Cashu JS is a JavaScript library for [Cashu](https://cashu.space) wallets written in Typescript.
 
 Wallet Features:
 
@@ -15,9 +15,16 @@ Wallet Features:
 
 ## Usage
 
+### Install
+
+```shell
+npm i @gandlaf21/cashu-js
+```
+
+### Import
+
 ```javascript
-import { CashuMint } from "../../../dist/lib/es6/CashuMint";
-import { CashuWallet } from "../../../dist/lib/es6/CashuWallet";
+import { CashuMint, CashuWallet } from "@gandlaf21/cashu-js";
 
 const mint = new CashuMint("{MINT_HOST}","{/path/to/api/root/}, {MINT_PORT}")
 const keys = await mint.getKeys()
