@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Split } from "./model/Split";
 class CashuMint {
     mintUrl: String
     constructor(mintHost: String, mintApiRoot?: String, mintPort?: String,) {
@@ -16,7 +17,7 @@ class CashuMint {
         }
     }
 
-    async requestMint(amount: number){
+    async requestMint(amount: number) {
         const { data } = await axios.get(`${this.mintUrl}/mint`, {
             params: {
                 amount
@@ -36,6 +37,11 @@ class CashuMint {
 
     async getKeys() {
         const { data } = await axios.get(`${this.mintUrl}/keys`)
+        return data
+    }
+
+    async split(split: Split) {
+        const { data } = await axios.get(`${this.mintUrl}/split`)
         return data
     }
 
