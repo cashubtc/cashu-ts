@@ -1,9 +1,10 @@
 import { CashuMint } from "./CashuMint";
 import * as utils from "./utils";
-import { Point, utils as ecUtils } from "@noble/secp256k1";
+import { utils as ecUtils } from "@noble/secp256k1";
 import * as dhke from "./DHKE";
-import { encodeJsonToBase64, encodeUint8toBase64 } from "./base64";
+import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64";
 import { Proof } from "./model/Proof";
+import { BlindedMessage } from "./model/BlindedMessage";
 
 class CashuWallet {
     keys: string
@@ -13,14 +14,14 @@ class CashuWallet {
         this.mint = mint
     }
 
-    // step1 get /mint
     async requestMint(amount: number) {
         return await this.mint.requestMint(amount)
     }
 
-    async recieve(encodedToken: string): Promise<Array<Proof>> {
-
-        return
+    recieve(encodedToken: string): Array<Proof> {
+        const jsonToken: Array<Proof> = encodeBase64ToJson(encodedToken)
+        //todo remint tokens
+        return jsonToken
     }
 
     send(amount: number, proofs: Array<Proof>): string {
@@ -42,13 +43,12 @@ class CashuWallet {
         return this.getEncodedProofs(proofsToSend)
     }
 
-    getEncodedProofs(proofs: Array<any>): string {
+    getEncodedProofs(proofs: Array<Proof>): string {
         return encodeJsonToBase64(proofs)
     }
 
-    //step2 post /mint
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
-        const payloads = { blinded_messages: [] }
+        const payloads: {blinded_messages: Array<{amount: number, B_: string}>} = { blinded_messages: [] }
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
         const amounts: Array<number> = utils.splitAmount(amount)
@@ -58,7 +58,8 @@ class CashuWallet {
             secrets.push(secret)
             const { B_, r } = await dhke.blindMessage(secret)
             rs.push(r)
-            payloads.blinded_messages.push({ amount: amounts[i], B_: B_.toHex(true) })
+            const blindedMessage: BlindedMessage = new BlindedMessage(amounts[i],B_)
+            payloads.blinded_messages.push(blindedMessage.getSerealizedBlindedMessage())
         }
         const payloadsJson = JSON.parse(JSON.stringify({ payloads }, utils.bigIntStringify))
         console.log(payloads)

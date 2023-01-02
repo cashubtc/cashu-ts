@@ -1,3 +1,5 @@
+import { encodeJsonToBase64 } from "../base64"
+
 class Proof {
     id: string
     amount: number
@@ -8,6 +10,9 @@ class Proof {
         this.amount = amount
         this.secret = secret
         this.C = C
+    }
+    encodeProofToBase64(): string {
+        return encodeJsonToBase64([{ id: this.id, amount: this.amount, secret: this.secret, string: this.C }])
     }
 }
 

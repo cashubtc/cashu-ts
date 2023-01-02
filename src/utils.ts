@@ -18,7 +18,7 @@ import { utils } from "@noble/secp256k1";
 }
 
 //used for json serialization
-function bigIntStringify(key, value) {
+function bigIntStringify(key: any, value: any) {
     return typeof value === 'bigint' ? value.toString() : value
 }
 

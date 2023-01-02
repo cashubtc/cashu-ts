@@ -1,6 +1,7 @@
 import { utils, Point } from "@noble/secp256k1";
 import { encodeUint8toBase64 } from "./base64";
 import { Proof } from "./model/Proof";
+import { SerealizedBlindedSignature } from "./model/types/SerealizedBlinedSignature";
 import { bytesToNumber } from "./utils";
 
 async function hashToCurve(secret: Uint8Array): Promise<Point> {
@@ -36,9 +37,9 @@ function unblindSignature(C_: Point, r: bigint, A: Point): Point {
     return C
 }
 
-function constructProofs(promises, rs, secrets, keys): Array<Proof> {
-    return promises.map((p, i) => {
-        const C_: Point = Point.fromHex(p["C_"])
+function constructProofs(promises: Array<SerealizedBlindedSignature>, rs: Array<bigint>, secrets: Array<Uint8Array>, keys: any): Array<Proof> {
+    return promises.map((p: SerealizedBlindedSignature, i: number) => {
+        const C_: Point = Point.fromHex(p.C_)
         const A: Point = Point.fromHex(keys[p.amount])
         const C: Point = unblindSignature(C_, rs[i], A)
         const proof = new Proof(p.id, p.amount, encodeUint8toBase64(secrets[i]), C.toHex(true))
