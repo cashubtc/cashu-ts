@@ -52,7 +52,6 @@ class CashuWallet {
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
         const amounts: Array<number> = utils.splitAmount(amount)
-        console.log(amounts)
         for (let i = 0; i < amounts.length; i++) {
             const secret: Uint8Array = ecUtils.randomBytes(32)
             secrets.push(secret)
@@ -62,9 +61,7 @@ class CashuWallet {
             payloads.blinded_messages.push(blindedMessage.getSerealizedBlindedMessage())
         }
         const payloadsJson = JSON.parse(JSON.stringify({ payloads }, utils.bigIntStringify))
-        console.log(payloads)
         const promises = await this.mint.mint(payloadsJson.payloads, hash)
-
         if (promises.error) {
             throw new Error(promises.error)
         }
