@@ -48,7 +48,18 @@ class CashuWallet {
     }
 
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
-        const payloads: {blinded_messages: Array<{amount: number, B_: string}>} = { blinded_messages: [] }
+        const {blindedMessages,secrets,rs} = await this.createRandomBlindedMessages(amount)
+        const payloads: {blinded_messages: Array<{amount: number, B_: string}>} = { blinded_messages: blindedMessages }
+        const payloadsJson = JSON.parse(JSON.stringify({ payloads }, utils.bigIntStringify))
+        const promises = await this.mint.mint(payloadsJson.payloads, hash)
+        if (promises.error) {
+            throw new Error(promises.error)
+        }
+        return dhke.constructProofs(promises, rs, secrets, this.keys)
+    }
+    
+    async createRandomBlindedMessages(amount: number) {
+        const blindedMessages: Array<{amount: number, B_: string}> = []
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
         const amounts: Array<number> = utils.splitAmount(amount)
@@ -58,14 +69,9 @@ class CashuWallet {
             const { B_, r } = await dhke.blindMessage(secret)
             rs.push(r)
             const blindedMessage: BlindedMessage = new BlindedMessage(amounts[i],B_)
-            payloads.blinded_messages.push(blindedMessage.getSerealizedBlindedMessage())
+            blindedMessages.push(blindedMessage.getSerealizedBlindedMessage())
         }
-        const payloadsJson = JSON.parse(JSON.stringify({ payloads }, utils.bigIntStringify))
-        const promises = await this.mint.mint(payloadsJson.payloads, hash)
-        if (promises.error) {
-            throw new Error(promises.error)
-        }
-        return dhke.constructProofs(promises, rs, secrets, this.keys)
+        return {blindedMessages,secrets,rs,amounts}
     }
 }
 
