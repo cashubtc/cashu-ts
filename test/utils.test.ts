@@ -5,6 +5,10 @@ describe('test split amounts ', () => {
         const chunks = utils.splitAmount(2561)
        expect(chunks).toEqual([ 1, 512, 2048 ])
     });
+    test('testing amount 0', async () => {
+        const chunks = utils.splitAmount(0)
+       expect(chunks).toEqual([])
+    });
 })
 
 
