@@ -43,7 +43,14 @@ class CashuMint {
         const { data } = await axios.post(`${this.mintUrl}/split`, splitPayload)
         return data
     }
-
+    async melt(meltPayload: object) {
+        const { data } = await axios.post(`${this.mintUrl}/melt`, meltPayload)
+        return data
+    }
+    async checkFees(checkfeesPayload: object) {
+        const { data } = await axios.post(`${this.mintUrl}/checkfees`, checkfeesPayload)
+        return data
+    }
 }
 
 export { CashuMint }

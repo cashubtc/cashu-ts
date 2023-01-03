@@ -10,8 +10,8 @@ Wallet Features:
 - [x] request minting tokens
 - [x] minting tokens
 - [x] sending tokens (get encoded token for chosen value)
-- [ ] receiving tokens
-- [ ] melting tokens
+- [x] receiving tokens
+- [x] melting tokens
 - [ ] ...
 
 ## Usage
