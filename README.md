@@ -9,8 +9,8 @@ Wallet Features:
 - [x] connect to mint (load keys)
 - [x] request minting tokens
 - [x] minting tokens
+- [x] sending tokens (get encoded token for chosen value)
 - [ ] receiving tokens
-- [ ] sending tokens (get encoded token for chosen value)
 - [ ] melting tokens
 - [ ] ...
 

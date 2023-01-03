@@ -39,7 +39,7 @@ class CashuMint {
         return data
     }
 
-    async split(splitPayload: string) {
+    async split(splitPayload: object) {
         const { data } = await axios.post(`${this.mintUrl}/split`, splitPayload)
         return data
     }
