@@ -1,6 +1,6 @@
 {
   "name": "@gandlaf21/cashu-js",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "cashu library for communicating with a cashu mint",
   "main": "dist/lib/es6/index.js",
   "type": "module",

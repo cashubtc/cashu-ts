@@ -43,6 +43,11 @@ class CashuMint {
         return data
     }
 
+    async getKeySets() {
+        const { data } = await axios.get(`${this.mintUrl}/keysets`)
+        return data
+    }
+
     async split(splitPayload: object) {
         const { data } = await axios.post(`${this.mintUrl}/split`, splitPayload)
         return data
