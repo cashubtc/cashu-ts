@@ -5,10 +5,19 @@ import * as dhke from "./DHKE";
 import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64";
 import { Proof } from "./model/Proof";
 import { BlindedMessage } from "./model/BlindedMessage";
+import { decode } from "@gandlaf21/bolt11-decode";
 
+/**
+ * Class that represents a Cashu wallet.
+ */
 class CashuWallet {
     keys: object
     mint: CashuMint
+    /**
+     * 
+     * @param keys public keys from the mint
+     * @param mint Cashu mint instance is used to make api calls
+     */
     constructor(keys: object, mint: CashuMint) {
         this.keys = keys
         this.mint = mint
@@ -18,24 +27,25 @@ class CashuWallet {
         return await this.mint.requestMint(amount)
     }
 
-    // todo: get amount from invoice
-    async payLnInvoice(amount:number, invoice:string, proofs: Array<Proof>){
-        const {fee}: {fee:number} = await this.mint.checkFees({pr: invoice}).catch((e)=>{
+    async payLnInvoice(invoice: string, proofs: Array<Proof>) {
+        //ammount is in millisat
+        const amount = decode(invoice).sections[2].value/1000
+        const { fee }: { fee: number } = await this.mint.checkFees({ pr: invoice }).catch((e) => {
             console.error(e)
             console.error('could not get fees from server')
-            return {fee: 0}
+            return { fee: 0 }
         })
         console.log(isNaN(fee))
         //todo: add fee to amount
         const amountToPay: number = amount
         const allProofsEncoded = await this.send(amountToPay, proofs)
         const proofsToSend: Array<Proof> = encodeBase64ToJson(allProofsEncoded[1])
-        const paymentPayload: any = this.createPaymentPayload(invoice,proofsToSend)
+        const paymentPayload: any = this.createPaymentPayload(invoice, proofsToSend)
         const payData = await this.mint.melt(paymentPayload)
-        return {isPaid: payData.paid, preimage: payData.preimage, change: allProofsEncoded[0]}
+        return { isPaid: payData.paid, preimage: payData.preimage, change: allProofsEncoded[0] }
     }
 
-    createPaymentPayload(invoice:string, proofs: Array<Proof>){
+    createPaymentPayload(invoice: string, proofs: Array<Proof>) {
         const payload = {
             invoice: invoice,
             proofs: proofs
@@ -43,19 +53,19 @@ class CashuWallet {
         return payload
     }
 
-    async payLnInvoiceWithToken(amount:number, invoice:string, token: string){
-        return this.payLnInvoice(amount, invoice, encodeBase64ToJson(token))
+    async payLnInvoiceWithToken(invoice: string, token: string) {
+        return this.payLnInvoice(invoice, encodeBase64ToJson(token))
     }
 
     async recieve(encodedToken: string): Promise<string> {
         const proofs: Array<Proof> = encodeBase64ToJson(encodedToken)
-        const amount = proofs.reduce((total,curr)=>{
-            return total+curr.amount
-        },0)
-        const {payload,amount1BlindedMessages, amount2BlindedMessages} = await this.createSplitPayload(0,amount,proofs)
-        const {fst,snd} = await this.mint.split(payload)
-        const proofs1: Array<Proof> = dhke.constructProofs(fst,amount1BlindedMessages.rs,amount1BlindedMessages.secrets,this.keys)
-        const proofs2: Array<Proof> = dhke.constructProofs(snd,amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
+        const amount = proofs.reduce((total, curr) => {
+            return total + curr.amount
+        }, 0)
+        const { payload, amount1BlindedMessages, amount2BlindedMessages } = await this.createSplitPayload(0, amount, proofs)
+        const { fst, snd } = await this.mint.split(payload)
+        const proofs1: Array<Proof> = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
+        const proofs2: Array<Proof> = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
         const newProofs: Array<Proof> = [...proofs1]
         newProofs.push(...proofs2)
         return this.getEncodedProofs(newProofs)
@@ -78,13 +88,13 @@ class CashuWallet {
         }
         if (amount < amountAvailable) {
             const { amount1, amount2 } = this.splitReceive(amount, amountAvailable)
-            const {payload, amount1BlindedMessages, amount2BlindedMessages} =await  this.createSplitPayload(amount1, amount2, proofsToSend)
-            const {fst, snd} = await this.mint.split(payload)
-            const proofs1 = dhke.constructProofs(fst,amount1BlindedMessages.rs,amount1BlindedMessages.secrets,this.keys)
-            const proofs2 = dhke.constructProofs(snd,amount2BlindedMessages.rs,amount2BlindedMessages.secrets,this.keys)
+            const { payload, amount1BlindedMessages, amount2BlindedMessages } = await this.createSplitPayload(amount1, amount2, proofsToSend)
+            const { fst, snd } = await this.mint.split(payload)
+            const proofs1 = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
+            const proofs2 = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
             return [this.getEncodedProofs(proofs1), this.getEncodedProofs(proofs2)]
         }
-        return ['',this.getEncodedProofs(proofsToSend)]
+        return ['', this.getEncodedProofs(proofsToSend)]
     }
 
     getEncodedProofs(proofs: Array<Proof>): string {
@@ -104,7 +114,7 @@ class CashuWallet {
 
 
     //keep amount 1 send amount 2
-    private async createSplitPayload(amount1:number, amount2: number, proofsToSend: Array<Proof>) {
+    private async createSplitPayload(amount1: number, amount2: number, proofsToSend: Array<Proof>) {
         const amount1BlindedMessages = await this.createRandomBlindedMessages(amount1)
         const amount2BlindedMessages = await this.createRandomBlindedMessages(amount2)
         const allBlindedMessages = []
@@ -113,14 +123,14 @@ class CashuWallet {
         allBlindedMessages.push(...amount1BlindedMessages.blindedMessages)
         allBlindedMessages.push(...amount2BlindedMessages.blindedMessages)
 
-            const payload = { 
-                proofs: proofsToSend,
-                amount: amount2,
-                outputs: { 
-                    blinded_messages: allBlindedMessages
-                } 
+        const payload = {
+            proofs: proofsToSend,
+            amount: amount2,
+            outputs: {
+                blinded_messages: allBlindedMessages
             }
-        return {payload, amount1BlindedMessages, amount2BlindedMessages}
+        }
+        return { payload, amount1BlindedMessages, amount2BlindedMessages }
     }
     //keep amount 1 send amount 2
     private splitReceive(amount: number, amountAvailable: number) {
@@ -130,7 +140,7 @@ class CashuWallet {
     }
 
 
- 
+
     private async createRandomBlindedMessages(amount: number) {
         const blindedMessages: Array<{ amount: number, B_: string }> = []
         const secrets: Array<Uint8Array> = []

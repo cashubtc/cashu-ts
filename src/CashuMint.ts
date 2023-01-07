@@ -1,4 +1,8 @@
 import axios from "axios";
+
+/**
+ * Class represents Cashu Mint API.  
+ */
 class CashuMint {
     mintUrl: string
     constructor(mintHost: string, mintApiRoot?: string, mintPort?: string,) {

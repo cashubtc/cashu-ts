@@ -1,6 +1,6 @@
 {
   "name": "@gandlaf21/cashu-js",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "cashu library for communicating with a cashu mint",
   "main": "dist/lib/es6/index.js",
   "type": "module",
@@ -36,6 +36,7 @@
     "typescript": "^4.9.4"
   },
   "dependencies": {
+    "@gandlaf21/bolt11-decode": "^3.0.4",
     "@noble/secp256k1": "^1.7.0",
     "axios": "^1.2.1",
     "buffer": "^6.0.3"
