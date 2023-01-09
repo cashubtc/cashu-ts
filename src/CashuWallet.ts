@@ -13,6 +13,7 @@ import { decode } from "@gandlaf21/bolt11-decode";
 class CashuWallet {
     keys: object
     mint: CashuMint
+
     /**
      * 
      * @param keys public keys from the mint
@@ -38,11 +39,11 @@ class CashuWallet {
         console.log(isNaN(fee))
         //todo: add fee to amount
         const amountToPay: number = amount
-        const allProofsEncoded = await this.send(amountToPay, proofs)
-        const proofsToSend: Array<Proof> = encodeBase64ToJson(allProofsEncoded[1])
+        const {returnChange,send} = await this.send(amountToPay, proofs)
+        const proofsToSend: Array<Proof> = send
         const paymentPayload: any = this.createPaymentPayload(invoice, proofsToSend)
         const payData = await this.mint.melt(paymentPayload)
-        return { isPaid: payData.paid, preimage: payData.preimage, change: allProofsEncoded[0] }
+        return { isPaid: payData.paid, preimage: payData.preimage, change: returnChange }
     }
 
     createPaymentPayload(invoice: string, proofs: Array<Proof>) {
@@ -57,7 +58,7 @@ class CashuWallet {
         return this.payLnInvoice(invoice, encodeBase64ToJson(token))
     }
 
-    async recieve(encodedToken: string): Promise<string> {
+    async recieve(encodedToken: string): Promise<Array<Proof>> {
         const proofs: Array<Proof> = encodeBase64ToJson(encodedToken)
         const amount = proofs.reduce((total, curr) => {
             return total + curr.amount
@@ -68,11 +69,11 @@ class CashuWallet {
         const proofs2: Array<Proof> = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
         const newProofs: Array<Proof> = [...proofs1]
         newProofs.push(...proofs2)
-        return this.getEncodedProofs(newProofs)
+        return newProofs
     }
 
     //Todo, fix splitting of funds, something is not right yet
-    async send(amount: number, proofs: Array<Proof>): Promise<Array<string>> {
+    async send(amount: number, proofs: Array<Proof>): Promise<{returnChange: Array<Proof>, send: Array<Proof>}> {
         let amountAvailable = 0
         const proofsToSend: Array<Proof> = []
         proofs.forEach(proof => {
@@ -92,15 +93,19 @@ class CashuWallet {
             const { fst, snd } = await this.mint.split(payload)
             const proofs1 = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
             const proofs2 = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
-            return [this.getEncodedProofs(proofs1), this.getEncodedProofs(proofs2)]
+            return {returnChange: proofs1, send:proofs2}
         }
-        return ['', this.getEncodedProofs(proofsToSend)]
+        return {returnChange:[], send:proofsToSend}
     }
 
     getEncodedProofs(proofs: Array<Proof>): string {
         return encodeJsonToBase64(proofs)
     }
-
+    
+    getDecodedProofs(token: string): Array<Proof> {
+        return encodeBase64ToJson(token)
+    }
+    
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
         const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount)
         const payloads: { blinded_messages: Array<{ amount: number, B_: string }> } = { blinded_messages: blindedMessages }
