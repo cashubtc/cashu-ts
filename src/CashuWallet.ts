@@ -72,7 +72,6 @@ class CashuWallet {
         return newProofs
     }
 
-    //Todo, fix splitting of funds, something is not right yet
     async send(amount: number, proofs: Array<Proof>): Promise<{returnChange: Array<Proof>, send: Array<Proof>}> {
         let amountAvailable = 0
         const proofsToSend: Array<Proof> = []
@@ -98,11 +97,11 @@ class CashuWallet {
         return {returnChange:[], send:proofsToSend}
     }
 
-    getEncodedProofs(proofs: Array<Proof>): string {
+    static getEncodedProofs(proofs: Array<Proof>): string {
         return encodeJsonToBase64(proofs)
     }
     
-    getDecodedProofs(token: string): Array<Proof> {
+    static getDecodedProofs(token: string): Array<Proof> {
         return encodeBase64ToJson(token)
     }
     
