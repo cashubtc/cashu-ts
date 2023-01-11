@@ -1,8 +1,8 @@
 import { utils, Point } from "@noble/secp256k1";
-import { encodeUint8toBase64 } from "./base64";
-import { Proof } from "./model/Proof";
-import { SerealizedBlindedSignature } from "./model/types/SerealizedBlinedSignature";
-import { bytesToNumber } from "./utils";
+import { encodeUint8toBase64 } from "./base64.js";
+import { Proof } from "./model/Proof.js";
+import { SerealizedBlindedSignature } from "./model/types/SerealizedBlinedSignature.js";
+import { bytesToNumber } from "./utils.js";
 
 async function hashToCurve(secret: Uint8Array): Promise<Point> {
     let point: Point

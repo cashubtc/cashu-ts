@@ -1,10 +1,10 @@
-import { CashuMint } from "./CashuMint";
-import * as utils from "./utils";
+import { CashuMint } from "./CashuMint.js";
+import * as utils from "./utils.js";
 import { utils as ecUtils } from "@noble/secp256k1";
-import * as dhke from "./DHKE";
-import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64";
-import { Proof } from "./model/Proof";
-import { BlindedMessage } from "./model/BlindedMessage";
+import * as dhke from "./DHKE.js";
+import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64.js";
+import { Proof } from "./model/Proof.js";
+import { BlindedMessage } from "./model/BlindedMessage.js";
 import { decode } from "@gandlaf21/bolt11-decode";
 
 /**

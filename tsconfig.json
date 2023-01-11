@@ -6,7 +6,8 @@
       "declaration": true,
       "outDir": "./dist/lib/es6",
       "moduleResolution": "node",
-      "noImplicitAny": true, 
+      "noImplicitAny": true,
+      "sourceMap": true
     },
     "include": ["src/**/*"]
   }

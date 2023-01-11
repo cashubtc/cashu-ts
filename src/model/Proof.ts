@@ -1,4 +1,4 @@
-import { encodeJsonToBase64 } from "../base64"
+import { encodeJsonToBase64 } from "../base64.js"
 
 class Proof {
     id: string
