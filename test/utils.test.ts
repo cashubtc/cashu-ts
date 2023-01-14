@@ -1,4 +1,4 @@
-import * as utils from "../src/utils"
+import * as utils from "../src/utils.js"
 
 describe('test split amounts ', () => {
     test('testing amount 2561', async () => {

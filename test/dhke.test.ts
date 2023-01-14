@@ -1,6 +1,6 @@
-import { utils, sign, verify ,Point, getPublicKey } from '@noble/secp256k1'
-import * as dhke from '../src/DHKE'
- import { bytesToNumber, hexToNumber } from '../src/utils'
+import { utils,Point } from '@noble/secp256k1'
+import * as dhke from '../src/DHKE.js'
+ import { bytesToNumber } from '../src/utils.js'
 
  const SECRET_MESSAGE ="test_message"
 

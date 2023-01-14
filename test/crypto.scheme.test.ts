@@ -1,6 +1,6 @@
 import { utils,Point } from "@noble/secp256k1";
-import { hashToCurve } from "../src/DHKE";
-import { bytesToNumber } from "../src/utils";
+import { hashToCurve } from "../src/DHKE.js";
+import { bytesToNumber } from "../src/utils.js";
 
 describe('test crypto bdhke', () => {
     test('bdhke', async () => {
