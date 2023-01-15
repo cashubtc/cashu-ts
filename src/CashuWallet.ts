@@ -30,7 +30,7 @@ class CashuWallet {
 
     async payLnInvoice(invoice: string, proofs: Array<Proof>) {
         //ammount is in millisat
-        const amount = decode(invoice).sections[2].value/1000
+        const amount = decode(invoice).sections[2].value / 1000
         const { fee }: { fee: number } = await this.mint.checkFees({ pr: invoice }).catch((e) => {
             console.error(e)
             console.error('could not get fees from server')
@@ -39,7 +39,7 @@ class CashuWallet {
         console.log(isNaN(fee))
         //todo: add fee to amount
         const amountToPay: number = amount
-        const {returnChange,send} = await this.send(amountToPay, proofs)
+        const { returnChange, send } = await this.send(amountToPay, proofs)
         const proofsToSend: Array<Proof> = send
         const paymentPayload: any = this.createPaymentPayload(invoice, proofsToSend)
         const payData = await this.mint.melt(paymentPayload)
@@ -72,7 +72,7 @@ class CashuWallet {
         return newProofs
     }
 
-    async send(amount: number, proofs: Array<Proof>): Promise<{returnChange: Array<Proof>, send: Array<Proof>}> {
+    async send(amount: number, proofs: Array<Proof>): Promise<{ returnChange: Array<Proof>, send: Array<Proof> }> {
         let amountAvailable = 0
         const proofsToSend: Array<Proof> = []
         proofs.forEach(proof => {
@@ -82,7 +82,6 @@ class CashuWallet {
             amountAvailable = amountAvailable + proof.amount
             proofsToSend.push(proof)
         });
-        console.log(`amount: ${amount} ||| amount available: ${amountAvailable}`)
         if (amount > amountAvailable) {
             throw new Error("Not enough funds available");
         }
@@ -92,19 +91,19 @@ class CashuWallet {
             const { fst, snd } = await this.mint.split(payload)
             const proofs1 = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
             const proofs2 = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
-            return {returnChange: proofs1, send:proofs2}
+            return { returnChange: proofs1, send: proofs2 }
         }
-        return {returnChange:[], send:proofsToSend}
+        return { returnChange: [], send: proofsToSend }
     }
 
     static getEncodedProofs(proofs: Array<Proof>): string {
         return encodeJsonToBase64(proofs)
     }
-    
+
     static getDecodedProofs(token: string): Array<Proof> {
         return encodeBase64ToJson(token)
     }
-    
+
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
         const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount)
         const payloads: { blinded_messages: Array<{ amount: number, B_: string }> } = { blinded_messages: blindedMessages }
