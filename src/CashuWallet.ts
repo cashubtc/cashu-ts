@@ -106,9 +106,9 @@ class CashuWallet {
 
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
         const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount)
-        const payloads: { blinded_messages: Array<{ amount: number, B_: string }> } = { blinded_messages: blindedMessages }
+        const payloads: { outputs: Array<{ amount: number, B_: string }> } = { outputs: blindedMessages }
         const payloadsJson = JSON.parse(JSON.stringify({ payloads }, utils.bigIntStringify))
-        const promises = await this.mint.mint(payloadsJson.payloads, hash)
+        const {promises} = await this.mint.mint(payloadsJson.payloads, hash)
         if (promises.error) {
             throw new Error(promises.error)
         }
@@ -129,9 +129,7 @@ class CashuWallet {
         const payload = {
             proofs: proofsToSend,
             amount: amount2,
-            outputs: {
-                blinded_messages: allBlindedMessages
-            }
+            outputs: allBlindedMessages
         }
         return { payload, amount1BlindedMessages, amount2BlindedMessages }
     }
