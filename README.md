@@ -1,8 +1,8 @@
-# Cashu JS
+# Cashu TS
 
 ⚠️ __Don't be reckless:__ This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
 
-Cashu JS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
+Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
 
 Wallet Features:
 
@@ -20,7 +20,7 @@ Wallet Features:
 ### Install
 
 ```shell
-npm i @gandlaf21/cashu-js
+npm i @gandlaf21/cashu-ts
 ```
 
 ### Import
