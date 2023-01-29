@@ -2,7 +2,7 @@
 
 ⚠️ __Don't be reckless:__ This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
 
-Cashu JS is a JavaScript library for [Cashu](https://cashu.space) wallets written in Typescript.
+Cashu JS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
 
 Wallet Features:
 
