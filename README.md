@@ -12,6 +12,7 @@ Wallet Features:
 - [x] sending tokens (get encoded token for chosen value)
 - [x] receiving tokens
 - [x] melting tokens
+- [x] check if tokens are spent
 - [ ] ...
 
 ## Usage
