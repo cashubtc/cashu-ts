@@ -1,8 +1,8 @@
 import { CashuMint } from "./CashuMint.js";
-import * as utils from "./utils.js";
+import { bigIntStringify, getDecodedProofs, splitAmount } from "./utils.js";
 import { utils as ecUtils } from "@noble/secp256k1";
 import * as dhke from "./DHKE.js";
-import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64.js";
+import { encodeBase64ToJson } from "./base64.js";
 import { Proof } from "./model/Proof.js";
 import { BlindedMessage } from "./model/BlindedMessage.js";
 import { decode } from "@gandlaf21/bolt11-decode";
@@ -24,26 +24,45 @@ class CashuWallet {
         this.mint = mint
     }
 
+    /**
+     * returns proofs that are already spent (use for keeping wallet state clean)
+     * @param proofs 
+     * @returns 
+     */
+    async checkProofsSpent(proofs: Array<Proof>): Promise<Array<any>> {
+        const payload = {
+            //send only the secret
+            proofs: proofs.map((p) => { return { secret: p.secret } })
+        }
+        const checkedSecrets = await this.mint.check(payload)
+        //return only the proofs that are NOT spendable
+        return proofs.filter((p,i)=>!checkedSecrets[i])
+    }
+
     async requestMint(amount: number) {
         return await this.mint.requestMint(amount)
     }
 
-    async payLnInvoice(invoice: string, proofs: Array<Proof>) {
-        //ammount is in millisat
-        const amount = decode(invoice).sections[2].value / 1000
-        const { fee }: { fee: number } = await this.mint.checkFees({ pr: invoice }).catch((e) => {
-            console.error(e)
-            console.error('could not get fees from server')
-            return { fee: 0 }
-        })
-        console.log(isNaN(fee))
-        //todo: add fee to amount
-        const amountToPay: number = amount
-        const { returnChange, send } = await this.send(amountToPay, proofs)
-        const proofsToSend: Array<Proof> = send
+    /**
+     * Executes a payment of an invoice on the Lightning network. 
+     * The combined amount of Proofs has to match the payment amount including fees.
+     * @param invoice 
+     * @param proofsToSend the exact amount to send including fees
+     * @returns 
+     */
+    async payLnInvoice(invoice: string, proofsToSend: Array<Proof>) {
         const paymentPayload: any = this.createPaymentPayload(invoice, proofsToSend)
         const payData = await this.mint.melt(paymentPayload)
-        return { isPaid: payData.paid, preimage: payData.preimage, change: returnChange }
+        return { isPaid: payData.paid ?? false, preimage: payData.preimage }
+    }
+
+    async getFee(invoice: string): Promise<number> {
+        const { fee }: { fee: number } = await this.mint.checkFees({ pr: invoice })
+        return fee
+    }
+
+    static getDecodedLnInvoice(invoice: string) {
+        return decode(invoice)
     }
 
     createPaymentPayload(invoice: string, proofs: Array<Proof>) {
@@ -58,8 +77,8 @@ class CashuWallet {
         return this.payLnInvoice(invoice, encodeBase64ToJson(token))
     }
 
-    async recieve(encodedToken: string): Promise<Array<Proof>> {
-        const proofs: Array<Proof> = encodeBase64ToJson(encodedToken)
+    async receive(encodedToken: string): Promise<Array<Proof>> {
+        const { proofs, mints } = getDecodedProofs(encodedToken)
         const amount = proofs.reduce((total, curr) => {
             return total + curr.amount
         }, 0)
@@ -96,19 +115,11 @@ class CashuWallet {
         return { returnChange: [], send: proofsToSend }
     }
 
-    static getEncodedProofs(proofs: Array<Proof>): string {
-        return encodeJsonToBase64(proofs)
-    }
-
-    static getDecodedProofs(token: string): Array<Proof> {
-        return encodeBase64ToJson(token)
-    }
-
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
         const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount)
         const payloads: { outputs: Array<{ amount: number, B_: string }> } = { outputs: blindedMessages }
-        const payloadsJson = JSON.parse(JSON.stringify({ payloads }, utils.bigIntStringify))
-        const {promises} = await this.mint.mint(payloadsJson.payloads, hash)
+        const payloadsJson = JSON.parse(JSON.stringify({ payloads }, bigIntStringify))
+        const { promises } = await this.mint.mint(payloadsJson.payloads, hash)
         if (promises.error) {
             throw new Error(promises.error)
         }
@@ -146,7 +157,7 @@ class CashuWallet {
         const blindedMessages: Array<{ amount: number, B_: string }> = []
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
-        const amounts: Array<number> = utils.splitAmount(amount)
+        const amounts: Array<number> = splitAmount(amount)
         for (let i = 0; i < amounts.length; i++) {
             const secret: Uint8Array = ecUtils.randomBytes(32)
             secrets.push(secret)

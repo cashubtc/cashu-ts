@@ -60,6 +60,10 @@ class CashuMint {
         const { data } = await axios.post(`${this.mintUrl}/checkfees`, checkfeesPayload)
         return data
     }
+    async check(checkPayload: object) {
+        const { data } = await axios.post(`${this.mintUrl}/check`, checkPayload)
+        return data
+    }
 }
 
 export { CashuMint }
