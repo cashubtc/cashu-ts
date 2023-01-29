@@ -67,7 +67,7 @@ class CashuWallet {
 
     createPaymentPayload(invoice: string, proofs: Array<Proof>) {
         const payload = {
-            invoice: invoice,
+            pr: invoice,
             proofs: proofs
         }
         return payload
