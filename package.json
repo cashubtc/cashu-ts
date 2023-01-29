@@ -1,15 +1,15 @@
 {
-  "name": "@gandlaf21/cashu-js",
-  "version": "0.4.16",
+  "name": "@gandlaf21/cashu-ts",
+  "version": "0.4.20",
   "description": "cashu library for communicating with a cashu mint",
   "main": "dist/lib/es5/index.js",
   "module": "dist/lib/es6/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/gandlaf21/cashu-js"
+    "url": "git+https://github.com/gandlafbtc/cashu-ts"
   },
   "bugs": {
-    "url": "https://github.com/gandlaf21/cashu-js/issues"
+    "url": "https://github.com/gandlafbtc/cashu-ts/issues"
   },
   "scripts": {
     "compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
