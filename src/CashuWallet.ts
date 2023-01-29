@@ -34,9 +34,9 @@ class CashuWallet {
             //send only the secret
             proofs: proofs.map((p) => { return { secret: p.secret } })
         }
-        const checkedSecrets = await this.mint.check(payload)
+        const { spendable } = await this.mint.check(payload)
         //return only the proofs that are NOT spendable
-        return proofs.filter((p,i)=>!checkedSecrets[i])
+        return proofs.filter((p,i)=>!spendable[i])
     }
 
     async requestMint(amount: number) {
