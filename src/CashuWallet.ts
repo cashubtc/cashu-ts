@@ -19,7 +19,7 @@ class CashuWallet {
      * @param keys public keys from the mint
      * @param mint Cashu mint instance is used to make api calls
      */
-	constructor(keys: { [k: string]: string }, mint: CashuMint) {
+    constructor(keys: { [k: string]: string }, mint: CashuMint) {
         this.keys = keys
         this.mint = mint
     }
@@ -81,8 +81,8 @@ class CashuWallet {
         const { proofs } = getDecodedProofs(encodedToken)
         const amount = proofs.reduce((total, curr) => total + curr.amount, 0)
         const { payload, amount1BlindedMessages, amount2BlindedMessages } = await this.createSplitPayload(0, amount, proofs)
-		const { fst, snd } = await this.mint.split(payload)
-		if(!fst || !snd) { return [] }
+        const { fst, snd } = await this.mint.split(payload)
+        if(!fst || !snd) { return [] }
         const proofs1: Array<Proof> = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
         const proofs2: Array<Proof> = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
         const newProofs: Array<Proof> = [...proofs1,...proofs2]
