@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Proof } from './model/Proof';
 
 /**
  * Class represents Cashu Mint API.  
@@ -21,10 +22,8 @@ class CashuMint {
     }
 
     async requestMint(amount: number) {
-        const { data } = await axios.get(`${this.mintUrl}/mint`, {
-            params: {
-                amount
-            }
+		const { data } = await axios.get<{ pr: string, hash: string }>(`${this.mintUrl}/mint`, {
+            params: { amount }
         })
         return data
     }
@@ -39,28 +38,32 @@ class CashuMint {
     }
 
     async getKeys() {
-        const { data } = await axios.get(`${this.mintUrl}/keys`)
+        const { data } = await axios.get<{[k:string]:string}>(`${this.mintUrl}/keys`)
         return data
     }
 
     async getKeySets() {
-        const { data } = await axios.get(`${this.mintUrl}/keysets`)
+		const { data } = await axios.get<{ keysets: string[] }>(`${this.mintUrl}/keysets`)
         return data
     }
 
-    async split(splitPayload: object) {
+	async split(splitPayload: {
+		proofs: Proof[],
+		amount: number,
+		outputs: { amount: number, B_: string }[]
+	}) {
         const { data } = await axios.post(`${this.mintUrl}/split`, splitPayload)
         return data
     }
-    async melt(meltPayload: object) {
+	async melt(meltPayload: { pr: string, proofs: Proof[] }) {
         const { data } = await axios.post(`${this.mintUrl}/melt`, meltPayload)
         return data
     }
-    async checkFees(checkfeesPayload: object) {
+	async checkFees(checkfeesPayload: { pr: string }) {
         const { data } = await axios.post(`${this.mintUrl}/checkfees`, checkfeesPayload)
         return data
     }
-    async check(checkPayload: object) {
+	async check(checkPayload: { proofs: { secret: string }[] }) {
         const { data } = await axios.post(`${this.mintUrl}/check`, checkPayload)
         return data
     }
