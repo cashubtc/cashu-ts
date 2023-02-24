@@ -29,7 +29,7 @@ class CashuWallet {
      * @param proofs 
      * @returns 
      */
-    async checkProofsSpent(proofs: Array<Proof>): Promise<Proof[]> {
+    async checkProofsSpent(proofs: Array<Proof>): Promise<Array<Proof>> {
         const payload = {
             //send only the secret
             proofs: proofs.map((p) => { return { secret: p.secret } })

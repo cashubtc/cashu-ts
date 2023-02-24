@@ -1,5 +1,5 @@
 import axios from "axios";
-import { Proof } from './model/Proof';
+import { Proof } from './model/Proof.js';
 
 /**
  * Class represents Cashu Mint API.  
@@ -43,19 +43,19 @@ class CashuMint {
     }
 
     async getKeySets() {
-        const { data } = await axios.get<{ keysets: string[] }>(`${this.mintUrl}/keysets`)
+        const { data } = await axios.get<{ keysets: Array<string> }>(`${this.mintUrl}/keysets`)
         return data
     }
 
     async split(splitPayload: {
-        proofs: Proof[],
+        proofs: Array<Proof>,
         amount: number,
-        outputs: { amount: number, B_: string }[]
+        outputs: Array<{ amount: number, B_: string }>
     }) {
         const { data } = await axios.post(`${this.mintUrl}/split`, splitPayload)
         return data
     }
-    async melt(meltPayload: { pr: string, proofs: Proof[] }) {
+    async melt(meltPayload: { pr: string, proofs: Array<Proof> }) {
         const { data } = await axios.post(`${this.mintUrl}/melt`, meltPayload)
         return data
     }
@@ -63,7 +63,7 @@ class CashuMint {
         const { data } = await axios.post(`${this.mintUrl}/checkfees`, checkfeesPayload)
         return data
     }
-    async check(checkPayload: { proofs: { secret: string }[] }) {
+    async check(checkPayload: { proofs: Array<{ secret: string }> }) {
         const { data } = await axios.post(`${this.mintUrl}/check`, checkPayload)
         return data
     }
