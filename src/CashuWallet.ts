@@ -19,7 +19,7 @@ class CashuWallet {
      * @param keys public keys from the mint
      * @param mint Cashu mint instance is used to make api calls
      */
-    constructor(keys: object, mint: CashuMint) {
+    constructor(keys: { [k: string]: string }, mint: CashuMint) {
         this.keys = keys
         this.mint = mint
     }
@@ -29,7 +29,7 @@ class CashuWallet {
      * @param proofs 
      * @returns 
      */
-    async checkProofsSpent(proofs: Array<Proof>): Promise<Array<any>> {
+    async checkProofsSpent(proofs: Array<Proof>): Promise<Array<Proof>> {
         const payload = {
             //send only the secret
             proofs: proofs.map((p) => { return { secret: p.secret } })
@@ -78,16 +78,13 @@ class CashuWallet {
     }
 
     async receive(encodedToken: string): Promise<Array<Proof>> {
-        const { proofs, mints } = getDecodedProofs(encodedToken)
-        const amount = proofs.reduce((total, curr) => {
-            return total + curr.amount
-        }, 0)
+        const { proofs } = getDecodedProofs(encodedToken)
+        const amount = proofs.reduce((total, curr) => total + curr.amount, 0)
         const { payload, amount1BlindedMessages, amount2BlindedMessages } = await this.createSplitPayload(0, amount, proofs)
         const { fst, snd } = await this.mint.split(payload)
-        const proofs1: Array<Proof> = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
-        const proofs2: Array<Proof> = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
-        const newProofs: Array<Proof> = [...proofs1]
-        newProofs.push(...proofs2)
+        const proofs1: Array<Proof> = fst ? dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys) : []
+        const proofs2: Array<Proof> = snd ? dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys) : []
+        const newProofs: Array<Proof> = [...proofs1,...proofs2]
         return newProofs
     }
 
