@@ -25,23 +25,23 @@ npm i @gandlaf21/cashu-ts
 
 ### Import
 
-```javascript
+```typescript
 import { CashuMint, CashuWallet } from "@gandlaf21/cashu-js";
 
-const mint = new CashuMint("{MINT_HOST}","{/path/to/api/root/}, {MINT_PORT}")
+const mint = new CashuMint("{MINT_HOST}","{/path/to/api/root/}", "{MINT_PORT}")
 const keys = await mint.getKeys()
 const wallet = new CashuWallet(keys,mint)
 
 const {pr, hash} = await wallet.requestMint(200)
 
 //pay this LN invoice
-console.log(pr)
+console.log({pr},{hash})
 
 async function invoiceHasBeenPaid() {
-const proofs = await wallet.requestTokens(200,hash)
-//Encoded proofs can be spent at the mint
-const encoded = wallet.getEncodedProofs(proofs)
-console.log(encoded)
+    const proofs = await wallet.requestTokens(200,hash)
+    //Encoded proofs can be spent at the mint
+    const encoded = wallet.getEncodedProofs(proofs)
+    console.log(encoded)
 }
 
 ```

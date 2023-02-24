@@ -127,7 +127,7 @@ class CashuWallet {
     private async createSplitPayload(amount1: number, amount2: number, proofsToSend: Array<Proof>) {
         const amount1BlindedMessages = await this.createRandomBlindedMessages(amount1)
         const amount2BlindedMessages = await this.createRandomBlindedMessages(amount2)
-        const allBlindedMessages = []
+        const allBlindedMessages: Array<{ amount: number, B_: string }> = []
         // the order of this array aparently matters if it's the other way around,
         // the mint complains that the split is not as expected
         allBlindedMessages.push(...amount1BlindedMessages.blindedMessages)
