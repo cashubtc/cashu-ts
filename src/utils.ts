@@ -31,7 +31,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
     * @param mints without this, a v1Token will be encoded
     * @returns 
     */
-function getEncodedProofs(proofs: Array<Proof>, mints?: Array<{ url: string, keysets: Array<string> }>): string {
+function getEncodedProofs(proofs: Array<Proof>, mints?: Array<{ url: string, ids: Array<string> }>): string {
     const token = {
         proofs,
         mints: mints ?? []
@@ -51,3 +51,4 @@ function getDecodedProofs(token: string): Token {
 export {
     hexToNumber, splitAmount, bytesToNumber, bigIntStringify, getDecodedProofs, getEncodedProofs
 };
+
