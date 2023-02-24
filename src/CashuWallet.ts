@@ -82,9 +82,8 @@ class CashuWallet {
         const amount = proofs.reduce((total, curr) => total + curr.amount, 0)
         const { payload, amount1BlindedMessages, amount2BlindedMessages } = await this.createSplitPayload(0, amount, proofs)
         const { fst, snd } = await this.mint.split(payload)
-        if(!fst || !snd) { return [] }
-        const proofs1: Array<Proof> = dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys)
-        const proofs2: Array<Proof> = dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys)
+        const proofs1: Array<Proof> = fst ? dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys) : []
+        const proofs2: Array<Proof> = snd ? dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys) : []
         const newProofs: Array<Proof> = [...proofs1,...proofs2]
         return newProofs
     }
