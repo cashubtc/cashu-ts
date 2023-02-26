@@ -1,7 +1,7 @@
 import { utils } from "@noble/secp256k1";
 import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64.js";
 import { Proof } from "./model/Proof.js";
-import { Token } from './model/types/Token.js';
+import { Token } from './model/types/index.js';
 
 function splitAmount(value: number): Array<number> {
     const chunks: Array<number> = []

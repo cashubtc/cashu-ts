@@ -1,5 +1,5 @@
 import { Point } from "@noble/secp256k1"
-import { SerealizedBlindedSignature } from "./types/SerealizedBlinedSignature.js"
+import { SerealizedBlindedSignature } from "./types/index.js"
 
 class BlindedSignature {
     id: string
