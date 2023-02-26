@@ -13,9 +13,15 @@ export type SplitPayload = {
     outputs: Array<SerealizedBlindedMessage>
 }
 
-export type SplitResponse = { fst: SerealizedBlindedSignature[], snd: SerealizedBlindedSignature[] }
+export type SplitResponse = {
+    fst: SerealizedBlindedSignature[],
+    snd: SerealizedBlindedSignature[]
+}
 
-export type requestMintResponse = { pr: string, hash: string }
+export type requestMintResponse = {
+    pr: string,
+    hash: string
+}
 
 export type CheckSpendableResponse = { spendable: Array<boolean> }
 
@@ -36,8 +42,8 @@ export type Token = {
 }
 
 export type BlindedTransaction = {
-    blindedMessages: SerealizedBlindedMessage[];
-    secrets: Uint8Array[];
-    rs: bigint[];
-    amounts: number[];
+    blindedMessages: SerealizedBlindedMessage[]
+    secrets: Uint8Array[]
+    rs: bigint[]
+    amounts: number[]
 }
