@@ -1,4 +1,4 @@
-import { utils,Point } from "@noble/secp256k1";
+import { utils, Point } from "@noble/secp256k1";
 import { hashToCurve } from "../src/DHKE.js";
 import { bytesToNumber } from "../src/utils.js";
 
@@ -9,16 +9,16 @@ describe('test crypto bdhke', () => {
 
         //Wallet(Bob)
         const wallet: Wallet = new Wallet()
-        const B_ : Point = await wallet.createBlindedMessage("secret")
+        const B_ = await wallet.createBlindedMessage("secret")
 
         //Mint
-        const C_: Point = mint.createBlindSignature(B_)
-        
+        const C_ = mint.createBlindSignature(B_)
+
         //Wallet
-        const {C, secret} = wallet.unblindSignature(C_, mint.publicKey)
+        const { C, secret } = wallet.unblindSignature(C_, mint.publicKey)
 
         //Mint 
-        const aY : Point = await mint.calculateCVerify(secret)
+        const aY = await mint.calculateCVerify(secret)
         expect(aY).toStrictEqual(C)
     });
 });
@@ -27,34 +27,33 @@ describe('test crypto bdhke', () => {
 class Mint {
     private privateKey: Uint8Array
     publicKey: Point
-    constructor(){
+    constructor() {
         this.privateKey = utils.randomPrivateKey()
         this.publicKey = Point.BASE.multiply(bytesToNumber(this.privateKey))
     }
 
-    createBlindSignature(B_: Point) : Point{
-        const C_ : Point = B_.multiply(bytesToNumber(this.privateKey))
+    createBlindSignature(B_: Point): Point {
+        const C_: Point = B_.multiply(bytesToNumber(this.privateKey))
         return C_
     }
 
-    async calculateCVerify(secret: Uint8Array) : Promise<Point> {
-        const Y : Point = await hashToCurve(secret)
-        const aY : Point = Y.multiply(bytesToNumber(this.privateKey))
+    async calculateCVerify(secret: Uint8Array): Promise<Point> {
+        const Y: Point = await hashToCurve(secret)
+        const aY: Point = Y.multiply(bytesToNumber(this.privateKey))
         return aY
     }
 }
 
 class Wallet {
-    private Y: Point;
-    private r: bigint;
-    private rG: Point;
-    private B_: Point;
-    private secret: Uint8Array;
-    constructor(){
-    }
+    private Y: Point | undefined
+    private r = BigInt(0)
+    private rG: Point | undefined
+    private B_: Point | undefined
+    private secret = new Uint8Array()
+    constructor() { }
 
     async createBlindedMessage(message: string): Promise<Point> {
-        const enc: TextEncoder = new TextEncoder()
+        const enc = new TextEncoder()
         this.secret = enc.encode(message)
         this.Y = await hashToCurve(this.secret)
         this.r = bytesToNumber(utils.randomPrivateKey())
@@ -63,8 +62,8 @@ class Wallet {
         return this.B_
     }
 
-    unblindSignature(C_: Point, mintPubK: Point): {C:Point, secret: Uint8Array}{
-        const C : Point = C_.subtract(mintPubK.multiply(this.r))
-        return {C, secret: this.secret}
+    unblindSignature(C_: Point, mintPubK: Point): { C: Point, secret: Uint8Array } {
+        const C = C_.subtract(mintPubK.multiply(this.r))
+        return { C, secret: this.secret }
     }
 }

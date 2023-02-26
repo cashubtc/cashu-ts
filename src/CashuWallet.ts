@@ -11,7 +11,7 @@ import { getDecodedProofs, splitAmount } from "./utils.js";
  * Class that represents a Cashu wallet.
  */
 class CashuWallet {
-    keys: object
+    keys: { [k: number]: string }
     mint: CashuMint
 
     /**
@@ -57,7 +57,7 @@ class CashuWallet {
     }
 
     async getFee(invoice: string): Promise<number> {
-        const { fee }: { fee: number } = await this.mint.checkFees({ pr: invoice })
+        const { fee } = await this.mint.checkFees({ pr: invoice })
         return fee
     }
 
@@ -82,9 +82,9 @@ class CashuWallet {
         const amount = proofs.reduce((total, curr) => total + curr.amount, 0)
         const { payload, amount1BlindedMessages, amount2BlindedMessages } = await this.createSplitPayload(0, amount, proofs)
         const { fst, snd } = await this.mint.split(payload)
-        const proofs1: Array<Proof> = fst ? dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys) : []
-        const proofs2: Array<Proof> = snd ? dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys) : []
-        const newProofs: Array<Proof> = [...proofs1, ...proofs2]
+        const proofs1 = fst ? dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys) : []
+        const proofs2 = snd ? dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys) : []
+        const newProofs = [...proofs1, ...proofs2]
         return newProofs
     }
 
@@ -153,7 +153,7 @@ class CashuWallet {
         const blindedMessages: Array<{ amount: number, B_: string }> = []
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
-        const amounts: Array<number> = splitAmount(amount)
+        const amounts = splitAmount(amount)
         for (let i = 0; i < amounts.length; i++) {
             const secret: Uint8Array = ecUtils.randomBytes(32)
             secrets.push(secret)

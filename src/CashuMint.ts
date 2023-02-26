@@ -7,7 +7,7 @@ import { SerealizedBlindedSignature } from "./model/types/SerealizedBlinedSignat
  */
 class CashuMint {
     mintUrl: string
-    constructor(mintHost: string, mintApiRoot?: string, mintPort?: string,) {
+    constructor(mintHost: string, mintApiRoot?: string, mintPort?: string) {
         if (mintPort) {
             this.mintUrl = `${mintHost}:${mintPort}`
         } else {
