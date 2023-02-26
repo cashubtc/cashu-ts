@@ -1,12 +1,13 @@
 import { utils } from "@noble/secp256k1";
 import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64.js";
 import { Proof } from "./model/Proof.js";
+import { Token } from './model/types/Token.js';
 
 function splitAmount(value: number): Array<number> {
     const chunks: Array<number> = []
     for (let i = 0; i < 32; i++) {
         const mask: number = 1 << i
-        if ((value & mask) !== 0) chunks.push(Math.pow(2, i))
+        if ((value & mask) !== 0) { chunks.push(Math.pow(2, i)) }
     }
     return chunks
 }
@@ -20,7 +21,7 @@ function hexToNumber(hex: string): bigint {
 }
 
 //used for json serialization
-function bigIntStringify(key: any, value: any) {
+function bigIntStringify<T>(_key: unknown, value: T) {
     return typeof value === 'bigint' ? value.toString() : value
 }
 
@@ -30,26 +31,24 @@ function bigIntStringify(key: any, value: any) {
     * @param mints without this, a v1Token will be encoded
     * @returns 
     */
-function getEncodedProofs(proofs: Array<Proof>, mints?: Array<{ url: string, keysets: Array<string> }>): string {
+function getEncodedProofs(proofs: Array<Proof>, mints?: Array<{ url: string, ids: Array<string> }>): string {
     const token = {
         proofs,
-        mints: mints??[]
+        mints: mints ?? []
     }
     return encodeJsonToBase64(token)
 }
 
-function getDecodedProofs(token: string): { proofs: Array<Proof>, mints: Array<{ url: string, keysets: Array<string> }> } {
-    const obj = encodeBase64ToJson(token)
-    // check if v2
-    if (obj.proofs) {
-        const proofs: Array<Proof> = obj.proofs
-        const mints: Array<{ url: string, keysets: Array<string> }> = obj.mints??[]
-        return { proofs, mints }
-    }
-        const proofs: Array<Proof> = obj
-        return { proofs, mints: [] }
-}
+function getDecodedProofs(token: string): Token {
+    const obj = encodeBase64ToJson<Token | Array<Proof>>(token)
 
+    if (Array.isArray(obj)) {
+        return { proofs: obj, mints: [] }
+    }
+    // check if v2
+    return { proofs: obj.proofs, mints: obj?.mints ?? [] }
+}
 export {
     hexToNumber, splitAmount, bytesToNumber, bigIntStringify, getDecodedProofs, getEncodedProofs
-}
+};
+

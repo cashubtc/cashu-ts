@@ -1,11 +1,11 @@
-import { CashuMint } from "./CashuMint.js";
-import { bigIntStringify, getDecodedProofs, splitAmount } from "./utils.js";
-import { utils as ecUtils } from "@noble/secp256k1";
-import * as dhke from "./DHKE.js";
-import { encodeBase64ToJson } from "./base64.js";
-import { Proof } from "./model/Proof.js";
-import { BlindedMessage } from "./model/BlindedMessage.js";
 import { decode } from "@gandlaf21/bolt11-decode";
+import { utils as ecUtils } from "@noble/secp256k1";
+import { encodeBase64ToJson } from "./base64.js";
+import { CashuMint } from "./CashuMint.js";
+import * as dhke from "./DHKE.js";
+import { BlindedMessage } from "./model/BlindedMessage.js";
+import { Proof } from "./model/Proof.js";
+import { getDecodedProofs, splitAmount } from "./utils.js";
 
 /**
  * Class that represents a Cashu wallet.
@@ -32,15 +32,15 @@ class CashuWallet {
     async checkProofsSpent(proofs: Array<Proof>): Promise<Array<Proof>> {
         const payload = {
             //send only the secret
-            proofs: proofs.map((p) => { return { secret: p.secret } })
+            proofs: proofs.map((p) => ({ secret: p.secret }))
         }
         const { spendable } = await this.mint.check(payload)
         //return only the proofs that are NOT spendable
-        return proofs.filter((p,i)=>!spendable[i])
+        return proofs.filter((_, i) => !spendable[i])
     }
 
-    async requestMint(amount: number) {
-        return await this.mint.requestMint(amount)
+    requestMint(amount: number) {
+        return this.mint.requestMint(amount)
     }
 
     /**
@@ -51,7 +51,7 @@ class CashuWallet {
      * @returns 
      */
     async payLnInvoice(invoice: string, proofsToSend: Array<Proof>) {
-        const paymentPayload: any = this.createPaymentPayload(invoice, proofsToSend)
+        const paymentPayload = this.createPaymentPayload(invoice, proofsToSend)
         const payData = await this.mint.melt(paymentPayload)
         return { isPaid: payData.paid ?? false, preimage: payData.preimage }
     }
@@ -73,7 +73,7 @@ class CashuWallet {
         return payload
     }
 
-    async payLnInvoiceWithToken(invoice: string, token: string) {
+    payLnInvoiceWithToken(invoice: string, token: string) {
         return this.payLnInvoice(invoice, encodeBase64ToJson(token))
     }
 
@@ -84,7 +84,7 @@ class CashuWallet {
         const { fst, snd } = await this.mint.split(payload)
         const proofs1: Array<Proof> = fst ? dhke.constructProofs(fst, amount1BlindedMessages.rs, amount1BlindedMessages.secrets, this.keys) : []
         const proofs2: Array<Proof> = snd ? dhke.constructProofs(snd, amount2BlindedMessages.rs, amount2BlindedMessages.secrets, this.keys) : []
-        const newProofs: Array<Proof> = [...proofs1,...proofs2]
+        const newProofs: Array<Proof> = [...proofs1, ...proofs2]
         return newProofs
     }
 
@@ -114,10 +114,9 @@ class CashuWallet {
 
     async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
         const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount)
-        const payloads: { outputs: Array<{ amount: number, B_: string }> } = { outputs: blindedMessages }
-        const payloadsJson = JSON.parse(JSON.stringify({ payloads }, bigIntStringify))
-        const { promises } = await this.mint.mint(payloadsJson.payloads, hash)
-        if (promises.error) {
+        const payloads = { outputs: blindedMessages }
+        const { promises } = await this.mint.mint(payloads, hash)
+        if ('error' in promises) {
             throw new Error(promises.error)
         }
         return dhke.constructProofs(promises, rs, secrets, this.keys)
@@ -128,7 +127,7 @@ class CashuWallet {
     private async createSplitPayload(amount1: number, amount2: number, proofsToSend: Array<Proof>) {
         const amount1BlindedMessages = await this.createRandomBlindedMessages(amount1)
         const amount2BlindedMessages = await this.createRandomBlindedMessages(amount2)
-        const allBlindedMessages = []
+        const allBlindedMessages: Array<{ amount: number, B_: string }> = []
         // the order of this array aparently matters if it's the other way around,
         // the mint complains that the split is not as expected
         allBlindedMessages.push(...amount1BlindedMessages.blindedMessages)
