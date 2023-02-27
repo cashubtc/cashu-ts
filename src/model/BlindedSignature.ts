@@ -1,5 +1,5 @@
 import { Point } from "@noble/secp256k1"
-import { SerealizedBlindedSignature } from "./types/index.js"
+import { SerializedBlindedSignature } from "./types/index.js"
 
 class BlindedSignature {
     id: string
@@ -12,8 +12,8 @@ class BlindedSignature {
         this.C_ = C_
     }
 
-    getSerealizedBlindedSignature(): SerealizedBlindedSignature{
-        return {id: this.id, amount: this.amount, C_: this.C_.toHex(true)}
+    getSerializedBlindedSignature(): SerializedBlindedSignature {
+        return { id: this.id, amount: this.amount, C_: this.C_.toHex(true) }
     }
 }
 

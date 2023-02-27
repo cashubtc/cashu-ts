@@ -1,8 +1,8 @@
 import axios from "axios";
 import {
     CheckSpendableResponse, MeltPayload, MeltResponse,
-    MintKeys, requestMintResponse, SerealizedBlindedMessage,
-    SerealizedBlindedSignature, SplitPayload, SplitResponse
+    MintKeys, requestMintResponse, SerializedBlindedMessage,
+    SerializedBlindedSignature, SplitPayload, SplitResponse
 } from './model/types/index.js';
 
 /**
@@ -30,8 +30,8 @@ class CashuMint {
         })
         return data
     }
-    async mint(payloads: { outputs: Array<SerealizedBlindedMessage> }, paymentHash = "") {
-        const { data } = await axios.post<{ promises: Array<SerealizedBlindedSignature> | { error: string } }>(`${this.mintUrl}/mint`, payloads,
+    async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, paymentHash = "") {
+        const { data } = await axios.post<{ promises: Array<SerializedBlindedSignature> | { error: string } }>(`${this.mintUrl}/mint`, payloads,
             {
                 params: { payment_hash: paymentHash }
             })

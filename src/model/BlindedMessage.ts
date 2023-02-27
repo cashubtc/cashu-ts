@@ -1,5 +1,5 @@
 import { Point } from "@noble/secp256k1"
-import { SerealizedBlindedMessage } from './types/index.js'
+import { SerializedBlindedMessage } from './types/index.js'
 
 class BlindedMessage {
     amount: number
@@ -8,7 +8,7 @@ class BlindedMessage {
         this.amount = amount
         this.B_ = B_
     }
-    getSerealizedBlindedMessage(): SerealizedBlindedMessage {
+    getSerializedBlindedMessage(): SerializedBlindedMessage {
         return { amount: this.amount, B_: this.B_.toHex(true) }
     }
 }

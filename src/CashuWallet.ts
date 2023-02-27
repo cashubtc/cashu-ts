@@ -5,7 +5,7 @@ import { CashuMint } from "./CashuMint.js";
 import * as dhke from "./DHKE.js";
 import { BlindedMessage } from "./model/BlindedMessage.js";
 import { Proof } from "./model/Proof.js";
-import { BlindedTransaction, MintKeys, SerealizedBlindedMessage, SplitPayload } from './model/types/index.js';
+import { BlindedTransaction, MintKeys, SerializedBlindedMessage, SplitPayload } from './model/types/index.js';
 import { getDecodedProofs, splitAmount } from "./utils.js";
 
 /**
@@ -132,7 +132,7 @@ class CashuWallet {
     }> {
         const amount1BlindedMessages = await this.createRandomBlindedMessages(amount1)
         const amount2BlindedMessages = await this.createRandomBlindedMessages(amount2)
-        const allBlindedMessages: Array<SerealizedBlindedMessage> = []
+        const allBlindedMessages: Array<SerializedBlindedMessage> = []
         // the order of this array aparently matters if it's the other way around,
         // the mint complains that the split is not as expected
         allBlindedMessages.push(...amount1BlindedMessages.blindedMessages)
@@ -155,7 +155,7 @@ class CashuWallet {
 
 
     private async createRandomBlindedMessages(amount: number) {
-        const blindedMessages: Array<SerealizedBlindedMessage> = []
+        const blindedMessages: Array<SerializedBlindedMessage> = []
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
         const amounts = splitAmount(amount)
@@ -165,7 +165,7 @@ class CashuWallet {
             const { B_, r } = await dhke.blindMessage(secret)
             rs.push(r)
             const blindedMessage = new BlindedMessage(amounts[i], B_)
-            blindedMessages.push(blindedMessage.getSerealizedBlindedMessage())
+            blindedMessages.push(blindedMessage.getSerializedBlindedMessage())
         }
         return { blindedMessages, secrets, rs, amounts }
     }

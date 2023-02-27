@@ -10,12 +10,12 @@ export type MeltResponse = { paid: boolean, preimage: string }
 export type SplitPayload = {
     proofs: Array<Proof>,
     amount: number,
-    outputs: Array<SerealizedBlindedMessage>
+    outputs: Array<SerializedBlindedMessage>
 }
 
 export type SplitResponse = {
-    fst: SerealizedBlindedSignature[],
-    snd: SerealizedBlindedSignature[]
+    fst: SerializedBlindedSignature[],
+    snd: SerializedBlindedSignature[]
 }
 
 export type requestMintResponse = {
@@ -25,12 +25,12 @@ export type requestMintResponse = {
 
 export type CheckSpendableResponse = { spendable: Array<boolean> }
 
-export type SerealizedBlindedMessage = {
+export type SerializedBlindedMessage = {
     amount: number,
     B_: string
 }
 
-export type SerealizedBlindedSignature = {
+export type SerializedBlindedSignature = {
     id: string
     amount: number
     C_: string
@@ -42,7 +42,7 @@ export type Token = {
 }
 
 export type BlindedTransaction = {
-    blindedMessages: SerealizedBlindedMessage[]
+    blindedMessages: SerializedBlindedMessage[]
     secrets: Uint8Array[]
     rs: bigint[]
     amounts: number[]
