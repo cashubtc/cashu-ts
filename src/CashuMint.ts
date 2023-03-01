@@ -1,5 +1,6 @@
 import axios from "axios";
 import {
+	CheckSpendablePayload,
     CheckSpendableResponse, MeltPayload, MeltResponse,
     MintKeys, requestMintResponse, SerializedBlindedMessage,
     SerializedBlindedSignature, SplitPayload, SplitResponse
@@ -60,7 +61,7 @@ class CashuMint {
         const { data } = await axios.post<{ fee: number }>(`${this.mintUrl}/checkfees`, checkfeesPayload)
         return data
     }
-    async check(checkPayload: { proofs: Array<{ secret: string }> }): Promise<CheckSpendableResponse> {
+	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
         const { data } = await axios.post<CheckSpendableResponse>(`${this.mintUrl}/check`, checkPayload)
         return data
     }

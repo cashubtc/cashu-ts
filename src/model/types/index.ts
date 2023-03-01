@@ -3,9 +3,15 @@ import { Proof } from '../Proof.js'
 export type MintKeys = { [k: number]: string }
 
 
-export type MeltPayload = { pr: string, proofs: Array<Proof> }
+export type MeltPayload = {
+    pr: string,
+    proofs: Array<Proof>
+}
 
-export type MeltResponse = { paid: boolean, preimage: string }
+export type MeltResponse = {
+    paid: boolean,
+    preimage: string
+}
 
 export type SplitPayload = {
     proofs: Array<Proof>,
@@ -23,6 +29,10 @@ export type requestMintResponse = {
     hash: string
 }
 
+
+export type CheckSpendablePayload = {
+    proofs: Array<{ secret: string }>
+}
 export type CheckSpendableResponse = { spendable: Array<boolean> }
 
 export type SerializedBlindedMessage = {
