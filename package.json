@@ -15,7 +15,8 @@
     "compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
     "test": "jest --coverage --maxWorkers=1",
     "dev": "tsc --watch",
-    "lint": "eslint --ext .js,.ts ."
+    "lint": "eslint --ext .js,.ts .",
+    "format": "prettier --write ."
   },
   "keywords": [
     "cashu"
@@ -41,6 +42,7 @@
     "@gandlaf21/bolt11-decode": "^3.0.6",
     "@noble/secp256k1": "^1.7.0",
     "axios": "^1.2.1",
-    "buffer": "^6.0.3"
+    "buffer": "^6.0.3",
+    "prettier": "^2.8.4"
   }
 }
