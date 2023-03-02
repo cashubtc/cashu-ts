@@ -5,13 +5,14 @@ import { CashuMint } from "./CashuMint.js";
 import * as dhke from "./DHKE.js";
 import { BlindedMessage } from "./model/BlindedMessage.js";
 import { Proof } from "./model/Proof.js";
+import { BlindedTransaction, MintKeys, SerializedBlindedMessage, SplitPayload } from './model/types/index.js';
 import { getDecodedProofs, splitAmount } from "./utils.js";
 
 /**
  * Class that represents a Cashu wallet.
  */
 class CashuWallet {
-    keys: { [k: number]: string }
+    keys: MintKeys
     mint: CashuMint
 
     /**
@@ -19,7 +20,7 @@ class CashuWallet {
      * @param keys public keys from the mint
      * @param mint Cashu mint instance is used to make api calls
      */
-    constructor(keys: { [k: string]: string }, mint: CashuMint) {
+    constructor(keys: MintKeys, mint: CashuMint) {
         this.keys = keys
         this.mint = mint
     }
@@ -124,10 +125,14 @@ class CashuWallet {
 
 
     //keep amount 1 send amount 2
-    private async createSplitPayload(amount1: number, amount2: number, proofsToSend: Array<Proof>) {
+    private async createSplitPayload(amount1: number, amount2: number, proofsToSend: Array<Proof>): Promise<{
+        payload: SplitPayload,
+        amount1BlindedMessages: BlindedTransaction,
+        amount2BlindedMessages: BlindedTransaction
+    }> {
         const amount1BlindedMessages = await this.createRandomBlindedMessages(amount1)
         const amount2BlindedMessages = await this.createRandomBlindedMessages(amount2)
-        const allBlindedMessages: Array<{ amount: number, B_: string }> = []
+        const allBlindedMessages: Array<SerializedBlindedMessage> = []
         // the order of this array aparently matters if it's the other way around,
         // the mint complains that the split is not as expected
         allBlindedMessages.push(...amount1BlindedMessages.blindedMessages)
@@ -150,7 +155,7 @@ class CashuWallet {
 
 
     private async createRandomBlindedMessages(amount: number) {
-        const blindedMessages: Array<{ amount: number, B_: string }> = []
+        const blindedMessages: Array<SerializedBlindedMessage> = []
         const secrets: Array<Uint8Array> = []
         const rs: Array<bigint> = []
         const amounts = splitAmount(amount)
@@ -159,11 +164,12 @@ class CashuWallet {
             secrets.push(secret)
             const { B_, r } = await dhke.blindMessage(secret)
             rs.push(r)
-            const blindedMessage: BlindedMessage = new BlindedMessage(amounts[i], B_)
-            blindedMessages.push(blindedMessage.getSerealizedBlindedMessage())
+            const blindedMessage = new BlindedMessage(amounts[i], B_)
+            blindedMessages.push(blindedMessage.getSerializedBlindedMessage())
         }
         return { blindedMessages, secrets, rs, amounts }
     }
 }
 
-export { CashuWallet }
+export { CashuWallet };
+

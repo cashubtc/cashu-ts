@@ -10,15 +10,15 @@ class Split {
         this.amount = amount
         this.outputs = outputs
     }
-    getSerealizedSplit(){
+    getSerializedSplit() {
         return {
             proofs: this.proofs,
             amount: this.amount,
             outputs: this.outputs.map((blindedMessage: BlindedMessage) => {
-                return {amount: blindedMessage.amount, B_: blindedMessage.B_.toHex(true)}
+                return { amount: blindedMessage.amount, B_: blindedMessage.B_.toHex(true) }
             })
         }
     }
 }
 
-export { Split }
+export { Split };
