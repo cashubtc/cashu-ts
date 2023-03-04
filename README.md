@@ -1,6 +1,6 @@
 # Cashu TS
 
-⚠️ __Don't be reckless:__ This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
+⚠️ **Don't be reckless:** This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
 
 Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
 
@@ -26,28 +26,27 @@ npm i @gandlaf21/cashu-ts
 ### Import
 
 ```typescript
-import { CashuMint, CashuWallet, getEncodedProofs } from "@gandlaf21/cashu-js";
+import { CashuMint, CashuWallet, getEncodedProofs } from '@gandlaf21/cashu-js';
 
-const mint = new CashuMint("{MINT_HOST}","{/path/to/api/root/}", "{MINT_PORT}")
-const keys = await mint.getKeys()
-const wallet = new CashuWallet(keys,mint)
+const mint = new CashuMint('{MINT_HOST}', '{/path/to/api/root/}', '{MINT_PORT}');
+const keys = await mint.getKeys();
+const wallet = new CashuWallet(keys, mint);
 
-const {pr, hash} = await wallet.requestMint(200)
+const { pr, hash } = await wallet.requestMint(200);
 
 //pay this LN invoice
-console.log({pr},{hash})
+console.log({ pr }, { hash });
 
 async function invoiceHasBeenPaid() {
-    const proofs = await wallet.requestTokens(200,hash)
-    //Encoded proofs can be spent at the mint
-    const encoded = getEncodedProofs(proofs)
-    console.log(encoded)
+	const proofs = await wallet.requestTokens(200, hash);
+	//Encoded proofs can be spent at the mint
+	const encoded = getEncodedProofs(proofs);
+	console.log(encoded);
 }
-
 ```
 
 ## Contribute
 
 Contributions are very welcome.
 
-If you want to contribute, please open an Issue or a PR. 
+If you want to contribute, please open an Issue or a PR.
