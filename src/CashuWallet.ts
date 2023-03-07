@@ -115,8 +115,10 @@ class CashuWallet {
 	): Promise<{ returnChange: Array<Proof>; send: Array<Proof> }> {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
+		const change: Array<Proof> = [];
 		proofs.forEach((proof) => {
 			if (amountAvailable >= amount) {
+				change.push(proof);
 				return;
 			}
 			amountAvailable = amountAvailable + proof.amount;
@@ -142,9 +144,9 @@ class CashuWallet {
 				amount2BlindedMessages.secrets,
 				this.keys
 			);
-			return { returnChange: proofs1, send: proofs2 };
+			return { returnChange: [...proofs1, ...change], send: proofs2 };
 		}
-		return { returnChange: [], send: proofsToSend };
+		return { returnChange: change, send: proofsToSend };
 	}
 
 	async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
