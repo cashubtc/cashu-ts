@@ -117,7 +117,7 @@ class CashuWallet {
 		const proofsToSend: Array<Proof> = [];
 		proofs.forEach((proof) => {
 			if (amountAvailable >= amount) {
-				return;
+				return { returnChange: proofs, send: [] };
 			}
 			amountAvailable = amountAvailable + proof.amount;
 			proofsToSend.push(proof);
