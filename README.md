@@ -20,13 +20,13 @@ Wallet Features:
 ### Install
 
 ```shell
-npm i @gandlaf21/cashu-ts
+npm i @cashu/cashu-ts
 ```
 
 ### Import
 
 ```typescript
-import { CashuMint, CashuWallet, getEncodedProofs } from '@gandlaf21/cashu-js';
+import { CashuMint, CashuWallet, getEncodedProofs } from '@cashu/cashu-ts';
 
 const mint = new CashuMint('{MINT_HOST}', '{/path/to/api/root/}', '{MINT_PORT}');
 const keys = await mint.getKeys();
