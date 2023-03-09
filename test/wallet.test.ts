@@ -23,4 +23,3 @@ describe('test fees', () => {
 		expect(fee + amount).toEqual(2020);
 	});
 });
-
