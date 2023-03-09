@@ -57,8 +57,26 @@ class CashuMint {
 	}
 
 	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
-		const { data } = await axios.post<SplitResponse>(`${this.mintUrl}/split`, splitPayload);
-		return data;
+		try {
+			const { data } = await axios.post<SplitResponse>(`${this.mintUrl}/split`, splitPayload);
+			if ('error' in data) {
+				throw new Error(data.error);
+			}
+			if ('detail' in data) {
+				throw new Error(data.detail);
+			}
+			return data;
+		} catch (err) {
+			if (axios.isAxiosError(err) && err?.response?.data) {
+				if ('error' in err.response.data) {
+					throw new Error(err.response.data.error);
+				}
+				if ('detail' in err.response.data) {
+					throw new Error(err.response.data.detail);
+				}
+			}
+			throw err;
+		}
 	}
 	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
 		const { data } = await axios.post<MeltResponse>(`${this.mintUrl}/melt`, meltPayload);

@@ -23,6 +23,9 @@ export type SplitPayload = {
 export type SplitResponse = {
 	fst: SerializedBlindedSignature[];
 	snd: SerializedBlindedSignature[];
+	error?: string;
+	code?: number;
+	detail?: string;
 };
 
 export type requestMintResponse = {
