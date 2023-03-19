@@ -14,7 +14,7 @@
 	},
 	"scripts": {
 		"compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
-		"test": "jest --coverage --maxWorkers=1",
+		"test": "jest --coverage",
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts .",
 		"format": "prettier --write ."

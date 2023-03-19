@@ -1,4 +1,5 @@
 import { utils } from '@noble/secp256k1';
+import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import { Proof } from './model/Proof.js';
 import { Token, TokenV2 } from './model/types/index.js';
@@ -76,6 +77,29 @@ function handleLegacyTokens(token: string): Token {
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
 
+export function isObj(v: unknown): v is object {
+	return typeof v === 'object';
+}
+
+export function checkResponse(data: { error?: string; detail?: string }) {
+	if (!isObj(data)) return;
+	if ('error' in data && data.error) {
+		throw new Error(data.error);
+	}
+	if ('detail' in data && data.detail) {
+		throw new Error(data.detail);
+	}
+}
+export function checkResponseError(err: unknown) {
+	if (axios.isAxiosError(err) && err?.response?.data) {
+		if ('error' in err.response.data) {
+			throw new Error(err.response.data.error);
+		}
+		if ('detail' in err.response.data) {
+			throw new Error(err.response.data.detail);
+		}
+	}
+}
 export {
 	hexToNumber,
 	splitAmount,

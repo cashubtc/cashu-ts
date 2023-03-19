@@ -35,14 +35,13 @@ class CashuWallet {
 	 * @param proofs
 	 * @returns
 	 */
-	async checkProofsSpent(proofs: Array<Proof>): Promise<Array<Proof>> {
+	async checkProofsSpent(proofs: Array<Proof>, isSpendable = false): Promise<Array<Proof>> {
 		const payload = {
 			//send only the secret
 			proofs: proofs.map((p) => ({ secret: p.secret }))
 		};
 		const { spendable } = await this.mint.check(payload);
-		//return only the proofs that are NOT spendable
-		return proofs.filter((_, i) => !spendable[i]);
+		return proofs.filter((_, i) => (isSpendable ? spendable[i] : !spendable[i]));
 	}
 
 	requestMint(amount: number) {
@@ -94,22 +93,18 @@ class CashuWallet {
 		const { payload, amount1BlindedMessages, amount2BlindedMessages } =
 			await this.createSplitPayload(0, amount, token[0]?.proofs);
 		const { fst, snd } = await this.mint.split(payload);
-		const proofs1 = fst
-			? dhke.constructProofs(
-					fst,
-					amount1BlindedMessages.rs,
-					amount1BlindedMessages.secrets,
-					this.keys
-			  )
-			: [];
-		const proofs2 = snd
-			? dhke.constructProofs(
-					snd,
-					amount2BlindedMessages.rs,
-					amount2BlindedMessages.secrets,
-					this.keys
-			  )
-			: [];
+		const proofs1 = dhke.constructProofs(
+			fst,
+			amount1BlindedMessages.rs,
+			amount1BlindedMessages.secrets,
+			this.keys
+		);
+		const proofs2 = dhke.constructProofs(
+			snd,
+			amount2BlindedMessages.rs,
+			amount2BlindedMessages.secrets,
+			this.keys
+		);
 		const newProofs = [...proofs1, ...proofs2];
 		return newProofs;
 	}
@@ -158,9 +153,6 @@ class CashuWallet {
 		const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
-		if ('error' in promises) {
-			throw new Error(promises.error);
-		}
 		return dhke.constructProofs(promises, rs, secrets, this.keys);
 	}
 
