@@ -292,6 +292,50 @@ describe('send', () => {
 		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(result.returnChange[0].secret)).toBe(true);
 	});
+
+	test('test send over paying2', async () => {
+		mockedAxios.get.mockResolvedValueOnce({
+			data: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
+		});
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(keys, mint);
+		mockedAxios.post.mockResolvedValueOnce({
+			data: {
+				fst: [
+					{
+						id: '/uYB/6wWnYkU',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				],
+				snd: [
+					{
+						id: '/uYB/6wWnYkU',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
+			}
+		});
+		proofs.push(
+			new Proof(
+				'/uYB/6wWnYkU',
+				2,
+				'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			)
+		);
+		const result = await wallet.send(1, proofs);
+
+		expect(result.send).toHaveLength(1);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '0NI3TUAs1Sfy' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(result.returnChange).toHaveLength(1);
+		expect(result.returnChange[0]).toMatchObject({ amount: 2, id: '/uYB/6wWnYkU' });
+		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(result.returnChange[0].secret)).toBe(true);
+	});
 	test('test send not enough funds', async () => {
 		mockedAxios.get.mockResolvedValueOnce({
 			data: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
