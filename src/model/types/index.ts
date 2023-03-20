@@ -36,7 +36,7 @@ export type CheckSpendablePayload = {
 export type CheckSpendableResponse = { spendable: Array<boolean> };
 
 export type SerializedBlindedMessage = {
-	amount?: number;
+	amount: number;
 	B_: string;
 };
 
