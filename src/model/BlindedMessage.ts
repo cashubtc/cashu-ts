@@ -9,7 +9,7 @@ class BlindedMessage {
 		this.B_ = B_;
 	}
 	getSerializedBlindedMessage(): SerializedBlindedMessage {
-		return { amount : this.amount,B_: this.B_.toHex(true) };
+		return { amount: this.amount, B_: this.B_.toHex(true) };
 	}
 }
 export { BlindedMessage };
