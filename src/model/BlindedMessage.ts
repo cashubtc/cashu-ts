@@ -2,7 +2,7 @@ import { Point } from '@noble/secp256k1';
 import { SerializedBlindedMessage } from './types/index.js';
 
 class BlindedMessage {
-	amount?: number;
+	amount: number;
 	B_: Point;
 	constructor(amount: number, B_: Point) {
 		this.amount = amount;
