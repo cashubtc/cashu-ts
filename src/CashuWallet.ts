@@ -220,7 +220,7 @@ class CashuWallet {
 			secrets.push(secret);
 			const { B_, r } = await dhke.blindMessage(secret);
 			rs.push(r);
-			const blindedMessage = new BlindedMessage(undefined, B_);
+			const blindedMessage = new BlindedMessage(0, B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 
