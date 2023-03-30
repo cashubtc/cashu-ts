@@ -11,6 +11,7 @@ export type MeltPayload = {
 export type MeltResponse = {
 	paid: boolean;
 	preimage: string;
+	change?: SerializedBlindedSignature[];
 } & ApiError;
 
 export type SplitPayload = {
