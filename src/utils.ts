@@ -51,7 +51,21 @@ function getDecodedProofs(token: string): Token {
 	if (token.startsWith('cashu')) {
 		return getDecodedV3Token(token);
 	}
+	return handleLegacyTokens(token);
+}
 
+function getDecodedV3Token(token: string): Token {
+	const version = token.slice(5, 5);
+	token = token.slice(6);
+	return encodeBase64ToJson<Token>(token);
+}
+
+/**
+ * deprecated
+ * @param token
+ * @returns
+ */
+function handleLegacyTokens(token: string): Token {
 	const obj = encodeBase64ToJson<TokenV2 | Array<Proof>>(token);
 
 	// check if v1
@@ -59,11 +73,9 @@ function getDecodedProofs(token: string): Token {
 		return { token: [{ proofs: obj, mint: '' }] };
 	}
 
-	// if v2 token return v3 format <deprecated>
+	// if v2 token return v3 format
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0].url ?? '' }] };
 }
-
-function getDecodedV3Token(token: string): Token {}
 
 export {
 	hexToNumber,
