@@ -58,8 +58,13 @@ class CashuWallet {
 	 */
 	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>) {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
-		const payData = await this.mint.melt(paymentPayload);
-		return { isPaid: payData.paid ?? false, preimage: payData.preimage };
+		const { blindedMessages, secrets, rs } = await this.createBlankOutputs();
+		const payData = await this.mint.melt({ ...paymentPayload, outputs: blindedMessages });
+		return {
+			isPaid: payData.paid ?? false,
+			preimage: payData.preimage,
+			change: payData?.change ? dhke.constructProofs(payData.change, rs, secrets, this.keys) : []
+		};
 	}
 
 	async getFee(invoice: string): Promise<number> {
@@ -205,6 +210,21 @@ class CashuWallet {
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 		return { blindedMessages, secrets, rs, amounts };
+	}
+	private async createBlankOutputs() {
+		const blindedMessages: Array<SerializedBlindedMessage> = [];
+		const secrets: Array<Uint8Array> = [];
+		const rs: Array<bigint> = [];
+		for (let i = 0; i < 4; i++) {
+			const secret: Uint8Array = ecUtils.randomBytes(32);
+			secrets.push(secret);
+			const { B_, r } = await dhke.blindMessage(secret);
+			rs.push(r);
+			const blindedMessage = new BlindedMessage(0, B_);
+			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
+		}
+
+		return { blindedMessages, secrets, rs };
 	}
 }
 
