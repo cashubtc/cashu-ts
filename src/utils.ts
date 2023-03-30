@@ -35,7 +35,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  */
 function getEncodedProofs(proofs: Array<Proof>, mint: string, memo?: string): string {
 	let token = {
-		token: [mint, proofs]
+		token: [{mint, proofs}]
 	};
 
 	//add memo if exist
