@@ -15,6 +15,18 @@ Wallet Features:
 - [x] check if tokens are spent
 - [ ] ...
 
+Implemented NUTs:
+
+- [x] NUT-00
+- [x] NUT-01
+- [x] NUT-02
+- [x] NUT-03
+- [x] NUT-04
+- [x] NUT-05
+- [x] NUT-06
+- [x] NUT-07
+- [x] NUT-08
+
 ## Usage
 
 ### Install

@@ -5,11 +5,13 @@ export type MintKeys = { [k: number]: string };
 export type MeltPayload = {
 	pr: string;
 	proofs: Array<Proof>;
+	outputs: SerializedBlindedMessage[];
 };
 
 export type MeltResponse = {
 	paid: boolean;
 	preimage: string;
+	change?: SerializedBlindedSignature[];
 };
 
 export type SplitPayload = {
