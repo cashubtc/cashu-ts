@@ -15,7 +15,7 @@ Wallet Features:
 - [x] check if tokens are spent
 - [ ] ...
 
-Implemented NUTs:
+Implemented [NUTs](https://github.com/cashubtc/nuts/):
 
 - [x] NUT-00
 - [x] NUT-01
