@@ -35,20 +35,19 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns
  */
 function getEncodedProofs(proofs: Array<Proof>, mint: string, memo?: string): string {
-	let token = {
+	const token: Token= {
 		token: [{ mint, proofs }]
 	};
-
+	
 	//add memo if exist
-	token = {
-		...token,
-		...(memo && { memo })
-	};
-
+	if (memo) {
+		token.memo = memo
+	}
+	
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
-function getDecodedProofs(token: string): Token {
+function getDecodedToken(token: string): Token {
 	if (token.startsWith('cashu')) {
 		return getDecodedV3Token(token);
 	}
@@ -56,7 +55,6 @@ function getDecodedProofs(token: string): Token {
 }
 
 function getDecodedV3Token(token: string): Token {
-	const version = token.slice(5, 5);
 	token = token.slice(6);
 	return encodeBase64ToJson<Token>(token);
 }
@@ -75,7 +73,7 @@ function handleLegacyTokens(token: string): Token {
 	}
 
 	// if v2 token return v3 format
-	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0].url ?? '' }] };
+	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
 
 export {
@@ -83,6 +81,6 @@ export {
 	splitAmount,
 	bytesToNumber,
 	bigIntStringify,
-	getDecodedProofs,
+	getDecodedToken,
 	getEncodedProofs
 };
