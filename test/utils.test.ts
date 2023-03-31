@@ -34,7 +34,6 @@ describe('test decode token', () => {
 		expect(result).toStrictEqual({
 			token: [
 				{
-
 					proofs: [
 						{
 							id: 'I2yN+iRYfkzT',
@@ -65,7 +64,6 @@ describe('test decode token', () => {
 						}
 					],
 					mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
-
 				}
 			]
 		});
