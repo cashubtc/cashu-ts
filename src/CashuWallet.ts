@@ -11,7 +11,7 @@ import {
 	SerializedBlindedMessage,
 	SplitPayload
 } from './model/types/index.js';
-import { getDecodedProofs, splitAmount } from './utils.js';
+import { getDecodedToken, splitAmount } from './utils.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -89,10 +89,10 @@ class CashuWallet {
 	}
 
 	async receive(encodedToken: string): Promise<Array<Proof>> {
-		const { proofs } = getDecodedProofs(encodedToken);
-		const amount = proofs.reduce((total, curr) => total + curr.amount, 0);
+		const { token } = getDecodedToken(encodedToken);
+		const amount = token[0]?.proofs?.reduce((total, curr) => total + curr.amount, 0);
 		const { payload, amount1BlindedMessages, amount2BlindedMessages } =
-			await this.createSplitPayload(0, amount, proofs);
+			await this.createSplitPayload(0, amount, token[0]?.proofs);
 		const { fst, snd } = await this.mint.split(payload);
 		const proofs1 = fst
 			? dhke.constructProofs(

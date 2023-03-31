@@ -1,7 +1,8 @@
 import { utils } from '@noble/secp256k1';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import { Proof } from './model/Proof.js';
-import { Token } from './model/types/index.js';
+import { Token, TokenV2 } from './model/types/index.js';
+import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 
 function splitAmount(value: number): Array<number> {
 	const chunks: Array<number> = [];
@@ -28,36 +29,58 @@ function bigIntStringify<T>(_key: unknown, value: T) {
 }
 
 /**
- * to encode a v2Token, the mints can be passed as a parameter
+ * to encode a v3 token
  * @param proofs
- * @param mints without this, a v1Token will be encoded
+ * @param mints
  * @returns
  */
-function getEncodedProofs(
-	proofs: Array<Proof>,
-	mints?: Array<{ url: string; ids: Array<string> }>
-): string {
-	const token = {
-		proofs,
-		mints: mints ?? []
+function getEncodedProofs(proofs: Array<Proof>, mint: string, memo?: string): string {
+	const token: Token= {
+		token: [{ mint, proofs }]
 	};
-	return encodeJsonToBase64(token);
-}
-
-function getDecodedProofs(token: string): Token {
-	const obj = encodeBase64ToJson<Token | Array<Proof>>(token);
-
-	if (Array.isArray(obj)) {
-		return { proofs: obj, mints: [] };
+	
+	//add memo if exist
+	if (memo) {
+		token.memo = memo
 	}
-	// check if v2
-	return { proofs: obj.proofs, mints: obj?.mints ?? [] };
+	
+	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
+
+function getDecodedToken(token: string): Token {
+	if (token.startsWith('cashu')) {
+		return getDecodedV3Token(token);
+	}
+	return handleLegacyTokens(token);
+}
+
+function getDecodedV3Token(token: string): Token {
+	token = token.slice(6);
+	return encodeBase64ToJson<Token>(token);
+}
+
+/**
+ * deprecated
+ * @param token
+ * @returns
+ */
+function handleLegacyTokens(token: string): Token {
+	const obj = encodeBase64ToJson<TokenV2 | Array<Proof>>(token);
+
+	// check if v1
+	if (Array.isArray(obj)) {
+		return { token: [{ proofs: obj, mint: '' }] };
+	}
+
+	// if v2 token return v3 format
+	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
+}
+
 export {
 	hexToNumber,
 	splitAmount,
 	bytesToNumber,
 	bigIntStringify,
-	getDecodedProofs,
+	getDecodedToken,
 	getEncodedProofs
 };
