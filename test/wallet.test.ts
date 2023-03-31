@@ -164,7 +164,7 @@ describe('payLnInvoice', () => {
 		const response = { paid: true, preimage: '' };
 		mockedAxios.post.mockResolvedValueOnce({ data: response });
 		const result = await wallet.payLnInvoice(invoice, proofs);
-		expect(result).toEqual({ isPaid: true, preimage: '', change : [] });
+		expect(result).toEqual({ isPaid: true, preimage: '', change: [] });
 	});
 	test('test payLnInvoice bad resonse', async () => {
 		mockedAxios.get.mockResolvedValueOnce({ data: {} });
