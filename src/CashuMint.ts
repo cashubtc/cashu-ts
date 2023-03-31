@@ -1,4 +1,3 @@
-
 import { axios } from './axios.js';
 import {
 	CheckSpendablePayload,

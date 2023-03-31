@@ -35,15 +35,15 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns
  */
 function getEncodedProofs(proofs: Array<Proof>, mint: string, memo?: string): string {
-	const token: Token= {
+	const token: Token = {
 		token: [{ mint, proofs }]
 	};
-	
+
 	//add memo if exist
 	if (memo) {
-		token.memo = memo
+		token.memo = memo;
 	}
-	
+
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
