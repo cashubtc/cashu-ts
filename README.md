@@ -27,6 +27,12 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] NUT-07
 - [x] NUT-08
 
+Token formats:
+
+- [x] v1 read
+- [x] v2 read
+- [x] v3 read/write
+
 ## Usage
 
 ### Install
