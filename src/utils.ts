@@ -34,7 +34,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @param mints
  * @returns
  */
-function getEncodedProofs(proofs: Array<Proof>, mint: string, memo?: string): string {
+function getEncodedToken(proofs: Array<Proof>, mint: string, memo?: string): string {
 	const token: Token = {
 		token: [{ mint, proofs }]
 	};
@@ -82,5 +82,5 @@ export {
 	bytesToNumber,
 	bigIntStringify,
 	getDecodedToken,
-	getEncodedProofs
+	getEncodedToken
 };
