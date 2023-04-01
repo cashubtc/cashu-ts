@@ -28,7 +28,7 @@ describe('test decode token', () => {
 	});
 	test('testing v2 Token', async () => {
 		const token =
-			'eyJwcm9vZnMiOlt7ImlkIjoiSTJ5TitpUllma3pUIiwiYW1vdW50IjoxLCJzZWNyZXQiOiI5N3pmbW1hR2Y1azhNZzBnYWpwbmJtcGVydlR0RWVFOHd3S3JpN3JXcFVzPSIsIkMiOiIwMjE5NTA4MWU2MjJmOThiZmMxOWEwNWViZTIzNDFkOTU1YzBkMTI1ODhjNTk0OGM4NThkMDdhZGVjMDA3YmMxZTQifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovLzgzMzMuc3BhY2U6MzMzOCIsImlkcyI6WyJMM3p4eFJCL0k4dUUiLCJJMnlOK2lSWWZrelQiXX1dfQ==';
+			'eyJwcm9vZnMiOlt7ImlkIjoiSTJ5TitpUllma3pUIiwiYW1vdW50IjoxLCJzZWNyZXQiOiI5N3pmbW1hR2Y1azhNZzBnYWpwbmJtcGVydlR0RWVFOHd3S3JpN3JXcFVzPSIsIkMiOiIwMjE5NTA4MWU2MjJmOThiZmMxOWEwNWViZTIzNDFkOTU1YzBkMTI1ODhjNTk0OGM4NThkMDdhZGVjMDA3YmMxZTQifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovLzgzMzMuc3BhY2U6MzMzOCIsImlkcyI6WyJMM3p4eFJCL0k4dUUiLCJJMnlOK2lSWWZrelQiXX1dfQ';
 
 		const result = utils.getDecodedToken(token);
 		expect(result).toStrictEqual({
