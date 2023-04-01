@@ -7,6 +7,11 @@ import { Proof } from '../src/model/Proof.js';
 // Mock jest and set the type
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+jest.mock('../src/axios.js', () => ({
+	get axios() {
+		return mockedAxios;
+	}
+}));
 
 afterEach(() => {
 	mockedAxios.post.mockReset();
