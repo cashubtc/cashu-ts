@@ -2,10 +2,11 @@ import { axios } from './axios.js';
 import {
 	CheckSpendablePayload,
 	CheckSpendableResponse,
+	GetInfoResponse,
 	MeltPayload,
 	MeltResponse,
 	MintKeys,
-	requestMintResponse,
+	RequestMintResponse,
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
 	SplitPayload,
@@ -31,12 +32,18 @@ class CashuMint {
 		}
 	}
 
-	async requestMint(amount: number): Promise<requestMintResponse> {
-		const { data } = await axios.get<requestMintResponse>(`${this.mintUrl}/mint`, {
+	async getInfo(): Promise<GetInfoResponse> {
+		const { data } = await axios.get<GetInfoResponse>(`${this.mintUrl}/info`);
+		return data;
+	}
+
+	async requestMint(amount: number): Promise<RequestMintResponse> {
+		const { data } = await axios.get<RequestMintResponse>(`${this.mintUrl}/mint`, {
 			params: { amount }
 		});
 		return data;
 	}
+
 	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, paymentHash = '') {
 		const { data } = await axios.post<{
 			promises: Array<SerializedBlindedSignature> | { error: string };
