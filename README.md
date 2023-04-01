@@ -27,10 +27,10 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] NUT-07
 - [x] NUT-08
 
-Token formats:
+Supported token formats:
 
 - [x] v1 read
-- [x] v2 read
+- [x] v2 read (deprecated)
 - [x] v3 read/write
 
 ## Usage
@@ -44,7 +44,7 @@ npm i @cashu/cashu-ts
 ### Import
 
 ```typescript
-import { CashuMint, CashuWallet, getEncodedProofs } from '@cashu/cashu-ts';
+import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 
 const mint = new CashuMint('{MINT_HOST}', '{/path/to/api/root/}', '{MINT_PORT}');
 const keys = await mint.getKeys();
@@ -58,7 +58,7 @@ console.log({ pr }, { hash });
 async function invoiceHasBeenPaid() {
 	const proofs = await wallet.requestTokens(200, hash);
 	//Encoded proofs can be spent at the mint
-	const encoded = getEncodedProofs(proofs);
+	const encoded = getEncodedToken(proofs);
 	console.log(encoded);
 }
 ```
