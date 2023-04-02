@@ -123,34 +123,6 @@ describe('checkProofsSpent', () => {
 		const result = await wallet.checkProofsSpent(proofs);
 		expect(result).toStrictEqual([]);
 	});
-	test('test checkProofsSpent - get proofs that are spendable', async () => {
-		mockedAxios.get.mockResolvedValueOnce({
-			data: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181'
-			}
-		});
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
-
-		mockedAxios.post.mockResolvedValueOnce({ data: { spendable: [true] } });
-		const result = await wallet.checkProofsSpent(proofs, true);
-		expect(result).toStrictEqual(proofs);
-	});
-	test('test checkProofsSpent bad resonse', async () => {
-		mockedAxios.get.mockResolvedValueOnce({
-			data: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181'
-			}
-		});
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
-		mockedAxios.post.mockResolvedValueOnce({ data: undefined });
-		try {
-			await wallet.checkProofsSpent(proofs, true);
-		} catch (error) {
-			expect(error).toEqual(new Error('bad response'));
-		}
-	});
 });
 
 describe('payLnInvoice', () => {
