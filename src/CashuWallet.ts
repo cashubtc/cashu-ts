@@ -35,13 +35,13 @@ class CashuWallet {
 	 * @param proofs
 	 * @returns
 	 */
-	async checkProofsSpent(proofs: Array<Proof>, isSpendable = false): Promise<Array<Proof>> {
+	async checkProofsSpent(proofs: Array<Proof>): Promise<Array<Proof>> {
 		const payload = {
 			//send only the secret
 			proofs: proofs.map((p) => ({ secret: p.secret }))
 		};
 		const { spendable } = await this.mint.check(payload);
-		return proofs.filter((_, i) => (isSpendable ? spendable[i] : !spendable[i]));
+		return proofs.filter((_, i) => !spendable[i]);
 	}
 
 	requestMint(amount: number) {
