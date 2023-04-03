@@ -6,7 +6,8 @@
 		"outDir": "./dist/lib/es5",
 		"moduleResolution": "node",
 		"lib": ["ES2020", "DOM"],
-		"noImplicitAny": true
+		"noImplicitAny": true,
+		"esModuleInterop": true
 	},
 	"include": ["src/**/*"]
 }

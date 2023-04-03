@@ -2,6 +2,7 @@
 	"name": "@cashu/cashu-ts",
 	"version": "0.6.1",
 	"description": "cashu library for communicating with a cashu mint",
+	"type": "module",
 	"main": "dist/lib/es5/index.js",
 	"module": "dist/lib/es6/index.js",
 	"repository": {
@@ -13,7 +14,7 @@
 	},
 	"scripts": {
 		"compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
-		"test": "jest --coverage --maxWorkers=1",
+		"test": "jest --coverage",
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts .",
 		"format": "prettier --write ."

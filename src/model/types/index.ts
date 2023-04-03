@@ -12,7 +12,7 @@ export type MeltResponse = {
 	paid: boolean;
 	preimage: string;
 	change?: SerializedBlindedSignature[];
-};
+} & ApiError;
 
 export type SplitPayload = {
 	proofs: Array<Proof>;
@@ -23,17 +23,21 @@ export type SplitPayload = {
 export type SplitResponse = {
 	fst: SerializedBlindedSignature[];
 	snd: SerializedBlindedSignature[];
+} & ApiError;
+export type ApiError = {
+	error?: string;
+	code?: number;
+	detail?: string;
 };
-
-export type requestMintResponse = {
+export type RequestMintResponse = {
 	pr: string;
 	hash: string;
-};
+} & ApiError;
 
 export type CheckSpendablePayload = {
 	proofs: Array<{ secret: string }>;
 };
-export type CheckSpendableResponse = { spendable: Array<boolean> };
+export type CheckSpendableResponse = { spendable: Array<boolean> } & ApiError;
 
 export type SerializedBlindedMessage = {
 	amount: number;
