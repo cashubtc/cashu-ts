@@ -49,24 +49,28 @@ function getEncodedToken(proofs: Array<Proof>, mint: string, memo?: string): str
 }
 
 function getDecodedToken(token: string): Token {
-	if (token.startsWith('cashu')) {
-		return getDecodedV3Token(token);
-	}
-	return handleLegacyTokens(token);
-}
-
-function getDecodedV3Token(token: string): Token {
-	token = token.slice(6);
-	return encodeBase64ToJson<Token>(token);
+	// remove prefixes
+	const UriPrefixes = ['web+cashu://', 'cashu:', 'cashu://', 'cashu'];
+	UriPrefixes.forEach((prefix) => {
+		if (!token.startsWith(prefix)) {
+			return;
+		}
+		token = token.slice(prefix.length);
+	});
+	return handleTokens(token);
 }
 
 /**
- * deprecated
  * @param token
  * @returns
  */
-function handleLegacyTokens(token: string): Token {
-	const obj = encodeBase64ToJson<TokenV2 | Array<Proof>>(token);
+function handleTokens(token: string): Token {
+	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
+
+	// check if v3
+	if ('token' in obj) {
+		return obj;
+	}
 
 	// check if v1
 	if (Array.isArray(obj)) {
