@@ -19,20 +19,7 @@ import { checkResponse, checkResponseError, isObj } from './utils.js';
  * Class represents Cashu Mint API.
  */
 class CashuMint {
-	mintUrl: string;
-	constructor(mintHost: string, mintApiRoot?: string, mintPort?: string) {
-		if (mintPort) {
-			this.mintUrl = `${mintHost}:${mintPort}`;
-		} else {
-			this.mintUrl = mintHost;
-		}
-		if (mintApiRoot) {
-			if (mintApiRoot.charAt(0) === '/') {
-				mintApiRoot = mintApiRoot.substring(1, mintApiRoot.length - 1);
-			}
-			this.mintUrl = `${this.mintUrl}/${mintApiRoot}`;
-		}
-	}
+	constructor(public mintUrl: string) {}
 
 	async getInfo(): Promise<GetInfoResponse> {
 		const { data } = await axios.get<GetInfoResponse>(`${this.mintUrl}/info`);
