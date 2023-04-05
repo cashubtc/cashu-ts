@@ -50,8 +50,8 @@ function getEncodedToken(proofs: Array<Proof>, mint: string, memo?: string): str
 
 function getDecodedToken(token: string): Token {
 	// remove prefixes
-	const UriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
-	UriPrefixes.forEach((prefix) => {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
+	uriPrefixes.forEach((prefix) => {
 		if (!token.startsWith(prefix)) {
 			return;
 		}
