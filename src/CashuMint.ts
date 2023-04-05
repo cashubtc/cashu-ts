@@ -3,6 +3,7 @@ import {
 	ApiError,
 	CheckSpendablePayload,
 	CheckSpendableResponse,
+	GetInfoResponse,
 	MeltPayload,
 	MeltResponse,
 	MintKeys,
@@ -33,12 +34,18 @@ class CashuMint {
 		}
 	}
 
+	async getInfo(): Promise<GetInfoResponse> {
+		const { data } = await axios.get<GetInfoResponse>(`${this.mintUrl}/info`);
+		return data;
+	}
+
 	async requestMint(amount: number): Promise<RequestMintResponse> {
 		const { data } = await axios.get<RequestMintResponse>(`${this.mintUrl}/mint`, {
 			params: { amount }
 		});
 		return data;
 	}
+
 	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, paymentHash = '') {
 		try {
 			const { data } = await axios.post<

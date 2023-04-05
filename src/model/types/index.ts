@@ -29,6 +29,7 @@ export type ApiError = {
 	code?: number;
 	detail?: string;
 };
+
 export type RequestMintResponse = {
 	pr: string;
 	hash: string;
@@ -65,4 +66,14 @@ export type BlindedTransaction = {
 	secrets: Uint8Array[];
 	rs: bigint[];
 	amounts: number[];
+};
+export type GetInfoResponse = {
+	name: string;
+	pubkey: string;
+	version: string;
+	description: string;
+	description_long: string;
+	contact: Array<Array<string>>;
+	nuts: Array<string>;
+	motd: string;
 };
