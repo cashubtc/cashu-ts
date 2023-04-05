@@ -64,4 +64,12 @@ describe('testing uint8 encoding', () => {
 			}
 		]);
 	});
+	test('base64url: convert to/from base64', () => {
+		const base64url = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI_wn4-z77iPIn0';
+		// const base64 = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI/wn4+z77iPIn0='
+		const obj = { testData: '🏳️🏳️' };
+
+		expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
+		expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+	});
 });
