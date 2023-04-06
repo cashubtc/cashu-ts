@@ -94,7 +94,9 @@ describe('test encode token', () => {
 			mints: [{ url: 'https://8333.space:3338', ids: ['L3zxxRB/I8uE', 'I2yN+iRYfkzT'] }]
 		};
 
-		const result = utils.getEncodedToken({ token: [{ mint: obj.mints[0].url, proofs: obj.proofs }], });
+		const result = utils.getEncodedToken({
+			token: [{ mint: obj.mints[0].url, proofs: obj.proofs }]
+		});
 		expect(result).toEqual(token);
 	});
 });

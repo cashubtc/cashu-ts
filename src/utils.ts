@@ -35,7 +35,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @param mints
  * @returns
  */
-function getEncodedToken(token:Token): string {
+function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
