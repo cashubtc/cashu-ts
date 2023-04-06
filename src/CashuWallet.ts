@@ -92,7 +92,7 @@ class CashuWallet {
 		const proofs: Proof[] = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
 		for (const token of tokens) {
-			if (!token?.proofs || !token.mint) {
+			if (!token?.proofs || !token?.mint) {
 				continue;
 			}
 			try {
