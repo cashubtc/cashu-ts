@@ -88,25 +88,42 @@ class CashuWallet {
 	}
 
 	async receive(encodedToken: string): Promise<Array<Proof>> {
-		const { token } = getDecodedToken(encodedToken);
-		const amount = token[0]?.proofs?.reduce((total, curr) => total + curr.amount, 0);
-		const { payload, amount1BlindedMessages, amount2BlindedMessages } =
-			await this.createSplitPayload(0, amount, token[0]?.proofs);
-		const { fst, snd } = await this.mint.split(payload);
-		const proofs1 = dhke.constructProofs(
-			fst,
-			amount1BlindedMessages.rs,
-			amount1BlindedMessages.secrets,
-			this.keys
-		);
-		const proofs2 = dhke.constructProofs(
-			snd,
-			amount2BlindedMessages.rs,
-			amount2BlindedMessages.secrets,
-			this.keys
-		);
-		const newProofs = [...proofs1, ...proofs2];
-		return newProofs;
+		const { token: tokens } = getDecodedToken(encodedToken);
+		const proofs: Proof[] = [];
+		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
+		for (const token of tokens) {
+			if (!token?.proofs || !token.mint) {
+				continue;
+			}
+			try {
+				const amount = token.proofs.reduce((total, curr) => total + curr.amount, 0);
+				const { payload, amount1BlindedMessages, amount2BlindedMessages } =
+					await this.createSplitPayload(0, amount, token.proofs);
+				const { fst, snd } = await CashuMint.split(token.mint, payload);
+				const keys = mintKeys.get(token.mint) || (await new CashuMint(token.mint).getKeys());
+				const proofs1 = dhke.constructProofs(
+					fst,
+					amount1BlindedMessages.rs,
+					amount1BlindedMessages.secrets,
+					keys
+				);
+				const proofs2 = dhke.constructProofs(
+					snd,
+					amount2BlindedMessages.rs,
+					amount2BlindedMessages.secrets,
+					keys
+				);
+				proofs.push(...proofs1, ...proofs2);
+				if (!mintKeys.has(token.mint)) {
+					mintKeys.set(token.mint, keys);
+				}
+			} catch (error) {
+				// I'm not sure if this is the best way to handle errors
+				if (proofs.length) return proofs;
+				throw error;
+			}
+		}
+		return proofs;
 	}
 
 	async send(

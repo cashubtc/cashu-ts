@@ -62,10 +62,9 @@ class CashuMint {
 		const { data } = await axios.get<{ keysets: Array<string> }>(`${this.mintUrl}/keysets`);
 		return data;
 	}
-
-	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
+	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
 		try {
-			const { data } = await axios.post<SplitResponse>(`${this.mintUrl}/split`, splitPayload);
+			const { data } = await axios.post<SplitResponse>(`${mintUrl}/split`, splitPayload);
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.fst) || !Array.isArray(data?.snd)) {
 				throw new Error('bad response');
@@ -75,6 +74,9 @@ class CashuMint {
 			checkResponseError(err);
 			throw err;
 		}
+	}
+	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
+		return CashuMint.split(this.mintUrl, splitPayload);
 	}
 	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
 		try {
