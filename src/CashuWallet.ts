@@ -96,11 +96,11 @@ class CashuWallet {
 				continue;
 			}
 			try {
+				const keys = mintKeys.get(token.mint) || (await new CashuMint(token.mint).getKeys());
 				const amount = token.proofs.reduce((total, curr) => total + curr.amount, 0);
 				const { payload, amount1BlindedMessages, amount2BlindedMessages } =
 					await this.createSplitPayload(0, amount, token.proofs);
 				const { fst, snd } = await CashuMint.split(token.mint, payload);
-				const keys = mintKeys.get(token.mint) || (await new CashuMint(token.mint).getKeys());
 				const proofs1 = dhke.constructProofs(
 					fst,
 					amount1BlindedMessages.rs,
@@ -119,7 +119,9 @@ class CashuWallet {
 				}
 			} catch (error) {
 				// I'm not sure if this is the best way to handle errors
-				if (proofs.length) return proofs;
+				if (proofs.length) {
+					return proofs;
+				}
 				throw error;
 			}
 		}
