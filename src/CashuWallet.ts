@@ -87,9 +87,12 @@ class CashuWallet {
 		return this.payLnInvoice(invoice, encodeBase64ToJson(token));
 	}
 
-	async receive(encodedToken: string): Promise<Array<Proof>> {
+	async receive(
+		encodedToken: string
+	): Promise<{ proofs: Proof[]; tokensWithErrors: { mint: string; proofs: Proof[] }[] }> {
 		const { token: tokens } = getDecodedToken(encodedToken);
 		const proofs: Proof[] = [];
+		const tokensWithErrors: { mint: string; proofs: Proof[] }[] = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
 		for (const token of tokens) {
 			if (!token?.proofs || !token?.mint) {
@@ -118,14 +121,11 @@ class CashuWallet {
 					mintKeys.set(token.mint, keys);
 				}
 			} catch (error) {
-				// I'm not sure if this is the best way to handle errors
-				if (proofs.length) {
-					return proofs;
-				}
-				throw error;
+				console.error(error);
+				tokensWithErrors.push(token);
 			}
 		}
-		return proofs;
+		return { proofs, tokensWithErrors };
 	}
 
 	async send(
