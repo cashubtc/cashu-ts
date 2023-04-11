@@ -5,13 +5,13 @@ export type MintKeys = { [k: number]: string };
 export type MeltPayload = {
 	pr: string;
 	proofs: Array<Proof>;
-	outputs: SerializedBlindedMessage[];
+	outputs: Array<SerializedBlindedMessage>;
 };
 
 export type MeltResponse = {
 	paid: boolean;
 	preimage: string;
-	change?: SerializedBlindedSignature[];
+	change?: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 export type SplitPayload = {
@@ -21,8 +21,8 @@ export type SplitPayload = {
 };
 
 export type SplitResponse = {
-	fst: SerializedBlindedSignature[];
-	snd: SerializedBlindedSignature[];
+	fst: Array<SerializedBlindedSignature>;
+	snd: Array<SerializedBlindedSignature>;
 } & ApiError;
 export type ApiError = {
 	error?: string;
@@ -62,10 +62,10 @@ export type TokenV2 = {
 };
 
 export type BlindedTransaction = {
-	blindedMessages: SerializedBlindedMessage[];
-	secrets: Uint8Array[];
-	rs: bigint[];
-	amounts: number[];
+	blindedMessages: Array<SerializedBlindedMessage>;
+	secrets: Array<Uint8Array>;
+	rs: Array<bigint>;
+	amounts: Array<number>;
 };
 export type GetInfoResponse = {
 	name: string;

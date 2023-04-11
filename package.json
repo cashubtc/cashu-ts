@@ -16,7 +16,7 @@
 		"compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
 		"test": "jest --coverage",
 		"dev": "tsc --watch",
-		"lint": "eslint --ext .js,.ts .",
+		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write ."
 	},
 	"keywords": [
