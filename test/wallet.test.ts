@@ -65,7 +65,7 @@ describe('receive', () => {
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '/uYB/6wWnYkU' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
-		expect(tokensWithErrors).toHaveLength(0);
+		expect(tokensWithErrors).toBe(undefined)
 	});
 	test('test receive tokens already spent', async () => {
 		const msg = 'tokens already spent. Secret: oEpEuViVHUV2vQH81INUbq++Yv2w3u5H0LhaqXJKeR0=';

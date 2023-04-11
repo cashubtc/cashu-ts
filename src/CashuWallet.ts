@@ -9,7 +9,8 @@ import {
 	BlindedTransaction,
 	MintKeys,
 	SerializedBlindedMessage,
-	SplitPayload
+	SplitPayload,
+	Token
 } from './model/types/index.js';
 import { getDecodedToken, splitAmount } from './utils.js';
 
@@ -89,10 +90,10 @@ class CashuWallet {
 
 	async receive(
 		encodedToken: string
-	): Promise<{ proofs: Proof[]; tokensWithErrors: { mint: string; proofs: Proof[] }[] }> {
+	): Promise<{ proofs: Array<Proof>; tokensWithErrors: Token | undefined }> {
 		const { token: tokens } = getDecodedToken(encodedToken);
-		const proofs: Proof[] = [];
-		const tokensWithErrors: { mint: string; proofs: Proof[] }[] = [];
+		const proofs: Array<Proof> = [];
+		const tokensWithErrors: Array<{ mint: string; proofs: Array<Proof> }> = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
 		for (const token of tokens) {
 			if (!token?.proofs || !token?.mint) {
@@ -125,7 +126,10 @@ class CashuWallet {
 				tokensWithErrors.push(token);
 			}
 		}
-		return { proofs, tokensWithErrors };
+		return {
+			proofs,
+			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
+		};
 	}
 
 	async send(
