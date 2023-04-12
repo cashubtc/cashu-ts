@@ -9,7 +9,8 @@ import {
 	BlindedTransaction,
 	MintKeys,
 	SerializedBlindedMessage,
-	SplitPayload
+	SplitPayload,
+	Token
 } from './model/types/index.js';
 import { getDecodedToken, splitAmount } from './utils.js';
 
@@ -87,26 +88,48 @@ class CashuWallet {
 		return this.payLnInvoice(invoice, encodeBase64ToJson(token));
 	}
 
-	async receive(encodedToken: string): Promise<Array<Proof>> {
-		const { token } = getDecodedToken(encodedToken);
-		const amount = token[0]?.proofs?.reduce((total, curr) => total + curr.amount, 0);
-		const { payload, amount1BlindedMessages, amount2BlindedMessages } =
-			await this.createSplitPayload(0, amount, token[0]?.proofs);
-		const { fst, snd } = await this.mint.split(payload);
-		const proofs1 = dhke.constructProofs(
-			fst,
-			amount1BlindedMessages.rs,
-			amount1BlindedMessages.secrets,
-			this.keys
-		);
-		const proofs2 = dhke.constructProofs(
-			snd,
-			amount2BlindedMessages.rs,
-			amount2BlindedMessages.secrets,
-			this.keys
-		);
-		const newProofs = [...proofs1, ...proofs2];
-		return newProofs;
+	async receive(
+		encodedToken: string
+	): Promise<{ proofs: Array<Proof>; tokensWithErrors: Token | undefined }> {
+		const { token: tokens } = getDecodedToken(encodedToken);
+		const proofs: Array<Proof> = [];
+		const tokensWithErrors: Array<{ mint: string; proofs: Array<Proof> }> = [];
+		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
+		for (const token of tokens) {
+			if (!token?.proofs || !token?.mint) {
+				continue;
+			}
+			try {
+				const keys = mintKeys.get(token.mint) || (await new CashuMint(token.mint).getKeys());
+				const amount = token.proofs.reduce((total, curr) => total + curr.amount, 0);
+				const { payload, amount1BlindedMessages, amount2BlindedMessages } =
+					await this.createSplitPayload(0, amount, token.proofs);
+				const { fst, snd } = await CashuMint.split(token.mint, payload);
+				const proofs1 = dhke.constructProofs(
+					fst,
+					amount1BlindedMessages.rs,
+					amount1BlindedMessages.secrets,
+					keys
+				);
+				const proofs2 = dhke.constructProofs(
+					snd,
+					amount2BlindedMessages.rs,
+					amount2BlindedMessages.secrets,
+					keys
+				);
+				proofs.push(...proofs1, ...proofs2);
+				if (!mintKeys.has(token.mint)) {
+					mintKeys.set(token.mint, keys);
+				}
+			} catch (error) {
+				console.error(error);
+				tokensWithErrors.push(token);
+			}
+		}
+		return {
+			proofs,
+			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
+		};
 	}
 
 	async send(

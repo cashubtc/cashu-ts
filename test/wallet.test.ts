@@ -37,7 +37,7 @@ describe('test fees', () => {
 
 describe('receive', () => {
 	const token =
-		'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xuYml0cy5zZW1pc29sLmRldi9jYXNodS9hcGkvdjEvVEVVY2M2R040ZEVzaDZ3YTZKMmhTdSIsImlkcyI6WyIvdVlCLzZ3V25Za1UiXX1dfQ==';
+		'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIi91WUIvNndXbllrVSJdfV19';
 	test('test receive', async () => {
 		mockedAxios.get.mockResolvedValueOnce({
 			data: {
@@ -59,12 +59,13 @@ describe('receive', () => {
 				]
 			}
 		});
-		const proofs = await wallet.receive(token);
+		const { proofs, tokensWithErrors } = await wallet.receive(token);
 
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '/uYB/6wWnYkU' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
+		expect(tokensWithErrors).toBe(undefined);
 	});
 	test('test receive tokens already spent', async () => {
 		const msg = 'tokens already spent. Secret: oEpEuViVHUV2vQH81INUbq++Yv2w3u5H0LhaqXJKeR0=';

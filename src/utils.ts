@@ -35,16 +35,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @param mints
  * @returns
  */
-function getEncodedToken(proofs: Array<Proof>, mint: string, memo?: string): string {
-	const token: Token = {
-		token: [{ mint, proofs }]
-	};
-
-	//add memo if exist
-	if (memo) {
-		token.memo = memo;
-	}
-
+function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 

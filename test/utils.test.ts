@@ -94,7 +94,9 @@ describe('test encode token', () => {
 			mints: [{ url: 'https://8333.space:3338', ids: ['L3zxxRB/I8uE', 'I2yN+iRYfkzT'] }]
 		};
 
-		const result = utils.getEncodedToken(obj.proofs, obj.mints[0].url);
+		const result = utils.getEncodedToken({
+			token: [{ mint: obj.mints[0].url, proofs: obj.proofs }]
+		});
 		expect(result).toEqual(token);
 	});
 });
@@ -102,39 +104,45 @@ describe('test encode token', () => {
 describe('test decode token', () => {
 	test('testing v3 Token', async () => {
 		const obj = {
-			token: [{
-				proofs: [
-					{
-						C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-						amount: 1,
-						id: 'I2yN+iRYfkzT',
-						secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-					}
-				], mint: 'https://8333.space:3338'
-			}]
+			token: [
+				{
+					proofs: [
+						{
+							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
+							amount: 1,
+							id: 'I2yN+iRYfkzT',
+							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
+						}
+					],
+					mint: 'https://8333.space:3338'
+				}
+			]
 		};
 		const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:'];
-		uriPrefixes.forEach(prefix => {
-			const token = prefix +
+		uriPrefixes.forEach((prefix) => {
+			const token =
+				prefix +
 				'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJpZCI6IkkyeU4raVJZZmt6VCIsImFtb3VudCI6MSwic2VjcmV0IjoiOTd6Zm1tYUdmNWs4TWcwZ2FqcG5ibXBlcnZUdEVlRTh3d0tyaTdyV3BVcz0iLCJDIjoiMDIxOTUwODFlNjIyZjk4YmZjMTlhMDVlYmUyMzQxZDk1NWMwZDEyNTg4YzU5NDhjODU4ZDA3YWRlYzAwN2JjMWU0In1dfV19';
 
 			const result = utils.getDecodedToken(token);
 			expect(result).toStrictEqual(obj);
-		})
-
+		});
 	});
 	test('testing v3 Token no prefix', async () => {
 		const obj = {
-			token: [{
-				proofs: [
-					{
-						C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-						amount: 1,
-						id: 'I2yN+iRYfkzT',
-						secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-					}
-				], mint: 'https://8333.space:3338'
-			}]
+			token: [
+				{
+					proofs: [
+						{
+							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
+							amount: 1,
+							id: 'I2yN+iRYfkzT',
+							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
+						}
+					],
+					mint: 'https://8333.space:3338'
+				}
+			]
 		};
 
 		const token =
