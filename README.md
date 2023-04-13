@@ -1,5 +1,12 @@
 # Cashu TS
 
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cashubtc/cashu-ts/node.js.yml)
+![GitHub issues](https://img.shields.io/github/issues/cashubtc/cashu-ts)
+![GitHub package.json version](https://img.shields.io/github/package-json/v/cashubtc/cashu-ts)
+![npm](https://img.shields.io/npm/v/@cashu/cashu-ts)
+![npm type definitions](https://img.shields.io/npm/types/@cashu/cashu-ts)
+![npm bundle size](https://img.shields.io/bundlephobia/min/@cashu/cashu-ts)
+
 ⚠️ **Don't be reckless:** This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
 
 Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
