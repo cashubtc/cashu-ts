@@ -10,7 +10,7 @@ export type MeltPayload = {
 
 export type MeltResponse = {
 	paid: boolean;
-	preimage: string;
+	preimage: string|null;
 	change?: Array<SerializedBlindedSignature>;
 } & ApiError;
 
