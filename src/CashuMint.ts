@@ -82,8 +82,11 @@ class CashuMint {
 		try {
 			const { data } = await axios.post<MeltResponse>(`${this.mintUrl}/melt`, meltPayload);
 			checkResponse(data);
-			checkResponse(data);
-			if (!isObj(data) || typeof data?.paid !== 'boolean' || typeof data?.preimage !== 'string') {
+			if (
+				!isObj(data) ||
+				typeof data?.paid !== 'boolean' ||
+				(data?.preimage !== null && typeof data?.preimage !== 'string')
+			) {
 				throw new Error('bad response');
 			}
 			return data;
