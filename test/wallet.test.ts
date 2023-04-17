@@ -167,7 +167,7 @@ describe('requestTokens', () => {
 			data: {
 				promises: [
 					{
-						id: '0NI3TUAs1Sfy',
+						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625'
 					}
@@ -176,7 +176,7 @@ describe('requestTokens', () => {
 		});
 		const proofs = await wallet.requestTokens(1, '');
 		expect(proofs).toHaveLength(1);
-		expect(proofs[0]).toMatchObject({ amount: 1, id: '0NI3TUAs1Sfy' });
+		expect(proofs[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
 	});
@@ -237,14 +237,14 @@ describe('send', () => {
 			data: {
 				fst: [
 					{
-						id: '/uYB/6wWnYkU',
+						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
 					}
 				],
 				snd: [
 					{
-						id: '/uYB/6wWnYkU',
+						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
 					}
@@ -261,11 +261,11 @@ describe('send', () => {
 		]);
 
 		expect(result.send).toHaveLength(1);
-		expect(result.send[0]).toMatchObject({ amount: 1, id: '/uYB/6wWnYkU' });
+		expect(result.send[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
 		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '/uYB/6wWnYkU' });
+		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(result.returnChange[0].secret)).toBe(true);
 	});
@@ -322,7 +322,7 @@ describe('send', () => {
 				fst: [],
 				snd: [
 					{
-						id: '/uYB/6wWnYkU',
+						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
 					}

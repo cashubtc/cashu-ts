@@ -13,13 +13,14 @@ import {
 	SplitPayload,
 	Token
 } from './model/types/index.js';
-import { getDecodedToken, splitAmount } from './utils.js';
+import { deriveKeysetId, getDecodedToken, splitAmount } from './utils.js';
 
 /**
  * Class that represents a Cashu wallet.
  */
 class CashuWallet {
 	keys: MintKeys;
+	keysetId = '';
 	mint: CashuMint;
 
 	/**
@@ -64,7 +65,14 @@ class CashuWallet {
 		return {
 			isPaid: payData.paid ?? false,
 			preimage: payData.preimage,
-			change: payData?.change ? dhke.constructProofs(payData.change, rs, secrets, this.keys) : []
+			change: payData?.change
+				? dhke.constructProofs(
+						payData.change,
+						rs,
+						secrets,
+						payData.change.length ? await this.getKeys(payData.change[0].id) : []
+				  )
+				: []
 		};
 	}
 
@@ -160,13 +168,13 @@ class CashuWallet {
 				fst,
 				amount1BlindedMessages.rs,
 				amount1BlindedMessages.secrets,
-				this.keys
+				fst.length ? await this.getKeys(fst[0].id) : []
 			);
 			const proofs2 = dhke.constructProofs(
 				snd,
 				amount2BlindedMessages.rs,
 				amount2BlindedMessages.secrets,
-				this.keys
+				snd.length ? await this.getKeys(snd[0].id) : []
 			);
 			return { returnChange: [...proofs1, ...change], send: proofs2 };
 		}
@@ -177,7 +185,23 @@ class CashuWallet {
 		const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
-		return dhke.constructProofs(promises, rs, secrets, this.keys);
+		return dhke.constructProofs(
+			promises,
+			rs,
+			secrets,
+			promises.length ? await this.getKeys(promises[0].id) : []
+		);
+	}
+
+	private async getKeys(keysetId: string) {
+		if (!this.keysetId) {
+			this.keysetId = await deriveKeysetId(this.keys);
+		}
+		if (this.keysetId === keysetId) {
+			return this.keys;
+		}
+		const newKeys = await this.mint.getKeys(keysetId);
+		return newKeys;
 	}
 
 	//keep amount 1 send amount 2

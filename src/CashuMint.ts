@@ -53,8 +53,10 @@ class CashuMint {
 		}
 	}
 
-	async getKeys(): Promise<MintKeys> {
-		const { data } = await axios.get<MintKeys>(`${this.mintUrl}/keys`);
+	async getKeys(keysetId?: string): Promise<MintKeys> {
+		const { data } = await axios.get<MintKeys>(
+			`${this.mintUrl}/keys${keysetId ? `/${keysetId}` : ''}`
+		);
 		return data;
 	}
 

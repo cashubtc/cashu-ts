@@ -1,7 +1,7 @@
 import { utils } from '@noble/secp256k1';
 import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { Proof, Token, TokenV2 } from './model/types/index.js';
+import { MintKeys,Proof, Token, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 
 function splitAmount(value: number): Array<number> {
@@ -69,6 +69,12 @@ function handleTokens(token: string): Token {
 
 	// if v2 token return v3 format
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
+}
+
+export async function deriveKeysetId(keys: MintKeys) {
+	const pubkeysConcat = Object.values(keys).join('');
+	const hash = await utils.sha256(new TextEncoder().encode(pubkeysConcat));
+	return Buffer.from(hash).toString('base64').slice(0, 12);
 }
 
 export function isObj(v: unknown): v is object {
