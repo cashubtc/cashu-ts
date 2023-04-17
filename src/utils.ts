@@ -1,8 +1,8 @@
-import { utils } from '@noble/secp256k1';
 import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import { Proof, Token, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
+import { bytesToHex } from '@noble/curves/abstract/utils';
 
 function splitAmount(value: number): Array<number> {
 	const chunks: Array<number> = [];
@@ -16,7 +16,7 @@ function splitAmount(value: number): Array<number> {
 }
 
 function bytesToNumber(bytes: Uint8Array): bigint {
-	return hexToNumber(utils.bytesToHex(bytes));
+	return hexToNumber(bytesToHex(bytes));
 }
 
 function hexToNumber(hex: string): bigint {

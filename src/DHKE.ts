@@ -1,36 +1,52 @@
-import { Point, utils } from '@noble/secp256k1';
+import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { hashToCurve, secp256k1 } from '@noble/curves/secp256k1';
 import { encodeUint8toBase64 } from './base64.js';
 import { MintKeys, Proof, SerializedBlindedSignature } from './model/types/index.js';
 import { bytesToNumber } from './utils.js';
+import { H2CPoint } from '@noble/curves/abstract/hash-to-curve';
+/* import { sha256 } from '@noble/hashes/sha256'
+import { bytesToHex } from '@noble/curves/abstract/utils';
 
-async function hashToCurve(secret: Uint8Array): Promise<Point> {
-	let point: Point | undefined;
+function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
+	let point: ProjPointType<bigint> | undefined;
 	while (!point) {
-		const hash = await utils.sha256(secret);
-		const hashHex = utils.bytesToHex(hash);
+		const hash =  sha256(secret);
+		const hashHex = bytesToHex(hash);
 		const pointX = '02' + hashHex;
 		try {
-			point = Point.fromHex(pointX);
+			point = pointFromHex(pointX);
 		} catch (error) {
-			secret = await utils.sha256(secret);
+			secret = sha256(secret);
 		}
 	}
 	return point;
+} */
+export function pointFromHex(hex: string) {
+	return secp256k1.ProjectivePoint.fromHex(hex);
 }
-
-async function blindMessage(secret: Uint8Array, r?: bigint): Promise<{ B_: Point; r: bigint }> {
+export function h2cToPoint(h2c: H2CPoint<bigint>): ProjPointType<bigint> {
+	return secp256k1.ProjectivePoint.fromAffine(h2c.toAffine());
+}
+async function blindMessage(
+	secret: Uint8Array,
+	r?: bigint
+): Promise<{ B_: ProjPointType<bigint>; r: bigint }> {
 	const secretMessageBase64 = encodeUint8toBase64(secret);
 	const secretMessage = new TextEncoder().encode(secretMessageBase64);
-	const Y = await hashToCurve(secretMessage);
+	const Y = hashToCurve(secretMessage);
 	if (!r) {
-		r = bytesToNumber(utils.randomPrivateKey());
+		r = bytesToNumber(secp256k1.utils.randomPrivateKey());
 	}
-	const rG = Point.BASE.multiply(r);
-	const B_ = Y.add(rG);
+	const rG = secp256k1.ProjectivePoint.BASE.multiply(r);
+	const B_ = h2cToPoint(Y.add(rG));
 	return { B_, r };
 }
 
-function unblindSignature(C_: Point, r: bigint, A: Point): Point {
+function unblindSignature(
+	C_: ProjPointType<bigint>,
+	r: bigint,
+	A: ProjPointType<bigint>
+): ProjPointType<bigint> {
 	const C = C_.subtract(A.multiply(r));
 	return C;
 }
@@ -42,8 +58,8 @@ function constructProofs(
 	keys: MintKeys
 ): Array<Proof> {
 	return promises.map((p: SerializedBlindedSignature, i: number) => {
-		const C_ = Point.fromHex(p.C_);
-		const A = Point.fromHex(keys[p.amount]);
+		const C_ = pointFromHex(p.C_);
+		const A = pointFromHex(keys[p.amount]);
 		const C = unblindSignature(C_, rs[i], A);
 		const proof = {
 			id: p.id,

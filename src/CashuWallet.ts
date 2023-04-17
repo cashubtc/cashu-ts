@@ -1,5 +1,4 @@
 import { decode } from '@gandlaf21/bolt11-decode';
-import { utils as ecUtils } from '@noble/secp256k1';
 import { encodeBase64ToJson } from './base64.js';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
@@ -14,6 +13,7 @@ import {
 	Token
 } from './model/types/index.js';
 import { getDecodedToken, splitAmount } from './utils.js';
+import { randomBytes } from '@noble/hashes/utils';
 
 /**
  * Class that represents a Cashu wallet.
@@ -218,7 +218,7 @@ class CashuWallet {
 		const rs: Array<bigint> = [];
 		const amounts = splitAmount(amount);
 		for (let i = 0; i < amounts.length; i++) {
-			const secret: Uint8Array = ecUtils.randomBytes(32);
+			const secret = randomBytes(32);
 			secrets.push(secret);
 			const { B_, r } = await dhke.blindMessage(secret);
 			rs.push(r);
@@ -232,7 +232,7 @@ class CashuWallet {
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
 		for (let i = 0; i < 4; i++) {
-			const secret: Uint8Array = ecUtils.randomBytes(32);
+			const secret = randomBytes(32);
 			secrets.push(secret);
 			const { B_, r } = await dhke.blindMessage(secret);
 			rs.push(r);

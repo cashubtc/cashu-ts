@@ -1,12 +1,12 @@
-import { Point } from '@noble/secp256k1';
+import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { SerializedBlindedSignature } from './types/index.js';
 
 class BlindedSignature {
 	id: string;
 	amount: number;
-	C_: Point;
+	C_: ProjPointType<bigint>;
 
-	constructor(id: string, amount: number, C_: Point) {
+	constructor(id: string, amount: number, C_: ProjPointType<bigint>) {
 		this.id = id;
 		this.amount = amount;
 		this.C_ = C_;
