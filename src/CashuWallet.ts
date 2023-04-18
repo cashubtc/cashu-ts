@@ -10,6 +10,7 @@ import {
 	MintKeys,
 	Proof,
 	SerializedBlindedMessage,
+	SerializedBlindedSignature,
 	SplitPayload,
 	Token
 } from './model/types/index.js';
@@ -20,6 +21,7 @@ import { deriveKeysetId, getDecodedToken, splitAmount } from './utils.js';
  */
 class CashuWallet {
 	keys: MintKeys;
+	keysMap: Map<string, MintKeys>;
 	keysetId = '';
 	mint: CashuMint;
 
@@ -31,6 +33,7 @@ class CashuWallet {
 	constructor(keys: MintKeys, mint: CashuMint) {
 		this.keys = keys;
 		this.mint = mint;
+		this.keysMap = new Map();
 	}
 
 	/**
@@ -58,7 +61,15 @@ class CashuWallet {
 	 * @param proofsToSend the exact amount to send including fees
 	 * @returns
 	 */
-	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>) {
+	async payLnInvoice(
+		invoice: string,
+		proofsToSend: Array<Proof>
+	): Promise<{
+		isPaid: boolean;
+		preimage: string | null;
+		change: Array<Proof>;
+		newKeys?: MintKeys;
+	}> {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
 		const { blindedMessages, secrets, rs } = await this.createBlankOutputs();
 		const payData = await this.mint.melt({ ...paymentPayload, outputs: blindedMessages });
@@ -72,7 +83,11 @@ class CashuWallet {
 						secrets,
 						payData.change.length ? await this.getKeys(payData.change[0].id) : []
 				  )
-				: []
+				: [],
+			newKeys:
+				payData?.change?.length && (await this.haveKeysChanged(...payData.change))
+					? await this.getKeys(payData.change[0].id)
+					: undefined
 		};
 	}
 
@@ -144,7 +159,7 @@ class CashuWallet {
 	async send(
 		amount: number,
 		proofs: Array<Proof>
-	): Promise<{ returnChange: Array<Proof>; send: Array<Proof> }> {
+	): Promise<{ returnChange: Array<Proof>; send: Array<Proof>; newKeys?: MintKeys }> {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const change: Array<Proof> = [];
@@ -176,9 +191,20 @@ class CashuWallet {
 				amount2BlindedMessages.secrets,
 				snd.length ? await this.getKeys(snd[0].id) : []
 			);
-			return { returnChange: [...proofs1, ...change], send: proofs2 };
+			const promises = [...proofs1, ...change];
+			return {
+				returnChange: promises,
+				send: proofs2,
+				newKeys:
+					promises.length && (await this.haveKeysChanged(...promises))
+						? await this.getKeys(promises[0].id)
+						: undefined
+			};
 		}
-		return { returnChange: change, send: proofsToSend };
+		return {
+			returnChange: change,
+			send: proofsToSend
+		};
 	}
 
 	async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
@@ -192,15 +218,27 @@ class CashuWallet {
 			promises.length ? await this.getKeys(promises[0].id) : []
 		);
 	}
-
-	private async getKeys(keysetId: string) {
+	private async haveKeysChanged(...promises: Array<SerializedBlindedSignature | Proof>) {
 		if (!this.keysetId) {
 			this.keysetId = await deriveKeysetId(this.keys);
+			this.keysMap.set(this.keysetId, this.keys);
+		}
+		return promises.some((x) => x.id !== this.keysetId);
+	}
+	private async getKeys(keysetId: string): Promise<MintKeys> {
+		if (!this.keysetId) {
+			this.keysetId = await deriveKeysetId(this.keys);
+			this.keysMap.set(this.keysetId, this.keys);
 		}
 		if (this.keysetId === keysetId) {
 			return this.keys;
 		}
-		const newKeys = await this.mint.getKeys(keysetId);
+		let newKeys = this.keysMap.get(keysetId);
+		if (newKeys) {
+			return newKeys;
+		}
+		newKeys = await this.mint.getKeys(keysetId);
+		this.keysMap.set(keysetId, newKeys);
 		return newKeys;
 	}
 
@@ -230,13 +268,23 @@ class CashuWallet {
 		return { payload, amount1BlindedMessages, amount2BlindedMessages };
 	}
 	//keep amount 1 send amount 2
-	private splitReceive(amount: number, amountAvailable: number) {
+	private splitReceive(
+		amount: number,
+		amountAvailable: number
+	): { amount1: number; amount2: number } {
 		const amount1: number = amountAvailable - amount;
 		const amount2: number = amount;
 		return { amount1, amount2 };
 	}
 
-	private async createRandomBlindedMessages(amount: number) {
+	private async createRandomBlindedMessages(
+		amount: number
+	): Promise<{
+		blindedMessages: Array<SerializedBlindedMessage>;
+		secrets: Array<Uint8Array>;
+		rs: Array<bigint>;
+		amounts: Array<number>;
+	}> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
@@ -251,7 +299,11 @@ class CashuWallet {
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
-	private async createBlankOutputs() {
+	private async createBlankOutputs(): Promise<{
+		blindedMessages: Array<SerializedBlindedMessage>;
+		secrets: Array<Uint8Array>;
+		rs: Array<bigint>;
+	}> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
