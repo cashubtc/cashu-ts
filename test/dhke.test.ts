@@ -8,14 +8,14 @@ describe('testing hash to curve', () => {
 	test('testing string 0000....00', async () => {
 		let secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000000');
 		let Y = dhke.hashToCurve(secret);
-		let hexY = dhke.h2cToPoint(Y).toHex(true);
+		let hexY = Y.toHex(true);
 		expect(hexY).toBe('0266687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925');
 	});
 
 	test('testing string 0000....01', async () => {
 		let secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
 		let Y = dhke.hashToCurve(secret);
-		let hexY = dhke.h2cToPoint(Y).toHex(true);
+		let hexY = Y.toHex(true);
 		expect(hexY).toBe('02ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5');
 	});
 });

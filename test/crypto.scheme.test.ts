@@ -1,5 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { h2cToPoint, hashToCurve } from '../src/DHKE.js';
+import {  hashToCurve } from '../src/DHKE.js';
 import { bytesToNumber } from '../src/utils.js';
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 
@@ -40,7 +40,7 @@ class Mint {
 	async calculateCVerify(secret: Uint8Array): Promise<ProjPointType<bigint>> {
 		const Y = hashToCurve(secret);
 		const aY = Y.multiply(bytesToNumber(this.privateKey));
-		return h2cToPoint(aY);
+		return aY;
 	}
 }
 
@@ -55,7 +55,7 @@ class Wallet {
 	async createBlindedMessage(message: string): Promise<ProjPointType<bigint>> {
 		const enc = new TextEncoder();
 		this.secret = enc.encode(message);
-		this.Y = h2cToPoint(hashToCurve(this.secret));
+		this.Y = hashToCurve(this.secret);
 		this.r = bytesToNumber(secp256k1.utils.randomPrivateKey());
 		this.rG = secp256k1.ProjectivePoint.BASE.multiply(this.r);
 		this.B_ = this.Y.add(this.rG);
