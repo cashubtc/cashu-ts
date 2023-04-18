@@ -72,7 +72,10 @@ function handleTokens(token: string): Token {
 }
 
 export async function deriveKeysetId(keys: MintKeys) {
-	const pubkeysConcat = Object.values(keys).join('');
+	const pubkeysConcat = Object.entries(keys)
+		.sort((a, b) => +a[0] - +b[0])
+		.map(([, pubKey]) => pubKey)
+		.join('');
 	const hash = await utils.sha256(new TextEncoder().encode(pubkeysConcat));
 	return Buffer.from(hash).toString('base64').slice(0, 12);
 }
