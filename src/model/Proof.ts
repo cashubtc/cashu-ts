@@ -6,8 +6,8 @@ class Proof {
 	amount: number;
 	secret: string;
 	C: string;
-	public static newProof({ id, amount, secret, C }: SerializedProof): Proof { 
-		return new Proof(id, amount, secret, C); 
+	public static newProof({ id, amount, secret, C }: SerializedProof): Proof {
+		return new Proof(id, amount, secret, C);
 	}
 	constructor(id: string, amount: number, secret: string, C: string) {
 		this.id = id;
@@ -16,12 +16,10 @@ class Proof {
 		this.C = C;
 	}
 	encodeProofToBase64(): string {
-		return encodeJsonToBase64([
-			{ id: this.id, amount: this.amount, secret: this.secret, C: this.C }
-		]);
+		return encodeJsonToBase64([this.toJSON()]);
 	}
 	toJSON(): SerializedProof {
-		return { id: this.id, amount: this.amount, secret: this.secret, C: this.C }
+		return { id: this.id, amount: this.amount, secret: this.secret, C: this.C };
 	}
 }
 

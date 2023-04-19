@@ -1,11 +1,11 @@
 import { Proof } from '../Proof.js';
 
 export type SerializedProof = {
-	id: string,
-	amount: number,
-	secret: string,
-	C: string
-}
+	id: string;
+	amount: number;
+	secret: string;
+	C: string;
+};
 export type MintKeys = { [k: number]: string };
 
 export type MeltPayload = {
