@@ -20,9 +20,9 @@ import { deriveKeysetId, getDecodedToken, splitAmount } from './utils.js';
  * Class that represents a Cashu wallet.
  */
 class CashuWallet {
-	keys: MintKeys;
-	keysMap: Map<string, MintKeys>;
-	keysetId = '';
+	private keys: MintKeys;
+	private keysMap: Map<string, MintKeys>;
+	private keysetId = '';
 	mint: CashuMint;
 
 	/**
@@ -112,13 +112,16 @@ class CashuWallet {
 		return this.payLnInvoice(invoice, encodeBase64ToJson(token));
 	}
 
-	async receive(
-		encodedToken: string
-	): Promise<{ proofs: Array<Proof>; tokensWithErrors: Token | undefined }> {
+	async receive(encodedToken: string): Promise<{
+		proofs: Array<Proof>;
+		tokensWithErrors: Token | undefined;
+		newKeys?: MintKeys;
+	}> {
 		const { token: tokens } = getDecodedToken(encodedToken);
 		const proofs: Array<Proof> = [];
 		const tokensWithErrors: Array<{ mint: string; proofs: Array<Proof> }> = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
+		let newKeys: MintKeys | undefined;
 		for (const token of tokens) {
 			if (!token?.proofs || !token?.mint) {
 				continue;
@@ -133,14 +136,17 @@ class CashuWallet {
 					fst,
 					amount1BlindedMessages.rs,
 					amount1BlindedMessages.secrets,
-					keys
+					token.mint === this.mint.mintUrl ? await this.getKeys(fst[0].id) : keys
 				);
 				const proofs2 = dhke.constructProofs(
 					snd,
 					amount2BlindedMessages.rs,
 					amount2BlindedMessages.secrets,
-					keys
+					token.mint === this.mint.mintUrl ? await this.getKeys(snd[0].id) : keys
 				);
+				if (token.mint === this.mint.mintUrl && (await this.haveKeysChanged(...fst, ...snd))) {
+					newKeys = await this.getKeys(token.mint);
+				}
 				proofs.push(...proofs1, ...proofs2);
 				if (!mintKeys.has(token.mint)) {
 					mintKeys.set(token.mint, keys);
@@ -152,7 +158,8 @@ class CashuWallet {
 		}
 		return {
 			proofs,
-			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
+			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined,
+			newKeys
 		};
 	}
 
@@ -277,9 +284,7 @@ class CashuWallet {
 		return { amount1, amount2 };
 	}
 
-	private async createRandomBlindedMessages(
-		amount: number
-	): Promise<{
+	private async createRandomBlindedMessages(amount: number): Promise<{
 		blindedMessages: Array<SerializedBlindedMessage>;
 		secrets: Array<Uint8Array>;
 		rs: Array<bigint>;
