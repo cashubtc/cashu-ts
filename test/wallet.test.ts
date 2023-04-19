@@ -131,7 +131,9 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
-		expect(newKeys).toStrictEqual({ 1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad' })
+		expect(newKeys).toStrictEqual({
+			1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+		});
 	});
 });
 
@@ -187,6 +189,35 @@ describe('payLnInvoice', () => {
 		} catch (error) {
 			expect(error).toEqual(new Error('bad response'));
 		}
+	});
+	test('test payLnInvoice key changed', async () => {
+		mockedAxios.get.mockResolvedValueOnce({ data: {} });
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(keys, mint);
+		const response = {
+			paid: true,
+			preimage: '',
+			change: [
+				{
+					id: 'test',
+					amount: 1,
+					C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+				}
+			]
+		};
+		mockedAxios.post.mockResolvedValueOnce({ data: response });
+		mockedAxios.get.mockResolvedValueOnce({
+			data: {
+				1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+			}
+		});
+		const { isPaid, preimage, change, newKeys } = await wallet.payLnInvoice(invoice, proofs);
+		expect(isPaid).toEqual(true);
+		expect(preimage).toEqual('');
+		expect(change).toHaveLength(1);
+		expect(newKeys).toStrictEqual({
+			1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+		});
 	});
 });
 
@@ -379,5 +410,52 @@ describe('send', () => {
 		} catch (error) {
 			expect(error).toEqual(new Error('bad response'));
 		}
+	});
+	test('test send key changed', async () => {
+		mockedAxios.get.mockResolvedValueOnce({
+			data: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
+		});
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(keys, mint);
+		mockedAxios.post.mockResolvedValueOnce({
+			data: {
+				fst: [
+					{
+						id: 'test',
+						amount: 1,
+						C_: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+					}
+				],
+				snd: [
+					{
+						id: 'test',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
+			}
+		});
+		mockedAxios.get.mockResolvedValueOnce({
+			data: {
+				1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+			}
+		});
+
+		const result = await wallet.send(1, [
+			new Proof(
+				'0NI3TUAs1Sfy',
+				2,
+				'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			)
+		]);
+		expect(result.returnChange).toHaveLength(1);
+		expect(result.send).toHaveLength(1);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: 'test' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(result.newKeys).toStrictEqual({
+			1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+		});
 	});
 });
