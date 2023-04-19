@@ -30,6 +30,8 @@ describe('Proofs', () => {
 	});
 
 	test('test Proof encodeProofToBase64', async () => {
-		expect(proof.encodeProofToBase64()).toBe('');
+		expect(proof.encodeProofToBase64()).toBe(
+			'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjEsInNlY3JldCI6Ikg1am1nM3BEUmtUSlFSZ2wxOGJXNFRsMHVUSDQ4R1VpRjg2aWtCQm5TaE09IiwiQyI6IjAzNDI2OGMwYmQzMGI5NDVhZGY1NzhhY2EyZGMwZDFlMjZlZjA4OTg2OWFhZjlhMDhiYTNhNmRhNDBmZGExZDhiZSJ9XQ'
+		);
 	});
 });
