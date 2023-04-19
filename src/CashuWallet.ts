@@ -136,16 +136,19 @@ class CashuWallet {
 					fst,
 					amount1BlindedMessages.rs,
 					amount1BlindedMessages.secrets,
-					token.mint === this.mint.mintUrl ? await this.getKeys(fst[0].id) : keys
+					fst.length &&token.mint === this.mint.mintUrl ? await this.getKeys(fst[0].id) : keys
 				);
 				const proofs2 = dhke.constructProofs(
 					snd,
 					amount2BlindedMessages.rs,
 					amount2BlindedMessages.secrets,
-					token.mint === this.mint.mintUrl ? await this.getKeys(snd[0].id) : keys
+					snd.length &&token.mint === this.mint.mintUrl ? await this.getKeys(snd[0].id) : keys
 				);
-				if (token.mint === this.mint.mintUrl && (await this.haveKeysChanged(...fst, ...snd))) {
-					newKeys = await this.getKeys(token.mint);
+				if (token.mint === this.mint.mintUrl) {
+					const tmp = [...fst, ...snd]
+					if(await this.haveKeysChanged(...tmp)) {
+						newKeys = await this.getKeys(tmp[0].id);
+					}
 				}
 				proofs.push(...proofs1, ...proofs2);
 				if (!mintKeys.has(token.mint)) {

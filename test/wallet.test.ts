@@ -1,6 +1,6 @@
+import { decode } from '@gandlaf21/bolt11-decode';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { decode } from '@gandlaf21/bolt11-decode';
 import axios from 'axios';
 
 // Mock jest and set the type
@@ -51,7 +51,7 @@ describe('receive', () => {
 				fst: [],
 				snd: [
 					{
-						id: '/uYB/6wWnYkU',
+						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
 					}
@@ -61,7 +61,7 @@ describe('receive', () => {
 		const { proofs, tokensWithErrors } = await wallet.receive(token);
 
 		expect(proofs).toHaveLength(1);
-		expect(proofs[0]).toMatchObject({ amount: 1, id: '/uYB/6wWnYkU' });
+		expect(proofs[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
@@ -98,6 +98,40 @@ describe('receive', () => {
 		} catch (err) {
 			expect(err).toEqual(new Error('could not verify proofs.'));
 		}
+	});
+	test('test receive keys changed', async () => {
+		mockedAxios.get.mockResolvedValueOnce({
+			data: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181'
+			}
+		});
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(keys, mint);
+		mockedAxios.post.mockResolvedValueOnce({
+			data: {
+				fst: [],
+				snd: [
+					{
+						id: 'test',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
+			}
+		});
+		mockedAxios.get.mockResolvedValueOnce({
+			data: {
+				1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+			}
+		});
+		const { proofs, tokensWithErrors, newKeys } = await wallet.receive(token);
+
+		expect(proofs).toHaveLength(1);
+		expect(proofs[0]).toMatchObject({ amount: 1, id: 'test' });
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
+		expect(tokensWithErrors).toBe(undefined);
+		expect(newKeys).toStrictEqual({ 1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad' })
 	});
 });
 
