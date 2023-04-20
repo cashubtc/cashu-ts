@@ -95,11 +95,63 @@ export function checkResponseError(err: unknown) {
 		}
 	}
 }
+
+function accumulateProofs(
+	proofs: Proof[],
+	requiredAmount: number,
+	strategy: 'middle' | 'ascending' | 'descending'
+) {
+	const result: Proof[] = [];
+	const temp = proofs.slice();
+	let total = 0;
+	switch (strategy) {
+		case 'middle': {
+			while (temp.length && total < requiredAmount) {
+				const first = temp.shift();
+				total += first!.amount;
+				result.push(first!);
+				if (total >= requiredAmount) {
+					break;
+				}
+				const last = temp.pop();
+				total += last!.amount;
+				result.push(last!);
+			}
+			break;
+		}
+		case 'ascending': {
+			for (let i = 0; i < temp.length; i++) {
+				total += temp[i].amount;
+				result.push(temp[i]);
+				if (total >= requiredAmount) {
+					break;
+				}
+			}
+			break;
+		}
+		case 'descending': {
+			for (let i = 0; i < temp.length; i++) {
+				total += temp[temp.length - i].amount;
+				result.push(temp[temp.length - i]);
+				if (total >= requiredAmount) {
+					break;
+				}
+			}
+		}
+	}
+	return {
+		base: result.slice(0, -1),
+		exceeds: result[result.length - 1],
+		excess: total - requiredAmount
+	};
+}
+
 export {
 	hexToNumber,
 	splitAmount,
 	bytesToNumber,
 	bigIntStringify,
 	getDecodedToken,
-	getEncodedToken
+	getEncodedToken,
+	accumulateProofs
 };
