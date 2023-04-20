@@ -102,7 +102,7 @@ function accumulateProofs(
 	strategy: 'middle' | 'ascending' | 'descending'
 ) {
 	const result: Proof[] = [];
-	const temp = proofs.slice();
+	const temp = proofs.slice().sort((a, b) => a.amount - b.amount);
 	let total = 0;
 	switch (strategy) {
 		case 'middle': {
@@ -130,14 +130,14 @@ function accumulateProofs(
 			break;
 		}
 		case 'descending': {
-			for (let i = 0; i < temp.length; i++) {
-				total += temp[temp.length - i].amount;
-				result.push(temp[temp.length - i]);
-				if (total >= requiredAmount) {
-					break;
-				}
-			}
-		}
+      for (let i = 0; i < temp.length; i++) {
+        total += temp[temp.length - (1 + i)].amount;
+        result.push(temp[temp.length - (1 + i)]);
+        if (total >= requiredAmount) {
+          break;
+        }
+      }
+    }
 	}
 	return {
 		base: result.slice(0, -1),
