@@ -1,7 +1,6 @@
 import { Point, utils } from '@noble/secp256k1';
 import { encodeUint8toBase64 } from './base64.js';
-import { Proof } from './model/Proof.js';
-import { MintKeys, SerializedBlindedSignature } from './model/types/index.js';
+import { MintKeys, Proof, SerializedBlindedSignature } from './model/types/index.js';
 import { bytesToNumber } from './utils.js';
 
 async function hashToCurve(secret: Uint8Array): Promise<Point> {
@@ -46,7 +45,12 @@ function constructProofs(
 		const C_ = Point.fromHex(p.C_);
 		const A = Point.fromHex(keys[p.amount]);
 		const C = unblindSignature(C_, rs[i], A);
-		const proof = new Proof(p.id, p.amount, encodeUint8toBase64(secrets[i]), C.toHex(true));
+		const proof = {
+			id: p.id,
+			amount: p.amount,
+			secret: encodeUint8toBase64(secrets[i]),
+			C: C.toHex(true)
+		};
 		return proof;
 	});
 }

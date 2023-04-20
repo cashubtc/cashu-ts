@@ -2,7 +2,6 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { decode } from '@gandlaf21/bolt11-decode';
 import axios from 'axios';
-import { Proof } from '../src/model/Proof.js';
 
 // Mock jest and set the type
 jest.mock('axios');
@@ -104,12 +103,12 @@ describe('receive', () => {
 
 describe('checkProofsSpent', () => {
 	const proofs = [
-		new Proof(
-			'0NI3TUAs1Sfy',
-			1,
-			'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
-			'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
-		)
+		{
+			id: '0NI3TUAs1Sfy',
+			amount: 1,
+			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		}
 	];
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		mockedAxios.get.mockResolvedValueOnce({
@@ -128,12 +127,12 @@ describe('checkProofsSpent', () => {
 
 describe('payLnInvoice', () => {
 	const proofs = [
-		new Proof(
-			'0NI3TUAs1Sfy',
-			1,
-			'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
-			'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
-		)
+		{
+			id: '0NI3TUAs1Sfy',
+			amount: 1,
+			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		}
 	];
 	test('test payLnInvoice', async () => {
 		mockedAxios.get.mockResolvedValueOnce({ data: {} });
@@ -196,12 +195,12 @@ describe('requestTokens', () => {
 
 describe('send', () => {
 	const proofs = [
-		new Proof(
-			'0NI3TUAs1Sfy',
-			1,
-			'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
-			'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
-		)
+		{
+			id: '0NI3TUAs1Sfy',
+			amount: 1,
+			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		}
 	];
 	test('test send ', async () => {
 		mockedAxios.get.mockResolvedValueOnce({
@@ -253,12 +252,12 @@ describe('send', () => {
 			}
 		});
 		const result = await wallet.send(1, [
-			new Proof(
-				'/uYB/6wWnYkU',
-				2,
-				'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
-				'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
-			)
+			{
+				id: '/uYB/6wWnYkU',
+				amount: 2,
+				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			}
 		]);
 
 		expect(result.send).toHaveLength(1);
@@ -295,14 +294,12 @@ describe('send', () => {
 				]
 			}
 		});
-		proofs.push(
-			new Proof(
-				'/uYB/6wWnYkU',
-				2,
-				'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
-				'034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
-			)
-		);
+		proofs.push({
+			id: '/uYB/6wWnYkU',
+			amount: 2,
+			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		});
 		const result = await wallet.send(1, proofs);
 
 		expect(result.send).toHaveLength(1);

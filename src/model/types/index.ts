@@ -1,6 +1,4 @@
-import { Proof } from '../Proof.js';
-
-export type SerializedProof = {
+export type Proof = {
 	id: string;
 	amount: number;
 	secret: string;
