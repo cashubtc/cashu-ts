@@ -239,7 +239,7 @@ describe('requestTokens', () => {
 				]
 			}
 		});
-		const proofs = await wallet.requestTokens(1, '');
+		const {proofs} = await wallet.requestTokens(1, '');
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
@@ -255,6 +255,37 @@ describe('requestTokens', () => {
 		} catch (error) {
 			expect(error).toEqual(new Error('bad response'));
 		}
+	});
+	test('test requestTokens', async () => {
+		mockedAxios.get.mockResolvedValueOnce({
+			data: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
+		});
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(keys, mint);
+		mockedAxios.post.mockResolvedValueOnce({
+			data: {
+				promises: [
+					{
+						id: 'test',
+						amount: 1,
+						C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625'
+					}
+				]
+			}
+		});
+		mockedAxios.get.mockResolvedValueOnce({
+			data: {
+				1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+			}
+		});
+		const {proofs,newKeys} = await wallet.requestTokens(1, '');
+		expect(proofs).toHaveLength(1);
+		expect(proofs[0]).toMatchObject({ amount: 1, id: 'test' });
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
+		expect(newKeys).toStrictEqual({
+			1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
+		});
 	});
 });
 
