@@ -54,6 +54,9 @@ class CashuMint {
 	}
 
 	async getKeys(keysetId?: string): Promise<MintKeys> {
+		if (keysetId) {
+			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
+		}
 		const { data } = await axios.get<MintKeys>(
 			`${this.mintUrl}/keys${keysetId ? `/${keysetId}` : ''}`
 		);

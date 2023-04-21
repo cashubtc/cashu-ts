@@ -239,7 +239,7 @@ describe('requestTokens', () => {
 				]
 			}
 		});
-		const {proofs} = await wallet.requestTokens(1, '');
+		const { proofs } = await wallet.requestTokens(1, '');
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
@@ -278,7 +278,7 @@ describe('requestTokens', () => {
 				1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
 			}
 		});
-		const {proofs,newKeys} = await wallet.requestTokens(1, '');
+		const { proofs, newKeys } = await wallet.requestTokens(1, '');
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: 'test' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);

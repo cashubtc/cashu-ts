@@ -78,12 +78,7 @@ class CashuWallet {
 			isPaid: payData.paid ?? false,
 			preimage: payData.preimage,
 			change: payData?.change
-				? dhke.constructProofs(
-					payData.change,
-					rs,
-					secrets,
-					await this.getKeys(payData?.change)
-				)
+				? dhke.constructProofs(payData.change, rs, secrets, await this.getKeys(payData?.change))
 				: [],
 			newKeys: await this.changedKeys(payData?.change)
 		};
@@ -94,11 +89,19 @@ class CashuWallet {
 		return fee;
 	}
 
-	static getDecodedLnInvoice(invoice: string): { paymentRequest: string; sections: Array<unknown>; readonly expiry: unknown; readonly route_hints: Array<unknown>; } {
+	static getDecodedLnInvoice(invoice: string): {
+		paymentRequest: string;
+		sections: Array<unknown>;
+		readonly expiry: unknown;
+		readonly route_hints: Array<unknown>;
+	} {
 		return decode(invoice);
 	}
 
-	createPaymentPayload(invoice: string, proofs: Array<Proof>): { pr: string; proofs: Array<Proof>; } {
+	createPaymentPayload(
+		invoice: string,
+		proofs: Array<Proof>
+	): { pr: string; proofs: Array<Proof> } {
 		const payload = {
 			pr: invoice,
 			proofs: proofs
@@ -106,7 +109,15 @@ class CashuWallet {
 		return payload;
 	}
 
-	payLnInvoiceWithToken(invoice: string, token: string): Promise<{ isPaid: boolean; preimage: string | null; change: Array<Proof>; newKeys?: MintKeys | undefined; }> {
+	payLnInvoiceWithToken(
+		invoice: string,
+		token: string
+	): Promise<{
+		isPaid: boolean;
+		preimage: string | null;
+		change: Array<Proof>;
+		newKeys?: MintKeys | undefined;
+	}> {
 		return this.payLnInvoice(invoice, encodeBase64ToJson(token));
 	}
 
@@ -209,38 +220,44 @@ class CashuWallet {
 		};
 	}
 
-	async requestTokens(amount: number, hash: string): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
+	async requestTokens(
+		amount: number,
+		hash: string
+	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
 		const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
 		return {
-			proofs: dhke.constructProofs(
-				promises,
-				rs,
-				secrets,
-				await this.getKeys(promises)
-			),
+			proofs: dhke.constructProofs(promises, rs, secrets, await this.getKeys(promises)),
 			newKeys: await this.changedKeys(promises)
 		};
 	}
-	private async haveKeysChanged(...promises: Array<SerializedBlindedSignature | Proof>): Promise<boolean> {
+	private async haveKeysChanged(
+		...promises: Array<SerializedBlindedSignature | Proof>
+	): Promise<boolean> {
 		if (!this.keysetId) {
 			this.keysetId = await deriveKeysetId(this.keys);
 			this.keysMap.set(this.keysetId, this.keys);
 		}
 		return promises.some((x) => x.id !== this.keysetId);
 	}
-	private async changedKeys(promises: Array<SerializedBlindedSignature | Proof> = []): Promise<MintKeys | undefined> {
+	private async changedKeys(
+		promises: Array<SerializedBlindedSignature | Proof> = []
+	): Promise<MintKeys | undefined> {
 		if (!this.keysetId) {
 			this.keysetId = await deriveKeysetId(this.keys);
 			this.keysMap.set(this.keysetId, this.keys);
 		}
-		if (!promises?.length) { return undefined }
-		return await this.haveKeysChanged(...promises) ? this.getKeys(promises) : undefined
+		if (!promises?.length) {
+			return undefined;
+		}
+		return (await this.haveKeysChanged(...promises)) ? this.getKeys(promises) : undefined;
 	}
 	private async getKeys(arr: Array<SerializedBlindedSignature | Proof> = []): Promise<MintKeys> {
-		if (!arr?.length || !arr[0]?.id) { return this.keys }
-		const keysetId = arr[0].id
+		if (!arr?.length || !arr[0]?.id) {
+			return this.keys;
+		}
+		const keysetId = arr[0].id;
 		if (!this.keysetId) {
 			this.keysetId = await deriveKeysetId(this.keys);
 			this.keysMap.set(this.keysetId, this.keys);
