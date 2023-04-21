@@ -21,7 +21,7 @@ import { deriveKeysetId, getDecodedToken, splitAmount } from './utils.js';
  * Class that represents a Cashu wallet.
  */
 class CashuWallet {
-	private keys: MintKeys;
+	private keys: MintKeys = {};
 	private keysMap: Map<string, MintKeys>;
 	private keysetId = '';
 	mint: CashuMint;
@@ -31,8 +31,7 @@ class CashuWallet {
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
-	constructor(keys: MintKeys, mint: CashuMint) {
-		this.keys = keys;
+	constructor(mint: CashuMint) {
 		this.mint = mint;
 		this.keysMap = new Map();
 	}
@@ -129,7 +128,7 @@ class CashuWallet {
 		const { token: tokens } = getDecodedToken(encodedToken);
 		const proofs: Array<Proof> = [];
 		const tokensWithErrors: Array<{ mint: string; proofs: Array<Proof> }> = [];
-		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
+		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, await this.getKeys()]]);
 		let newKeys: MintKeys | undefined;
 		for (const token of tokens) {
 			if (!token?.proofs || !token?.mint) {
@@ -232,36 +231,34 @@ class CashuWallet {
 			newKeys: await this.changedKeys(promises)
 		};
 	}
-	private async haveKeysChanged(
-		...promises: Array<SerializedBlindedSignature | Proof>
-	): Promise<boolean> {
-		if (!this.keysetId) {
+	private async initKeys() {
+		if (!this.keysetId || !Object.keys(this.keys).length) {
+			this.keys = await this.mint.getKeys();
 			this.keysetId = await deriveKeysetId(this.keys);
 			this.keysMap.set(this.keysetId, this.keys);
 		}
+	}
+	private async haveKeysChanged(
+		...promises: Array<SerializedBlindedSignature | Proof>
+	): Promise<boolean> {
+		await this.initKeys();
 		return promises.some((x) => x.id !== this.keysetId);
 	}
 	private async changedKeys(
 		promises: Array<SerializedBlindedSignature | Proof> = []
 	): Promise<MintKeys | undefined> {
-		if (!this.keysetId) {
-			this.keysetId = await deriveKeysetId(this.keys);
-			this.keysMap.set(this.keysetId, this.keys);
-		}
+		await this.initKeys();
 		if (!promises?.length) {
 			return undefined;
 		}
 		return (await this.haveKeysChanged(...promises)) ? this.getKeys(promises) : undefined;
 	}
 	private async getKeys(arr: Array<SerializedBlindedSignature | Proof> = []): Promise<MintKeys> {
+		await this.initKeys();
 		if (!arr?.length || !arr[0]?.id) {
 			return this.keys;
 		}
 		const keysetId = arr[0].id;
-		if (!this.keysetId) {
-			this.keysetId = await deriveKeysetId(this.keys);
-			this.keysMap.set(this.keysetId, this.keys);
-		}
 		if (this.keysetId === keysetId) {
 			return this.keys;
 		}
