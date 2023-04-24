@@ -1,5 +1,9 @@
-import { Proof } from '../Proof.js';
-
+export type Proof = {
+	id: string;
+	amount: number;
+	secret: string;
+	C: string;
+};
 export type MintKeys = { [k: number]: string };
 
 export type MeltPayload = {

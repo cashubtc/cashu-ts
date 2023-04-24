@@ -4,10 +4,11 @@ import { encodeBase64ToJson } from './base64.js';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
-import { Proof } from './model/Proof.js';
+
 import {
 	BlindedTransaction,
 	MintKeys,
+	Proof,
 	SerializedBlindedMessage,
 	SplitPayload,
 	Token

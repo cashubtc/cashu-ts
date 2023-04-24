@@ -1,4 +1,3 @@
-import { Proof } from '../src/model/Proof.js';
 import { Token } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 
@@ -84,12 +83,12 @@ describe('test encode token', () => {
 
 		const obj = {
 			proofs: [
-				new Proof(
-					'I2yN+iRYfkzT',
-					1,
-					'97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs=',
-					'02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4'
-				)
+				{
+					id: 'I2yN+iRYfkzT',
+					amount: 1,
+					secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs=',
+					C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4'
+				}
 			],
 			mints: [{ url: 'https://8333.space:3338', ids: ['L3zxxRB/I8uE', 'I2yN+iRYfkzT'] }]
 		};
