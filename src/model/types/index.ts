@@ -6,6 +6,12 @@ export type Proof = {
 };
 export type MintKeys = { [k: number]: string };
 
+export type PayLnInvoiceResponse = {
+	isPaid: boolean;
+	preimage: string | null;
+	change: Array<Proof>;
+	newKeys?: MintKeys;
+};
 export type MeltPayload = {
 	pr: string;
 	proofs: Array<Proof>;

@@ -9,6 +9,7 @@ import {
 	BlindedTransaction,
 	MintKeys,
 	Proof,
+	PayLnInvoiceResponse,
 	RequestMintResponse,
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
@@ -61,15 +62,7 @@ class CashuWallet {
 	 * @param proofsToSend the exact amount to send including fees
 	 * @returns
 	 */
-	async payLnInvoice(
-		invoice: string,
-		proofsToSend: Array<Proof>
-	): Promise<{
-		isPaid: boolean;
-		preimage: string | null;
-		change: Array<Proof>;
-		newKeys?: MintKeys;
-	}> {
+	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>): Promise<PayLnInvoiceResponse> {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
 		const { blindedMessages, secrets, rs } = await this.createBlankOutputs();
 		const payData = await this.mint.melt({ ...paymentPayload, outputs: blindedMessages });
