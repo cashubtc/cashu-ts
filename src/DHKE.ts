@@ -1,15 +1,15 @@
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
-import {  secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { encodeUint8toBase64 } from './base64.js';
 import { MintKeys, Proof, SerializedBlindedSignature } from './model/types/index.js';
 import { bytesToNumber } from './utils.js';
-import { sha256 } from '@noble/hashes/sha256'
+import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 
 function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 	let point: ProjPointType<bigint> | undefined;
 	while (!point) {
-		const hash =  sha256(secret);
+		const hash = sha256(secret);
 		const hashHex = bytesToHex(hash);
 		const pointX = '02' + hashHex;
 		try {
@@ -37,7 +37,7 @@ async function blindMessage(
 		r = bytesToNumber(secp256k1.utils.randomPrivateKey());
 	}
 	const rG = secp256k1.ProjectivePoint.BASE.multiply(r);
-	const B_ =Y.add(rG);
+	const B_ = Y.add(rG);
 	return { B_, r };
 }
 

@@ -52,10 +52,16 @@ class CashuMint {
 			throw err;
 		}
 	}
-
-	async getKeys(): Promise<MintKeys> {
-		const { data } = await axios.get<MintKeys>(`${this.mintUrl}/keys`);
+	public static async getKeys(mintUrl: string, keysetId?: string): Promise<MintKeys> {
+		if (keysetId) {
+			// make the keysetId url safe
+			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
+		}
+		const { data } = await axios.get<MintKeys>(`${mintUrl}/keys${keysetId ? `/${keysetId}` : ''}`);
 		return data;
+	}
+	async getKeys(keysetId?: string): Promise<MintKeys> {
+		return CashuMint.getKeys(this.mintUrl, keysetId);
 	}
 
 	async getKeySets(): Promise<{ keysets: Array<string> }> {
