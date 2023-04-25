@@ -41,7 +41,7 @@
 	},
 	"dependencies": {
 		"@gandlaf21/bolt11-decode": "^3.0.6",
-		"@noble/secp256k1": "^1.7.0",
+		"@noble/curves": "^1.0.0",
 		"axios": "^1.2.1",
 		"buffer": "^6.0.3"
 	}

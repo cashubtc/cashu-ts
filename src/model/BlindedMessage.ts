@@ -1,10 +1,10 @@
-import { Point } from '@noble/secp256k1';
 import { SerializedBlindedMessage } from './types/index.js';
+import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 
 class BlindedMessage {
 	amount: number;
-	B_: Point;
-	constructor(amount: number, B_: Point) {
+	B_: ProjPointType<bigint>;
+	constructor(amount: number, B_: ProjPointType<bigint>) {
 		this.amount = amount;
 		this.B_ = B_;
 	}

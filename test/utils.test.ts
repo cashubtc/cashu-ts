@@ -1,4 +1,3 @@
-import { Token } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 
 describe('test split amounts ', () => {
