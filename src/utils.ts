@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { Proof, Token, TokenV2 } from './model/types/index.js';
+import { MintKeys, Proof, Token, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex } from '@noble/curves/abstract/utils';
+import { sha256 } from '@noble/hashes/sha256';
 
 function splitAmount(value: number): Array<number> {
 	const chunks: Array<number> = [];
@@ -69,6 +70,15 @@ function handleTokens(token: string): Token {
 
 	// if v2 token return v3 format
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
+}
+
+export async function deriveKeysetId(keys: MintKeys) {
+	const pubkeysConcat = Object.entries(keys)
+		.sort((a, b) => +a[0] - +b[0])
+		.map(([, pubKey]) => pubKey)
+		.join('');
+	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
+	return Buffer.from(hash).toString('base64').slice(0, 12);
 }
 
 export function isObj(v: unknown): v is object {

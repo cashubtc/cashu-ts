@@ -1,6 +1,15 @@
 import { CashuMint } from './CashuMint.js';
 import { CashuWallet } from './CashuWallet.js';
 import { Proof } from './model/types/index.js';
-import { getEncodedToken, getDecodedToken } from './utils.js';
+import { getEncodedToken, getDecodedToken, deriveKeysetId } from './utils.js';
+import { decode as getDecodedLnInvoice } from '@gandlaf21/bolt11-decode';
 
-export { CashuMint, CashuWallet, Proof, getDecodedToken, getEncodedToken };
+export {
+	CashuMint,
+	CashuWallet,
+	Proof,
+	getDecodedToken,
+	getEncodedToken,
+	deriveKeysetId,
+	getDecodedLnInvoice
+};

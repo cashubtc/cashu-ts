@@ -1,19 +1,19 @@
-import { decode } from '@gandlaf21/bolt11-decode';
-import { encodeBase64ToJson } from './base64.js';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
-
+import { getDecodedToken, splitAmount } from './utils.js';
+import { randomBytes } from '@noble/hashes/utils';
 import {
 	BlindedTransaction,
 	MintKeys,
+	PayLnInvoiceResponse,
+	PaymentPayload,
 	Proof,
+	ReceiveResponse,
+	SendResponse,
 	SerializedBlindedMessage,
-	SplitPayload,
-	Token
+	SplitPayload
 } from './model/types/index.js';
-import { getDecodedToken, splitAmount } from './utils.js';
-import { randomBytes } from '@noble/hashes/utils';
 
 /**
  * Class that represents a Cashu wallet.
@@ -58,7 +58,7 @@ class CashuWallet {
 	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
 	 * @returns
 	 */
-	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>, feeReserve?: number) {
+	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>, feeReserve?: number) : Promise<PayLnInvoiceResponse> {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
 		if (!feeReserve) {
 			feeReserve = await this.getFee(invoice);
@@ -77,25 +77,22 @@ class CashuWallet {
 		return fee;
 	}
 
-	static getDecodedLnInvoice(invoice: string) {
-		return decode(invoice);
-	}
-
-	createPaymentPayload(invoice: string, proofs: Array<Proof>) {
-		const payload = {
+	createPaymentPayload(invoice: string, proofs: Array<Proof>): PaymentPayload {
+		return {
 			pr: invoice,
 			proofs: proofs
 		};
-		return payload;
 	}
 
-	payLnInvoiceWithToken(invoice: string, token: string) {
-		return this.payLnInvoice(invoice, encodeBase64ToJson(token));
+	payLnInvoiceWithToken(invoice: string, token: string): Promise<PayLnInvoiceResponse> {
+		const decodedToken = getDecodedToken(token);
+		const proofs = decodedToken.token
+			.filter((x) => x.mint === this.mint.mintUrl)
+			.flatMap((t) => t.proofs);
+		return this.payLnInvoice(invoice, proofs);
 	}
 
-	async receive(
-		encodedToken: string
-	): Promise<{ proofs: Array<Proof>; tokensWithErrors: Token | undefined }> {
+	async receive(encodedToken: string): Promise<ReceiveResponse> {
 		const { token: tokens } = getDecodedToken(encodedToken);
 		const proofs: Array<Proof> = [];
 		const tokensWithErrors: Array<{ mint: string; proofs: Array<Proof> }> = [];
@@ -132,15 +129,12 @@ class CashuWallet {
 			}
 		}
 		return {
-			proofs,
+			token: { token: [{ proofs, mint: this.mint.mintUrl }] },
 			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
 		};
 	}
 
-	async send(
-		amount: number,
-		proofs: Array<Proof>
-	): Promise<{ returnChange: Array<Proof>; send: Array<Proof> }> {
+	async send(amount: number, proofs: Array<Proof>): Promise<SendResponse> {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const change: Array<Proof> = [];
@@ -210,13 +204,21 @@ class CashuWallet {
 		return { payload, amount1BlindedMessages, amount2BlindedMessages };
 	}
 	//keep amount 1 send amount 2
-	private splitReceive(amount: number, amountAvailable: number) {
+	private splitReceive(
+		amount: number,
+		amountAvailable: number
+	): { amount1: number; amount2: number } {
 		const amount1: number = amountAvailable - amount;
 		const amount2: number = amount;
 		return { amount1, amount2 };
 	}
 
-	private async createRandomBlindedMessages(amount: number) {
+	private async createRandomBlindedMessages(amount: number): Promise<{
+		blindedMessages: Array<SerializedBlindedMessage>;
+		secrets: Array<Uint8Array>;
+		rs: Array<bigint>;
+		amounts: Array<number>;
+	}> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
@@ -231,7 +233,11 @@ class CashuWallet {
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
-	private async createBlankOutputs(feeReserve: number) {
+	private async createBlankOutputs(feeReserve: number) : Promise<{
+		blindedMessages: Array<SerializedBlindedMessage>;
+		secrets: Array<Uint8Array>;
+		rs: Array<bigint>;
+	}> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
