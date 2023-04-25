@@ -1,7 +1,7 @@
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
 import { decode } from '@gandlaf21/bolt11-decode';
 import axios from 'axios';
+import { CashuMint } from '../src/CashuMint.js';
+import { CashuWallet } from '../src/CashuWallet.js';
 
 // Mock jest and set the type
 jest.mock('axios');
@@ -58,12 +58,16 @@ describe('receive', () => {
 				]
 			}
 		});
-		const { proofs, tokensWithErrors } = await wallet.receive(token);
+		const { token: t, tokensWithErrors } = await wallet.receive(token);
 
-		expect(proofs).toHaveLength(1);
-		expect(proofs[0]).toMatchObject({ amount: 1, id: '/uYB/6wWnYkU' });
-		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
+		expect(t.token).toHaveLength(1);
+		expect(t.token[0].proofs).toHaveLength(1);
+		expect(t.token[0]).toMatchObject({
+			proofs: [{ amount: 1, id: '/uYB/6wWnYkU' }],
+			mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
+		});
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
 	});
 	test('test receive tokens already spent', async () => {

@@ -1,8 +1,7 @@
+import { randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
-import { getDecodedToken, splitAmount } from './utils.js';
-import { randomBytes } from '@noble/hashes/utils';
 import {
 	BlindedTransaction,
 	MintKeys,
@@ -14,6 +13,7 @@ import {
 	SerializedBlindedMessage,
 	SplitPayload
 } from './model/types/index.js';
+import { getDecodedToken, splitAmount } from './utils.js';
 
 /**
  * Class that represents a Cashu wallet.
