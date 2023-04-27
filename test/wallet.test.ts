@@ -139,9 +139,33 @@ describe('payLnInvoice', () => {
 		const keys = await mint.getKeys();
 		const wallet = new CashuWallet(keys, mint);
 		const response = { paid: true, preimage: '' };
+		mockedAxios.post.mockResolvedValueOnce({ data: { fee: 0 } });
 		mockedAxios.post.mockResolvedValueOnce({ data: response });
 		const result = await wallet.payLnInvoice(invoice, proofs);
 		expect(result).toEqual({ isPaid: true, preimage: '', change: [] });
+	});
+	test('test payLnInvoice change', async () => {
+		mockedAxios.get.mockResolvedValueOnce({
+			data: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			}
+		});
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(keys, mint);
+		const response = {
+			paid: true, preimage: '', change: [{
+				id: '0NI3TUAs1Sfy',
+				amount: 2,
+				C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625'
+			}]
+		};
+		mockedAxios.post.mockResolvedValueOnce({ data: { fee: 2} });
+		mockedAxios.post.mockResolvedValueOnce({ data: response });
+		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }]);
+		expect(result.isPaid).toBe(true);
+		expect(result.preimage).toBe('')
+		expect(result.change).toHaveLength(1);
 	});
 	test('test payLnInvoice bad resonse', async () => {
 		mockedAxios.get.mockResolvedValueOnce({ data: {} });
