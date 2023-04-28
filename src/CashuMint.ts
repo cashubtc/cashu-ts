@@ -19,7 +19,7 @@ import { checkResponse, checkResponseError, isObj } from './utils.js';
  * Class represents Cashu Mint API.
  */
 class CashuMint {
-	constructor(public mintUrl: string) {}
+	constructor(public mintUrl: string) { }
 
 	async getInfo(): Promise<GetInfoResponse> {
 		const { data } = await axios.get<GetInfoResponse>(`${this.mintUrl}/info`);
@@ -33,14 +33,18 @@ class CashuMint {
 		return data;
 	}
 
-	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, paymentHash = '') {
+	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, hash: string) {
 		try {
 			const { data } = await axios.post<
 				{
 					promises: Array<SerializedBlindedSignature>;
 				} & ApiError
 			>(`${this.mintUrl}/mint`, payloads, {
-				params: { payment_hash: paymentHash }
+				params: {
+					// payment_hash is deprecated
+					payment_hash: hash,
+					hash
+				}
 			});
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.promises)) {
