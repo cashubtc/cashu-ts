@@ -34,7 +34,7 @@ class CashuWallet {
 
 	/**
 	 * returns proofs that are already spent (use for keeping wallet state clean)
-	 * @param proofs
+	 * @param proofs (only the 'secret' field is required)
 	 * @returns
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
