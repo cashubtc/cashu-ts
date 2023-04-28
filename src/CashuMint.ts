@@ -19,7 +19,7 @@ import { checkResponse, checkResponseError, isObj } from './utils.js';
  * Class represents Cashu Mint API.
  */
 class CashuMint {
-	constructor(public mintUrl: string) { }
+	constructor(public mintUrl: string) {}
 
 	async getInfo(): Promise<GetInfoResponse> {
 		const { data } = await axios.get<GetInfoResponse>(`${this.mintUrl}/info`);

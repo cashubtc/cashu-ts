@@ -55,6 +55,7 @@ class CashuWallet {
 	 * The combined amount of Proofs has to match the payment amount including fees.
 	 * @param invoice
 	 * @param proofsToSend the exact amount to send including fees
+	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
 	 * @returns
 	 */
 	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>, feeReserve?: number) {
