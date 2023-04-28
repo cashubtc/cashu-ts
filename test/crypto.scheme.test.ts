@@ -1,5 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
-import {  hashToCurve } from '../src/DHKE.js';
+import { hashToCurve } from '../src/DHKE.js';
 import { bytesToNumber } from '../src/utils.js';
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 
