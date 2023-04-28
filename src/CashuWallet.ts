@@ -3,6 +3,7 @@ import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
+	BlindedMessageData,
 	BlindedTransaction,
 	MintKeys,
 	PayLnInvoiceResponse,
@@ -129,7 +130,7 @@ class CashuWallet {
 			}
 		}
 		return {
-			token: { token: [{ proofs, mint: this.mint.mintUrl }] },
+			proofs: proofs,
 			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
 		};
 	}
@@ -213,12 +214,9 @@ class CashuWallet {
 		return { amount1, amount2 };
 	}
 
-	private async createRandomBlindedMessages(amount: number): Promise<{
-		blindedMessages: Array<SerializedBlindedMessage>;
-		secrets: Array<Uint8Array>;
-		rs: Array<bigint>;
-		amounts: Array<number>;
-	}> {
+	private async createRandomBlindedMessages(
+		amount: number
+	): Promise<BlindedMessageData & { amounts: Array<number> }> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
@@ -233,11 +231,7 @@ class CashuWallet {
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
-	private async createBlankOutputs(feeReserve: number) : Promise<{
-		blindedMessages: Array<SerializedBlindedMessage>;
-		secrets: Array<Uint8Array>;
-		rs: Array<bigint>;
-	}> {
+	private async createBlankOutputs(feeReserve: number) : Promise<BlindedMessageData> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
