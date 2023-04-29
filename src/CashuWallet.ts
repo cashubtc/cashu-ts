@@ -55,11 +55,15 @@ class CashuWallet {
 	 * The combined amount of Proofs has to match the payment amount including fees.
 	 * @param invoice
 	 * @param proofsToSend the exact amount to send including fees
+	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
 	 * @returns
 	 */
-	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>) {
+	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>, feeReserve?: number) {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
-		const { blindedMessages, secrets, rs } = await this.createBlankOutputs();
+		if (!feeReserve) {
+			feeReserve = await this.getFee(invoice);
+		}
+		const { blindedMessages, secrets, rs } = await this.createBlankOutputs(feeReserve);
 		const payData = await this.mint.melt({ ...paymentPayload, outputs: blindedMessages });
 		return {
 			isPaid: payData.paid ?? false,
@@ -227,11 +231,12 @@ class CashuWallet {
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
-	private async createBlankOutputs() {
+	private async createBlankOutputs(feeReserve: number) {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
-		for (let i = 0; i < 4; i++) {
+		const count = Math.ceil(Math.log2(feeReserve));
+		for (let i = 0; i < count; i++) {
 			const secret = randomBytes(32);
 			secrets.push(secret);
 			const { B_, r } = await dhke.blindMessage(secret);
