@@ -59,7 +59,11 @@ class CashuWallet {
 	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
 	 * @returns
 	 */
-	async payLnInvoice(invoice: string, proofsToSend: Array<Proof>, feeReserve?: number) : Promise<PayLnInvoiceResponse> {
+	async payLnInvoice(
+		invoice: string,
+		proofsToSend: Array<Proof>,
+		feeReserve?: number
+	): Promise<PayLnInvoiceResponse> {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
 		if (!feeReserve) {
 			feeReserve = await this.getFee(invoice);
@@ -231,7 +235,7 @@ class CashuWallet {
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
-	private async createBlankOutputs(feeReserve: number) : Promise<BlindedMessageData> {
+	private async createBlankOutputs(feeReserve: number): Promise<BlindedMessageData> {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
