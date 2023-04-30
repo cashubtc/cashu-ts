@@ -4,7 +4,22 @@ export type Proof = {
 	secret: string;
 	C: string;
 };
+export type BlindedMessageData = {
+	blindedMessages: Array<SerializedBlindedMessage>;
+	secrets: Array<Uint8Array>;
+	rs: Array<bigint>;
+};
 export type MintKeys = { [k: number]: string };
+export type PaymentPayload = { pr: string; proofs: Array<Proof> };
+
+export type SendResponse = { returnChange: Array<Proof>; send: Array<Proof> };
+export type ReceiveResponse = { proofs: Array<Proof>; tokensWithErrors: Token | undefined };
+export type PayLnInvoiceResponse = {
+	isPaid: boolean;
+	preimage: string | null;
+	change: Array<Proof>;
+	newKeys?: MintKeys;
+};
 
 export type MeltPayload = {
 	pr: string;

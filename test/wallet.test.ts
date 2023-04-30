@@ -1,7 +1,7 @@
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
 import { decode } from '@gandlaf21/bolt11-decode';
 import axios from 'axios';
+import { CashuMint } from '../src/CashuMint.js';
+import { CashuWallet } from '../src/CashuWallet.js';
 
 // Mock jest and set the type
 jest.mock('axios');
