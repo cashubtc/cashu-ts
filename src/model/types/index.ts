@@ -71,9 +71,14 @@ export type SerializedBlindedSignature = {
 };
 
 export type Token = {
-	token: Array<{ mint: string; proofs: Array<Proof> }>;
+	token: Array<TokenEntry>;
 	memo?: string;
 };
+
+export type TokenEntry = {
+	proofs: Array<Proof>
+	mint: string
+}
 
 export type TokenV2 = {
 	proofs: Array<Proof>;
