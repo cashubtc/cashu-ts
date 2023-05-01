@@ -101,29 +101,29 @@ class CashuWallet {
 	async receive(encodedToken: string): Promise<ReceiveResponse> {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
-		const tokensWithErrors: Array<TokenEntry> = [];
+		const tokenEntriesWithError: Array<TokenEntry> = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
 		for (const tokenEntry of token) {
 			try {
 				const keys =
-					mintKeys.get(tokenEntry.mint) || (await new CashuMint(tokenEntry.mint).getKeys());
+					mintKeys.get(tokenEntry.mint) || await CashuMint.getKeys(tokenEntry.mint);
 				if (!mintKeys.has(tokenEntry.mint)) {
 					mintKeys.set(tokenEntry.mint, keys);
 				}
 				const result = await this.receiveTokenEntry(tokenEntry, keys);
 				if (result?.proofsWithError?.length) {
-					tokensWithErrors.push(tokenEntry);
+					tokenEntriesWithError.push(tokenEntry);
 					continue;
 				}
 				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...result.proofs] });
 			} catch (error) {
 				console.error(error);
-				tokensWithErrors.push(tokenEntry);
+				tokenEntriesWithError.push(tokenEntry);
 			}
 		}
 		return {
 			token: { token: tokenEntries },
-			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
+			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined
 		};
 	}
 
