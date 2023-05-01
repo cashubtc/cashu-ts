@@ -19,33 +19,44 @@ import { checkResponse, checkResponseError, isObj } from './utils.js';
  * Class represents Cashu Mint API.
  */
 class CashuMint {
-	constructor(public mintUrl: string) {}
-
-	async getInfo(): Promise<GetInfoResponse> {
-		const { data } = await axios.get<GetInfoResponse>(`${this.mintUrl}/info`);
-		return data;
+	constructor(private _mintUrl: string) {}
+	get mintUrl() {
+		return this._mintUrl;
 	}
 
-	async requestMint(amount: number): Promise<RequestMintResponse> {
-		const { data } = await axios.get<RequestMintResponse>(`${this.mintUrl}/mint`, {
+	public static async getInfo(mintUrl: string): Promise<GetInfoResponse> {
+		const { data } = await axios.get<GetInfoResponse>(`${mintUrl}/info`);
+		return data;
+	}
+	async getInfo(): Promise<GetInfoResponse> {
+		return CashuMint.getInfo(this._mintUrl);
+	}
+	public static async requestMint(mintUrl: string, amount: number): Promise<RequestMintResponse> {
+		const { data } = await axios.get<RequestMintResponse>(`${mintUrl}/mint`, {
 			params: { amount }
 		});
 		return data;
 	}
-
-	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, hash: string) {
+	async requestMint(amount: number): Promise<RequestMintResponse> {
+		return CashuMint.requestMint(this._mintUrl, amount);
+	}
+	public static async mint(
+		mintUrl: string,
+		payloads: { outputs: Array<SerializedBlindedMessage> },
+		hash: string
+	) {
 		try {
-			const { data } = await axios.post<
+			const { data } = await axios.post<{ promises: Array<SerializedBlindedSignature> } & ApiError>(
+				`${mintUrl}/mint`,
+				payloads,
 				{
-					promises: Array<SerializedBlindedSignature>;
-				} & ApiError
-			>(`${this.mintUrl}/mint`, payloads, {
-				params: {
-					// payment_hash is deprecated
-					payment_hash: hash,
-					hash
+					params: {
+						// payment_hash is deprecated
+						payment_hash: hash,
+						hash
+					}
 				}
-			});
+			);
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.promises)) {
 				throw new Error('bad response');
@@ -56,6 +67,9 @@ class CashuMint {
 			throw err;
 		}
 	}
+	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, hash: string) {
+		return CashuMint.mint(this._mintUrl, payloads, hash);
+	}
 	public static async getKeys(mintUrl: string, keysetId?: string): Promise<MintKeys> {
 		if (keysetId) {
 			// make the keysetId url safe
@@ -65,12 +79,14 @@ class CashuMint {
 		return data;
 	}
 	async getKeys(keysetId?: string): Promise<MintKeys> {
-		return CashuMint.getKeys(this.mintUrl, keysetId);
+		return CashuMint.getKeys(this._mintUrl, keysetId);
 	}
-
-	async getKeySets(): Promise<{ keysets: Array<string> }> {
-		const { data } = await axios.get<{ keysets: Array<string> }>(`${this.mintUrl}/keysets`);
+	public static async getKeySets(mintUrl: string): Promise<{ keysets: Array<string> }> {
+		const { data } = await axios.get<{ keysets: Array<string> }>(`${mintUrl}/keysets`);
 		return data;
+	}
+	async getKeySets(): Promise<{ keysets: Array<string> }> {
+		return CashuMint.getKeySets(this._mintUrl);
 	}
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
 		try {
@@ -86,11 +102,11 @@ class CashuMint {
 		}
 	}
 	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
-		return CashuMint.split(this.mintUrl, splitPayload);
+		return CashuMint.split(this._mintUrl, splitPayload);
 	}
-	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
+	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
 		try {
-			const { data } = await axios.post<MeltResponse>(`${this.mintUrl}/melt`, meltPayload);
+			const { data } = await axios.post<MeltResponse>(`${mintUrl}/melt`, meltPayload);
 			checkResponse(data);
 			if (
 				!isObj(data) ||
@@ -105,10 +121,16 @@ class CashuMint {
 			throw err;
 		}
 	}
-	async checkFees(checkfeesPayload: { pr: string }): Promise<{ fee: number }> {
+	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
+		return CashuMint.melt(this._mintUrl, meltPayload);
+	}
+	public static async checkFees(
+		mintUrl: string,
+		checkfeesPayload: { pr: string }
+	): Promise<{ fee: number }> {
 		try {
 			const { data } = await axios.post<{ fee: number } & ApiError>(
-				`${this.mintUrl}/checkfees`,
+				`${mintUrl}/checkfees`,
 				checkfeesPayload
 			);
 			checkResponse(data);
@@ -121,12 +143,15 @@ class CashuMint {
 			throw err;
 		}
 	}
-	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
+	async checkFees(checkfeesPayload: { pr: string }): Promise<{ fee: number }> {
+		return CashuMint.checkFees(this._mintUrl, checkfeesPayload);
+	}
+	public static async check(
+		mintUrl: string,
+		checkPayload: CheckSpendablePayload
+	): Promise<CheckSpendableResponse> {
 		try {
-			const { data } = await axios.post<CheckSpendableResponse>(
-				`${this.mintUrl}/check`,
-				checkPayload
-			);
+			const { data } = await axios.post<CheckSpendableResponse>(`${mintUrl}/check`, checkPayload);
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.spendable)) {
 				throw new Error('bad response');
@@ -136,6 +161,9 @@ class CashuMint {
 			checkResponseError(err);
 			throw err;
 		}
+	}
+	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
+		return CashuMint.check(this._mintUrl, checkPayload);
 	}
 }
 
