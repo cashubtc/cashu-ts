@@ -26,10 +26,7 @@ export function pointFromHex(hex: string) {
 /* export function h2cToPoint(h2c: H2CPoint<bigint>): ProjPointType<bigint> {
 	return secp256k1.ProjectivePoint.fromAffine(h2c.toAffine());
 } */
-async function blindMessage(
-	secret: Uint8Array,
-	r?: bigint
-): Promise<{ B_: ProjPointType<bigint>; r: bigint }> {
+function blindMessage(secret: Uint8Array, r?: bigint): { B_: ProjPointType<bigint>; r: bigint } {
 	const secretMessageBase64 = encodeUint8toBase64(secret);
 	const secretMessage = new TextEncoder().encode(secretMessageBase64);
 	const Y = hashToCurve(secretMessage);
