@@ -46,17 +46,17 @@ class CashuMint {
 		hash: string
 	) {
 		try {
-			const { data } = await axios.post<
+			const { data } = await axios.post<{ promises: Array<SerializedBlindedSignature> } & ApiError>(
+				`${mintUrl}/mint`,
+				payloads,
 				{
-					promises: Array<SerializedBlindedSignature>;
-				} & ApiError
-			>(`${mintUrl}/mint`, payloads, {
-				params: {
-					// payment_hash is deprecated
-					payment_hash: hash,
-					hash
+					params: {
+						// payment_hash is deprecated
+						payment_hash: hash,
+						hash
+					}
 				}
-			});
+			);
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.promises)) {
 				throw new Error('bad response');

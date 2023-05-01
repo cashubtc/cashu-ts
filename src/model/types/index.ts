@@ -76,9 +76,9 @@ export type Token = {
 };
 
 export type TokenEntry = {
-	proofs: Array<Proof>
-	mint: string
-}
+	proofs: Array<Proof>;
+	mint: string;
+};
 
 export type TokenV2 = {
 	proofs: Array<Proof>;
