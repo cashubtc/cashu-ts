@@ -104,9 +104,11 @@ class CashuWallet {
 		const tokenEntriesWithError: Array<TokenEntry> = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
 		for (const tokenEntry of token) {
+			if (!tokenEntry?.proofs?.length) {
+				continue;
+			}
 			try {
-				const keys =
-					mintKeys.get(tokenEntry.mint) || await CashuMint.getKeys(tokenEntry.mint);
+				const keys = mintKeys.get(tokenEntry.mint) || (await CashuMint.getKeys(tokenEntry.mint));
 				if (!mintKeys.has(tokenEntry.mint)) {
 					mintKeys.set(tokenEntry.mint, keys);
 				}
