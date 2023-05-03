@@ -12,9 +12,10 @@ import {
 	ReceiveResponse,
 	SendResponse,
 	SerializedBlindedMessage,
-	SplitPayload
+	SplitPayload,
+	TokenEntry
 } from './model/types/index.js';
-import { getDecodedToken, splitAmount } from './utils.js';
+import { cleanToken, getDecodedToken, splitAmount } from './utils.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -68,7 +69,7 @@ class CashuWallet {
 		if (!feeReserve) {
 			feeReserve = await this.getFee(invoice);
 		}
-		const { blindedMessages, secrets, rs } = await this.createBlankOutputs(feeReserve);
+		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve);
 		const payData = await this.mint.melt({ ...paymentPayload, outputs: blindedMessages });
 		return {
 			isPaid: payData.paid ?? false,
@@ -98,44 +99,33 @@ class CashuWallet {
 	}
 
 	async receive(encodedToken: string): Promise<ReceiveResponse> {
-		const { token: tokens } = getDecodedToken(encodedToken);
-		const proofs: Array<Proof> = [];
-		const tokensWithErrors: Array<{ mint: string; proofs: Array<Proof> }> = [];
+		const { token } = cleanToken(getDecodedToken(encodedToken));
+		const tokenEntries: Array<TokenEntry> = [];
+		const tokenEntriesWithError: Array<TokenEntry> = [];
 		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
-		for (const token of tokens) {
-			if (!token?.proofs || !token?.mint) {
+		for (const tokenEntry of token) {
+			if (!tokenEntry?.proofs?.length) {
 				continue;
 			}
 			try {
-				const keys = mintKeys.get(token.mint) || (await new CashuMint(token.mint).getKeys());
-				const amount = token.proofs.reduce((total, curr) => total + curr.amount, 0);
-				const { payload, amount1BlindedMessages, amount2BlindedMessages } =
-					await this.createSplitPayload(0, amount, token.proofs);
-				const { fst, snd } = await CashuMint.split(token.mint, payload);
-				const proofs1 = dhke.constructProofs(
-					fst,
-					amount1BlindedMessages.rs,
-					amount1BlindedMessages.secrets,
-					keys
-				);
-				const proofs2 = dhke.constructProofs(
-					snd,
-					amount2BlindedMessages.rs,
-					amount2BlindedMessages.secrets,
-					keys
-				);
-				proofs.push(...proofs1, ...proofs2);
-				if (!mintKeys.has(token.mint)) {
-					mintKeys.set(token.mint, keys);
+				const keys = mintKeys.get(tokenEntry.mint) || (await CashuMint.getKeys(tokenEntry.mint));
+				if (!mintKeys.has(tokenEntry.mint)) {
+					mintKeys.set(tokenEntry.mint, keys);
 				}
+				const result = await this.receiveTokenEntry(tokenEntry, keys);
+				if (result?.proofsWithError?.length) {
+					tokenEntriesWithError.push(tokenEntry);
+					continue;
+				}
+				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...result.proofs] });
 			} catch (error) {
 				console.error(error);
-				tokensWithErrors.push(token);
+				tokenEntriesWithError.push(tokenEntry);
 			}
 		}
 		return {
-			proofs: proofs,
-			tokensWithErrors: tokensWithErrors.length ? { token: tokensWithErrors } : undefined
+			token: { token: tokenEntries },
+			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined
 		};
 	}
 
@@ -156,8 +146,11 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable) {
 			const { amount1, amount2 } = this.splitReceive(amount, amountAvailable);
-			const { payload, amount1BlindedMessages, amount2BlindedMessages } =
-				await this.createSplitPayload(amount1, amount2, proofsToSend);
+			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
+				amount1,
+				amount2,
+				proofsToSend
+			);
 			const { fst, snd } = await this.mint.split(payload);
 			const proofs1 = dhke.constructProofs(
 				fst,
@@ -177,24 +170,58 @@ class CashuWallet {
 	}
 
 	async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
-		const { blindedMessages, secrets, rs } = await this.createRandomBlindedMessages(amount);
+		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(amount);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
 		return dhke.constructProofs(promises, rs, secrets, this.keys);
 	}
 
+	private async receiveTokenEntry(tokenEntry: TokenEntry, keys: MintKeys) {
+		const proofsWithError: Array<Proof> = [];
+		const proofs: Array<Proof> = [];
+		try {
+			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
+			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
+				0,
+				amount,
+				tokenEntry.proofs
+			);
+			const { fst, snd } = await CashuMint.split(tokenEntry.mint, payload);
+			const proofs1 = dhke.constructProofs(
+				fst,
+				amount1BlindedMessages.rs,
+				amount1BlindedMessages.secrets,
+				keys
+			);
+			const proofs2 = dhke.constructProofs(
+				snd,
+				amount2BlindedMessages.rs,
+				amount2BlindedMessages.secrets,
+				keys
+			);
+			proofs.push(...proofs1, ...proofs2);
+		} catch (error) {
+			console.error(error);
+			proofsWithError.push(...tokenEntry.proofs);
+		}
+		return {
+			proofs,
+			proofsWithError: proofsWithError.length ? proofsWithError : undefined
+		};
+	}
+
 	//keep amount 1 send amount 2
-	private async createSplitPayload(
+	private createSplitPayload(
 		amount1: number,
 		amount2: number,
 		proofsToSend: Array<Proof>
-	): Promise<{
+	): {
 		payload: SplitPayload;
 		amount1BlindedMessages: BlindedTransaction;
 		amount2BlindedMessages: BlindedTransaction;
-	}> {
-		const amount1BlindedMessages = await this.createRandomBlindedMessages(amount1);
-		const amount2BlindedMessages = await this.createRandomBlindedMessages(amount2);
+	} {
+		const amount1BlindedMessages = this.createRandomBlindedMessages(amount1);
+		const amount2BlindedMessages = this.createRandomBlindedMessages(amount2);
 		const allBlindedMessages: Array<SerializedBlindedMessage> = [];
 		// the order of this array aparently matters if it's the other way around,
 		// the mint complains that the split is not as expected
@@ -218,9 +245,9 @@ class CashuWallet {
 		return { amount1, amount2 };
 	}
 
-	private async createRandomBlindedMessages(
+	private createRandomBlindedMessages(
 		amount: number
-	): Promise<BlindedMessageData & { amounts: Array<number> }> {
+	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
@@ -228,14 +255,14 @@ class CashuWallet {
 		for (let i = 0; i < amounts.length; i++) {
 			const secret = randomBytes(32);
 			secrets.push(secret);
-			const { B_, r } = await dhke.blindMessage(secret);
+			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(amounts[i], B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
-	private async createBlankOutputs(feeReserve: number): Promise<BlindedMessageData> {
+	private createBlankOutputs(feeReserve: number): BlindedMessageData {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
@@ -243,7 +270,7 @@ class CashuWallet {
 		for (let i = 0; i < count; i++) {
 			const secret = randomBytes(32);
 			secrets.push(secret);
-			const { B_, r } = await dhke.blindMessage(secret);
+			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(0, B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
