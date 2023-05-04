@@ -10,18 +10,21 @@ import {
 	PaymentPayload,
 	Proof,
 	ReceiveResponse,
+	ReceiveTokenEntryResponse,
 	SendResponse,
 	SerializedBlindedMessage,
+	SerializedBlindedSignature,
 	SplitPayload,
 	TokenEntry
 } from './model/types/index.js';
-import { cleanToken, getDecodedToken, splitAmount } from './utils.js';
+import { cleanToken, deriveKeysetId, getDecodedToken, splitAmount } from './utils.js';
 
 /**
  * Class that represents a Cashu wallet.
  */
 class CashuWallet {
-	keys: MintKeys;
+	private _keys: MintKeys;
+	private _keysetId: string;
 	mint: CashuMint;
 
 	/**
@@ -30,10 +33,21 @@ class CashuWallet {
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
 	constructor(keys: MintKeys, mint: CashuMint) {
-		this.keys = keys;
+		this._keys = keys;
 		this.mint = mint;
+		this._keysetId = deriveKeysetId(this._keys);
 	}
 
+	get keys(): MintKeys {
+		return this._keys;
+	}
+	set keys(keys: MintKeys) {
+		this._keys = keys;
+		this._keysetId = deriveKeysetId(this._keys);
+	}
+	get keysetId(): string {
+		return this._keysetId;
+	}
 	/**
 	 * returns proofs that are already spent (use for keeping wallet state clean)
 	 * @param proofs (only the 'secret' field is required)
@@ -74,7 +88,10 @@ class CashuWallet {
 		return {
 			isPaid: payData.paid ?? false,
 			preimage: payData.preimage,
-			change: payData?.change ? dhke.constructProofs(payData.change, rs, secrets, this.keys) : []
+			change: payData?.change
+				? dhke.constructProofs(payData.change, rs, secrets, await this.getKeys(payData.change))
+				: [],
+			newKeys: await this.changedKeys(payData?.change)
 		};
 	}
 
@@ -102,22 +119,25 @@ class CashuWallet {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
-		const mintKeys = new Map<string, MintKeys>([[this.mint.mintUrl, this.keys]]);
+		let newKeys: MintKeys | undefined;
 		for (const tokenEntry of token) {
 			if (!tokenEntry?.proofs?.length) {
 				continue;
 			}
 			try {
-				const keys = mintKeys.get(tokenEntry.mint) || (await CashuMint.getKeys(tokenEntry.mint));
-				if (!mintKeys.has(tokenEntry.mint)) {
-					mintKeys.set(tokenEntry.mint, keys);
-				}
-				const result = await this.receiveTokenEntry(tokenEntry, keys);
-				if (result?.proofsWithError?.length) {
+				const {
+					proofsWithError,
+					proofs,
+					newKeys: newKeysFromReceive
+				} = await this.receiveTokenEntry(tokenEntry);
+				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
 				}
-				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...result.proofs] });
+				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...proofs] });
+				if (!newKeys) {
+					newKeys = newKeysFromReceive;
+				}
 			} catch (error) {
 				console.error(error);
 				tokenEntriesWithError.push(tokenEntry);
@@ -125,7 +145,8 @@ class CashuWallet {
 		}
 		return {
 			token: { token: tokenEntries },
-			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined
+			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined,
+			newKeys
 		};
 	}
 
@@ -156,29 +177,40 @@ class CashuWallet {
 				fst,
 				amount1BlindedMessages.rs,
 				amount1BlindedMessages.secrets,
-				this.keys
+				await this.getKeys(fst)
 			);
 			const proofs2 = dhke.constructProofs(
 				snd,
 				amount2BlindedMessages.rs,
 				amount2BlindedMessages.secrets,
-				this.keys
+				await this.getKeys(snd)
 			);
-			return { returnChange: [...proofs1, ...change], send: proofs2 };
+			return {
+				returnChange: [...proofs1, ...change],
+				send: proofs2,
+				newKeys: await this.changedKeys([...(fst || []), ...(snd || [])])
+			};
 		}
 		return { returnChange: change, send: proofsToSend };
 	}
 
-	async requestTokens(amount: number, hash: string): Promise<Array<Proof>> {
+	async requestTokens(
+		amount: number,
+		hash: string
+	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(amount);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
-		return dhke.constructProofs(promises, rs, secrets, this.keys);
+		return {
+			proofs: dhke.constructProofs(promises, rs, secrets, await this.getKeys(promises)),
+			newKeys: await this.changedKeys(promises)
+		};
 	}
 
-	private async receiveTokenEntry(tokenEntry: TokenEntry, keys: MintKeys) {
+	private async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
+		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
 			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
@@ -191,23 +223,58 @@ class CashuWallet {
 				fst,
 				amount1BlindedMessages.rs,
 				amount1BlindedMessages.secrets,
-				keys
+				await this.getKeys(fst, tokenEntry.mint)
 			);
 			const proofs2 = dhke.constructProofs(
 				snd,
 				amount2BlindedMessages.rs,
 				amount2BlindedMessages.secrets,
-				keys
+				await this.getKeys(snd, tokenEntry.mint)
 			);
 			proofs.push(...proofs1, ...proofs2);
+			newKeys = await this.changedKeys([...(fst || []), ...(snd || [])]);
 		} catch (error) {
 			console.error(error);
 			proofsWithError.push(...tokenEntry.proofs);
 		}
 		return {
 			proofs,
-			proofsWithError: proofsWithError.length ? proofsWithError : undefined
+			proofsWithError: proofsWithError.length ? proofsWithError : undefined,
+			newKeys
 		};
+	}
+
+	private async changedKeys(
+		promises: Array<SerializedBlindedSignature | Proof> = []
+	): Promise<MintKeys | undefined> {
+		if (!promises?.length) {
+			return undefined;
+		}
+		if (!promises.some((x) => x.id !== this.keysetId)) {
+			return undefined;
+		}
+		const maybeNewKeys = await this.mint.getKeys();
+		const keysetId = deriveKeysetId(maybeNewKeys);
+		return keysetId === this.keysetId ? undefined : maybeNewKeys;
+	}
+	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
+		if (!arr?.length || !arr[0]?.id) {
+			return this.keys;
+		}
+		const keysetId = arr[0].id;
+		if (this.keysetId === keysetId) {
+			return this.keys;
+		}
+		// let newKeys = this.keysMap.get(keysetId);
+		// if (newKeys) {
+		// 	return newKeys;
+		// }
+		const keys =
+			!mint || mint === this.mint.mintUrl
+				? await this.mint.getKeys(arr[0].id)
+				: await CashuMint.getKeys(mint, arr[0].id);
+		// this.keysMap.set(keysetId, keys);
+		return keys;
 	}
 
 	//keep amount 1 send amount 2
@@ -266,7 +333,7 @@ class CashuWallet {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
-		const count = Math.ceil(Math.log2(feeReserve));
+		const count = Math.ceil(Math.log2(feeReserve)) || 1;
 		for (let i = 0; i < count; i++) {
 			const secret = randomBytes(32);
 			secrets.push(secret);
