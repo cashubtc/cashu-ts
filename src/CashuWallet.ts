@@ -232,7 +232,10 @@ class CashuWallet {
 				await this.getKeys(snd, tokenEntry.mint)
 			);
 			proofs.push(...proofs1, ...proofs2);
-			newKeys = await this.changedKeys([...(fst || []), ...(snd || [])]);
+			newKeys =
+				tokenEntry.mint === this.mint.mintUrl
+					? await this.changedKeys([...(fst || []), ...(snd || [])])
+					: undefined;
 		} catch (error) {
 			console.error(error);
 			proofsWithError.push(...tokenEntry.proofs);
