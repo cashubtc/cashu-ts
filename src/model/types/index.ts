@@ -10,10 +10,23 @@ export type BlindedMessageData = {
 	rs: Array<bigint>;
 };
 export type MintKeys = { [k: number]: string };
+export type ReceiveTokenEntryResponse = {
+	proofs: Array<Proof>;
+	proofsWithError: Array<Proof> | undefined;
+	newKeys?: MintKeys;
+};
 export type PaymentPayload = { pr: string; proofs: Array<Proof> };
 
-export type SendResponse = { returnChange: Array<Proof>; send: Array<Proof> };
-export type ReceiveResponse = { token: Token; tokensWithErrors: Token | undefined };
+export type SendResponse = {
+	returnChange: Array<Proof>;
+	send: Array<Proof>;
+	newKeys?: MintKeys;
+};
+export type ReceiveResponse = {
+	token: Token;
+	tokensWithErrors: Token | undefined;
+	newKeys?: MintKeys;
+};
 export type PayLnInvoiceResponse = {
 	isPaid: boolean;
 	preimage: string | null;
