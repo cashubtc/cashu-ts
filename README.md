@@ -54,9 +54,7 @@ npm i @cashu/cashu-ts
 ```typescript
 import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 
-const mint = new CashuMint('{MINT_URL}');
-const keys = await mint.getKeys();
-const wallet = new CashuWallet(keys, mint);
+const wallet = new CashuWallet(new CashuMint('{MINT_URL}'));
 
 const { pr, hash } = await wallet.requestMint(200);
 
