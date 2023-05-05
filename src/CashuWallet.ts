@@ -24,7 +24,7 @@ import { cleanToken, deriveKeysetId, getDecodedToken, splitAmount } from './util
  */
 class CashuWallet {
 	private _keys: MintKeys;
-	private _keysetId: string;
+	private _keysetId = '';
 	mint: CashuMint;
 
 	/**
@@ -32,10 +32,12 @@ class CashuWallet {
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
-	constructor(keys: MintKeys, mint: CashuMint) {
-		this._keys = keys;
+	constructor(mint: CashuMint, keys?: MintKeys) {
+		this._keys = keys || {};
 		this.mint = mint;
-		this._keysetId = deriveKeysetId(this._keys);
+		if (keys) {
+			this._keysetId = deriveKeysetId(this._keys);
+		}
 	}
 
 	get keys(): MintKeys {
@@ -247,9 +249,16 @@ class CashuWallet {
 		};
 	}
 
+	private async initKeys() {
+		if (!this.keysetId || !Object.keys(this.keys).length) {
+			this.keys = await this.mint.getKeys();
+			this._keysetId = deriveKeysetId(this.keys);
+		}
+	}
 	private async changedKeys(
 		promises: Array<SerializedBlindedSignature | Proof> = []
 	): Promise<MintKeys | undefined> {
+		await this.initKeys();
 		if (!promises?.length) {
 			return undefined;
 		}
@@ -261,6 +270,7 @@ class CashuWallet {
 		return keysetId === this.keysetId ? undefined : maybeNewKeys;
 	}
 	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
+		await this.initKeys();
 		if (!arr?.length || !arr[0]?.id) {
 			return this.keys;
 		}
