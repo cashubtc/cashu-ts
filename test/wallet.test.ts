@@ -27,8 +27,7 @@ const invoice =
 describe('test fees', () => {
 	test('test get fees', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 
 		mockedAxios.post.mockResolvedValueOnce({ data: { fee: 20 } });
 		const fee = await wallet.getFee(invoice);
@@ -42,8 +41,7 @@ describe('receive', () => {
 		'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIi91WUIvNndXbllrVSJdfV19';
 	test('test receive', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
@@ -73,8 +71,7 @@ describe('receive', () => {
 		const msg = 'tokens already spent. Secret: oEpEuViVHUV2vQH81INUbq++Yv2w3u5H0LhaqXJKeR0=';
 
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.isAxiosError.mockReturnValueOnce(true);
 		mockedAxios.post.mockRejectedValueOnce({
 			response: { data: { detail: msg } }
@@ -87,8 +84,7 @@ describe('receive', () => {
 	});
 	test('test receive could not verify proofs', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: { code: 0, error: 'could not verify proofs.' }
 		});
@@ -100,8 +96,7 @@ describe('receive', () => {
 	});
 	test('test receive keys changed', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
 				fst: [],
@@ -147,8 +142,7 @@ describe('checkProofsSpent', () => {
 	];
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 
 		mockedAxios.post.mockResolvedValueOnce({ data: { spendable: [true] } });
 		const result = await wallet.checkProofsSpent(proofs);
@@ -167,8 +161,7 @@ describe('payLnInvoice', () => {
 	];
 	test('test payLnInvoice base case', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		const response = { paid: true, preimage: '' };
 		mockedAxios.post.mockResolvedValueOnce({ data: { fee: 0 } });
 		mockedAxios.post.mockResolvedValueOnce({ data: response });
@@ -182,8 +175,7 @@ describe('payLnInvoice', () => {
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
 			}
 		});
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		const response = {
 			paid: true,
 			preimage: '',
@@ -204,8 +196,7 @@ describe('payLnInvoice', () => {
 	});
 	test('test payLnInvoice bad resonse', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({ data: undefined });
 		try {
 			await wallet.payLnInvoice(invoice, proofs);
@@ -215,8 +206,7 @@ describe('payLnInvoice', () => {
 	});
 	test('test payLnInvoice key changed', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		const response = {
 			paid: true,
 			preimage: '',
@@ -248,8 +238,7 @@ describe('payLnInvoice', () => {
 describe('requestTokens', () => {
 	test('test requestTokens', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
 				promises: [
@@ -269,8 +258,7 @@ describe('requestTokens', () => {
 	});
 	test('test requestTokens bad resonse', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({ data: undefined });
 		try {
 			await wallet.requestTokens(1, '');
@@ -291,8 +279,7 @@ describe('send', () => {
 	];
 	test('test send base case', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
 				fst: [],
@@ -314,8 +301,7 @@ describe('send', () => {
 	});
 	test('test send over paying. Should return change', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
 				fst: [
@@ -355,8 +341,7 @@ describe('send', () => {
 
 	test('test send over paying2', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
 				fst: [
@@ -394,8 +379,7 @@ describe('send', () => {
 	});
 	test('test send not enough funds', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
 				fst: [],
@@ -416,8 +400,7 @@ describe('send', () => {
 	});
 	test('test send bad resonse', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const keys = await mint.getKeys();
-		const wallet = new CashuWallet(keys, mint);
+		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({ data: undefined });
 		try {
 			await wallet.send(1, proofs);
