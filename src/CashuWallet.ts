@@ -278,19 +278,14 @@ class CashuWallet {
 		if (this.keysetId === keysetId) {
 			return this.keys;
 		}
-		// let newKeys = this.keysMap.get(keysetId);
-		// if (newKeys) {
-		// 	return newKeys;
-		// }
+
 		const keys =
 			!mint || mint === this.mint.mintUrl
 				? await this.mint.getKeys(arr[0].id)
 				: await CashuMint.getKeys(mint, arr[0].id);
-		// this.keysMap.set(keysetId, keys);
 		return keys;
 	}
 
-	//keep amount 1 send amount 2
 	private createSplitPayload(
 		amount1: number,
 		amount2: number,
