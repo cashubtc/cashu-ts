@@ -16,7 +16,9 @@
 		"test": "jest --coverage",
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts . --fix",
-		"format": "prettier --write ."
+		"format": "prettier --write .",
+		"typedoc": "typedoc src/index.ts"
+		
 	},
 	"keywords": [
 		"cashu"
