@@ -76,7 +76,11 @@ function handleTokens(token: string): Token {
 	// if v2 token return v3 format
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
-
+/**
+ * Returns the keyset id of a set of keys 
+ * @param keys keys object to derive keyset id from 
+ * @returns 
+ */
 export function deriveKeysetId(keys: MintKeys) {
 	const pubkeysConcat = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
