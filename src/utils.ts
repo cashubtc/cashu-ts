@@ -31,15 +31,19 @@ function bigIntStringify<T>(_key: unknown, value: T) {
 }
 
 /**
- * to encode a v3 token
- * @param proofs
- * @param mints
+ * Helper function to encode a v3 cashu token
+ * @param token 
  * @returns
  */
 function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
+/**
+ * Helper function to decode cashu tokens into object
+ * @param token an encoded cashu token (cashuAey...)
+ * @returns cashu token object
+ */
 function getDecodedToken(token: string): Token {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];

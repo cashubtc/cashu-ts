@@ -21,6 +21,7 @@ import { cleanToken, deriveKeysetId, getDecodedToken, splitAmount } from './util
 
 /**
  * Class that represents a Cashu wallet.
+ * This class should act as the entry point for this library
  */
 class CashuWallet {
 	private _keys: MintKeys;
@@ -63,7 +64,11 @@ class CashuWallet {
 		const { spendable } = await this.mint.check(payload);
 		return proofs.filter((_, i) => !spendable[i]);
 	}
-
+	/**
+	 * Starts a minting process by requesting an invoice from the mint
+	 * @param amount Amount requesting for mint. 
+	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 */
 	requestMint(amount: number) {
 		return this.mint.requestMint(amount);
 	}
@@ -74,7 +79,6 @@ class CashuWallet {
 	 * @param invoice
 	 * @param proofsToSend the exact amount to send including fees
 	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
-	 * @returns
 	 */
 	async payLnInvoice(
 		invoice: string,
@@ -96,7 +100,11 @@ class CashuWallet {
 			newKeys: await this.changedKeys(payData?.change)
 		};
 	}
-
+	/**
+	 * Estimate fees for a given LN invoice
+	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @returns estimated Fee
+	 */
 	async getFee(invoice: string): Promise<number> {
 		const { fee } = await this.mint.checkFees({ pr: invoice });
 		return fee;
@@ -108,7 +116,11 @@ class CashuWallet {
 			proofs: proofs
 		};
 	}
-
+	/**
+	 * Use a cashu token to pay an ln invoice
+	 * @param invoice Lightning invoice
+	 * @param token cashu token
+	 */
 	payLnInvoiceWithToken(invoice: string, token: string): Promise<PayLnInvoiceResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
@@ -116,7 +128,11 @@ class CashuWallet {
 			.flatMap((t) => t.proofs);
 		return this.payLnInvoice(invoice, proofs);
 	}
-
+	/**
+	 * Receive an encoded Cashu token
+	 * @param encodedToken Cashu token
+	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
+	 */
 	async receive(encodedToken: string): Promise<ReceiveResponse> {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
@@ -152,6 +168,57 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Receive a single cashu token entry
+	 * @param tokenEntry a single entry of a cashu token
+	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
+	 */
+	private async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
+		const proofsWithError: Array<Proof> = [];
+		const proofs: Array<Proof> = [];
+		let newKeys: MintKeys | undefined;
+		try {
+			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
+			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
+				0,
+				amount,
+				tokenEntry.proofs
+			);
+			const { fst, snd } = await CashuMint.split(tokenEntry.mint, payload);
+			const proofs1 = dhke.constructProofs(
+				fst,
+				amount1BlindedMessages.rs,
+				amount1BlindedMessages.secrets,
+				await this.getKeys(fst, tokenEntry.mint)
+			);
+			const proofs2 = dhke.constructProofs(
+				snd,
+				amount2BlindedMessages.rs,
+				amount2BlindedMessages.secrets,
+				await this.getKeys(snd, tokenEntry.mint)
+			);
+			proofs.push(...proofs1, ...proofs2);
+			newKeys =
+				tokenEntry.mint === this.mint.mintUrl
+					? await this.changedKeys([...(fst || []), ...(snd || [])])
+					: undefined;
+		} catch (error) {
+			console.error(error);
+			proofsWithError.push(...tokenEntry.proofs);
+		}
+		return {
+			proofs,
+			proofsWithError: proofsWithError.length ? proofsWithError : undefined,
+			newKeys
+		};
+	}
+
+	/**
+	 * Splits and creates sendable tokens
+	 * @param amount amount to send
+	 * @param proofs proofs matching that amount
+	 * @returns promise of the change- and send-proofs
+	 */
 	async send(amount: number, proofs: Array<Proof>): Promise<SendResponse> {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
@@ -208,6 +275,7 @@ class CashuWallet {
 			newKeys: await this.changedKeys(promises)
 		};
 	}
+<<<<<<< HEAD
 
 	async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
@@ -248,6 +316,9 @@ class CashuWallet {
 			newKeys
 		};
 	}
+=======
+	
+>>>>>>> ts docs
 
 	private async initKeys() {
 		if (!this.keysetId || !Object.keys(this.keys).length) {
@@ -298,7 +369,7 @@ class CashuWallet {
 		const amount1BlindedMessages = this.createRandomBlindedMessages(amount1);
 		const amount2BlindedMessages = this.createRandomBlindedMessages(amount2);
 		const allBlindedMessages: Array<SerializedBlindedMessage> = [];
-		// the order of this array aparently matters if it's the other way around,
+		// the order of this array apparently matters if it's the other way around,
 		// the mint complains that the split is not as expected
 		allBlindedMessages.push(...amount1BlindedMessages.blindedMessages);
 		allBlindedMessages.push(...amount2BlindedMessages.blindedMessages);
