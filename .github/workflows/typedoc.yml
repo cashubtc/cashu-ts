@@ -3,7 +3,7 @@ name: Generate and Deploy Typedoc
 on:
   push:
     branches:
-      - docs  # Modify this if your main branch has a different name
+      - main
 
 jobs:
   build:
@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18 # Adjust the version based on your project
+          node-version: 18
 
       - name: Install dependencies
         run: npm install
