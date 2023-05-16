@@ -209,7 +209,7 @@ class CashuWallet {
 		};
 	}
 
-	private async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
+	async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
 		let newKeys: MintKeys | undefined;
