@@ -18,7 +18,6 @@
 		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write .",
 		"typedoc": "typedoc src/index.ts"
-		
 	},
 	"keywords": [
 		"cashu"

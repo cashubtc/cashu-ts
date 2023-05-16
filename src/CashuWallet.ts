@@ -66,7 +66,7 @@ class CashuWallet {
 	}
 	/**
 	 * Starts a minting process by requesting an invoice from the mint
-	 * @param amount Amount requesting for mint. 
+	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	requestMint(amount: number) {
@@ -276,6 +276,7 @@ class CashuWallet {
 		};
 	}
 <<<<<<< HEAD
+<<<<<<< HEAD
 
 	async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
@@ -319,6 +320,8 @@ class CashuWallet {
 =======
 	
 >>>>>>> ts docs
+=======
+>>>>>>> format
 
 	private async initKeys() {
 		if (!this.keysetId || !Object.keys(this.keys).length) {

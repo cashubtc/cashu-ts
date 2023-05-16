@@ -1,5 +1,5 @@
 /**
- * represents a single Cashu proof. 
+ * represents a single Cashu proof.
  */
 export type Proof = {
 	/**
@@ -20,7 +20,6 @@ export type Proof = {
 	C: string;
 };
 
-
 /**
  * A mints publickey-set.
  */
@@ -39,13 +38,13 @@ export type ReceiveTokenEntryResponse = {
 	 */
 	proofsWithError: Array<Proof> | undefined;
 	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys. 
+	 * If the mint has rotated keys, this field will be populated with the new keys.
 	 */
 	newKeys?: MintKeys;
 };
 
 /**
- *  response after sending  
+ *  response after sending
  */
 export type SendResponse = {
 	/**
@@ -57,7 +56,7 @@ export type SendResponse = {
 	 */
 	send: Array<Proof>;
 	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys. 
+	 * If the mint has rotated keys, this field will be populated with the new keys.
 	 */
 	newKeys?: MintKeys;
 };
@@ -74,16 +73,15 @@ export type ReceiveResponse = {
 	 */
 	tokensWithErrors: Token | undefined;
 	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys. 
+	 * If the mint has rotated keys, this field will be populated with the new keys.
 	 */
 	newKeys?: MintKeys;
 };
 
-
 /**
  * Payload that needs to be sent to the mint when paying a lightning invoice.
  */
-export type PaymentPayload = { 
+export type PaymentPayload = {
 	/**
 	 * Payment request/Lighting invoice that should get paid by the mint.
 	 */
@@ -91,7 +89,8 @@ export type PaymentPayload = {
 	/**
 	 * Proofs, matching Lightning invoices amount + fees.
 	 */
-	proofs: Array<Proof> };
+	proofs: Array<Proof>;
+};
 
 /**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
@@ -119,12 +118,12 @@ export type MeltResponse = {
 	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
 	 */
 	paid: boolean;
-		/**
-	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses 
+	/**
+	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
 	preimage: string | null;
 	/**
-	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate 
+	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
 	change?: Array<SerializedBlindedSignature>;
 } & ApiError;
@@ -138,15 +137,15 @@ export type PayLnInvoiceResponse = {
 	 */
 	isPaid: boolean;
 	/**
-	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses 
+	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
 	preimage: string | null;
 	/**
-	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate 
+	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
 	change: Array<Proof>;
 	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys. 
+	 * If the mint has rotated keys, this field will be populated with the new keys.
 	 */
 	newKeys?: MintKeys;
 };
@@ -164,7 +163,7 @@ export type SplitPayload = {
 	 */
 	amount: number;
 	/**
-	 * Fresh blinded messages to be signed by the mint to create the split proofs 
+	 * Fresh blinded messages to be signed by the mint to create the split proofs
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
@@ -210,27 +209,27 @@ export type RequestMintResponse = {
  */
 export type CheckSpendablePayload = {
 	/**
-	 * array of proofs. Only the secret is strictly needed. 
+	 * array of proofs. Only the secret is strictly needed.
 	 * If the whole object is passed, it will be stripped of other objects before sending it to the mint.
 	 */
 	proofs: Array<{ secret: string }>;
 };
 
 /**
- * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated. 
+ * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
  */
-export type CheckSpendableResponse = { 
+export type CheckSpendableResponse = {
 	/**
 	 * Ordered list for checked proofs. True if the secret has not been redeemed at the mint before
 	 */
-	spendable: Array<boolean>
- } & ApiError;
+	spendable: Array<boolean>;
+} & ApiError;
 /**
  * blinded message for sending to the mint
  */
 export type SerializedBlindedMessage = {
 	/**
-	 * amount 
+	 * amount
 	 */
 	amount: number;
 	/**
@@ -239,7 +238,7 @@ export type SerializedBlindedMessage = {
 	B_: string;
 };
 /**
- * Blinded signature as it is received from the mint 
+ * Blinded signature as it is received from the mint
  */
 export type SerializedBlindedSignature = {
 	/**
@@ -304,7 +303,7 @@ export type BlindedTransaction = {
 	 */
 	secrets: Array<Uint8Array>;
 	/**
-	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint. 
+	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint.
 	 */
 	rs: Array<bigint>;
 	/**
@@ -326,13 +325,13 @@ export type BlindedMessageData = {
 	 */
 	secrets: Array<Uint8Array>;
 	/**
-	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint. 
+	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint.
 	 */
 	rs: Array<bigint>;
 };
 
 /**
- * Response from mint at /info endpoint 
+ * Response from mint at /info endpoint
  */
 export type GetInfoResponse = {
 	name: string;

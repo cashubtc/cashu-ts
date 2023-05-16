@@ -32,7 +32,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
 
 /**
  * Helper function to encode a v3 cashu token
- * @param token 
+ * @param token
  * @returns
  */
 function getEncodedToken(token: Token): string {
@@ -77,9 +77,9 @@ function handleTokens(token: string): Token {
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
 /**
- * Returns the keyset id of a set of keys 
- * @param keys keys object to derive keyset id from 
- * @returns 
+ * Returns the keyset id of a set of keys
+ * @param keys keys object to derive keyset id from
+ * @returns
  */
 export function deriveKeysetId(keys: MintKeys) {
 	const pubkeysConcat = Object.entries(keys)
