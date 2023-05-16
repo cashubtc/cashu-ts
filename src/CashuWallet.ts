@@ -173,7 +173,7 @@ class CashuWallet {
 	 * @param tokenEntry a single entry of a cashu token
 	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
 	 */
-	private async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
+	async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
 		let newKeys: MintKeys | undefined;
@@ -275,53 +275,6 @@ class CashuWallet {
 			newKeys: await this.changedKeys(promises)
 		};
 	}
-<<<<<<< HEAD
-<<<<<<< HEAD
-
-	async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
-		const proofsWithError: Array<Proof> = [];
-		const proofs: Array<Proof> = [];
-		let newKeys: MintKeys | undefined;
-		try {
-			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
-				0,
-				amount,
-				tokenEntry.proofs
-			);
-			const { fst, snd } = await CashuMint.split(tokenEntry.mint, payload);
-			const proofs1 = dhke.constructProofs(
-				fst,
-				amount1BlindedMessages.rs,
-				amount1BlindedMessages.secrets,
-				await this.getKeys(fst, tokenEntry.mint)
-			);
-			const proofs2 = dhke.constructProofs(
-				snd,
-				amount2BlindedMessages.rs,
-				amount2BlindedMessages.secrets,
-				await this.getKeys(snd, tokenEntry.mint)
-			);
-			proofs.push(...proofs1, ...proofs2);
-			newKeys =
-				tokenEntry.mint === this.mint.mintUrl
-					? await this.changedKeys([...(fst || []), ...(snd || [])])
-					: undefined;
-		} catch (error) {
-			console.error(error);
-			proofsWithError.push(...tokenEntry.proofs);
-		}
-		return {
-			proofs,
-			proofsWithError: proofsWithError.length ? proofsWithError : undefined,
-			newKeys
-		};
-	}
-=======
-	
->>>>>>> ts docs
-=======
->>>>>>> format
 
 	private async initKeys() {
 		if (!this.keysetId || !Object.keys(this.keys).length) {
