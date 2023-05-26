@@ -43,6 +43,8 @@ Supported token formats:
 
 ## Usage
 
+Go to the [docs](https://cashubtc.github.io/cashu-ts/) for detailed usage.
+
 ### Install
 
 ```shell
