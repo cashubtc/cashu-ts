@@ -180,7 +180,9 @@ class CashuMint {
 	 */
 	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
 		try {
-			const { data } = await axios.post<MeltResponse>(`${mintUrl}/melt`, meltPayload, { timeout: 0 });
+			const { data } = await axios.post<MeltResponse>(`${mintUrl}/melt`, meltPayload, {
+				timeout: 0
+			});
 			checkResponse(data);
 			if (
 				!isObj(data) ||
