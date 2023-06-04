@@ -337,9 +337,10 @@ export type GetInfoResponse = {
 	name: string;
 	pubkey: string;
 	version: string;
-	description: string;
-	description_long: string;
+	description?: string;
+	description_long?: string;
 	contact: Array<Array<string>>;
 	nuts: Array<string>;
-	motd: string;
+	motd?: string;
+	parameter: { peg_out_only: boolean };
 };
