@@ -3,6 +3,7 @@ import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
+	AmountPreference,
 	BlindedMessageData,
 	BlindedTransaction,
 	MintKeys,
@@ -265,9 +266,10 @@ class CashuWallet {
 
 	async requestTokens(
 		amount: number,
-		hash: string
+		hash: string,
+		AmountPreference?: Array<AmountPreference>
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
-		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(amount);
+		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(amount,AmountPreference);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
 		return {
@@ -348,12 +350,13 @@ class CashuWallet {
 	}
 
 	private createRandomBlindedMessages(
-		amount: number
+		amount: number,
+		amountPreference?: Array<AmountPreference>
 	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
-		const amounts = splitAmount(amount);
+		const amounts = splitAmount(amount, amountPreference);
 		for (let i = 0; i < amounts.length; i++) {
 			const secret = randomBytes(32);
 			secrets.push(secret);

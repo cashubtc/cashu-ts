@@ -1,4 +1,6 @@
+import { AmountPreference } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
+
 
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
@@ -10,6 +12,35 @@ describe('test split amounts ', () => {
 		expect(chunks).toStrictEqual([]);
 	});
 });
+
+
+
+describe('test split custom amounts ', () => {
+	const fiveToOne: AmountPreference = {amount: 1,
+	count: 5}
+	test('testing amount 5', async () => {
+		const chunks = utils.splitAmount(5, [fiveToOne]);
+		expect(chunks).toStrictEqual([1,1,1,1,1]);
+	});
+	const tenToOneAndTwo: Array<AmountPreference> = [{amount: 1,
+		count: 2},{amount:2,count:4}]
+	test('testing amount 10', async () => {
+		const chunks = utils.splitAmount(10, tenToOneAndTwo);
+		expect(chunks).toStrictEqual([1,1,2,2,2,2]);
+	});
+	const fiveTwelve: Array<AmountPreference> = [{amount: 512,
+		count: 2}]
+	test('testing amount 516', async () => {
+		const chunks = utils.splitAmount(518, fiveTwelve);
+		expect(chunks).toStrictEqual([512,2,4]);
+	});
+	const illegal: Array<AmountPreference> = [{amount: 3,
+		count: 2}]
+	test('testing non pow2', async () => {
+		expect(() => utils.splitAmount(6, illegal)).toThrowError();
+	});
+});
+
 
 describe('test decode token', () => {
 	test('testing v1 Token', () => {
