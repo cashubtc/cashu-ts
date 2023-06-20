@@ -269,7 +269,10 @@ class CashuWallet {
 		hash: string,
 		AmountPreference?: Array<AmountPreference>
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
-		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(amount,AmountPreference);
+		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
+			amount,
+			AmountPreference
+		);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
 		return {
@@ -334,7 +337,7 @@ class CashuWallet {
 
 		const payload = {
 			proofs: proofsToSend,
-			amount: amount2,
+			amount: amount2, //deprecated
 			outputs: allBlindedMessages
 		};
 		return { payload, amount1BlindedMessages, amount2BlindedMessages };

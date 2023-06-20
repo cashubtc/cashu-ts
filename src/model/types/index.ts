@@ -346,6 +346,6 @@ export type GetInfoResponse = {
 };
 
 export type AmountPreference = {
-	amount: number,
-	count: number
-}
+	amount: number;
+	count: number;
+};

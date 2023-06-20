@@ -1,6 +1,13 @@
 import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, MintKeys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
+import {
+	AmountPreference,
+	MintKeys,
+	Proof,
+	Token,
+	TokenEntry,
+	TokenV2
+} from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
@@ -9,10 +16,12 @@ import { Buffer } from 'buffer/';
 function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
-		chunks.push(...getPreference(value,amountPreference))
-		value = value - chunks.reduce((curr, acc)=> {
-		return curr+acc
-		},0)
+		chunks.push(...getPreference(value, amountPreference));
+		value =
+			value -
+			chunks.reduce((curr, acc) => {
+				return curr + acc;
+			}, 0);
 	}
 	for (let i = 0; i < 32; i++) {
 		const mask: number = 1 << i;
@@ -28,21 +37,23 @@ function isPowerOfTwo(number: number) {
 }
 
 function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
-	const chunks: Array<number> = []
-	let accumulator = 0
-	preferredAmounts.forEach(pa => {
+	const chunks: Array<number> = [];
+	let accumulator = 0;
+	preferredAmounts.forEach((pa) => {
 		if (!isPowerOfTwo(pa.amount)) {
-			throw new Error("Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers");
+			throw new Error(
+				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
+			);
 		}
 		for (let i = 1; i <= pa.count; i++) {
-			accumulator += pa.amount
-			if (accumulator>amount) {
-				return
+			accumulator += pa.amount;
+			if (accumulator > amount) {
+				return;
 			}
-			chunks.push(pa.amount)
-		} 
+			chunks.push(pa.amount);
+		}
 	});
-	return chunks
+	return chunks;
 }
 
 function bytesToNumber(bytes: Uint8Array): bigint {
