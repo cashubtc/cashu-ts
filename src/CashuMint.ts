@@ -49,7 +49,8 @@ class CashuMint {
 	 */
 	public static async requestMint(mintUrl: string, amount: number): Promise<RequestMintResponse> {
 		const { data } = await axios.get<RequestMintResponse>(`${mintUrl}/mint`, {
-			params: { amount }
+			params: { amount },
+			timeout: 0
 		});
 		return data;
 	}
@@ -153,7 +154,9 @@ class CashuMint {
 	 */
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
 		try {
-			const { data } = await axios.post<SplitResponse>(`${mintUrl}/split`, splitPayload);
+			const { data } = await axios.post<SplitResponse>(`${mintUrl}/split`, splitPayload, {
+				timeout: 0
+			});
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.fst) || !Array.isArray(data?.snd)) {
 				throw new Error('bad response');
