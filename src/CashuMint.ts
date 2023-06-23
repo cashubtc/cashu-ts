@@ -49,8 +49,7 @@ class CashuMint {
 	 */
 	public static async requestMint(mintUrl: string, amount: number): Promise<RequestMintResponse> {
 		const { data } = await axios.get<RequestMintResponse>(`${mintUrl}/mint`, {
-			params: { amount },
-			timeout: 0
+			params: { amount }
 		});
 		return data;
 	}
@@ -84,7 +83,8 @@ class CashuMint {
 						// payment_hash is deprecated
 						payment_hash: hash,
 						hash
-					}
+					},
+					timeout: 0
 				}
 			);
 			checkResponse(data);
