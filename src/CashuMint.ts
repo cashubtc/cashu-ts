@@ -155,7 +155,7 @@ class CashuMint {
 		try {
 			const { data } = await axios.post<SplitResponse>(`${mintUrl}/split`, splitPayload);
 			checkResponse(data);
-			if (!isObj(data) || !Array.isArray(data?.fst) || !Array.isArray(data?.snd)) {
+			if (!isObj(data) || !Array.isArray(data?.promises)) {
 				throw new Error('bad response');
 			}
 			return data;

@@ -159,10 +159,6 @@ export type SplitPayload = {
 	 */
 	proofs: Array<Proof>;
 	/**
-	 * Amount that needs to be split from the total amount provided (in proofs)
-	 */
-	amount: number;
-	/**
 	 * Fresh blinded messages to be signed by the mint to create the split proofs
 	 */
 	outputs: Array<SerializedBlindedMessage>;
@@ -174,11 +170,7 @@ export type SplitResponse = {
 	/**
 	 * represents the left-over amount after the split
 	 */
-	fst: Array<SerializedBlindedSignature>;
-	/**
-	 * represents the specified amount when splitting
-	 */
-	snd: Array<SerializedBlindedSignature>;
+	promises: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 /**

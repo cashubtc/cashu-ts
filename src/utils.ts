@@ -1,72 +1,84 @@
-import axios from 'axios';
-import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
+import axios from "axios";
+import { encodeBase64ToJson, encodeJsonToBase64 } from "./base64.js";
 import {
-	AmountPreference,
-	MintKeys,
-	Proof,
-	Token,
-	TokenEntry,
-	TokenV2
-} from './model/types/index.js';
-import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
-import { bytesToHex } from '@noble/curves/abstract/utils';
-import { sha256 } from '@noble/hashes/sha256';
-import { Buffer } from 'buffer/';
+  AmountPreference,
+  MintKeys,
+  Proof,
+  Token,
+  TokenEntry,
+  TokenV2,
+} from "./model/types/index.js";
+import { TOKEN_PREFIX, TOKEN_VERSION } from "./utils/Constants.js";
+import { bytesToHex } from "@noble/curves/abstract/utils";
+import { sha256 } from "@noble/hashes/sha256";
+import { Buffer } from "buffer/";
 
-function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
-	const chunks: Array<number> = [];
-	if (amountPreference) {
-		chunks.push(...getPreference(value, amountPreference));
-		value =
-			value -
-			chunks.reduce((curr, acc) => {
-				return curr + acc;
-			}, 0);
-	}
-	for (let i = 0; i < 32; i++) {
-		const mask: number = 1 << i;
-		if ((value & mask) !== 0) {
-			chunks.push(Math.pow(2, i));
-		}
-	}
-	return chunks;
+function splitAmount(
+  value: number,
+  amountPreference?: Array<AmountPreference>,
+): Array<number> {
+  const chunks: Array<number> = [];
+  if (amountPreference) {
+    chunks.push(...getPreference(value, amountPreference));
+    value = value -
+      chunks.reduce((curr, acc) => {
+        return curr + acc;
+      }, 0);
+  }
+  for (let i = 0; i < 32; i++) {
+    const mask: number = 1 << i;
+    if ((value & mask) !== 0) {
+      chunks.push(Math.pow(2, i));
+    }
+  }
+  return chunks;
 }
 
 function isPowerOfTwo(number: number) {
-	return number && !(number & (number - 1));
+  return number && !(number & (number - 1));
 }
 
-function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
-	const chunks: Array<number> = [];
-	let accumulator = 0;
-	preferredAmounts.forEach((pa) => {
-		if (!isPowerOfTwo(pa.amount)) {
-			throw new Error(
-				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
-			);
-		}
-		for (let i = 1; i <= pa.count; i++) {
-			accumulator += pa.amount;
-			if (accumulator > amount) {
-				return;
-			}
-			chunks.push(pa.amount);
-		}
-	});
-	return chunks;
+function getPreference(
+  amount: number,
+  preferredAmounts: Array<AmountPreference>,
+): Array<number> {
+  const chunks: Array<number> = [];
+  let accumulator = 0;
+  preferredAmounts.forEach((pa) => {
+    if (!isPowerOfTwo(pa.amount)) {
+      throw new Error(
+        "Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers",
+      );
+    }
+    for (let i = 1; i <= pa.count; i++) {
+      accumulator += pa.amount;
+      if (accumulator > amount) {
+        return;
+      }
+      chunks.push(pa.amount);
+    }
+  });
+  return chunks;
+}
+
+function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
+  const amounts = splitAmount(amount);
+  return amounts.map((a) => {
+    return { amount: a, count: 1 };
+  });
 }
 
 function bytesToNumber(bytes: Uint8Array): bigint {
-	return hexToNumber(bytesToHex(bytes));
+  return hexToNumber(bytesToHex(bytes));
 }
 
 function hexToNumber(hex: string): bigint {
-	return BigInt(`0x${hex}`);
+  return BigInt(`0x${hex}`);
 }
 
 //used for json serialization
 function bigIntStringify<T>(_key: unknown, value: T) {
-	return typeof value === 'bigint' ? value.toString() : value;
+  return typeof value === "bigint" ? value.toString() : value;
 }
 
 /**
@@ -75,7 +87,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns
  */
 function getEncodedToken(token: Token): string {
-	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
+  return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
 /**
@@ -84,15 +96,15 @@ function getEncodedToken(token: Token): string {
  * @returns cashu token object
  */
 function getDecodedToken(token: string): Token {
-	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
-	uriPrefixes.forEach((prefix) => {
-		if (!token.startsWith(prefix)) {
-			return;
-		}
-		token = token.slice(prefix.length);
-	});
-	return handleTokens(token);
+  // remove prefixes
+  const uriPrefixes = ["web+cashu://", "cashu://", "cashu:", "cashuA"];
+  uriPrefixes.forEach((prefix) => {
+    if (!token.startsWith(prefix)) {
+      return;
+    }
+    token = token.slice(prefix.length);
+  });
+  return handleTokens(token);
 }
 
 /**
@@ -100,20 +112,20 @@ function getDecodedToken(token: string): Token {
  * @returns
  */
 function handleTokens(token: string): Token {
-	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
+  const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
 
-	// check if v3
-	if ('token' in obj) {
-		return obj;
-	}
+  // check if v3
+  if ("token" in obj) {
+    return obj;
+  }
 
-	// check if v1
-	if (Array.isArray(obj)) {
-		return { token: [{ proofs: obj, mint: '' }] };
-	}
+  // check if v1
+  if (Array.isArray(obj)) {
+    return { token: [{ proofs: obj, mint: "" }] };
+  }
 
-	// if v2 token return v3 format
-	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
+  // if v2 token return v3 format
+  return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? "" }] };
 }
 /**
  * Returns the keyset id of a set of keys
@@ -121,12 +133,12 @@ function handleTokens(token: string): Token {
  * @returns
  */
 export function deriveKeysetId(keys: MintKeys) {
-	const pubkeysConcat = Object.entries(keys)
-		.sort((a, b) => +a[0] - +b[0])
-		.map(([, pubKey]) => pubKey)
-		.join('');
-	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
-	return Buffer.from(hash).toString('base64').slice(0, 12);
+  const pubkeysConcat = Object.entries(keys)
+    .sort((a, b) => +a[0] - +b[0])
+    .map(([, pubKey]) => pubKey)
+    .join("");
+  const hash = sha256(new TextEncoder().encode(pubkeysConcat));
+  return Buffer.from(hash).toString("base64").slice(0, 12);
 }
 /**
  * merge proofs from same mint,
@@ -138,54 +150,61 @@ export function deriveKeysetId(keys: MintKeys) {
  * @return {*}  {Token}
  */
 export function cleanToken(token: Token): Token {
-	const tokenEntryMap: { [key: string]: TokenEntry } = {};
-	for (const tokenEntry of token.token) {
-		if (!tokenEntry?.proofs?.length || !tokenEntry?.mint) {
-			continue;
-		}
-		if (tokenEntryMap[tokenEntry.mint]) {
-			tokenEntryMap[tokenEntry.mint].proofs.push(...[...tokenEntry.proofs]);
-			continue;
-		}
-		tokenEntryMap[tokenEntry.mint] = { mint: tokenEntry.mint, proofs: [...tokenEntry.proofs] };
-	}
-	return {
-		memo: token?.memo,
-		token: Object.values(tokenEntryMap).map((x) => ({ ...x, proofs: sortProofsById(x.proofs) }))
-	};
+  const tokenEntryMap: { [key: string]: TokenEntry } = {};
+  for (const tokenEntry of token.token) {
+    if (!tokenEntry?.proofs?.length || !tokenEntry?.mint) {
+      continue;
+    }
+    if (tokenEntryMap[tokenEntry.mint]) {
+      tokenEntryMap[tokenEntry.mint].proofs.push(...[...tokenEntry.proofs]);
+      continue;
+    }
+    tokenEntryMap[tokenEntry.mint] = {
+      mint: tokenEntry.mint,
+      proofs: [...tokenEntry.proofs],
+    };
+  }
+  return {
+    memo: token?.memo,
+    token: Object.values(tokenEntryMap).map((x) => ({
+      ...x,
+      proofs: sortProofsById(x.proofs),
+    })),
+  };
 }
 export function sortProofsById(proofs: Array<Proof>) {
-	return proofs.sort((a, b) => a.id.localeCompare(b.id));
+  return proofs.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function isObj(v: unknown): v is object {
-	return typeof v === 'object';
+  return typeof v === "object";
 }
 
 export function checkResponse(data: { error?: string; detail?: string }) {
-	if (!isObj(data)) return;
-	if ('error' in data && data.error) {
-		throw new Error(data.error);
-	}
-	if ('detail' in data && data.detail) {
-		throw new Error(data.detail);
-	}
+  if (!isObj(data)) return;
+  if ("error" in data && data.error) {
+    throw new Error(data.error);
+  }
+  if ("detail" in data && data.detail) {
+    throw new Error(data.detail);
+  }
 }
 export function checkResponseError(err: unknown) {
-	if (axios.isAxiosError(err) && err?.response?.data) {
-		if ('error' in err.response.data) {
-			throw new Error(err.response.data.error);
-		}
-		if ('detail' in err.response.data) {
-			throw new Error(err.response.data.detail);
-		}
-	}
+  if (axios.isAxiosError(err) && err?.response?.data) {
+    if ("error" in err.response.data) {
+      throw new Error(err.response.data.error);
+    }
+    if ("detail" in err.response.data) {
+      throw new Error(err.response.data.detail);
+    }
+  }
 }
 export {
-	hexToNumber,
-	splitAmount,
-	bytesToNumber,
-	bigIntStringify,
-	getDecodedToken,
-	getEncodedToken
+  bigIntStringify,
+  bytesToNumber,
+  getDecodedToken,
+  getEncodedToken,
+  hexToNumber,
+  splitAmount,
+  getDefaultAmountPreference
 };
