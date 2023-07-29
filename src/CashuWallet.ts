@@ -212,13 +212,17 @@ class CashuWallet {
           getDefaultAmountPreference(amount),
           tokenEntry.proofs,
         );
-      const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
-      const proofs = dhke.constructProofs(
+      const { promises, error } = await CashuMint.split(
+        tokenEntry.mint,
+        payload,
+      );
+      const newProofs = dhke.constructProofs(
         promises,
         blindedMessages.rs,
         blindedMessages.secrets,
         await this.getKeys(promises, tokenEntry.mint),
       );
+      proofs.push(...newProofs);
       newKeys = tokenEntry.mint === this.mint.mintUrl
         ? await this.changedKeys([...(promises || [])])
         : undefined;
@@ -252,7 +256,7 @@ class CashuWallet {
       amount = proofAmount;
     }
     if (!preference) {
-      preference = getDefaultAmountPreference(amount)
+      preference = getDefaultAmountPreference(amount);
     }
 
     const sendAmount = preference?.reduce(
@@ -280,7 +284,7 @@ class CashuWallet {
       preference,
       proofsToSend,
     );
-    const { promises, error } = await this.mint.split(payload);
+    const { promises } = await this.mint.split(payload);
 
     const newProofs = dhke.constructProofs(
       promises,
@@ -289,7 +293,7 @@ class CashuWallet {
       await this.getKeys(promises),
     );
 
-	const {send, returns} = this.getSplitProofs(newProofs, amount)
+    const { send, returns } = this.getSplitProofs(newProofs, amount);
     return {
       returnChange: [...returns, ...change],
       send,
@@ -298,15 +302,15 @@ class CashuWallet {
   }
 
   private getSplitProofs(proofs: Array<Proof>, amount: number) {
-	const send: Array<Proof> = []
-	for (const proof of proofs) {
-		if (send.reduce((acc, curr)=> acc+curr.amount,0)>=amount) {
-			break
-		}
-		send.push(proof)
-	}
-	const returns = proofs.filter(p=>!send.includes(p)) 
-	return {send, returns}
+    const send: Array<Proof> = [];
+    for (const proof of proofs) {
+      if (send.reduce((acc, curr) => acc + curr.amount, 0) >= amount) {
+        break;
+      }
+      send.push(proof);
+    }
+    const returns = proofs.filter((p) => !send.includes(p));
+    return { send, returns };
   }
 
   async requestTokens(

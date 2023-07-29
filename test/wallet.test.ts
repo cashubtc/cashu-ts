@@ -45,8 +45,7 @@ describe('receive', () => {
 
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
@@ -99,8 +98,7 @@ describe('receive', () => {
 		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: 'test',
 						amount: 1,
@@ -279,11 +277,11 @@ describe('send', () => {
 	];
 	test('test send base case', async () => {
 		mockedAxios.get.mockResolvedValueOnce(dummyKeysResp);
-		const wallet = new CashuWallet(mint);
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(mint, keys);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: '0NI3TUAs1Sfy',
 						amount: 1,
@@ -304,14 +302,12 @@ describe('send', () => {
 		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
-				fst: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-					}
-				],
-				snd: [
+					},
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
@@ -344,14 +340,12 @@ describe('send', () => {
 		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
-				fst: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-					}
-				],
-				snd: [
+					},
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
@@ -382,8 +376,7 @@ describe('send', () => {
 		const wallet = new CashuWallet(mint);
 		mockedAxios.post.mockResolvedValueOnce({
 			data: {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
