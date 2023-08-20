@@ -74,7 +74,7 @@ class CashuMint {
 		hash: string
 	) {
 		try {
-			const res = await fetch(`${mintUrl}/mint?hash=${hash}`, {method: 'POST', body: JSON.stringify(payloads)})
+			const res = await fetch(`${mintUrl}/mint?hash=${hash}`, {method: 'POST', body: JSON.stringify(payloads), headers:{'content-type': 'application/json'}})
 			const data: { promises: Array<SerializedBlindedSignature> } 
 			& ApiError = await res.json()
 			
@@ -147,7 +147,7 @@ class CashuMint {
 	 */
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
 		try {
-			const res = await fetch(`${mintUrl}/split`, {method: 'POST', body: JSON.stringify(splitPayload)})
+			const res = await fetch(`${mintUrl}/split`, {method: 'POST', body: JSON.stringify(splitPayload),headers:{'content-type': 'application/json'}})
 			const data: SplitResponse = await res.json()
 			checkResponse(data);
 			if (!isObj(data) || !Array.isArray(data?.fst) || !Array.isArray(data?.snd)) {
@@ -175,7 +175,7 @@ class CashuMint {
 	 */
 	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
 		try {
-			const res = await fetch(`${mintUrl}/melt`, {method: 'POST', body: JSON.stringify(meltPayload)})
+			const res = await fetch(`${mintUrl}/melt`, {method: 'POST', body: JSON.stringify(meltPayload), headers:{'content-type': 'application/json'}})
 			const data: MeltResponse = await res.json()
 			checkResponse(data);
 			if (
@@ -210,7 +210,7 @@ class CashuMint {
 		checkfeesPayload: { pr: string }
 	): Promise<{ fee: number }> {
 		try {
-			const res = await fetch(`${mintUrl}/checkfees`, {method: 'POST', body: JSON.stringify(checkfeesPayload)})
+			const res = await fetch(`${mintUrl}/checkfees`, {method: 'POST', body: JSON.stringify(checkfeesPayload),headers:{'content-type': 'application/json'}})
 			const data: { fee: number } & ApiError = await res.json()
 			
 			checkResponse(data);
@@ -243,7 +243,7 @@ class CashuMint {
 		checkPayload: CheckSpendablePayload
 	): Promise<CheckSpendableResponse> {
 		try {
-			const res = await fetch(`${mintUrl}/check`, {method: 'POST', body: JSON.stringify(checkPayload)})
+			const res = await fetch(`${mintUrl}/check`, {method: 'POST', body: JSON.stringify(checkPayload),headers:{'content-type': 'application/json'}})
 			const data: CheckSpendableResponse = await res.json()
 
 			checkResponse(data);
