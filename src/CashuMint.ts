@@ -31,7 +31,7 @@ class CashuMint {
    * @param mintUrl
    */
   public static async getInfo(mintUrl: string): Promise<GetInfoResponse> {
-    const res = await fetch(`${mintUrl}/info`);
+    const res = await fetch(`${mintUrl}/info/`);
     const data: GetInfoResponse = await res.json();
     return data;
   }
@@ -51,7 +51,7 @@ class CashuMint {
     mintUrl: string,
     amount: number,
   ): Promise<RequestMintResponse> {
-    const res = await fetch(`${mintUrl}/mint?amount=${amount}`);
+    const res = await fetch(`${mintUrl}/mint?amount=${amount}/`);
     const data = await res.json();
     return data;
   }
@@ -77,7 +77,7 @@ class CashuMint {
     hash: string,
   ) {
     try {
-      const res = await fetch(`${mintUrl}/mint?hash=${hash}`, {
+      const res = await fetch(`${mintUrl}/mint?hash=${hash}/`, {
         method: "POST",
         body: JSON.stringify(payloads),
         headers: {
@@ -125,7 +125,7 @@ class CashuMint {
       // make the keysetId url safe
       keysetId = keysetId.replace(/\//g, "_").replace(/\+/g, "-");
     }
-    const res = await fetch(`${mintUrl}/keys${keysetId ? `/${keysetId}` : ""}`);
+    const res = await fetch(`${mintUrl}/keys${keysetId ? `/${keysetId}/` : "/"}`);
     const data = await res.json();
     return data;
   }
@@ -145,7 +145,7 @@ class CashuMint {
   public static async getKeySets(
     mintUrl: string,
   ): Promise<{ keysets: Array<string> }> {
-    const res = await fetch(`${mintUrl}/keysets`);
+    const res = await fetch(`${mintUrl}/keysets/`);
     const data = await res.json();
     return data;
   }
@@ -169,7 +169,7 @@ class CashuMint {
     splitPayload: SplitPayload,
   ): Promise<SplitResponse> {
     try {
-      const res = await fetch(`${mintUrl}/split`, {
+      const res = await fetch(`${mintUrl}/split/`, {
         method: "POST",
         body: JSON.stringify(splitPayload),
         headers: {
@@ -209,7 +209,7 @@ class CashuMint {
     meltPayload: MeltPayload,
   ): Promise<MeltResponse> {
     try {
-      const res = await fetch(`${mintUrl}/melt`, {
+      const res = await fetch(`${mintUrl}/melt/`, {
         method: "POST",
         body: JSON.stringify(meltPayload),
         headers: {
@@ -251,7 +251,7 @@ class CashuMint {
     checkfeesPayload: { pr: string },
   ): Promise<{ fee: number }> {
     try {
-      const res = await fetch(`${mintUrl}/checkfees`, {
+      const res = await fetch(`${mintUrl}/checkfees/`, {
         method: "POST",
         body: JSON.stringify(checkfeesPayload),
         headers: {
@@ -291,7 +291,7 @@ class CashuMint {
     checkPayload: CheckSpendablePayload,
   ): Promise<CheckSpendableResponse> {
     try {
-      const res = await fetch(`${mintUrl}/check`, {
+      const res = await fetch(`${mintUrl}/check/`, {
         method: "POST",
         body: JSON.stringify(checkPayload),
         headers: {
