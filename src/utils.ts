@@ -125,22 +125,22 @@ export function isObj(v: unknown): v is object {
 
 export function checkResponse(data: { error?: string; detail?: string }) {
 	if (!isObj(data)) return;
-	if ('error' in data && data.error) {
-		throw new Error(data.error);
-	}
-	if ('detail' in data && data.detail) {
-		throw new Error(data.detail);
+	const message = data.error || data.detail;
+	if (message) {
+		throw new Error(message);
 	}
 }
+
 export function checkResponseError(err: unknown) {
-	if (axios.isAxiosError(err) && err?.response?.data) {
-		if ('error' in err.response.data) {
-			throw new Error(err.response.data.error);
+    if (axios.isAxiosError(err)) {
+			const data = err?.response?.data as { error?: string; detail?: string };
+			if (isObj(data) && (data.error || data.detail)) {
+				const message = data.error || data.detail;
+				if (message) {
+					throw new Error(message);
+				}
+			}
 		}
-		if ('detail' in err.response.data) {
-			throw new Error(err.response.data.detail);
-		}
-	}
 }
 export {
 	hexToNumber,
