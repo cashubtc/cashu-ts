@@ -6,7 +6,12 @@ import { bytesToHex } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { Buffer } from 'buffer/';
 
-function splitAmount(value: number): Array<number> {
+/**
+ * Splits a number into its constituent powers of 2.
+ * @param value The number to split
+ * @returns An array containing the constituent powers of 2
+ */
+export function splitAmount(value: number): number[] {
 	const chunks: Array<number> = [];
 	for (let i = 0; i < 32; i++) {
 		const mask: number = 1 << i;
@@ -17,16 +22,21 @@ function splitAmount(value: number): Array<number> {
 	return chunks;
 }
 
-function bytesToNumber(bytes: Uint8Array): bigint {
+/**
+ * Converts a Uint8Array of bytes to a BigInt number.
+ * @param bytes The byte array to convert
+ * @returns The BigInt representation
+ */
+export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
 
-function hexToNumber(hex: string): bigint {
+export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
 //used for json serialization
-function bigIntStringify<T>(_key: unknown, value: T) {
+export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
@@ -35,7 +45,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @param token
  * @returns
  */
-function getEncodedToken(token: Token): string {
+export function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
@@ -44,7 +54,7 @@ function getEncodedToken(token: Token): string {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string): Token {
+export function getDecodedToken(token: string): Token {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
 	uriPrefixes.forEach((prefix) => {
@@ -123,30 +133,28 @@ export function isObj(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null;
 }
 
-export function checkResponse(data: { error?: string; detail?: string }) {
+/**
+ * Checks if a response object has any error fields.
+ * Throws an Error if so.
+ * @param data The response data to check
+ */
+export function checkResponse(data: { error?: string; detail?: string }): void {
 	if (!isObj(data)) return;
-	const message = data.error || data.detail;
+	const message = data.error ?? data.detail;
 	if (message) {
 		throw new Error(message);
 	}
 }
 
-export function checkResponseError(err: unknown) {
-    if (axios.isAxiosError(err)) {
-			const data = err?.response?.data as { error?: string; detail?: string };
-			if (isObj(data) && (data.error || data.detail)) {
-				const message = data.error || data.detail;
-				if (message) {
-					throw new Error(message);
-				}
-			}
+/**
+ * Checks for Axios errors and throws custom Error.
+ * @param err The Axios error
+ */
+export function checkResponseError(err: unknown): void {
+	if (axios.isAxiosError(err)) {
+		const message = err?.response?.data?.error ?? err?.response?.data?.detail;
+		if (message) {
+			throw new Error(message);
 		}
+	}
 }
-export {
-	hexToNumber,
-	splitAmount,
-	bytesToNumber,
-	bigIntStringify,
-	getDecodedToken,
-	getEncodedToken
-};
