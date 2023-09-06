@@ -119,8 +119,8 @@ export function sortProofsById(proofs: Array<Proof>) {
 	return proofs.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export function isObj(v: unknown): v is object {
-	return typeof v === 'object';
+export function isObj(v: unknown): v is Record<string, unknown> {
+	return typeof v === 'object' && v !== null;
 }
 
 export function checkResponse(data: { error?: string; detail?: string }) {
