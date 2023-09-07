@@ -31,6 +31,8 @@ async function _request({ endpoint, requestBody, ...options }: RequestOptions): 
 }
 
 export default async function request<T>(options: RequestOptions): Promise<T> {
+	options.headers = { 'Content-Type': 'application/json', ...options.headers };
+	options.headers = { 'Accept': 'application/json', ...options.headers };
 	const response = await _request({ ...options, ...globalRequestOptions });
 	const data = await response.json().catch(() => ({ error: 'bad response' }));
 	checkResponse(data);
