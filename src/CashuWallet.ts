@@ -263,6 +263,12 @@ class CashuWallet {
 		return { returnChange: change, send: proofsToSend };
 	}
 
+	/**
+	 * Request tokens from the mint
+	 * @param amount amount to request
+	 * @param hash hash to use to identify the request
+	 * @returns proofs and newKeys if they have changed
+	 */
 	async requestTokens(
 		amount: number,
 		hash: string
@@ -276,12 +282,21 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Initialize the wallet with the mints public keys
+	 */
 	private async initKeys() {
 		if (!this.keysetId || !Object.keys(this.keys).length) {
 			this.keys = await this.mint.getKeys();
 			this._keysetId = deriveKeysetId(this.keys);
 		}
 	}
+
+	/**
+	 * Check if the keysetId has changed and return the new keys
+	 * @param promises array of promises to check
+	 * @returns new keys if they have changed
+	 */
 	private async changedKeys(
 		promises: Array<SerializedBlindedSignature | Proof> = []
 	): Promise<MintKeys | undefined> {
@@ -296,6 +311,13 @@ class CashuWallet {
 		const keysetId = deriveKeysetId(maybeNewKeys);
 		return keysetId === this.keysetId ? undefined : maybeNewKeys;
 	}
+
+	/**
+	 * Get the mint's public keys for a given set of proofs
+	 * @param arr array of proofs
+	 * @param mint optional mint url
+	 * @returns keys
+	 */
 	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
 		await this.initKeys();
 		if (!arr?.length || !arr[0]?.id) {
@@ -313,6 +335,13 @@ class CashuWallet {
 		return keys;
 	}
 
+	/**
+	 * Creates a split payload
+	 * @param amount1 amount to keep
+	 * @param amount2 amount to send
+	 * @param proofsToSend proofs to split
+	 * @returns
+	 */
 	private createSplitPayload(
 		amount1: number,
 		amount2: number,
@@ -347,6 +376,11 @@ class CashuWallet {
 		return { amount1, amount2 };
 	}
 
+	/**
+	 * Creates blinded messages for a given amount
+	 * @param amount amount to create blinded messages for
+	 * @returns blinded messages, secrets, rs, and amounts
+	 */
 	private createRandomBlindedMessages(
 		amount: number
 	): BlindedMessageData & { amounts: Array<number> } {
@@ -364,6 +398,13 @@ class CashuWallet {
 		}
 		return { blindedMessages, secrets, rs, amounts };
 	}
+
+	/**
+	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve
+	 * See: https://github.com/cashubtc/nuts/blob/main/08.md
+	 * @param feeReserve amount to cover with blank outputs
+	 * @returns blinded messages, secrets, and rs
+	 */
 	private createBlankOutputs(feeReserve: number): BlindedMessageData {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
