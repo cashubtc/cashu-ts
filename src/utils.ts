@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import {
 	AmountPreference,
@@ -182,16 +181,6 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 	}
 	if ('detail' in data && data.detail) {
 		throw new Error(data.detail);
-	}
-}
-export function checkResponseError(err: unknown) {
-	if (axios.isAxiosError(err) && err?.response?.data) {
-		if ('error' in err.response.data) {
-			throw new Error(err.response.data.error);
-		}
-		if ('detail' in err.response.data) {
-			throw new Error(err.response.data.detail);
-		}
 	}
 }
 export {
