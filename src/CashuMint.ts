@@ -21,7 +21,7 @@ class CashuMint {
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 */
-	constructor(private _mintUrl: string) {}
+	constructor(private _mintUrl: string) { }
 
 	get mintUrl() {
 		return this._mintUrl;
@@ -145,7 +145,7 @@ class CashuMint {
 			requestBody: splitPayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.fst) || !Array.isArray(data?.snd)) {
+		if (!isObj(data) || !Array.isArray(data?.promises)) {
 			throw new Error('bad response');
 		}
 
