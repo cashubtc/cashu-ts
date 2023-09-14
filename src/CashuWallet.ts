@@ -179,28 +179,20 @@ class CashuWallet {
 		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
-				0,
+			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs
 			);
-			const { fst, snd } = await CashuMint.split(tokenEntry.mint, payload);
-			const proofs1 = dhke.constructProofs(
-				fst,
-				amount1BlindedMessages.rs,
-				amount1BlindedMessages.secrets,
-				await this.getKeys(fst, tokenEntry.mint)
-			);
-			const proofs2 = dhke.constructProofs(
-				snd,
-				amount2BlindedMessages.rs,
-				amount2BlindedMessages.secrets,
-				await this.getKeys(snd, tokenEntry.mint)
-			);
-			proofs.push(...proofs1, ...proofs2);
+			const { promises } = await CashuMint.split(tokenEntry.mint, payload);
+			proofs.push(...dhke.constructProofs(
+				promises,
+				blindedMessages.rs,
+				blindedMessages.secrets,
+				await this.getKeys(promises, tokenEntry.mint)
+			));
 			newKeys =
 				tokenEntry.mint === this.mint.mintUrl
-					? await this.changedKeys([...(fst || []), ...(snd || [])])
+					? await this.changedKeys([...(promises || [])])
 					: undefined;
 		} catch (error) {
 			console.error(error);
@@ -222,10 +214,10 @@ class CashuWallet {
 	async send(amount: number, proofs: Array<Proof>): Promise<SendResponse> {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
-		const change: Array<Proof> = [];
+		const proofsToKeep: Array<Proof> = [];
 		proofs.forEach((proof) => {
 			if (amountAvailable >= amount) {
-				change.push(proof);
+				proofsToKeep.push(proof);
 				return;
 			}
 			amountAvailable = amountAvailable + proof.amount;
@@ -236,31 +228,36 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable) {
 			const { amount1, amount2 } = this.splitReceive(amount, amountAvailable);
-			const { payload, amount1BlindedMessages, amount2BlindedMessages } = this.createSplitPayload(
+			const { payload, blindedMessages } = this.createSplitPayload(
 				amount1,
-				amount2,
 				proofsToSend
 			);
-			const { fst, snd } = await this.mint.split(payload);
-			const proofs1 = dhke.constructProofs(
-				fst,
-				amount1BlindedMessages.rs,
-				amount1BlindedMessages.secrets,
-				await this.getKeys(fst)
+			const { promises } = await this.mint.split(payload);
+			const proofs = dhke.constructProofs(
+				promises,
+				blindedMessages.rs,
+				blindedMessages.secrets,
+				await this.getKeys(promises)
 			);
-			const proofs2 = dhke.constructProofs(
-				snd,
-				amount2BlindedMessages.rs,
-				amount2BlindedMessages.secrets,
-				await this.getKeys(snd)
-			);
+			// sum up proofs until amount2 is reached
+			const splitProofsToKeep: Array<Proof> = [];
+			const splitProofsToSend: Array<Proof> = [];
+			let amount2Available = 0;
+			proofs.forEach((proof) => {
+				if (amount2Available >= amount2) {
+					splitProofsToKeep.push(proof);
+					return;
+				}
+				amount2Available = amount2Available + proof.amount;
+				splitProofsToSend.push(proof);
+			});
 			return {
-				returnChange: [...proofs1, ...change],
-				send: proofs2,
-				newKeys: await this.changedKeys([...(fst || []), ...(snd || [])])
+				returnChange: [...splitProofsToKeep, ...proofsToKeep],
+				send: splitProofsToSend,
+				newKeys: await this.changedKeys([...(promises || [])])
 			};
 		}
-		return { returnChange: change, send: proofsToSend };
+		return { returnChange: proofsToKeep, send: proofsToSend };
 	}
 
 	async requestTokens(
@@ -314,28 +311,38 @@ class CashuWallet {
 	}
 
 	private createSplitPayload(
-		amount1: number,
-		amount2: number,
+		amount: number,
 		proofsToSend: Array<Proof>
 	): {
 		payload: SplitPayload;
-		amount1BlindedMessages: BlindedTransaction;
-		amount2BlindedMessages: BlindedTransaction;
+		blindedMessages: BlindedTransaction;
 	} {
-		const amount1BlindedMessages = this.createRandomBlindedMessages(amount1);
-		const amount2BlindedMessages = this.createRandomBlindedMessages(amount2);
-		const allBlindedMessages: Array<SerializedBlindedMessage> = [];
+		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
+		const amount1BlindedMessages = this.createRandomBlindedMessages(amount);
+		const amount2BlindedMessages = this.createRandomBlindedMessages(totalAmount - amount);
+
+		// join amount1BlindedMessages and amount2BlindedMessages
+		const blindedMessages: BlindedTransaction = {
+			blindedMessages: [
+				...amount1BlindedMessages.blindedMessages,
+				...amount2BlindedMessages.blindedMessages
+			],
+			secrets: [...amount1BlindedMessages.secrets, ...amount2BlindedMessages.secrets],
+			rs: [...amount1BlindedMessages.rs, ...amount2BlindedMessages.rs],
+			amounts: [...amount1BlindedMessages.amounts, ...amount2BlindedMessages.amounts]
+		};
+
+		const allSerializedBlindedMessages: Array<SerializedBlindedMessage> = [];
 		// the order of this array apparently matters if it's the other way around,
 		// the mint complains that the split is not as expected
-		allBlindedMessages.push(...amount1BlindedMessages.blindedMessages);
-		allBlindedMessages.push(...amount2BlindedMessages.blindedMessages);
+		allSerializedBlindedMessages.push(...amount1BlindedMessages.blindedMessages);
+		allSerializedBlindedMessages.push(...amount2BlindedMessages.blindedMessages);
 
 		const payload = {
 			proofs: proofsToSend,
-			amount: amount2,
-			outputs: allBlindedMessages
+			outputs: allSerializedBlindedMessages
 		};
-		return { payload, amount1BlindedMessages, amount2BlindedMessages };
+		return { payload, blindedMessages };
 	}
 	//keep amount 1 send amount 2
 	private splitReceive(

@@ -37,8 +37,7 @@ describe('receive', () => {
 		nock(mintUrl)
 			.post('/split')
 			.reply(200, {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
@@ -99,8 +98,7 @@ describe('receive', () => {
 		nock(mintUrl)
 			.post('/split')
 			.reply(200, {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: 'test',
 						amount: 1,
@@ -287,8 +285,7 @@ describe('send', () => {
 		nock(mintUrl)
 			.post('/split')
 			.reply(200, {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: '0NI3TUAs1Sfy',
 						amount: 1,
@@ -310,14 +307,12 @@ describe('send', () => {
 		nock(mintUrl)
 			.post('/split')
 			.reply(200, {
-				fst: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-					}
-				],
-				snd: [
+					},
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
@@ -350,14 +345,12 @@ describe('send', () => {
 		nock(mintUrl)
 			.post('/split')
 			.reply(200, {
-				fst: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
 						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-					}
-				],
-				snd: [
+					},
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
@@ -391,8 +384,7 @@ describe('send', () => {
 		nock(mintUrl)
 			.post('/split')
 			.reply(200, {
-				fst: [],
-				snd: [
+				promises: [
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 1,
