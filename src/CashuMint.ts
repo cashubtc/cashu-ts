@@ -12,7 +12,7 @@ import {
 	SplitResponse
 } from './model/types/index.js';
 import request from './request.js';
-import { isObj } from './utils.js';
+import { isObj, joinUrls } from './utils.js';
 
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
@@ -31,7 +31,7 @@ class CashuMint {
 	 * @param mintUrl
 	 */
 	public static async getInfo(mintUrl: string): Promise<GetInfoResponse> {
-		return request<GetInfoResponse>({ endpoint: `${mintUrl}/info` });
+		return request<GetInfoResponse>({ endpoint: joinUrls(mintUrl, 'info') });
 	}
 	/**
 	 * fetches mints info at the /info endpoint
@@ -46,7 +46,9 @@ class CashuMint {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	public static async requestMint(mintUrl: string, amount: number): Promise<RequestMintResponse> {
-		return request<RequestMintResponse>({ endpoint: `${mintUrl}/mint?amount=${amount}` });
+		return request<RequestMintResponse>({
+			endpoint: `${joinUrls(mintUrl, 'mint')}?amount=${amount}`
+		});
 	}
 
 	/**
@@ -70,7 +72,7 @@ class CashuMint {
 		hash: string
 	) {
 		const data = await request<{ promises: Array<SerializedBlindedSignature> }>({
-			endpoint: `${mintUrl}/mint?hash=${hash}`,
+			endpoint: `${joinUrls(mintUrl, 'mint')}?hash=${hash}`,
 			method: 'POST',
 			requestBody: payloads
 		});
@@ -102,7 +104,7 @@ class CashuMint {
 			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
 		}
 		return request<MintKeys>({
-			endpoint: `${mintUrl}/keys${keysetId ? `/${keysetId}` : ''}`
+			endpoint: keysetId ? joinUrls(mintUrl, 'keys', keysetId) : joinUrls(mintUrl, 'keys')
 		});
 	}
 	/**
@@ -119,7 +121,7 @@ class CashuMint {
 	 * @returns all the mints past and current keysets.
 	 */
 	public static async getKeySets(mintUrl: string): Promise<{ keysets: Array<string> }> {
-		return request<{ keysets: Array<string> }>({ endpoint: `${mintUrl}/keysets` });
+		return request<{ keysets: Array<string> }>({ endpoint: joinUrls(mintUrl, 'keysets') });
 	}
 
 	/**
@@ -138,7 +140,7 @@ class CashuMint {
 	 */
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
 		const data = await request<SplitResponse>({
-			endpoint: `${mintUrl}/split`,
+			endpoint: joinUrls(mintUrl, 'split'),
 			method: 'POST',
 			requestBody: splitPayload
 		});
@@ -165,7 +167,7 @@ class CashuMint {
 	 */
 	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
 		const data = await request<MeltResponse>({
-			endpoint: `${mintUrl}/melt`,
+			endpoint: joinUrls(mintUrl, 'melt'),
 			method: 'POST',
 			requestBody: meltPayload
 		});
@@ -199,7 +201,7 @@ class CashuMint {
 		checkfeesPayload: { pr: string }
 	): Promise<{ fee: number }> {
 		const data = await request<{ fee: number }>({
-			endpoint: `${mintUrl}/checkfees`,
+			endpoint: joinUrls(mintUrl, 'checkfees'),
 			method: 'POST',
 			requestBody: checkfeesPayload
 		});
@@ -230,7 +232,7 @@ class CashuMint {
 		checkPayload: CheckSpendablePayload
 	): Promise<CheckSpendableResponse> {
 		const data = await request<CheckSpendableResponse>({
-			endpoint: `${mintUrl}/check`,
+			endpoint: joinUrls(mintUrl, 'check'),
 			method: 'POST',
 			requestBody: checkPayload
 		});

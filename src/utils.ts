@@ -131,6 +131,11 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 		throw new Error(data.detail);
 	}
 }
+
+export function joinUrls(...parts: string[]): string {
+	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
+}
+
 export {
 	hexToNumber,
 	splitAmount,
