@@ -21,7 +21,7 @@ class CashuMint {
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 */
-	constructor(private _mintUrl: string) { }
+	constructor(private _mintUrl: string) {}
 
 	get mintUrl() {
 		return this._mintUrl;
