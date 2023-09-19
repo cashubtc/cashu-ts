@@ -1,4 +1,4 @@
-import { checkResponse } from './utils';
+import { HttpResponseError } from './model/Errors';
 
 type RequestArgs = {
 	endpoint: string;
@@ -23,7 +23,7 @@ async function _request({
 	requestBody,
 	headers: requestHeaders,
 	...options
-}: RequestOptions): Promise<Response> {
+}: RequestOptions): Promise<unknown> {
 	const body = requestBody ? JSON.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
@@ -34,17 +34,21 @@ async function _request({
 	const response = await fetch(endpoint, { body, headers, ...options });
 
 	if (!response.ok) {
-		const { error, detail } = await response.json();
-		const message = error || detail || 'bad response';
-		throw new Error(message);
+		// expecting: { error: '', code: 0 }
+		// or: { detail: '' } (cashuBtc via pythonApi)
+		const { error, detail } = await response.json().catch(() => ({ error: 'bad response' }))
+		throw new HttpResponseError(error || detail || 'bad response', response.status);
 	}
 
-	return response;
+	try {
+		return await response.json();
+	} catch (err) {
+		console.error('Failed to parse HTTP response', err);
+		throw new HttpResponseError('bad response', response.status)
+	}
 }
 
 export default async function request<T>(options: RequestOptions): Promise<T> {
-	const response = await _request({ ...options, ...globalRequestOptions });
-	const data = await response.json().catch(() => ({ error: 'bad response' }));
-	checkResponse(data);
-	return data;
+	const data = await _request({ ...options, ...globalRequestOptions });
+	return data as T;
 }
