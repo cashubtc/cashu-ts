@@ -36,7 +36,7 @@ async function _request({
 	if (!response.ok) {
 		// expecting: { error: '', code: 0 }
 		// or: { detail: '' } (cashuBtc via pythonApi)
-		const { error, detail } = await response.json().catch(() => ({ error: 'bad response' }))
+		const { error, detail } = await response.json().catch(() => ({ error: 'bad response' }));
 		throw new HttpResponseError(error || detail || 'bad response', response.status);
 	}
 
@@ -44,7 +44,7 @@ async function _request({
 		return await response.json();
 	} catch (err) {
 		console.error('Failed to parse HTTP response', err);
-		throw new HttpResponseError('bad response', response.status)
+		throw new HttpResponseError('bad response', response.status);
 	}
 }
 
