@@ -179,17 +179,16 @@ class CashuWallet {
 		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			const { payload, blindedMessages } = this.createSplitPayload(
-				amount,
-				tokenEntry.proofs
-			);
+			const { payload, blindedMessages } = this.createSplitPayload(amount, tokenEntry.proofs);
 			const { promises } = await CashuMint.split(tokenEntry.mint, payload);
-			proofs.push(...dhke.constructProofs(
-				promises,
-				blindedMessages.rs,
-				blindedMessages.secrets,
-				await this.getKeys(promises, tokenEntry.mint)
-			));
+			proofs.push(
+				...dhke.constructProofs(
+					promises,
+					blindedMessages.rs,
+					blindedMessages.secrets,
+					await this.getKeys(promises, tokenEntry.mint)
+				)
+			);
 			newKeys =
 				tokenEntry.mint === this.mint.mintUrl
 					? await this.changedKeys([...(promises || [])])
@@ -228,10 +227,7 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable) {
 			const { amount1, amount2 } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(
-				amount1,
-				proofsToSend
-			);
+			const { payload, blindedMessages } = this.createSplitPayload(amount1, proofsToSend);
 			const { promises } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
 				promises,
