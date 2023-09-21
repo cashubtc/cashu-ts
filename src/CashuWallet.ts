@@ -250,12 +250,8 @@ class CashuWallet {
 			throw new Error('Not enough funds available');
 		}
 		if (amount < amountAvailable || preference) {
-			const { amount1, amount2 } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(
-				amount1,
-				proofsToSend,
-				preference
-			);
+			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
+			const { payload, blindedMessages } = this.createSplitPayload(amountSend, proofsToSend, preference);
 			const { promises } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
 				promises,
@@ -266,13 +262,13 @@ class CashuWallet {
 			// sum up proofs until amount2 is reached
 			const splitProofsToKeep: Array<Proof> = [];
 			const splitProofsToSend: Array<Proof> = [];
-			let amount2Available = 0;
+			let amountSendCounter = 0;
 			proofs.forEach((proof) => {
-				if (amount2Available >= amount2) {
+				if (amountSendCounter >= amountSend) {
 					splitProofsToKeep.push(proof);
 					return;
 				}
-				amount2Available = amount2Available + proof.amount;
+				amountSendCounter = amountSendCounter + proof.amount;
 				splitProofsToSend.push(proof);
 			});
 			return {
@@ -376,42 +372,33 @@ class CashuWallet {
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
-		const amount1BlindedMessages = this.createRandomBlindedMessages(amount);
-		const amount2BlindedMessages = this.createRandomBlindedMessages(
-			totalAmount - amount,
-			preference
-		);
+		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount);
+		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference);
 
-		// join amount1BlindedMessages and amount2BlindedMessages
+		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
 			blindedMessages: [
-				...amount1BlindedMessages.blindedMessages,
-				...amount2BlindedMessages.blindedMessages
+				...keepBlindedMessages.blindedMessages,
+				...sendBlindedMessages.blindedMessages
 			],
-			secrets: [...amount1BlindedMessages.secrets, ...amount2BlindedMessages.secrets],
-			rs: [...amount1BlindedMessages.rs, ...amount2BlindedMessages.rs],
-			amounts: [...amount1BlindedMessages.amounts, ...amount2BlindedMessages.amounts]
+			secrets: [...keepBlindedMessages.secrets, ...sendBlindedMessages.secrets],
+			rs: [...keepBlindedMessages.rs, ...sendBlindedMessages.rs],
+			amounts: [...keepBlindedMessages.amounts, ...sendBlindedMessages.amounts]
 		};
-
-		const allSerializedBlindedMessages: Array<SerializedBlindedMessage> = [];
-		// the order of this array apparently matters if it's the other way around,
-		// the mint complains that the split is not as expected
-		allSerializedBlindedMessages.push(...amount1BlindedMessages.blindedMessages);
-		allSerializedBlindedMessages.push(...amount2BlindedMessages.blindedMessages);
 
 		const payload = {
 			proofs: proofsToSend,
-			outputs: allSerializedBlindedMessages
+			outputs: [...blindedMessages.blindedMessages]
 		};
 		return { payload, blindedMessages };
 	}
 	private splitReceive(
 		amount: number,
 		amountAvailable: number
-	): { amount1: number; amount2: number } {
-		const amount1: number = amountAvailable - amount;
-		const amount2: number = amount;
-		return { amount1, amount2 };
+	): { amountKeep: number; amountSend: number } {
+		const amountKeep: number = amountAvailable - amount;
+		const amountSend: number = amount;
+		return { amountKeep, amountSend };
 	}
 
 	/**
