@@ -434,6 +434,61 @@ describe('send', () => {
 		expect(result.returnChange).toHaveLength(0);
 	});
 
+	test('test send preference overpay', async () => {
+		nock(mintUrl)
+			.post('/split')
+			.reply(200, {
+				promises: [
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
+			});
+		const wallet = new CashuWallet(mint);
+
+		const overpayProofs = [
+			{
+				id: 'z32vUtKgNCm1',
+				amount: 2,
+				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			},
+			{
+				id: 'z32vUtKgNCm1',
+				amount: 2,
+				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			}
+		];
+		const result = await wallet.send(4, overpayProofs, [{ amount: 1, count: 3 }]);
+
+		expect(result.send).toHaveLength(3);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
+		expect(result.send[1]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
+		expect(result.send[2]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(result.returnChange).toHaveLength(1);
+		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
+	});
+
 	test('test send not enough funds', async () => {
 		nock(mintUrl)
 			.post('/split')
