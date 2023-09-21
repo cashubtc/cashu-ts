@@ -3,6 +3,7 @@ import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
+	AmountPreference,
 	BlindedMessageData,
 	BlindedTransaction,
 	MintKeys,
@@ -17,7 +18,13 @@ import {
 	SplitPayload,
 	TokenEntry
 } from './model/types/index.js';
-import { cleanToken, deriveKeysetId, getDecodedToken, splitAmount } from './utils.js';
+import {
+	cleanToken,
+	deriveKeysetId,
+	getDecodedToken,
+	getDefaultAmountPreference,
+	splitAmount
+} from './utils.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -29,7 +36,6 @@ class CashuWallet {
 	mint: CashuMint;
 
 	/**
-	 *
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
@@ -90,7 +96,10 @@ class CashuWallet {
 			feeReserve = await this.getFee(invoice);
 		}
 		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve);
-		const payData = await this.mint.melt({ ...paymentPayload, outputs: blindedMessages });
+		const payData = await this.mint.melt({
+			...paymentPayload,
+			outputs: blindedMessages
+		});
 		return {
 			isPaid: payData.paid ?? false,
 			preimage: payData.preimage,
@@ -179,16 +188,20 @@ class CashuWallet {
 		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			const { payload, blindedMessages } = this.createSplitPayload(amount, tokenEntry.proofs);
-			const { promises } = await CashuMint.split(tokenEntry.mint, payload);
-			proofs.push(
-				...dhke.constructProofs(
-					promises,
-					blindedMessages.rs,
-					blindedMessages.secrets,
-					await this.getKeys(promises, tokenEntry.mint)
-				)
+
+			const { payload, blindedMessages } = this.createSplitPayload(
+				amount,
+				tokenEntry.proofs,
+				getDefaultAmountPreference(amount)
 			);
+			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const newProofs = dhke.constructProofs(
+				promises,
+				blindedMessages.rs,
+				blindedMessages.secrets,
+				await this.getKeys(promises, tokenEntry.mint)
+			);
+			proofs.push(...newProofs);
 			newKeys =
 				tokenEntry.mint === this.mint.mintUrl
 					? await this.changedKeys([...(promises || [])])
@@ -206,28 +219,43 @@ class CashuWallet {
 
 	/**
 	 * Splits and creates sendable tokens
-	 * @param amount amount to send
+	 * if no amount is specified, the amount is implied by the cumulative amount of all proofs
+	 * if both amount and preference are set, but the preference cannot fulfill the amount, then we use the default split
+	 * @param amount amount to send while performing the optimal split (least proofs possible). can be set to undefined if preference is set
 	 * @param proofs proofs matching that amount
+	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @returns promise of the change- and send-proofs
 	 */
-	async send(amount: number, proofs: Array<Proof>): Promise<SendResponse> {
+	async send(
+		amount: number,
+		proofs: Array<Proof>,
+		preference?: Array<AmountPreference>
+	): Promise<SendResponse> {
+		if (preference) {
+			amount = preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
+		}
+
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const proofsToKeep: Array<Proof> = [];
 		proofs.forEach((proof) => {
 			if (amountAvailable >= amount) {
 				proofsToKeep.push(proof);
-				return;
 			}
 			amountAvailable = amountAvailable + proof.amount;
 			proofsToSend.push(proof);
 		});
+
 		if (amount > amountAvailable) {
 			throw new Error('Not enough funds available');
 		}
-		if (amount < amountAvailable) {
+		if (amount < amountAvailable || preference) {
 			const { amount1, amount2 } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(amount1, proofsToSend);
+			const { payload, blindedMessages } = this.createSplitPayload(
+				amount1,
+				proofsToSend,
+				preference
+			);
 			const { promises } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
 				promises,
@@ -264,9 +292,13 @@ class CashuWallet {
 	 */
 	async requestTokens(
 		amount: number,
-		hash: string
+		hash: string,
+		AmountPreference?: Array<AmountPreference>
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
-		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(amount);
+		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
+			amount,
+			AmountPreference
+		);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
 		return {
@@ -337,14 +369,18 @@ class CashuWallet {
 	 */
 	private createSplitPayload(
 		amount: number,
-		proofsToSend: Array<Proof>
+		proofsToSend: Array<Proof>,
+		preference?: Array<AmountPreference>
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const amount1BlindedMessages = this.createRandomBlindedMessages(amount);
-		const amount2BlindedMessages = this.createRandomBlindedMessages(totalAmount - amount);
+		const amount2BlindedMessages = this.createRandomBlindedMessages(
+			totalAmount - amount,
+			preference
+		);
 
 		// join amount1BlindedMessages and amount2BlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -369,7 +405,6 @@ class CashuWallet {
 		};
 		return { payload, blindedMessages };
 	}
-	//keep amount 1 send amount 2
 	private splitReceive(
 		amount: number,
 		amountAvailable: number
@@ -385,12 +420,13 @@ class CashuWallet {
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createRandomBlindedMessages(
-		amount: number
+		amount: number,
+		amountPreference?: Array<AmountPreference>
 	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
-		const amounts = splitAmount(amount);
+		const amounts = splitAmount(amount, amountPreference);
 		for (let i = 0; i < amounts.length; i++) {
 			const secret = randomBytes(32);
 			secrets.push(secret);
