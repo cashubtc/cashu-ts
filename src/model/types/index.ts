@@ -336,3 +336,8 @@ export type GetInfoResponse = {
 	motd?: string;
 	parameter: { peg_out_only: boolean };
 };
+
+export type AmountPreference = {
+	amount: number;
+	count: number;
+};
