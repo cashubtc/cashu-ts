@@ -265,7 +265,7 @@ class CashuWallet {
 			const splitProofsToSend: Array<Proof> = [];
 			let amountKeepCounter = 0;
 			proofs.forEach((proof) => {
-				if (amountKeepCounter < amount - amountSend) {
+				if (amountKeepCounter < amountKeep) {
 					amountKeepCounter += proof.amount;
 					splitProofsToKeep.push(proof);
 					return;
