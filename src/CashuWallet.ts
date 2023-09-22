@@ -241,6 +241,7 @@ class CashuWallet {
 		proofs.forEach((proof) => {
 			if (amountAvailable >= amount) {
 				proofsToKeep.push(proof);
+				return
 			}
 			amountAvailable = amountAvailable + proof.amount;
 			proofsToSend.push(proof);
