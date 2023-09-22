@@ -264,7 +264,7 @@ class CashuWallet {
 			const splitProofsToKeep: Array<Proof> = [];
 			const splitProofsToSend: Array<Proof> = [];
 			let amountSendCounter = 0;
-			proofs.forEach((proof) => {
+			proofs.reverse().forEach((proof) => {
 				if (amountSendCounter >= amountSend) {
 					splitProofsToKeep.push(proof);
 					return;
