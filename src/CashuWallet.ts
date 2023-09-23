@@ -140,9 +140,10 @@ class CashuWallet {
 	/**
 	 * Receive an encoded Cashu token
 	 * @param encodedToken Cashu token
+	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
 	 */
-	async receive(encodedToken: string): Promise<ReceiveResponse> {
+	async receive(encodedToken: string, preference?: Array<AmountPreference>): Promise<ReceiveResponse> {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
@@ -156,7 +157,7 @@ class CashuWallet {
 					proofsWithError,
 					proofs,
 					newKeys: newKeysFromReceive
-				} = await this.receiveTokenEntry(tokenEntry);
+				} = await this.receiveTokenEntry(tokenEntry, preference);
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
@@ -180,19 +181,22 @@ class CashuWallet {
 	/**
 	 * Receive a single cashu token entry
 	 * @param tokenEntry a single entry of a cashu token
+	 * @param preference optional preference for splitting proofs into specific amounts.
 	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
 	 */
-	async receiveTokenEntry(tokenEntry: TokenEntry): Promise<ReceiveTokenEntryResponse> {
+	async receiveTokenEntry(tokenEntry: TokenEntry, preference?: Array<AmountPreference>): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
 		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-
+			if (!preference) {
+				preference = getDefaultAmountPreference(amount)
+			}
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
-				getDefaultAmountPreference(amount)
+				preference
 			);
 			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
