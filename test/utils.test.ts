@@ -256,4 +256,14 @@ describe('test cleanToken', () => {
 		expect(result.token[0].proofs[1].id).toBe('I2yN+iRYfkzT');
 		expect(result.token[0].proofs[2].id).toBe('test');
 	});
+	test('testing joining urls', () => {
+		const mint_url = 'https://8333.space:3338';
+		const info_url = utils.joinUrls(mint_url, 'info');
+
+		expect(info_url).toBe('https://8333.space:3338/info');
+
+		const mint_url_trailing_slash = 'https://8333.space:3338/';
+		const mint_info_url = utils.joinUrls(mint_url_trailing_slash, 'info');
+		expect(mint_info_url).toBe('https://8333.space:3338/info');
+	});
 });

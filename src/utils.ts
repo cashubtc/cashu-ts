@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import { MintKeys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
@@ -146,15 +145,6 @@ export function checkResponse(data: { error?: string; detail?: string }): void {
 	}
 }
 
-/**
- * Checks for Axios errors and throws custom Error.
- * @param err The Axios error
- */
-export function checkResponseError(err: unknown): void {
-	if (axios.isAxiosError(err)) {
-		const message = err?.response?.data?.error ?? err?.response?.data?.detail;
-		if (message) {
-			throw new Error(message);
-		}
-	}
+export function joinUrls(...parts: string[]): string {
+	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
