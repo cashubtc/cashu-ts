@@ -33,67 +33,74 @@ describe('test fees', () => {
 describe('receive', () => {
 	const tokenInput =
 		'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIi91WUIvNndXbllrVSJdfV19';
-		test('test receive', async () => {
-			nock(mintUrl)
-				.post('/split')
-				.reply(200, {
-					promises: [
-						{
-							id: 'z32vUtKgNCm1',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-						}
-					]
-				});
-			const wallet = new CashuWallet(mint);
-	
-			const { token: t, tokensWithErrors } = await wallet.receive(tokenInput);
-	
-			expect(t.token).toHaveLength(1);
-			expect(t.token[0].proofs).toHaveLength(1);
-			expect(t.token[0]).toMatchObject({
-				proofs: [{ amount: 1, id: 'z32vUtKgNCm1' }],
-				mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
+	test('test receive', async () => {
+		nock(mintUrl)
+			.post('/split')
+			.reply(200, {
+				promises: [
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
 			});
-			expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-			expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
-			expect(tokensWithErrors).toBe(undefined);
+		const wallet = new CashuWallet(mint);
+
+		const { token: t, tokensWithErrors } = await wallet.receive(tokenInput);
+
+		expect(t.token).toHaveLength(1);
+		expect(t.token[0].proofs).toHaveLength(1);
+		expect(t.token[0]).toMatchObject({
+			proofs: [{ amount: 1, id: 'z32vUtKgNCm1' }],
+			mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
 		});
-		test('test receive custom split', async () => {
-			nock(mintUrl)
-				.post('/split')
-				.reply(200, {
-					promises: [
-						{
-							id: 'z32vUtKgNCm1',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-						},
-						{
-							id: 'z32vUtKgNCm1',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-						},
-						{
-							id: 'z32vUtKgNCm1',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
-						}
-					]
-				});
-			const wallet = new CashuWallet(mint);
-			const token3sat = 'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifSx7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifSx7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIi91WUIvNndXbllrVSJdfV19'
-			const { token: t, tokensWithErrors } = await wallet.receive(token3sat, [{amount:1, count:3}]);
-	
-			expect(t.token).toHaveLength(1);
-			expect(t.token[0].proofs).toHaveLength(3);
-			expect(t.token[0]).toMatchObject({
-				proofs: [{ amount: 1, id: 'z32vUtKgNCm1' },{ amount: 1, id: 'z32vUtKgNCm1' },{ amount: 1, id: 'z32vUtKgNCm1' }],
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(tokensWithErrors).toBe(undefined);
+	});
+	test('test receive custom split', async () => {
+		nock(mintUrl)
+			.post('/split')
+			.reply(200, {
+				promises: [
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
 			});
-			expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-			expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
-			expect(tokensWithErrors).toBe(undefined);
+		const wallet = new CashuWallet(mint);
+		const token3sat =
+			'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifSx7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifSx7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIi91WUIvNndXbllrVSJdfV19';
+		const { token: t, tokensWithErrors } = await wallet.receive(token3sat, [
+			{ amount: 1, count: 3 }
+		]);
+
+		expect(t.token).toHaveLength(1);
+		expect(t.token[0].proofs).toHaveLength(3);
+		expect(t.token[0]).toMatchObject({
+			proofs: [
+				{ amount: 1, id: 'z32vUtKgNCm1' },
+				{ amount: 1, id: 'z32vUtKgNCm1' },
+				{ amount: 1, id: 'z32vUtKgNCm1' }
+			]
 		});
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
+		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(tokensWithErrors).toBe(undefined);
+	});
 	test('test receive tokens already spent', async () => {
 		const msg = 'tokens already spent. Secret: oEpEuViVHUV2vQH81INUbq++Yv2w3u5H0LhaqXJKeR0=';
 		nock(mintUrl).post('/split').reply(200, { detail: msg });
