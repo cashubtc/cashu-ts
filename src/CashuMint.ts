@@ -5,6 +5,7 @@ import {
 	MeltPayload,
 	MeltResponse,
 	MintKeys,
+	PostRestoreResponse,
 	RequestMintResponse,
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
@@ -251,6 +252,29 @@ class CashuMint {
 	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
 		return CashuMint.check(this._mintUrl, checkPayload);
 	}
+
+	public static async restore(
+		mintUrl: string,
+		restorePayload: { outputs: Array<SerializedBlindedMessage> }
+	): Promise<PostRestoreResponse> {
+		const data = await request<PostRestoreResponse>({
+			endpoint: joinUrls(mintUrl, 'restore'),
+			method: 'POST',
+			requestBody: restorePayload
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.promises) ) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	async restore(restorePayload: { outputs: Array<SerializedBlindedMessage> }): Promise<PostRestoreResponse> {
+		return CashuMint.restore(this._mintUrl, restorePayload);
+	}
+
+	
 }
 
 export { CashuMint };

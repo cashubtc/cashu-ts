@@ -336,6 +336,13 @@ export type GetInfoResponse = {
 	motd?: string;
 	parameter: { peg_out_only: boolean };
 };
+/**
+ * Response from mint at /info endpoint
+ */
+export type PostRestoreResponse = {
+	outputs: Array<SerializedBlindedMessage>
+    promises: Array<SerializedBlindedSignature>
+};
 
 export type AmountPreference = {
 	amount: number;

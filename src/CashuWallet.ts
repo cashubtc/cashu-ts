@@ -333,6 +333,19 @@ class CashuWallet {
 		};
 	}
 
+	async restore(counter: number, startIndex=0): Promise<Array<Proof>> {
+		const numberOfMessages = counter-startIndex
+		const amounts = Array(numberOfMessages).fill(0)
+		const {blindedMessages, rs, secrets} = this.createBlindedMessages(amounts, startIndex)
+		
+		const {outputs, promises}= await this.mint.restore({outputs: blindedMessages})
+		
+		const validRs = rs.filter((r, i)=>outputs.map(o=>o.B_).includes(blindedMessages[i].B_))
+		const validSecrets = secrets.filter((s, i)=>outputs.map(o=>o.B_).includes(blindedMessages[i].B_))
+
+		return dhke.constructProofs(promises, validRs, validSecrets, this.keys)
+	}
+
 	/**
 	 * Initialize the wallet with the mints public keys
 	 */
@@ -448,10 +461,15 @@ class CashuWallet {
 		amountPreference?: Array<AmountPreference>,
 		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
+		const amounts = splitAmount(amount, amountPreference);
+		return this.createBlindedMessages(amounts, counter);
+	}
+
+
+	private createBlindedMessages(amounts: Array<number>, counter?:number):BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
-		const amounts = splitAmount(amount, amountPreference);
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secret = undefined;
@@ -469,7 +487,7 @@ class CashuWallet {
 			const blindedMessage = new BlindedMessage(amounts[i], B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
-		return { blindedMessages, secrets, rs, amounts };
+		return {amounts, blindedMessages, rs, secrets}
 	}
 
 	/**
@@ -479,28 +497,12 @@ class CashuWallet {
 	 * @returns blinded messages, secrets, and rs
 	 */
 	private createBlankOutputs(feeReserve: number, counter?: number): BlindedMessageData {
-		const blindedMessages: Array<SerializedBlindedMessage> = [];
-		const secrets: Array<Uint8Array> = [];
-		const rs: Array<bigint> = [];
-		const count = Math.ceil(Math.log2(feeReserve)) || 1;
-		for (let i = 0; i < count; i++) {
-			let deterministicR = undefined;
-			let secret = undefined;
-			if (this._seed && counter) {
-				secret = deriveSecret(this._seed, this.keysetId, counter + i);
-				deterministicR = bytesToNumber(
-					deriveBlindingFactor(this._seed, this.keysetId, counter + i)
-				);
-			} else {
-				secret = randomBytes(32);
-			}
-			secrets.push(secret);
-			const { B_, r } = dhke.blindMessage(secret, deterministicR);
-			rs.push(r);
-			const blindedMessage = new BlindedMessage(0, B_);
-			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
+		let count = Math.ceil(Math.log2(feeReserve)) || 1;
+		if (count<0) {
+			count=0
 		}
-
+		const amounts = count?Array(count).fill(0):[]
+		const {blindedMessages,rs,secrets} = this.createBlindedMessages(amounts, counter)
 		return { blindedMessages, secrets, rs };
 	}
 }
