@@ -19,12 +19,14 @@ import {
 	TokenEntry
 } from './model/types/index.js';
 import {
+	bytesToNumber,
 	cleanToken,
 	deriveKeysetId,
 	getDecodedToken,
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
+import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -33,17 +35,22 @@ import {
 class CashuWallet {
 	private _keys: MintKeys;
 	private _keysetId = '';
+	private _seed: Uint8Array | undefined;
 	mint: CashuMint;
 
 	/**
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
+	 * @param mnemonic Cashu mint instance is used to make api calls
 	 */
-	constructor(mint: CashuMint, keys?: MintKeys) {
+	constructor(mint: CashuMint, keys?: MintKeys, mnemonic?: string) {
 		this._keys = keys || {};
 		this.mint = mint;
 		if (keys) {
 			this._keysetId = deriveKeysetId(this._keys);
+		}
+		if (mnemonic) {
+			this._seed = deriveSeedFromMnemonic(mnemonic);
 		}
 	}
 
@@ -89,13 +96,14 @@ class CashuWallet {
 	async payLnInvoice(
 		invoice: string,
 		proofsToSend: Array<Proof>,
-		feeReserve?: number
+		feeReserve?: number,
+		count?: number
 	): Promise<PayLnInvoiceResponse> {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
 		if (!feeReserve) {
 			feeReserve = await this.getFee(invoice);
 		}
-		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve);
+		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve, count);
 		const payData = await this.mint.melt({
 			...paymentPayload,
 			outputs: blindedMessages
@@ -143,7 +151,11 @@ class CashuWallet {
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
 	 */
-	async receive(encodedToken: string, preference?: Array<AmountPreference>): Promise<ReceiveResponse> {
+	async receive(
+		encodedToken: string,
+		preference?: Array<AmountPreference>,
+		count?: number
+	): Promise<ReceiveResponse> {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
@@ -157,7 +169,7 @@ class CashuWallet {
 					proofsWithError,
 					proofs,
 					newKeys: newKeysFromReceive
-				} = await this.receiveTokenEntry(tokenEntry, preference);
+				} = await this.receiveTokenEntry(tokenEntry, preference, count);
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
@@ -184,18 +196,23 @@ class CashuWallet {
 	 * @param preference optional preference for splitting proofs into specific amounts.
 	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
 	 */
-	async receiveTokenEntry(tokenEntry: TokenEntry, preference?: Array<AmountPreference>): Promise<ReceiveTokenEntryResponse> {
+	async receiveTokenEntry(
+		tokenEntry: TokenEntry,
+		preference?: Array<AmountPreference>,
+		count?: number
+	): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
 		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
 			if (!preference) {
-				preference = getDefaultAmountPreference(amount)
+				preference = getDefaultAmountPreference(amount);
 			}
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
+				count,
 				preference
 			);
 			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
@@ -233,7 +250,8 @@ class CashuWallet {
 	async send(
 		amount: number,
 		proofs: Array<Proof>,
-		preference?: Array<AmountPreference>
+		preference?: Array<AmountPreference>,
+		count?: number
 	): Promise<SendResponse> {
 		if (preference) {
 			amount = preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
@@ -245,7 +263,7 @@ class CashuWallet {
 		proofs.forEach((proof) => {
 			if (amountAvailable >= amount) {
 				proofsToKeep.push(proof);
-				return
+				return;
 			}
 			amountAvailable = amountAvailable + proof.amount;
 			proofsToSend.push(proof);
@@ -256,7 +274,12 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable || preference) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(amountSend, proofsToSend, preference);
+			const { payload, blindedMessages } = this.createSplitPayload(
+				amountSend,
+				proofsToSend,
+				count,
+				preference
+			);
 			const { promises } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
 				promises,
@@ -273,7 +296,6 @@ class CashuWallet {
 					amountKeepCounter += proof.amount;
 					splitProofsToKeep.push(proof);
 					return;
-
 				}
 				splitProofsToSend.push(proof);
 			});
@@ -295,11 +317,13 @@ class CashuWallet {
 	async requestTokens(
 		amount: number,
 		hash: string,
-		AmountPreference?: Array<AmountPreference>
+		AmountPreference?: Array<AmountPreference>,
+		count?: number
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			AmountPreference
+			AmountPreference,
+			count
 		);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, hash);
@@ -364,22 +388,29 @@ class CashuWallet {
 
 	/**
 	 * Creates a split payload
-	 * @param amount1 amount to keep
-	 * @param amount2 amount to send
+	 * @param amount amount to send
 	 * @param proofsToSend proofs to split
 	 * @returns
 	 */
 	private createSplitPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
+		count?: number,
 		preference?: Array<AmountPreference>
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
-		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount);
-		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference);
+		const keepBlindedMessages = this.createRandomBlindedMessages(
+			totalAmount - amount,
+			undefined,
+			count
+		);
+		if (this._seed && count) {
+			count = count + keepBlindedMessages.secrets.length;
+		}
+		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference, count);
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -414,16 +445,26 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
-		amountPreference?: Array<AmountPreference>
+		amountPreference?: Array<AmountPreference>,
+		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
 		const amounts = splitAmount(amount, amountPreference);
 		for (let i = 0; i < amounts.length; i++) {
-			const secret = randomBytes(32);
+			let deterministicR = undefined;
+			let secret = undefined;
+			if (this._seed && counter) {
+				secret = deriveSecret(this._seed, this.keysetId, counter + i);
+				deterministicR = bytesToNumber(
+					deriveBlindingFactor(this._seed, this.keysetId, counter + i)
+				);
+			} else {
+				secret = randomBytes(32);
+			}
 			secrets.push(secret);
-			const { B_, r } = dhke.blindMessage(secret);
+			const { B_, r } = dhke.blindMessage(secret, deterministicR);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(amounts[i], B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
@@ -437,15 +478,24 @@ class CashuWallet {
 	 * @param feeReserve amount to cover with blank outputs
 	 * @returns blinded messages, secrets, and rs
 	 */
-	private createBlankOutputs(feeReserve: number): BlindedMessageData {
+	private createBlankOutputs(feeReserve: number, counter?: number): BlindedMessageData {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
 		const count = Math.ceil(Math.log2(feeReserve)) || 1;
 		for (let i = 0; i < count; i++) {
-			const secret = randomBytes(32);
+			let deterministicR = undefined;
+			let secret = undefined;
+			if (this._seed && counter) {
+				secret = deriveSecret(this._seed, this.keysetId, counter + i);
+				deterministicR = bytesToNumber(
+					deriveBlindingFactor(this._seed, this.keysetId, counter + i)
+				);
+			} else {
+				secret = randomBytes(32);
+			}
 			secrets.push(secret);
-			const { B_, r } = dhke.blindMessage(secret);
+			const { B_, r } = dhke.blindMessage(secret, deterministicR);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(0, B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());

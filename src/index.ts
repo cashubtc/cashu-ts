@@ -3,7 +3,7 @@ import { CashuWallet } from './CashuWallet.js';
 import { setGlobalRequestOptions } from './request.js';
 import { getEncodedToken, getDecodedToken, deriveKeysetId } from './utils.js';
 import { decode as getDecodedLnInvoice } from '@gandlaf21/bolt11-decode';
-
+import { generateNewMnemonic } from './secrets.js';
 export * from './model/types/index.js';
 
 export {
@@ -13,5 +13,6 @@ export {
 	getEncodedToken,
 	deriveKeysetId,
 	getDecodedLnInvoice,
-	setGlobalRequestOptions
+	setGlobalRequestOptions,
+	generateNewMnemonic
 };
