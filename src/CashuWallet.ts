@@ -333,7 +333,7 @@ class CashuWallet {
 		};
 	}
 
-	async restore(counter: number, startIndex=0): Promise<Array<Proof>> {
+	async restore(counter: number, startIndex=0): Promise<{proofs: Array<Proof>, newKeys?: MintKeys}> {
 		const numberOfMessages = counter-startIndex
 		const amounts = Array(numberOfMessages).fill(0)
 		const {blindedMessages, rs, secrets} = this.createBlindedMessages(amounts, startIndex)
@@ -343,7 +343,7 @@ class CashuWallet {
 		const validRs = rs.filter((r, i)=>outputs.map(o=>o.B_).includes(blindedMessages[i].B_))
 		const validSecrets = secrets.filter((s, i)=>outputs.map(o=>o.B_).includes(blindedMessages[i].B_))
 
-		return dhke.constructProofs(promises, validRs, validSecrets, this.keys)
+		return {proofs: dhke.constructProofs(promises, validRs, validSecrets, await this.getKeys(promises)), newKeys: await this.changedKeys(promises)}
 	}
 
 	/**
@@ -473,7 +473,7 @@ class CashuWallet {
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secret = undefined;
-			if (this._seed && counter) {
+			if (this._seed && counter!=undefined) {
 				secret = deriveSecret(this._seed, this.keysetId, counter + i);
 				deterministicR = bytesToNumber(
 					deriveBlindingFactor(this._seed, this.keysetId, counter + i)
