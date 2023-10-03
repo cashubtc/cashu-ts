@@ -1,42 +1,32 @@
-import {
-	deriveSecret,
-	generateNewMnemonic,
-	deriveSeedFromMnemonic,
-	deriveBlindingFactor
-} from '../src/secrets';
+import { bytesToHex } from "@noble/curves/abstract/utils";
+import { deriveSeedFromMnemonic } from "../src/secrets";
+import { deriveBlindingFactor, deriveSecret } from "../src/secrets";
+import { HDKey } from "@scure/bip32";
 
 const mnemonic =
-	'vehicle liberty balcony ensure label shiver garage fish shrimp various slam audit';
-const seed = new Uint8Array([
-	145, 161, 210, 31, 40, 240, 127, 134, 145, 5, 205, 11, 105, 44, 150, 208, 149, 141, 80, 33, 36,
-	57, 83, 205, 173, 128, 123, 107, 64, 199, 63, 176, 167, 239, 255, 243, 189, 64, 189, 51, 56, 24,
-	33, 162, 20, 119, 154, 207, 143, 74, 191, 58, 135, 167, 204, 46, 141, 115, 107, 182, 236, 248, 58,
-	150
-]);
-describe('testing deterministic secrets', () => {
-	test('generate new mnemonic', async () => {
-		const mnem = generateNewMnemonic();
-		console.log(mnem);
-		expect(mnem.split(' ').length).toBe(12);
-	});
+  "half depart obvious quality work element tank gorilla view sugar picture humble";
+const seed = deriveSeedFromMnemonic(mnemonic);
 
-	test('derive seed', async () => {
-		const seed = deriveSeedFromMnemonic(mnemonic);
-		console.log(seed);
-		expect(seed.toString()).toBe(
-			[
-				145, 161, 210, 31, 40, 240, 127, 134, 145, 5, 205, 11, 105, 44, 150, 208, 149, 141, 80, 33,
-				36, 57, 83, 205, 173, 128, 123, 107, 64, 199, 63, 176, 167, 239, 255, 243, 189, 64, 189, 51,
-				56, 24, 33, 162, 20, 119, 154, 207, 143, 74, 191, 58, 135, 167, 204, 46, 141, 115, 107, 182,
-				236, 248, 58, 150
-			].toString()
-		);
-	});
+describe("testing deterministic secrets", () => {
+  const secrets = [
+    "9bfb12704297fe90983907d122838940755fcce370ce51e9e00a4275a347c3fe",
+    "dbc5e05f2b1f24ec0e2ab6e8312d5e13f57ada52594d4caf429a697d9c742490",
+    "06a29fa8081b3a620b50b473fc80cde9a575c3b94358f3513c03007f8b66321e",
+    "652d08c804bd2c5f2c1f3e3d8895860397df394b30473753227d766affd15e89",
+    "654e5997f8a20402f7487296b6f7e463315dd52fc6f6cc5a4e35c7f6ccac77e0",
+  ];
+  test("derive Secret", async () => {
 
-	test('derive Secret', async () => {
-		const secret = deriveSecret(seed, 'z32vUtKgNCm1', 0);
-	});
-	test('derive BF', async () => {
-		const secret = deriveBlindingFactor(seed, 'z32vUtKgNCm1', 0);
-	});
+    const secret1 = deriveSecret(seed, "1cCNIAZ2X/w1", 0);
+    const secret2 = deriveSecret(seed, "1cCNIAZ2X/w1", 1);
+    const secret3 = deriveSecret(seed, "1cCNIAZ2X/w1", 2);
+    const secret4 = deriveSecret(seed, "1cCNIAZ2X/w1", 3);
+    const secret5 = deriveSecret(seed, "1cCNIAZ2X/w1", 4);
+
+    expect(bytesToHex(secret1)).toBe(secrets[0]);
+    expect(bytesToHex(secret2)).toBe(secrets[1]);
+    expect(bytesToHex(secret3)).toBe(secrets[2]);
+    expect(bytesToHex(secret4)).toBe(secrets[3]);
+    expect(bytesToHex(secret5)).toBe(secrets[4]);
+  })
 });
