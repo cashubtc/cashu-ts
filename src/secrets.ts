@@ -1,9 +1,5 @@
 import { HDKey } from '@scure/bip32';
-import {
-	generateMnemonic,
-	validateMnemonic,
-	mnemonicToSeedSync
-} from '@scure/bip39';
+import { generateMnemonic, validateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { encodeBase64toUint8 } from './base64';
 import { bytesToNumber } from './utils';
@@ -40,11 +36,11 @@ const derive = (
 ): Uint8Array => {
 	const hdkey = HDKey.fromMasterSeed(seed);
 	const keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
-	const derivationPath = `m/129372'/0'/${keysetIdInt}'/${counter}'/${secretOrBlinding}`
+	const derivationPath = `m/129372'/0'/${keysetIdInt}'/${counter}'/${secretOrBlinding}`;
 
 	//todo: remove this after tests are fixed
-	console.log(derivationPath)
-	
+	console.log(derivationPath);
+
 	const derived = hdkey.derive(derivationPath);
 	if (derived.privateKey === null) {
 		throw new Error('Could not derive private key');
