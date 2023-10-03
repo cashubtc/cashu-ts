@@ -333,17 +333,25 @@ class CashuWallet {
 		};
 	}
 
-	async restore(counter: number, startIndex=0): Promise<{proofs: Array<Proof>, newKeys?: MintKeys}> {
-		const numberOfMessages = counter-startIndex
-		const amounts = Array(numberOfMessages).fill(0)
-		const {blindedMessages, rs, secrets} = this.createBlindedMessages(amounts, startIndex)
-		
-		const {outputs, promises}= await this.mint.restore({outputs: blindedMessages})
-		
-		const validRs = rs.filter((r, i)=>outputs.map(o=>o.B_).includes(blindedMessages[i].B_))
-		const validSecrets = secrets.filter((s, i)=>outputs.map(o=>o.B_).includes(blindedMessages[i].B_))
+	async restore(
+		counter: number,
+		startIndex = 0
+	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
+		const numberOfMessages = counter - startIndex;
+		const amounts = Array(numberOfMessages).fill(0);
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, startIndex);
 
-		return {proofs: dhke.constructProofs(promises, validRs, validSecrets, await this.getKeys(promises)), newKeys: await this.changedKeys(promises)}
+		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
+
+		const validRs = rs.filter((r, i) => outputs.map((o) => o.B_).includes(blindedMessages[i].B_));
+		const validSecrets = secrets.filter((s, i) =>
+			outputs.map((o) => o.B_).includes(blindedMessages[i].B_)
+		);
+
+		return {
+			proofs: dhke.constructProofs(promises, validRs, validSecrets, await this.getKeys(promises)),
+			newKeys: await this.changedKeys(promises)
+		};
 	}
 
 	/**
@@ -465,15 +473,17 @@ class CashuWallet {
 		return this.createBlindedMessages(amounts, counter);
 	}
 
-
-	private createBlindedMessages(amounts: Array<number>, counter?:number):BlindedMessageData & { amounts: Array<number> } {
+	private createBlindedMessages(
+		amounts: Array<number>,
+		counter?: number
+	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secret = undefined;
-			if (this._seed && counter!=undefined) {
+			if (this._seed && counter != undefined) {
 				secret = deriveSecret(this._seed, this.keysetId, counter + i);
 				deterministicR = bytesToNumber(
 					deriveBlindingFactor(this._seed, this.keysetId, counter + i)
@@ -487,7 +497,7 @@ class CashuWallet {
 			const blindedMessage = new BlindedMessage(amounts[i], B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
-		return {amounts, blindedMessages, rs, secrets}
+		return { amounts, blindedMessages, rs, secrets };
 	}
 
 	/**
@@ -498,11 +508,11 @@ class CashuWallet {
 	 */
 	private createBlankOutputs(feeReserve: number, counter?: number): BlindedMessageData {
 		let count = Math.ceil(Math.log2(feeReserve)) || 1;
-		if (count<0) {
-			count=0
+		if (count < 0) {
+			count = 0;
 		}
-		const amounts = count?Array(count).fill(0):[]
-		const {blindedMessages,rs,secrets} = this.createBlindedMessages(amounts, counter)
+		const amounts = count ? Array(count).fill(0) : [];
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, counter);
 		return { blindedMessages, secrets, rs };
 	}
 }

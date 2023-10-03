@@ -263,18 +263,18 @@ class CashuMint {
 			requestBody: restorePayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.promises) ) {
+		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.promises)) {
 			throw new Error('bad response');
 		}
 
 		return data;
 	}
 
-	async restore(restorePayload: { outputs: Array<SerializedBlindedMessage> }): Promise<PostRestoreResponse> {
+	async restore(restorePayload: {
+		outputs: Array<SerializedBlindedMessage>;
+	}): Promise<PostRestoreResponse> {
 		return CashuMint.restore(this._mintUrl, restorePayload);
 	}
-
-	
 }
 
 export { CashuMint };
