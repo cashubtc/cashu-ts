@@ -40,7 +40,12 @@ const derive = (
 ): Uint8Array => {
 	const hdkey = HDKey.fromMasterSeed(seed);
 	const keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
-	const derived = hdkey.derive(`m/129372'/0'/${keysetIdInt}'/${counter}'/${secretOrBlinding}`);
+	const derivationPath = `m/129372'/0'/${keysetIdInt}'/${counter}'/${secretOrBlinding}`
+
+	//todo: remove this after tests are fixed
+	console.log(derivationPath)
+	
+	const derived = hdkey.derive(derivationPath);
 	if (derived.privateKey === null) {
 		throw new Error('Could not derive private key');
 	}
