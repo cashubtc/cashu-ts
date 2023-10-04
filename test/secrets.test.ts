@@ -6,7 +6,6 @@ import { HDKey } from '@scure/bip32';
 const mnemonic = 'half depart obvious quality work element tank gorilla view sugar picture humble';
 const seed = deriveSeedFromMnemonic(mnemonic);
 
-
 describe('testing hdkey from seed', () => {
 	test('hdkey from seed', async () => {
 		const hdkey = HDKey.fromMasterSeed(seed);
