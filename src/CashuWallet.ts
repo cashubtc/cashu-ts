@@ -357,8 +357,7 @@ class CashuWallet {
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
 		}
-		const numberOfMessages = count - startIndex;
-		const amounts = Array(numberOfMessages).fill(0);
+		const amounts = Array(count).fill(0);
 		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, startIndex);
 
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
@@ -540,7 +539,7 @@ class CashuWallet {
 		if (counter < 0) {
 			counter = 0;
 		}
-		const amounts = counter ? Array(counter).fill(0) : [];
+		const amounts = counter ? Array(counter).fill(1) : [];
 		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, count);
 		return { blindedMessages, secrets, rs };
 	}
