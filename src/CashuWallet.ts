@@ -352,13 +352,14 @@ class CashuWallet {
 	 */
 	async restore(
 		count: number,
-		startIndex = 0
+		startIndex = 0,
+		keysetId?: string
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
 		}
 		const amounts = Array(count).fill(0);
-		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, startIndex);
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, startIndex, keysetId);
 
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
 
@@ -504,7 +505,8 @@ class CashuWallet {
 	 */
 	private createBlindedMessages(
 		amounts: Array<number>,
-		count?: number
+		count?: number,
+		keysetId?: string
 	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
@@ -513,8 +515,8 @@ class CashuWallet {
 			let deterministicR = undefined;
 			let secret = undefined;
 			if (this._seed && count != undefined) {
-				secret = deriveSecret(this._seed, this.keysetId, count + i);
-				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, this.keysetId, count + i));
+				secret = deriveSecret(this._seed, keysetId??this.keysetId, count + i);
+				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, keysetId??this.keysetId, count + i));
 			} else {
 				secret = randomBytes(32);
 			}
