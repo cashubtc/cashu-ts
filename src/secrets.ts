@@ -3,6 +3,7 @@ import { generateMnemonic, validateMnemonic, mnemonicToSeedSync } from '@scure/b
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { encodeBase64toUint8 } from './base64';
 import { bytesToNumber } from './utils';
+import { hexToNumber } from '@noble/curves/abstract/utils';
 export const generateNewMnemonic = (): string => {
 	const mnemonic = generateMnemonic(wordlist, 128);
 	if (!validateMnemonic(mnemonic, wordlist)) {
@@ -35,7 +36,7 @@ const derive = (
 	secretOrBlinding: 0 | 1
 ): Uint8Array => {
 	const hdkey = HDKey.fromMasterSeed(seed);
-	const keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+	const keysetIdInt = getKeysetIdInt(keysetId)
 	const derivationPath = `m/129372'/0'/${keysetIdInt}'/${counter}'/${secretOrBlinding}`;
 	const derived = hdkey.derive(derivationPath);
 	if (derived.privateKey === null) {
@@ -43,3 +44,15 @@ const derive = (
 	}
 	return derived.privateKey;
 };
+
+const getKeysetIdInt = (keysetId:string): bigint =>{
+	let keysetIdInt: bigint
+	if (/^[a-fA-F0-9]+$/.test(keysetId)) {
+		keysetIdInt = (hexToNumber(keysetId)) % BigInt(2 ** 31 - 1);
+	}
+	else {
+		//legacy keyset compatibility
+		keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+	}
+	return keysetIdInt
+}
