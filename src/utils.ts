@@ -15,9 +15,13 @@ import { Buffer } from 'buffer/';
 /**
  * Splits a number into its constituent powers of 2.
  * @param value The number to split
+ * @param amountPreference An optional array of preferred amounts
  * @returns An array containing the constituent powers of 2
  */
-function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
+export function splitAmount(
+	value: number,
+	amountPreference?: Array<AmountPreference>
+): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
 		chunks.push(...getPreference(value, amountPreference));
@@ -36,10 +40,21 @@ function splitAmount(value: number, amountPreference?: Array<AmountPreference>):
 	return chunks;
 }
 
+/**
+ * Checks if a number is a power of two.
+ * @param number The number to check
+ * @returns True if the number is a power of two, false otherwise
+ */
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
 
+/**
+ * Splits an amount into preferred chunks.
+ * @param amount The amount to split
+ * @param preferredAmounts An array of preferred amounts
+ * @returns An array containing the split amounts
+ */
 function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
@@ -60,30 +75,50 @@ function getPreference(amount: number, preferredAmounts: Array<AmountPreference>
 	return chunks;
 }
 
-function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
+/**
+ * Returns the default amount preference for a given amount.
+ * @param amount The amount to split
+ * @returns An array of AmountPreference objects
+ */
+export function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
 	const amounts = splitAmount(amount);
 	return amounts.map((a) => {
 		return { amount: a, count: 1 };
 	});
 }
 
-function bytesToNumber(bytes: Uint8Array): bigint {
+/**
+ * Converts a byte array to a number.
+ * @param bytes The byte array to convert
+ * @returns The converted number
+ */
+export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
 
+/**
+ * Converts a hexadecimal string to a number.
+ * @param hex The hexadecimal string to convert
+ * @returns The converted number
+ */
 export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
-//used for json serialization
+/**
+ * Stringifies a BigInt for JSON serialization.
+ * @param _key The key of the value being stringified
+ * @param value The value to stringify
+ * @returns The stringified value
+ */
 export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
 /**
- * Helper function to encode a v3 cashu token
- * @param token
- * @returns
+ * Encodes a cashu token.
+ * @param token The token to encode
+ * @returns The encoded token
  */
 export function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
@@ -107,8 +142,9 @@ export function getDecodedToken(token: string): Token {
 }
 
 /**
- * @param token
- * @returns
+ * Handles different versions of cashu tokens.
+ * @param token The token to handle
+ * @returns The handled token
  */
 function handleTokens(token: string): Token {
 	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
@@ -126,10 +162,11 @@ function handleTokens(token: string): Token {
 	// if v2 token return v3 format
 	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
+
 /**
- * Returns the keyset id of a set of keys
- * @param keys keys object to derive keyset id from
- * @returns
+ * Derives the keyset id from a set of keys.
+ * @param keys The keys to derive the keyset id from
+ * @returns The derived keyset id
  */
 export function deriveKeysetId(keys: MintKeys) {
 	const pubkeysConcat = Object.entries(keys)
@@ -139,14 +176,11 @@ export function deriveKeysetId(keys: MintKeys) {
 	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
 	return Buffer.from(hash).toString('base64').slice(0, 12);
 }
+
 /**
- * merge proofs from same mint,
- * removes TokenEntrys with no proofs or no mint field
- * and sorts proofs by id
- *
- * @export
- * @param {Token} token
- * @return {*}  {Token}
+ * Cleans a token by merging proofs from the same mint, removing TokenEntrys with no proofs or no mint field, and sorting proofs by id.
+ * @param token The token to clean
+ * @returns The cleaned token
  */
 export function cleanToken(token: Token): Token {
 	const tokenEntryMap: { [key: string]: TokenEntry } = {};
@@ -171,10 +205,21 @@ export function cleanToken(token: Token): Token {
 		}))
 	};
 }
+
+/**
+ * Sorts an array of proofs by id.
+ * @param proofs The proofs to sort
+ * @returns The sorted proofs
+ */
 export function sortProofsById(proofs: Array<Proof>) {
 	return proofs.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/**
+ * Checks if a value is an object.
+ * @param v The value to check
+ * @returns True if the value is an object, false otherwise
+ */
 export function isObj(v: unknown): v is Record<string, unknown> {
 	return typeof v === 'object' && v !== null;
 }
@@ -192,16 +237,12 @@ export function checkResponse(data: { error?: string; detail?: string }): void {
 	}
 }
 
+/**
+ * Joins URL parts into a single URL string.
+ * @param parts The parts of the URL to join
+ * @returns The joined URL
+ */
 export function joinUrls(...parts: string[]): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
-export {
-	bigIntStringify,
-	bytesToNumber,
-	getDecodedToken,
-	getEncodedToken,
-	hexToNumber,
-	splitAmount,
-	getDefaultAmountPreference
-};
