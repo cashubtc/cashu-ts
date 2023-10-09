@@ -7,7 +7,7 @@
 ![npm type definitions](https://img.shields.io/npm/types/@cashu/cashu-ts)
 ![npm bundle size](https://img.shields.io/bundlephobia/min/@cashu/cashu-ts)
 
-⚠️ **Don't be reckless:** This project is in early development, it does however work with real sats! Always use amounts you don't mind loosing.
+⚠️ **Don't be reckless:** This project is in early development, it does however work with real sats! Always use amounts you don't mind losing.
 
 Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
 

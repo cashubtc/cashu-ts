@@ -1,5 +1,12 @@
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { MintKeys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
+import {
+	AmountPreference,
+	MintKeys,
+	Proof,
+	Token,
+	TokenEntry,
+	TokenV2
+} from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
@@ -10,8 +17,16 @@ import { Buffer } from 'buffer/';
  * @param value The number to split
  * @returns An array containing the constituent powers of 2
  */
-export function splitAmount(value: number): number[] {
+function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
+	if (amountPreference) {
+		chunks.push(...getPreference(value, amountPreference));
+		value =
+			value -
+			chunks.reduce((curr, acc) => {
+				return curr + acc;
+			}, 0);
+	}
 	for (let i = 0; i < 32; i++) {
 		const mask: number = 1 << i;
 		if ((value & mask) !== 0) {
@@ -21,12 +36,38 @@ export function splitAmount(value: number): number[] {
 	return chunks;
 }
 
-/**
- * Converts a Uint8Array of bytes to a BigInt number.
- * @param bytes The byte array to convert
- * @returns The BigInt representation
- */
-export function bytesToNumber(bytes: Uint8Array): bigint {
+function isPowerOfTwo(number: number) {
+	return number && !(number & (number - 1));
+}
+
+function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
+	const chunks: Array<number> = [];
+	let accumulator = 0;
+	preferredAmounts.forEach((pa) => {
+		if (!isPowerOfTwo(pa.amount)) {
+			throw new Error(
+				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
+			);
+		}
+		for (let i = 1; i <= pa.count; i++) {
+			accumulator += pa.amount;
+			if (accumulator > amount) {
+				return;
+			}
+			chunks.push(pa.amount);
+		}
+	});
+	return chunks;
+}
+
+function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
+	const amounts = splitAmount(amount);
+	return amounts.map((a) => {
+		return { amount: a, count: 1 };
+	});
+}
+
+function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
 
@@ -117,11 +158,17 @@ export function cleanToken(token: Token): Token {
 			tokenEntryMap[tokenEntry.mint].proofs.push(...[...tokenEntry.proofs]);
 			continue;
 		}
-		tokenEntryMap[tokenEntry.mint] = { mint: tokenEntry.mint, proofs: [...tokenEntry.proofs] };
+		tokenEntryMap[tokenEntry.mint] = {
+			mint: tokenEntry.mint,
+			proofs: [...tokenEntry.proofs]
+		};
 	}
 	return {
 		memo: token?.memo,
-		token: Object.values(tokenEntryMap).map((x) => ({ ...x, proofs: sortProofsById(x.proofs) }))
+		token: Object.values(tokenEntryMap).map((x) => ({
+			...x,
+			proofs: sortProofsById(x.proofs)
+		}))
 	};
 }
 export function sortProofsById(proofs: Array<Proof>) {
@@ -148,3 +195,13 @@ export function checkResponse(data: { error?: string; detail?: string }): void {
 export function joinUrls(...parts: string[]): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
+
+export {
+	bigIntStringify,
+	bytesToNumber,
+	getDecodedToken,
+	getEncodedToken,
+	hexToNumber,
+	splitAmount,
+	getDefaultAmountPreference
+};
