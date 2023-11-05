@@ -346,13 +346,13 @@ class CashuWallet {
 
 	/**
 	 * Regenerates
+	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count set number of blinded messages that should be generated
-	 * @param startIndex optionally set starting point for count (default is 0)
 	 * @returns proofs (and newKeys, if they have changed)
 	 */
 	async restore(
+		start: number,
 		count: number,
-		startIndex = 0,
 		keysetId?: string
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
 		if (!this._seed) {
@@ -360,7 +360,7 @@ class CashuWallet {
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
-		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, startIndex, keysetId);
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, start, keysetId);
 
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
 
