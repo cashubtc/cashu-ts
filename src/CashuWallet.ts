@@ -510,6 +510,10 @@ class CashuWallet {
 		count?: number,
 		keysetId?: string
 	): BlindedMessageData & { amounts: Array<number> } {
+		// if we atempt to create deterministic messages without a _seed, abort.
+		if (count!=undefined && !this._seed) {
+			throw new Error('Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit count param.')
+		}
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const rs: Array<bigint> = [];
