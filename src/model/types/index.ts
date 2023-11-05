@@ -337,7 +337,7 @@ export type GetInfoResponse = {
 	parameter: { peg_out_only: boolean };
 };
 /**
- * Response from mint at /info endpoint
+ * Response from mint at /restore endpoint
  */
 export type PostRestoreResponse = {
 	outputs: Array<SerializedBlindedMessage>;
