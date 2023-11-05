@@ -6,9 +6,6 @@ import { bytesToNumber } from './utils';
 import { hexToNumber } from '@noble/curves/abstract/utils';
 export const generateNewMnemonic = (): string => {
 	const mnemonic = generateMnemonic(wordlist, 128);
-	if (!validateMnemonic(mnemonic, wordlist)) {
-		return generateNewMnemonic();
-	}
 	return mnemonic;
 };
 

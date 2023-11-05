@@ -346,9 +346,9 @@ class CashuWallet {
 
 	/**
 	 * Regenerates
-	 * @param count? set number of blinded messages that should be generated
+	 * @param count set number of blinded messages that should be generated
 	 * @param startIndex optionally set starting point for count (default is 0)
-	 * @returns proofs and newKeys if they have changed
+	 * @returns proofs (and newKeys, if they have changed)
 	 */
 	async restore(
 		count: number,
@@ -358,6 +358,7 @@ class CashuWallet {
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
 		}
+		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
 		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, startIndex, keysetId);
 
@@ -484,7 +485,7 @@ class CashuWallet {
 	/**
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for
-	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param amountPreference optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
@@ -501,6 +502,7 @@ class CashuWallet {
 	 * Creates blinded messages for a according to @param amounts
 	 * @param amount array of amounts to create blinded messages for
 	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createBlindedMessages(
@@ -526,7 +528,7 @@ class CashuWallet {
 			const blindedMessage = new BlindedMessage(amounts[i], B_);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
-		return { amounts, blindedMessages, rs, secrets };
+		return { blindedMessages, secrets, rs, amounts };
 	}
 
 	/**
