@@ -7,30 +7,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Set up Docker Compose
+        uses: adambirds/docker-compose-action@v1.3.0
+      - name: Checkout Nutshell repository
         uses: actions/checkout@v2
         with:
           repository: 'cashubtc/nutshell'
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Compose
-        uses: adambirds/docker-compose-action@v1.3.0
-        with:
-          compose-file: ../nutshell/docker-compose.yml
-
-      - name: Build and start services
+      - name: Build and start mint
         run: |
           docker-compose up -d
-      - name: Check if services are running
-        run: netstat -lp
-      - name: Run ifconfig
-        run: ifconfig
-      - name: Curl on localhost:4448/keys
-        run: curl http://localhost:4448/
-
       - name: Curl on localhost:3338/keys
         run: curl http://localhost:3338/keys
-
       - name: Navigate to the parent directory
         run: cd ..
       - uses: actions/checkout@v3
