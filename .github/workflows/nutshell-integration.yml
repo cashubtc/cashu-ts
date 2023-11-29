@@ -25,7 +25,7 @@ jobs:
           MINT_LISTEN_PORT: 3338
           MINT_PRIVATE_KEY: TEST_PRIVATE_KEY
         run: |
-          docker-compose up -d
+          docker-compose up
       - name: Check if services are running
         run: netstat -lp
       - name: Curl on localhost:3338/keys
