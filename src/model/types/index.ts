@@ -89,10 +89,6 @@ export type ReceiveTokenEntryResponse = {
 	 * Proofs that could not be received. Doesn't throw an error, but if this field is populated it should be handled by the implementation accordingly
 	 */
 	proofsWithError: Array<Proof> | undefined;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 
 /**
@@ -107,10 +103,6 @@ export type SendResponse = {
 	 * Proofs to be sent, matching the chosen amount
 	 */
 	send: Array<Proof>;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 /**
  * Response when receiving a complete token.
@@ -124,10 +116,6 @@ export type ReceiveResponse = {
 	 * TokenEntries that had errors. No error will be thrown, but clients can choose to handle tokens with errors accordingly.
 	 */
 	tokensWithErrors: Token | undefined;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 
 /**
@@ -228,10 +216,6 @@ export type PayLnInvoiceResponse = {
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
 	change: Array<Proof>;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 
 /**
@@ -239,11 +223,11 @@ export type PayLnInvoiceResponse = {
  */
 export type SplitPayload = {
 	/**
-	 * Proofs to be split
+	 * Inputs to the split operation
 	 */
-	proofs: Array<Proof>;
+	inputs: Array<Proof>;
 	/**
-	 * Fresh blinded messages to be signed by the mint to create the split proofs
+	 * Outputs (blinded messages) to be signed by the mint 
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
@@ -254,7 +238,7 @@ export type SplitResponse = {
 	/**
 	 * represents the outputs after the split
 	 */
-	promises: Array<SerializedBlindedSignature>;
+	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 /**

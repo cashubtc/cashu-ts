@@ -99,7 +99,6 @@ class CashuWallet {
 	 */
 	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
 		const meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
-		// const { fee } = await this.mint.checkFees({ pr: invoice });
 		return meltQuote;
 	}
 	/**
@@ -217,12 +216,12 @@ class CashuWallet {
 				tokenEntry.proofs,
 				preference
 			);
-			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
-				promises,
+				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(promises, tokenEntry.mint)
+				await this.getKeys(signatures, tokenEntry.mint)
 			);
 			proofs.push(...newProofs);
 		} catch (error) {
@@ -271,12 +270,12 @@ class CashuWallet {
 		if (amount < amountAvailable || preference) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
 			const { payload, blindedMessages } = this.createSplitPayload(amountSend, proofsToSend, preference);
-			const { promises } = await this.mint.split(payload);
+			const { signatures } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
-				promises,
+				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(promises)
+				await this.getKeys(signatures)
 			);
 			// sum up proofs until amount2 is reached
 			const splitProofsToKeep: Array<Proof> = [];
@@ -392,7 +391,7 @@ class CashuWallet {
 		};
 
 		const payload = {
-			proofs: proofsToSend,
+			inputs: proofsToSend,
 			outputs: [...blindedMessages.blindedMessages]
 		};
 		return { payload, blindedMessages };

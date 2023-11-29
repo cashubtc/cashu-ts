@@ -162,12 +162,12 @@ class CashuMint {
 	 */
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
 		const data = await request<SplitResponse>({
-			endpoint: joinUrls(mintUrl, 'split'),
+			endpoint: joinUrls(mintUrl, '/v1/split'),
 			method: 'POST',
 			requestBody: splitPayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.promises)) {
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
 			throw new Error('bad response');
 		}
 
@@ -239,37 +239,37 @@ class CashuMint {
 	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
 		return CashuMint.melt(this._mintUrl, meltPayload);
 	}
-	/**
-	 * Estimate fees for a given LN invoice
-	 * @param mintUrl
-	 * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
-	 * @returns estimated Fee
-	 */
-	public static async checkFees(
-		mintUrl: string,
-		checkfeesPayload: { pr: string }
-	): Promise<{ fee: number }> {
-		const data = await request<{ fee: number }>({
-			endpoint: joinUrls(mintUrl, 'checkfees'),
-			method: 'POST',
-			requestBody: checkfeesPayload
-		});
+	// /**
+	//  * Estimate fees for a given LN invoice
+	//  * @param mintUrl
+	//  * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
+	//  * @returns estimated Fee
+	//  */
+	// public static async checkFees(
+	// 	mintUrl: string,
+	// 	checkfeesPayload: { pr: string }
+	// ): Promise<{ fee: number }> {
+	// 	const data = await request<{ fee: number }>({
+	// 		endpoint: joinUrls(mintUrl, 'checkfees'),
+	// 		method: 'POST',
+	// 		requestBody: checkfeesPayload
+	// 	});
 
-		if (!isObj(data) || typeof data?.fee !== 'number') {
-			throw new Error('bad response');
-		}
+	// 	if (!isObj(data) || typeof data?.fee !== 'number') {
+	// 		throw new Error('bad response');
+	// 	}
 
-		return data;
-	}
-	/**
-	 * Estimate fees for a given LN invoice
-	 * @param mintUrl
-	 * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
-	 * @returns estimated Fee
-	 */
-	async checkFees(checkfeesPayload: { pr: string }): Promise<{ fee: number }> {
-		return CashuMint.checkFees(this._mintUrl, checkfeesPayload);
-	}
+	// 	return data;
+	// }
+	// /**
+	//  * Estimate fees for a given LN invoice
+	//  * @param mintUrl
+	//  * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
+	//  * @returns estimated Fee
+	//  */
+	// async checkFees(checkfeesPayload: { pr: string }): Promise<{ fee: number }> {
+	// 	return CashuMint.checkFees(this._mintUrl, checkfeesPayload);
+	// }
 	/**
 	 * Checks if specific proofs have already been redeemed
 	 * @param mintUrl

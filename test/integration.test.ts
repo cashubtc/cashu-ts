@@ -2,6 +2,7 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
+import { getEncodedToken } from '../src/utils.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -50,7 +51,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 		const request = await wallet.requestMint(100);
-		const fee = (await wallet.getLNQuote(request.request)).fee_reserve;
+		const fee = (await wallet.getMeltQuote(request.request)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because local invoice, fee should be 0
 		expect(fee).toBe(0);
@@ -58,7 +59,7 @@ describe('mint api', () => {
 	test('get fee for external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const fee = (await wallet.getLNQuote(externalInvoice)).fee_reserve;
+		const fee = (await wallet.getMeltQuote(externalInvoice)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because external invoice, fee should be > 0
 		expect(fee).toBeGreaterThan(0);
@@ -71,7 +72,7 @@ describe('mint api', () => {
 
 		// expect no fee because local invoice
 		const requestToPay = await wallet.requestMint(10);
-		const quote = await wallet.getLNQuote(requestToPay.request);
+		const quote = await wallet.getMeltQuote(requestToPay.request);
 		const fee = quote.fee_reserve
 		expect(fee).toBe(0);
 
@@ -97,7 +98,7 @@ describe('mint api', () => {
 		const request = await wallet.requestMint(3000);
 		const tokens = await wallet.requestTokens(3000, request.quote);
 
-		const fee = (await wallet.getLNQuote(externalInvoice)).fee_reserve;
+		const fee = (await wallet.getMeltQuote(externalInvoice)).fee_reserve;
 		expect(fee).toBeGreaterThan(0);
 
 		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);
@@ -116,5 +117,33 @@ describe('mint api', () => {
 		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange)
 		expect(returnChangeSpent).toBeDefined();
 		expect(returnChangeSpent).toEqual([]);
+	});
+	test('test send tokens', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const request = await wallet.requestMint(100);
+		const tokens = await wallet.requestTokens(100, request.quote);
+
+		const sendResponse = await wallet.send(10, tokens.proofs);
+		expect(sendResponse).toBeDefined();
+		expect(sendResponse.send).toBeDefined();
+		expect(sendResponse.returnChange).toBeDefined();
+		expect(sendResponse.send.length).toBe(2);
+		expect(sendResponse.returnChange.length).toBe(4);
+	});
+	test('receive tokens', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const request = await wallet.requestMint(100);
+		const tokens = await wallet.requestTokens(100, request.quote);
+
+		const sendResponse = await wallet.send(10, tokens.proofs);
+		const encoded = getEncodedToken({
+			token: [{ mint: mintUrl, proofs: sendResponse.send }]
+		});
+		const response = await wallet.receive(encoded);
+		expect(response).toBeDefined();
+		expect(response.token).toBeDefined();
+		expect(response.tokensWithErrors).toBeUndefined();
 	});
 });
