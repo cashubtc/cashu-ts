@@ -16,7 +16,7 @@ jobs:
       - name: Set up Docker Compose
         uses: adambirds/docker-compose-action@v1.3.0
         with:
-          compose-file: nutshell/docker-compose.yml
+          compose-file: ../nutshell/docker-compose.yml
 
       - name: Build and start services
         run: |
