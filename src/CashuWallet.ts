@@ -9,9 +9,7 @@ import {
 	MeltPayload,
 	MeltQuoteResponse,
 	MintKeys,
-	MintKeyset,
 	MeltTokensResponse,
-	PaymentPayload,
 	PostMintPayload,
 	Proof,
 	ReceiveResponse,
@@ -25,7 +23,6 @@ import {
 } from './model/types/index.js';
 import {
 	cleanToken,
-	deriveKeysetId,
 	getDecodedToken,
 	getDefaultAmountPreference,
 	splitAmount

@@ -22,7 +22,7 @@ jobs:
         env:
           MINT_LIGHTNING_BACKEND: FakeWallet
         run: |
-          docker-compose up -d
+          docker-compose up --build -d
 
       - name: Navigate to the parent directory
         run: cd ..
