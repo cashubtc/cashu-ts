@@ -27,7 +27,7 @@ jobs:
         run: |
           docker-compose up -d
       - name: Check if services are running
-        run: docker-compose ps
+        run: netstat -lp
 
       - name: Navigate to the parent directory
         run: cd ..
