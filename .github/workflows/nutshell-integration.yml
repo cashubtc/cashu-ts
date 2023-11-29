@@ -27,7 +27,6 @@ jobs:
       - name: Run Tests
         uses: actions/setup-node@v3
         with:
-          node-version: 20x
           cache: 'npm'
       - run: npm ci
       - run: npm run compile
