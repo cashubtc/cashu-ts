@@ -118,7 +118,20 @@ describe('mint api', () => {
 		expect(returnChangeSpent).toBeDefined();
 		expect(returnChangeSpent).toEqual([]);
 	});
-	test('test send tokens', async () => {
+	test('test send tokens exact without previous split', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const request = await wallet.requestMint(64);
+		const tokens = await wallet.requestTokens(64, request.quote);
+
+		const sendResponse = await wallet.send(64, tokens.proofs);
+		expect(sendResponse).toBeDefined();
+		expect(sendResponse.send).toBeDefined();
+		expect(sendResponse.returnChange).toBeDefined();
+		expect(sendResponse.send.length).toBe(1);
+		expect(sendResponse.returnChange.length).toBe(0);
+	});
+	test('test send tokens with change', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 		const request = await wallet.requestMint(100);

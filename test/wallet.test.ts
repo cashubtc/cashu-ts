@@ -287,7 +287,7 @@ describe('send', () => {
 	});
 	test('test send over paying. Should return change', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/split')
 			.reply(200, {
 				signatures: [
 					{
@@ -325,7 +325,7 @@ describe('send', () => {
 
 	test('test send over paying2', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/split')
 			.reply(200, {
 				signatures: [
 					{
@@ -363,7 +363,7 @@ describe('send', () => {
 	});
 	test('test send preference', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/split')
 			.reply(200, {
 				signatures: [
 					{
@@ -418,7 +418,7 @@ describe('send', () => {
 
 	test('test send preference overpay', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/split')
 			.reply(200, {
 				signatures: [
 					{
@@ -473,7 +473,7 @@ describe('send', () => {
 
 	test('test send not enough funds', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/split')
 			.reply(200, {
 				signatures: [
 					{
@@ -490,7 +490,7 @@ describe('send', () => {
 		expect(result).toEqual(new Error('Not enough funds available'));
 	});
 	test('test send bad response', async () => {
-		nock(mintUrl).post('/split').reply(200, {});
+		nock(mintUrl).post('/v1/split').reply(200, {});
 		const wallet = new CashuWallet(mint);
 
 		const result = await wallet

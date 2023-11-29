@@ -50,7 +50,7 @@ class Wallet {
 	private rG: ProjPointType<bigint> | undefined;
 	private B_: ProjPointType<bigint> | undefined;
 	private secret = new Uint8Array();
-	constructor() {}
+	constructor() { }
 
 	async createBlindedMessage(message: string): Promise<ProjPointType<bigint>> {
 		const enc = new TextEncoder();
