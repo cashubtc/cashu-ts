@@ -21,9 +21,51 @@ export type Proof = {
 };
 
 /**
- * A mints publickey-set.
+ * An array of mint keysets
  */
-export type MintKeys = { [k: number]: string };
+export type MintActiveKeys = Array<MintKeys>;
+
+/**
+ * A mint keyset.
+ */
+export type MintKeys = {
+	/**
+	 * Keyset ID
+	 */
+	id: string;
+	/**
+	 * Unit of the keyset.
+	 */
+	unit: string;
+	/**
+	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+	 */
+	keys: { [amount: number]: string };
+
+};
+
+/**
+ * An array of mint keyset entries.
+ */
+export type MintAllKeysets = Array<MintKeyset>;
+
+/**
+ * A mint keyset entry.
+ */
+export type MintKeyset = {
+	/**
+	 * Keyset ID
+	 */
+	id: string;
+	/**
+	 * Unit of the keyset.
+	 */
+	unit: string;
+	/**
+	 * Whether the keyset is active or not.
+	 */
+	active: boolean;
+};
 
 /**
  * response when after receiving a single TokenEntry

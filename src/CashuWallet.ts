@@ -7,6 +7,7 @@ import {
 	BlindedMessageData,
 	BlindedTransaction,
 	MintKeys,
+	MintKeyset,
 	PayLnInvoiceResponse,
 	PaymentPayload,
 	Proof,
@@ -31,7 +32,7 @@ import {
  * This class should act as the entry point for this library
  */
 class CashuWallet {
-	private _keys: MintKeys;
+	private _keys = {} as MintKeys;
 	private _keysetId = '';
 	mint: CashuMint;
 
@@ -40,9 +41,9 @@ class CashuWallet {
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
 	constructor(mint: CashuMint, keys?: MintKeys) {
-		this._keys = keys || {};
 		this.mint = mint;
 		if (keys) {
+			this._keys = keys;
 			this._keysetId = deriveKeysetId(this._keys);
 		}
 	}
@@ -357,8 +358,9 @@ class CashuWallet {
 
 		const keys =
 			!mint || mint === this.mint.mintUrl
-				? await this.mint.getKeys(arr[0].id)
-				: await CashuMint.getKeys(mint, arr[0].id);
+				? await this.mint.getKeys(keysetId)
+				: await this.mint.getKeys(keysetId, mint);
+
 		return keys;
 	}
 

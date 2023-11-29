@@ -5,6 +5,8 @@ import {
 	MeltPayload,
 	MeltResponse,
 	MintKeys,
+	MintActiveKeys,
+	MintAllKeysets,
 	RequestMintResponse,
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
@@ -21,7 +23,7 @@ class CashuMint {
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 */
-	constructor(private _mintUrl: string) {}
+	constructor(private _mintUrl: string) { }
 
 	get mintUrl() {
 		return this._mintUrl;
@@ -98,37 +100,51 @@ class CashuMint {
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
 	 * @returns
 	 */
-	public static async getKeys(mintUrl: string, keysetId?: string): Promise<MintKeys> {
+	public static async getKeys(mintUrl: string, keysetId?: string): Promise<MintActiveKeys> {
+		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
 			// make the keysetId url safe
 			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
 		}
-		return request<MintKeys>({
-			endpoint: keysetId ? joinUrls(mintUrl, 'keys', keysetId) : joinUrls(mintUrl, 'keys')
+
+		const data = await request<MintActiveKeys>({
+			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, 'keys')
 		});
+
+		if (!isObj(data) || !Array.isArray(data)) {
+			throw new Error('bad response');
+		}
+
+		return data;
 	}
 	/**
 	 * Get the mints public keys
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
 	 * @returns the mints public keys
 	 */
-	async getKeys(keysetId?: string): Promise<MintKeys> {
-		return CashuMint.getKeys(this._mintUrl, keysetId);
+	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintKeys> {
+		const allKeys = CashuMint.getKeys(mintUrl || this._mintUrl, keysetId);
+		// find keyset with unit 'sat'
+		const satKeys = (await allKeys).find((keys) => keys.unit === 'sat');
+		if (!satKeys) {
+			throw new Error('No keyset with unit "sat" found');
+		}
+		return satKeys
 	}
 	/**
 	 * Get the mints keysets in no specific order
 	 * @param mintUrl
 	 * @returns all the mints past and current keysets.
 	 */
-	public static async getKeySets(mintUrl: string): Promise<{ keysets: Array<string> }> {
-		return request<{ keysets: Array<string> }>({ endpoint: joinUrls(mintUrl, 'keysets') });
+	public static async getKeySets(mintUrl: string): Promise<MintAllKeysets> {
+		return request<MintAllKeysets>({ endpoint: joinUrls(mintUrl, '/v1/keysets') });
 	}
 
 	/**
 	 * Get the mints keysets in no specific order
 	 * @returns all the mints past and current keysets.
 	 */
-	async getKeySets(): Promise<{ keysets: Array<string> }> {
+	async getKeySets(): Promise<MintAllKeysets> {
 		return CashuMint.getKeySets(this._mintUrl);
 	}
 
