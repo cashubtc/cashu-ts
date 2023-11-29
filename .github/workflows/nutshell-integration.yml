@@ -28,6 +28,8 @@ jobs:
           docker-compose up -d
       - name: Check if services are running
         run: netstat -lp
+      - name: Curl on localhost:3338/keys
+        run: curl http://localhost:3338/keys
 
       - name: Navigate to the parent directory
         run: cd ..
