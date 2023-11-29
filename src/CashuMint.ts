@@ -11,7 +11,10 @@ import {
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
 	SplitPayload,
-	SplitResponse
+	SplitResponse,
+	RequestMintPayload,
+	PostMintPayload,
+	PostMintResponse
 } from './model/types/index.js';
 import request from './request.js';
 import { isObj, joinUrls } from './utils.js';
@@ -33,7 +36,7 @@ class CashuMint {
 	 * @param mintUrl
 	 */
 	public static async getInfo(mintUrl: string): Promise<GetInfoResponse> {
-		return request<GetInfoResponse>({ endpoint: joinUrls(mintUrl, 'info') });
+		return request<GetInfoResponse>({ endpoint: joinUrls(mintUrl, '/v1/info') });
 	}
 	/**
 	 * fetches mints info at the /info endpoint
@@ -47,9 +50,11 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	public static async requestMint(mintUrl: string, amount: number): Promise<RequestMintResponse> {
+	public static async requestMint(mintUrl: string, requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
 		return request<RequestMintResponse>({
-			endpoint: `${joinUrls(mintUrl, 'mint')}?amount=${amount}`
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
+			method: 'POST',
+			requestBody: requestMintPayload
 		});
 	}
 
@@ -58,8 +63,8 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async requestMint(amount: number): Promise<RequestMintResponse> {
-		return CashuMint.requestMint(this._mintUrl, amount);
+	async requestMint(requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
+		return CashuMint.requestMint(this._mintUrl, requestMintPayload);
 	}
 	/**
 	 * Requests the mint to perform token minting after the LN invoice has been paid
@@ -70,16 +75,15 @@ class CashuMint {
 	 */
 	public static async mint(
 		mintUrl: string,
-		payloads: { outputs: Array<SerializedBlindedMessage> },
-		hash: string
+		mintPayload: PostMintPayload,
 	) {
-		const data = await request<{ promises: Array<SerializedBlindedSignature> }>({
-			endpoint: `${joinUrls(mintUrl, 'mint')}?hash=${hash}`,
+		const data = await request<PostMintResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/bolt11'),
 			method: 'POST',
-			requestBody: payloads
+			requestBody: mintPayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.promises)) {
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
 			throw new Error('bad response');
 		}
 
@@ -91,8 +95,8 @@ class CashuMint {
 	 * @param hash hash (id) used for by the mint to keep track of wether the invoice has been paid yet
 	 * @returns serialized blinded signatures
 	 */
-	async mint(payloads: { outputs: Array<SerializedBlindedMessage> }, hash: string) {
-		return CashuMint.mint(this._mintUrl, payloads, hash);
+	async mint(mintPayload: PostMintPayload) {
+		return CashuMint.mint(this._mintUrl, mintPayload);
 	}
 	/**
 	 * Get the mints public keys
@@ -108,10 +112,10 @@ class CashuMint {
 		}
 
 		const data = await request<MintActiveKeys>({
-			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, 'keys')
+			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, '/v1/keys')
 		});
 
-		if (!isObj(data) || !Array.isArray(data)) {
+		if (!isObj(data) || !Array.isArray(data.keysets)) {
 			throw new Error('bad response');
 		}
 
@@ -125,7 +129,7 @@ class CashuMint {
 	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintKeys> {
 		const allKeys = CashuMint.getKeys(mintUrl || this._mintUrl, keysetId);
 		// find keyset with unit 'sat'
-		const satKeys = (await allKeys).find((keys) => keys.unit === 'sat');
+		const satKeys = ((await allKeys).keysets).find((keys) => keys.unit === 'sat');
 		if (!satKeys) {
 			throw new Error('No keyset with unit "sat" found');
 		}

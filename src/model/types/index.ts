@@ -23,7 +23,12 @@ export type Proof = {
 /**
  * An array of mint keysets
  */
-export type MintActiveKeys = Array<MintKeys>;
+export type MintActiveKeys = {
+	/**
+	 * Keysets
+	 */
+	keysets: Array<MintKeys>;
+};
 
 /**
  * A mint keyset.
@@ -47,7 +52,12 @@ export type MintKeys = {
 /**
  * An array of mint keyset entries.
  */
-export type MintAllKeysets = Array<MintKeyset>;
+export type MintAllKeysets = {
+	/**
+	 * Keysets
+	 */
+	keysets: Array<MintKeyset>;
+};
 
 /**
  * A mint keyset entry.
@@ -233,10 +243,47 @@ export type ApiError = {
 	detail?: string;
 };
 
+/**
+ * Payload that needs to be sent to the mint when requesting a mint
+ */
+export type RequestMintPayload = {
+	/**
+	 * Unit to be minted
+	 */
+	unit: string;
+	/**
+	 * Amount to be minted
+	 */
+	amount: number;
+};
+/**
+ * Response from the mint after requesting a mint
+ */
 export type RequestMintResponse = {
-	pr: string;
-	hash: string;
+	request: string;
+	quote: string;
 } & ApiError;
+
+/**
+ * Payload that needs to be sent to the mint when requesting a mint
+ */
+export type PostMintPayload = {
+	/**
+	 * Quote ID received from the mint.
+	 */
+	quote: string;
+	/**
+	 * Outputs (blinded messages) to be signed by the mint.
+	 */
+	outputs: Array<SerializedBlindedMessage>
+};
+/**
+ * Response from the mint after requesting a mint
+ */
+export type PostMintResponse = {
+	signatures: Array<SerializedBlindedSignature>;
+} & ApiError;
+
 
 /**
  * Payload that needs to be sent to the mint when checking for spendable proofs
@@ -270,6 +317,10 @@ export type SerializedBlindedMessage = {
 	 * Blinded message
 	 */
 	B_: string;
+	/**	
+	 * Keyset id
+	 */
+	id: string;
 };
 /**
  * Blinded signature as it is received from the mint

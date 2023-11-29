@@ -10,9 +10,11 @@ import {
 	MintKeyset,
 	PayLnInvoiceResponse,
 	PaymentPayload,
+	PostMintPayload,
 	Proof,
 	ReceiveResponse,
 	ReceiveTokenEntryResponse,
+	RequestMintPayload,
 	SendResponse,
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
@@ -77,7 +79,11 @@ class CashuWallet {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	requestMint(amount: number) {
-		return this.mint.requestMint(amount);
+		const requestMintPayload: RequestMintPayload = {
+			unit: 'sat',
+			amount: amount
+		}
+		return this.mint.requestMint(requestMintPayload);
 	}
 
 	/**
@@ -298,15 +304,20 @@ class CashuWallet {
 		hash: string,
 		AmountPreference?: Array<AmountPreference>
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
+		await this.initKeys();
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
+			this.keysetId,
 			AmountPreference
 		);
-		const payloads = { outputs: blindedMessages };
-		const { promises } = await this.mint.mint(payloads, hash);
+		const postMintPayload: PostMintPayload = {
+			outputs: blindedMessages,
+			quote: hash
+		};
+		const { signatures } = await this.mint.mint(postMintPayload);
 		return {
-			proofs: dhke.constructProofs(promises, rs, secrets, await this.getKeys(promises)),
-			newKeys: await this.changedKeys(promises)
+			proofs: dhke.constructProofs(signatures, rs, secrets, await this.getKeys(signatures)),
+			newKeys: await this.changedKeys(signatures)
 		};
 	}
 
@@ -316,7 +327,8 @@ class CashuWallet {
 	private async initKeys() {
 		if (!this.keysetId || !Object.keys(this.keys).length) {
 			this.keys = await this.mint.getKeys();
-			this._keysetId = deriveKeysetId(this.keys);
+			// this._keysetId = deriveKeysetId(this.keys);
+			this._keysetId = this.keys.id;
 		}
 	}
 
@@ -380,8 +392,8 @@ class CashuWallet {
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
-		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount);
-		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference);
+		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount, this.keysetId);
+		const sendBlindedMessages = this.createRandomBlindedMessages(amount, this.keysetId, preference);
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -416,6 +428,7 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
+		keysetId: string,
 		amountPreference?: Array<AmountPreference>
 	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
@@ -427,7 +440,7 @@ class CashuWallet {
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
-			const blindedMessage = new BlindedMessage(amounts[i], B_);
+			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 		return { blindedMessages, secrets, rs, amounts };
@@ -449,7 +462,7 @@ class CashuWallet {
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
-			const blindedMessage = new BlindedMessage(0, B_);
+			const blindedMessage = new BlindedMessage(0, B_, "");
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 
