@@ -215,6 +215,7 @@ class CashuWallet {
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
+				keyset,
 				preference
 			);
 			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
@@ -252,7 +253,7 @@ class CashuWallet {
 		if (preference) {
 			amount = preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
 		}
-
+		const keyset = await this.initKeys();
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const proofsToKeep: Array<Proof> = [];
@@ -270,13 +271,13 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable || preference) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(amountSend, proofsToSend, preference);
+			const { payload, blindedMessages } = this.createSplitPayload(amountSend, proofsToSend, keyset, preference);
 			const { signatures } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
 				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(signatures)
+				keyset
 			);
 			// sum up proofs until amount2 is reached
 			const splitProofsToKeep: Array<Proof> = [];
@@ -322,7 +323,7 @@ class CashuWallet {
 		};
 		const { signatures } = await this.mint.mint(postMintPayload);
 		return {
-			proofs: dhke.constructProofs(signatures, rs, secrets, await this.getKeys(signatures))
+			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
 		};
 	}
 
@@ -372,18 +373,12 @@ class CashuWallet {
 	private createSplitPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
-		preference?: Array<AmountPreference>,
-		keyset?: MintKeys
+		keyset: MintKeys,
+		preference?: Array<AmountPreference>
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
 	} {
-		if (!keyset) {
-			if (!this.keys) {
-				throw new Error('No keyset available');
-			}
-			keyset = this.keys;
-		}
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount, keyset);
 		const sendBlindedMessages = this.createRandomBlindedMessages(amount, keyset, preference);

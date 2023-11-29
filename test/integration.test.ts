@@ -144,7 +144,7 @@ describe('mint api', () => {
 		expect(sendResponse.send.length).toBe(2);
 		expect(sendResponse.returnChange.length).toBe(4);
 	});
-	test('receive tokens', async () => {
+	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 		const request = await wallet.requestMint(100);
@@ -153,6 +153,19 @@ describe('mint api', () => {
 		const sendResponse = await wallet.send(10, tokens.proofs);
 		const encoded = getEncodedToken({
 			token: [{ mint: mintUrl, proofs: sendResponse.send }]
+		});
+		const response = await wallet.receive(encoded);
+		expect(response).toBeDefined();
+		expect(response.token).toBeDefined();
+		expect(response.tokensWithErrors).toBeUndefined();
+	});
+	test('receive tokens with previous mint', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const request = await wallet.requestMint(64);
+		const tokens = await wallet.requestTokens(64, request.quote);
+		const encoded = getEncodedToken({
+			token: [{ mint: mintUrl, proofs: tokens.proofs }]
 		});
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
