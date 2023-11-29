@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - name: Set up Docker Compose
         uses: adambirds/docker-compose-action@v1.3.0
@@ -17,7 +17,7 @@ jobs:
 
       - name: Build and start mint
         run: |
-          docker-compose up
+          docker-compose up -d
       - name: Run netstat
         run: netstat -lp
       - name: Curl on localhost:3338/keys
