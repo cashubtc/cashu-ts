@@ -152,7 +152,7 @@ describe('checkProofsSpent', () => {
 	];
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
-			.post('/check')
+			.post('/v1/check')
 			.reply(200, { spendable: [true] });
 		const wallet = new CashuWallet(mint);
 
@@ -237,7 +237,7 @@ describe('requestTokens', () => {
 			});
 		const wallet = new CashuWallet(mint);
 
-		const { proofs } = await wallet.requestTokens(1, '');
+		const { proofs } = await wallet.mintTokens(1, '');
 
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
@@ -248,7 +248,7 @@ describe('requestTokens', () => {
 		nock(mintUrl).post('/v1/mint/bolt11').reply(200, {});
 		const wallet = new CashuWallet(mint);
 
-		const result = await wallet.requestTokens(1, '').catch((e) => e);
+		const result = await wallet.mintTokens(1, '').catch((e) => e);
 
 		expect(result).toEqual(new Error('bad response'));
 	});

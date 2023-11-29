@@ -203,7 +203,7 @@ export type MeltResponse = {
 /**
  * Response after paying a Lightning invoice
  */
-export type PayLnInvoiceResponse = {
+export type MeltTokensResponse = {
 	/**
 	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
 	 */

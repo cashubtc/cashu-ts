@@ -10,7 +10,7 @@ import {
 	MeltQuoteResponse,
 	MintKeys,
 	MintKeyset,
-	PayLnInvoiceResponse,
+	MeltTokensResponse,
 	PaymentPayload,
 	PostMintPayload,
 	Proof,
@@ -68,33 +68,82 @@ class CashuWallet {
 		return this._keysetId;
 	}
 	/**
-	 * returns proofs that are already spent (use for keeping wallet state clean)
-	 * @param proofs (only the 'secret' field is required)
-	 * @returns
+	 * Initialize the wallet with the mints public keys
 	 */
-	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
-		const payload = {
-			//send only the secret
-			proofs: proofs.map((p) => ({ secret: p.secret }))
-		};
-		const { spendable } = await this.mint.check(payload);
-		return proofs.filter((_, i) => !spendable[i]);
+	private async initKeys(): Promise<MintKeys> {
+		if (!this.keysetId || !Object.keys(this.keys).length) {
+			this.keys = await this.mint.getKeys();
+			// this._keysetId = deriveKeysetId(this.keys);
+			this._keysetId = this.keys.id;
+		}
+		return this.keys;
 	}
+
 	/**
-	 * Starts a minting process by requesting an invoice from the mint
+	 * Get the mint's public keys for a given set of proofs
+	 * @param arr array of proofs
+	 * @param mint optional mint url
+	 * @returns keys
+	 */
+	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
+		await this.initKeys();
+		if (!arr?.length || !arr[0]?.id) {
+			return this.keys;
+		}
+		const keysetId = arr[0].id;
+		if (this.keysetId === keysetId) {
+			return this.keys;
+		}
+
+		const keys =
+			!mint || mint === this.mint.mintUrl
+				? await this.mint.getKeys(keysetId)
+				: await this.mint.getKeys(keysetId, mint);
+
+		return keys;
+	}
+
+	/**
+	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	requestMint(amount: number) {
+	getMintQuote(amount: number) {
 		const requestMintPayload: RequestMintPayload = {
 			unit: this.unit,
 			amount: amount
 		}
 		return this.mint.mintQuote(requestMintPayload);
 	}
+	/**
+	 * Mint tokens for a given mint quote
+	 * @param amount amount to request
+	 * @param quote ID of mint quote
+	 * @returns proofs
+	 */
+	async mintTokens(
+		amount: number,
+		quote: string,
+		AmountPreference?: Array<AmountPreference>
+	): Promise<{ proofs: Array<Proof> }> {
+		const keyset = await this.initKeys();
+		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
+			amount,
+			keyset,
+			AmountPreference
+		);
+		const postMintPayload: PostMintPayload = {
+			outputs: blindedMessages,
+			quote: quote
+		};
+		const { signatures } = await this.mint.mint(postMintPayload);
+		return {
+			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
+		};
+	}
 
 	/**
-	 * Requests a quote for a LN payment. Response returns amount and fees for a given LN invoice.
+	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.
 	 * @param invoice LN invoice that needs to get a fee estimate
 	 * @returns estimated Fee
 	 */
@@ -103,33 +152,16 @@ class CashuWallet {
 		return meltQuote;
 	}
 	/**
-	 * Executes a payment of an invoice on the Lightning network.
-	 * The combined amount of Proofs has to match the payment amount including fees.
-	 * @param invoice
-	 * @param proofsToSend the exact amount to send including fees
-	 * @param meltQuote melt quote for the invoice
+	 * Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote. 
+	 * Returns payment proof and change proofs
+	 * @param meltQuote ID of the melt quote
+	 * @param proofsToSend proofs to melt
+	 * @returns 
 	 */
-	async payLnInvoice(
-		invoice: string,
-		proofsToSend: Array<Proof>,
-		meltQuote?: MeltQuoteResponse
-	): Promise<PayLnInvoiceResponse> {
-		if (!meltQuote) {
-			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
-		}
-		return await this.payMeltQuote(meltQuote, proofsToSend);
-
-	}
-	/**
-	 * Pays an LN quote.
-	 * @param meltQuote
-	 * @param proofsToSend the exact amount to send including fees
-	 * @returns
-	 */
-	async payMeltQuote(
+	async meltTokens(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>
-	): Promise<PayLnInvoiceResponse> {
+	): Promise<MeltTokensResponse> {
 		const { blindedMessages, secrets, rs } = this.createBlankOutputs(meltQuote.fee_reserve);
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
@@ -146,23 +178,39 @@ class CashuWallet {
 				: []
 		};
 	}
+	/**
+	 * Helper function that pays a Lightning invoice directly without having to create a melt quote before
+	 * The combined amount of Proofs must match the payment amount including fees.
+	 * @param invoice
+	 * @param proofsToSend the exact amount to send including fees
+	 * @param meltQuote melt quote for the invoice
+	 * @returns
+	 */
+	async payLnInvoice(
+		invoice: string,
+		proofsToSend: Array<Proof>,
+		meltQuote?: MeltQuoteResponse
+	): Promise<MeltTokensResponse> {
+		if (!meltQuote) {
+			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+		}
+		return await this.meltTokens(meltQuote, proofsToSend);
 
-
+	}
 
 	/**
-	 * NOTE: This method is a helper. Should be moved. 
-	 * 
-	 * Use a cashu token to pay an ln invoice
+	 * Helper function to ingest a Cashu token and pay a Lightning invoice with it.
 	 * @param invoice Lightning invoice
 	 * @param token cashu token
 	 */
-	payLnInvoiceWithToken(invoice: string, token: string): Promise<PayLnInvoiceResponse> {
+	payLnInvoiceWithToken(invoice: string, token: string): Promise<MeltTokensResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
 			.filter((x) => x.mint === this.mint.mintUrl)
 			.flatMap((t) => t.proofs);
 		return this.payLnInvoice(invoice, proofs);
 	}
+
 	/**
 	 * Receive an encoded Cashu token
 	 * @param encodedToken Cashu token
@@ -197,7 +245,6 @@ class CashuWallet {
 			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined,
 		};
 	}
-
 	/**
 	 * Receive a single cashu token entry
 	 * @param tokenEntry a single entry of a cashu token
@@ -300,70 +347,6 @@ class CashuWallet {
 		}
 		return { returnChange: proofsToKeep, send: proofsToSend };
 	}
-
-	/**
-	 * Request tokens from the mint
-	 * @param amount amount to request
-	 * @param hash hash to use to identify the request
-	 * @returns proofs
-	 */
-	async requestTokens(
-		amount: number,
-		hash: string,
-		AmountPreference?: Array<AmountPreference>
-	): Promise<{ proofs: Array<Proof> }> {
-		const keyset = await this.initKeys();
-		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
-			amount,
-			keyset,
-			AmountPreference
-		);
-		const postMintPayload: PostMintPayload = {
-			outputs: blindedMessages,
-			quote: hash
-		};
-		const { signatures } = await this.mint.mint(postMintPayload);
-		return {
-			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
-		};
-	}
-
-	/**
-	 * Initialize the wallet with the mints public keys
-	 */
-	private async initKeys(): Promise<MintKeys> {
-		if (!this.keysetId || !Object.keys(this.keys).length) {
-			this.keys = await this.mint.getKeys();
-			// this._keysetId = deriveKeysetId(this.keys);
-			this._keysetId = this.keys.id;
-		}
-		return this.keys;
-	}
-
-	/**
-	 * Get the mint's public keys for a given set of proofs
-	 * @param arr array of proofs
-	 * @param mint optional mint url
-	 * @returns keys
-	 */
-	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
-		await this.initKeys();
-		if (!arr?.length || !arr[0]?.id) {
-			return this.keys;
-		}
-		const keysetId = arr[0].id;
-		if (this.keysetId === keysetId) {
-			return this.keys;
-		}
-
-		const keys =
-			!mint || mint === this.mint.mintUrl
-				? await this.mint.getKeys(keysetId)
-				: await this.mint.getKeys(keysetId, mint);
-
-		return keys;
-	}
-
 	/**
 	 * Creates a split payload
 	 * @param amount1 amount to keep
@@ -400,6 +383,19 @@ class CashuWallet {
 			outputs: [...blindedMessages.blindedMessages]
 		};
 		return { payload, blindedMessages };
+	}
+	/**
+	 * returns proofs that are already spent (use for keeping wallet state clean)
+	 * @param proofs (only the 'secret' field is required)
+	 * @returns
+	 */
+	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
+		const payload = {
+			//send only the secret
+			proofs: proofs.map((p) => ({ secret: p.secret }))
+		};
+		const { spendable } = await this.mint.check(payload);
+		return proofs.filter((_, i) => !spendable[i]);
 	}
 	private splitReceive(
 		amount: number,

@@ -33,16 +33,16 @@ describe('mint api', () => {
 	test('request mint', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(100);
+		const request = await wallet.getMintQuote(100);
 		expect(request).toBeDefined();
 	});
 	test('mint tokens', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(1337);
+		const request = await wallet.getMintQuote(1337);
 		expect(request).toBeDefined();
 		expect(request.request).toContain('lnbc1337');
-		const tokens = await wallet.requestTokens(1337, request.quote);
+		const tokens = await wallet.mintTokens(1337, request.quote);
 		expect(tokens).toBeDefined();
 		// expect that the sum of all tokens.proofs.amount is equal to the requested amount
 		expect(tokens.proofs.reduce((a, b) => a + b.amount, 0)).toBe(1337);
@@ -50,7 +50,7 @@ describe('mint api', () => {
 	test('get fee for local invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(100);
+		const request = await wallet.getMintQuote(100);
 		const fee = (await wallet.getMeltQuote(request.request)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because local invoice, fee should be 0
@@ -67,11 +67,11 @@ describe('mint api', () => {
 	test('pay local invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(100);
-		const tokens = await wallet.requestTokens(100, request.quote);
+		const request = await wallet.getMintQuote(100);
+		const tokens = await wallet.mintTokens(100, request.quote);
 
 		// expect no fee because local invoice
-		const requestToPay = await wallet.requestMint(10);
+		const requestToPay = await wallet.getMintQuote(10);
 		const quote = await wallet.getMeltQuote(requestToPay.request);
 		const fee = quote.fee_reserve
 		expect(fee).toBe(0);
@@ -95,8 +95,8 @@ describe('mint api', () => {
 	test('pay external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(3000);
-		const tokens = await wallet.requestTokens(3000, request.quote);
+		const request = await wallet.getMintQuote(3000);
+		const tokens = await wallet.mintTokens(3000, request.quote);
 
 		const fee = (await wallet.getMeltQuote(externalInvoice)).fee_reserve;
 		expect(fee).toBeGreaterThan(0);
@@ -121,8 +121,8 @@ describe('mint api', () => {
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(64);
-		const tokens = await wallet.requestTokens(64, request.quote);
+		const request = await wallet.getMintQuote(64);
+		const tokens = await wallet.mintTokens(64, request.quote);
 
 		const sendResponse = await wallet.send(64, tokens.proofs);
 		expect(sendResponse).toBeDefined();
@@ -134,8 +134,8 @@ describe('mint api', () => {
 	test('test send tokens with change', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(100);
-		const tokens = await wallet.requestTokens(100, request.quote);
+		const request = await wallet.getMintQuote(100);
+		const tokens = await wallet.mintTokens(100, request.quote);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
 		expect(sendResponse).toBeDefined();
@@ -147,8 +147,8 @@ describe('mint api', () => {
 	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(100);
-		const tokens = await wallet.requestTokens(100, request.quote);
+		const request = await wallet.getMintQuote(100);
+		const tokens = await wallet.mintTokens(100, request.quote);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
 		const encoded = getEncodedToken({
@@ -162,8 +162,8 @@ describe('mint api', () => {
 	test('receive tokens with previous mint', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const request = await wallet.requestMint(64);
-		const tokens = await wallet.requestTokens(64, request.quote);
+		const request = await wallet.getMintQuote(64);
+		const tokens = await wallet.mintTokens(64, request.quote);
 		const encoded = getEncodedToken({
 			token: [{ mint: mintUrl, proofs: tokens.proofs }]
 		});

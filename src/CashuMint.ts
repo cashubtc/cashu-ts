@@ -8,8 +8,6 @@ import {
 	MintActiveKeys,
 	MintAllKeysets,
 	RequestMintResponse,
-	SerializedBlindedMessage,
-	SerializedBlindedSignature,
 	SplitPayload,
 	SplitResponse,
 	RequestMintPayload,
@@ -239,37 +237,6 @@ class CashuMint {
 	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
 		return CashuMint.melt(this._mintUrl, meltPayload);
 	}
-	// /**
-	//  * Estimate fees for a given LN invoice
-	//  * @param mintUrl
-	//  * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
-	//  * @returns estimated Fee
-	//  */
-	// public static async checkFees(
-	// 	mintUrl: string,
-	// 	checkfeesPayload: { pr: string }
-	// ): Promise<{ fee: number }> {
-	// 	const data = await request<{ fee: number }>({
-	// 		endpoint: joinUrls(mintUrl, 'checkfees'),
-	// 		method: 'POST',
-	// 		requestBody: checkfeesPayload
-	// 	});
-
-	// 	if (!isObj(data) || typeof data?.fee !== 'number') {
-	// 		throw new Error('bad response');
-	// 	}
-
-	// 	return data;
-	// }
-	// /**
-	//  * Estimate fees for a given LN invoice
-	//  * @param mintUrl
-	//  * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
-	//  * @returns estimated Fee
-	//  */
-	// async checkFees(checkfeesPayload: { pr: string }): Promise<{ fee: number }> {
-	// 	return CashuMint.checkFees(this._mintUrl, checkfeesPayload);
-	// }
 	/**
 	 * Checks if specific proofs have already been redeemed
 	 * @param mintUrl
@@ -281,7 +248,7 @@ class CashuMint {
 		checkPayload: CheckSpendablePayload
 	): Promise<CheckSpendableResponse> {
 		const data = await request<CheckSpendableResponse>({
-			endpoint: joinUrls(mintUrl, 'check'),
+			endpoint: joinUrls(mintUrl, '/v1/check'),
 			method: 'POST',
 			requestBody: checkPayload
 		});
