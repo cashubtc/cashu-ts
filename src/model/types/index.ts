@@ -144,18 +144,50 @@ export type PaymentPayload = {
 	proofs: Array<Proof>;
 };
 
+/** 
+ * Payload that needs to be send to the mint to request a melt quote
+ */
+export type MeltQuotePayload = {
+	/** 
+	 * Unit to be melted
+	 */
+	unit: string;
+	/**
+	 * Request to be melted to
+	 */
+	request: string;
+};
+
+/**
+ * Response from the mint after requesting a melt quote
+ */
+export type MeltQuoteResponse = {
+	/**
+	 * Quote ID
+	 */
+	quote: string;
+	/**
+	 * Amount to be melted
+	 */
+	amount: number;
+	/**
+	 * Fee reserve to be added to the amount
+	 */
+	fee_reserve: number;
+} & ApiError;
+
 /**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
  */
 export type MeltPayload = {
 	/**
-	 * Payment request/Lighting invoice that should get paid by the mint.
+	 * ID of the melt quote
 	 */
-	pr: string;
+	quote: string;
 	/**
-	 * Proofs, matching Lightning invoices amount + fees.
+	 * Inputs (Proofs) to be melted
 	 */
-	proofs: Array<Proof>;
+	inputs: Array<Proof>;
 	/**
 	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees
 	 */
@@ -173,7 +205,7 @@ export type MeltResponse = {
 	/**
 	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
-	preimage: string | null;
+	proof: string | null;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */

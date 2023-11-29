@@ -14,7 +14,9 @@ import {
 	SplitResponse,
 	RequestMintPayload,
 	PostMintPayload,
-	PostMintResponse
+	PostMintResponse,
+	MeltQuotePayload,
+	MeltQuoteResponse
 } from './model/types/index.js';
 import request from './request.js';
 import { isObj, joinUrls } from './utils.js';
@@ -50,7 +52,7 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	public static async requestMint(mintUrl: string, requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
+	public static async mintQuote(mintUrl: string, requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
 		return request<RequestMintResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
@@ -63,8 +65,8 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async requestMint(requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
-		return CashuMint.requestMint(this._mintUrl, requestMintPayload);
+	async mintQuote(requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
+		return CashuMint.mintQuote(this._mintUrl, requestMintPayload);
 	}
 	/**
 	 * Requests the mint to perform token minting after the LN invoice has been paid
@@ -126,10 +128,10 @@ class CashuMint {
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
 	 * @returns the mints public keys
 	 */
-	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintKeys> {
+	async getKeys(keysetId?: string, mintUrl?: string, unit?: string): Promise<MintKeys> {
 		const allKeys = CashuMint.getKeys(mintUrl || this._mintUrl, keysetId);
 		// find keyset with unit 'sat'
-		const satKeys = ((await allKeys).keysets).find((keys) => keys.unit === 'sat');
+		const satKeys = ((await allKeys).keysets).find((keys) => keys.unit === unit ? unit : 'sat');
 		if (!satKeys) {
 			throw new Error('No keyset with unit "sat" found');
 		}
@@ -180,6 +182,33 @@ class CashuMint {
 		return CashuMint.split(this._mintUrl, splitPayload);
 	}
 	/**
+	 * Asks the mint for a melt quote
+	 * @param mintUrl
+	 * @param MeltQuotePayload
+	 * @returns
+	 */
+	public static async meltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+		const data = await request<MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
+			method: 'POST',
+			requestBody: meltQuotePayload
+		});
+
+		if (!isObj(data) || typeof data?.amount !== 'number' || typeof data?.fee_reserve !== 'number' || typeof data?.quote !== 'string') {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+	/**
+	 * Asks the mint for a melt quote
+	 * @param MeltQuotePayload
+	 * @returns
+	 */
+	async meltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+		return CashuMint.meltQuote(this._mintUrl, meltQuotePayload);
+	}
+	/**
 	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
 	 * @param mintUrl
 	 * @param meltPayload
@@ -187,7 +216,7 @@ class CashuMint {
 	 */
 	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
 		const data = await request<MeltResponse>({
-			endpoint: joinUrls(mintUrl, 'melt'),
+			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
 			method: 'POST',
 			requestBody: meltPayload
 		});
@@ -195,7 +224,7 @@ class CashuMint {
 		if (
 			!isObj(data) ||
 			typeof data?.paid !== 'boolean' ||
-			(data?.preimage !== null && typeof data?.preimage !== 'string')
+			(data?.proof !== null && typeof data?.proof !== 'string')
 		) {
 			throw new Error('bad response');
 		}

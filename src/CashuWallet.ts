@@ -6,6 +6,8 @@ import {
 	AmountPreference,
 	BlindedMessageData,
 	BlindedTransaction,
+	MeltPayload,
+	MeltQuoteResponse,
 	MintKeys,
 	MintKeyset,
 	PayLnInvoiceResponse,
@@ -36,7 +38,9 @@ import {
 class CashuWallet {
 	private _keys = {} as MintKeys;
 	private _keysetId = '';
+
 	mint: CashuMint;
+	unit = 'sat';
 
 	/**
 	 * @param keys public keys from the mint
@@ -46,7 +50,8 @@ class CashuWallet {
 		this.mint = mint;
 		if (keys) {
 			this._keys = keys;
-			this._keysetId = deriveKeysetId(this._keys);
+			// this._keysetId = deriveKeysetId(this._keys);
+			this._keysetId = keys.id;
 		}
 	}
 
@@ -55,7 +60,8 @@ class CashuWallet {
 	}
 	set keys(keys: MintKeys) {
 		this._keys = keys;
-		this._keysetId = deriveKeysetId(this._keys);
+		// this._keysetId = deriveKeysetId(this._keys);
+		this._keysetId = keys.id;
 	}
 	get keysetId(): string {
 		return this._keysetId;
@@ -80,59 +86,72 @@ class CashuWallet {
 	 */
 	requestMint(amount: number) {
 		const requestMintPayload: RequestMintPayload = {
-			unit: 'sat',
+			unit: this.unit,
 			amount: amount
 		}
-		return this.mint.requestMint(requestMintPayload);
+		return this.mint.mintQuote(requestMintPayload);
 	}
 
+	/**
+	 * Requests a quote for a LN payment. Response returns amount and fees for a given LN invoice.
+	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @returns estimated Fee
+	 */
+	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+		const meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+		// const { fee } = await this.mint.checkFees({ pr: invoice });
+		return meltQuote;
+	}
 	/**
 	 * Executes a payment of an invoice on the Lightning network.
 	 * The combined amount of Proofs has to match the payment amount including fees.
 	 * @param invoice
 	 * @param proofsToSend the exact amount to send including fees
-	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
+	 * @param meltQuote melt quote for the invoice
 	 */
 	async payLnInvoice(
 		invoice: string,
 		proofsToSend: Array<Proof>,
-		feeReserve?: number
+		meltQuote?: MeltQuoteResponse
 	): Promise<PayLnInvoiceResponse> {
-		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
-		if (!feeReserve) {
-			feeReserve = await this.getFee(invoice);
+		if (!meltQuote) {
+			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
 		}
-		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve);
-		const payData = await this.mint.melt({
-			...paymentPayload,
-			outputs: blindedMessages
-		});
-		return {
-			isPaid: payData.paid ?? false,
-			preimage: payData.preimage,
-			change: payData?.change
-				? dhke.constructProofs(payData.change, rs, secrets, await this.getKeys(payData.change))
-				: [],
-			newKeys: await this.changedKeys(payData?.change)
-		};
+		return await this.payMeltQuote(meltQuote, proofsToSend);
+
 	}
 	/**
-	 * Estimate fees for a given LN invoice
-	 * @param invoice LN invoice that needs to get a fee estimate
-	 * @returns estimated Fee
+	 * Pays an LN quote.
+	 * @param meltQuote
+	 * @param proofsToSend the exact amount to send including fees
+	 * @returns
 	 */
-	async getFee(invoice: string): Promise<number> {
-		const { fee } = await this.mint.checkFees({ pr: invoice });
-		return fee;
+	async payMeltQuote(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Array<Proof>
+	): Promise<PayLnInvoiceResponse> {
+		const { blindedMessages, secrets, rs } = this.createBlankOutputs(meltQuote.fee_reserve);
+		const meltPayload: MeltPayload = {
+			quote: meltQuote.quote,
+			inputs: proofsToSend,
+			outputs: [...blindedMessages]
+		};
+		const meltResponse = await this.mint.melt(meltPayload);
+
+		return {
+			isPaid: meltResponse.paid ?? false,
+			preimage: meltResponse.proof,
+			change: meltResponse?.change
+				? dhke.constructProofs(meltResponse.change, rs, secrets, await this.getKeys(meltResponse.change))
+				: []
+		};
 	}
 
-	createPaymentPayload(invoice: string, proofs: Array<Proof>): PaymentPayload {
-		return {
-			pr: invoice,
-			proofs: proofs
-		};
-	}
+
+
 	/**
+	 * NOTE: This method is a helper. Should be moved. 
+	 * 
 	 * Use a cashu token to pay an ln invoice
 	 * @param invoice Lightning invoice
 	 * @param token cashu token
@@ -148,13 +167,12 @@ class CashuWallet {
 	 * Receive an encoded Cashu token
 	 * @param encodedToken Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
-	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
+	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(encodedToken: string, preference?: Array<AmountPreference>): Promise<ReceiveResponse> {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
-		let newKeys: MintKeys | undefined;
 		for (const tokenEntry of token) {
 			if (!tokenEntry?.proofs?.length) {
 				continue;
@@ -163,16 +181,12 @@ class CashuWallet {
 				const {
 					proofsWithError,
 					proofs,
-					newKeys: newKeysFromReceive
 				} = await this.receiveTokenEntry(tokenEntry, preference);
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
 				}
 				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...proofs] });
-				if (!newKeys) {
-					newKeys = newKeysFromReceive;
-				}
 			} catch (error) {
 				console.error(error);
 				tokenEntriesWithError.push(tokenEntry);
@@ -181,7 +195,6 @@ class CashuWallet {
 		return {
 			token: { token: tokenEntries },
 			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined,
-			newKeys
 		};
 	}
 
@@ -189,12 +202,11 @@ class CashuWallet {
 	 * Receive a single cashu token entry
 	 * @param tokenEntry a single entry of a cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts.
-	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
+	 * @returns New token entry with newly created proofs, proofs that had errors
 	 */
 	async receiveTokenEntry(tokenEntry: TokenEntry, preference?: Array<AmountPreference>): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
-		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
 			if (!preference) {
@@ -213,18 +225,13 @@ class CashuWallet {
 				await this.getKeys(promises, tokenEntry.mint)
 			);
 			proofs.push(...newProofs);
-			newKeys =
-				tokenEntry.mint === this.mint.mintUrl
-					? await this.changedKeys([...(promises || [])])
-					: undefined;
 		} catch (error) {
 			console.error(error);
 			proofsWithError.push(...tokenEntry.proofs);
 		}
 		return {
 			proofs,
-			proofsWithError: proofsWithError.length ? proofsWithError : undefined,
-			newKeys
+			proofsWithError: proofsWithError.length ? proofsWithError : undefined
 		};
 	}
 
@@ -286,8 +293,7 @@ class CashuWallet {
 			});
 			return {
 				returnChange: [...splitProofsToKeep, ...proofsToKeep],
-				send: splitProofsToSend,
-				newKeys: await this.changedKeys([...(promises || [])])
+				send: splitProofsToSend
 			};
 		}
 		return { returnChange: proofsToKeep, send: proofsToSend };
@@ -297,13 +303,13 @@ class CashuWallet {
 	 * Request tokens from the mint
 	 * @param amount amount to request
 	 * @param hash hash to use to identify the request
-	 * @returns proofs and newKeys if they have changed
+	 * @returns proofs
 	 */
 	async requestTokens(
 		amount: number,
 		hash: string,
 		AmountPreference?: Array<AmountPreference>
-	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
+	): Promise<{ proofs: Array<Proof> }> {
 		await this.initKeys();
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
@@ -316,8 +322,7 @@ class CashuWallet {
 		};
 		const { signatures } = await this.mint.mint(postMintPayload);
 		return {
-			proofs: dhke.constructProofs(signatures, rs, secrets, await this.getKeys(signatures)),
-			newKeys: await this.changedKeys(signatures)
+			proofs: dhke.constructProofs(signatures, rs, secrets, await this.getKeys(signatures))
 		};
 	}
 
@@ -330,26 +335,6 @@ class CashuWallet {
 			// this._keysetId = deriveKeysetId(this.keys);
 			this._keysetId = this.keys.id;
 		}
-	}
-
-	/**
-	 * Check if the keysetId has changed and return the new keys
-	 * @param promises array of promises to check
-	 * @returns new keys if they have changed
-	 */
-	private async changedKeys(
-		promises: Array<SerializedBlindedSignature | Proof> = []
-	): Promise<MintKeys | undefined> {
-		await this.initKeys();
-		if (!promises?.length) {
-			return undefined;
-		}
-		if (!promises.some((x) => x.id !== this.keysetId)) {
-			return undefined;
-		}
-		const maybeNewKeys = await this.mint.getKeys();
-		const keysetId = deriveKeysetId(maybeNewKeys);
-		return keysetId === this.keysetId ? undefined : maybeNewKeys;
 	}
 
 	/**
@@ -462,7 +447,7 @@ class CashuWallet {
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
-			const blindedMessage = new BlindedMessage(0, B_, "");
+			const blindedMessage = new BlindedMessage(0, B_, this.keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 

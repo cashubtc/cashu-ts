@@ -50,7 +50,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 		const request = await wallet.requestMint(100);
-		const fee = await wallet.getFee(request.request);
+		const fee = (await wallet.getLNQuote(request.request)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because local invoice, fee should be 0
 		expect(fee).toBe(0);
@@ -58,7 +58,7 @@ describe('mint api', () => {
 	test('get fee for external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const fee = await wallet.getFee(externalInvoice);
+		const fee = (await wallet.getLNQuote(externalInvoice)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because external invoice, fee should be > 0
 		expect(fee).toBeGreaterThan(0);
@@ -71,11 +71,12 @@ describe('mint api', () => {
 
 		// expect no fee because local invoice
 		const requestToPay = await wallet.requestMint(10);
-		const fee = await wallet.getFee(requestToPay.request);
+		const quote = await wallet.getLNQuote(requestToPay.request);
+		const fee = quote.fee_reserve
 		expect(fee).toBe(0);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
-		const response = await wallet.payLnInvoice(requestToPay.request, sendResponse.send);
+		const response = await wallet.payLnInvoice(requestToPay.request, sendResponse.send, quote);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
@@ -96,7 +97,7 @@ describe('mint api', () => {
 		const request = await wallet.requestMint(3000);
 		const tokens = await wallet.requestTokens(3000, request.quote);
 
-		const fee = await wallet.getFee(externalInvoice);
+		const fee = (await wallet.getLNQuote(externalInvoice)).fee_reserve;
 		expect(fee).toBeGreaterThan(0);
 
 		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);
