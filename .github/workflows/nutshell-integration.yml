@@ -25,6 +25,9 @@ jobs:
         run: netstat -lp
       - name: Run ifconfig
         run: ifconfig
+      - name: Curl on localhost:4448/keys
+        run: curl http://127.0.0.1:4448/
+
       - name: Curl on localhost:3338/keys
         run: curl http://127.0.0.1:3338/keys
 
