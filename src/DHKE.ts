@@ -26,7 +26,7 @@ export function pointFromHex(hex: string) {
 	return secp256k1.ProjectivePoint.fromAffine(h2c.toAffine());
 } */
 function blindMessage(secret: Uint8Array, r?: bigint): { B_: ProjPointType<bigint>; r: bigint } {
-	const secretMessage = new TextEncoder().encode(bytesToHex(secret));
+	const secretMessage = new TextEncoder().encode(new TextDecoder().decode(secret));
 	const Y = hashToCurve(secretMessage);
 	if (!r) {
 		r = bytesToNumber(secp256k1.utils.randomPrivateKey());
@@ -55,7 +55,7 @@ function constructProofs(
 		const C_ = pointFromHex(p.C_);
 		const A = pointFromHex(keyset.keys[p.amount]);
 		const C = unblindSignature(C_, rs[i], A);
-		const secret = bytesToHex(secrets[i])
+		const secret = new TextDecoder().decode(secrets[i])
 		const proof = {
 			id: p.id,
 			amount: p.amount,

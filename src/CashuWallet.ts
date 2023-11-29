@@ -30,6 +30,7 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
+import { bytesToHex } from '@noble/curves/abstract/utils';
 
 /**
  * Class that represents a Cashu wallet.
@@ -424,7 +425,7 @@ class CashuWallet {
 		const rs: Array<bigint> = [];
 		const amounts = splitAmount(amount, amountPreference);
 		for (let i = 0; i < amounts.length; i++) {
-			const secret = randomBytes(32);
+			const secret = new TextEncoder().encode(bytesToHex(randomBytes(32)));
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
@@ -446,7 +447,7 @@ class CashuWallet {
 		const rs: Array<bigint> = [];
 		const count = Math.ceil(Math.log2(feeReserve)) || 1;
 		for (let i = 0; i < count; i++) {
-			const secret = randomBytes(32);
+			const secret = new TextEncoder().encode(bytesToHex(randomBytes(32)));
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
