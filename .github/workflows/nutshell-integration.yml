@@ -20,7 +20,7 @@ jobs:
 
       - name: Build and start services
         run: |
-          docker-compose up
+          docker-compose up -d
       - name: Check if services are running
         run: netstat -lp
       - name: Curl on localhost:3338/keys
