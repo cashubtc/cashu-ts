@@ -5,7 +5,6 @@ on: [push, pull_request]
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Set up Docker Compose
         uses: adambirds/docker-compose-action@v1.3.0
@@ -13,6 +12,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: 'cashubtc/nutshell'
+          ref: 'docker/network_mode_host'
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and start mint
         run: |
