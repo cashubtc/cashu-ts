@@ -25,7 +25,7 @@ jobs:
           MINT_LISTEN_PORT: 3338
           MINT_PRIVATE_KEY: TEST_PRIVATE_KEY
         run: |
-          docker-compose up --build -d
+          docker-compose up -d
       - name: Check if services are running
         run: docker-compose ps
 
@@ -39,4 +39,4 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run compile
-      - run: npm test-integration
+      - run: npm run test-integration
