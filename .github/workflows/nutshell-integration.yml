@@ -1,0 +1,42 @@
+name: CI Test Workflow
+
+on: [push, pull_request]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      docker:
+        image: docker:19.03.12
+        ports:
+          - 3338:3338
+        options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          repository: 'cashubtc/nutshell'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build and Run Docker Container
+        run: |
+          docker build -t nutshell-app .
+          docker run -d -e MINT_LIGHTNING_BACKEND=FakeWallet -p 3338:3338 nutshell-app
+
+      - name: Execute Command Inside the Container
+        run: |
+          docker exec $(docker ps -q) poetry run mint --port 3338 --host 0.0.0.0
+
+      - name: Run Tests
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20x
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run compile
+      - run: npm test
