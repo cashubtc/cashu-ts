@@ -14,10 +14,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Compose
-        uses: docker/compose-action@v1
+        uses: adambirds/docker-compose-action@v1.3.0
         with:
-          compose-yaml: docker-compose.yml
-          compose-version: '1.27.4'
+          compose-file: docker-compose.yml
 
       - name: Build and start services
         run: |
