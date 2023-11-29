@@ -93,7 +93,7 @@ describe('test decode token', () => {
 							C: '02a42140d1bbd59ca4c5ba9eb73d020f31f68f4e3078fd3af1ee64ebece52b6eda'
 						}
 					],
-					mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
+					mint: 'https://localhost:3338'
 				}
 			]
 		});

@@ -211,6 +211,7 @@ class CashuWallet {
 			if (!preference) {
 				preference = getDefaultAmountPreference(amount)
 			}
+			const keyset = await this.initKeys()
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
@@ -221,7 +222,7 @@ class CashuWallet {
 				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(signatures, tokenEntry.mint)
+				keyset
 			);
 			proofs.push(...newProofs);
 		} catch (error) {
@@ -309,10 +310,10 @@ class CashuWallet {
 		hash: string,
 		AmountPreference?: Array<AmountPreference>
 	): Promise<{ proofs: Array<Proof> }> {
-		await this.initKeys();
+		const keyset = await this.initKeys();
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			this.keysetId,
+			keyset,
 			AmountPreference
 		);
 		const postMintPayload: PostMintPayload = {
@@ -328,12 +329,13 @@ class CashuWallet {
 	/**
 	 * Initialize the wallet with the mints public keys
 	 */
-	private async initKeys() {
+	private async initKeys(): Promise<MintKeys> {
 		if (!this.keysetId || !Object.keys(this.keys).length) {
 			this.keys = await this.mint.getKeys();
 			// this._keysetId = deriveKeysetId(this.keys);
 			this._keysetId = this.keys.id;
 		}
+		return this.keys;
 	}
 
 	/**
@@ -370,14 +372,21 @@ class CashuWallet {
 	private createSplitPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
-		preference?: Array<AmountPreference>
+		preference?: Array<AmountPreference>,
+		keyset?: MintKeys
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
 	} {
+		if (!keyset) {
+			if (!this.keys) {
+				throw new Error('No keyset available');
+			}
+			keyset = this.keys;
+		}
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
-		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount, this.keysetId);
-		const sendBlindedMessages = this.createRandomBlindedMessages(amount, this.keysetId, preference);
+		const keepBlindedMessages = this.createRandomBlindedMessages(totalAmount - amount, keyset);
+		const sendBlindedMessages = this.createRandomBlindedMessages(amount, keyset, preference);
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -412,7 +421,7 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
-		keysetId: string,
+		keyset: MintKeys,
 		amountPreference?: Array<AmountPreference>
 	): BlindedMessageData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
@@ -424,7 +433,7 @@ class CashuWallet {
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret);
 			rs.push(r);
-			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
+			const blindedMessage = new BlindedMessage(amounts[i], B_, keyset.id);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 		return { blindedMessages, secrets, rs, amounts };

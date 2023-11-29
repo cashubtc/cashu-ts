@@ -129,9 +129,9 @@ class CashuMint {
 	 * @returns the mints public keys
 	 */
 	async getKeys(keysetId?: string, mintUrl?: string, unit?: string): Promise<MintKeys> {
-		const allKeys = CashuMint.getKeys(mintUrl || this._mintUrl, keysetId);
+		const allKeys = await CashuMint.getKeys(mintUrl || this._mintUrl, keysetId);
 		// find keyset with unit 'sat'
-		const satKeys = ((await allKeys).keysets).find((keys) => keys.unit === unit ? unit : 'sat');
+		const satKeys = (allKeys.keysets).find((keys) => keys.unit === unit ? unit : 'sat');
 		if (!satKeys) {
 			throw new Error('No keyset with unit "sat" found');
 		}
