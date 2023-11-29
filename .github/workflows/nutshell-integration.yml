@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: 'cashubtc/nutshell'
-          ref: 'docker/network_mode_host'
+          ref: 'docker-network-mode-host'
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and start mint
         run: |
