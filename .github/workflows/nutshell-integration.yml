@@ -18,8 +18,8 @@ jobs:
       - name: Build and start mint
         run: |
           docker-compose up -d
-      - name: Run ifconfig
-        run: ifconfig
+      - name: Run netstat
+        run: netstat -lp
       - name: Curl on localhost:3338/keys
         run: curl http://localhost:3338/keys
       - name: Navigate to the parent directory
