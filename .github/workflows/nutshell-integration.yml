@@ -21,6 +21,9 @@ jobs:
       - name: Build and start services
         env:
           MINT_LIGHTNING_BACKEND: FakeWallet
+          MINT_LISTEN_HOST: 0.0.0.0
+          MINT_LISTEN_PORT: 3338
+          MINT_PRIVATE_KEY: TEST_PRIVATE_KEY
         run: |
           docker-compose up --build -d
       - name: Check if services are running
@@ -36,4 +39,4 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run compile
-      - run: npm test
+      - run: npm test-integration
