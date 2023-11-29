@@ -14,9 +14,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Compose
-        run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
+        uses: docker/compose-action@v1
+        with:
+          compose-yaml: docker-compose.yml
+          compose-version: '1.27.4'
 
       - name: Build and start services
         run: |
@@ -26,10 +27,10 @@ jobs:
       - name: Run ifconfig
         run: ifconfig
       - name: Curl on localhost:4448/keys
-        run: curl http://127.0.0.1:4448/
+        run: curl http://localhost:4448/
 
       - name: Curl on localhost:3338/keys
-        run: curl http://127.0.0.1:3338/keys
+        run: curl http://localhost:3338/keys
 
       - name: Navigate to the parent directory
         run: cd ..
