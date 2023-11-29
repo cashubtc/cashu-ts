@@ -17,7 +17,7 @@ jobs:
 
       - name: Build and start mint
         run: |
-          docker-compose up -d
+          docker-compose up -d && netstat -lp
       - name: Run netstat
         run: netstat -lp
       - name: Curl on localhost:3338/keys
