@@ -19,11 +19,6 @@ jobs:
           sudo chmod +x /usr/local/bin/docker-compose
 
       - name: Build and start services
-        env:
-          MINT_LIGHTNING_BACKEND: FakeWallet
-          MINT_LISTEN_HOST: 0.0.0.0
-          MINT_LISTEN_PORT: 3338
-          MINT_PRIVATE_KEY: TEST_PRIVATE_KEY
         run: |
           docker-compose up
       - name: Check if services are running
