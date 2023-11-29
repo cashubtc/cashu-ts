@@ -26,7 +26,7 @@ jobs:
       - name: Run ifconfig
         run: ifconfig
       - name: Curl on localhost:3338/keys
-        run: curl http://mint:3338/keys
+        run: curl http://127.0.0.1:3338/keys
 
       - name: Navigate to the parent directory
         run: cd ..
