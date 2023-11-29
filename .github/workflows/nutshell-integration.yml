@@ -23,6 +23,8 @@ jobs:
           MINT_LIGHTNING_BACKEND: FakeWallet
         run: |
           docker-compose up --build -d
+      - name: Check if services are running
+        run: docker-compose ps
 
       - name: Navigate to the parent directory
         run: cd ..
