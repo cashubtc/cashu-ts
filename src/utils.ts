@@ -127,12 +127,13 @@ function handleTokens(token: string): Token {
  * @returns
  */
 export function deriveKeysetId(keys: MintKeys) {
-	const pubkeysConcat = Object.entries(keys)
+	const pubkeysConcat = Object.entries(keys.keys)
 		.sort((a, b) => +a[0] - +b[0])
 		.map(([, pubKey]) => pubKey)
 		.join('');
 	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
-	return Buffer.from(hash).toString('base64').slice(0, 12);
+	const hashHex = bytesToHex(hash);
+	return "00" + hashHex.slice(0, 12);
 }
 /**
  * merge proofs from same mint,

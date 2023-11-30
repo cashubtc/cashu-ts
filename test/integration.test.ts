@@ -2,7 +2,7 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { getEncodedToken } from '../src/utils.js';
+import { deriveKeysetId, getEncodedToken } from '../src/utils.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
