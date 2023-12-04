@@ -27,6 +27,8 @@ import {
 	splitAmount
 } from './utils.js';
 import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
+import { validateMnemonic } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -50,6 +52,9 @@ class CashuWallet {
 			this._keysetId = deriveKeysetId(this._keys);
 		}
 		if (mnemonic) {
+			if (!validateMnemonic(mnemonic, wordlist)) {
+				throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
+			}
 			this._seed = deriveSeedFromMnemonic(mnemonic);
 		}
 	}
