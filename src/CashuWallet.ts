@@ -97,19 +97,19 @@ class CashuWallet {
 	 * @param invoice
 	 * @param proofsToSend the exact amount to send including fees
 	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 */
 	async payLnInvoice(
 		invoice: string,
 		proofsToSend: Array<Proof>,
 		feeReserve?: number,
-		count?: number
+		counter?: number
 	): Promise<PayLnInvoiceResponse> {
 		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
 		if (!feeReserve) {
 			feeReserve = await this.getFee(invoice);
 		}
-		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve, count);
+		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve, counter);
 		const payData = await this.mint.melt({
 			...paymentPayload,
 			outputs: blindedMessages
@@ -143,30 +143,30 @@ class CashuWallet {
 	 * Use a cashu token to pay an ln invoice
 	 * @param invoice Lightning invoice
 	 * @param token cashu token
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 */
 	payLnInvoiceWithToken(
 		invoice: string,
 		token: string,
-		count?: number
+		counter?: number
 	): Promise<PayLnInvoiceResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
 			.filter((x) => x.mint === this.mint.mintUrl)
 			.flatMap((t) => t.proofs);
-		return this.payLnInvoice(invoice, proofs, undefined, count);
+		return this.payLnInvoice(invoice, proofs, undefined, counter);
 	}
 	/**
 	 * Receive an encoded Cashu token
 	 * @param encodedToken Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
 	 */
 	async receive(
 		encodedToken: string,
 		preference?: Array<AmountPreference>,
-		count?: number
+		counter?: number
 	): Promise<ReceiveResponse> {
 		const { token } = cleanToken(getDecodedToken(encodedToken));
 		const tokenEntries: Array<TokenEntry> = [];
@@ -181,7 +181,7 @@ class CashuWallet {
 					proofsWithError,
 					proofs,
 					newKeys: newKeysFromReceive
-				} = await this.receiveTokenEntry(tokenEntry, preference, count);
+				} = await this.receiveTokenEntry(tokenEntry, preference, counter);
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
@@ -206,13 +206,13 @@ class CashuWallet {
 	 * Receive a single cashu token entry
 	 * @param tokenEntry a single entry of a cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts.
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
 	 */
 	async receiveTokenEntry(
 		tokenEntry: TokenEntry,
 		preference?: Array<AmountPreference>,
-		count?: number
+		counter?: number
 	): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
@@ -226,7 +226,7 @@ class CashuWallet {
 				amount,
 				tokenEntry.proofs,
 				preference,
-				count
+				counter
 			);
 			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
@@ -258,14 +258,14 @@ class CashuWallet {
 	 * @param amount amount to send while performing the optimal split (least proofs possible). can be set to undefined if preference is set
 	 * @param proofs proofs matching that amount
 	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns promise of the change- and send-proofs
 	 */
 	async send(
 		amount: number,
 		proofs: Array<Proof>,
 		preference?: Array<AmountPreference>,
-		count?: number
+		counter?: number
 	): Promise<SendResponse> {
 		if (preference) {
 			amount = preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
@@ -292,7 +292,7 @@ class CashuWallet {
 				amountSend,
 				proofsToSend,
 				preference,
-				count
+				counter
 			);
 			const { promises } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
@@ -327,19 +327,19 @@ class CashuWallet {
 	 * @param amount amount to request
 	 * @param id id to identify the mint request*
 	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns proofs and newKeys if they have changed
 	 */
 	async requestTokens(
 		amount: number,
 		id: string,
 		AmountPreference?: Array<AmountPreference>,
-		count?: number
+		counter?: number
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			AmountPreference,
-			count
+			counter
 		);
 		const payloads = { outputs: blindedMessages };
 		const { promises } = await this.mint.mint(payloads, id);
@@ -438,14 +438,14 @@ class CashuWallet {
 	 * @param amount amount to send
 	 * @param proofsToSend proofs to split*
 	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns
 	 */
 	private createSplitPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
 		preference?: Array<AmountPreference>,
-		count?: number
+		counter?: number
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
@@ -454,12 +454,12 @@ class CashuWallet {
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
 			undefined,
-			count
+			counter
 		);
-		if (this._seed && count) {
-			count = count + keepBlindedMessages.secrets.length;
+		if (this._seed && counter) {
+			counter = counter + keepBlindedMessages.secrets.length;
 		}
-		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference, count);
+		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference, counter);
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -491,34 +491,34 @@ class CashuWallet {
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for
 	 * @param amountPreference optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
 		amountPreference?: Array<AmountPreference>,
-		count?: number
+		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
 		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, count);
+		return this.createBlindedMessages(amounts, counter);
 	}
 
 	/**
 	 * Creates blinded messages for a according to @param amounts
 	 * @param amount array of amounts to create blinded messages for
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createBlindedMessages(
 		amounts: Array<number>,
-		count?: number,
+		counter?: number,
 		keysetId?: string
 	): BlindedMessageData & { amounts: Array<number> } {
 		// if we atempt to create deterministic messages without a _seed, abort.
-		if (count != undefined && !this._seed) {
+		if (counter != undefined && !this._seed) {
 			throw new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit count param.'
+				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit counter param.'
 			);
 		}
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
@@ -527,10 +527,10 @@ class CashuWallet {
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secret = undefined;
-			if (this._seed && count != undefined) {
-				secret = deriveSecret(this._seed, keysetId ?? this.keysetId, count + i);
+			if (this._seed && counter != undefined) {
+				secret = deriveSecret(this._seed, keysetId ?? this.keysetId, counter + i);
 				deterministicR = bytesToNumber(
-					deriveBlindingFactor(this._seed, keysetId ?? this.keysetId, count + i)
+					deriveBlindingFactor(this._seed, keysetId ?? this.keysetId, counter + i)
 				);
 			} else {
 				secret = randomBytes(32);
@@ -548,17 +548,17 @@ class CashuWallet {
 	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve
 	 * See: https://github.com/cashubtc/nuts/blob/main/08.md
 	 * @param feeReserve amount to cover with blank outputs
-	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
-	private createBlankOutputs(feeReserve: number, count?: number): BlindedMessageData {
-		let counter = Math.ceil(Math.log2(feeReserve)) || 1;
-		//Prevent counter from being -Infinity
-		if (counter < 0) {
-			counter = 0;
+	private createBlankOutputs(feeReserve: number, counter?: number): BlindedMessageData {
+		let count = Math.ceil(Math.log2(feeReserve)) || 1;
+		//Prevent count from being -Infinity
+		if (count < 0) {
+			count = 0;
 		}
-		const amounts = counter ? Array(counter).fill(1) : [];
-		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, count);
+		const amounts = count ? Array(count).fill(1) : [];
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, counter);
 		return { blindedMessages, secrets, rs };
 	}
 }
