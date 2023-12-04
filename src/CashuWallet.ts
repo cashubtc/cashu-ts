@@ -325,14 +325,14 @@ class CashuWallet {
 	/**
 	 * Request tokens from the mint
 	 * @param amount amount to request
-	 * @param hash hash to use to identify the request*
+	 * @param id id to identify the mint request*
 	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @param count? optionally set count to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns proofs and newKeys if they have changed
 	 */
 	async requestTokens(
 		amount: number,
-		hash: string,
+		id: string,
 		AmountPreference?: Array<AmountPreference>,
 		count?: number
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
@@ -342,7 +342,7 @@ class CashuWallet {
 			count
 		);
 		const payloads = { outputs: blindedMessages };
-		const { promises } = await this.mint.mint(payloads, hash);
+		const { promises } = await this.mint.mint(payloads, id);
 		return {
 			proofs: dhke.constructProofs(promises, rs, secrets, await this.getKeys(promises)),
 			newKeys: await this.changedKeys(promises)
