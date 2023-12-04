@@ -5,11 +5,11 @@ import { encodeBase64toUint8 } from './base64';
 import { bytesToNumber } from './utils';
 import { hexToNumber } from '@noble/curves/abstract/utils';
 
-const STANDARD_DERIVATION_PATH = `m/129372'/0'`
+const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
-enum DerivationType{
-	SECRET=0,
-	BLINDING_FACTOR=1
+enum DerivationType {
+	SECRET = 0,
+	BLINDING_FACTOR = 1
 }
 
 export const generateNewMnemonic = (): string => {
@@ -41,7 +41,7 @@ const derive = (
 	secretOrBlinding: DerivationType
 ): Uint8Array => {
 	const hdkey = HDKey.fromMasterSeed(seed);
-	const keysetIdInt = getKeysetIdInt(keysetId)
+	const keysetIdInt = getKeysetIdInt(keysetId);
 	const derivationPath = `${STANDARD_DERIVATION_PATH}/${keysetIdInt}'/${counter}'/${secretOrBlinding}`;
 	const derived = hdkey.derive(derivationPath);
 	if (derived.privateKey === null) {
@@ -50,14 +50,13 @@ const derive = (
 	return derived.privateKey;
 };
 
-const getKeysetIdInt = (keysetId:string): bigint =>{
-	let keysetIdInt: bigint
+const getKeysetIdInt = (keysetId: string): bigint => {
+	let keysetIdInt: bigint;
 	if (/^[a-fA-F0-9]+$/.test(keysetId)) {
-		keysetIdInt = (hexToNumber(keysetId)) % BigInt(2 ** 31 - 1);
-	}
-	else {
+		keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
+	} else {
 		//legacy keyset compatibility
 		keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
 	}
-	return keysetIdInt
-}
+	return keysetIdInt;
+};
