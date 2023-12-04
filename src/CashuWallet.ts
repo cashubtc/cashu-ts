@@ -369,6 +369,7 @@ class CashuWallet {
 
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
 
+		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint 
 		const validRs = rs.filter((r, i) => outputs.map((o) => o.B_).includes(blindedMessages[i].B_));
 		const validSecrets = secrets.filter((s, i) =>
 			outputs.map((o) => o.B_).includes(blindedMessages[i].B_)
