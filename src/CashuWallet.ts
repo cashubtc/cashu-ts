@@ -43,7 +43,7 @@ class CashuWallet {
 	/**
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
-	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it. 
+	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(mint: CashuMint, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
@@ -53,11 +53,11 @@ class CashuWallet {
 			this._keysetId = deriveKeysetId(this._keys);
 		}
 		if (!mnemonicOrSeed) {
-			return
+			return;
 		}
 		if (mnemonicOrSeed instanceof Uint8Array) {
-			this._seed = mnemonicOrSeed
-			return
+			this._seed = mnemonicOrSeed;
+			return;
 		}
 		if (!validateMnemonic(mnemonicOrSeed, wordlist)) {
 			throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
@@ -375,7 +375,7 @@ class CashuWallet {
 
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
 
-		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint 
+		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint
 		const validRs = rs.filter((r, i) => outputs.map((o) => o.B_).includes(blindedMessages[i].B_));
 		const validSecrets = secrets.filter((s, i) =>
 			outputs.map((o) => o.B_).includes(blindedMessages[i].B_)
