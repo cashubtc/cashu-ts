@@ -553,6 +553,7 @@ class CashuWallet {
 	 */
 	private createBlankOutputs(feeReserve: number, count?: number): BlindedMessageData {
 		let counter = Math.ceil(Math.log2(feeReserve)) || 1;
+		//Prevent counter from being -Infinity
 		if (counter < 0) {
 			counter = 0;
 		}
