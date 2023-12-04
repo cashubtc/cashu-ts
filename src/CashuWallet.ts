@@ -43,20 +43,26 @@ class CashuWallet {
 	/**
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
-	 * @param mnemonic mnemonic seed phrase to initial derivation key for this wallets deterministic secrets
+	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it. 
+	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
-	constructor(mint: CashuMint, keys?: MintKeys, mnemonic?: string) {
+	constructor(mint: CashuMint, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
 		this._keys = keys || {};
 		this.mint = mint;
 		if (keys) {
 			this._keysetId = deriveKeysetId(this._keys);
 		}
-		if (mnemonic) {
-			if (!validateMnemonic(mnemonic, wordlist)) {
-				throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
-			}
-			this._seed = deriveSeedFromMnemonic(mnemonic);
+		if (!mnemonicOrSeed) {
+			return
 		}
+		if (mnemonicOrSeed instanceof Uint8Array) {
+			this._seed = mnemonicOrSeed
+			return
+		}
+		if (!validateMnemonic(mnemonicOrSeed, wordlist)) {
+			throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
+		}
+		this._seed = deriveSeedFromMnemonic(mnemonicOrSeed);
 	}
 
 	get keys(): MintKeys {
