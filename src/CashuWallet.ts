@@ -164,8 +164,8 @@ class CashuWallet {
 		return this.payLnInvoice(invoice, proofs, undefined, counter);
 	}
 	/**
-	 * Receive an encoded Cashu token
-	 * @param encodedToken Cashu token
+	 * Receive an encoded or raw Cashu token
+	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
