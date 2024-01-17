@@ -16,6 +16,7 @@ import {
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
 	SplitPayload,
+	Token,
 	TokenEntry
 } from './model/types/index.js';
 import {
@@ -170,15 +171,20 @@ class CashuWallet {
 	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
 	 */
 	async receive(
-		encodedToken: string,
+		token: string | Token,
 		preference?: Array<AmountPreference>,
 		counter?: number
 	): Promise<ReceiveResponse> {
-		const { token } = cleanToken(getDecodedToken(encodedToken));
+		let decodedToken: Array<TokenEntry>;
+		if (typeof token === 'string') {
+			decodedToken = cleanToken(getDecodedToken(token)).token;
+		} else {
+			decodedToken = token.token;
+		}
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
 		let newKeys: MintKeys | undefined;
-		for (const tokenEntry of token) {
+		for (const tokenEntry of decodedToken) {
 			if (!tokenEntry?.proofs?.length) {
 				continue;
 			}
