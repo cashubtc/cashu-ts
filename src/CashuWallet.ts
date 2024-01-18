@@ -16,6 +16,7 @@ import {
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
 	SplitPayload,
+	Token,
 	TokenEntry
 } from './model/types/index.js';
 import {
@@ -163,22 +164,27 @@ class CashuWallet {
 		return this.payLnInvoice(invoice, proofs, undefined, counter);
 	}
 	/**
-	 * Receive an encoded Cashu token
-	 * @param encodedToken Cashu token
+	 * Receive an encoded or raw Cashu token
+	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
 	 */
 	async receive(
-		encodedToken: string,
+		token: string | Token,
 		preference?: Array<AmountPreference>,
 		counter?: number
 	): Promise<ReceiveResponse> {
-		const { token } = cleanToken(getDecodedToken(encodedToken));
+		let decodedToken: Array<TokenEntry>;
+		if (typeof token === 'string') {
+			decodedToken = cleanToken(getDecodedToken(token)).token;
+		} else {
+			decodedToken = token.token;
+		}
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
 		let newKeys: MintKeys | undefined;
-		for (const tokenEntry of token) {
+		for (const tokenEntry of decodedToken) {
 			if (!tokenEntry?.proofs?.length) {
 				continue;
 			}
