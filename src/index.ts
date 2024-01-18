@@ -10,7 +10,7 @@ export * from './model/types/index.js';
 /**
  * @deprecated use decodeInvoice instead
  */
-const getDecodedLnInvoice = decode
+const getDecodedLnInvoice = decode;
 
 export {
 	CashuMint,
