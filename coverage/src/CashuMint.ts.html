@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">87.87% </span>
+                <span class="strong">81.08% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>58/66</span>
+                <span class='fraction'>60/74</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">83.01% </span>
+                <span class="strong">66.66% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>44/53</span>
+                <span class='fraction'>44/66</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">71.42% </span>
+                <span class="strong">65.21% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>15/21</span>
+                <span class='fraction'>15/23</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">86.88% </span>
+                <span class="strong">80.88% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>53/61</span>
+                <span class='fraction'>55/68</span>
             </div>
         
             
@@ -319,7 +319,32 @@
 <a name='L254'></a><a href='#L254'>254</a>
 <a name='L255'></a><a href='#L255'>255</a>
 <a name='L256'></a><a href='#L256'>256</a>
-<a name='L257'></a><a href='#L257'>257</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L257'></a><a href='#L257'>257</a>
+<a name='L258'></a><a href='#L258'>258</a>
+<a name='L259'></a><a href='#L259'>259</a>
+<a name='L260'></a><a href='#L260'>260</a>
+<a name='L261'></a><a href='#L261'>261</a>
+<a name='L262'></a><a href='#L262'>262</a>
+<a name='L263'></a><a href='#L263'>263</a>
+<a name='L264'></a><a href='#L264'>264</a>
+<a name='L265'></a><a href='#L265'>265</a>
+<a name='L266'></a><a href='#L266'>266</a>
+<a name='L267'></a><a href='#L267'>267</a>
+<a name='L268'></a><a href='#L268'>268</a>
+<a name='L269'></a><a href='#L269'>269</a>
+<a name='L270'></a><a href='#L270'>270</a>
+<a name='L271'></a><a href='#L271'>271</a>
+<a name='L272'></a><a href='#L272'>272</a>
+<a name='L273'></a><a href='#L273'>273</a>
+<a name='L274'></a><a href='#L274'>274</a>
+<a name='L275'></a><a href='#L275'>275</a>
+<a name='L276'></a><a href='#L276'>276</a>
+<a name='L277'></a><a href='#L277'>277</a>
+<a name='L278'></a><a href='#L278'>278</a>
+<a name='L279'></a><a href='#L279'>279</a>
+<a name='L280'></a><a href='#L280'>280</a>
+<a name='L281'></a><a href='#L281'>281</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -572,6 +597,29 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
@@ -582,6 +630,7 @@
 	MeltPayload,
 	MeltResponse,
 	MintKeys,
+	PostRestoreResponse,
 	RequestMintResponse,
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
@@ -828,6 +877,29 @@ class CashuMint {
 	async check(checkPayload: CheckSpendablePayload): Promise&lt;CheckSpendableResponse&gt; {
 		return CashuMint.check(this._mintUrl, checkPayload);
 	}
+&nbsp;
+<span class="fstat-no" title="function not covered" >	public static async r</span>estore(
+		mintUrl: string,
+		restorePayload: { outputs: Array&lt;SerializedBlindedMessage&gt; }
+	): Promise&lt;PostRestoreResponse&gt; {
+		const <span class="cstat-no" title="statement not covered" >data = <span class="cstat-no" title="statement not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >await request&lt;PostRestoreResponse&gt;({</span></span></span>
+			endpoint: joinUrls(mintUrl, 'restore'),
+			method: 'POST',
+			requestBody: restorePayload
+		});
+&nbsp;
+<span class="cstat-no" title="statement not covered" >		<span class="missing-if-branch" title="if path not taken" >I</span>if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.promises)) {</span>
+<span class="cstat-no" title="statement not covered" >			throw new Error('bad response');</span>
+		}
+&nbsp;
+<span class="cstat-no" title="statement not covered" >		return data;</span>
+	}
+&nbsp;
+<span class="fstat-no" title="function not covered" >	async r</span>estore(restorePayload: {
+		outputs: Array&lt;SerializedBlindedMessage&gt;;
+	}): Promise&lt;PostRestoreResponse&gt; {
+<span class="cstat-no" title="statement not covered" >		return CashuMint.restore(this._mintUrl, restorePayload);</span>
+	}
 }
 &nbsp;
 export { CashuMint };
@@ -838,7 +910,7 @@ export { CashuMint };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2023-11-05T03:47:52.873Z
+                at 2024-01-18T02:38:57.910Z
             </div>
         <script src="../prettify.js"></script>
         <script>
