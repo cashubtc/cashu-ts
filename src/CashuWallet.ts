@@ -28,7 +28,7 @@ import {
 } from './utils.js';
 import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english.js';
+import { wordlist } from '@scure/bip39/wordlists/english';
 
 /**
  * Class that represents a Cashu wallet.

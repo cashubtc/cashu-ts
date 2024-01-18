@@ -3,7 +3,7 @@
 
 name: Node.js CI
 
-on: 
+on:
   pull_request:
     types:
       - ready_for_review
