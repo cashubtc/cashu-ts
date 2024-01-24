@@ -193,6 +193,7 @@ export function joinUrls(...parts: Array<string>): string {
 export function decodeInvoice(bolt11Invoice: string): InvoiceData {
 	const invoiceData: InvoiceData = {} as InvoiceData;
 	const decodeResult = decode(bolt11Invoice);
+	invoiceData.paymentRequest = decodeResult.paymentRequest;
 	for (let i = 0; i < decodeResult.sections.length; i++) {
 		const decodedSection = decodeResult.sections[i];
 		if (decodedSection.name === 'amount') {

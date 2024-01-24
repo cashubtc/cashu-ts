@@ -351,10 +351,10 @@ export type AmountPreference = {
 
 export type InvoiceData = {
 	paymentRequest: string;
-	amountInSats: number;
-	amountInMSats: number;
-	timestamp: number;
-	paymentHash: string;
-	memo: string;
-	expiry: number;
+	amountInSats?: number;
+	amountInMSats?: number;
+	timestamp?: number;
+	paymentHash?: string;
+	memo?: string;
+	expiry?: number;
 };
