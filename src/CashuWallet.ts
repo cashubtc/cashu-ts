@@ -299,15 +299,15 @@ class CashuWallet {
 			throw new Error('Not enough funds available');
 		}
 		if (amount < amountAvailable || preference) {
-			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(
+			const { amountSend } = this.splitReceive(amount, amountAvailable);
+			const { payload, blindedMessages, keepVector } = this.createSplitPayload(
 				amountSend,
 				proofsToSend,
 				preference,
 				counter
 			);
 			const { promises } = await this.mint.split(payload);
-			const proofs = dhke.constructProofs(
+			const splitProofs = dhke.constructProofs(
 				promises,
 				blindedMessages.rs,
 				blindedMessages.secrets,
@@ -316,14 +316,12 @@ class CashuWallet {
 			// sum up proofs until amount2 is reached
 			const splitProofsToKeep: Array<Proof> = [];
 			const splitProofsToSend: Array<Proof> = [];
-			let amountKeepCounter = 0;
-			proofs.forEach((proof) => {
-				if (amountKeepCounter < amountKeep) {
-					amountKeepCounter += proof.amount;
+			splitProofs.forEach((proof, i) => {
+				if (keepVector[i]) {
 					splitProofsToKeep.push(proof);
-					return;
+				} else {
+					splitProofsToSend.push(proof);
 				}
-				splitProofsToSend.push(proof);
 			});
 			return {
 				returnChange: [...splitProofsToKeep, ...proofsToKeep],
