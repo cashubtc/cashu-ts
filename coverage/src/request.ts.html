@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">80.76% </span>
+                <span class="strong">88% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>21/26</span>
+                <span class='fraction'>22/25</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">70% </span>
+                <span class="strong">90% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>7/10</span>
+                <span class='fraction'>9/10</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">85.71% </span>
+                <span class="strong">90% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>18/21</span>
+                <span class='fraction'>18/20</span>
             </div>
         
             
@@ -113,7 +113,11 @@
 <a name='L48'></a><a href='#L48'>48</a>
 <a name='L49'></a><a href='#L49'>49</a>
 <a name='L50'></a><a href='#L50'>50</a>
-<a name='L51'></a><a href='#L51'>51</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -148,22 +152,26 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">40x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">80x</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">78x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">38x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">40x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">40x</span>
-<span class="cline-any cline-yes">40x</span>
-<span class="cline-any cline-yes">40x</span>
 <span class="cline-any cline-yes">38x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { checkResponse } from './utils';
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { HttpResponseError } from './model/Errors';
 &nbsp;
 type RequestArgs = {
 	endpoint: string;
@@ -188,7 +196,7 @@ async function _request({
 	requestBody,
 	headers: requestHeaders,
 	...options
-}: RequestOptions): Promise&lt;Response&gt; {
+}: RequestOptions): Promise&lt;unknown&gt; {
 	const body = requestBody ? JSON.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
@@ -199,19 +207,23 @@ async function _request({
 	const response = await fetch(endpoint, { body, headers, ...options });
 &nbsp;
 	if (!response.ok) {
-		const <span class="cstat-no" title="statement not covered" >{ error, detail } = <span class="cstat-no" title="statement not covered" >a</span>wait response.json();</span>
-		const <span class="cstat-no" title="statement not covered" >message = error || detail || 'bad response';</span>
-<span class="cstat-no" title="statement not covered" >		throw new Error(message);</span>
+		// expecting: { error: '', code: 0 }
+		// or: { detail: '' } (cashuBtc via pythonApi)
+		const { error, detail } = await response.json().catch(<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >(</span>{ error: 'bad response' }));</span>
+		throw new HttpResponseError(error || detail || <span class="branch-2 cbranch-no" title="branch not covered" >'bad response',</span> response.status);
 	}
 &nbsp;
-	return response;
+	try {
+		return await response.json();
+	} catch (err) {
+<span class="cstat-no" title="statement not covered" >		console.error('Failed to parse HTTP response', err);</span>
+<span class="cstat-no" title="statement not covered" >		throw new HttpResponseError('bad response', response.status);</span>
+	}
 }
 &nbsp;
 export default async function request&lt;T&gt;(options: RequestOptions): Promise&lt;T&gt; {
-	const response = await _request({ ...options, ...globalRequestOptions });
-	const data = await response.json().catch(<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >(</span>{ error: 'bad response' }));</span>
-	checkResponse(data);
-	return data;
+	const data = await _request({ ...options, ...globalRequestOptions });
+	return data as T;
 }
 &nbsp;</pre></td></tr></table></pre>
 
@@ -220,7 +232,7 @@ export default async function request&lt;T&gt;(options: RequestOptions): Promise
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2024-01-29T02:35:27.283Z
+                at 2024-01-29T02:45:12.899Z
             </div>
         <script src="../prettify.js"></script>
         <script>
