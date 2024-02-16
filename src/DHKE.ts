@@ -4,22 +4,27 @@ import { encodeUint8toBase64 } from './base64.js';
 import { MintKeys, Proof, SerializedBlindedSignature } from './model/types/index.js';
 import { bytesToNumber } from './utils.js';
 import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { Buffer } from 'buffer/';
+
+const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
 
 function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
-	let point: ProjPointType<bigint> | undefined;
-	while (!point) {
-		const hash = sha256(secret);
-		const hashHex = bytesToHex(hash);
-		const pointX = '02' + hashHex;
+	const msgToHash = sha256(Buffer.concat([DOMAIN_SEPARATOR, secret]));
+	const counter = new Uint32Array(1);
+	const maxIterations = 2 ** 16;
+	for (let i = 0; i < maxIterations; i++) {
+		const counterBytes = new Uint8Array(counter.buffer);
+		const hash = sha256(Buffer.concat([msgToHash, counterBytes]));
 		try {
-			point = pointFromHex(pointX);
+			return pointFromHex(bytesToHex(Buffer.concat([new Uint8Array([0x02]), hash])));
 		} catch (error) {
-			secret = sha256(secret);
+			counter[0]++;
 		}
 	}
-	return point;
+	throw new Error('No valid point found');
 }
+
 export function pointFromHex(hex: string) {
 	return secp256k1.ProjectivePoint.fromHex(hex);
 }
