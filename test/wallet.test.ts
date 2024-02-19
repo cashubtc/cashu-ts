@@ -31,7 +31,7 @@ describe('test fees', () => {
 			amount: 2000,
 			fee_reserve: 20
 		});
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, 'sat');
 
 		const fee = await wallet.getMeltQuote(invoice);
 		const amount = decode(invoice).sections[2].value / 1000;
