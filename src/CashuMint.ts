@@ -42,6 +42,12 @@ class CashuMint {
 		return request<GetInfoResponse>({ endpoint: joinUrls(mintUrl, '/v1/info') });
 	}
 	/**
+	 * fetches mints info at the /info endpoint
+	 */
+	async getInfo(): Promise<GetInfoResponse> {
+		return CashuMint.getInfo(this._mintUrl);
+	}
+	/**
 	 * Starts a minting process by requesting an invoice from the mint
 	 * @param mintUrl
 	 * @param amount Amount requesting for mint.

@@ -27,7 +27,7 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
-import { bytesToHex } from '@noble/curves/abstract/utils.js';
+import { bytesToHex } from '@noble/curves/abstract/utils';
 
 /**
  * Class that represents a Cashu wallet.

@@ -2,7 +2,7 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { deriveKeysetId, getEncodedToken } from '../src/utils.js';
+import { decodeInvoice, deriveKeysetId, getEncodedToken } from '../src/utils.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -28,17 +28,29 @@ describe('mint api', () => {
 	test('get info', async () => {
 		const mint = new CashuMint(mintUrl);
 		const info = await mint.getInfo();
-		expect(info).toBeDefined();
+		expect(info.name).toContain('Current App  mint');
 	});
 	test('request mint', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, 'sat');
 		const request = await wallet.getMintQuote(100);
-		expect(request).toBeDefined();
+		console.log(request);
+		expect(request.quote.length).toBeGreaterThan(0);
 	});
+	test('request USD Quote', async () => {
+		const mint = new CashuMint('https://mint.current.fyi');
+		const wallet = new CashuWallet(mint, 'usd');
+		const request = await wallet.getMintQuote(100);
+		console.log(request);
+		const decodedInvoice = decodeInvoice(request.request);
+		console.log(decodedInvoice);
+		expect(decodedInvoice.amountInSats).toBeGreaterThan(0);
+		expect(request.quote.length).toBeGreaterThan(0);
+	});
+
 	test('mint tokens', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, 'sat');
 		const request = await wallet.getMintQuote(1337);
 		expect(request).toBeDefined();
 		expect(request.request).toContain('lnbc1337');
