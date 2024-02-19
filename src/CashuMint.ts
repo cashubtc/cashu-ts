@@ -1,6 +1,4 @@
 import {
-	CheckSpendablePayload,
-	CheckSpendableResponse,
 	GetInfoResponse,
 	MeltPayload,
 	MeltResponse,
@@ -25,29 +23,27 @@ import { isObj, joinUrls } from './utils.js';
 class CashuMint {
 	/**
 	 * @param _mintUrl requires mint URL to create this object
+	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
 	constructor(private _mintUrl: string) { }
 
 	get mintUrl() {
 		return this._mintUrl;
 	}
+
 	/**
 	 * fetches mints info at the /info endpoint
 	 * @param mintUrl
+	 * @param customRequest
 	 */
 	public static async getInfo(mintUrl: string): Promise<GetInfoResponse> {
 		return request<GetInfoResponse>({ endpoint: joinUrls(mintUrl, '/v1/info') });
 	}
 	/**
-	 * fetches mints info at the /info endpoint
-	 */
-	async getInfo(): Promise<GetInfoResponse> {
-		return CashuMint.getInfo(this._mintUrl);
-	}
-	/**
 	 * Starts a minting process by requesting an invoice from the mint
 	 * @param mintUrl
 	 * @param amount Amount requesting for mint.
+	 * @param customRequest
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	public static async mintQuote(mintUrl: string, requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
@@ -71,6 +67,7 @@ class CashuMint {
 	 * @param mintUrl
 	 * @param payloads outputs (Blinded messages) that can be written
 	 * @param hash hash (id) used for by the mint to keep track of wether the invoice has been paid yet
+	 * @param customRequest
 	 * @returns serialized blinded signatures
 	 */
 	public static async mint(
@@ -102,6 +99,7 @@ class CashuMint {
 	 * Get the mints public keys
 	 * @param mintUrl
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
+	 * @param customRequest
 	 * @returns
 	 */
 	public static async getKeys(mintUrl: string, keysetId?: string): Promise<MintActiveKeys> {
@@ -138,6 +136,7 @@ class CashuMint {
 	/**
 	 * Get the mints keysets in no specific order
 	 * @param mintUrl
+	 * @param customRequest
 	 * @returns all the mints past and current keysets.
 	 */
 	public static async getKeySets(mintUrl: string): Promise<MintAllKeysets> {
@@ -156,6 +155,7 @@ class CashuMint {
 	 * Ask mint to perform a split operation
 	 * @param mintUrl
 	 * @param splitPayload data needed for performing a token split
+	 * @param customRequest
 	 * @returns split tokens
 	 */
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
@@ -171,15 +171,7 @@ class CashuMint {
 
 		return data;
 	}
-	/**
-	 * Ask mint to perform a split operation
-	 * @param splitPayload data needed for performing a token split
-	 * @returns split tokens
-	 */
-	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
-		return CashuMint.split(this._mintUrl, splitPayload);
-	}
-	/**
+	/*
 	 * Asks the mint for a melt quote
 	 * @param mintUrl
 	 * @param MeltQuotePayload
@@ -198,18 +190,11 @@ class CashuMint {
 
 		return data;
 	}
-	/**
-	 * Asks the mint for a melt quote
-	 * @param MeltQuotePayload
-	 * @returns
-	 */
-	async meltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
-		return CashuMint.meltQuote(this._mintUrl, meltQuotePayload);
-	}
-	/**
+	/*
 	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
 	 * @param mintUrl
 	 * @param meltPayload
+	 * @param customRequest
 	 * @returns
 	 */
 	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
@@ -238,35 +223,31 @@ class CashuMint {
 		return CashuMint.melt(this._mintUrl, meltPayload);
 	}
 	/**
-	 * Checks if specific proofs have already been redeemed
+	 * Estimate fees for a given LN invoice
 	 * @param mintUrl
-	 * @param checkPayload
-	 * @returns redeemed and unredeemed ordered list of booleans
+	 * @param checkfeesPayload Payload containing LN invoice that needs to get a fee estimate
+	 * @returns estimated Fee
 	 */
-	public static async check(
+	public static async checkFees(
 		mintUrl: string,
-		checkPayload: CheckSpendablePayload
-	): Promise<CheckSpendableResponse> {
-		const data = await request<CheckSpendableResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/check'),
+		checkfeesPayload: { pr: string }
+	): Promise<{ fee: number }> {
+		const data = await request<{ fee: number }>({
+			endpoint: joinUrls(mintUrl, 'checkfees'),
 			method: 'POST',
-			requestBody: checkPayload
+			requestBody: checkfeesPayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.spendable)) {
+		if (!isObj(data) || typeof data?.fee !== 'number') {
 			throw new Error('bad response');
 		}
 
 		return data;
 	}
-	/**
-	 * Checks if specific proofs have already been redeemed
-	 * @param checkPayload
-	 * @returns redeemed and unredeemed ordered list of booleans
-	 */
-	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
-		return CashuMint.check(this._mintUrl, checkPayload);
-	}
+	
+	
+
+	
 }
 
 export { CashuMint };

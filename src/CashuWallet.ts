@@ -27,7 +27,7 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
-import { bytesToHex } from '@noble/curves/abstract/utils';
+import { bytesToHex } from '@noble/curves/abstract/utils.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -43,6 +43,8 @@ class CashuWallet {
 	/**
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
+	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
+	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(mint: CashuMint, unit?:string, keys?: MintKeys, ) {
 		this.mint = mint;
@@ -218,6 +220,7 @@ class CashuWallet {
 		return this.payLnInvoice(invoice, proofs);
 	}
 
+	
 	/**
 	 * Receive an encoded Cashu token
 	 * @param encodedToken Cashu token
@@ -356,9 +359,10 @@ class CashuWallet {
 	}
 	/**
 	 * Creates a split payload
-	 * @param amount1 amount to keep
-	 * @param amount2 amount to send
-	 * @param proofsToSend proofs to split
+	 * @param amount amount to send
+	 * @param proofsToSend proofs to split*
+	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns
 	 */
 	private createSplitPayload(
@@ -438,10 +442,12 @@ class CashuWallet {
 		return { blindedMessages, secrets, rs, amounts };
 	}
 
+
 	/**
 	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve
 	 * See: https://github.com/cashubtc/nuts/blob/main/08.md
 	 * @param feeReserve amount to cover with blank outputs
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
 	private createBlankOutputs(feeReserve: number): BlindedMessageData {
