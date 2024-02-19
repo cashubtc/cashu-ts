@@ -23,13 +23,13 @@ describe('testing hash to curve', () => {
 describe('test blinding message', () => {
 	test('testing string 0000....01', async () => {
 		var enc = new TextEncoder();
-		let secretUInt8 = enc.encode(SECRET_MESSAGE);
+		let secretUInt8 = enc.encode('test_message');
 		let { B_ } = await dhke.blindMessage(
 			secretUInt8,
 			bytesToNumber(hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'))
 		);
 		expect(B_.toHex(true)).toBe(
-			'03c509bbdd8aaa81d5e67468d07b4b7dffd5769ac596ff3964e151adcefc6b06d0'
+			'02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2'
 		);
 	});
 });

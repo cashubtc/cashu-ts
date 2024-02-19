@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
@@ -548,6 +548,8 @@ class CashuWallet {
 			} else {
 				secret = randomBytes(32);
 			}
+			secret = bytesToHex(secret);
+			secret = new TextEncoder().encode(secret);
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret, deterministicR);
 			rs.push(r);
