@@ -36,21 +36,28 @@ import { bytesToHex } from '@noble/curves/abstract/utils';
 class CashuWallet {
 	private _keys = {} as MintKeys;
 	private _keysetId = '';
+	private _unit='sat';
 
 	mint: CashuMint;
-	unit = 'sat';
 
 	/**
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
-	constructor(mint: CashuMint, keys?: MintKeys) {
+	constructor(mint: CashuMint, unit?:string, keys?: MintKeys, ) {
 		this.mint = mint;
 		if (keys) {
 			this._keys = keys;
 			// this._keysetId = deriveKeysetId(this._keys);
 			this._keysetId = keys.id;
 		}
+
+		if (unit) this._unit  = unit;
+	}
+
+	get unit():string {
+
+		return this._unit;
 	}
 
 	get keys(): MintKeys {
@@ -165,6 +172,9 @@ class CashuWallet {
 			inputs: proofsToSend,
 			outputs: [...blindedMessages]
 		};
+
+		console.log(meltPayload);
+		//TODO: remove this line
 		const meltResponse = await this.mint.melt(meltPayload);
 
 		return {
@@ -263,7 +273,7 @@ class CashuWallet {
 				keyset,
 				preference
 			);
-			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
 				signatures,
 				blindedMessages.rs,
