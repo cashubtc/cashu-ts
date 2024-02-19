@@ -107,8 +107,8 @@ describe('receive', () => {
 		expect(response.tokensWithErrors).toBe(undefined);
 	});
 	test('test receive tokens already spent', async () => {
-		const msg = 'tokens already spent. Secret: asdasdasd';
-		nock(mintUrl).post('/v1/split').reply(200, { detail: msg });
+		const msg = 'tokens already spent. Secret: oEpEuViVHUV2vQH81INUbq++Yv2w3u5H0LhaqXJKeR0=';
+		nock(mintUrl).post('/split').reply(200, { detail: msg });
 		const wallet = new CashuWallet(mint);
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
@@ -125,7 +125,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 	});
 	test('test receive could not verify proofs', async () => {
-		nock(mintUrl).post('/v1/split').reply(200, { code: 0, error: 'could not verify proofs.' });
+		nock(mintUrl).post('/split').reply(200, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint);
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
@@ -525,7 +525,6 @@ describe('deterministic', () => {
 					}
 				],
 				undefined,
-				1
 			)
 			.catch((e) => e);
 		expect(result).toEqual(

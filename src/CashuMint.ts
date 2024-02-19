@@ -1,4 +1,6 @@
 import {
+	CheckSpendablePayload,
+	CheckSpendableResponse,
 	GetInfoResponse,
 	MeltPayload,
 	MeltResponse,
@@ -155,7 +157,6 @@ class CashuMint {
 	 * Ask mint to perform a split operation
 	 * @param mintUrl
 	 * @param splitPayload data needed for performing a token split
-	 * @param customRequest
 	 * @returns split tokens
 	 */
 	public static async split(mintUrl: string, splitPayload: SplitPayload): Promise<SplitResponse> {
@@ -171,7 +172,15 @@ class CashuMint {
 
 		return data;
 	}
-	/*
+	/**
+	 * Ask mint to perform a split operation
+	 * @param splitPayload data needed for performing a token split
+	 * @returns split tokens
+	 */
+	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
+		return CashuMint.split(this._mintUrl, splitPayload);
+	}
+	/**
 	 * Asks the mint for a melt quote
 	 * @param mintUrl
 	 * @param MeltQuotePayload
@@ -190,11 +199,18 @@ class CashuMint {
 
 		return data;
 	}
-	/*
+	/**
+	 * Asks the mint for a melt quote
+	 * @param MeltQuotePayload
+	 * @returns
+	 */
+	async meltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+		return CashuMint.meltQuote(this._mintUrl, meltQuotePayload);
+	}
+	/**
 	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
 	 * @param mintUrl
 	 * @param meltPayload
-	 * @param customRequest
 	 * @returns
 	 */
 	public static async melt(mintUrl: string, meltPayload: MeltPayload): Promise<MeltResponse> {
@@ -243,6 +259,37 @@ class CashuMint {
 		}
 
 		return data;
+	}
+
+	/**
+	 * Checks if specific proofs have already been redeemed
+	 * @param mintUrl
+	 * @param checkPayload
+	 * @returns redeemed and unredeemed ordered list of booleans
+	 */
+	public static async check(
+		mintUrl: string,
+		checkPayload: CheckSpendablePayload
+	): Promise<CheckSpendableResponse> {
+		const data = await request<CheckSpendableResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/check'),
+			method: 'POST',
+			requestBody: checkPayload
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.spendable)) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+	/**
+	 * Checks if specific proofs have already been redeemed
+	 * @param checkPayload
+	 * @returns redeemed and unredeemed ordered list of booleans
+	 */
+	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
+		return CashuMint.check(this._mintUrl, checkPayload);
 	}
 	
 	
