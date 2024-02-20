@@ -85,9 +85,15 @@ If you open a PR, please do so from the `development` branch as the base branch.
 
 ```
 * `main`
-|\  
-| * `staging` 
-| |\  
+|\
+|\ \
+| | * `hotfix`
+| |
+| * `staging`
+| |\ 
+| |\ \
+| | | * `bugfix`
+| | |
 | | * `development`  
 | | |\ 
 | | | * `feature1`
