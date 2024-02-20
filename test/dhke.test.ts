@@ -9,14 +9,14 @@ describe('testing hash to curve', () => {
 		let secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000000');
 		let Y = dhke.hashToCurve(secret);
 		let hexY = Y.toHex(true);
-		expect(hexY).toBe('0266687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925');
+		expect(hexY).toBe('024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725');
 	});
 
 	test('testing string 0000....01', async () => {
 		let secret = hexToBytes('0000000000000000000000000000000000000000000000000000000000000001');
 		let Y = dhke.hashToCurve(secret);
 		let hexY = Y.toHex(true);
-		expect(hexY).toBe('02ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5');
+		expect(hexY).toBe('022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf');
 	});
 });
 
@@ -29,7 +29,7 @@ describe('test blinding message', () => {
 			bytesToNumber(hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'))
 		);
 		expect(B_.toHex(true)).toBe(
-			'03c509bbdd8aaa81d5e67468d07b4b7dffd5769ac596ff3964e151adcefc6b06d0'
+			'030eded094dc2b0e3c78aae9fac76c1ad426a43e1f57fb32d2e64ca5dc82a85791'
 		);
 	});
 });
