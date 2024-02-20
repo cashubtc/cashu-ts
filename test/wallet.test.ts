@@ -35,7 +35,7 @@ describe('test fees', () => {
 
 describe('receive', () => {
 	const tokenInput =
-		'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiJBZmtRYlJYQUc1UU1tT3ArbG9vRzQ2OXBZWTdiaStqbEcxRXRDT2tIa2hZPSIsIkMiOiIwMmY4NWRkODRiMGY4NDE4NDM2NmNiNjkxNDYxMDZhZjdjMGYyNmYyZWUwYWQyODdhM2U1ZmE4NTI1MjhiYjI5ZGYifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIi91WUIvNndXbllrVSJdfV19';
+		'eyJwcm9vZnMiOlt7ImlkIjoiL3VZQi82d1duWWtVIiwiYW1vdW50IjoxLCJzZWNyZXQiOiIwMWY5MTA2ZDE1YzAxYjk0MGM5OGVhN2U5NjhhMDZlM2FmNjk2MThlZGI4YmU4ZTUxYjUxMmQwOGU5MDc5MjE2IiwiQyI6IjAyZjg1ZGQ4NGIwZjg0MTg0MzY2Y2I2OTE0NjEwNmFmN2MwZjI2ZjJlZTBhZDI4N2EzZTVmYTg1MjUyOGJiMjlkZiJ9XSwibWludHMiOlt7InVybCI6Imh0dHBzOi8vbGVnZW5kLmxuYml0cy5jb20vY2FzaHUvYXBpL3YxLzRncjlYY216M1hFa1VOd2lCaVFHb0MiLCJpZHMiOlsiL3VZQi82d1duWWtVIl19XX0=';
 	test('test receive encoded token', async () => {
 		nock(mintUrl)
 			.post('/split')
@@ -59,7 +59,7 @@ describe('receive', () => {
 			mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
 		});
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
 	});
 
@@ -88,7 +88,7 @@ describe('receive', () => {
 			mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
 		});
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
 	});
 	test('test receive custom split', async () => {
@@ -130,7 +130,7 @@ describe('receive', () => {
 			]
 		});
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
 	});
 	test('test receive tokens already spent', async () => {
@@ -149,7 +149,7 @@ describe('receive', () => {
 			mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
 		});
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 	});
 	test('test receive could not verify proofs', async () => {
 		nock(mintUrl).post('/split').reply(500, { code: 0, error: 'could not verify proofs.' });
@@ -166,7 +166,7 @@ describe('receive', () => {
 			mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
 		});
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 	});
 	test('test receive keys changed', async () => {
 		nock(mintUrl)
@@ -197,7 +197,7 @@ describe('receive', () => {
 		expect(token[0].proofs).toHaveLength(1);
 		expect(token[0].proofs[0]).toMatchObject({ amount: 1, id: 'test' });
 		expect(/[0-9a-f]{64}/.test(token[0].proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(token[0].proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(token[0].proofs[0].secret)).toBe(true);
 		expect(tokensWithErrors).toBe(undefined);
 		expect(newKeys).toStrictEqual({
 			1: '0377a6fe114e291a8d8e991627c38001c8305b23b9e98b1c7b1893f5cd0dda6cad'
@@ -210,7 +210,7 @@ describe('checkProofsSpent', () => {
 		{
 			id: '0NI3TUAs1Sfy',
 			amount: 1,
-			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
@@ -231,7 +231,7 @@ describe('payLnInvoice', () => {
 		{
 			id: '0NI3TUAs1Sfy',
 			amount: 1,
-			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
@@ -334,7 +334,7 @@ describe('requestTokens', () => {
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(proofs[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 	test('test requestTokens bad resonse', async () => {
 		nock(mintUrl).post('/mint?hash=').reply(200, {});
@@ -351,7 +351,7 @@ describe('send', () => {
 		{
 			id: '0NI3TUAs1Sfy',
 			amount: 1,
-			secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
@@ -375,7 +375,7 @@ describe('send', () => {
 		expect(result.send).toHaveLength(1);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '0NI3TUAs1Sfy' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 	});
 	test('test send over paying. Should return change', async () => {
 		nock(mintUrl)
@@ -400,7 +400,7 @@ describe('send', () => {
 			{
 				id: '0NI3TUAs1Sfy',
 				amount: 2,
-				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		]);
@@ -408,11 +408,11 @@ describe('send', () => {
 		expect(result.send).toHaveLength(1);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 		expect(result.returnChange).toHaveLength(1);
 		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.returnChange[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.returnChange[0].secret)).toBe(true);
 	});
 
 	test('test send over paying2', async () => {
@@ -438,7 +438,7 @@ describe('send', () => {
 			{
 				id: 'z32vUtKgNCm1',
 				amount: 2,
-				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
@@ -447,11 +447,11 @@ describe('send', () => {
 		expect(result.send).toHaveLength(1);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 		expect(result.returnChange).toHaveLength(1);
 		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.returnChange[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.returnChange[0].secret)).toBe(true);
 	});
 	test('test send preference', async () => {
 		nock(mintUrl)
@@ -486,13 +486,13 @@ describe('send', () => {
 			{
 				id: 'z32vUtKgNCm1',
 				amount: 2,
-				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			},
 			{
 				id: 'z32vUtKgNCm1',
 				amount: 2,
-				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
@@ -504,7 +504,7 @@ describe('send', () => {
 		expect(result.send[2]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(result.send[3]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 		expect(result.returnChange).toHaveLength(0);
 	});
 
@@ -541,13 +541,13 @@ describe('send', () => {
 			{
 				id: 'z32vUtKgNCm1',
 				amount: 2,
-				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			},
 			{
 				id: 'z32vUtKgNCm1',
 				amount: 2,
-				secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
@@ -558,7 +558,7 @@ describe('send', () => {
 		expect(result.send[1]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(result.send[2]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-		expect(/[A-Za-z0-9+/]{43}=/.test(result.send[0].secret)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 		expect(result.returnChange).toHaveLength(1);
 		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: 'z32vUtKgNCm1' });
 	});
@@ -590,7 +590,7 @@ describe('send', () => {
 				{
 					id: 'z32vUtKgNCm1',
 					amount: 2,
-					secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 				}
 			])
@@ -610,7 +610,7 @@ describe('deterministic', () => {
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 2,
-						secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+						secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 						C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 					}
 				],
