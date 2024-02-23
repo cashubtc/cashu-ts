@@ -1,6 +1,8 @@
+import { decode } from '@gandlaf21/bolt11-decode';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import {
 	AmountPreference,
+	InvoiceData,
 	MintKeys,
 	Proof,
 	Token,
@@ -185,8 +187,33 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 	}
 }
 
-export function joinUrls(...parts: string[]): string {
+export function joinUrls(...parts: Array<string>): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
+}
+
+export function decodeInvoice(bolt11Invoice: string): InvoiceData {
+	const invoiceData: InvoiceData = {} as InvoiceData;
+	const decodeResult = decode(bolt11Invoice);
+	for (let i = 0; i < decodeResult.sections.length; i++) {
+		const decodedSection = decodeResult.sections[i];
+		if (decodedSection.name === 'amount') {
+			invoiceData.amountInSats = Number(decodedSection.value) / 1000;
+			invoiceData.amountInMSats = Number(decodedSection.value);
+		}
+		if (decodedSection.name === 'timestamp') {
+			invoiceData.timestamp = decodedSection.value;
+		}
+		if (decodedSection.name === 'description') {
+			invoiceData.memo = decodedSection.value;
+		}
+		if (decodedSection.name === 'expiry') {
+			invoiceData.expiry = decodedSection.value;
+		}
+		if (decodedSection.name === 'payment_hash') {
+			invoiceData.paymentHash = decodedSection.value.toString('hex');
+		}
+	}
+	return invoiceData;
 }
 
 export {
