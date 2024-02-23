@@ -299,15 +299,15 @@ class CashuWallet {
 			throw new Error('Not enough funds available');
 		}
 		if (amount < amountAvailable || preference) {
-			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(
+			const { amountSend } = this.splitReceive(amount, amountAvailable);
+			const { payload, blindedMessages, keepVector } = this.createSplitPayload(
 				amountSend,
 				proofsToSend,
 				preference,
 				counter
 			);
 			const { promises } = await this.mint.split(payload);
-			const proofs = dhke.constructProofs(
+			const splitProofs = dhke.constructProofs(
 				promises,
 				blindedMessages.rs,
 				blindedMessages.secrets,
@@ -316,14 +316,12 @@ class CashuWallet {
 			// sum up proofs until amount2 is reached
 			const splitProofsToKeep: Array<Proof> = [];
 			const splitProofsToSend: Array<Proof> = [];
-			let amountKeepCounter = 0;
-			proofs.forEach((proof) => {
-				if (amountKeepCounter < amountKeep) {
-					amountKeepCounter += proof.amount;
+			splitProofs.forEach((proof, i) => {
+				if (keepVector[i]) {
 					splitProofsToKeep.push(proof);
-					return;
+				} else {
+					splitProofsToSend.push(proof);
 				}
-				splitProofsToSend.push(proof);
 			});
 			return {
 				returnChange: [...splitProofsToKeep, ...proofsToKeep],
@@ -462,6 +460,7 @@ class CashuWallet {
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
+		keepVector: Array<boolean>;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
@@ -474,22 +473,43 @@ class CashuWallet {
 		}
 		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference, counter);
 
-		// join keepBlindedMessages and sendBlindedMessages
+		const convertedKeepMessages = keepBlindedMessages.blindedMessages.map((_, i) => ({
+			msg: keepBlindedMessages.blindedMessages[i],
+			secret: keepBlindedMessages.secrets[i],
+			rs: keepBlindedMessages.rs[i],
+			amount: keepBlindedMessages.amounts[i],
+			keep: true
+		}));
+
+		const convertedSendMessages = sendBlindedMessages.blindedMessages.map((_, i) => ({
+			msg: sendBlindedMessages.blindedMessages[i],
+			secret: sendBlindedMessages.secrets[i],
+			rs: sendBlindedMessages.rs[i],
+			amount: sendBlindedMessages.amounts[i],
+			keep: false
+		}));
+		const keepVector: Array<boolean> = [];
 		const blindedMessages: BlindedTransaction = {
-			blindedMessages: [
-				...keepBlindedMessages.blindedMessages,
-				...sendBlindedMessages.blindedMessages
-			],
-			secrets: [...keepBlindedMessages.secrets, ...sendBlindedMessages.secrets],
-			rs: [...keepBlindedMessages.rs, ...sendBlindedMessages.rs],
-			amounts: [...keepBlindedMessages.amounts, ...sendBlindedMessages.amounts]
+			blindedMessages: [],
+			secrets: [],
+			rs: [],
+			amounts: []
 		};
+		[...convertedKeepMessages, ...convertedSendMessages]
+			.sort((a, b) => a.amount - b.amount)
+			.map((msg) => {
+				keepVector.push(msg.keep);
+				blindedMessages.blindedMessages.push(msg.msg);
+				blindedMessages.amounts.push(msg.amount);
+				blindedMessages.secrets.push(msg.secret);
+				blindedMessages.rs.push(msg.rs);
+			});
 
 		const payload = {
 			proofs: proofsToSend,
 			outputs: [...blindedMessages.blindedMessages]
 		};
-		return { payload, blindedMessages };
+		return { payload, blindedMessages, keepVector };
 	}
 	private splitReceive(
 		amount: number,
