@@ -1,5 +1,6 @@
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
+import { encodeUint8toBase64 } from './base64.js';
 import { MintKeys, Proof, SerializedBlindedSignature } from './model/types/index.js';
 import { bytesToNumber } from './utils.js';
 import { sha256 } from '@noble/hashes/sha256';
@@ -26,7 +27,8 @@ export function pointFromHex(hex: string) {
 	return secp256k1.ProjectivePoint.fromAffine(h2c.toAffine());
 } */
 function blindMessage(secret: Uint8Array, r?: bigint): { B_: ProjPointType<bigint>; r: bigint } {
-	const secretMessage = new TextEncoder().encode(new TextDecoder().decode(secret));
+	const secretMessageBase64 = encodeUint8toBase64(secret);
+	const secretMessage = new TextEncoder().encode(secretMessageBase64);
 	const Y = hashToCurve(secretMessage);
 	if (!r) {
 		r = bytesToNumber(secp256k1.utils.randomPrivateKey());
@@ -55,11 +57,10 @@ function constructProofs(
 		const C_ = pointFromHex(p.C_);
 		const A = pointFromHex(keyset.keys[p.amount]);
 		const C = unblindSignature(C_, rs[i], A);
-		const secret = new TextDecoder().decode(secrets[i])
 		const proof = {
 			id: p.id,
 			amount: p.amount,
-			secret: secret,
+			secret: encodeUint8toBase64(secrets[i]),
 			C: C.toHex(true)
 		};
 		return proof;

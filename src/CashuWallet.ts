@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
@@ -30,7 +30,6 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
-import { bytesToHex } from '@noble/curves/abstract/utils';
 import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
@@ -557,15 +556,17 @@ class CashuWallet {
 		const rs: Array<bigint> = [];
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
-			let secret = undefined;
+			let secretBytes = undefined;
 			if (this._seed && counter != undefined) {
-				secret = deriveSecret(this._seed, keysetId ?? this.keysetId, counter + i);
+				secretBytes = deriveSecret(this._seed, keysetId ?? this.keysetId, counter + i);
 				deterministicR = bytesToNumber(
 					deriveBlindingFactor(this._seed, keysetId ?? this.keysetId, counter + i)
 				);
 			} else {
-				secret = randomBytes(32);
+				secretBytes = randomBytes(32);
 			}
+			const secretHex = bytesToHex(secretBytes);
+			const secret = new TextEncoder().encode(secretHex);
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret, deterministicR);
 			rs.push(r);
