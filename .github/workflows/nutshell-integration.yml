@@ -13,8 +13,10 @@ jobs:
       - name: Check running containers
         run: docker ps
 
-      - name: Curl on localhost:3338/v1/keys
-        run: curl http://localhost:3338/v1/keys
+      - name: Sleep 5 seconds and curl on localhost:3338/v1/keys
+        run: |
+          sleep 5
+          curl localhost:3338/v1/keys
 
       - name: Checkout cashu-ts repository
         uses: actions/checkout@v3
