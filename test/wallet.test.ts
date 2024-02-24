@@ -3,6 +3,7 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { ReceiveResponse } from '../src/model/types/index.js';
+import { cleanToken, getDecodedToken } from '../src/utils.js';
 
 const dummyKeysResp = {
 	keysets: [{
@@ -44,8 +45,8 @@ describe('test fees', () => {
 
 describe('receive', () => {
 	const tokenInput =
-		'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICI4ZTRlODU1NmZkODBkZGY1NDk4Y2JmOTY4ZjcxZGRkMDZiMTc2MDBkYTJmOWU1MWE4NTc1YmVjN2U3N2Q0YjgxIiwgIkMiOiAiMDJmZWM1ZGQzNzk3YmRhZTBiMzk3ZmFmZjkyOTAzYzEzZmQ2ZWVhZGQzN2NlNjJjZGJmODAwNGI1MTNjZDAzZmRmIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19';
-	test('test receive', async () => {
+		'cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAwOWExZjI5MzI1M2U0MWUiLCJhbW91bnQiOjEsInNlY3JldCI6IjAxZjkxMDZkMTVjMDFiOTQwYzk4ZWE3ZTk2OGEwNmUzYWY2OTYxOGVkYjhiZThlNTFiNTEyZDA4ZTkwNzkyMTYiLCJDIjoiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCJtaW50IjoiaHR0cDovL2xvY2FsaG9zdDozMzM4In1dfQ=';
+	test('test receive encoded token', async () => {
 		nock(mintUrl)
 			.post('/v1/split')
 			.reply(200, {
@@ -70,6 +71,35 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].secret)).toBe(true);
 		expect(response.tokensWithErrors).toBe(undefined);
+	});
+
+	test('test receive raw token', async () => {
+		const decodedInput = cleanToken(getDecodedToken(tokenInput));
+
+		nock(mintUrl)
+			.post('/v1/split')
+			.reply(200, {
+				signatures: [
+					{
+						id: 'z32vUtKgNCm1',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
+			});
+		const wallet = new CashuWallet(mint);
+
+		const { token: t, tokensWithErrors } = await wallet.receive(decodedInput);
+
+		expect(t.token).toHaveLength(1);
+		expect(t.token[0].proofs).toHaveLength(1);
+		expect(t.token[0]).toMatchObject({
+			proofs: [{ amount: 1, id: 'z32vUtKgNCm1' }],
+			mint: 'http://localhost:3338'
+		});
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
+		expect(tokensWithErrors).toBe(undefined);
 	});
 	test('test receive custom split', async () => {
 		nock(mintUrl)
@@ -148,7 +178,7 @@ describe('checkProofsSpent', () => {
 		{
 			id: '009a1f293253e41e',
 			amount: 1,
-			secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
@@ -169,7 +199,7 @@ describe('payLnInvoice', () => {
 		{
 			id: '009a1f293253e41e',
 			amount: 1,
-			secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
@@ -261,7 +291,7 @@ describe('send', () => {
 		{
 			id: '009a1f293253e41e',
 			amount: 1,
-			secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
@@ -310,7 +340,7 @@ describe('send', () => {
 			{
 				id: '009a1f293253e41e',
 				amount: 2,
-				secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		]);
@@ -348,7 +378,7 @@ describe('send', () => {
 			{
 				id: '009a1f293253e41e',
 				amount: 2,
-				secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
@@ -396,13 +426,13 @@ describe('send', () => {
 			{
 				id: '009a1f293253e41e',
 				amount: 2,
-				secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			},
 			{
 				id: '009a1f293253e41e',
 				amount: 2,
-				secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
@@ -451,13 +481,13 @@ describe('send', () => {
 			{
 				id: '009a1f293253e41e',
 				amount: 2,
-				secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			},
 			{
 				id: '009a1f293253e41e',
 				amount: 2,
-				secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
@@ -500,7 +530,7 @@ describe('send', () => {
 				{
 					id: '009a1f293253e41e',
 					amount: 2,
-					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 				}
 			])
@@ -520,7 +550,7 @@ describe('deterministic', () => {
 					{
 						id: 'z32vUtKgNCm1',
 						amount: 2,
-						secret: 'H5jmg3pDRkTJQRgl18bW4Tl0uTH48GUiF86ikBBnShM=',
+						secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 						C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 					}
 				],

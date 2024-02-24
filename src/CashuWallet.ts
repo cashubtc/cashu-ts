@@ -109,7 +109,7 @@ class CashuWallet {
 				continue;
 			}
 			try {
-				const { proofsWithError, proofs } = await this.receiveTokenEntry(
+				const { proofs, proofsWithError } = await this.receiveTokenEntry(
 					tokenEntry,
 					preference,
 					counter
