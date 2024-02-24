@@ -19,7 +19,7 @@ import {
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
 	SplitPayload,
-	MeltQuotePayload,
+	CheckStateEnum,
 	Token,
 	TokenEntry
 } from './model/types/index.js';
@@ -385,7 +385,7 @@ class CashuWallet {
 
 		return {
 			isPaid: meltResponse.paid ?? false,
-			preimage: meltResponse.proof,
+			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? dhke.constructProofs(
 					meltResponse.change,
@@ -501,11 +501,15 @@ class CashuWallet {
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const payload = {
-			//send only the secret
-			proofs: proofs.map((p) => ({ secret: p.secret }))
+			// array of secrets of proofs to check
+			secrets: proofs.map((p) => p.secret)
 		};
-		const { spendable } = await this.mint.check(payload);
-		return proofs.filter((_, i) => !spendable[i]);
+		const { states } = await this.mint.check(payload);
+
+		return proofs.filter((proof) => {
+			const state = states.find((state) => state.secret === proof.secret);
+			return state && state.state === CheckStateEnum.SPENT;
+		});
 	}
 	private splitReceive(
 		amount: number,

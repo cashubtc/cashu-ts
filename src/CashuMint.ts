@@ -1,6 +1,6 @@
 import {
-	CheckSpendablePayload,
-	CheckSpendableResponse,
+	CheckStatePayload,
+	CheckStateResponse,
 	GetInfoResponse,
 	MeltPayload,
 	MeltResponse,
@@ -180,7 +180,7 @@ class CashuMint {
 	public static async split(mintUrl: string, splitPayload: SplitPayload, customRequest?: typeof request): Promise<SplitResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<SplitResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/split'),
+			endpoint: joinUrls(mintUrl, '/v1/swap'),
 			method: 'POST',
 			requestBody: splitPayload
 		});
@@ -244,7 +244,7 @@ class CashuMint {
 		if (
 			!isObj(data) ||
 			typeof data?.paid !== 'boolean' ||
-			(data?.proof !== null && typeof data?.proof !== 'string')
+			(data?.payment_preimage !== null && typeof data?.payment_preimage !== 'string')
 		) {
 			throw new Error('bad response');
 		}
@@ -268,17 +268,17 @@ class CashuMint {
 	 */
 	public static async check(
 		mintUrl: string,
-		checkPayload: CheckSpendablePayload,
+		checkPayload: CheckStatePayload,
 		customRequest?: typeof request
-	): Promise<CheckSpendableResponse> {
+	): Promise<CheckStateResponse> {
 		const requestInstance = customRequest || request;
-		const data = await requestInstance<CheckSpendableResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/check'),
+		const data = await requestInstance<CheckStateResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/checkstate'),
 			method: 'POST',
 			requestBody: checkPayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.spendable)) {
+		if (!isObj(data) || !Array.isArray(data?.states)) {
 			throw new Error('bad response');
 		}
 
@@ -289,7 +289,7 @@ class CashuMint {
 	 * @param checkPayload
 	 * @returns redeemed and unredeemed ordered list of booleans
 	 */
-	async check(checkPayload: CheckSpendablePayload): Promise<CheckSpendableResponse> {
+	async check(checkPayload: CheckStatePayload): Promise<CheckStateResponse> {
 		return CashuMint.check(this._mintUrl, checkPayload, this._customRequest);
 	}
 

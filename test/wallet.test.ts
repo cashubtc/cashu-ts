@@ -48,7 +48,7 @@ describe('receive', () => {
 		'cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAwOWExZjI5MzI1M2U0MWUiLCJhbW91bnQiOjEsInNlY3JldCI6IjAxZjkxMDZkMTVjMDFiOTQwYzk4ZWE3ZTk2OGEwNmUzYWY2OTYxOGVkYjhiZThlNTFiNTEyZDA4ZTkwNzkyMTYiLCJDIjoiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCJtaW50IjoiaHR0cDovL2xvY2FsaG9zdDozMzM4In1dfQ=';
 	test('test receive encoded token', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -77,7 +77,7 @@ describe('receive', () => {
 		const decodedInput = cleanToken(getDecodedToken(tokenInput));
 
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -103,7 +103,7 @@ describe('receive', () => {
 	});
 	test('test receive custom split', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -138,7 +138,7 @@ describe('receive', () => {
 	});
 	test('test receive tokens already spent', async () => {
 		const msg = 'tokens already spent. Secret: asdasdasd';
-		nock(mintUrl).post('/v1/split').reply(200, { detail: msg });
+		nock(mintUrl).post('/v1/swap').reply(200, { detail: msg });
 		const wallet = new CashuWallet(mint);
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
@@ -155,7 +155,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 	});
 	test('test receive could not verify proofs', async () => {
-		nock(mintUrl).post('/v1/split').reply(200, { code: 0, error: 'could not verify proofs.' });
+		nock(mintUrl).post('/v1/swap').reply(200, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint);
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
@@ -184,8 +184,8 @@ describe('checkProofsSpent', () => {
 	];
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
-			.post('/v1/check')
-			.reply(200, { spendable: [true] });
+			.post('/v1/checkstate')
+			.reply(200, { states: [{ secret: "asd", state: "UNSPENT", witness: "witness-asd" }] });
 		const wallet = new CashuWallet(mint);
 
 		const result = await wallet.checkProofsSpent(proofs);
@@ -205,7 +205,7 @@ describe('payLnInvoice', () => {
 	];
 	test('test payLnInvoice base case', async () => {
 		nock(mintUrl).post('/v1/melt/quote/bolt11').reply(200, { quote: "quote_id", amount: 123, fee_reserve: 0 });
-		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, proof: '' });
+		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
 		const wallet = new CashuWallet(mint);
 
 		const result = await wallet.payLnInvoice(invoice, proofs);
@@ -227,7 +227,7 @@ describe('payLnInvoice', () => {
 			.post('/v1/melt/bolt11')
 			.reply(200, {
 				paid: true,
-				proof: 'asd',
+				payment_preimage: 'asd',
 				change: [
 					{
 						id: '009a1f293253e41e',
@@ -319,7 +319,7 @@ describe('send', () => {
 	});
 	test('test send over paying. Should return change', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -357,7 +357,7 @@ describe('send', () => {
 
 	test('test send over paying2', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -395,7 +395,7 @@ describe('send', () => {
 	});
 	test('test send preference', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -450,7 +450,7 @@ describe('send', () => {
 
 	test('test send preference overpay', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -505,7 +505,7 @@ describe('send', () => {
 
 	test('test send not enough funds', async () => {
 		nock(mintUrl)
-			.post('/v1/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -522,7 +522,7 @@ describe('send', () => {
 		expect(result).toEqual(new Error('Not enough funds available'));
 	});
 	test('test send bad response', async () => {
-		nock(mintUrl).post('/v1/split').reply(200, {});
+		nock(mintUrl).post('/v1/swap').reply(200, {});
 		const wallet = new CashuWallet(mint);
 
 		const result = await wallet

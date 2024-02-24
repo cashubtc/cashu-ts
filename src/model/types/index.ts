@@ -193,7 +193,7 @@ export type MeltResponse = {
 	/**
 	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
-	proof: string | null;
+	payment_preimage: string | null;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
@@ -304,22 +304,40 @@ export type PostMintResponse = {
 /**
  * Payload that needs to be sent to the mint when checking for spendable proofs
  */
-export type CheckSpendablePayload = {
+export type CheckStatePayload = {
 	/**
 	 * array of proofs. Only the secret is strictly needed.
 	 * If the whole object is passed, it will be stripped of other objects before sending it to the mint.
 	 */
-	proofs: Array<{ secret: string }>;
+	secrets: Array<string>;
 };
+
+/**
+ * Enum for the state of a proof
+ */
+export enum CheckStateEnum {
+	UNSPENT = "UNSPENT",
+	PENDING = "PENDING",
+	SPENT = "SPENT",
+}
+
+/**
+ * Entries of CheckStateResponse with state of the proof
+ */
+export type CheckStateEntry = {
+	secret: string;
+	state: CheckStateEnum;
+	witness: string | null;
+}
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
  */
-export type CheckSpendableResponse = {
+export type CheckStateResponse = {
 	/**
-	 * Ordered list for checked proofs. True if the secret has not been redeemed at the mint before
+	 * 
 	 */
-	spendable: Array<boolean>;
+	states: Array<CheckStateEntry>;
 } & ApiError;
 /**
  * blinded message for sending to the mint
