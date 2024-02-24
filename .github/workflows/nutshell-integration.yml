@@ -1,16 +1,15 @@
 name: CI Test Workflow
 
 on: [push, pull_request]
-# on: []
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Docker Compose
+      - name: Set up Docker
         run: |
-          sudo curl -L "https://github.com/docker/compose/releases/download/v2.2.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
+          sudo apt-get update
+          sudo apt-get install -y docker.io
 
       - name: Checkout Nutshell repository
         uses: actions/checkout@v2
@@ -18,22 +17,27 @@ jobs:
           repository: 'cashubtc/nutshell'
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and start mint
+      - name: Pull and start mint
         run: |
-          docker-compose up -d
-      - name: Run netstat
-        run: netstat -lp
+          sudo docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.15.0 poetry run mint
+
+      - name: Check running containers
+        run: sudo docker ps
+
       - name: Curl on localhost:3338/keys
         run: curl http://localhost:3338/keys
+
       - name: Navigate to the parent directory
         run: cd ..
+
       - name: Checkout cashu-ts repository
         uses: actions/checkout@v3
 
-      - name: Run Tests
+      - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           cache: 'npm'
+
       - run: npm ci
       - run: npm run compile
       - run: npm run test-integration
