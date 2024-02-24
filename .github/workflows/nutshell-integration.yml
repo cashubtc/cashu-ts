@@ -6,29 +6,15 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Set up Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-
-      - name: Checkout Nutshell repository
-        uses: actions/checkout@v2
-        with:
-          repository: 'cashubtc/nutshell'
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Pull and start mint
         run: |
-          sudo docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.15.0 poetry run mint
+          docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.15.0 poetry run mint
 
       - name: Check running containers
-        run: sudo docker ps
+        run: docker ps
 
-      - name: Curl on localhost:3338/keys
-        run: curl http://localhost:3338/keys
-
-      - name: Navigate to the parent directory
-        run: cd ..
+      - name: Curl on localhost:3338/v1/keys
+        run: curl http://localhost:3338/v1/keys
 
       - name: Checkout cashu-ts repository
         uses: actions/checkout@v3
