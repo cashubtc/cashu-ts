@@ -1,7 +1,7 @@
 name: CI Test Workflow
 
-# on: [push, pull_request]
-on: []
+on: [push, pull_request]
+# on: []
 
 jobs:
   build-and-test:
