@@ -1,4 +1,4 @@
-name: CI Test Workflow
+name: Nutshell end-to-end tests
 
 on: [push, pull_request]
 
@@ -13,10 +13,10 @@ jobs:
       - name: Check running containers
         run: docker ps
 
-      - name: Sleep 5 seconds and curl on localhost:3338/v1/keys
-        run: |
-          sleep 5
-          curl localhost:3338/v1/keys
+      # - name: Sleep 5 seconds and curl on localhost:3338/v1/info
+      #   run: |
+      #     sleep 5
+      #     curl localhost:3338/v1/info
 
       - name: Checkout cashu-ts repository
         uses: actions/checkout@v3
