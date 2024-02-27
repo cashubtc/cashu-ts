@@ -30,7 +30,7 @@ class CashuMint {
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request) { }
+	constructor(private _mintUrl: string, private _customRequest?: typeof request) {}
 
 	get mintUrl() {
 		return this._mintUrl;
@@ -61,7 +61,11 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	public static async mintQuote(mintUrl: string, requestMintPayload: RequestMintPayload, customRequest?: typeof request): Promise<RequestMintResponse> {
+	public static async mintQuote(
+		mintUrl: string,
+		requestMintPayload: RequestMintPayload,
+		customRequest?: typeof request
+	): Promise<RequestMintResponse> {
 		const requestInstance = customRequest || request;
 		return requestInstance<RequestMintResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
@@ -75,7 +79,10 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async mintQuote(requestMintPayload: RequestMintPayload, customRequest?: typeof request): Promise<RequestMintResponse> {
+	async mintQuote(
+		requestMintPayload: RequestMintPayload,
+		customRequest?: typeof request
+	): Promise<RequestMintResponse> {
 		return CashuMint.mintQuote(this._mintUrl, requestMintPayload, customRequest);
 	}
 	/**
@@ -120,7 +127,11 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns
 	 */
-	public static async getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys> {
+	public static async getKeys(
+		mintUrl: string,
+		keysetId?: string,
+		customRequest?: typeof request
+	): Promise<MintActiveKeys> {
 		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
 			// make the keysetId url safe
@@ -142,14 +153,19 @@ class CashuMint {
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
 	 * @returns the mints public keys
 	 */
-	async getKeys(keysetId?: string, mintUrl?: string, unit?: string, customRequest?: typeof request): Promise<MintKeys> {
+	async getKeys(
+		keysetId?: string,
+		mintUrl?: string,
+		unit?: string,
+		customRequest?: typeof request
+	): Promise<MintKeys> {
 		const allKeys = await CashuMint.getKeys(mintUrl || this._mintUrl, keysetId, customRequest);
 		// find keyset with unit 'sat'
-		const satKeys = (allKeys.keysets).find((keys) => keys.unit === unit ? unit : 'sat');
+		const satKeys = allKeys.keysets.find((keys) => (keys.unit === unit ? unit : 'sat'));
 		if (!satKeys) {
 			throw new Error('No keyset with unit "sat" found');
 		}
-		return satKeys
+		return satKeys;
 	}
 	/**
 	 * Get the mints keysets in no specific order
@@ -157,7 +173,10 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns all the mints past and current keysets.
 	 */
-	public static async getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets> {
+	public static async getKeySets(
+		mintUrl: string,
+		customRequest?: typeof request
+	): Promise<MintAllKeysets> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(mintUrl, '/v1/keysets') });
 	}
@@ -177,7 +196,11 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns split tokens
 	 */
-	public static async split(mintUrl: string, splitPayload: SplitPayload, customRequest?: typeof request): Promise<SplitResponse> {
+	public static async split(
+		mintUrl: string,
+		splitPayload: SplitPayload,
+		customRequest?: typeof request
+	): Promise<SplitResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<SplitResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/swap'),
@@ -205,14 +228,22 @@ class CashuMint {
 	 * @param MeltQuotePayload
 	 * @returns
 	 */
-	public static async meltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+	public static async meltQuote(
+		mintUrl: string,
+		meltQuotePayload: MeltQuotePayload
+	): Promise<MeltQuoteResponse> {
 		const data = await request<MeltQuoteResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
 			method: 'POST',
 			requestBody: meltQuotePayload
 		});
 
-		if (!isObj(data) || typeof data?.amount !== 'number' || typeof data?.fee_reserve !== 'number' || typeof data?.quote !== 'string') {
+		if (
+			!isObj(data) ||
+			typeof data?.amount !== 'number' ||
+			typeof data?.fee_reserve !== 'number' ||
+			typeof data?.quote !== 'string'
+		) {
 			throw new Error('bad response');
 		}
 
@@ -233,7 +264,11 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns
 	 */
-	public static async melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request): Promise<MeltResponse> {
+	public static async melt(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request
+	): Promise<MeltResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MeltResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),

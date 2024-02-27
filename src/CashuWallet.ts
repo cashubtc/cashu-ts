@@ -388,11 +388,11 @@ class CashuWallet {
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? dhke.constructProofs(
-					meltResponse.change,
-					rs,
-					secrets,
-					await this.getKeys(meltResponse.change)
-				)
+						meltResponse.change,
+						rs,
+						secrets,
+						await this.getKeys(meltResponse.change)
+				  )
 				: []
 		};
 	}

@@ -6,9 +6,13 @@ import { ReceiveResponse } from '../src/model/types/index.js';
 import { cleanToken, getDecodedToken } from '../src/utils.js';
 
 const dummyKeysResp = {
-	keysets: [{
-		id: '009a1f293253e41e', unit: 'sat', keys: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
-	},]
+	keysets: [
+		{
+			id: '009a1f293253e41e',
+			unit: 'sat',
+			keys: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
+		}
+	]
 };
 const mintUrl = 'http://localhost:3338';
 const mint = new CashuMint(mintUrl);
@@ -124,13 +128,18 @@ describe('receive', () => {
 				]
 			});
 		const wallet = new CashuWallet(mint);
-		const token3sat = 'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICJlN2MxYjc2ZDFiMzFlMmJjYTJiMjI5ZDE2MGJkZjYwNDZmMzNiYzQ1NzAyMjIzMDRiNjUxMTBkOTI2ZjdhZjg5IiwgIkMiOiAiMDM4OWNkOWY0Zjk4OGUzODBhNzk4OWQ0ZDQ4OGE3YzkxYzUyNzdmYjkzMDQ3ZTdhMmNjMWVkOGUzMzk2Yjg1NGZmIn0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjMiLCAiQyI6ICIwMmRlNDBjNTlkOTAzODNiODg1M2NjZjNhNGIyMDg2NGFjODNiYTc1OGZjZTNkOTU5ZGJiODkzNjEwMDJlOGNlNDcifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0='
+		const token3sat =
+			'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICJlN2MxYjc2ZDFiMzFlMmJjYTJiMjI5ZDE2MGJkZjYwNDZmMzNiYzQ1NzAyMjIzMDRiNjUxMTBkOTI2ZjdhZjg5IiwgIkMiOiAiMDM4OWNkOWY0Zjk4OGUzODBhNzk4OWQ0ZDQ4OGE3YzkxYzUyNzdmYjkzMDQ3ZTdhMmNjMWVkOGUzMzk2Yjg1NGZmIn0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjMiLCAiQyI6ICIwMmRlNDBjNTlkOTAzODNiODg1M2NjZjNhNGIyMDg2NGFjODNiYTc1OGZjZTNkOTU5ZGJiODkzNjEwMDJlOGNlNDcifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0=';
 		const response: ReceiveResponse = await wallet.receive(token3sat, [{ amount: 1, count: 3 }]);
 
 		expect(response.token.token).toHaveLength(1);
 		expect(response.token.token[0].proofs).toHaveLength(3);
 		expect(response.token.token[0]).toMatchObject({
-			proofs: [{ amount: 1, id: '009a1f293253e41e' }, { amount: 1, id: '009a1f293253e41e' }, { amount: 1, id: '009a1f293253e41e' }],
+			proofs: [
+				{ amount: 1, id: '009a1f293253e41e' },
+				{ amount: 1, id: '009a1f293253e41e' },
+				{ amount: 1, id: '009a1f293253e41e' }
+			]
 		});
 		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].secret)).toBe(true);
@@ -185,7 +194,7 @@ describe('checkProofsSpent', () => {
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
 			.post('/v1/checkstate')
-			.reply(200, { states: [{ secret: "asd", state: "UNSPENT", witness: "witness-asd" }] });
+			.reply(200, { states: [{ secret: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
 		const wallet = new CashuWallet(mint);
 
 		const result = await wallet.checkProofsSpent(proofs);
@@ -204,7 +213,9 @@ describe('payLnInvoice', () => {
 		}
 	];
 	test('test payLnInvoice base case', async () => {
-		nock(mintUrl).post('/v1/melt/quote/bolt11').reply(200, { quote: "quote_id", amount: 123, fee_reserve: 0 });
+		nock(mintUrl)
+			.post('/v1/melt/quote/bolt11')
+			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 0 });
 		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
 		const wallet = new CashuWallet(mint);
 
@@ -214,15 +225,23 @@ describe('payLnInvoice', () => {
 	});
 	test('test payLnInvoice change', async () => {
 		nock.cleanAll();
-		nock(mintUrl).get('/v1/keys').reply(200, {
-			keysets: [{
-				id: '009a1f293253e41e', unit: 'sat', keys: {
-					1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-					2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
-				}
-			},]
-		});
-		nock(mintUrl).post('/v1/melt/quote/bolt11').reply(200, { quote: "quote_id", amount: 123, fee_reserve: 2 });
+		nock(mintUrl)
+			.get('/v1/keys')
+			.reply(200, {
+				keysets: [
+					{
+						id: '009a1f293253e41e',
+						unit: 'sat',
+						keys: {
+							1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+							2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
+						}
+					}
+				]
+			});
+		nock(mintUrl)
+			.post('/v1/melt/quote/bolt11')
+			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 2 });
 		nock(mintUrl)
 			.post('/v1/melt/bolt11')
 			.reply(200, {

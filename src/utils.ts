@@ -135,7 +135,7 @@ export function deriveKeysetId(keys: MintKeys) {
 		.join('');
 	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
 	const hashHex = bytesToHex(hash);
-	return "00" + hashHex.slice(0, 12);
+	return '00' + hashHex.slice(0, 12);
 }
 /**
  * merge proofs from same mint,

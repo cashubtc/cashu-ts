@@ -73,7 +73,7 @@ describe('mint api', () => {
 		// expect no fee because local invoice
 		const requestToPay = await wallet.getMintQuote(10);
 		const quote = await wallet.getMeltQuote(requestToPay.request);
-		const fee = quote.fee_reserve
+		const fee = quote.fee_reserve;
 		expect(fee).toBe(0);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
@@ -83,12 +83,12 @@ describe('mint api', () => {
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
 
 		// check states of spent and kept proofs after payment
-		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send)
+		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
 		expect(sentProofsSpent).toBeDefined();
 		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
 		expect(sentProofsSpent).toEqual(sendResponse.send);
 		// expect none of the sendResponse.returnChange to be spent
-		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange)
+		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange);
 		expect(returnChangeSpent).toBeDefined();
 		expect(returnChangeSpent).toEqual([]);
 	});
@@ -109,12 +109,12 @@ describe('mint api', () => {
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
 
 		// check states of spent and kept proofs after payment
-		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send)
+		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
 		expect(sentProofsSpent).toBeDefined();
 		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
 		expect(sentProofsSpent).toEqual(sendResponse.send);
 		// expect none of the sendResponse.returnChange to be spent
-		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange)
+		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange);
 		expect(returnChangeSpent).toBeDefined();
 		expect(returnChangeSpent).toEqual([]);
 	});
