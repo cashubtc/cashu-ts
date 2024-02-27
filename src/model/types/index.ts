@@ -21,6 +21,11 @@ export type Proof = {
 };
 
 /**
+ * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+ */
+export type Keys = { [amount: number]: string };
+
+/**
  * An array of mint keysets
  */
 export type MintActiveKeys = {
@@ -45,7 +50,7 @@ export type MintKeys = {
 	/**
 	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
 	 */
-	keys: { [amount: number]: string };
+	keys: Keys;
 };
 
 /**
