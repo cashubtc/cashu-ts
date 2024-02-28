@@ -67,9 +67,11 @@ console.log({ pr }, { hash });
 async function invoiceHasBeenPaid() {
 	const { proofs } = await wallet.requestTokens(200, hash);
 	//Encoded proofs can be spent at the mint
-	const encoded = getEncodedToken({
-		token: [{ mint: '{MINT_URL}', proofs }]
-	});
+	const tokenEntry: TokenEntry[] = [{ proofs, mint: mint_url }];
+	const token: Token = { token: tokenEntry };
+
+	const encoded = getEncodedToken(token);
+
 	console.log(encoded);
 }
 ```
@@ -78,8 +80,8 @@ async function invoiceHasBeenPaid() {
 
 Contributions are very welcome.
 
-If you want to contribute, please open an Issue or a PR. 
-If you open a PR, please do so from the `development` branch as the base branch. 
+If you want to contribute, please open an Issue or a PR.
+If you open a PR, please do so from the `development` branch as the base branch.
 
 ### Version
 
@@ -90,17 +92,17 @@ If you open a PR, please do so from the `development` branch as the base branch.
 | | * `hotfix`
 | |
 | * `staging`
-| |\ 
+| |\
 | |\ \
 | | | * `bugfix`
 | | |
-| | * `development`  
-| | |\ 
+| | * `development`
+| | |\
 | | | * `feature1`
 | | | |
 | | |/
 | | *
-| | |\ 
+| | |\
 | | | * `feature2`
 | | |/
 | |/
