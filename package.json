@@ -13,8 +13,8 @@
 	},
 	"scripts": {
 		"compile": "rm -rf dist/lib && tsc && tsc --build tsconfig.es5.json",
-        "test": "jest --coverage --testPathIgnorePatterns ./test/integration.test.ts",  
-        "test-integration": "jest --coverage --testPathPattern ./test/integration.test.ts",  
+		"test": "jest --coverage --testPathIgnorePatterns ./test/integration.test.ts",
+		"test-integration": "jest --coverage --testPathPattern ./test/integration.test.ts",
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write .",

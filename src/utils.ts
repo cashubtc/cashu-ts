@@ -3,6 +3,7 @@ import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import {
 	AmountPreference,
 	InvoiceData,
+	Keys,
 	MintKeys,
 	Proof,
 	Token,
@@ -128,14 +129,14 @@ function handleTokens(token: string): Token {
  * @param keys keys object to derive keyset id from
  * @returns
  */
-export function deriveKeysetId(keys: MintKeys) {
-	const pubkeysConcat = Object.entries(keys.keys)
+export function deriveKeysetId(keys: Keys) {
+	const pubkeysConcat = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
 		.map(([, pubKey]) => pubKey)
 		.join('');
 	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
 	const hashHex = bytesToHex(hash);
-	return "00" + hashHex.slice(0, 12);
+	return '00' + hashHex.slice(0, 12);
 }
 /**
  * merge proofs from same mint,

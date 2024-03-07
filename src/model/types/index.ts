@@ -21,6 +21,11 @@ export type Proof = {
 };
 
 /**
+ * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+ */
+export type Keys = { [amount: number]: string };
+
+/**
  * An array of mint keysets
  */
 export type MintActiveKeys = {
@@ -45,8 +50,7 @@ export type MintKeys = {
 	/**
 	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
 	 */
-	keys: { [amount: number]: string };
-
+	keys: Keys;
 };
 
 /**
@@ -132,11 +136,11 @@ export type PaymentPayload = {
 	proofs: Array<Proof>;
 };
 
-/** 
+/**
  * Payload that needs to be send to the mint to request a melt quote
  */
 export type MeltQuotePayload = {
-	/** 
+	/**
 	 * Unit to be melted
 	 */
 	unit: string;
@@ -227,7 +231,7 @@ export type SplitPayload = {
 	 */
 	inputs: Array<Proof>;
 	/**
-	 * Outputs (blinded messages) to be signed by the mint 
+	 * Outputs (blinded messages) to be signed by the mint
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
@@ -291,7 +295,7 @@ export type PostMintPayload = {
 	/**
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */
-	outputs: Array<SerializedBlindedMessage>
+	outputs: Array<SerializedBlindedMessage>;
 };
 /**
  * Response from the mint after requesting a mint
@@ -299,7 +303,6 @@ export type PostMintPayload = {
 export type PostMintResponse = {
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
-
 
 /**
  * Payload that needs to be sent to the mint when checking for spendable proofs
@@ -315,9 +318,9 @@ export type CheckStatePayload = {
  * Enum for the state of a proof
  */
 export enum CheckStateEnum {
-	UNSPENT = "UNSPENT",
-	PENDING = "PENDING",
-	SPENT = "SPENT",
+	UNSPENT = 'UNSPENT',
+	PENDING = 'PENDING',
+	SPENT = 'SPENT'
 }
 
 /**
@@ -327,14 +330,14 @@ export type CheckStateEntry = {
 	secret: string;
 	state: CheckStateEnum;
 	witness: string | null;
-}
+};
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
  */
 export type CheckStateResponse = {
 	/**
-	 * 
+	 *
 	 */
 	states: Array<CheckStateEntry>;
 } & ApiError;
@@ -350,7 +353,7 @@ export type SerializedBlindedMessage = {
 	 * Blinded message
 	 */
 	B_: string;
-	/**	
+	/**
 	 * Keyset id
 	 */
 	id: string;
@@ -469,7 +472,7 @@ export type GetInfoResponse = {
 
 export type PostRestorePayload = {
 	outputs: Array<SerializedBlindedMessage>;
-}
+};
 
 /**
  * Response from mint at /v1/restore endpoint

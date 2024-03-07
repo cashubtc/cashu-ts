@@ -336,7 +336,7 @@ class CashuWallet {
 		const keyset = await this.initKeys();
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			keyset,
+			keyset.id,
 			AmountPreference
 		);
 		const postMintPayload: PostMintPayload = {
@@ -388,11 +388,11 @@ class CashuWallet {
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? dhke.constructProofs(
-					meltResponse.change,
-					rs,
-					secrets,
-					await this.getKeys(meltResponse.change)
-				)
+						meltResponse.change,
+						rs,
+						secrets,
+						await this.getKeys(meltResponse.change)
+				  )
 				: []
 		};
 	}
@@ -463,7 +463,7 @@ class CashuWallet {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
-			keyset,
+			keyset.id,
 			undefined,
 			counter
 		);
@@ -472,7 +472,7 @@ class CashuWallet {
 		}
 		const sendBlindedMessages = this.createRandomBlindedMessages(
 			amount,
-			keyset,
+			keyset.id,
 			preference,
 			counter
 		);
@@ -530,12 +530,12 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
-		keyset: MintKeys,
+		keysetId: string,
 		amountPreference?: Array<AmountPreference>,
 		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
 		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, keyset.id, counter);
+		return this.createBlindedMessages(amounts, keysetId, counter);
 	}
 
 	/**
