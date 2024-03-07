@@ -1,9 +1,9 @@
-name: Nutshell end-to-end tests
+name: Nutshell integration
 
 on: [push, pull_request]
 
 jobs:
-  integration:
+  integration-tests:
     runs-on: ubuntu-latest
     steps:
       - name: Pull and start mint
