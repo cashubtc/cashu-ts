@@ -388,11 +388,11 @@ class CashuWallet {
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? dhke.constructProofs(
-						meltResponse.change,
-						rs,
-						secrets,
-						await this.getKeys(meltResponse.change)
-				  )
+					meltResponse.change,
+					rs,
+					secrets,
+					await this.getKeys(meltResponse.change)
+				)
 				: []
 		};
 	}
@@ -501,14 +501,15 @@ class CashuWallet {
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const enc = new TextEncoder();
+		const Ys = proofs.map((p) => dhke.hashToCurve(enc.encode(p.secret)).toHex(true));
 		const payload = {
 			// array of Ys of proofs to check
-			Ys: proofs.map((p) => dhke.hashToCurve(enc.encode(p.secret)).toHex(true))
+			Ys: Ys
 		};
 		const { states } = await this.mint.check(payload);
 
-		return proofs.filter((proof) => {
-			const state = states.find((state) => state.secret === proof.secret);
+		return proofs.filter((_, i) => {
+			const state = states.find((state) => state.Y === Ys[i]);
 			return state && state.state === CheckStateEnum.SPENT;
 		});
 	}

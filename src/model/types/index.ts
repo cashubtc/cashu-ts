@@ -327,7 +327,7 @@ export enum CheckStateEnum {
  * Entries of CheckStateResponse with state of the proof
  */
 export type CheckStateEntry = {
-	secret: string;
+	Y: string;
 	state: CheckStateEnum;
 	witness: string | null;
 };
