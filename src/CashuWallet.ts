@@ -500,9 +500,10 @@ class CashuWallet {
 	 * @returns
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
+		const enc = new TextEncoder();
 		const payload = {
-			// array of secrets of proofs to check
-			secrets: proofs.map((p) => p.secret)
+			// array of Ys of proofs to check
+			Ys: proofs.map((p) => dhke.hashToCurve(enc.encode(p.secret)).toHex(true))
 		};
 		const { states } = await this.mint.check(payload);
 

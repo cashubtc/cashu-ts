@@ -306,10 +306,9 @@ export type PostMintResponse = {
  */
 export type CheckStatePayload = {
 	/**
-	 * array of proofs. Only the secret is strictly needed.
-	 * If the whole object is passed, it will be stripped of other objects before sending it to the mint.
+	 * The Y = hash_to_curve(secret) of the proofs to be checked.
 	 */
-	secrets: Array<string>;
+	Ys: Array<string>;
 };
 
 /**
