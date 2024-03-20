@@ -31,7 +31,7 @@ describe('requests', () => {
 				};
 			});
 
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, unit);
 		await wallet.getMeltQuote(invoice);
 
 		expect(request).toBeDefined();
@@ -51,7 +51,7 @@ describe('requests', () => {
 				};
 			});
 
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, unit);
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 		await wallet.getMeltQuote(invoice);
 

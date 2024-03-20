@@ -36,20 +36,23 @@ import { bytesToHex } from '@noble/curves/abstract/utils';
 class CashuWallet {
 	private _keys = {} as MintKeys;
 	private _keysetId = '';
+	private _unit = 'sat';
 
 	mint: CashuMint;
-	unit = 'sat';
+
 
 	/**
 	 * @param keys public keys from the mint
 	 * @param mint Cashu mint instance is used to make api calls
 	 */
-	constructor(mint: CashuMint, keys?: MintKeys) {
+	constructor(mint: CashuMint, unit?:string, keys?: MintKeys) {
 		this.mint = mint;
+		if (unit) this._unit  = unit;
 		if (keys) {
 			this._keys = keys;
 			// this._keysetId = deriveKeysetId(this._keys);
 			this._keysetId = keys.id;
+			
 		}
 	}
 
@@ -107,7 +110,7 @@ class CashuWallet {
 	 */
 	getMintQuote(amount: number) {
 		const requestMintPayload: RequestMintPayload = {
-			unit: this.unit,
+			unit: this._unit,
 			amount: amount
 		}
 		return this.mint.mintQuote(requestMintPayload);
@@ -145,7 +148,7 @@ class CashuWallet {
 	 * @returns estimated Fee
 	 */
 	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+		const meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
 		return meltQuote;
 	}
 	/**
@@ -189,7 +192,7 @@ class CashuWallet {
 		meltQuote?: MeltQuoteResponse
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
-			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+			meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
 		}
 		return await this.meltTokens(meltQuote, proofsToSend);
 
@@ -263,7 +266,7 @@ class CashuWallet {
 				keyset,
 				preference
 			);
-			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const { signatures} = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
 				signatures,
 				blindedMessages.rs,
