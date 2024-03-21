@@ -150,18 +150,13 @@ class CashuMint {
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
 	 * @returns the mints public keys
 	 */
-	async getKeys(keysetId?: string, mintUrl?: string, unit?: string): Promise<MintKeys> {
+	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys> {
 		const allKeys = await CashuMint.getKeys(
 			mintUrl || this._mintUrl,
 			keysetId,
 			this._customRequest
 		);
-		// find keyset with unit 'sat'
-		const satKeys = allKeys.keysets.find((keys) => (keys.unit === unit ? unit : 'sat'));
-		if (!satKeys) {
-			throw new Error('No keyset with unit "sat" found');
-		}
-		return satKeys;
+		return allKeys;
 	}
 	/**
 	 * Get the mints keysets in no specific order
@@ -332,6 +327,9 @@ class CashuMint {
 		customRequest?: typeof request
 	): Promise<PostRestoreResponse> {
 		const requestInstance = customRequest || request;
+		//TODO remove after fix
+		//@ts-expect-error temp fix
+		restorePayload.quote = '';
 		const data = await requestInstance<PostRestoreResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/restore'),
 			method: 'POST',

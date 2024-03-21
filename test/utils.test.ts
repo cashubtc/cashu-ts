@@ -1,5 +1,6 @@
 import { AmountPreference } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
+import { PUBKEYS } from './consts.js';
 
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
@@ -312,5 +313,14 @@ describe('test decodeInvoice', () => {
 		);
 		expect(invoiceData.expiry).toStrictEqual(600);
 		expect(invoiceData.memo).toStrictEqual('bolt11.org');
+	});
+});
+
+describe('test keyset derivation', () => {
+	test('derive', () => {
+		const keys = PUBKEYS;
+		const keysetId = utils.deriveKeysetId(keys);
+		console.log(keysetId);
+		expect(keysetId).toBe('00a627821fbe96e4');
 	});
 });
