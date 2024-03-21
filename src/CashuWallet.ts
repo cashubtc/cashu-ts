@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
@@ -17,7 +17,6 @@ import {
 	RequestMintPayload,
 	SendResponse,
 	SerializedBlindedMessage,
-	SerializedBlindedSignature,
 	SplitPayload,
 	CheckStateEnum,
 	Token,

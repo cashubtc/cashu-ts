@@ -1,10 +1,9 @@
-import {
+import type {
 	CheckStatePayload,
 	CheckStateResponse,
 	GetInfoResponse,
 	MeltPayload,
 	MeltResponse,
-	MintKeys,
 	MintActiveKeys,
 	MintAllKeysets,
 	PostRestoreResponse,
