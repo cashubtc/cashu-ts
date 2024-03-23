@@ -194,7 +194,7 @@ describe('checkProofsSpent', () => {
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
 			.post('/v1/checkstate')
-			.reply(200, { states: [{ Y: "asd", state: "UNSPENT", witness: "witness-asd" }] });
+			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
 		const wallet = new CashuWallet(mint);
 
 		const result = await wallet.checkProofsSpent(proofs);
