@@ -495,6 +495,9 @@ export type GetInfoResponse = {
 	motd?: string;
 };
 
+/**
+ * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}
+ */
 export type SwapMethod = {
 	method: string,
 	unit: string,
