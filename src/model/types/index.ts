@@ -460,11 +460,47 @@ export type GetInfoResponse = {
 	version: string;
 	description?: string;
 	description_long?: string;
-	contact: Array<Array<string>>;
-	nuts: Array<string>;
+	contact: Array<[string, string]>;
+	nuts: {
+		"4": {
+			methods: Array<SwapMethod>
+			disabled: boolean
+		}
+		"5": {
+			methods: Array<SwapMethod>
+			disabled: boolean
+		}
+		"7"?: {
+			supported:  boolean
+		},
+		"8"?: {
+			supported:  boolean
+		},
+		"9"?: {
+			supported:  boolean
+		},
+		"10"?: {
+			supported: boolean
+		},
+		"11"?: {
+			supported: boolean
+		},
+		"12"?: {
+			supported: boolean
+		}
+		"13"?: {
+			supported: boolean
+		}
+	}
 	motd?: string;
-	parameter: { peg_out_only: boolean };
 };
+
+export type SwapMethod = {
+	method: string,
+	unit: string,
+    min_amount: number,
+	max_amount: number
+}
 
 /**
  * Request to mint at /v1/restore endpoint
