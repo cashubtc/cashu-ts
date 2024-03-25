@@ -44,7 +44,7 @@ Supported token formats:
 
 ## Usage
 
-Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage.
+Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
 ### Install
 
@@ -52,26 +52,16 @@ Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage.
 npm i @cashu/cashu-ts
 ```
 
-### Import
+### Example
 
 ```typescript
 import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 
-const wallet = new CashuWallet(new CashuMint('{MINT_URL}'));
+const mint = new CashuMint(mintUrl);
+const wallet = new CashuWallet(mint);
+const request = await wallet.getMintQuote(64);
+const tokens = await wallet.mintTokens(64, request.quote);
 
-const { pr, hash } = await wallet.requestMint(200);
-
-//pay this LN invoice
-console.log({ pr }, { hash });
-
-async function invoiceHasBeenPaid() {
-	const { proofs } = await wallet.requestTokens(200, hash);
-	//Encoded proofs can be spent at the mint
-	const encoded = getEncodedToken({
-		token: [{ mint: '{MINT_URL}', proofs }]
-	});
-	console.log(encoded);
-}
 ```
 
 ## Contribute
