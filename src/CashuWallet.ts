@@ -275,7 +275,7 @@ class CashuWallet {
 	 * Initialize the wallet with the mints public keys
 	 */
 	private async getKeys(keysetId?: string, unit?: string): Promise<MintKeys> {
-		if (!this._keys) {
+		if (!this._keys || this._keys.id !== keysetId) {
 			const allKeys = await this.mint.getKeys(keysetId);
 			let keys;
 			if (keysetId) {
