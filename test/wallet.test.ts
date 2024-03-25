@@ -1,4 +1,3 @@
-import { decode } from '@gandlaf21/bolt11-decode';
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
@@ -41,7 +40,7 @@ describe('test fees', () => {
 		const wallet = new CashuWallet(mint);
 
 		const fee = await wallet.getMeltQuote(invoice);
-		const amount = decode(invoice).sections[2].value / 1000;
+		const amount = 2000;
 
 		expect(fee.fee_reserve + amount).toEqual(2020);
 	});

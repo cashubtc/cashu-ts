@@ -300,22 +300,6 @@ describe('test cleanToken', () => {
 	});
 });
 
-describe('test decodeInvoice', () => {
-	test('decoding a lightning invoice', async () => {
-		const invoice =
-			'lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs';
-		const invoiceData = utils.decodeInvoice(invoice);
-		expect(invoiceData.timestamp).toStrictEqual(1651105770);
-		expect(invoiceData.amountInMSats).toStrictEqual(1500000);
-		expect(invoiceData.amountInSats).toStrictEqual(1500);
-		expect(invoiceData.paymentHash).toStrictEqual(
-			'90570c8d3688ad5012aa5ff982606971ae46b3f9df0a100cb15f05f61718f223'
-		);
-		expect(invoiceData.expiry).toStrictEqual(600);
-		expect(invoiceData.memo).toStrictEqual('bolt11.org');
-	});
-});
-
 describe('test keyset derivation', () => {
 	test('derive', () => {
 		const keys = PUBKEYS;
