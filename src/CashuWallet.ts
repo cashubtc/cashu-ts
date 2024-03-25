@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
@@ -6,23 +6,25 @@ import {
 	AmountPreference,
 	BlindedMessageData,
 	BlindedTransaction,
+	MeltPayload,
+	MeltQuoteResponse,
 	MintKeys,
-	PayLnInvoiceResponse,
-	PaymentPayload,
+	MeltTokensResponse,
+	PostMintPayload,
 	Proof,
 	ReceiveResponse,
 	ReceiveTokenEntryResponse,
+	RequestMintPayload,
 	SendResponse,
 	SerializedBlindedMessage,
-	SerializedBlindedSignature,
 	SplitPayload,
+	CheckStateEnum,
 	Token,
 	TokenEntry
 } from './model/types/index.js';
 import {
 	bytesToNumber,
 	cleanToken,
-	deriveKeysetId,
 	getDecodedToken,
 	getDefaultAmountPreference,
 	splitAmount
@@ -36,10 +38,10 @@ import { wordlist } from '@scure/bip39/wordlists/english';
  * This class should act as the entry point for this library
  */
 class CashuWallet {
-	private _keys: MintKeys;
-	private _keysetId = '';
+	private _keys: MintKeys | undefined;
 	private _seed: Uint8Array | undefined;
 	mint: CashuMint;
+	unit = 'sat';
 
 	/**
 	 * @param keys public keys from the mint
@@ -48,10 +50,9 @@ class CashuWallet {
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(mint: CashuMint, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
-		this._keys = keys || {};
 		this.mint = mint;
 		if (keys) {
-			this._keysetId = deriveKeysetId(this._keys);
+			this._keys = keys;
 		}
 		if (!mnemonicOrSeed) {
 			return;
@@ -67,108 +68,21 @@ class CashuWallet {
 	}
 
 	get keys(): MintKeys {
+		if (!this._keys) {
+			throw new Error('Keys are not set');
+		}
 		return this._keys;
 	}
 	set keys(keys: MintKeys) {
 		this._keys = keys;
-		this._keysetId = deriveKeysetId(this._keys);
-	}
-	get keysetId(): string {
-		return this._keysetId;
-	}
-	/**
-	 * returns proofs that are already spent (use for keeping wallet state clean)
-	 * @param proofs (only the 'secret' field is required)
-	 * @returns
-	 */
-	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
-		const payload = {
-			//send only the secret
-			proofs: proofs.map((p) => ({ secret: p.secret }))
-		};
-		const { spendable } = await this.mint.check(payload);
-		return proofs.filter((_, i) => !spendable[i]);
-	}
-	/**
-	 * Starts a minting process by requesting an invoice from the mint
-	 * @param amount Amount requesting for mint.
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
-	 */
-	requestMint(amount: number) {
-		return this.mint.requestMint(amount);
 	}
 
-	/**
-	 * Executes a payment of an invoice on the Lightning network.
-	 * The combined amount of Proofs has to match the payment amount including fees.
-	 * @param invoice
-	 * @param proofsToSend the exact amount to send including fees
-	 * @param feeReserve? optionally set LN routing fee reserve. If not set, fee reserve will get fetched at mint
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 */
-	async payLnInvoice(
-		invoice: string,
-		proofsToSend: Array<Proof>,
-		feeReserve?: number,
-		counter?: number
-	): Promise<PayLnInvoiceResponse> {
-		const paymentPayload = this.createPaymentPayload(invoice, proofsToSend);
-		if (!feeReserve) {
-			feeReserve = await this.getFee(invoice);
-		}
-		const { blindedMessages, secrets, rs } = this.createBlankOutputs(feeReserve, counter);
-		const payData = await this.mint.melt({
-			...paymentPayload,
-			outputs: blindedMessages
-		});
-		return {
-			isPaid: payData.paid ?? false,
-			preimage: payData.preimage,
-			change: payData?.change
-				? dhke.constructProofs(payData.change, rs, secrets, await this.getKeys(payData.change))
-				: [],
-			newKeys: await this.changedKeys(payData?.change)
-		};
-	}
-	/**
-	 * Estimate fees for a given LN invoice
-	 * @param invoice LN invoice that needs to get a fee estimate
-	 * @returns estimated Fee
-	 */
-	async getFee(invoice: string): Promise<number> {
-		const { fee } = await this.mint.checkFees({ pr: invoice });
-		return fee;
-	}
-
-	createPaymentPayload(invoice: string, proofs: Array<Proof>): PaymentPayload {
-		return {
-			pr: invoice,
-			proofs: proofs
-		};
-	}
-	/**
-	 * Use a cashu token to pay an ln invoice
-	 * @param invoice Lightning invoice
-	 * @param token cashu token
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 */
-	payLnInvoiceWithToken(
-		invoice: string,
-		token: string,
-		counter?: number
-	): Promise<PayLnInvoiceResponse> {
-		const decodedToken = getDecodedToken(token);
-		const proofs = decodedToken.token
-			.filter((x) => x.mint === this.mint.mintUrl)
-			.flatMap((t) => t.proofs);
-		return this.payLnInvoice(invoice, proofs, undefined, counter);
-	}
 	/**
 	 * Receive an encoded or raw Cashu token
 	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @returns New token with newly created proofs, token entries that had errors, and newKeys if they have changed
+	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(
 		token: string | Token,
@@ -183,25 +97,21 @@ class CashuWallet {
 		}
 		const tokenEntries: Array<TokenEntry> = [];
 		const tokenEntriesWithError: Array<TokenEntry> = [];
-		let newKeys: MintKeys | undefined;
 		for (const tokenEntry of decodedToken) {
 			if (!tokenEntry?.proofs?.length) {
 				continue;
 			}
 			try {
-				const {
-					proofsWithError,
-					proofs,
-					newKeys: newKeysFromReceive
-				} = await this.receiveTokenEntry(tokenEntry, preference, counter);
+				const { proofs, proofsWithError } = await this.receiveTokenEntry(
+					tokenEntry,
+					preference,
+					counter
+				);
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
 				}
 				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...proofs] });
-				if (!newKeys) {
-					newKeys = newKeysFromReceive;
-				}
 			} catch (error) {
 				console.error(error);
 				tokenEntriesWithError.push(tokenEntry);
@@ -209,8 +119,7 @@ class CashuWallet {
 		}
 		return {
 			token: { token: tokenEntries },
-			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined,
-			newKeys
+			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined
 		};
 	}
 
@@ -219,7 +128,7 @@ class CashuWallet {
 	 * @param tokenEntry a single entry of a cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @returns New token entry with newly created proofs, proofs that had errors, and newKeys if they have changed
+	 * @returns New token entry with newly created proofs, proofs that had errors
 	 */
 	async receiveTokenEntry(
 		tokenEntry: TokenEntry,
@@ -228,38 +137,34 @@ class CashuWallet {
 	): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
-		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
 			if (!preference) {
 				preference = getDefaultAmountPreference(amount);
 			}
+			const keys = await this.getKeys();
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
+				keys,
 				preference,
 				counter
 			);
-			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
-				promises,
+				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(promises, tokenEntry.mint)
+				keys
 			);
 			proofs.push(...newProofs);
-			newKeys =
-				tokenEntry.mint === this.mint.mintUrl
-					? await this.changedKeys([...(promises || [])])
-					: undefined;
 		} catch (error) {
 			console.error(error);
 			proofsWithError.push(...tokenEntry.proofs);
 		}
 		return {
 			proofs,
-			proofsWithError: proofsWithError.length ? proofsWithError : undefined,
-			newKeys
+			proofsWithError: proofsWithError.length ? proofsWithError : undefined
 		};
 	}
 
@@ -282,7 +187,7 @@ class CashuWallet {
 		if (preference) {
 			amount = preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
 		}
-
+		const keyset = await this.getKeys();
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const proofsToKeep: Array<Proof> = [];
@@ -303,15 +208,16 @@ class CashuWallet {
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amountSend,
 				proofsToSend,
+				keyset,
 				preference,
 				counter
 			);
-			const { promises } = await this.mint.split(payload);
+			const { signatures } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
-				promises,
+				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(promises)
+				keyset
 			);
 			// sum up proofs until amount2 is reached
 			const splitProofsToKeep: Array<Proof> = [];
@@ -327,57 +233,30 @@ class CashuWallet {
 			});
 			return {
 				returnChange: [...splitProofsToKeep, ...proofsToKeep],
-				send: splitProofsToSend,
-				newKeys: await this.changedKeys([...(promises || [])])
+				send: splitProofsToSend
 			};
 		}
 		return { returnChange: proofsToKeep, send: proofsToSend };
 	}
 
 	/**
-	 * Request tokens from the mint
-	 * @param amount amount to request
-	 * @param id id to identify the mint request*
-	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @returns proofs and newKeys if they have changed
-	 */
-	async requestTokens(
-		amount: number,
-		id: string,
-		AmountPreference?: Array<AmountPreference>,
-		counter?: number
-	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
-		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
-			amount,
-			AmountPreference,
-			counter
-		);
-		const payloads = { outputs: blindedMessages };
-		const { promises } = await this.mint.mint(payloads, id);
-		return {
-			proofs: dhke.constructProofs(promises, rs, secrets, await this.getKeys(promises)),
-			newKeys: await this.changedKeys(promises)
-		};
-	}
-
-	/**
 	 * Regenerates
 	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count set number of blinded messages that should be generated
-	 * @returns proofs (and newKeys, if they have changed)
+	 * @returns proofs
 	 */
 	async restore(
 		start: number,
 		count: number,
 		keysetId?: string
-	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
+	): Promise<{ proofs: Array<Proof> }> {
+		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
-		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, start, keysetId);
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, keys.id, start);
 
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
 
@@ -388,62 +267,163 @@ class CashuWallet {
 		);
 
 		return {
-			proofs: dhke.constructProofs(promises, validRs, validSecrets, await this.getKeys(promises)),
-			newKeys: await this.changedKeys(promises)
+			proofs: dhke.constructProofs(promises, validRs, validSecrets, keys)
 		};
 	}
 
 	/**
 	 * Initialize the wallet with the mints public keys
 	 */
-	private async initKeys() {
-		if (!this.keysetId || !Object.keys(this.keys).length) {
-			this.keys = await this.mint.getKeys();
-			this._keysetId = deriveKeysetId(this.keys);
+	private async getKeys(keysetId?: string, unit?: string): Promise<MintKeys> {
+		if (!this._keys || this._keys.id !== keysetId) {
+			const allKeys = await this.mint.getKeys(keysetId);
+			let keys;
+			if (keysetId) {
+				keys = allKeys.keysets.find((k) => k.id === keysetId);
+			} else {
+				keys = allKeys.keysets.find((k) => (unit ? k.unit === unit : k.unit === 'sat'));
+			}
+			if (!keys) {
+				throw new Error(
+					`could not initialize keys. No keyset with unit '${unit ? unit : 'sat'}' found`
+				);
+			}
+			this._keys = keys;
 		}
+		return this._keys;
 	}
 
 	/**
-	 * Check if the keysetId has changed and return the new keys
-	 * @param promises array of promises to check
-	 * @returns new keys if they have changed
+	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
+	 * @param amount Amount requesting for mint.
+	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	private async changedKeys(
-		promises: Array<SerializedBlindedSignature | Proof> = []
-	): Promise<MintKeys | undefined> {
-		await this.initKeys();
-		if (!promises?.length) {
-			return undefined;
-		}
-		if (!promises.some((x) => x.id !== this.keysetId)) {
-			return undefined;
-		}
-		const maybeNewKeys = await this.mint.getKeys();
-		const keysetId = deriveKeysetId(maybeNewKeys);
-		return keysetId === this.keysetId ? undefined : maybeNewKeys;
+	async getMintQuote(amount: number) {
+		const requestMintPayload: RequestMintPayload = {
+			unit: this.unit,
+			amount: amount
+		};
+		return await this.mint.mintQuote(requestMintPayload);
 	}
 
 	/**
-	 * Get the mint's public keys for a given set of proofs
-	 * @param arr array of proofs
-	 * @param mint optional mint url
-	 * @returns keys
+	 * Mint tokens for a given mint quote
+	 * @param amount amount to request
+	 * @param quote ID of mint quote
+	 * @returns proofs
 	 */
-	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
-		await this.initKeys();
-		if (!arr?.length || !arr[0]?.id) {
-			return this.keys;
-		}
-		const keysetId = arr[0].id;
-		if (this.keysetId === keysetId) {
-			return this.keys;
-		}
+	async mintTokens(
+		amount: number,
+		quote: string,
+		keysetId?: string,
+		AmountPreference?: Array<AmountPreference>,
+		counter?: number
+	): Promise<{ proofs: Array<Proof> }> {
+		const keyset = await this.getKeys(keysetId);
+		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
+			amount,
+			keysetId ?? keyset.id,
+			AmountPreference,
+			counter
+		);
+		const postMintPayload: PostMintPayload = {
+			outputs: blindedMessages,
+			quote: quote
+		};
+		const { signatures } = await this.mint.mint(postMintPayload);
+		return {
+			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
+		};
+	}
 
-		const keys =
-			!mint || mint === this.mint.mintUrl
-				? await this.mint.getKeys(arr[0].id)
-				: await CashuMint.getKeys(mint, arr[0].id);
-		return keys;
+	/**
+	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.
+	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @returns estimated Fee
+	 */
+	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+		const meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+		return meltQuote;
+	}
+	/**
+	 * Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
+	 * Returns payment proof and change proofs
+	 * @param meltQuote ID of the melt quote
+	 * @param proofsToSend proofs to melt
+	 * @returns
+	 */
+	async meltTokens(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Array<Proof>,
+		keysetId?: string,
+		counter?: number
+	): Promise<MeltTokensResponse> {
+		const keys = await this.getKeys(keysetId);
+
+		const { blindedMessages, secrets, rs } = this.createBlankOutputs(
+			meltQuote.fee_reserve,
+			keys.id,
+			counter
+		);
+		const meltPayload: MeltPayload = {
+			quote: meltQuote.quote,
+			inputs: proofsToSend,
+			outputs: [...blindedMessages]
+		};
+		const meltResponse = await this.mint.melt(meltPayload);
+
+		return {
+			isPaid: meltResponse.paid ?? false,
+			preimage: meltResponse.payment_preimage,
+			change: meltResponse?.change
+				? dhke.constructProofs(meltResponse.change, rs, secrets, keys)
+				: []
+		};
+	}
+
+	/**
+	 * Helper function that pays a Lightning invoice directly without having to create a melt quote before
+	 * The combined amount of Proofs must match the payment amount including fees.
+	 * @param invoice
+	 * @param proofsToSend the exact amount to send including fees
+	 * @param meltQuote melt quote for the invoice
+	 * @param keysetId? optionally set keysetId for blank outputs for returned change.
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @returns
+	 */
+	async payLnInvoice(
+		invoice: string,
+		proofsToSend: Array<Proof>,
+		meltQuote?: MeltQuoteResponse,
+		keysetId?: string,
+		counter?: number
+	): Promise<MeltTokensResponse> {
+		if (!meltQuote) {
+			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+		}
+		return await this.meltTokens(meltQuote, proofsToSend, keysetId, counter);
+	}
+
+	/**
+	 * Helper function to ingest a Cashu token and pay a Lightning invoice with it.
+	 * @param invoice Lightning invoice
+	 * @param token cashu token
+	 * @param meltQuote melt quote for the invoice
+	 * @param keysetId? optionally set keysetId for blank outputs for returned change.
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 */
+	payLnInvoiceWithToken(
+		invoice: string,
+		token: string,
+		meltQuote?: MeltQuoteResponse,
+		keysetId?: string,
+		counter?: number
+	): Promise<MeltTokensResponse> {
+		const decodedToken = getDecodedToken(token);
+		const proofs = decodedToken.token
+			.filter((x) => x.mint === this.mint.mintUrl)
+			.flatMap((t) => t.proofs);
+		return this.payLnInvoice(invoice, proofs, meltQuote, keysetId, counter);
 	}
 
 	/**
@@ -457,6 +437,7 @@ class CashuWallet {
 	private createSplitPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
+		keyset: MintKeys,
 		preference?: Array<AmountPreference>,
 		counter?: number
 	): {
@@ -466,13 +447,19 @@ class CashuWallet {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
+			keyset.id,
 			undefined,
 			counter
 		);
 		if (this._seed && counter) {
 			counter = counter + keepBlindedMessages.secrets.length;
 		}
-		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference, counter);
+		const sendBlindedMessages = this.createRandomBlindedMessages(
+			amount,
+			keyset.id,
+			preference,
+			counter
+		);
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -486,10 +473,29 @@ class CashuWallet {
 		};
 
 		const payload = {
-			proofs: proofsToSend,
+			inputs: proofsToSend,
 			outputs: [...blindedMessages.blindedMessages]
 		};
 		return { payload, blindedMessages };
+	}
+	/**
+	 * returns proofs that are already spent (use for keeping wallet state clean)
+	 * @param proofs (only the 'secret' field is required)
+	 * @returns
+	 */
+	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
+		const enc = new TextEncoder();
+		const Ys = proofs.map((p) => dhke.hashToCurve(enc.encode(p.secret)).toHex(true));
+		const payload = {
+			// array of Ys of proofs to check
+			Ys: Ys
+		};
+		const { states } = await this.mint.check(payload);
+
+		return proofs.filter((_, i) => {
+			const state = states.find((state) => state.Y === Ys[i]);
+			return state && state.state === CheckStateEnum.SPENT;
+		});
 	}
 	private splitReceive(
 		amount: number,
@@ -509,11 +515,12 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
+		keysetId: string,
 		amountPreference?: Array<AmountPreference>,
 		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
 		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, counter);
+		return this.createBlindedMessages(amounts, keysetId, counter);
 	}
 
 	/**
@@ -525,8 +532,8 @@ class CashuWallet {
 	 */
 	private createBlindedMessages(
 		amounts: Array<number>,
-		counter?: number,
-		keysetId?: string
+		keysetId: string,
+		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
@@ -539,19 +546,19 @@ class CashuWallet {
 		const rs: Array<bigint> = [];
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
-			let secret = undefined;
+			let secretBytes = undefined;
 			if (this._seed && counter != undefined) {
-				secret = deriveSecret(this._seed, keysetId ?? this.keysetId, counter + i);
-				deterministicR = bytesToNumber(
-					deriveBlindingFactor(this._seed, keysetId ?? this.keysetId, counter + i)
-				);
+				secretBytes = deriveSecret(this._seed, keysetId, counter + i);
+				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, keysetId, counter + i));
 			} else {
-				secret = randomBytes(32);
+				secretBytes = randomBytes(32);
 			}
+			const secretHex = bytesToHex(secretBytes);
+			const secret = new TextEncoder().encode(secretHex);
 			secrets.push(secret);
 			const { B_, r } = dhke.blindMessage(secret, deterministicR);
 			rs.push(r);
-			const blindedMessage = new BlindedMessage(amounts[i], B_);
+			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
 		}
 		return { blindedMessages, secrets, rs, amounts };
@@ -564,14 +571,18 @@ class CashuWallet {
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
-	private createBlankOutputs(feeReserve: number, counter?: number): BlindedMessageData {
+	private createBlankOutputs(
+		feeReserve: number,
+		keysetId: string,
+		counter?: number
+	): BlindedMessageData {
 		let count = Math.ceil(Math.log2(feeReserve)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {
 			count = 0;
 		}
 		const amounts = count ? Array(count).fill(1) : [];
-		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, counter);
+		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, keysetId, counter);
 		return { blindedMessages, secrets, rs };
 	}
 }
