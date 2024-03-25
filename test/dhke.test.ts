@@ -22,12 +22,14 @@ describe('testing hash to curve', () => {
 
 describe('test blinding message', () => {
 	test('testing string 0000....01', async () => {
-		var enc = new TextEncoder();
-		let secretUInt8 = enc.encode(SECRET_MESSAGE);
-		let { B_ } = await dhke.blindMessage(
-			secretUInt8,
-			bytesToNumber(hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'))
+		let secretUInt8 = new TextEncoder().encode(SECRET_MESSAGE);
+		expect(secretUInt8).toStrictEqual(
+			new Uint8Array([116, 101, 115, 116, 95, 109, 101, 115, 115, 97, 103, 101])
 		);
+		const r = bytesToNumber(
+			hexToBytes('0000000000000000000000000000000000000000000000000000000000000001')
+		);
+		let { B_ } = await dhke.blindMessage(secretUInt8, r);
 		expect(B_.toHex(true)).toBe(
 			'025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b'
 		);

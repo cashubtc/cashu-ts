@@ -53,11 +53,11 @@ function constructProofs(
 	promises: Array<SerializedBlindedSignature>,
 	rs: Array<bigint>,
 	secrets: Array<Uint8Array>,
-	keys: MintKeys
+	keyset: MintKeys
 ): Array<Proof> {
 	return promises.map((p: SerializedBlindedSignature, i: number) => {
 		const C_ = pointFromHex(p.C_);
-		const A = pointFromHex(keys[p.amount]);
+		const A = pointFromHex(keyset.keys[p.amount]);
 		const C = unblindSignature(C_, rs[i], A);
 		const proof = {
 			id: p.id,

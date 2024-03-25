@@ -3,7 +3,7 @@ import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
 import {
 	AmountPreference,
 	InvoiceData,
-	MintKeys,
+	Keys,
 	Proof,
 	Token,
 	TokenEntry,
@@ -12,7 +12,6 @@ import {
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
-import { Buffer } from 'buffer/';
 
 function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
@@ -128,14 +127,16 @@ function handleTokens(token: string): Token {
  * @param keys keys object to derive keyset id from
  * @returns
  */
-export function deriveKeysetId(keys: MintKeys) {
+export function deriveKeysetId(keys: Keys) {
 	const pubkeysConcat = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
 		.map(([, pubKey]) => pubKey)
 		.join('');
 	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
-	return Buffer.from(hash).toString('base64').slice(0, 12);
+	const hashHex = bytesToHex(hash);
+	return '00' + hashHex.slice(0, 14);
 }
+
 /**
  * merge proofs from same mint,
  * removes TokenEntrys with no proofs or no mint field
