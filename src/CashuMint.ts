@@ -326,9 +326,6 @@ class CashuMint {
 		customRequest?: typeof request
 	): Promise<PostRestoreResponse> {
 		const requestInstance = customRequest || request;
-		//TODO remove after fix
-		//@ts-expect-error temp fix
-		restorePayload.quote = '';
 		const data = await requestInstance<PostRestoreResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/restore'),
 			method: 'POST',
