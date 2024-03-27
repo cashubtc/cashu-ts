@@ -105,8 +105,8 @@ describe('mint api', () => {
 		const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send);
 
 		expect(response).toBeDefined();
-		// expect that we have received the fee back, since it was internal
-		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
+		// expect that we have not received the fee back, since it was external
+		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBeLessThan(fee);
 
 		// check states of spent and kept proofs after payment
 		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
