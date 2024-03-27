@@ -21,6 +21,11 @@ export type Proof = {
 };
 
 /**
+ * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+ */
+export type Keys = { [amount: number]: string };
+
+/**
  * An array of mint keysets
  */
 export type MintActiveKeys = {
@@ -45,8 +50,7 @@ export type MintKeys = {
 	/**
 	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
 	 */
-	keys: { [amount: number]: string };
-
+	keys: Keys;
 };
 
 /**
@@ -132,11 +136,11 @@ export type PaymentPayload = {
 	proofs: Array<Proof>;
 };
 
-/** 
+/**
  * Payload that needs to be send to the mint to request a melt quote
  */
 export type MeltQuotePayload = {
-	/** 
+	/**
 	 * Unit to be melted
 	 */
 	unit: string;
@@ -193,7 +197,7 @@ export type MeltResponse = {
 	/**
 	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
-	proof: string | null;
+	payment_preimage: string | null;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
@@ -227,7 +231,7 @@ export type SplitPayload = {
 	 */
 	inputs: Array<Proof>;
 	/**
-	 * Outputs (blinded messages) to be signed by the mint 
+	 * Outputs (blinded messages) to be signed by the mint
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
@@ -291,7 +295,7 @@ export type PostMintPayload = {
 	/**
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */
-	outputs: Array<SerializedBlindedMessage>
+	outputs: Array<SerializedBlindedMessage>;
 };
 /**
  * Response from the mint after requesting a mint
@@ -300,26 +304,42 @@ export type PostMintResponse = {
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
-
 /**
  * Payload that needs to be sent to the mint when checking for spendable proofs
  */
-export type CheckSpendablePayload = {
+export type CheckStatePayload = {
 	/**
-	 * array of proofs. Only the secret is strictly needed.
-	 * If the whole object is passed, it will be stripped of other objects before sending it to the mint.
+	 * The Y = hash_to_curve(secret) of the proofs to be checked.
 	 */
-	proofs: Array<{ secret: string }>;
+	Ys: Array<string>;
+};
+
+/**
+ * Enum for the state of a proof
+ */
+export enum CheckStateEnum {
+	UNSPENT = 'UNSPENT',
+	PENDING = 'PENDING',
+	SPENT = 'SPENT'
+}
+
+/**
+ * Entries of CheckStateResponse with state of the proof
+ */
+export type CheckStateEntry = {
+	Y: string;
+	state: CheckStateEnum;
+	witness: string | null;
 };
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
  */
-export type CheckSpendableResponse = {
+export type CheckStateResponse = {
 	/**
-	 * Ordered list for checked proofs. True if the secret has not been redeemed at the mint before
+	 *
 	 */
-	spendable: Array<boolean>;
+	states: Array<CheckStateEntry>;
 } & ApiError;
 /**
  * blinded message for sending to the mint
@@ -333,7 +353,7 @@ export type SerializedBlindedMessage = {
 	 * Blinded message
 	 */
 	B_: string;
-	/**	
+	/**
 	 * Keyset id
 	 */
 	id: string;
@@ -440,13 +460,78 @@ export type GetInfoResponse = {
 	version: string;
 	description?: string;
 	description_long?: string;
-	contact: Array<Array<string>>;
-	nuts: Array<string>;
+	contact: Array<[string, string]>;
+	nuts: {
+		'4': {
+			methods: Array<SwapMethod>;
+			disabled: boolean;
+		};
+		'5': {
+			methods: Array<SwapMethod>;
+			disabled: boolean;
+		};
+		'7'?: {
+			supported: boolean;
+		};
+		'8'?: {
+			supported: boolean;
+		};
+		'9'?: {
+			supported: boolean;
+		};
+		'10'?: {
+			supported: boolean;
+		};
+		'11'?: {
+			supported: boolean;
+		};
+		'12'?: {
+			supported: boolean;
+		};
+		'13'?: {
+			supported: boolean;
+		};
+	};
 	motd?: string;
-	parameter: { peg_out_only: boolean };
+};
+
+/**
+ * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}
+ */
+export type SwapMethod = {
+	method: string;
+	unit: string;
+	min_amount: number;
+	max_amount: number;
+};
+
+/**
+ * Request to mint at /v1/restore endpoint
+ */
+
+export type PostRestorePayload = {
+	outputs: Array<SerializedBlindedMessage>;
+};
+
+/**
+ * Response from mint at /v1/restore endpoint
+ */
+export type PostRestoreResponse = {
+	outputs: Array<SerializedBlindedMessage>;
+	promises: Array<SerializedBlindedSignature>;
 };
 
 export type AmountPreference = {
 	amount: number;
 	count: number;
+};
+
+export type InvoiceData = {
+	paymentRequest: string;
+	amountInSats?: number;
+	amountInMSats?: number;
+	timestamp?: number;
+	paymentHash?: string;
+	memo?: string;
+	expiry?: number;
 };
