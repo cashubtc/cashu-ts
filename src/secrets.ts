@@ -1,5 +1,5 @@
 import { HDKey } from '@scure/bip32';
-import { generateMnemonic, validateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
+import { generateMnemonic, mnemonicToSeedSync } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { encodeBase64toUint8 } from './base64';
 import { bytesToNumber } from './utils';

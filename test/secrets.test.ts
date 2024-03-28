@@ -1,6 +1,7 @@
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { deriveSeedFromMnemonic } from '../src/secrets';
 import { deriveBlindingFactor, deriveSecret } from '../src/secrets';
+import { blindMessage } from '../src/DHKE';
 import { HDKey } from '@scure/bip32';
 
 const mnemonic = 'half depart obvious quality work element tank gorilla view sugar picture humble';
@@ -26,24 +27,43 @@ describe('testing hdkey from seed', () => {
 
 describe('testing deterministic secrets', () => {
 	const secrets = [
-		'9d32fc57e6fa2942d05ee475d28ba6a56839b8cb8a3f174b05ed0ed9d3a420f6',
-		'1c0f2c32e7438e7cc992612049e9dfcdbffd454ea460901f24cc429921437802',
-		'327c606b761af03cbe26fa13c4b34a6183b868c52cda059fe57fdddcb4e1e1e7',
-		'53476919560398b56c0fdc5dd92cf8628b1e06de6f2652b0f7d6e8ac319de3b7',
-		'b2f5d632229378a716be6752fc79ac8c2b43323b820859a7956f2dfe5432b7b4'
+		'485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae',
+		'8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270',
+		'bc628c79accd2364fd31511216a0fab62afd4a18ff77a20deded7b858c9860c8',
+		'59284fd1650ea9fa17db2b3acf59ecd0f2d52ec3261dd4152785813ff27a33bf',
+		'576c23393a8b31cc8da6688d9c9a96394ec74b40fdaf1f693a6bb84284334ea0'
 	];
 	test('derive Secret', async () => {
-		const secret1 = deriveSecret(seed, '1cCNIAZ2X/w1', 0);
-		const secret2 = deriveSecret(seed, '1cCNIAZ2X/w1', 1);
-		const secret3 = deriveSecret(seed, '1cCNIAZ2X/w1', 2);
-		const secret4 = deriveSecret(seed, '1cCNIAZ2X/w1', 3);
-		const secret5 = deriveSecret(seed, '1cCNIAZ2X/w1', 4);
+		const secret1 = deriveSecret(seed, '009a1f293253e41e', 0);
+		const secret2 = deriveSecret(seed, '009a1f293253e41e', 1);
+		const secret3 = deriveSecret(seed, '009a1f293253e41e', 2);
+		const secret4 = deriveSecret(seed, '009a1f293253e41e', 3);
+		const secret5 = deriveSecret(seed, '009a1f293253e41e', 4);
+
+		const bf1 = deriveBlindingFactor(seed, '009a1f293253e41e', 0);
+		const bf2 = deriveBlindingFactor(seed, '009a1f293253e41e', 1);
+		const bf3 = deriveBlindingFactor(seed, '009a1f293253e41e', 2);
+		const bf4 = deriveBlindingFactor(seed, '009a1f293253e41e', 3);
+		const bf5 = deriveBlindingFactor(seed, '009a1f293253e41e', 4);
 
 		expect(bytesToHex(secret1)).toBe(secrets[0]);
 		expect(bytesToHex(secret2)).toBe(secrets[1]);
 		expect(bytesToHex(secret3)).toBe(secrets[2]);
 		expect(bytesToHex(secret4)).toBe(secrets[3]);
 		expect(bytesToHex(secret5)).toBe(secrets[4]);
+	});
+});
+
+describe('testing deterministic blindedMessage', () => {
+	const secrets = ['485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae'];
+	test('derive Secret', async () => {
+		const secret1 = deriveSecret(seed, '009a1f293253e41e', 0);
+
+		const bf1 = deriveBlindingFactor(seed, '009a1f293253e41e', 0);
+
+		expect(bytesToHex(secret1)).toBe(secrets[0]);
+
+		// blindMessage()
 	});
 });
 
