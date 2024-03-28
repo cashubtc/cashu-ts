@@ -40,7 +40,7 @@ import { wordlist } from '@scure/bip39/wordlists/english';
 class CashuWallet {
 	private _keys: MintKeys | undefined;
 	private _seed: Uint8Array | undefined;
-  private _unit = 'sat';
+	private _unit = 'sat';
 	mint: CashuMint;
 	
 
@@ -52,6 +52,7 @@ class CashuWallet {
 	 */
 	constructor(mint: CashuMint, unit?:string, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
 		this.mint = mint;
+		if (unit) this._unit  = unit;
 		if (keys) {
 			this._keys = keys;
 		}
@@ -151,7 +152,7 @@ class CashuWallet {
 				preference,
 				counter
 			);
-			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
 				signatures,
 				blindedMessages.rs,
