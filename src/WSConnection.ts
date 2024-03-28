@@ -1,3 +1,4 @@
+import { listeners } from 'process';
 import { MessageQueue } from './utils';
 
 let _WS: typeof WebSocket;
@@ -13,7 +14,7 @@ export function injectWebSocketImpl(ws: any) {
 export class WSConnection {
 	public readonly url: URL;
 	private ws: WebSocket | undefined;
-	private listeners: { [reqId: string]: (e: any) => any } = {};
+	private listeners: { [reqId: string]: Array<any> } = {};
 	private messageQueue: MessageQueue;
 	private handlingInterval?: NodeJS.Timer;
 
@@ -40,6 +41,14 @@ export class WSConnection {
 		});
 	}
 
+	addListener(subId: string, callback: () => any) {
+		(this.listeners[subId] = this.listeners[subId] || []).push(callback);
+	}
+
+	removeListener(subId: string, callback: () => any) {
+		(this.listeners[subId] = this.listeners[subId] || []).filter((fn) => fn !== callback);
+	}
+
 	handleNextMesage() {
 		if (this.messageQueue.size === 0) {
 			clearInterval(this.handlingInterval);
@@ -58,12 +67,13 @@ export class WSConnection {
 		switch (parsed.length) {
 			case 2: {
 				// Must be notice
-				// TODO: Implement NOTICED
+				// TODO: Implement NOTICE
 				return;
 			}
 			case 3: {
 				subId = parsed[1];
 				data = parsed[3];
+				this.listeners[subId].forEach((cb) => cb(data));
 				break;
 			}
 			default: {
