@@ -3,7 +3,7 @@ import { MessageQueue } from './utils';
 
 let _WS: typeof WebSocket;
 
-if (WebSocket) {
+if (typeof WebSocket !== 'undefined') {
 	_WS = WebSocket;
 }
 
@@ -48,7 +48,7 @@ export class WSConnection {
 			this.ws.onmessage = (e) => {
 				this.messageQueue.enqueue(e.data);
 				if (!this.handlingInterval) {
-					this.handlingInterval = setInterval(this.handleNextMesage, 0);
+					this.handlingInterval = setInterval(this.handleNextMesage.bind(this), 0);
 				}
 			};
 		});
@@ -71,6 +71,7 @@ export class WSConnection {
 	handleNextMesage() {
 		if (this.messageQueue.size === 0) {
 			clearInterval(this.handlingInterval);
+			this.handlingInterval = undefined;
 			return;
 		}
 		const message = this.messageQueue.dequeue() as string;
