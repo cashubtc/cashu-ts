@@ -8,7 +8,7 @@ import {
 	TokenV2
 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
-import { bytesToHex } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
 function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
@@ -128,12 +128,19 @@ function handleTokens(token: string): Token {
 export function deriveKeysetId(keys: Keys) {
 	const pubkeysConcat = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
-		.map(([, pubKey]) => pubKey)
-		.join('');
-	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
-	const hashHex = bytesToHex(hash);
-	return '00' + hashHex.slice(0, 14);
+		.map(([, pubKey]) => hexToBytes(pubKey)).reduce((prev,curr)=>mergeUInt8Arrays(prev,curr),new Uint8Array())
+	const hash = sha256(pubkeysConcat);
+	const hashHex =  Buffer.from(hash).toString('hex').slice(0, 14)
+	return '00' + hashHex
 }
+
+function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
+	// sum of individual array lengths
+	const mergedArray = new Uint8Array(a1.length + a2.length);
+	mergedArray.set(a1);
+	mergedArray.set(a2, a1.length);
+	return mergedArray;
+  }
 
 /**
  * merge proofs from same mint,
