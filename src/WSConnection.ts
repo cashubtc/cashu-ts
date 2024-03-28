@@ -11,6 +11,19 @@ export function injectWebSocketImpl(ws: any) {
 	_WS = ws;
 }
 
+class Subscription {
+	private connection: WSConnection;
+	private subId: string;
+	constructor(conn: WSConnection) {
+		// HACK: There might be way better ways to create an random string, but I want to create something without dependecies frist
+		this.subId = Math.random().toString(36).slice(-5);
+		this.connection = conn;
+	}
+	onmessage(cb: () => any) {
+		this.connection.addListener(this.subId, cb);
+	}
+}
+
 export class WSConnection {
 	public readonly url: URL;
 	private ws: WebSocket | undefined;
@@ -49,6 +62,12 @@ export class WSConnection {
 		(this.listeners[subId] = this.listeners[subId] || []).filter((fn) => fn !== callback);
 	}
 
+	async ensureConenction() {
+		if (this.ws?.readyState !== 1) {
+			await this.connect();
+		}
+	}
+
 	handleNextMesage() {
 		if (this.messageQueue.size === 0) {
 			clearInterval(this.handlingInterval);
@@ -80,6 +99,9 @@ export class WSConnection {
 				return;
 			}
 		}
-		const len = parsed.length;
+	}
+
+	subscribe() {
+		return new Subscription(this);
 	}
 }
