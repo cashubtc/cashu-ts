@@ -1,6 +1,8 @@
 import { listeners } from 'process';
 import { MessageQueue } from './utils';
 
+type Command = 'check_quote' | 'check_proof';
+
 let _WS: typeof WebSocket;
 
 if (typeof WebSocket !== 'undefined') {
@@ -18,6 +20,7 @@ class Subscription {
 		// HACK: There might be way better ways to create an random string, but I want to create something without dependecies frist
 		this.subId = Math.random().toString(36).slice(-5);
 		this.connection = conn;
+		conn.sendCommand('check_proof', this.subId, { test: true });
 	}
 	onmessage(cb: () => any) {
 		this.connection.addListener(this.subId, cb);
@@ -52,6 +55,10 @@ export class WSConnection {
 				}
 			};
 		});
+	}
+
+	sendCommand(cmd: Command, subId: string, params: any) {
+		this.ws?.send(JSON.stringify(['REQ', subId, cmd, params]));
 	}
 
 	addListener(subId: string, callback: () => any) {
@@ -102,7 +109,7 @@ export class WSConnection {
 		}
 	}
 
-	subscribe() {
+	subscribe(cmd: 'check_proof' | 'check_quote') {
 		return new Subscription(this);
 	}
 }

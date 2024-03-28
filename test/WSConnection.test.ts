@@ -5,7 +5,7 @@ describe('testing WSConnection', () => {
 		injectWebSocketImpl(require('ws'));
 		const ws = new WSConnection('https://echo.websocket.org/');
 		await ws.connect();
-		const sub = ws.subscribe();
+		const sub = ws.subscribe('check_proof');
 		await new Promise((res) => {
 			// @ts-ignore
 			sub.onmessage((e) => {
