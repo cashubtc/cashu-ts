@@ -98,11 +98,12 @@ describe('mint api', () => {
 		const request = await wallet.getMintQuote(3000);
 		const tokens = await wallet.mintTokens(3000, request.quote);
 
-		const fee = (await wallet.getMeltQuote(externalInvoice)).fee_reserve;
+		const meltQuote = (await wallet.getMeltQuote(externalInvoice));
+		const fee = meltQuote.fee_reserve
 		expect(fee).toBeGreaterThan(0);
 
 		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);
-		const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send);
+		const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send, meltQuote);
 
 		expect(response).toBeDefined();
 		// expect that we have not received the fee back, since it was external

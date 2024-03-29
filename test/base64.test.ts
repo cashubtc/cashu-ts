@@ -72,4 +72,27 @@ describe('testing uint8 encoding', () => {
 		expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
 		expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
 	});
+	test('test script secret to from base64', () => {
+		const base64url = 'eyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAwOWExZjI5MzI1M2U0MWUiLCJhbW91bnQiOjEsInNlY3JldCI6IltcIlAyUEtcIix7XCJub25jZVwiOlwiZDU2YWM4MzljMzdiZWRiNGM1MGIxODcxOTY1MDI2N2E2MWIzMTBlZjdhY2Q5ZWFjMzgwZmIxZmRmNmM1ZjkxNlwiLFwiZGF0YVwiOlwiYjM4Y2FjMmY0N2QzZWNjYjY0NmUxYmFiZDBiNDFlMzZhMTc5MmRlZjlhODU5ODRlNWZiZmVkZTU1ZjQ4Yjc4OVwifV0iLCJDIjoiMDM4YTcyZWRmNWRmN2M3ZmNiMTRhMDhjYjhiZDljODVlOTVkZmM0MzY4ZTU5YTk3OTRkZmI5OTAxZWEyZDIxNzI5In1dLCJtaW50IjoiaHR0cHM6Ly90ZXN0bnV0LmNhc2h1LnNwYWNlIn1dfQ';
+		// const base64 = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI/wn4+z77iPIn0='
+		const obj = {
+			"token": [
+			  {
+				"proofs": [
+				  {
+					"id": "009a1f293253e41e",
+					"amount": 1,
+					"secret": "[\"P2PK\",{\"nonce\":\"d56ac839c37bedb4c50b18719650267a61b310ef7acd9eac380fb1fdf6c5f916\",\"data\":\"b38cac2f47d3eccb646e1babd0b41e36a1792def9a85984e5fbfede55f48b789\"}]",
+					"C": "038a72edf5df7c7fcb14a08cb8bd9c85e95dfc4368e59a9794dfb9901ea2d21729"
+				  }
+				],
+				"mint": "https://testnut.cashu.space"
+			  }
+			]
+		  };
+
+		expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
+		expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+	});
+	
 });

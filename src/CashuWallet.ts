@@ -32,6 +32,9 @@ import {
 import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
+import { createP2PKsecret, getSignedProofs } from "@gandlaf21/cashu-crypto/modules/client/NUT11";
+import { serializeProof } from "@gandlaf21/cashu-crypto/modules/client";
+import { pointFromHex } from './DHKE';
 
 /**
  * Class that represents a Cashu wallet.
@@ -82,13 +85,19 @@ class CashuWallet {
 	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param privkey? will create a signature on the @param token secrets if set
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(
 		token: string | Token,
-		preference?: Array<AmountPreference>,
-		counter?: number
-	): Promise<ReceiveResponse> {
+		options?: {
+			preference?: Array<AmountPreference>,
+			counter?: number,
+			pubkey?: string,
+			privkey?: string
+		}
+			): Promise<ReceiveResponse> {
 		let decodedToken: Array<TokenEntry>;
 		if (typeof token === 'string') {
 			decodedToken = cleanToken(getDecodedToken(token)).token;
@@ -104,8 +113,12 @@ class CashuWallet {
 			try {
 				const { proofs, proofsWithError } = await this.receiveTokenEntry(
 					tokenEntry,
-					preference,
-					counter
+					{
+						preference: options?.preference,
+						counter: options?.counter,
+						pubkey: options?.pubkey,
+						privkey: options?.privkey
+					}
 				);
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
@@ -128,17 +141,24 @@ class CashuWallet {
 	 * @param tokenEntry a single entry of a cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param privkey? will create a signature on the @param tokenEntry secrets if set
 	 * @returns New token entry with newly created proofs, proofs that had errors
 	 */
 	async receiveTokenEntry(
 		tokenEntry: TokenEntry,
-		preference?: Array<AmountPreference>,
-		counter?: number
+		options?:{
+			preference?: Array<AmountPreference>,
+			counter?: number,
+			pubkey?: string,
+			privkey?: string
+		}
 	): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
+			let preference = options?.preference 
 			if (!preference) {
 				preference = getDefaultAmountPreference(amount);
 			}
@@ -148,7 +168,9 @@ class CashuWallet {
 				tokenEntry.proofs,
 				keys,
 				preference,
-				counter
+				options?.counter,
+				options?.pubkey,
+				options?.privkey
 			);
 			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
@@ -176,16 +198,22 @@ class CashuWallet {
 	 * @param proofs proofs matching that amount
 	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param privkey? will create a signature on the @param proofs secrets if set
 	 * @returns promise of the change- and send-proofs
 	 */
 	async send(
 		amount: number,
 		proofs: Array<Proof>,
-		preference?: Array<AmountPreference>,
-		counter?: number
+		options?:{
+			preference?: Array<AmountPreference>,
+			counter?: number,
+			pubkey?: string,
+			privkey?: string
+		}
 	): Promise<SendResponse> {
-		if (preference) {
-			amount = preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
+		if (options?.preference) {
+			amount = options?.preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
 		}
 		const keyset = await this.getKeys();
 		let amountAvailable = 0;
@@ -203,14 +231,16 @@ class CashuWallet {
 		if (amount > amountAvailable) {
 			throw new Error('Not enough funds available');
 		}
-		if (amount < amountAvailable || preference) {
+		if (amount < amountAvailable || options?.preference || options?.pubkey) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amountSend,
 				proofsToSend,
 				keyset,
-				preference,
-				counter
+				options?.preference,
+				options?.counter,
+				options?.pubkey,
+				options?.privkey
 			);
 			const { signatures } = await this.mint.split(payload);
 			const proofs = dhke.constructProofs(
@@ -248,9 +278,11 @@ class CashuWallet {
 	async restore(
 		start: number,
 		count: number,
-		keysetId?: string
+		options?: {
+			keysetId?: string
+		}
 	): Promise<{ proofs: Array<Proof> }> {
-		const keys = await this.getKeys(keysetId);
+		const keys = await this.getKeys(options?.keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
 		}
@@ -288,7 +320,9 @@ class CashuWallet {
 					`could not initialize keys. No keyset with unit '${unit ? unit : 'sat'}' found`
 				);
 			}
-			this._keys = keys;
+			if (!this._keys) {
+				this._keys = keys;
+			}
 		}
 		return this._keys;
 	}
@@ -315,16 +349,20 @@ class CashuWallet {
 	async mintTokens(
 		amount: number,
 		quote: string,
-		keysetId?: string,
-		AmountPreference?: Array<AmountPreference>,
-		counter?: number
+		options?: {
+			keysetId?: string,
+			AmountPreference?: Array<AmountPreference>,
+			counter?: number,
+			pubkey?: string
+		}
 	): Promise<{ proofs: Array<Proof> }> {
-		const keyset = await this.getKeys(keysetId);
+		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			keysetId ?? keyset.id,
-			AmountPreference,
-			counter
+			options?.keysetId ?? keyset.id,
+			options?.AmountPreference,
+			options?.counter,
+			options?.pubkey
 		);
 		const postMintPayload: PostMintPayload = {
 			outputs: blindedMessages,
@@ -350,20 +388,24 @@ class CashuWallet {
 	 * Returns payment proof and change proofs
 	 * @param meltQuote ID of the melt quote
 	 * @param proofsToSend proofs to melt
+	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
+	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns
 	 */
 	async meltTokens(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
-		keysetId?: string,
-		counter?: number
+		options?: {
+			keysetId?: string,
+			counter?: number,
+		}
 	): Promise<MeltTokensResponse> {
-		const keys = await this.getKeys(keysetId);
+		const keys = await this.getKeys(options?.keysetId);
 
 		const { blindedMessages, secrets, rs } = this.createBlankOutputs(
 			meltQuote.fee_reserve,
 			keys.id,
-			counter
+			options?.counter
 		);
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
@@ -387,21 +429,23 @@ class CashuWallet {
 	 * @param invoice
 	 * @param proofsToSend the exact amount to send including fees
 	 * @param meltQuote melt quote for the invoice
-	 * @param keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
+	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns
 	 */
 	async payLnInvoice(
 		invoice: string,
 		proofsToSend: Array<Proof>,
-		meltQuote?: MeltQuoteResponse,
-		keysetId?: string,
-		counter?: number
+		meltQuote: MeltQuoteResponse,
+		options?:{
+			keysetId?: string,
+			counter?: number
+		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
 			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
 		}
-		return await this.meltTokens(meltQuote, proofsToSend, keysetId, counter);
+		return await this.meltTokens(meltQuote, proofsToSend, {keysetId:options?.keysetId, counter: options?.counter});
 	}
 
 	/**
@@ -409,21 +453,23 @@ class CashuWallet {
 	 * @param invoice Lightning invoice
 	 * @param token cashu token
 	 * @param meltQuote melt quote for the invoice
-	 * @param keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
+	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 */
-	payLnInvoiceWithToken(
+	async payLnInvoiceWithToken(
 		invoice: string,
 		token: string,
-		meltQuote?: MeltQuoteResponse,
-		keysetId?: string,
-		counter?: number
+		meltQuote: MeltQuoteResponse,
+		options?: {
+			keysetId?: string,
+			counter?: number
+		}
 	): Promise<MeltTokensResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
 			.filter((x) => x.mint === this.mint.mintUrl)
 			.flatMap((t) => t.proofs);
-		return this.payLnInvoice(invoice, proofs, meltQuote, keysetId, counter);
+		return this.payLnInvoice(invoice, proofs, meltQuote, {keysetId: options?.keysetId, counter: options?.counter});
 	}
 
 	/**
@@ -432,6 +478,8 @@ class CashuWallet {
 	 * @param proofsToSend proofs to split*
 	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
 	 * @returns
 	 */
 	private createSplitPayload(
@@ -439,7 +487,9 @@ class CashuWallet {
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
 		preference?: Array<AmountPreference>,
-		counter?: number
+		counter?: number,
+		pubkey?: string,
+		privkey?: string
 	): {
 		payload: SplitPayload;
 		blindedMessages: BlindedTransaction;
@@ -458,8 +508,12 @@ class CashuWallet {
 			amount,
 			keyset.id,
 			preference,
-			counter
+			counter,
+			pubkey
 		);
+		if (privkey) {
+			proofsToSend = getSignedProofs(proofsToSend.map((p)=>{return {amount:p.amount, C: pointFromHex(p.C), id: p.id, secret: new TextEncoder().encode(p.secret)}}), privkey).map(p=> serializeProof(p))
+		}
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -480,7 +534,7 @@ class CashuWallet {
 	}
 	/**
 	 * returns proofs that are already spent (use for keeping wallet state clean)
-	 * @param proofs (only the 'secret' field is required)
+	 * @param proofs (only the 'Y' field is required)
 	 * @returns
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
@@ -510,17 +564,20 @@ class CashuWallet {
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for
 	 * @param amountPreference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
 		keysetId: string,
 		amountPreference?: Array<AmountPreference>,
-		counter?: number
+		counter?: number,
+		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
 		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, keysetId, counter);
+		return this.createBlindedMessages(amounts, keysetId, counter, pubkey);
 	}
 
 	/**
@@ -528,12 +585,14 @@ class CashuWallet {
 	 * @param amount array of amounts to create blinded messages for
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createBlindedMessages(
 		amounts: Array<number>,
 		keysetId: string,
-		counter?: number
+		counter?: number,
+		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
@@ -547,16 +606,21 @@ class CashuWallet {
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secretBytes = undefined;
-			if (this._seed && counter != undefined) {
+			if (pubkey) {
+				secretBytes = createP2PKsecret(pubkey)
+			}
+			else if (this._seed && counter != undefined) {
 				secretBytes = deriveSecret(this._seed, keysetId, counter + i);
 				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, keysetId, counter + i));
 			} else {
 				secretBytes = randomBytes(32);
 			}
-			const secretHex = bytesToHex(secretBytes);
-			const secret = new TextEncoder().encode(secretHex);
-			secrets.push(secret);
-			const { B_, r } = dhke.blindMessage(secret, deterministicR);
+			if (!pubkey) {
+				const secretHex = bytesToHex(secretBytes);
+				secretBytes = new TextEncoder().encode(secretHex);
+			}
+			secrets.push(secretBytes);
+			const { B_, r } = dhke.blindMessage(secretBytes, deterministicR);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
@@ -568,6 +632,7 @@ class CashuWallet {
 	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve
 	 * See: https://github.com/cashubtc/nuts/blob/main/08.md
 	 * @param feeReserve amount to cover with blank outputs
+	 * @param keysetId mint keysetId
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
