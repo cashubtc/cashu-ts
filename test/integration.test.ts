@@ -98,8 +98,8 @@ describe('mint api', () => {
 		const request = await wallet.getMintQuote(3000);
 		const tokens = await wallet.mintTokens(3000, request.quote);
 
-		const meltQuote = (await wallet.getMeltQuote(externalInvoice));
-		const fee = meltQuote.fee_reserve
+		const meltQuote = await wallet.getMeltQuote(externalInvoice);
+		const fee = meltQuote.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
 
 		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);

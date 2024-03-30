@@ -32,8 +32,8 @@ import {
 import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
-import { createP2PKsecret, getSignedProofs } from "@gandlaf21/cashu-crypto/modules/client/NUT11";
-import { serializeProof } from "@gandlaf21/cashu-crypto/modules/client";
+import { createP2PKsecret, getSignedProofs } from '@gandlaf21/cashu-crypto/modules/client/NUT11';
+import { serializeProof } from '@gandlaf21/cashu-crypto/modules/client';
 import { pointFromHex } from './DHKE';
 
 /**
@@ -92,12 +92,12 @@ class CashuWallet {
 	async receive(
 		token: string | Token,
 		options?: {
-			preference?: Array<AmountPreference>,
-			counter?: number,
-			pubkey?: string,
-			privkey?: string
+			preference?: Array<AmountPreference>;
+			counter?: number;
+			pubkey?: string;
+			privkey?: string;
 		}
-			): Promise<ReceiveResponse> {
+	): Promise<ReceiveResponse> {
 		let decodedToken: Array<TokenEntry>;
 		if (typeof token === 'string') {
 			decodedToken = cleanToken(getDecodedToken(token)).token;
@@ -111,15 +111,12 @@ class CashuWallet {
 				continue;
 			}
 			try {
-				const { proofs, proofsWithError } = await this.receiveTokenEntry(
-					tokenEntry,
-					{
-						preference: options?.preference,
-						counter: options?.counter,
-						pubkey: options?.pubkey,
-						privkey: options?.privkey
-					}
-				);
+				const { proofs, proofsWithError } = await this.receiveTokenEntry(tokenEntry, {
+					preference: options?.preference,
+					counter: options?.counter,
+					pubkey: options?.pubkey,
+					privkey: options?.privkey
+				});
 				if (proofsWithError?.length) {
 					tokenEntriesWithError.push(tokenEntry);
 					continue;
@@ -147,18 +144,18 @@ class CashuWallet {
 	 */
 	async receiveTokenEntry(
 		tokenEntry: TokenEntry,
-		options?:{
-			preference?: Array<AmountPreference>,
-			counter?: number,
-			pubkey?: string,
-			privkey?: string
+		options?: {
+			preference?: Array<AmountPreference>;
+			counter?: number;
+			pubkey?: string;
+			privkey?: string;
 		}
 	): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			let preference = options?.preference 
+			let preference = options?.preference;
 			if (!preference) {
 				preference = getDefaultAmountPreference(amount);
 			}
@@ -205,11 +202,11 @@ class CashuWallet {
 	async send(
 		amount: number,
 		proofs: Array<Proof>,
-		options?:{
-			preference?: Array<AmountPreference>,
-			counter?: number,
-			pubkey?: string,
-			privkey?: string
+		options?: {
+			preference?: Array<AmountPreference>;
+			counter?: number;
+			pubkey?: string;
+			privkey?: string;
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
@@ -279,7 +276,7 @@ class CashuWallet {
 		start: number,
 		count: number,
 		options?: {
-			keysetId?: string
+			keysetId?: string;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -350,10 +347,10 @@ class CashuWallet {
 		amount: number,
 		quote: string,
 		options?: {
-			keysetId?: string,
-			AmountPreference?: Array<AmountPreference>,
-			counter?: number,
-			pubkey?: string
+			keysetId?: string;
+			AmountPreference?: Array<AmountPreference>;
+			counter?: number;
+			pubkey?: string;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
 		const keyset = await this.getKeys(options?.keysetId);
@@ -396,8 +393,8 @@ class CashuWallet {
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
 		options?: {
-			keysetId?: string,
-			counter?: number,
+			keysetId?: string;
+			counter?: number;
 		}
 	): Promise<MeltTokensResponse> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -437,15 +434,18 @@ class CashuWallet {
 		invoice: string,
 		proofsToSend: Array<Proof>,
 		meltQuote: MeltQuoteResponse,
-		options?:{
-			keysetId?: string,
-			counter?: number
+		options?: {
+			keysetId?: string;
+			counter?: number;
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
 			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
 		}
-		return await this.meltTokens(meltQuote, proofsToSend, {keysetId:options?.keysetId, counter: options?.counter});
+		return await this.meltTokens(meltQuote, proofsToSend, {
+			keysetId: options?.keysetId,
+			counter: options?.counter
+		});
 	}
 
 	/**
@@ -461,15 +461,18 @@ class CashuWallet {
 		token: string,
 		meltQuote: MeltQuoteResponse,
 		options?: {
-			keysetId?: string,
-			counter?: number
+			keysetId?: string;
+			counter?: number;
 		}
 	): Promise<MeltTokensResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
 			.filter((x) => x.mint === this.mint.mintUrl)
 			.flatMap((t) => t.proofs);
-		return this.payLnInvoice(invoice, proofs, meltQuote, {keysetId: options?.keysetId, counter: options?.counter});
+		return this.payLnInvoice(invoice, proofs, meltQuote, {
+			keysetId: options?.keysetId,
+			counter: options?.counter
+		});
 	}
 
 	/**
@@ -512,7 +515,17 @@ class CashuWallet {
 			pubkey
 		);
 		if (privkey) {
-			proofsToSend = getSignedProofs(proofsToSend.map((p)=>{return {amount:p.amount, C: pointFromHex(p.C), id: p.id, secret: new TextEncoder().encode(p.secret)}}), privkey).map(p=> serializeProof(p))
+			proofsToSend = getSignedProofs(
+				proofsToSend.map((p) => {
+					return {
+						amount: p.amount,
+						C: pointFromHex(p.C),
+						id: p.id,
+						secret: new TextEncoder().encode(p.secret)
+					};
+				}),
+				privkey
+			).map((p) => serializeProof(p));
 		}
 
 		// join keepBlindedMessages and sendBlindedMessages
@@ -607,9 +620,8 @@ class CashuWallet {
 			let deterministicR = undefined;
 			let secretBytes = undefined;
 			if (pubkey) {
-				secretBytes = createP2PKsecret(pubkey)
-			}
-			else if (this._seed && counter != undefined) {
+				secretBytes = createP2PKsecret(pubkey);
+			} else if (this._seed && counter != undefined) {
 				secretBytes = deriveSecret(this._seed, keysetId, counter + i);
 				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, keysetId, counter + i));
 			} else {
