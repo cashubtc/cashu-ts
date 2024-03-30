@@ -1,12 +1,5 @@
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import {
-	AmountPreference,
-	Keys,
-	Proof,
-	Token,
-	TokenEntry,
-	TokenV2
-} from './model/types/index.js';
+import { AmountPreference, Keys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
@@ -128,10 +121,11 @@ function handleTokens(token: string): Token {
 export function deriveKeysetId(keys: Keys) {
 	const pubkeysConcat = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
-		.map(([, pubKey]) => hexToBytes(pubKey)).reduce((prev,curr)=>mergeUInt8Arrays(prev,curr),new Uint8Array())
+		.map(([, pubKey]) => hexToBytes(pubKey))
+		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 	const hash = sha256(pubkeysConcat);
-	const hashHex =  Buffer.from(hash).toString('hex').slice(0, 14)
-	return '00' + hashHex
+	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+	return '00' + hashHex;
 }
 
 function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
@@ -140,7 +134,7 @@ function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 	mergedArray.set(a1);
 	mergedArray.set(a2, a1.length);
 	return mergedArray;
-  }
+}
 
 /**
  * merge proofs from same mint,

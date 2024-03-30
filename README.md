@@ -61,7 +61,6 @@ const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
 const request = await wallet.getMintQuote(64);
 const tokens = await wallet.mintTokens(64, request.quote);
-
 ```
 
 ## Contribute

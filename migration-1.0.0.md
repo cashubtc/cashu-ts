@@ -14,10 +14,11 @@ In Version 1.0.0 the api version of mints has been upgraded to `v1`. Please read
 
 ### Decoding LN invoices
 
-**Removed LN invoice decode:** 
-Decoding LN invoices is no longer used inside the lib. 
+**Removed LN invoice decode:**
+Decoding LN invoices is no longer used inside the lib.
 
-**How to fix:** If you need to decode LN invoices, you can use 
+**How to fix:** If you need to decode LN invoices, you can use
+
 > npm i [@gandlaf21/bolt11-decode](https://www.npmjs.com/package/@gandlaf21/bolt11-decode)
 
 ---
@@ -25,13 +26,13 @@ Decoding LN invoices is no longer used inside the lib.
 ### `CashuWallet` interface changes
 
 **`requestMint(amount: number)` --> `getMintQuote(amount: number)`**
-Now returns the following: 
+Now returns the following:
 
 ```typescript
 type MintQuoteResponse = {
-    request: string;
-    quote: string;
-}
+	request: string;
+	quote: string;
+};
 ```
 
 where `request` is the invoice to be paid, and `quote` is the identifier used to pass to `mintTokens()`.
@@ -45,8 +46,9 @@ type MeltQuoteResponse = {
 	quote: string;
 	amount: number;
 	fee_reserve: number;
-}
+};
 ```
+
 where `quote` is the identifier to pass to `meltTokens()`
 
 ---
@@ -64,11 +66,12 @@ type MintKeys = {
 };
 
 type Keys = { [amount: number]: string };
-
 ```
+
 ---
+
 **`MintKeyset`**:
-Used to be a string array, but now contains the additional fields `active` and `unit` 
+Used to be a string array, but now contains the additional fields `active` and `unit`
 
 ```typescript
 type MintKeyset = {
@@ -77,17 +80,21 @@ type MintKeyset = {
 	active: boolean;
 };
 ```
+
 ---
+
 **`BlindedMessages`:** now include the field `id`, corresponding with the mints `keysetId`
 
-```typescript 
+```typescript
 type BlindedMessage {
 	amount: number;
 	B_: ProjPointType<bigint>;
 	id: string;
 }
 ```
+
 ---
+
 ### Pattern changes
 
-**removed `newKeys` from returns**: Functions no longer return `newKeys`. Wallets now specify the keyset they use in the BlindedMessage via the `id` field. 
+**removed `newKeys` from returns**: Functions no longer return `newKeys`. Wallets now specify the keyset they use in the BlindedMessage via the `id` field.
