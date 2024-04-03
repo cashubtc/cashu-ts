@@ -178,28 +178,34 @@ describe('mint api', () => {
 	test('send and receive p2pk', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		
-		const privKeyAlice = secp256k1.utils.randomPrivateKey()
-		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice)
-		
-		const privKeyBob = secp256k1.utils.randomPrivateKey()
-		const pubKeyBob = secp256k1.getPublicKey(privKeyBob)
-		
+
+		const privKeyAlice = secp256k1.utils.randomPrivateKey();
+		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice);
+
+		const privKeyBob = secp256k1.utils.randomPrivateKey();
+		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
+
 		const request = await wallet.getMintQuote(64);
 		const tokens = await wallet.mintTokens(64, request.quote);
-		
-		const  {send} = await wallet.send(64, tokens.proofs, {pubkey: bytesToHex(pubKeyBob)})
+
+		const { send } = await wallet.send(64, tokens.proofs, { pubkey: bytesToHex(pubKeyBob) });
 		const encoded = getEncodedToken({
 			token: [{ mint: mintUrl, proofs: send }]
 		});
 
-		const res = await wallet.receive(encoded,{privkey:bytesToHex(privKeyAlice)}).catch()
-		expect(res.token.token).toEqual([])
-		expect(res.tokensWithErrors?.token.length).toBe(1)
+		const res = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) }).catch();
+		expect(res.token.token).toEqual([]);
+		expect(res.tokensWithErrors?.token.length).toBe(1);
 
-		const  { token } = await wallet.receive(encoded,{privkey:bytesToHex(privKeyBob)})
+		const { token } = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 
-		expect(token.token.map(t=>t.proofs).flat().reduce((curr,acc)=>{return curr+acc.amount},0)).toBe(64)
-		
+		expect(
+			token.token
+				.map((t) => t.proofs)
+				.flat()
+				.reduce((curr, acc) => {
+					return curr + acc.amount;
+				}, 0)
+		).toBe(64);
 	});
 });
