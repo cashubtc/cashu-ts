@@ -32,8 +32,8 @@ import {
 import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
-import { createP2PKsecret, getSignedProofs } from '@gandlaf21/cashu-crypto/modules/client/NUT11';
-import { serializeProof } from '@gandlaf21/cashu-crypto/modules/client';
+import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
+import { serializeProof } from '@cashu/crypto/modules/client';
 import { pointFromHex } from './DHKE';
 
 /**
