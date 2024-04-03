@@ -348,7 +348,7 @@ class CashuWallet {
 		quote: string,
 		options?: {
 			keysetId?: string;
-			AmountPreference?: Array<AmountPreference>;
+			amountPreference?: Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
 		}
@@ -357,7 +357,7 @@ class CashuWallet {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			options?.keysetId ?? keyset.id,
-			options?.AmountPreference,
+			options?.amountPreference,
 			options?.counter,
 			options?.pubkey
 		);
