@@ -41,6 +41,8 @@ type MintQuoteResponse = {
 
 where `request` is the invoice to be paid, and `quote` is the identifier used to pass to `mintTokens()`.
 
+**`requestTokens()` --> `mintTokens()`**
+
 ---
 
 **`getMeltQuote(invoice: string)`** is now used to get fee estimation and conversion quotes instead of `getFee()` and returns:
