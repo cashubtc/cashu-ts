@@ -25,6 +25,7 @@ class Subscription {
 	onmessage(cb: () => any) {
 		this.connection.addListener(this.subId, cb);
 	}
+	unsub() {}
 }
 
 export class WSConnection {
@@ -59,6 +60,10 @@ export class WSConnection {
 
 	sendCommand(cmd: Command, subId: string, params: any) {
 		this.ws?.send(JSON.stringify(['REQ', subId, cmd, params]));
+	}
+
+	closeSubscription(subId: string) {
+		this.ws?.send(JSON.stringify(['CLOSE', subId]));
 	}
 
 	addListener(subId: string, callback: () => any) {
