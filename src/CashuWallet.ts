@@ -332,11 +332,11 @@ class CashuWallet {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async getMintQuote(amount: number) {
-		const MintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuotePayload = {		
 			unit: this._unit,
 			amount: amount
 		};
-		return await this.mint.mintQuote(MintQuotePayload);
+		return await this.mint.mintQuote(mintQuotePayload);
 	}
 
 	/**
@@ -363,7 +363,7 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey
 		);
-		const MintPayload: MintPayload = {
+		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
 			quote: quote
 		};

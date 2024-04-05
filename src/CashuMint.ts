@@ -29,7 +29,7 @@ class CashuMint {
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request) {}
+	constructor(private _mintUrl: string, private _customRequest?: typeof request) { }
 
 	get mintUrl() {
 		return this._mintUrl;
@@ -62,14 +62,14 @@ class CashuMint {
 	 */
 	public static async mintQuote(
 		mintUrl: string,
-		MintQuotePayload: MintQuotePayload,
+		mintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request
 	): Promise<MintQuoteResponse> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintQuoteResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
-			requestBody: MintQuotePayload
+			requestBody: mintQuotePayload
 		});
 	}
 
@@ -78,8 +78,8 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async mintQuote(MintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
-		return CashuMint.mintQuote(this._mintUrl, MintQuotePayload, this._customRequest);
+	async mintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
+		return CashuMint.mintQuote(this._mintUrl, mintQuotePayload, this._customRequest);
 	}
 	/**
 	 * Requests the mint to perform token minting after the LN invoice has been paid
