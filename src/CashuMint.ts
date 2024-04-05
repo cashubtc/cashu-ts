@@ -7,13 +7,13 @@ import type {
 	MintActiveKeys,
 	MintAllKeysets,
 	PostRestoreResponse,
-	RequestMintResponse,
+	MintQuoteResponse,
 	SerializedBlindedMessage,
 	SplitPayload,
 	SplitResponse,
-	RequestMintPayload,
-	PostMintPayload,
-	PostMintResponse,
+	MintQuotePayload,
+	MintPayload,
+	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
 	MeltQuoteResponse
@@ -62,14 +62,14 @@ class CashuMint {
 	 */
 	public static async mintQuote(
 		mintUrl: string,
-		requestMintPayload: RequestMintPayload,
+		MintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request
-	): Promise<RequestMintResponse> {
+	): Promise<MintQuoteResponse> {
 		const requestInstance = customRequest || request;
-		return requestInstance<RequestMintResponse>({
+		return requestInstance<MintQuoteResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
-			requestBody: requestMintPayload
+			requestBody: MintQuotePayload
 		});
 	}
 
@@ -78,8 +78,8 @@ class CashuMint {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async mintQuote(requestMintPayload: RequestMintPayload): Promise<RequestMintResponse> {
-		return CashuMint.mintQuote(this._mintUrl, requestMintPayload, this._customRequest);
+	async mintQuote(MintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
+		return CashuMint.mintQuote(this._mintUrl, MintQuotePayload, this._customRequest);
 	}
 	/**
 	 * Requests the mint to perform token minting after the LN invoice has been paid
@@ -91,11 +91,11 @@ class CashuMint {
 	 */
 	public static async mint(
 		mintUrl: string,
-		mintPayload: PostMintPayload,
+		mintPayload: MintPayload,
 		customRequest?: typeof request
 	) {
 		const requestInstance = customRequest || request;
-		const data = await requestInstance<PostMintResponse>({
+		const data = await requestInstance<MintResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/bolt11'),
 			method: 'POST',
 			requestBody: mintPayload
@@ -113,7 +113,7 @@ class CashuMint {
 	 * @param hash hash (id) used for by the mint to keep track of wether the invoice has been paid yet
 	 * @returns serialized blinded signatures
 	 */
-	async mint(mintPayload: PostMintPayload) {
+	async mint(mintPayload: MintPayload) {
 		return CashuMint.mint(this._mintUrl, mintPayload, this._customRequest);
 	}
 	/**

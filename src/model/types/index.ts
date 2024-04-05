@@ -266,7 +266,7 @@ export type ApiError = {
 /**
  * Payload that needs to be sent to the mint when requesting a mint
  */
-export type RequestMintPayload = {
+export type MintQuotePayload = {
 	/**
 	 * Unit to be minted
 	 */
@@ -279,7 +279,7 @@ export type RequestMintPayload = {
 /**
  * Response from the mint after requesting a mint
  */
-export type RequestMintResponse = {
+export type MintQuoteResponse = {
 	request: string;
 	quote: string;
 } & ApiError;
@@ -287,7 +287,7 @@ export type RequestMintResponse = {
 /**
  * Payload that needs to be sent to the mint when requesting a mint
  */
-export type PostMintPayload = {
+export type MintPayload = {
 	/**
 	 * Quote ID received from the mint.
 	 */
@@ -300,7 +300,7 @@ export type PostMintPayload = {
 /**
  * Response from the mint after requesting a mint
  */
-export type PostMintResponse = {
+export type MintResponse = {
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 

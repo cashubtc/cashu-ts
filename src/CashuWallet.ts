@@ -10,11 +10,11 @@ import {
 	MeltQuoteResponse,
 	MintKeys,
 	MeltTokensResponse,
-	PostMintPayload,
+	MintPayload,
 	Proof,
 	ReceiveResponse,
 	ReceiveTokenEntryResponse,
-	RequestMintPayload,
+	MintQuotePayload,
 	SendResponse,
 	SerializedBlindedMessage,
 	SplitPayload,
@@ -332,11 +332,11 @@ class CashuWallet {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async getMintQuote(amount: number) {
-		const requestMintPayload: RequestMintPayload = {
+		const MintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
-		return await this.mint.mintQuote(requestMintPayload);
+		return await this.mint.mintQuote(MintQuotePayload);
 	}
 
 	/**
@@ -363,11 +363,11 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey
 		);
-		const postMintPayload: PostMintPayload = {
+		const MintPayload: MintPayload = {
 			outputs: blindedMessages,
 			quote: quote
 		};
-		const { signatures } = await this.mint.mint(postMintPayload);
+		const { signatures } = await this.mint.mint(MintPayload);
 		return {
 			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
 		};
