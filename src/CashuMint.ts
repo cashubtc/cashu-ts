@@ -29,7 +29,7 @@ class CashuMint {
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request) {}
+	constructor(private _mintUrl: string, private _customRequest?: typeof request) { }
 
 	get mintUrl() {
 		return this._mintUrl;
@@ -119,7 +119,7 @@ class CashuMint {
 	/**
 	 * Get the mints public keys
 	 * @param mintUrl
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
+	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
 	 * @param customRequest
 	 * @returns
 	 */
@@ -146,7 +146,7 @@ class CashuMint {
 	}
 	/**
 	 * Get the mints public keys
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from the active keyset are fetched
+	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
 	 * @returns the mints public keys
 	 */
 	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys> {
