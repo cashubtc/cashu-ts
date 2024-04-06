@@ -201,9 +201,8 @@ describe('checkProofsSpent', () => {
 	];
 	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
-
-			.post('/v1/check')
-			.reply(200, { spendable: [true] });
+			.post('/v1/checkstate')
+			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
 		const wallet = new CashuWallet(mint, unit);
 
 		const result = await wallet.checkProofsSpent(proofs);
@@ -211,6 +210,7 @@ describe('checkProofsSpent', () => {
 		expect(result).toStrictEqual([]);
 	});
 });
+
 
 describe('payLnInvoice', () => {
 	const proofs = [
