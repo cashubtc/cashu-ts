@@ -3,24 +3,24 @@ import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
-	AmountPreference,
-	BlindedMessageData,
-	BlindedTransaction,
-	MeltPayload,
-	MeltQuoteResponse,
-	MintKeys,
-	MeltTokensResponse,
-	MintPayload,
-	Proof,
-	ReceiveResponse,
-	ReceiveTokenEntryResponse,
-	MintQuotePayload,
-	SendResponse,
-	SerializedBlindedMessage,
-	SplitPayload,
-	CheckStateEnum,
-	Token,
-	TokenEntry
+	type AmountPreference,
+	type BlindedMessageData,
+	type BlindedTransaction,
+	type MeltPayload,
+	type MeltQuoteResponse,
+	type MintKeys,
+	type MeltTokensResponse,
+	type MintPayload,
+	type Proof,
+	type ReceiveResponse,
+	type ReceiveTokenEntryResponse,
+	type MintQuotePayload,
+	type SendResponse,
+	type SerializedBlindedMessage,
+	type SplitPayload,
+	type Token,
+	type TokenEntry,
+	CheckStateEnum
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -367,7 +367,7 @@ class CashuWallet {
 			outputs: blindedMessages,
 			quote: quote
 		};
-		const { signatures } = await this.mint.mint(MintPayload);
+		const { signatures } = await this.mint.mint(mintPayload);
 		return {
 			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
 		};
