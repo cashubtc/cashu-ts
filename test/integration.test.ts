@@ -12,7 +12,7 @@ const externalInvoice =
 
 let request: Record<string, string> | undefined;
 const mintUrl = 'http://localhost:3338';
-const unit = 'sats'
+const unit = 'sat'
 
 describe('mint api', () => {
 	test('get keys', async () => {
