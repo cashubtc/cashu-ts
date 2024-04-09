@@ -80,6 +80,10 @@ class CashuWallet {
 		this._seed = deriveSeedFromMnemonic(options.mnemonicOrSeed);
 	}
 
+	get unit(): string {
+		return this._unit;
+	}
+
 	get keys(): MintKeys {
 		if (!this._keys) {
 			throw new Error('Keys are not set');
