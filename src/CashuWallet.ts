@@ -107,6 +107,7 @@ class CashuWallet {
 	async receive(
 		token: string | Token,
 		options?: {
+      keysetId?: string;
 			preference?: Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
@@ -127,6 +128,7 @@ class CashuWallet {
 			}
 			try {
 				const { proofs, proofsWithError } = await this.receiveTokenEntry(tokenEntry, {
+          keysetId: options?.keysetId,
 					preference: options?.preference,
 					counter: options?.counter,
 					pubkey: options?.pubkey,
@@ -160,6 +162,7 @@ class CashuWallet {
 	async receiveTokenEntry(
 		tokenEntry: TokenEntry,
 		options?: {
+      keysetId?: string;
 			preference?: Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
@@ -174,7 +177,7 @@ class CashuWallet {
 			if (!preference) {
 				preference = getDefaultAmountPreference(amount);
 			}
-			const keys = await this.getKeys();
+			const keys = await this.getKeys(options?.keysetId);
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
@@ -218,6 +221,7 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
+      keysetId?: string;
 			preference?: Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
@@ -227,7 +231,7 @@ class CashuWallet {
 		if (options?.preference) {
 			amount = options?.preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
 		}
-		const keyset = await this.getKeys();
+		const keyset =  await this.getKeys(options?.keysetId);
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const proofsToKeep: Array<Proof> = [];
