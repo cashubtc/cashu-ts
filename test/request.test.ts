@@ -5,6 +5,7 @@ import { setGlobalRequestOptions } from '../src/request.js';
 
 let request: Record<string, string> | undefined;
 const mintUrl = 'https://localhost:3338';
+const unit = 'sats'; 
 const invoice =
 	'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
 
@@ -31,7 +32,7 @@ describe('requests', () => {
 				};
 			});
 
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, unit);
 		await wallet.getMeltQuote(invoice);
 
 		expect(request).toBeDefined();
@@ -51,7 +52,7 @@ describe('requests', () => {
 				};
 			});
 
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, unit);
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 		await wallet.getMeltQuote(invoice);
 

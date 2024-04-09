@@ -43,8 +43,9 @@ import { pointFromHex } from './DHKE';
 class CashuWallet {
 	private _keys: MintKeys | undefined;
 	private _seed: Uint8Array | undefined;
+	private _unit = 'sat';
 	mint: CashuMint;
-	unit = 'sat';
+	
 
 	/**
 	 * @param keys public keys from the mint
@@ -52,8 +53,9 @@ class CashuWallet {
 	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
-	constructor(mint: CashuMint, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
+	constructor(mint: CashuMint, unit?:string, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
 		this.mint = mint;
+		if (unit) this._unit  = unit;
 		if (keys) {
 			this._keys = keys;
 		}
@@ -169,7 +171,7 @@ class CashuWallet {
 				options?.pubkey,
 				options?.privkey
 			);
-			const { signatures, error } = await CashuMint.split(tokenEntry.mint, payload);
+			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
 			const newProofs = dhke.constructProofs(
 				signatures,
 				blindedMessages.rs,
@@ -331,7 +333,7 @@ class CashuWallet {
 	 */
 	async getMintQuote(amount: number) {
 		const requestMintPayload: RequestMintPayload = {
-			unit: this.unit,
+			unit: this._unit,
 			amount: amount
 		};
 		return await this.mint.mintQuote(requestMintPayload);
@@ -377,7 +379,7 @@ class CashuWallet {
 	 * @returns estimated Fee
 	 */
 	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+		const meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
 		return meltQuote;
 	}
 	/**
@@ -440,7 +442,7 @@ class CashuWallet {
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
-			meltQuote = await this.mint.meltQuote({ unit: this.unit, request: invoice });
+			meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
