@@ -39,7 +39,7 @@ describe('test fees', () => {
 			amount: 2000,
 			fee_reserve: 20
 		});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const fee = await wallet.getMeltQuote(invoice);
 		const amount = 2000;
@@ -63,7 +63,7 @@ describe('receive', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const response: ReceiveResponse = await wallet.receive(tokenInput);
 
@@ -129,7 +129,7 @@ describe('receive', () => {
 				]
 			});
 
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 		const token3sat =
 			'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICJlN2MxYjc2ZDFiMzFlMmJjYTJiMjI5ZDE2MGJkZjYwNDZmMzNiYzQ1NzAyMjIzMDRiNjUxMTBkOTI2ZjdhZjg5IiwgIkMiOiAiMDM4OWNkOWY0Zjk4OGUzODBhNzk4OWQ0ZDQ4OGE3YzkxYzUyNzdmYjkzMDQ3ZTdhMmNjMWVkOGUzMzk2Yjg1NGZmIn0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjMiLCAiQyI6ICIwMmRlNDBjNTlkOTAzODNiODg1M2NjZjNhNGIyMDg2NGFjODNiYTc1OGZjZTNkOTU5ZGJiODkzNjEwMDJlOGNlNDcifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0=';
 
@@ -154,7 +154,7 @@ describe('receive', () => {
 		const msg = 'tokens already spent. Secret: asdasdasd';
 
 		nock(mintUrl).post('/v1/swap').reply(200, { detail: msg });
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
 		const t = tokensWithErrors!;
@@ -171,7 +171,7 @@ describe('receive', () => {
 	});
 	test('test receive could not verify proofs', async () => {
 		nock(mintUrl).post('/v1/split').reply(200, { code: 0, error: 'could not verify proofs.' });
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
 		const t = tokensWithErrors!;
@@ -201,7 +201,7 @@ describe('checkProofsSpent', () => {
 		nock(mintUrl)
 			.post('/v1/checkstate')
 			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet.checkProofsSpent(proofs);
 
@@ -224,7 +224,7 @@ describe('payLnInvoice', () => {
 			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 0 });
 		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
 
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 		const meltQuote = await wallet.getMeltQuote('lnbcabbc');
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
@@ -264,7 +264,7 @@ describe('payLnInvoice', () => {
 				]
 			});
 
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 		const meltQuote = await wallet.getMeltQuote('lnbcabbc');
 		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
@@ -274,7 +274,7 @@ describe('payLnInvoice', () => {
 	});
 	test('test payLnInvoice bad resonse', async () => {
 		nock(mintUrl).post('/v1/melt/bolt11').reply(200, {});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet
 			.payLnInvoice(invoice, proofs, {} as MeltQuoteResponse)
 			.catch((e) => e);
@@ -296,7 +296,7 @@ describe('requestTokens', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const { proofs } = await wallet.mintTokens(1, '');
 
@@ -307,7 +307,7 @@ describe('requestTokens', () => {
 	});
 	test('test requestTokens bad resonse', async () => {
 		nock(mintUrl).post('/v1/mint/bolt11').reply(200, {});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet.mintTokens(1, '').catch((e) => e);
 
@@ -336,7 +336,7 @@ describe('send', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet.send(1, proofs);
 
@@ -363,7 +363,7 @@ describe('send', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet.send(1, [
 			{
@@ -401,7 +401,7 @@ describe('send', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const overpayProofs = [
 			{
@@ -449,7 +449,7 @@ describe('send', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const overpayProofs = [
 			{
@@ -504,7 +504,7 @@ describe('send', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const overpayProofs = [
 			{
@@ -544,7 +544,7 @@ describe('send', () => {
 					}
 				]
 			});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet.send(2, proofs).catch((e) => e);
 
@@ -552,7 +552,7 @@ describe('send', () => {
 	});
 	test('test send bad response', async () => {
 		nock(mintUrl).post('/v1/swap').reply(200, {});
-		const wallet = new CashuWallet(mint, unit);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet
 			.send(1, [

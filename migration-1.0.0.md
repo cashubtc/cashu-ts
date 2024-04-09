@@ -25,7 +25,7 @@ Decoding LN invoices is no longer used inside the lib.
 
 ### `CashuWallet` interface changes
 
-**optional parameters are now in an onpional `options?` Object**
+**optional function AND constructor parameters are now in an onpional `options?` Object**
 
 Utility functions now have an `options` object for optional parameters, instead of passing them directly
 
