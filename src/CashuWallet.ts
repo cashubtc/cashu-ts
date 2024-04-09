@@ -45,7 +45,6 @@ class CashuWallet {
 	private _seed: Uint8Array | undefined;
 	private _unit = 'sat';
 	mint: CashuMint;
-	
 
 	/**
 	 * @param keys public keys from the mint
@@ -53,9 +52,14 @@ class CashuWallet {
 	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
-	constructor(mint: CashuMint, unit?:string, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
+	constructor(
+		mint: CashuMint,
+		unit?: string,
+		keys?: MintKeys,
+		mnemonicOrSeed?: string | Uint8Array
+	) {
 		this.mint = mint;
-		if (unit) this._unit  = unit;
+		if (unit) this._unit = unit;
 		if (keys) {
 			this._keys = keys;
 		}
@@ -332,7 +336,7 @@ class CashuWallet {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async getMintQuote(amount: number) {
-		const mintQuotePayload: MintQuotePayload = {		
+		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
