@@ -3,24 +3,24 @@ import { CashuMint } from './CashuMint.js';
 import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
-	AmountPreference,
-	BlindedMessageData,
-	BlindedTransaction,
-	MeltPayload,
-	MeltQuoteResponse,
-	MintKeys,
-	MeltTokensResponse,
-	PostMintPayload,
-	Proof,
-	ReceiveResponse,
-	ReceiveTokenEntryResponse,
-	RequestMintPayload,
-	SendResponse,
-	SerializedBlindedMessage,
-	SplitPayload,
-	CheckStateEnum,
-	Token,
-	TokenEntry
+	type AmountPreference,
+	type BlindedMessageData,
+	type BlindedTransaction,
+	type MeltPayload,
+	type MeltQuoteResponse,
+	type MintKeys,
+	type MeltTokensResponse,
+	type MintPayload,
+	type Proof,
+	type ReceiveResponse,
+	type ReceiveTokenEntryResponse,
+	type MintQuotePayload,
+	type SendResponse,
+	type SerializedBlindedMessage,
+	type SplitPayload,
+	type Token,
+	type TokenEntry,
+	CheckStateEnum
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -45,7 +45,6 @@ class CashuWallet {
 	private _seed: Uint8Array | undefined;
 	private _unit = 'sat';
 	mint: CashuMint;
-	
 
 	/**
 	 * @param keys public keys from the mint
@@ -53,9 +52,14 @@ class CashuWallet {
 	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
-	constructor(mint: CashuMint, unit?:string, keys?: MintKeys, mnemonicOrSeed?: string | Uint8Array) {
+	constructor(
+		mint: CashuMint,
+		unit?: string,
+		keys?: MintKeys,
+		mnemonicOrSeed?: string | Uint8Array
+	) {
 		this.mint = mint;
-		if (unit) this._unit  = unit;
+		if (unit) this._unit = unit;
 		if (keys) {
 			this._keys = keys;
 		}
@@ -332,11 +336,11 @@ class CashuWallet {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async getMintQuote(amount: number) {
-		const requestMintPayload: RequestMintPayload = {
+		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
-		return await this.mint.mintQuote(requestMintPayload);
+		return await this.mint.mintQuote(mintQuotePayload);
 	}
 
 	/**
@@ -363,11 +367,11 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey
 		);
-		const postMintPayload: PostMintPayload = {
+		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
 			quote: quote
 		};
-		const { signatures } = await this.mint.mint(postMintPayload);
+		const { signatures } = await this.mint.mint(mintPayload);
 		return {
 			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
 		};
