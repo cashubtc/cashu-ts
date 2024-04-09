@@ -92,6 +92,7 @@ class CashuWallet {
 	}
 	set keys(keys: MintKeys) {
 		this._keys = keys;
+		this._unit = keys.unit;
 	}
 
 	/**
