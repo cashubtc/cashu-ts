@@ -47,33 +47,37 @@ class CashuWallet {
 	mint: CashuMint;
 
 	/**
-	 * @param keys public keys from the mint
+	 * @param unit optionally set unit
+	 * @param keys public keys from the mint. If set, it will override the unit with the keysets unit
 	 * @param mint Cashu mint instance is used to make api calls
 	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
 		mint: CashuMint,
-		unit?: string,
-		keys?: MintKeys,
-		mnemonicOrSeed?: string | Uint8Array
+		options?: {
+			unit?: string;
+			keys?: MintKeys;
+			mnemonicOrSeed?: string | Uint8Array;
+		}
 	) {
 		this.mint = mint;
-		if (unit) this._unit = unit;
-		if (keys) {
-			this._keys = keys;
+		if (options?.unit) this._unit = options?.unit;
+		if (options?.keys) {
+			this._keys = options.keys;
+			this._unit = options.keys.unit;
 		}
-		if (!mnemonicOrSeed) {
+		if (!options?.mnemonicOrSeed) {
 			return;
 		}
-		if (mnemonicOrSeed instanceof Uint8Array) {
-			this._seed = mnemonicOrSeed;
+		if (options?.mnemonicOrSeed instanceof Uint8Array) {
+			this._seed = options.mnemonicOrSeed;
 			return;
 		}
-		if (!validateMnemonic(mnemonicOrSeed, wordlist)) {
+		if (!validateMnemonic(options.mnemonicOrSeed, wordlist)) {
 			throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
 		}
-		this._seed = deriveSeedFromMnemonic(mnemonicOrSeed);
+		this._seed = deriveSeedFromMnemonic(options.mnemonicOrSeed);
 	}
 
 	get keys(): MintKeys {
