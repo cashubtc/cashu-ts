@@ -4,10 +4,9 @@
 name: Node.js CI
 
 on:
-  pull_request:
-    types:
-      - ready_for_review
-      - opened
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -15,9 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [20.x, 16.x, 18.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
-
+        node-version: [20.x]
     steps:
       - uses: actions/checkout@v3
       - name: Use Node.js ${{ matrix.node-version }}
@@ -28,3 +25,9 @@ jobs:
       - run: npm ci
       - run: npm run compile
       - run: npm test
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          destination_dir: coverage
+          publish_dir: ./coverage/lcov-report

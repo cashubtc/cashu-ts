@@ -336,8 +336,25 @@ export type GetInfoResponse = {
 	motd?: string;
 	parameter: { peg_out_only: boolean };
 };
+/**
+ * Response from mint at /restore endpoint
+ */
+export type PostRestoreResponse = {
+	outputs: Array<SerializedBlindedMessage>;
+	promises: Array<SerializedBlindedSignature>;
+};
 
 export type AmountPreference = {
 	amount: number;
 	count: number;
+};
+
+export type InvoiceData = {
+	paymentRequest: string;
+	amountInSats?: number;
+	amountInMSats?: number;
+	timestamp?: number;
+	paymentHash?: string;
+	memo?: string;
+	expiry?: number;
 };
