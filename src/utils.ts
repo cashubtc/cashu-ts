@@ -51,8 +51,8 @@ export function splitAmount(
  * @param number The number to check
  * @returns True if the number is a power of two, false otherwise
  */
-function isPowerOfTwo(number: number) {
-	return number && !(number & (number - 1));
+function isPowerOfTwo(number: number): boolean {
+	return !!number && !(number & (number - 1));
 }
 
 /**
