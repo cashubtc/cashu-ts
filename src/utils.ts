@@ -26,7 +26,11 @@ export function splitAmount(
 ): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
-		chunks.push(...getPreference(value, amountPreference));
+		try {
+			chunks.push(...getPreference(value, amountPreference));
+		} catch (error) {
+			console.error('Error occurred while getting preferences: ', error);
+		}
 		value =
 			value -
 			chunks.reduce((curr, acc) => {
