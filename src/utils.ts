@@ -131,19 +131,27 @@ export function getEncodedToken(token: Token): string {
 }
 
 /**
+ * Helper function to remove prefixes from a token
+ * @param token an encoded cashu token (cashuAey...)
+ * @returns token without prefixes
+ */
+function removePrefixes(token: string): string {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
+	uriPrefixes.forEach((prefix) => {
+		if (token.startsWith(prefix)) {
+			token = token.slice(prefix.length);
+		}
+	});
+	return token;
+}
+
+/**
  * Helper function to decode cashu tokens into object
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
 export function getDecodedToken(token: string): Token {
-	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
-	uriPrefixes.forEach((prefix) => {
-		if (!token.startsWith(prefix)) {
-			return;
-		}
-		token = token.slice(prefix.length);
-	});
+	token = removePrefixes(token);
 	return handleTokens(token);
 }
 
