@@ -182,12 +182,12 @@ function handleTokens(token: string): Token {
  * @param keys The keys to derive the keyset id from
  * @returns The derived keyset id
  */
-export function deriveKeysetId(keys: MintKeys) {
-	const pubkeysConcat = Object.entries(keys)
+export function deriveKeysetId(keys: MintKeys): string {
+	const pubkeysConcat: string = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
 		.map(([, pubKey]) => pubKey)
 		.join('');
-	const hash = sha256(new TextEncoder().encode(pubkeysConcat));
+	const hash: Uint8Array = sha256(new TextEncoder().encode(pubkeysConcat));
 	return Buffer.from(hash).toString('base64').slice(0, 12);
 }
 
@@ -225,7 +225,7 @@ export function cleanToken(token: Token): Token {
  * @param proofs The proofs to sort
  * @returns The sorted proofs
  */
-export function sortProofsById(proofs: Array<Proof>) {
+export function sortProofsById(proofs: Array<Proof>): Array<Proof> {
 	return proofs.sort((a, b) => a.id.localeCompare(b.id));
 }
 
@@ -251,10 +251,20 @@ export function checkResponse(data: { error?: string; detail?: string }): void {
 	}
 }
 
+/**
+ * Joins multiple URL parts into a single URL.
+ * @param parts The parts of the URL to join
+ * @returns The joined URL
+ */
 export function joinUrls(...parts: Array<string>): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
+/**
+ * Decodes a bolt11 invoice into an InvoiceData object.
+ * @param bolt11Invoice The bolt11 invoice to decode
+ * @returns The decoded invoice data
+ */
 export function decodeInvoice(bolt11Invoice: string): InvoiceData {
 	const invoiceData: InvoiceData = {} as InvoiceData;
 	const decodeResult = decode(bolt11Invoice);
@@ -280,13 +290,3 @@ export function decodeInvoice(bolt11Invoice: string): InvoiceData {
 	}
 	return invoiceData;
 }
-
-export {
-	bigIntStringify,
-	bytesToNumber,
-	getDecodedToken,
-	getEncodedToken,
-	hexToNumber,
-	splitAmount,
-	getDefaultAmountPreference
-};
