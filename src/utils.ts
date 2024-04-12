@@ -117,8 +117,8 @@ export function hexToNumber(hex: string): bigint {
  * @param value The value to stringify
  * @returns The stringified value
  */
-export function bigIntStringify<T>(_key: unknown, value: T) {
-	return typeof value === 'bigint' ? value.toString() : value;
+export function bigIntStringify<T>(_key: unknown, value: T): string {
+	return typeof value === 'bigint' ? value.toString() : JSON.stringify(value);
 }
 
 /**
