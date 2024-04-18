@@ -1,5 +1,12 @@
 import { listeners } from 'process';
 import { MessageQueue } from './utils';
+import {
+	JsonRpcErrorObject,
+	JsonRpcMessage,
+	JsonRpcRequest,
+	JsonRpcResponse,
+	RpcSubId
+} from './model/types';
 
 type Command = 'check_quote' | 'check_proof';
 
@@ -13,33 +20,21 @@ export function injectWebSocketImpl(ws: any) {
 	_WS = ws;
 }
 
-class Subscription {
-	private connection: WSConnection;
-	private subId: string;
-	constructor(conn: WSConnection) {
-		// HACK: There might be way better ways to create an random string, but I want to create something without dependecies frist
-		this.subId = Math.random().toString(36).slice(-5);
-		this.connection = conn;
-		conn.sendCommand('check_proof', this.subId, { test: true });
-	}
-	onmessage(cb: () => any) {
-		this.connection.addListener(this.subId, cb);
-	}
-	unsub() {}
-}
-
 export class WSConnection {
 	public readonly url: URL;
 	private ws: WebSocket | undefined;
-	private listeners: { [reqId: string]: Array<any> } = {};
+	private subListeners: { [subId: string]: Array<any> } = {};
+	private rpcListeners: { [rpsSubId: string]: any } = {};
 	private messageQueue: MessageQueue;
 	private handlingInterval?: NodeJS.Timer;
+	private rpcId = 0;
 
 	constructor(url: string) {
 		this.url = new URL(url);
 		this.messageQueue = new MessageQueue();
 	}
-	async connect() {
+
+	connect() {
 		return new Promise((res, rej) => {
 			try {
 				this.ws = new _WS(this.url);
@@ -58,20 +53,34 @@ export class WSConnection {
 		});
 	}
 
-	sendCommand(cmd: Command, subId: string, params: any) {
-		this.ws?.send(JSON.stringify(['REQ', subId, cmd, params]));
+	sendRequest(cmd: Command, subId: string, params: any) {
+		const id = this.rpcId;
+		this.rpcId++;
+		this.ws?.send(JSON.stringify({ jsonrpc: '2.0', method: cmd, params: { subId }, id: id }));
 	}
 
 	closeSubscription(subId: string) {
 		this.ws?.send(JSON.stringify(['CLOSE', subId]));
 	}
 
-	addListener(subId: string, callback: () => any) {
-		(this.listeners[subId] = this.listeners[subId] || []).push(callback);
+	addSubListener(subId: string, callback: () => any) {
+		(this.subListeners[subId] = this.subListeners[subId] || []).push(callback);
+	}
+
+	addRpcListener(
+		callback: () => any,
+		errorCallback: (e: JsonRpcErrorObject) => any,
+		id: Exclude<RpcSubId, null>
+	) {
+		this.rpcListeners[id] = { callback, errorCallback };
+	}
+
+	removeRpcListener(id: Exclude<RpcSubId, null>) {
+		delete this.rpcListeners[id];
 	}
 
 	removeListener(subId: string, callback: () => any) {
-		(this.listeners[subId] = this.listeners[subId] || []).filter((fn) => fn !== callback);
+		(this.subListeners[subId] = this.subListeners[subId] || []).filter((fn) => fn !== callback);
 	}
 
 	async ensureConenction() {
@@ -89,32 +98,56 @@ export class WSConnection {
 		const message = this.messageQueue.dequeue() as string;
 		let parsed;
 		try {
-			parsed = JSON.parse(message) as Array<string>;
+			parsed = JSON.parse(message) as JsonRpcMessage;
+			if ('result' in parsed && parsed.id != undefined) {
+				if (this.rpcListeners[parsed.id]) {
+					this.rpcListeners[parsed.id].callback();
+					this.removeRpcListener(parsed.id);
+				}
+			} else if ('error' in parsed && parsed.id != undefined) {
+				if (this.rpcListeners[parsed.id]) {
+					this.rpcListeners[parsed.id].errorCallback(parsed.error);
+					this.removeRpcListener(parsed.id);
+				}
+			} else if ('method' in parsed) {
+				if ('id' in parsed) {
+					// This is a request
+					// Do nothing as mints should not send requests
+				} else {
+					const subId = parsed.params.subId;
+					if (!subId) {
+						return;
+					}
+					if (this.subListeners[subId].length > 0) {
+						this.subListeners[subId].forEach((cb) => cb());
+					}
+					// This is a notification
+				}
+			}
 		} catch (e) {
 			console.log(e);
 			return;
 		}
-		let subId: string;
-		let data: any;
-		switch (parsed.length) {
-			case 2: {
-				// Must be notice
-				// TODO: Implement NOTICE
-				return;
-			}
-			case 3: {
-				subId = parsed[1];
-				data = parsed[3];
-				this.listeners[subId].forEach((cb) => cb(data));
-				break;
-			}
-			default: {
-				return;
-			}
-		}
 	}
 
-	subscribe(cmd: 'check_proof' | 'check_quote') {
-		return new Subscription(this);
+	createSubscription(
+		cmd: 'check_proof' | 'check_quote',
+		callback: () => any,
+		errorCallback: (e: Error) => any
+	) {
+		if (this.ws?.readyState === 1) {
+			return errorCallback(new Error('Socket is not open'));
+		}
+		const subId = (Math.random() + 1).toString(36).substring(7);
+		this.addRpcListener(
+			() => {
+				this.addSubListener(subId, callback);
+			},
+			(e: JsonRpcErrorObject) => {
+				errorCallback(new Error(e.message));
+			},
+			this.rpcId
+		);
+		this.rpcId++;
 	}
 }
