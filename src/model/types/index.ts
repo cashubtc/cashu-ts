@@ -388,6 +388,10 @@ export type Token = {
 	 * a message to send along with the token
 	 */
 	memo?: string;
+	/**
+	  * the unit of the token
+	  */
+	unit?: string;
 };
 /**
  * TokenEntry that stores proofs and mints
