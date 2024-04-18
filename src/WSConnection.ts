@@ -1,12 +1,5 @@
-import { listeners } from 'process';
 import { MessageQueue } from './utils';
-import {
-	JsonRpcErrorObject,
-	JsonRpcMessage,
-	JsonRpcRequest,
-	JsonRpcResponse,
-	RpcSubId
-} from './model/types';
+import { JsonRpcErrorObject, JsonRpcMessage, RpcSubId } from './model/types';
 
 type Command = 'check_quote' | 'check_proof';
 
@@ -132,6 +125,7 @@ export class WSConnection {
 
 	createSubscription(
 		cmd: 'check_proof' | 'check_quote',
+		params: any,
 		callback: () => any,
 		errorCallback: (e: Error) => any
 	) {
@@ -149,5 +143,6 @@ export class WSConnection {
 			this.rpcId
 		);
 		this.rpcId++;
+		this.sendRequest(cmd, subId, params);
 	}
 }
