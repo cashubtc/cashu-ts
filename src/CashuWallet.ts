@@ -449,7 +449,7 @@ class CashuWallet {
 	async payLnInvoice(
 		invoice: string,
 		proofsToSend: Array<Proof>,
-		meltQuote: MeltQuoteResponse,
+		meltQuote?: MeltQuoteResponse,
 		options?: {
 			keysetId?: string;
 			counter?: number;
