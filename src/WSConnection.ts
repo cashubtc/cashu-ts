@@ -1,8 +1,6 @@
 import { MessageQueue } from './utils';
 import { JsonRpcErrorObject, JsonRpcMessage, JsonRpcReqParams, RpcSubId } from './model/types';
 
-type Command = 'check_quote' | 'check_proof';
-
 let _WS: typeof WebSocket;
 
 if (typeof WebSocket !== 'undefined') {
@@ -49,7 +47,9 @@ export class WSConnection {
 	sendRequest(params: JsonRpcReqParams) {
 		const id = this.rpcId;
 		this.rpcId++;
-		this.ws?.send(JSON.stringify({ jsonrpc: '2.0', method: 'sub', params, id: id }));
+		const message = JSON.stringify({ jsonrpc: '2.0', method: 'sub', params, id });
+		console.log(message);
+		this.ws?.send(message);
 	}
 
 	closeSubscription(subId: string) {
@@ -92,6 +92,7 @@ export class WSConnection {
 		let parsed;
 		try {
 			parsed = JSON.parse(message) as JsonRpcMessage;
+			console.log(parsed);
 			if ('result' in parsed && parsed.id != undefined) {
 				if (this.rpcListeners[parsed.id]) {
 					this.rpcListeners[parsed.id].callback();
@@ -128,7 +129,7 @@ export class WSConnection {
 		callback: () => any,
 		errorCallback: (e: Error) => any
 	) {
-		if (this.ws?.readyState === 1) {
+		if (this.ws?.readyState !== 1) {
 			return errorCallback(new Error('Socket is not open'));
 		}
 		const subId = (Math.random() + 1).toString(36).substring(7);
