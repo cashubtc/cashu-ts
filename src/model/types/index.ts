@@ -18,9 +18,17 @@ export type InvoiceData = {
 	expiry?: number;
 };
 
+type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
+
 export type RpcSubId = string | number | null;
 
 type JsonRpcParams = any;
+
+export type JsonRpcReqParams = {
+	kind: RpcSubKinds;
+	filter: Array<string>;
+	subId: string;
+};
 
 type JsonRpcSuccess<T = any> = {
 	jsonrpc: '2.0';
@@ -42,8 +50,8 @@ type JsonRpcError = {
 
 type JsonRpcRequest = {
 	jsonrpc: '2.0';
-	method: string;
-	params?: JsonRpcParams;
+	method: 'sub';
+	params: JsonRpcReqParams;
 	id: Exclude<RpcSubId, null>;
 };
 
