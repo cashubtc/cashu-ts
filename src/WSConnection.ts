@@ -1,5 +1,5 @@
 import { MessageQueue } from './utils';
-import { JsonRpcErrorObject, JsonRpcMessage, RpcSubId } from './model/types';
+import { JsonRpcErrorObject, JsonRpcMessage, JsonRpcReqParams, RpcSubId } from './model/types';
 
 type Command = 'check_quote' | 'check_proof';
 
@@ -46,10 +46,10 @@ export class WSConnection {
 		});
 	}
 
-	sendRequest(cmd: Command, subId: string, params: any) {
+	sendRequest(params: JsonRpcReqParams) {
 		const id = this.rpcId;
 		this.rpcId++;
-		this.ws?.send(JSON.stringify({ jsonrpc: '2.0', method: cmd, params: { subId }, id: id }));
+		this.ws?.send(JSON.stringify({ jsonrpc: '2.0', method: 'sub', params, id: id }));
 	}
 
 	closeSubscription(subId: string) {
@@ -124,8 +124,7 @@ export class WSConnection {
 	}
 
 	createSubscription(
-		cmd: 'check_proof' | 'check_quote',
-		params: any,
+		params: JsonRpcReqParams,
 		callback: () => any,
 		errorCallback: (e: Error) => any
 	) {
@@ -143,6 +142,6 @@ export class WSConnection {
 			this.rpcId
 		);
 		this.rpcId++;
-		this.sendRequest(cmd, subId, params);
+		this.sendRequest(params);
 	}
 }
