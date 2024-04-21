@@ -26,7 +26,7 @@ type JsonRpcParams = any;
 
 export type JsonRpcReqParams = {
 	kind: RpcSubKinds;
-	filter: Array<string>;
+	filters: Array<string>;
 	subId: string;
 };
 
