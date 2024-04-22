@@ -1,18 +1,8 @@
-import { decode } from '@gandlaf21/bolt11-decode';
 import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import {
-	AmountPreference,
-	InvoiceData,
-	MintKeys,
-	Proof,
-	Token,
-	TokenEntry,
-	TokenV2
-} from './model/types/index.js';
+import { AmountPreference, Keys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
-import { bytesToHex } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
-import { Buffer } from 'buffer/';
 
 /**
  * Splits a number into its constituent powers of 2.
@@ -182,13 +172,22 @@ function handleTokens(token: string): Token {
  * @param keys The keys to derive the keyset id from
  * @returns The derived keyset id
  */
-export function deriveKeysetId(keys: MintKeys): string {
-	const pubkeysConcat: string = Object.entries(keys)
+export function deriveKeysetId(keys: Keys): string {
+	const pubkeysConcat = Object.entries(keys)
 		.sort((a, b) => +a[0] - +b[0])
-		.map(([, pubKey]) => pubKey)
-		.join('');
-	const hash: Uint8Array = sha256(new TextEncoder().encode(pubkeysConcat));
-	return Buffer.from(hash).toString('base64').slice(0, 12);
+		.map(([, pubKey]) => hexToBytes(pubKey))
+		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
+	const hash = sha256(pubkeysConcat);
+	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+	return '00' + hashHex;
+}
+
+function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
+	// sum of individual array lengths
+	const mergedArray = new Uint8Array(a1.length + a2.length);
+	mergedArray.set(a1);
+	mergedArray.set(a2, a1.length);
+	return mergedArray;
 }
 
 /**
@@ -258,35 +257,4 @@ export function checkResponse(data: { error?: string; detail?: string }): void {
  */
 export function joinUrls(...parts: Array<string>): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
-}
-
-/**
- * Decodes a bolt11 invoice into an InvoiceData object.
- * @param bolt11Invoice The bolt11 invoice to decode
- * @returns The decoded invoice data
- */
-export function decodeInvoice(bolt11Invoice: string): InvoiceData {
-	const invoiceData: InvoiceData = {} as InvoiceData;
-	const decodeResult = decode(bolt11Invoice);
-	invoiceData.paymentRequest = decodeResult.paymentRequest;
-	for (let i = 0; i < decodeResult.sections.length; i++) {
-		const decodedSection = decodeResult.sections[i];
-		if (decodedSection.name === 'amount') {
-			invoiceData.amountInSats = Number(decodedSection.value) / 1000;
-			invoiceData.amountInMSats = Number(decodedSection.value);
-		}
-		if (decodedSection.name === 'timestamp') {
-			invoiceData.timestamp = decodedSection.value;
-		}
-		if (decodedSection.name === 'description') {
-			invoiceData.memo = decodedSection.value;
-		}
-		if (decodedSection.name === 'expiry') {
-			invoiceData.expiry = decodedSection.value;
-		}
-		if (decodedSection.name === 'payment_hash') {
-			invoiceData.paymentHash = decodedSection.value.toString('hex');
-		}
-	}
-	return invoiceData;
 }
