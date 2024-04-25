@@ -19,7 +19,7 @@ import type {
 	MeltQuoteResponse
 } from './model/types/index.js';
 import request from './request.js';
-import { isObj, joinUrls } from './utils.js';
+import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
@@ -32,7 +32,7 @@ class CashuMint {
 	constructor(private _mintUrl: string, private _customRequest?: typeof request) {}
 
 	get mintUrl() {
-		return this._mintUrl;
+		return sanitizeUrl(this._mintUrl);
 	}
 
 	/**

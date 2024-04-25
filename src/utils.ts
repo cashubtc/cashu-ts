@@ -189,7 +189,11 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 
 export function joinUrls(...parts: Array<string>): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
-}
+};
+
+export function sanitizeUrl(url:string): string{
+	return url.replace(/\/$/, '');
+};
 
 export function decodeInvoice(bolt11Invoice: string): InvoiceData {
 	const invoiceData: InvoiceData = {} as InvoiceData;
