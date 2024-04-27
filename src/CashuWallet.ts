@@ -176,7 +176,7 @@ class CashuWallet {
 				preference = getDefaultAmountPreference(amount);
 			}
 			let keys = options?.keyset
-			if (keys === undefined) {
+			if (!keys) {
 				keys = await this.getKeys(options?.keysetId);
 			}
 
