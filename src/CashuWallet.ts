@@ -163,6 +163,8 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
+			keysetId?: string;
+			keyset?: MintKeys;
 		}
 	): Promise<ReceiveTokenEntryResponse> {
 		const proofsWithError: Array<Proof> = [];
@@ -173,7 +175,11 @@ class CashuWallet {
 			if (!preference) {
 				preference = getDefaultAmountPreference(amount);
 			}
-			const keys = await this.getKeys();
+			let keys = options?.keyset
+			if (keys === undefined) {
+				keys = await this.getKeys(options?.keysetId);
+			}
+
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
@@ -324,11 +330,11 @@ class CashuWallet {
 			if (keysetId) {
 				keys = allKeys.keysets.find((k) => k.id === keysetId);
 			} else {
-				keys = allKeys.keysets.find((k) => (unit ? k.unit === unit : k.unit === 'sat'));
+				keys = allKeys.keysets.find((k) => (unit ? k.unit === unit : k.unit === this._unit));
 			}
 			if (!keys) {
 				throw new Error(
-					`could not initialize keys. No keyset with unit '${unit ? unit : 'sat'}' found`
+					`could not initialize keys. No keyset with unit '${unit ? unit : this._unit}' found`
 				);
 			}
 			if (!this._keys) {
@@ -518,7 +524,7 @@ class CashuWallet {
 			undefined,
 			counter
 		);
-		if (this._seed && counter) {
+		if (this._seed && counter && keepBlindedMessages.secrets.length > 0) {
 			counter = counter + keepBlindedMessages.secrets.length;
 		}
 		const sendBlindedMessages = this.createRandomBlindedMessages(
