@@ -166,6 +166,15 @@ export type MeltQuoteResponse = {
 	 * Fee reserve to be added to the amount
 	 */
 	fee_reserve: number;
+	/**
+	 * Whether the quote has been paid.
+	 */
+	paid: boolean;
+	/**
+	 * Timestamp of when the quote expires
+	 */
+	expiry: number;
+
 } & ApiError;
 
 /**
@@ -280,8 +289,22 @@ export type MintQuotePayload = {
  * Response from the mint after requesting a mint
  */
 export type MintQuoteResponse = {
+	/**
+	 * Payment request 
+	 */
 	request: string;
+	/**
+	 * Quote ID
+	 */
 	quote: string;
+	/**
+	 * Whether the quote has been paid.
+	*/
+	paid: boolean;
+	/**
+	 * Timestamp of when the quote expires
+	 */
+	expiry: number;
 } & ApiError;
 
 /**

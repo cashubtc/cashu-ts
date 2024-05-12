@@ -16,6 +16,10 @@ import {
 	type MintQuotePayload,
 	type SendResponse,
 	type SerializedBlindedMessage,
+<<<<<<< HEAD
+=======
+	type SwapPayload,
+>>>>>>> split to swap
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
@@ -187,7 +191,7 @@ class CashuWallet {
 				preference = getDefaultAmountPreference(amount);
 			}
 			const keys = await this.getKeys(options?.keysetId);
-			const { payload, blindedMessages } = this.createSplitPayload(
+			const { payload, blindedMessages } = this.createSwapPayload(
 				amount,
 				tokenEntry.proofs,
 				keys,
@@ -258,7 +262,7 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable || options?.preference || options?.pubkey) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(
+			const { payload, blindedMessages } = this.createSwapPayload(
 				amountSend,
 				proofsToSend,
 				keyset,
@@ -513,7 +517,7 @@ class CashuWallet {
 	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
 	 * @returns
 	 */
-	private createSplitPayload(
+	private createSwapPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
