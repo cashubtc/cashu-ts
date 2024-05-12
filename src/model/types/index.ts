@@ -225,7 +225,7 @@ export type MeltTokensResponse = {
 /**
  * Payload that needs to be sent to the mint when performing a split action
  */
-export type SplitPayload = {
+export type SwapPayload = {
 	/**
 	 * Inputs to the split operation
 	 */
@@ -238,7 +238,7 @@ export type SplitPayload = {
 /**
  * Response from the mint after performing a split action
  */
-export type SplitResponse = {
+export type SwapResponse = {
 	/**
 	 * represents the outputs after the split
 	 */

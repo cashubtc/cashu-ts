@@ -16,11 +16,11 @@ import {
 	type MintQuotePayload,
 	type SendResponse,
 	type SerializedBlindedMessage,
-	type SplitPayload,
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
-	SerializedBlindedSignature
+	SerializedBlindedSignature,
+	SwapPayload
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -522,7 +522,7 @@ class CashuWallet {
 		pubkey?: string,
 		privkey?: string
 	): {
-		payload: SplitPayload;
+		payload: SwapPayload;
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
