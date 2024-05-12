@@ -14,6 +14,7 @@ import {
 	type ReceiveResponse,
 	type ReceiveTokenEntryResponse,
 	type MintQuotePayload,
+	type MeltQuotePayload,
 	type SendResponse,
 	type SerializedBlindedMessage,
 <<<<<<< HEAD
@@ -359,15 +360,25 @@ class CashuWallet {
 	/**
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async getMintQuote(amount: number) {
+	async mintQuote(amount: number) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
 		return await this.mint.mintQuote(mintQuotePayload);
 	}
+
+	/**
+	 * Gets an existing mint quote from the mint.
+	 * @param quote Quote ID
+	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 */
+	async getMintQuote(quote: string) {
+		return await this.mint.getMintQuote(quote);
+	}
+
 
 	/**
 	 * Mint tokens for a given mint quote
@@ -406,12 +417,27 @@ class CashuWallet {
 	/**
 	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.
 	 * @param invoice LN invoice that needs to get a fee estimate
-	 * @returns estimated Fee
+	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
+	async meltQuote(invoice: string): Promise<MeltQuoteResponse> {
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice
+		};
+		const meltQuote = await this.mint.meltQuote(meltQuotePayload);
 		return meltQuote;
 	}
+
+	/**
+	 * Return an existing melt quote from the mint.
+	 * @param quote ID of the melt quote
+	 * @returns the mint will return an existing melt quote
+	 */
+	async getMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+		const meltQuote = await this.mint.getMeltQuote(quote);
+		return meltQuote;
+	}
+
 	/**
 	 * Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
 	 * Returns payment proof and change proofs

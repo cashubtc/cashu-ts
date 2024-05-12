@@ -122,28 +122,28 @@ class CashuMint {
 	/**
 	 * Gets an existing mint quote from the mint.
 	 * @param mintUrl
-	 * @param quoteId Quote ID
+	 * @param quote Quote ID
 	 * @param customRequest
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	public static async getMintQuote(
 		mintUrl: string,
-		quoteId: string,
+		quote: string,
 		customRequest?: typeof request
 	): Promise<MintQuoteResponse> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintQuoteResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quoteId),
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
 			method: 'GET',
 		});
 	}
 	/**
 	 * Gets an existing mint quote from the mint.
-	 * @param quoteId Quote ID
+	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async getMintQuote(quoteId: string): Promise<MintQuoteResponse> {
-		return CashuMint.getMintQuote(this._mintUrl, quoteId, this._customRequest);
+	async getMintQuote(quote: string): Promise<MintQuoteResponse> {
+		return CashuMint.getMintQuote(this._mintUrl, quote, this._customRequest);
 	}
 
 	/**
@@ -220,17 +220,17 @@ class CashuMint {
 	/**
 	 * Gets an existing melt quote.
 	 * @param mintUrl
-	 * @param quoteId Quote ID
+	 * @param quote Quote ID
 	 * @returns
 	 */
 	public static async getMeltQuote(
 		mintUrl: string,
-		quoteId: string,
+		quote: string,
 		customRequest?: typeof request
 	): Promise<MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MeltQuoteResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quoteId),
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
 			method: 'GET',
 		});
 
@@ -247,11 +247,11 @@ class CashuMint {
 	}
 	/**
 	 * Gets an existing melt quote.
-	 * @param quoteId Quote ID
+	 * @param quote Quote ID
 	 * @returns
 	 */
-	async getMeltQuote(quoteId: string): Promise<MeltQuoteResponse> {
-		return CashuMint.getMeltQuote(this._mintUrl, quoteId, this._customRequest);
+	async getMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+		return CashuMint.getMeltQuote(this._mintUrl, quote, this._customRequest);
 	}
 
 	/**
