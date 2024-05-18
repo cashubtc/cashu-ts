@@ -9,20 +9,20 @@ import { Buffer } from 'buffer/';
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
 
 function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
-	const msgToHash = sha256(Buffer.concat([DOMAIN_SEPARATOR, secret]));
-	const counter = new Uint32Array(1);
-	const maxIterations = 2 ** 16;
-	for (let i = 0; i < maxIterations; i++) {
-		const counterBytes = new Uint8Array(counter.buffer);
-		const hash = sha256(Buffer.concat([msgToHash, counterBytes]));
+	let point: ProjPointType<bigint> | undefined;
+	while (!point) {
+		const hash = sha256(secret);
+		const hashHex = bytesToHex(hash);
+		const pointX = '02' + hashHex;
 		try {
-			return pointFromHex(bytesToHex(Buffer.concat([new Uint8Array([0x02]), hash])));
+			point = pointFromHex(pointX);
 		} catch (error) {
-			counter[0]++;
+			secret = sha256(secret);
 		}
 	}
-	throw new Error('No valid point found');
+	return point;
 }
+
 
 export function pointFromHex(hex: string) {
 	return secp256k1.ProjectivePoint.fromHex(hex);

@@ -35,6 +35,7 @@ import { wordlist } from '@scure/bip39/wordlists/english';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { serializeProof } from '@cashu/crypto/modules/client';
 import { pointFromHex } from './DHKE';
+import { encodeUint8toBase64 } from './base64.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -643,7 +644,7 @@ class CashuWallet {
 				secretBytes = randomBytes(32);
 			}
 			if (!pubkey) {
-				const secretHex = bytesToHex(secretBytes);
+				const secretHex = encodeUint8toBase64(secretBytes);
 				secretBytes = new TextEncoder().encode(secretHex);
 			}
 			secrets.push(secretBytes);
