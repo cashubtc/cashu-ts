@@ -228,6 +228,7 @@ export type SerializedBlindedMessage = {
 	 * Blinded message
 	 */
 	B_: string;
+	id: string;
 };
 /**
  * Blinded signature as it is received from the mint
