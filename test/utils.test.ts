@@ -304,7 +304,6 @@ describe('test keyset derivation', () => {
 	test('derive', () => {
 		const keys = PUBKEYS;
 		const keysetId = utils.deriveKeysetId(keys);
-		console.log(keysetId);
 		expect(keysetId).toBe('009a1f293253e41e');
 	});
 });
