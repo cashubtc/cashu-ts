@@ -190,6 +190,10 @@ export function joinUrls(...parts: Array<string>): string {
 	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
+export function sanitizeUrl(url: string): string {
+	return url.replace(/\/$/, '');
+}
+
 export {
 	bigIntStringify,
 	bytesToNumber,
