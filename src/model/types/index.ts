@@ -389,8 +389,8 @@ export type Token = {
 	 */
 	memo?: string;
 	/**
-	  * the unit of the token
-	  */
+	 * the unit of the token
+	 */
 	unit?: string;
 };
 /**
