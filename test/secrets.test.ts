@@ -1,7 +1,6 @@
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { deriveSeedFromMnemonic } from '../src/secrets';
 import { deriveBlindingFactor, deriveSecret } from '../src/secrets';
-import { blindMessage } from '../src/DHKE';
 import { HDKey } from '@scure/bip32';
 
 const mnemonic = 'half depart obvious quality work element tank gorilla view sugar picture humble';
