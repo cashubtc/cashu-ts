@@ -29,7 +29,6 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
-import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -38,6 +37,11 @@ import {
 	constructProofFromPromise,
 	serializeProof
 } from '@cashu/crypto/modules/client';
+import {
+	deriveBlindingFactor,
+	deriveSecret,
+	deriveSeedFromMnemonic
+} from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 
