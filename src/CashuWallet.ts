@@ -33,6 +33,7 @@ import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './se
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
+import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 import { serializeProof } from '@cashu/crypto/modules/client';
 import { pointFromHex } from './DHKE';
 
@@ -544,7 +545,7 @@ class CashuWallet {
 					};
 				}),
 				privkey
-			).map((p: Proof) => serializeProof(p));
+			).map((p: NUT11Proof) => serializeProof(p));
 		}
 
 		// join keepBlindedMessages and sendBlindedMessages
