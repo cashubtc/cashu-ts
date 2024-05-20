@@ -29,10 +29,13 @@ class CashuMint {
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request) {}
+	constructor(private _mintUrl: string, private _customRequest?: typeof request) {
+		this._mintUrl = sanitizeUrl(_mintUrl);
+		this._customRequest = _customRequest;
+	}
 
 	get mintUrl() {
-		return sanitizeUrl(this._mintUrl);
+		return this._mintUrl;
 	}
 
 	/**
