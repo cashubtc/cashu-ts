@@ -221,7 +221,6 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			keysetId?: string;
 			preference?: Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
@@ -545,7 +544,7 @@ class CashuWallet {
 					};
 				}),
 				privkey
-			).map((p) => serializeProof(p));
+			).map((p: Proof) => serializeProof(p));
 		}
 
 		// join keepBlindedMessages and sendBlindedMessages
