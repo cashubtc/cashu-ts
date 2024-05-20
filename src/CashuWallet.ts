@@ -226,6 +226,7 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
+			keysetId?: string;
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
@@ -323,7 +324,7 @@ class CashuWallet {
 	 * Initialize the wallet with the mints public keys
 	 */
 	private async getKeys(keysetId?: string, unit?: string): Promise<MintKeys> {
-		if (!this._keys || this._keys.id !== keysetId) {
+		if (!this._keys || (keysetId !== undefined && this._keys.id !== keysetId)) {
 			const allKeys = await this.mint.getKeys(keysetId);
 			let keys;
 			if (keysetId) {
@@ -452,7 +453,7 @@ class CashuWallet {
 	async payLnInvoice(
 		invoice: string,
 		proofsToSend: Array<Proof>,
-		meltQuote: MeltQuoteResponse,
+		meltQuote?: MeltQuoteResponse,
 		options?: {
 			keysetId?: string;
 			counter?: number;
