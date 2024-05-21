@@ -1,6 +1,5 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
-import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
 	type AmountPreference,
@@ -20,7 +19,8 @@ import {
 	type SplitPayload,
 	type Token,
 	type TokenEntry,
-	CheckStateEnum
+	CheckStateEnum,
+	SerializedBlindedSignature
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -29,13 +29,21 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
-import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
+import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
+import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof
+} from '@cashu/crypto/modules/client';
+import {
+	deriveBlindingFactor,
+	deriveSecret,
+	deriveSeedFromMnemonic
+} from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
-import { serializeProof } from '@cashu/crypto/modules/client';
-import { pointFromHex } from './DHKE';
 
 /**
  * Class that represents a Cashu wallet.
@@ -189,7 +197,7 @@ class CashuWallet {
 				options?.privkey
 			);
 			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
-			const newProofs = dhke.constructProofs(
+			const newProofs = this.constructProofs(
 				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
@@ -260,7 +268,7 @@ class CashuWallet {
 				options?.privkey
 			);
 			const { signatures } = await this.mint.split(payload);
-			const proofs = dhke.constructProofs(
+			const proofs = this.constructProofs(
 				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
@@ -316,7 +324,7 @@ class CashuWallet {
 		);
 
 		return {
-			proofs: dhke.constructProofs(promises, validRs, validSecrets, keys)
+			proofs: this.constructProofs(promises, validRs, validSecrets, keys)
 		};
 	}
 
@@ -387,7 +395,7 @@ class CashuWallet {
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
 		return {
-			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
+			proofs: this.constructProofs(signatures, rs, secrets, keyset)
 		};
 	}
 
@@ -435,7 +443,7 @@ class CashuWallet {
 			isPaid: meltResponse.paid ?? false,
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
-				? dhke.constructProofs(meltResponse.change, rs, secrets, keys)
+				? this.constructProofs(meltResponse.change, rs, secrets, keys)
 				: []
 		};
 	}
@@ -572,7 +580,7 @@ class CashuWallet {
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p) => dhke.hashToCurve(enc.encode(p.secret)).toHex(true));
+		const Ys = proofs.map((p) => hashToCurve(enc.encode(p.secret)).toHex(true));
 		const payload = {
 			// array of Ys of proofs to check
 			Ys: Ys
@@ -652,7 +660,7 @@ class CashuWallet {
 				secretBytes = new TextEncoder().encode(secretHex);
 			}
 			secrets.push(secretBytes);
-			const { B_, r } = dhke.blindMessage(secretBytes, deterministicR);
+			const { B_, r } = blindMessage(secretBytes, deterministicR);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
@@ -681,6 +689,31 @@ class CashuWallet {
 		const amounts = count ? Array(count).fill(1) : [];
 		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, keysetId, counter);
 		return { blindedMessages, secrets, rs };
+	}
+
+	/**
+	 * construct proofs from @params promises, @params rs, @params secrets, and @params keyset
+	 * @param promises array of serialized blinded signatures
+	 * @param rs arrays of binding factors
+	 * @param secrets array of secrets
+	 * @param keyset mint keyset
+	 * @returns array of serialized proofs
+	 */
+	private constructProofs(
+		promises: Array<SerializedBlindedSignature>,
+		rs: Array<bigint>,
+		secrets: Array<Uint8Array>,
+		keyset: MintKeys
+	): Array<Proof> {
+		return promises
+			.map((p: SerializedBlindedSignature, i: number) => {
+				const blindSignature = { id: p.id, amount: p.amount, C_: pointFromHex(p.C_) };
+				const r = rs[i];
+				const secret = secrets[i];
+				const A = pointFromHex(keyset.keys[p.amount]);
+				return constructProofFromPromise(blindSignature, r, secret, A);
+			})
+			.map((p) => serializeProof(p) as Proof);
 	}
 }
 

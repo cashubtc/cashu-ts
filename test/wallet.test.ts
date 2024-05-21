@@ -170,7 +170,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
 	});
 	test('test receive could not verify proofs', async () => {
-		nock(mintUrl).post('/v1/split').reply(200, { code: 0, error: 'could not verify proofs.' });
+		nock(mintUrl).post('/v1/swap').reply(200, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint, { unit });
 
 		const { tokensWithErrors } = await wallet.receive(tokenInput);
