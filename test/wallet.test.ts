@@ -34,14 +34,14 @@ beforeEach(() => {
 
 describe('test fees', () => {
 	test('test melt quote fees', async () => {
-		nock(mintUrl).post('/v1/melt/quote/bolt11').reply(200, {
+		nock(mintUrl).get('/v1/melt/quote/bolt11/test').reply(200, {
 			quote: 'test_melt_quote_id',
 			amount: 2000,
 			fee_reserve: 20
 		});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const fee = await wallet.getMeltQuote(invoice);
+		const fee = await wallet.getMeltQuote('test');
 		const amount = 2000;
 
 		expect(fee.fee_reserve + amount).toEqual(2020);
@@ -220,12 +220,12 @@ describe('payLnInvoice', () => {
 	];
 	test('test payLnInvoice base case', async () => {
 		nock(mintUrl)
-			.post('/v1/melt/quote/bolt11')
+			.get('/v1/melt/quote/bolt11/test')
 			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 0 });
 		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
 
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.getMeltQuote('lnbcabbc');
+		const meltQuote = await wallet.getMeltQuote('test');
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
 
@@ -248,7 +248,7 @@ describe('payLnInvoice', () => {
 				]
 			});
 		nock(mintUrl)
-			.post('/v1/melt/quote/bolt11')
+			.get('/v1/melt/quote/bolt11/test')
 			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 2 });
 		nock(mintUrl)
 			.post('/v1/melt/bolt11')
@@ -265,7 +265,7 @@ describe('payLnInvoice', () => {
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.getMeltQuote('lnbcabbc');
+		const meltQuote = await wallet.getMeltQuote('test');
 		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
 		expect(result.isPaid).toBe(true);

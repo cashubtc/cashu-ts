@@ -17,15 +17,11 @@ import {
 	type MeltQuotePayload,
 	type SendResponse,
 	type SerializedBlindedMessage,
-<<<<<<< HEAD
-=======
 	type SwapPayload,
->>>>>>> split to swap
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
 	SerializedBlindedSignature,
-	SwapPayload
 } from './model/types/index.js';
 import {
 	bytesToNumber,
