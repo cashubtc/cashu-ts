@@ -170,8 +170,6 @@ describe('mint api', () => {
 		});
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
-		expect(response.token).toBeDefined();
-		expect(response.tokensWithErrors).toBeUndefined();
 	});
 	test('receive tokens with previous mint', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -183,8 +181,6 @@ describe('mint api', () => {
 		});
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
-		expect(response.token).toBeDefined();
-		expect(response.tokensWithErrors).toBeUndefined();
 	});
 	test('send and receive p2pk', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -204,19 +200,17 @@ describe('mint api', () => {
 			token: [{ mint: mintUrl, proofs: send }]
 		});
 
-		const res = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) }).catch();
-		expect(res.token.token).toEqual([]);
-		expect(res.tokensWithErrors?.token.length).toBe(1);
+		const result = await wallet
+			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
+			.catch((e) => e);
+		expect(result).toEqual(new Error('Error when receiving'));
 
-		const { token } = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 
 		expect(
-			token.token
-				.map((t) => t.proofs)
-				.flat()
-				.reduce((curr, acc) => {
-					return curr + acc.amount;
-				}, 0)
+			proofs.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0)
 		).toBe(64);
 	});
 });

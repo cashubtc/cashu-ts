@@ -24,8 +24,8 @@ describe('requests', () => {
 		nock(mintUrl)
 			.get('/v1/melt/quote/bolt11/test')
 			.reply(200, function () {
-				request = this.req.headers
-				console.log(this.req.headers)
+				request = this.req.headers;
+				console.log(this.req.headers);
 				return {
 					quote: 'test_melt_quote_id',
 					amount: 2000,
@@ -55,7 +55,7 @@ describe('requests', () => {
 
 		const wallet = new CashuWallet(mint, { unit });
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
-		
+
 		await wallet.getMeltQuote('test');
 
 		expect(request).toBeDefined();
