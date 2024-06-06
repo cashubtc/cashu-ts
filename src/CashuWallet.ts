@@ -19,7 +19,7 @@ import {
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
-	SerializedBlindedSignature,
+	SerializedBlindedSignature
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -123,9 +123,9 @@ class CashuWallet {
 	): Promise<Array<Proof>> {
 		try {
 			if (typeof token === 'string') {
-				token = getDecodedToken(token)
+				token = getDecodedToken(token);
 			}
-			const tokenEntries: Array<TokenEntry> = token.token
+			const tokenEntries: Array<TokenEntry> = token.token;
 			const proofs = await this.receiveTokenEntry(tokenEntries[0], {
 				keysetId: options?.keysetId,
 				preference: options?.preference,
@@ -133,7 +133,7 @@ class CashuWallet {
 				pubkey: options?.pubkey,
 				privkey: options?.privkey
 			});
-			return proofs
+			return proofs;
 		} catch (error) {
 			throw new Error('Error when receiving');
 		}
@@ -184,7 +184,7 @@ class CashuWallet {
 			);
 			proofs.push(...newProofs);
 		} catch (error) {
-			throw new Error("Error receiving token entry");
+			throw new Error('Error receiving token entry');
 		}
 		return proofs;
 	}
@@ -348,7 +348,6 @@ class CashuWallet {
 	async getMintQuote(quote: string) {
 		return await this.mint.getMintQuote(quote);
 	}
-
 
 	/**
 	 * Mint tokens for a given mint quote
