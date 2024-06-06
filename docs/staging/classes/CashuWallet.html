@@ -24,7 +24,7 @@ This class should act as the entry point for this library</p>
 <ul class="tsd-hierarchy">
 <li><span class="target">CashuWallet</span></li></ul></section><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L52">src/CashuWallet.ts:52</a></li></ul></aside>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L53">src/CashuWallet.ts:53</a></li></ul></aside>
 <section class="tsd-panel-group tsd-index-group">
 <section class="tsd-panel tsd-index-panel">
 <details class="tsd-index-content tsd-index-accordion" open><summary class="tsd-accordion-summary tsd-index-summary">
@@ -53,11 +53,13 @@ This class should act as the entry point for this library</p>
 <a href="CashuWallet.html#createBlankOutputs" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blank<wbr/>Outputs</span></a>
 <a href="CashuWallet.html#createBlindedMessages" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blinded<wbr/>Messages</span></a>
 <a href="CashuWallet.html#createRandomBlindedMessages" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span></a>
-<a href="CashuWallet.html#createSplitPayload" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Split<wbr/>Payload</span></a>
+<a href="CashuWallet.html#createSwapPayload" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Swap<wbr/>Payload</span></a>
 <a href="CashuWallet.html#getKeys" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Keys</span></a>
 <a href="CashuWallet.html#getMeltQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Melt<wbr/>Quote</span></a>
 <a href="CashuWallet.html#getMintQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Mint<wbr/>Quote</span></a>
+<a href="CashuWallet.html#meltQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>melt<wbr/>Quote</span></a>
 <a href="CashuWallet.html#meltTokens" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>melt<wbr/>Tokens</span></a>
+<a href="CashuWallet.html#mintQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>mint<wbr/>Quote</span></a>
 <a href="CashuWallet.html#mintTokens" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>mint<wbr/>Tokens</span></a>
 <a href="CashuWallet.html#payLnInvoice" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice</span></a>
 <a href="CashuWallet.html#payLnInvoiceWithToken" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span></a>
@@ -92,29 +94,29 @@ This class should act as the entry point for this library</p>
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">unit</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
 <h4 class="tsd-returns-title">Returns <a href="CashuWallet.html" class="tsd-signature-type tsd-kind-class">CashuWallet</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L65">src/CashuWallet.ts:65</a></li></ul></aside></li></ul></section></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L66">src/CashuWallet.ts:66</a></li></ul></aside></li></ul></section></section>
 <section class="tsd-panel-group tsd-member-group">
 <h2>Properties</h2>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="_keys" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>_keys</span><a href="#_keys" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">_keys</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L53">src/CashuWallet.ts:53</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L54">src/CashuWallet.ts:54</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="_seed" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>_seed</span><a href="#_seed" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">_seed</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type ">Uint8Array</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L54">src/CashuWallet.ts:54</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L55">src/CashuWallet.ts:55</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="_unit" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>_unit</span><a href="#_unit" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">_unit</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> = &#39;sat&#39;</span></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L55">src/CashuWallet.ts:55</a></li></ul></aside></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L56">src/CashuWallet.ts:56</a></li></ul></aside></section>
 <section class="tsd-panel tsd-member"><a id="mint" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>mint</span><a href="#mint" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <div class="tsd-signature"><span class="tsd-kind-property">mint</span><span class="tsd-signature-symbol">:</span> <a href="CashuMint.html" class="tsd-signature-type tsd-kind-class">CashuMint</a></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L56">src/CashuWallet.ts:56</a></li></ul></aside></section></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L57">src/CashuWallet.ts:57</a></li></ul></aside></section></section>
 <section class="tsd-panel-group tsd-member-group">
 <h2>Accessors</h2>
 <section class="tsd-panel tsd-member"><a id="keys" class="tsd-anchor"></a>
@@ -124,7 +126,7 @@ This class should act as the entry point for this library</p>
 <li class="tsd-description">
 <h4 class="tsd-returns-title">Returns <a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L96">src/CashuWallet.ts:96</a></li></ul></aside></li>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L97">src/CashuWallet.ts:97</a></li></ul></aside></li>
 <li class="tsd-signature" id="keys.keys-2"><span class="tsd-signature-symbol">set</span> keys<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">keys</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">void</span></li>
 <li class="tsd-description">
 <div class="tsd-parameters">
@@ -134,7 +136,7 @@ This class should act as the entry point for this library</p>
 <h5><span class="tsd-kind-parameter">keys</span>: <a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h5></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L102">src/CashuWallet.ts:102</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L103">src/CashuWallet.ts:103</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="unit" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>unit</span><a href="#unit" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -142,7 +144,7 @@ This class should act as the entry point for this library</p>
 <li class="tsd-description">
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L92">src/CashuWallet.ts:92</a></li></ul></aside></li></ul></section></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L93">src/CashuWallet.ts:93</a></li></ul></aside></li></ul></section></section>
 <section class="tsd-panel-group tsd-member-group">
 <h2>Methods</h2>
 <section class="tsd-panel tsd-member"><a id="checkProofsSpent" class="tsd-anchor"></a>
@@ -166,7 +168,7 @@ This class should act as the entry point for this library</p>
 </div></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type tsd-kind-type-parameter">T</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L581">src/CashuWallet.ts:581</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L607">src/CashuWallet.ts:607</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="constructProofs" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>construct<wbr/>Proofs</span><a href="#constructProofs" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
@@ -204,7 +206,7 @@ This class should act as the entry point for this library</p>
 <h4 class="tsd-returns-title">Returns <a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span></h4><p>array of serialized proofs</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L702">src/CashuWallet.ts:702</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L728">src/CashuWallet.ts:728</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="createBlankOutputs" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Blank<wbr/>Outputs</span><a href="#createBlankOutputs" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
@@ -229,7 +231,7 @@ See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.c
 <h4 class="tsd-returns-title">Returns <a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a></h4><p>blinded messages, secrets, and rs</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L679">src/CashuWallet.ts:679</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L705">src/CashuWallet.ts:705</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="createBlindedMessages" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Blinded<wbr/>Messages</span><a href="#createBlindedMessages" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
@@ -251,7 +253,7 @@ See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.c
 <h4 class="tsd-returns-title">Returns <a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><span class="tsd-signature-symbol"> &amp; </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4><p>blinded messages, secrets, rs, and amounts</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L632">src/CashuWallet.ts:632</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L658">src/CashuWallet.ts:658</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="createRandomBlindedMessages" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span><a href="#createRandomBlindedMessages" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
@@ -279,11 +281,11 @@ See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.c
 <h4 class="tsd-returns-title">Returns <a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><span class="tsd-signature-symbol"> &amp; </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4><p>blinded messages, secrets, rs, and amounts</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L613">src/CashuWallet.ts:613</a></li></ul></aside></li></ul></section>
-<section class="tsd-panel tsd-member tsd-is-private"><a id="createSplitPayload" class="tsd-anchor"></a>
-<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Split<wbr/>Payload</span><a href="#createSplitPayload" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L639">src/CashuWallet.ts:639</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="createSwapPayload" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Swap<wbr/>Payload</span><a href="#createSwapPayload" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
-<li class="tsd-signature tsd-anchor-link" id="createSplitPayload.createSplitPayload-1"><span class="tsd-kind-call-signature">create<wbr/>Split<wbr/>Payload</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">proofsToSend</span>, <span class="tsd-kind-parameter">keyset</span>, <span class="tsd-kind-parameter">preference</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">counter</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">pubkey</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">privkey</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SplitPayload.html" class="tsd-signature-type tsd-kind-type-alias">SplitPayload</a><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><a href="#createSplitPayload.createSplitPayload-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-signature tsd-anchor-link" id="createSwapPayload.createSwapPayload-1"><span class="tsd-kind-call-signature">create<wbr/>Swap<wbr/>Payload</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">proofsToSend</span>, <span class="tsd-kind-parameter">keyset</span>, <span class="tsd-kind-parameter">preference</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">counter</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">pubkey</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">privkey</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SwapPayload.html" class="tsd-signature-type tsd-kind-type-alias">SwapPayload</a><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><a href="#createSwapPayload.createSwapPayload-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
 <li class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Creates a split payload</p>
 </div>
@@ -310,14 +312,14 @@ See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.c
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">pubkey</span>: <span class="tsd-signature-type">string</span></h5></li>
 <li>
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">privkey</span>: <span class="tsd-signature-type">string</span></h5></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SplitPayload.html" class="tsd-signature-type tsd-kind-type-alias">SplitPayload</a><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SwapPayload.html" class="tsd-signature-type tsd-kind-type-alias">SwapPayload</a><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4>
 <ul class="tsd-parameters">
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-property">blinded<wbr/>Messages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a></h5></li>
 <li class="tsd-parameter">
-<h5><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SplitPayload.html" class="tsd-signature-type tsd-kind-type-alias">SplitPayload</a></h5></li></ul><aside class="tsd-sources">
+<h5><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SwapPayload.html" class="tsd-signature-type tsd-kind-type-alias">SwapPayload</a></h5></li></ul><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L516">src/CashuWallet.ts:516</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L542">src/CashuWallet.ts:542</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="getKeys" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>get<wbr/>Keys</span><a href="#getKeys" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
@@ -334,11 +336,47 @@ See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.c
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">unit</span>: <span class="tsd-signature-type">string</span></h5></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L334">src/CashuWallet.ts:334</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L335">src/CashuWallet.ts:335</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="getMeltQuote" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>get<wbr/>Melt<wbr/>Quote</span><a href="#getMeltQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
-<li class="tsd-signature tsd-anchor-link" id="getMeltQuote.getMeltQuote-1"><span class="tsd-kind-call-signature">get<wbr/>Melt<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">invoice</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#getMeltQuote.getMeltQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-signature tsd-anchor-link" id="getMeltQuote.getMeltQuote-1"><span class="tsd-kind-call-signature">get<wbr/>Melt<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">quote</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#getMeltQuote.getMeltQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Return an existing melt quote from the mint.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">quote</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>ID of the melt quote</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will return an existing melt quote</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L432">src/CashuWallet.ts:432</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="getMintQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>get<wbr/>Mint<wbr/>Quote</span><a href="#getMintQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="getMintQuote.getMintQuote-1"><span class="tsd-kind-call-signature">get<wbr/>Mint<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">quote</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#getMintQuote.getMintQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Gets an existing mint quote from the mint.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">quote</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>Quote ID</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will create and return a Lightning invoice for the specified amount</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L374">src/CashuWallet.ts:374</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="meltQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>melt<wbr/>Quote</span><a href="#meltQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="meltQuote.meltQuote-1"><span class="tsd-kind-call-signature">melt<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">invoice</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#meltQuote.meltQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
 <li class="tsd-description">
 <div class="tsd-comment tsd-typography"><p>Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.</p>
 </div>
@@ -349,28 +387,10 @@ See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.c
 <h5><span class="tsd-kind-parameter">invoice</span>: <span class="tsd-signature-type">string</span></h5>
 <div class="tsd-comment tsd-typography"><p>LN invoice that needs to get a fee estimate</p>
 </div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>estimated Fee</p>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will create and return a melt quote for the invoice with an amount and fee reserve</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L407">src/CashuWallet.ts:407</a></li></ul></aside></li></ul></section>
-<section class="tsd-panel tsd-member"><a id="getMintQuote" class="tsd-anchor"></a>
-<h3 class="tsd-anchor-link"><span>get<wbr/>Mint<wbr/>Quote</span><a href="#getMintQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
-<ul class="tsd-signatures">
-<li class="tsd-signature tsd-anchor-link" id="getMintQuote.getMintQuote-1"><span class="tsd-kind-call-signature">get<wbr/>Mint<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#getMintQuote.getMintQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
-<li class="tsd-description">
-<div class="tsd-comment tsd-typography"><p>Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.</p>
-</div>
-<div class="tsd-parameters">
-<h4 class="tsd-parameters-title">Parameters</h4>
-<ul class="tsd-parameter-list">
-<li>
-<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
-<div class="tsd-comment tsd-typography"><p>Amount requesting for mint.</p>
-</div></li></ul></div>
-<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will create and return a Lightning invoice for the specified amount</p>
-<aside class="tsd-sources">
-<ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L360">src/CashuWallet.ts:360</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L418">src/CashuWallet.ts:418</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="meltTokens" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>melt<wbr/>Tokens</span><a href="#meltTokens" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -399,7 +419,25 @@ Returns payment proof and change proofs</p>
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L420">src/CashuWallet.ts:420</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L446">src/CashuWallet.ts:446</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="mintQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>mint<wbr/>Quote</span><a href="#mintQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="mintQuote.mintQuote-1"><span class="tsd-kind-call-signature">mint<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#mintQuote.mintQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>Amount requesting for mint.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L361">src/CashuWallet.ts:361</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="mintTokens" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>mint<wbr/>Tokens</span><a href="#mintTokens" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -432,7 +470,7 @@ Returns payment proof and change proofs</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">proofs</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4><p>proofs</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L374">src/CashuWallet.ts:374</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L385">src/CashuWallet.ts:385</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="payLnInvoice" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>pay<wbr/>Ln<wbr/>Invoice</span><a href="#payLnInvoice" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -463,7 +501,7 @@ The combined amount of Proofs must match the payment amount including fees.</p>
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L461">src/CashuWallet.ts:461</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L487">src/CashuWallet.ts:487</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="payLnInvoiceWithToken" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span><a href="#payLnInvoiceWithToken" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -495,7 +533,7 @@ The combined amount of Proofs must match the payment amount including fees.</p>
 <h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L487">src/CashuWallet.ts:487</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L513">src/CashuWallet.ts:513</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="receive" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>receive</span><a href="#receive" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -526,7 +564,7 @@ The combined amount of Proofs must match the payment amount including fees.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/ReceiveResponse.html" class="tsd-signature-type tsd-kind-type-alias">ReceiveResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>New token with newly created proofs, token entries that had errors</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L116">src/CashuWallet.ts:116</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L117">src/CashuWallet.ts:117</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="receiveTokenEntry" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>receive<wbr/>Token<wbr/>Entry</span><a href="#receiveTokenEntry" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -557,7 +595,7 @@ The combined amount of Proofs must match the payment amount including fees.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/ReceiveTokenEntryResponse.html" class="tsd-signature-type tsd-kind-type-alias">ReceiveTokenEntryResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>New token entry with newly created proofs, proofs that had errors</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L171">src/CashuWallet.ts:171</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L172">src/CashuWallet.ts:172</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="restore" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>restore</span><a href="#restore" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -584,7 +622,7 @@ The combined amount of Proofs must match the payment amount including fees.</p>
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">proofs</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4><p>proofs</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L303">src/CashuWallet.ts:303</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L304">src/CashuWallet.ts:304</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member"><a id="send" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><span>send</span><a href="#send" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures">
@@ -621,7 +659,7 @@ if both amount and preference are set, but the preference cannot fulfill the amo
 <h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/SendResponse.html" class="tsd-signature-type tsd-kind-type-alias">SendResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>promise of the change- and send-proofs</p>
 <aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L229">src/CashuWallet.ts:229</a></li></ul></aside></li></ul></section>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L230">src/CashuWallet.ts:230</a></li></ul></aside></li></ul></section>
 <section class="tsd-panel tsd-member tsd-is-private"><a id="splitReceive" class="tsd-anchor"></a>
 <h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>split<wbr/>Receive</span><a href="#splitReceive" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
 <ul class="tsd-signatures tsd-is-private">
@@ -641,7 +679,7 @@ if both amount and preference are set, but the preference cannot fulfill the amo
 <li class="tsd-parameter">
 <h5><span class="tsd-kind-property">amount<wbr/>Send</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span></h5></li></ul><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d6b108e/src/CashuWallet.ts#L595">src/CashuWallet.ts:595</a></li></ul></aside></li></ul></section></section></div>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/bc9fdc5/src/CashuWallet.ts#L621">src/CashuWallet.ts:621</a></li></ul></aside></li></ul></section></section></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -673,11 +711,13 @@ if both amount and preference are set, but the preference cannot fulfill the amo
 <li><a href="#createBlankOutputs" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blank<wbr/>Outputs</span></a></li>
 <li><a href="#createBlindedMessages" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blinded<wbr/>Messages</span></a></li>
 <li><a href="#createRandomBlindedMessages" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span></a></li>
-<li><a href="#createSplitPayload" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Split<wbr/>Payload</span></a></li>
+<li><a href="#createSwapPayload" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Swap<wbr/>Payload</span></a></li>
 <li><a href="#getKeys" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Keys</span></a></li>
 <li><a href="#getMeltQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Melt<wbr/>Quote</span></a></li>
 <li><a href="#getMintQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Mint<wbr/>Quote</span></a></li>
+<li><a href="#meltQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>melt<wbr/>Quote</span></a></li>
 <li><a href="#meltTokens" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>melt<wbr/>Tokens</span></a></li>
+<li><a href="#mintQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>mint<wbr/>Quote</span></a></li>
 <li><a href="#mintTokens" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>mint<wbr/>Tokens</span></a></li>
 <li><a href="#payLnInvoice" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice</span></a></li>
 <li><a href="#payLnInvoiceWithToken" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span></a></li>
@@ -724,9 +764,9 @@ if both amount and preference are set, but the preference cannot fulfill the amo
 <li><a href="../types/SendResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Send<wbr/>Response</span></a></li>
 <li><a href="../types/SerializedBlindedMessage.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Serialized<wbr/>Blinded<wbr/>Message</span></a></li>
 <li><a href="../types/SerializedBlindedSignature.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Serialized<wbr/>Blinded<wbr/>Signature</span></a></li>
-<li><a href="../types/SplitPayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Split<wbr/>Payload</span></a></li>
-<li><a href="../types/SplitResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Split<wbr/>Response</span></a></li>
 <li><a href="../types/SwapMethod.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Swap<wbr/>Method</span></a></li>
+<li><a href="../types/SwapPayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Swap<wbr/>Payload</span></a></li>
+<li><a href="../types/SwapResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Swap<wbr/>Response</span></a></li>
 <li><a href="../types/Token.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Token</span></a></li>
 <li><a href="../types/TokenEntry.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Token<wbr/>Entry</span></a></li>
 <li><a href="../types/TokenV2.html" class="deprecated"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Token<wbr/>V2</span></a></li>
