@@ -2,7 +2,7 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js';
-import { cleanToken, getDecodedToken } from '../src/utils.js';
+import { getDecodedToken } from '../src/utils.js';
 import { AmountPreference } from '../src/model/types/index';
 import { Proof } from '@cashu/crypto/modules/common';
 
@@ -75,7 +75,7 @@ describe('receive', () => {
 	});
 
 	test('test receive raw token', async () => {
-		const decodedInput = cleanToken(getDecodedToken(tokenInput));
+		const decodedInput = getDecodedToken(tokenInput);
 
 		nock(mintUrl)
 			.post('/v1/swap')
