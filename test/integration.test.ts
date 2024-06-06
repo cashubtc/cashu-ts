@@ -38,7 +38,7 @@ describe('mint api', () => {
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.mintQuote(100);
 		expect(request).toBeDefined();
-		const mintQuote = await wallet.getMeltQuote(request.quote);
+		const mintQuote = await wallet.getMintQuote(request.quote);
 		expect(mintQuote).toBeDefined();
 	});
 	test('mint tokens', async () => {
@@ -76,17 +76,17 @@ describe('mint api', () => {
 		const tokens = await wallet.mintTokens(100, request.quote);
 
 		// expect no fee because local invoice
-		const meltQuote = await wallet.mintQuote(10);
-		const quote = await wallet.meltQuote(meltQuote.request);
+		const mintQuote = await wallet.mintQuote(10);
+		const quote = await wallet.meltQuote(mintQuote.request);
 		const fee = quote.fee_reserve;
 		expect(fee).toBe(0);
 
 		// get the quote from the mint
-		const quote_ = await wallet.getMeltQuote(meltQuote.quote);
+		const quote_ = await wallet.getMeltQuote(quote.quote);
 		expect(quote_).toBeDefined();
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
-		const response = await wallet.payLnInvoice(meltQuote.request, sendResponse.send, quote);
+		const response = await wallet.payLnInvoice(mintQuote.request, sendResponse.send, quote);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
