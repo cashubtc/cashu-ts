@@ -29,13 +29,15 @@ Decoding LN invoices is no longer used inside the lib.
 
 Utility functions now have an `options` object for optional parameters, instead of passing them directly
 
-**`requestMint(amount: number)` --> `getMintQuote(amount: number)`**
+**`requestMint(amount: number)` --> `mintQuote(amount: number)`**
 Now returns the following:
 
 ```typescript
 type MintQuoteResponse = {
 	request: string;
 	quote: string;
+	paid: boolean;
+	expiry: number;
 };
 ```
 
@@ -52,6 +54,8 @@ type MeltQuoteResponse = {
 	quote: string;
 	amount: number;
 	fee_reserve: number;
+	paid: boolean;
+	expiry: number;
 };
 ```
 
