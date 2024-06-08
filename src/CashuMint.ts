@@ -134,7 +134,7 @@ class CashuMint {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintQuoteResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
-			method: 'GET',
+			method: 'GET'
 		});
 	}
 	/**
@@ -231,7 +231,7 @@ class CashuMint {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MeltQuoteResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
-			method: 'GET',
+			method: 'GET'
 		});
 
 		if (

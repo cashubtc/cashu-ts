@@ -11,8 +11,6 @@ import {
 	type MeltTokensResponse,
 	type MintPayload,
 	type Proof,
-	type ReceiveResponse,
-	type ReceiveTokenEntryResponse,
 	type MintQuotePayload,
 	type MeltQuotePayload,
 	type SendResponse,
@@ -21,11 +19,10 @@ import {
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
-	SerializedBlindedSignature,
+	SerializedBlindedSignature
 } from './model/types/index.js';
 import {
 	bytesToNumber,
-	cleanToken,
 	getDecodedToken,
 	getDefaultAmountPreference,
 	splitAmount
@@ -106,7 +103,7 @@ class CashuWallet {
 	}
 
 	/**
-	 * Receive an encoded or raw Cashu token
+	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
 	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
@@ -123,41 +120,23 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 		}
-	): Promise<ReceiveResponse> {
-		let decodedToken: Array<TokenEntry>;
-		if (typeof token === 'string') {
-			decodedToken = cleanToken(getDecodedToken(token)).token;
-		} else {
-			decodedToken = token.token;
-		}
-		const tokenEntries: Array<TokenEntry> = [];
-		const tokenEntriesWithError: Array<TokenEntry> = [];
-		for (const tokenEntry of decodedToken) {
-			if (!tokenEntry?.proofs?.length) {
-				continue;
+	): Promise<Array<Proof>> {
+		try {
+			if (typeof token === 'string') {
+				token = getDecodedToken(token);
 			}
-			try {
-				const { proofs, proofsWithError } = await this.receiveTokenEntry(tokenEntry, {
-					keysetId: options?.keysetId,
-					preference: options?.preference,
-					counter: options?.counter,
-					pubkey: options?.pubkey,
-					privkey: options?.privkey
-				});
-				if (proofsWithError?.length) {
-					tokenEntriesWithError.push(tokenEntry);
-					continue;
-				}
-				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...proofs] });
-			} catch (error) {
-				console.error(error);
-				tokenEntriesWithError.push(tokenEntry);
-			}
+			const tokenEntries: Array<TokenEntry> = token.token;
+			const proofs = await this.receiveTokenEntry(tokenEntries[0], {
+				keysetId: options?.keysetId,
+				preference: options?.preference,
+				counter: options?.counter,
+				pubkey: options?.pubkey,
+				privkey: options?.privkey
+			});
+			return proofs;
+		} catch (error) {
+			throw new Error('Error when receiving');
 		}
-		return {
-			token: { token: tokenEntries },
-			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined
-		};
 	}
 
 	/**
@@ -178,8 +157,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 		}
-	): Promise<ReceiveTokenEntryResponse> {
-		const proofsWithError: Array<Proof> = [];
+	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
@@ -206,13 +184,9 @@ class CashuWallet {
 			);
 			proofs.push(...newProofs);
 		} catch (error) {
-			console.error(error);
-			proofsWithError.push(...tokenEntry.proofs);
+			throw new Error('Error receiving token entry');
 		}
-		return {
-			proofs,
-			proofsWithError: proofsWithError.length ? proofsWithError : undefined
-		};
+		return proofs;
 	}
 
 	/**
@@ -374,7 +348,6 @@ class CashuWallet {
 	async getMintQuote(quote: string) {
 		return await this.mint.getMintQuote(quote);
 	}
-
 
 	/**
 	 * Mint tokens for a given mint quote

@@ -89,10 +89,6 @@ export type ReceiveTokenEntryResponse = {
 	 * Received proofs
 	 */
 	proofs: Array<Proof>;
-	/**
-	 * Proofs that could not be received. Doesn't throw an error, but if this field is populated it should be handled by the implementation accordingly
-	 */
-	proofsWithError: Array<Proof> | undefined;
 };
 
 /**
@@ -174,7 +170,6 @@ export type MeltQuoteResponse = {
 	 * Timestamp of when the quote expires
 	 */
 	expiry: number;
-
 } & ApiError;
 
 /**
@@ -290,7 +285,7 @@ export type MintQuotePayload = {
  */
 export type MintQuoteResponse = {
 	/**
-	 * Payment request 
+	 * Payment request
 	 */
 	request: string;
 	/**
@@ -299,7 +294,7 @@ export type MintQuoteResponse = {
 	quote: string;
 	/**
 	 * Whether the quote has been paid.
-	*/
+	 */
 	paid: boolean;
 	/**
 	 * Timestamp of when the quote expires

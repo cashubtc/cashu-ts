@@ -2,8 +2,9 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js';
-import { cleanToken, getDecodedToken } from '../src/utils.js';
+import { getDecodedToken } from '../src/utils.js';
 import { AmountPreference } from '../src/model/types/index';
+import { Proof } from '@cashu/crypto/modules/common';
 
 const dummyKeysResp = {
 	keysets: [
@@ -65,21 +66,16 @@ describe('receive', () => {
 			});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const response: ReceiveResponse = await wallet.receive(tokenInput);
+		const proofs = await wallet.receive(tokenInput);
 
-		expect(response.token.token).toHaveLength(1);
-		expect(response.token.token[0].proofs).toHaveLength(1);
-		expect(response.token.token[0]).toMatchObject({
-			proofs: [{ amount: 1, id: '009a1f293253e41e' }],
-			mint: mintUrl
-		});
-		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].secret)).toBe(true);
-		expect(response.tokensWithErrors).toBe(undefined);
+		expect(proofs).toHaveLength(1);
+		expect(proofs).toMatchObject([{ amount: 1, id: '009a1f293253e41e' }]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 
 	test('test receive raw token', async () => {
-		const decodedInput = cleanToken(getDecodedToken(tokenInput));
+		const decodedInput = getDecodedToken(tokenInput);
 
 		nock(mintUrl)
 			.post('/v1/swap')
@@ -94,17 +90,12 @@ describe('receive', () => {
 			});
 		const wallet = new CashuWallet(mint);
 
-		const { token: t, tokensWithErrors } = await wallet.receive(decodedInput);
+		const proofs = await wallet.receive(decodedInput);
 
-		expect(t.token).toHaveLength(1);
-		expect(t.token[0].proofs).toHaveLength(1);
-		expect(t.token[0]).toMatchObject({
-			proofs: [{ amount: 1, id: 'z32vUtKgNCm1' }],
-			mint: 'http://localhost:3338'
-		});
-		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
-		expect(tokensWithErrors).toBe(undefined);
+		expect(proofs).toHaveLength(1);
+		expect(proofs).toMatchObject([{ amount: 1, id: 'z32vUtKgNCm1' }]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 	test('test receive custom split', async () => {
 		nock(mintUrl)
@@ -133,58 +124,33 @@ describe('receive', () => {
 		const token3sat =
 			'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICJlN2MxYjc2ZDFiMzFlMmJjYTJiMjI5ZDE2MGJkZjYwNDZmMzNiYzQ1NzAyMjIzMDRiNjUxMTBkOTI2ZjdhZjg5IiwgIkMiOiAiMDM4OWNkOWY0Zjk4OGUzODBhNzk4OWQ0ZDQ4OGE3YzkxYzUyNzdmYjkzMDQ3ZTdhMmNjMWVkOGUzMzk2Yjg1NGZmIn0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjMiLCAiQyI6ICIwMmRlNDBjNTlkOTAzODNiODg1M2NjZjNhNGIyMDg2NGFjODNiYTc1OGZjZTNkOTU5ZGJiODkzNjEwMDJlOGNlNDcifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0=';
 
-		const response: ReceiveResponse = await wallet.receive(token3sat, {
+		const proofs = await wallet.receive(token3sat, {
 			preference: [{ amount: 1, count: 3 }]
 		});
 
-		expect(response.token.token).toHaveLength(1);
-		expect(response.token.token[0].proofs).toHaveLength(3);
-		expect(response.token.token[0]).toMatchObject({
-			proofs: [
-				{ amount: 1, id: '009a1f293253e41e' },
-				{ amount: 1, id: '009a1f293253e41e' },
-				{ amount: 1, id: '009a1f293253e41e' }
-			]
-		});
-		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(response.token.token[0].proofs[0].secret)).toBe(true);
-		expect(response.tokensWithErrors).toBe(undefined);
+		expect(proofs).toHaveLength(3);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '009a1f293253e41e' },
+			{ amount: 1, id: '009a1f293253e41e' },
+			{ amount: 1, id: '009a1f293253e41e' }
+		]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 	test('test receive tokens already spent', async () => {
 		const msg = 'tokens already spent. Secret: asdasdasd';
 
-		nock(mintUrl).post('/v1/swap').reply(200, { detail: msg });
+		nock(mintUrl).post('/v1/swap').reply(400, { detail: msg });
 		const wallet = new CashuWallet(mint, { unit });
-
-		const { tokensWithErrors } = await wallet.receive(tokenInput);
-		const t = tokensWithErrors!;
-
-		expect(tokensWithErrors).toBeDefined();
-		expect(t.token).toHaveLength(1);
-		expect(t.token[0].proofs).toHaveLength(1);
-		expect(t.token[0]).toMatchObject({
-			proofs: [{ amount: 1, id: '009a1f293253e41e' }],
-			mint: 'http://localhost:3338'
-		});
-		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
+		const result = await wallet.receive(tokenInput).catch((e) => e);
+		expect(result).toEqual(new Error('Error when receiving'));
 	});
+
 	test('test receive could not verify proofs', async () => {
-		nock(mintUrl).post('/v1/swap').reply(200, { code: 0, error: 'could not verify proofs.' });
+		nock(mintUrl).post('/v1/swap').reply(400, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint, { unit });
-
-		const { tokensWithErrors } = await wallet.receive(tokenInput);
-		const t = tokensWithErrors!;
-
-		expect(tokensWithErrors).toBeDefined();
-		expect(t.token).toHaveLength(1);
-		expect(t.token[0].proofs).toHaveLength(1);
-		expect(t.token[0]).toMatchObject({
-			proofs: [{ amount: 1, id: '009a1f293253e41e' }],
-			mint: 'http://localhost:3338'
-		});
-		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(t.token[0].proofs[0].secret)).toBe(true);
+		const result = await wallet.receive(tokenInput).catch((e) => e);
+		expect(result).toEqual(new Error('Error when receiving'));
 	});
 });
 
