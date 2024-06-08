@@ -25,6 +25,10 @@ Decoding LN invoices is no longer used inside the lib.
 
 ### `CashuWallet` interface changes
 
+**`receive()` does no longer support multi-token tokens**
+
+To reduce complexity, simplify error handling and to prepare for token V4, this feature has been removed. only the first token inside a token will be processed
+
 **optional function AND constructor parameters are now in an onpional `options?` Object**
 
 Utility functions now have an `options` object for optional parameters, instead of passing them directly
