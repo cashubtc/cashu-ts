@@ -14,15 +14,18 @@ import { bytesToHex } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { Buffer } from 'buffer/';
 
-function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
+function splitAmount(value: number, keys: MintKeys, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
-		chunks.push(...getPreference(value, amountPreference));
-		value =
-			value -
-			chunks.reduce((curr, acc) => {
-				return curr + acc;
-			}, 0);
+		if (amountPreference.length > 0) {
+			chunks.push(...getPreference(value, keys, amountPreference));
+			value =
+				value -
+				chunks.reduce((curr, acc) => {
+					return curr + acc;
+				}, 0);
+			return chunks;
+		}
 	}
 	for (let i = 0; i < 32; i++) {
 		const mask: number = 1 << i;
@@ -37,13 +40,17 @@ function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
 
-function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
+function hasCorrespondingKey(amount: number, keys: MintKeys) {
+	return amount in keys;
+}
+
+function getPreference(amount: number, keys: MintKeys, preferredAmounts: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
 	preferredAmounts.forEach((pa) => {
-		if (!isPowerOfTwo(pa.amount)) {
+		if (!hasCorrespondingKey(pa.amount, keys)) {
 			throw new Error(
-				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
+				'Provided amount preferences contain an amount does not match any key!'
 			);
 		}
 		for (let i = 1; i <= pa.count; i++) {
@@ -57,8 +64,8 @@ function getPreference(amount: number, preferredAmounts: Array<AmountPreference>
 	return chunks;
 }
 
-function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
-	const amounts = splitAmount(amount);
+function getDefaultAmountPreference(amount: number, keys: MintKeys): Array<AmountPreference> {
+	const amounts = splitAmount(amount, keys);
 	return amounts.map((a) => {
 		return { amount: a, count: 1 };
 	});

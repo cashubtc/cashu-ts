@@ -231,13 +231,16 @@ class CashuWallet {
 		let newKeys: MintKeys | undefined;
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
+			let keys: MintKeys = await this.getKeys(tokenEntry.proofs, tokenEntry.mint);
 			if (!preference) {
-				preference = getDefaultAmountPreference(amount);
+				preference = getDefaultAmountPreference(amount, keys);
 			}
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
+				keys,
 				tokenEntry.proofs,
 				preference,
+				undefined,
 				counter
 			);
 			const { promises, error } = await CashuMint.split(tokenEntry.mint, payload);
@@ -245,7 +248,7 @@ class CashuWallet {
 				promises,
 				blindedMessages.rs,
 				blindedMessages.secrets,
-				await this.getKeys(promises, tokenEntry.mint)
+				keys
 			);
 			proofs.push(...newProofs);
 			newKeys =
@@ -298,12 +301,16 @@ class CashuWallet {
 		if (amount > amountAvailable) {
 			throw new Error('Not enough funds available');
 		}
+
+		let keys: MintKeys = await this.getKeys(proofs);
 		if (amount < amountAvailable || preference) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amountSend,
+				keys,
 				proofsToSend,
 				preference,
+				undefined,
 				counter
 			);
 			const { promises } = await this.mint.split(payload);
@@ -348,8 +355,10 @@ class CashuWallet {
 		AmountPreference?: Array<AmountPreference>,
 		counter?: number
 	): Promise<{ proofs: Array<Proof>; newKeys?: MintKeys }> {
+		let keys: MintKeys = await this.mint.getKeys();
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
+			keys,
 			AmountPreference,
 			counter
 		);
@@ -425,11 +434,11 @@ class CashuWallet {
 
 	/**
 	 * Get the mint's public keys for a given set of proofs
-	 * @param arr array of proofs
+	 * @param arr array of proofs or blinded signatures
 	 * @param mint optional mint url
 	 * @returns keys
 	 */
-	private async getKeys(arr: Array<SerializedBlindedSignature>, mint?: string): Promise<MintKeys> {
+	private async getKeys(arr: Array<SerializedBlindedSignature> | Array<Proof>, mint?: string): Promise<MintKeys> {
 		await this.initKeys();
 		if (!arr?.length || !arr[0]?.id) {
 			return this.keys;
@@ -449,15 +458,19 @@ class CashuWallet {
 	/**
 	 * Creates a split payload
 	 * @param amount amount to send
+	 * @param keys public keyset of the mint that signed the proofs
 	 * @param proofsToSend proofs to split*
-	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param sendPreference optional preference for splitting proofs to send into specific amounts. overrides amount param
+	 * @param keepPreference optional preference for splitting proofs to keep into specific amounts.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns
 	 */
 	private createSplitPayload(
 		amount: number,
+		keys: MintKeys,
 		proofsToSend: Array<Proof>,
-		preference?: Array<AmountPreference>,
+		sendPreference?: Array<AmountPreference>,
+		keepPreference?: Array<AmountPreference>,
 		counter?: number
 	): {
 		payload: SplitPayload;
@@ -466,13 +479,22 @@ class CashuWallet {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
-			undefined,
+			keys,
+			keepPreference,
 			counter
 		);
 		if (this._seed && counter) {
 			counter = counter + keepBlindedMessages.secrets.length;
 		}
-		const sendBlindedMessages = this.createRandomBlindedMessages(amount, preference, counter);
+		const sendBlindedMessages = this.createRandomBlindedMessages(
+			amount,
+			keys,
+			sendPreference,
+			counter
+		);
+		if (this._seed && counter) {
+			counter = counter + sendBlindedMessages.secrets.length;
+		}
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindedMessages: BlindedTransaction = {
@@ -503,16 +525,18 @@ class CashuWallet {
 	/**
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for
+	 * @param keys public keyset of the mint that signed the proofs
 	 * @param amountPreference optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
+		keys: MintKeys,
 		amountPreference?: Array<AmountPreference>,
 		counter?: number
 	): BlindedMessageData & { amounts: Array<number> } {
-		const amounts = splitAmount(amount, amountPreference);
+		const amounts = splitAmount(amount, keys, amountPreference);
 		return this.createBlindedMessages(amounts, counter);
 	}
 
