@@ -187,13 +187,19 @@ export type MeltPayload = {
 };
 
 /**
+ * Payment state as part of the mints MeltResponse
+ */
+
+type MeltPaymentState = 'UNPAID' | 'PAID' | 'PENDING';
+
+/**
  * Response from the mint after paying a lightning invoice (melt)
  */
 export type MeltResponse = {
 	/**
-	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
+	 * state of the invoice payment
 	 */
-	paid: boolean;
+	state: MeltPaymentState;
 	/**
 	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
@@ -212,6 +218,10 @@ export type MeltTokensResponse = {
 	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
 	 */
 	isPaid: boolean;
+	/**
+	 * state of the invoice payment
+	 */
+	state: MeltPaymentState;
 	/**
 	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
 	 */
