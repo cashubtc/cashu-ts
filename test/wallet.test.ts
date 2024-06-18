@@ -222,14 +222,14 @@ describe('payLnInvoice', () => {
 		nock(mintUrl)
 			.post('/v1/melt/quote/bolt11')
 			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 0 });
-		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
+		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { state: 'PAID', payment_preimage: '' });
 
 		const wallet = new CashuWallet(mint, { unit });
 		const meltQuote = await wallet.getMeltQuote('lnbcabbc');
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
 
-		expect(result).toEqual({ isPaid: true, preimage: '', change: [] });
+		expect(result).toEqual({ isPaid: true, state: 'PAID', preimage: '', change: [] });
 	});
 	test('test payLnInvoice change', async () => {
 		nock.cleanAll();
@@ -253,7 +253,7 @@ describe('payLnInvoice', () => {
 		nock(mintUrl)
 			.post('/v1/melt/bolt11')
 			.reply(200, {
-				paid: true,
+				state: 'PAID',
 				payment_preimage: 'asd',
 				change: [
 					{
@@ -269,6 +269,7 @@ describe('payLnInvoice', () => {
 		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
 		expect(result.isPaid).toBe(true);
+		expect(result.state).toBe('PAID');
 		expect(result.preimage).toBe('asd');
 		expect(result.change).toHaveLength(1);
 	});
