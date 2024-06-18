@@ -1,3 +1,4 @@
+import { WSConnection } from './WSConnection.js';
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
@@ -33,6 +34,7 @@ import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
 class CashuMint {
+	private ws?: WSConnection;
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
@@ -437,6 +439,21 @@ class CashuMint {
 		outputs: Array<SerializedBlindedMessage>;
 	}): Promise<PostRestoreResponse> {
 		return CashuMint.restore(this._mintUrl, restorePayload, this._customRequest);
+	}
+
+	async connectWebSocket() {
+		if (this.ws) {
+			await this.ws.ensureConnection();
+		} else {
+			const mintUrl = new URL(this._mintUrl);
+			this.ws = new WSConnection(
+				`${mintUrl.protocol === 'https' ? 'wss' : 'ws'}://${mintUrl.host}/v1/ws`
+			);
+			await this.ws.connect();
+		}
+	}
+	get webSocketConnection() {
+		return this.ws;
 	}
 }
 
