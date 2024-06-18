@@ -32,11 +32,7 @@ describe('test split custom amounts ', () => {
 		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
 		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
-	const fiveTwelve: Array<AmountPreference> = [
-		{ amount: 512, count: 1 },
-		{ amount: 2, count: 1 },
-		{ amount: 4, count: 1}
-	];
+	const fiveTwelve: Array<AmountPreference> = [{ amount: 512, count: 2 }];
 	test('testing amount 518', async () => {
 		const chunks = utils.splitAmount(518, keys, fiveTwelve);
 		expect(chunks).toStrictEqual([512, 2, 4]);
