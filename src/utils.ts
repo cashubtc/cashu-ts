@@ -4,7 +4,12 @@ import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
-function splitAmount(value: number, keyset: Keys, amountPreference?: Array<AmountPreference>): Array<number> {
+function splitAmount(
+	value: number, 
+	keyset: Keys,
+	amountPreference?: Array<AmountPreference>,
+	order?: string
+): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
 		chunks.push(...getPreference(value, keyset, amountPreference));
@@ -14,13 +19,16 @@ function splitAmount(value: number, keyset: Keys, amountPreference?: Array<Amoun
 				return curr + acc;
 			}, 0);
 	}
-	for (let i = 0; i < 32; i++) {
-		const mask: number = 1 << i;
-		if ((value & mask) !== 0) {
-			chunks.push(Math.pow(2, i));
-		}
-	}
-	return chunks;
+	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
+		.map(k => parseInt(k))
+		.sort((a, b) => b-a);
+	sortedKeyAmounts.forEach(amt => {
+		let q = Math.floor(value / amt);
+		for (let i=0; i<q; ++i)
+			chunks.push(amt);
+		value %= amt;
+	});
+	return chunks.sort((a, b) => (order === "asc") ? (a-b) : (b-a));
 }
 
 function isPowerOfTwo(number: number) {

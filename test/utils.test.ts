@@ -3,13 +3,23 @@ import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';
 
 const keys: Keys = {};
-for (let i=1; i<2048; i *= 2) {
+for (let i=1; i<=2048; i *= 2) {
 	keys[i] = "deadbeef";
+}
+
+const keys_base10: Keys = {};
+for (let i=1; i<=10000; i *= 10) {
+	keys_base10[i] = "deadbeef";
+}
+
+const keys_base16: Keys = {};
+for (let i=1; i<=0x10000; i *= 16) {
+	keys_base16[i] = "deadbeef";
 }
 
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
-		const chunks = utils.splitAmount(2561, keys);
+		const chunks = utils.splitAmount(2561, keys, undefined, "asc");
 		expect(chunks).toStrictEqual([1, 512, 2048]);
 	});
 	test('testing amount 0', async () => {
@@ -29,13 +39,13 @@ describe('test split custom amounts ', () => {
 		{ amount: 2, count: 4 }
 	];
 	test('testing amount 10', async () => {
-		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
+		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo, "asc");
 		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
 	const fiveTwelve: Array<AmountPreference> = [{ amount: 512, count: 2 }];
 	test('testing amount 518', async () => {
 		const chunks = utils.splitAmount(518, keys, fiveTwelve);
-		expect(chunks).toStrictEqual([512, 2, 4]);
+		expect(chunks).toStrictEqual([512, 4, 2]);
 	});
 	const illegal: Array<AmountPreference> = [{ amount: 3, count: 2 }];
 	test('testing non pow2', async () => {
@@ -44,12 +54,33 @@ describe('test split custom amounts ', () => {
 	const empty: Array<AmountPreference> = [];
 	test('testing empty', async () => {
 		const chunks = utils.splitAmount(5, keys, empty);
-		expect(chunks).toStrictEqual([1, 4]);
+		expect(chunks).toStrictEqual([4, 1]);
 	});
 	const undef = undefined;
 	test('testing undefined', async () => {
-		const chunks = utils.splitAmount(5, keys, undef);
+		const chunks = utils.splitAmount(5, keys, undef, "asc");
 		expect(chunks).toStrictEqual([1, 4]);
+	});
+});
+
+describe('test split different key amount', () => {
+	test('testing amount 68251', async () => {
+		const chunks = utils.splitAmount(68251, keys_base10);
+		expect(chunks).toStrictEqual([
+			10000, 10000, 10000, 10000, 10000, 10000,
+			1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+			100, 100,
+			10, 10, 10, 10, 10,
+			1
+		]);
+	});
+	test('testing amount 1917', async () => {
+		const chunks = utils.splitAmount(1917, keys_base16);
+		expect(chunks).toStrictEqual([
+			256, 256, 256, 256, 256, 256, 256,
+			16, 16, 16, 16, 16, 16, 16,
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+		]);
 	});
 });
 
