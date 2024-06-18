@@ -76,7 +76,7 @@ export class WSConnection {
 		(this.subListeners[subId] = this.subListeners[subId] || []).filter((fn) => fn !== callback);
 	}
 
-	async ensureConenction() {
+	async ensureConnection() {
 		if (this.ws?.readyState !== 1) {
 			await this.connect();
 		}
