@@ -79,7 +79,7 @@ export class WSConnection {
 		delete this.rpcListeners[id];
 	}
 
-	removeListener(subId: string, callback: () => any) {
+	removeListener(subId: string, callback: (payload: any) => any) {
 		(this.subListeners[subId] = this.subListeners[subId] || []).filter((fn) => fn !== callback);
 	}
 
@@ -151,15 +151,11 @@ export class WSConnection {
 		);
 		this.rpcId++;
 		this.sendRequest('subscribe', { ...params, subId });
+		return subId;
 	}
 
-	cancelSubscription(subId: string, callback: () => any, errorCallback: (e: Error) => any) {
+	cancelSubscription(subId: string, callback: (payload: any) => any) {
 		this.removeListener(subId, callback);
-		this.addRpcListener(
-			callback,
-			(e: JsonRpcErrorObject) => errorCallback(new Error(e.message)),
-			this.rpcId
-		);
 		this.rpcId++;
 		this.sendRequest('unsubscribe', { subId });
 	}
