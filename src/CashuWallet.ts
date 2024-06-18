@@ -863,6 +863,21 @@ class CashuWallet {
 		return states;
 	}
 
+	async waitOnQuotePaid(quoteId: string, callback: (payload: any) => any) {
+		await this.mint.connectWebSocket();
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		this.mint.webSocketConnection.createSubscription(
+			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
+			callback,
+			(e) => {
+				throw new Error(e.message);
+			}
+		);
+		//TODO: Return unsub function
+	}
+
 	/**
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for
