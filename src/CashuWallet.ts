@@ -21,7 +21,8 @@ import {
 	CheckStateEnum,
 	SerializedBlindedSignature,
 	MeltQuoteState,
-	MintQuoteResponse
+	MintQuoteResponse,
+	Preferences
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -171,11 +172,12 @@ class CashuWallet {
 		if (!preference) {
 			preference = getDefaultAmountPreference(amount, keys);
 		}
+		const pref: Preferences = {sendPreference: preference};
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
 			tokenEntry.proofs,
 			keys,
-			preference,
+			pref,
 			options?.counter,
 			options?.pubkey,
 			options?.privkey
@@ -207,7 +209,7 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			preference?: Array<AmountPreference>;
+			preference?: Preferences;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
@@ -215,7 +217,7 @@ class CashuWallet {
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
-			amount = options?.preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
+			amount = options?.preference?.sendPreference.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
 		}
 		const keyset = await this.getKeys(options?.keysetId);
 		let amountAvailable = 0;
@@ -538,7 +540,7 @@ class CashuWallet {
 		amount: number,
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
-		preference?: Array<AmountPreference>,
+		preference?: Preferences,
 		counter?: number,
 		pubkey?: string,
 		privkey?: string
@@ -550,7 +552,7 @@ class CashuWallet {
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
 			keyset,
-			undefined,
+			preference?.keepPreference,
 			counter
 		);
 		if (this._seed && counter) {
@@ -559,7 +561,7 @@ class CashuWallet {
 		const sendBlindedMessages = this.createRandomBlindedMessages(
 			amount,
 			keyset,
-			preference,
+			preference?.sendPreference,
 			counter,
 			pubkey
 		);
