@@ -20,7 +20,7 @@ export function injectWebSocketImpl(ws: any) {
 export class WSConnection {
 	public readonly url: URL;
 	private ws: WebSocket | undefined;
-	private subListeners: { [subId: string]: Array<any> } = {};
+	private subListeners: { [subId: string]: Array<(payload: any) => any> } = {};
 	private rpcListeners: { [rpsSubId: string]: any } = {};
 	private messageQueue: MessageQueue;
 	private handlingInterval?: NodeJS.Timer;
@@ -62,7 +62,7 @@ export class WSConnection {
 		this.ws?.send(JSON.stringify(['CLOSE', subId]));
 	}
 
-	addSubListener(subId: string, callback: () => any) {
+	addSubListener(subId: string, callback: (payload: any) => any) {
 		(this.subListeners[subId] = this.subListeners[subId] || []).push(callback);
 	}
 
@@ -132,7 +132,7 @@ export class WSConnection {
 
 	createSubscription(
 		params: Omit<JsonRpcReqParams, 'subId'>,
-		callback: () => any,
+		callback: (payload: any) => any,
 		errorCallback: (e: Error) => any
 	) {
 		if (this.ws?.readyState !== 1) {

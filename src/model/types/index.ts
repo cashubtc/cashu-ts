@@ -603,7 +603,7 @@ type JsonRpcRequest = {
 	id: Exclude<RpcSubId, null>;
 };
 
-type JsonRpcNotification = {
+export type JsonRpcNotification = {
 	jsonrpc: '2.0';
 	method: string;
 	params?: JsonRpcParams;
