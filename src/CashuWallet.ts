@@ -174,10 +174,10 @@ class CashuWallet {
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
 			let preference = options?.preference;
-			if (!preference) {
-				preference = getDefaultAmountPreference(amount);
-			}
 			const keys = await this.getKeys(options?.keysetId);
+			if (!preference) {
+				preference = getDefaultAmountPreference(amount, keys);
+			}
 			const { payload, blindedMessages } = this.createSplitPayload(
 				amount,
 				tokenEntry.proofs,
@@ -226,7 +226,6 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
-			keysetId?: string;
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
@@ -376,7 +375,7 @@ class CashuWallet {
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			options?.keysetId ?? keyset.id,
+			keyset,
 			options?.amountPreference,
 			options?.counter,
 			options?.pubkey
@@ -520,7 +519,7 @@ class CashuWallet {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
-			keyset.id,
+			keyset,
 			undefined,
 			counter
 		);
@@ -529,7 +528,7 @@ class CashuWallet {
 		}
 		const sendBlindedMessages = this.createRandomBlindedMessages(
 			amount,
-			keyset.id,
+			keyset,
 			preference,
 			counter,
 			pubkey
@@ -604,13 +603,13 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
-		keysetId: string,
+		keyset: MintKeys,
 		amountPreference?: Array<AmountPreference>,
 		counter?: number,
 		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
-		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, keysetId, counter, pubkey);
+		const amounts = splitAmount(amount, keyset.keys, amountPreference);
+		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
 	}
 
 	/**
