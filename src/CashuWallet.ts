@@ -627,6 +627,22 @@ class CashuWallet {
 			return state && state.state === CheckStateEnum.SPENT;
 		});
 	}
+
+	async waitOnQuotePaid(quoteId: string, callback: (payload: any) => any) {
+		await this.mint.connectWebSocket();
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		this.mint.webSocketConnection.createSubscription(
+			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
+			callback,
+			(e) => {
+				throw new Error(e.message);
+			}
+		);
+		//TODO: Return unsub function
+	}
+
 	private splitReceive(
 		amount: number,
 		amountAvailable: number
