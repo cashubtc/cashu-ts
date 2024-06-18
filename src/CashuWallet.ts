@@ -633,14 +633,16 @@ class CashuWallet {
 		if (!this.mint.webSocketConnection) {
 			throw new Error('failed to establish WebSocket connection.');
 		}
-		this.mint.webSocketConnection.createSubscription(
+		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
 			callback,
 			(e) => {
 				throw new Error(e.message);
 			}
 		);
-		//TODO: Return unsub function
+		return () => {
+			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+		};
 	}
 
 	private splitReceive(
