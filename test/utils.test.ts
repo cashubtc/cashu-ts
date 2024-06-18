@@ -1,14 +1,19 @@
-import { AmountPreference, Token } from '../src/model/types/index.js';
+import { AmountPreference, Token, Keys } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';
 
+const keys: Keys = {};
+for (let i=1; i<2048; i *= 2) {
+	keys[i] = "deadbeef";
+}
+
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
-		const chunks = utils.splitAmount(2561);
+		const chunks = utils.splitAmount(2561, keys);
 		expect(chunks).toStrictEqual([1, 512, 2048]);
 	});
 	test('testing amount 0', async () => {
-		const chunks = utils.splitAmount(0);
+		const chunks = utils.splitAmount(0, keys);
 		expect(chunks).toStrictEqual([]);
 	});
 });
@@ -16,7 +21,7 @@ describe('test split amounts ', () => {
 describe('test split custom amounts ', () => {
 	const fiveToOne: AmountPreference = { amount: 1, count: 5 };
 	test('testing amount 5', async () => {
-		const chunks = utils.splitAmount(5, [fiveToOne]);
+		const chunks = utils.splitAmount(5, keys, [fiveToOne]);
 		expect(chunks).toStrictEqual([1, 1, 1, 1, 1]);
 	});
 	const tenToOneAndTwo: Array<AmountPreference> = [
@@ -24,21 +29,30 @@ describe('test split custom amounts ', () => {
 		{ amount: 2, count: 4 }
 	];
 	test('testing amount 10', async () => {
-		const chunks = utils.splitAmount(10, tenToOneAndTwo);
+		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
 		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
-	const fiveTwelve: Array<AmountPreference> = [{ amount: 512, count: 2 }];
-	test('testing amount 516', async () => {
-		const chunks = utils.splitAmount(518, fiveTwelve);
+	const fiveTwelve: Array<AmountPreference> = [
+		{ amount: 512, count: 1 },
+		{ amount: 2, count: 1 },
+		{ amount: 4, count: 1}
+	];
+	test('testing amount 518', async () => {
+		const chunks = utils.splitAmount(518, keys, fiveTwelve);
 		expect(chunks).toStrictEqual([512, 2, 4]);
 	});
 	const illegal: Array<AmountPreference> = [{ amount: 3, count: 2 }];
 	test('testing non pow2', async () => {
-		expect(() => utils.splitAmount(6, illegal)).toThrowError();
+		expect(() => utils.splitAmount(6, keys, illegal)).toThrowError();
 	});
 	const empty: Array<AmountPreference> = [];
 	test('testing empty', async () => {
-		const chunks = utils.splitAmount(5, empty);
+		const chunks = utils.splitAmount(5, keys, empty);
+		expect(chunks).toStrictEqual([1, 4]);
+	});
+	const undef = undefined;
+	test('testing undefined', async () => {
+		const chunks = utils.splitAmount(5, keys, undef);
 		expect(chunks).toStrictEqual([1, 4]);
 	});
 });
