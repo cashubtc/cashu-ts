@@ -273,7 +273,7 @@ class CashuMint {
 
 		if (
 			!isObj(data) ||
-			typeof data?.paid !== 'boolean' ||
+			typeof data?.state !== 'string' ||
 			(data?.payment_preimage !== null && typeof data?.payment_preimage !== 'string')
 		) {
 			throw new Error('bad response');

@@ -432,7 +432,8 @@ class CashuWallet {
 		const meltResponse = await this.mint.melt(meltPayload);
 
 		return {
-			isPaid: meltResponse.paid ?? false,
+			isPaid: meltResponse.state === 'PAID',
+			state: meltResponse.state,
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? dhke.constructProofs(meltResponse.change, rs, secrets, keys)
