@@ -24,15 +24,12 @@ import { decodeCBOR, encodeCBOR } from './cbor.js';
 function splitAmount(value: number, keyset: Keys, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
-		if (amountPreference.length > 0) {
-			chunks.push(...getPreference(value, keyset, amountPreference));
-			value =
-				value -
-				chunks.reduce((curr, acc) => {
-					return curr + acc;
-				}, 0);
-			return chunks;
-		}
+		chunks.push(...getPreference(value, keyset, amountPreference));
+		value =
+			value -
+			chunks.reduce((curr, acc) => {
+				return curr + acc;
+			}, 0);
 	}
 	for (let i = 0; i < 32; i++) {
 		const mask: number = 1 << i;
