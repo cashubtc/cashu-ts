@@ -1,5 +1,11 @@
 import { MessageQueue } from './utils';
-import { JsonRpcErrorObject, JsonRpcMessage, JsonRpcReqParams, RpcSubId } from './model/types';
+import {
+	JsonRpcErrorObject,
+	JsonRpcMessage,
+	JsonRpcNotification,
+	JsonRpcReqParams,
+	RpcSubId
+} from './model/types';
 
 let _WS: typeof WebSocket;
 
@@ -92,7 +98,6 @@ export class WSConnection {
 		let parsed;
 		try {
 			parsed = JSON.parse(message) as JsonRpcMessage;
-			console.log(parsed);
 			if ('result' in parsed && parsed.id != undefined) {
 				if (this.rpcListeners[parsed.id]) {
 					this.rpcListeners[parsed.id].callback();
@@ -113,7 +118,8 @@ export class WSConnection {
 						return;
 					}
 					if (this.subListeners[subId].length > 0) {
-						this.subListeners[subId].forEach((cb) => cb());
+						const notification = parsed as JsonRpcNotification;
+						this.subListeners[subId].forEach((cb) => cb(notification.params.payload));
 					}
 					// This is a notification
 				}
@@ -125,7 +131,7 @@ export class WSConnection {
 	}
 
 	createSubscription(
-		params: JsonRpcReqParams,
+		params: Omit<JsonRpcReqParams, 'subId'>,
 		callback: () => any,
 		errorCallback: (e: Error) => any
 	) {
@@ -143,6 +149,6 @@ export class WSConnection {
 			this.rpcId
 		);
 		this.rpcId++;
-		this.sendRequest(params);
+		this.sendRequest({ ...params, subId });
 	}
 }
