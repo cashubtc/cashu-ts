@@ -49,11 +49,12 @@ export class WSConnection {
 			};
 		});
 	}
-
-	sendRequest(params: JsonRpcReqParams) {
+	sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
+	sendRequest(method: 'unsubscribe', params: { subId: string }): void;
+	sendRequest(method: 'subscribe' | 'unsubscribe', params: Partial<JsonRpcReqParams>) {
 		const id = this.rpcId;
 		this.rpcId++;
-		const message = JSON.stringify({ jsonrpc: '2.0', method: 'sub', params, id });
+		const message = JSON.stringify({ jsonrpc: '2.0', method, params, id });
 		console.log(message);
 		this.ws?.send(message);
 	}
@@ -149,6 +150,17 @@ export class WSConnection {
 			this.rpcId
 		);
 		this.rpcId++;
-		this.sendRequest({ ...params, subId });
+		this.sendRequest('subscribe', { ...params, subId });
+	}
+
+	cancelSubscription(subId: string, callback: () => any, errorCallback: (e: Error) => any) {
+		this.removeListener(subId, callback);
+		this.addRpcListener(
+			callback,
+			(e: JsonRpcErrorObject) => errorCallback(new Error(e.message)),
+			this.rpcId
+		);
+		this.rpcId++;
+		this.sendRequest('unsubscribe', { subId });
 	}
 }
