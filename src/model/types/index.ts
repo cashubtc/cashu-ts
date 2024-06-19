@@ -4,7 +4,7 @@ export * from './wallet/index';
 export type Preferences = {
 	sendPreference: Array<AmountPreference>;
 	keepPreference?: Array<AmountPreference>;
-}
+};
 
 export type InvoiceData = {
 	paymentRequest: string;
