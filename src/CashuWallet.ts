@@ -237,7 +237,9 @@ class CashuWallet {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const proofsToKeep: Array<Proof> = [];
-		proofs.forEach((proof) => {
+		// Start from smallest amounts and work your way up.
+		// This limits small change.
+		proofs.reverse().forEach((proof) => {
 			if (amountAvailable >= amount) {
 				proofsToKeep.push(proof);
 				return;

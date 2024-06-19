@@ -5,7 +5,7 @@ import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
 function splitAmount(
-	value: number, 
+	value: number,
 	keyset: Keys,
 	amountPreference?: Array<AmountPreference>,
 	order?: string
@@ -20,15 +20,14 @@ function splitAmount(
 			}, 0);
 	}
 	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
-		.map(k => parseInt(k))
-		.sort((a, b) => b-a);
-	sortedKeyAmounts.forEach(amt => {
+		.map((k) => parseInt(k))
+		.sort((a, b) => b - a);
+	sortedKeyAmounts.forEach((amt) => {
 		let q = Math.floor(value / amt);
-		for (let i=0; i<q; ++i)
-			chunks.push(amt);
+		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => (order === "asc") ? (a-b) : (b-a));
+	return chunks.sort((a, b) => (order === 'asc' ? a - b : b - a));
 }
 
 function isPowerOfTwo(number: number) {
@@ -39,14 +38,16 @@ function hasCorrespondingKey(amount: number, keyset: Keys) {
 	return amount in keyset;
 }
 
-function getPreference(amount: number, keyset: Keys, preferredAmounts: Array<AmountPreference>): Array<number> {
+function getPreference(
+	amount: number,
+	keyset: Keys,
+	preferredAmounts: Array<AmountPreference>
+): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
 	preferredAmounts.forEach((pa) => {
 		if (!hasCorrespondingKey(pa.amount, keyset)) {
-			throw new Error(
-				'Provided amount preferences do not match the amounts of the mint keyset.'
-			);
+			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
 		for (let i = 1; i <= pa.count; i++) {
 			accumulator += pa.amount;
