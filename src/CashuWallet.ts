@@ -172,7 +172,7 @@ class CashuWallet {
 		if (!preference) {
 			preference = getDefaultAmountPreference(amount, keys);
 		}
-		const pref: Preferences = {sendPreference: preference};
+		const pref: Preferences = { sendPreference: preference };
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
 			tokenEntry.proofs,
@@ -217,7 +217,10 @@ class CashuWallet {
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
-			amount = options?.preference?.sendPreference.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
+			amount = options?.preference?.sendPreference.reduce(
+				(acc, curr) => acc + curr.amount * curr.count,
+				0
+			);
 		}
 		const keyset = await this.getKeys(options?.keysetId);
 		let amountAvailable = 0;

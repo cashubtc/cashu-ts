@@ -74,8 +74,8 @@ describe('test split different key amount', () => {
 	test('testing amount 1917', async () => {
 		const chunks = utils.splitAmount(1917, keys_base16);
 		expect(chunks).toStrictEqual([
-			1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-			1, 1, 1, 16, 16, 16, 16, 16, 16, 16, 256, 256, 256, 256, 256, 256, 256
+			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 16, 16, 16, 16, 16, 16, 16, 256, 256, 256, 256, 256,
+			256, 256
 		]);
 	});
 });
