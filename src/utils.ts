@@ -44,7 +44,7 @@ function splitAmount(
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => (order === 'asc' ? a - b : b - a));
+	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
 function isPowerOfTwo(number: number) {
