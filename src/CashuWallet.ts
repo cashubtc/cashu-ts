@@ -863,14 +863,16 @@ class CashuWallet {
 		return states;
 	}
 
-	async waitOnQuotePaid(quoteId: string, callback: (payload: any) => any) {
+	async onQuotePaid(quoteId: string, callback: (payload: any) => any) {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
 			throw new Error('failed to establish WebSocket connection.');
 		}
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
-			callback,
+			(payload) => {
+				console.log(payload);
+			},
 			(e) => {
 				throw new Error(e.message);
 			}
