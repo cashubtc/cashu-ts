@@ -49,6 +49,7 @@ export class WSConnection {
 			};
 		});
 	}
+
 	sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
 	sendRequest(method: 'unsubscribe', params: { subId: string }): void;
 	sendRequest(method: 'subscribe' | 'unsubscribe', params: Partial<JsonRpcReqParams>) {
@@ -67,7 +68,8 @@ export class WSConnection {
 		(this.subListeners[subId] = this.subListeners[subId] || []).push(callback);
 	}
 
-	addRpcListener(
+	//TODO: Move to RPCManagerClass
+	private addRpcListener(
 		callback: () => any,
 		errorCallback: (e: JsonRpcErrorObject) => any,
 		id: Exclude<RpcSubId, null>
@@ -75,11 +77,12 @@ export class WSConnection {
 		this.rpcListeners[id] = { callback, errorCallback };
 	}
 
-	removeRpcListener(id: Exclude<RpcSubId, null>) {
+	//TODO: Move to RPCManagerClass
+	private removeRpcListener(id: Exclude<RpcSubId, null>) {
 		delete this.rpcListeners[id];
 	}
 
-	removeListener(subId: string, callback: (payload: any) => any) {
+	private removeListener(subId: string, callback: (payload: any) => any) {
 		(this.subListeners[subId] = this.subListeners[subId] || []).filter((fn) => fn !== callback);
 	}
 
@@ -89,7 +92,7 @@ export class WSConnection {
 		}
 	}
 
-	handleNextMesage() {
+	private handleNextMesage() {
 		if (this.messageQueue.size === 0) {
 			clearInterval(this.handlingInterval);
 			this.handlingInterval = undefined;
@@ -111,7 +114,6 @@ export class WSConnection {
 				}
 			} else if ('method' in parsed) {
 				if ('id' in parsed) {
-					// This is a request
 					// Do nothing as mints should not send requests
 				} else {
 					const subId = parsed.params.subId;
@@ -122,7 +124,6 @@ export class WSConnection {
 						const notification = parsed as JsonRpcNotification;
 						this.subListeners[subId].forEach((cb) => cb(notification.params.payload));
 					}
-					// This is a notification
 				}
 			}
 		} catch (e) {
