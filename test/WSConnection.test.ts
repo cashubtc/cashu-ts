@@ -1,17 +1,11 @@
 import { WSConnection, injectWebSocketImpl } from '../src/WSConnection';
+import { CashuMint, CashuWallet } from '../src/index';
 
 describe('testing WSConnection', () => {
 	test('connecting...', async () => {
 		injectWebSocketImpl(require('ws'));
-		const ws = new WSConnection('https://echo.websocket.org/');
-		await ws.connect();
-		const sub = ws.subscribe('check_proof');
-		await new Promise((res) => {
-			// @ts-ignore
-			sub.onmessage((e) => {
-				console.log(e);
-				res(e);
-			});
-		});
+		const wallet = new CashuWallet(new CashuMint('ws://localhost:3338'));
+		const quote = await wallet.getMintQuote(21);
+		console.log(quote);
 	});
 });
