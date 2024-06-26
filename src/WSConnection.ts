@@ -33,9 +33,11 @@ export class WSConnection {
 
 	connect() {
 		return new Promise((res, rej) => {
+			console.log('running connect');
 			try {
 				this.ws = new _WS(this.url);
 			} catch (err) {
+				console.log(err);
 				rej(err);
 				return;
 			}
@@ -56,7 +58,6 @@ export class WSConnection {
 		const id = this.rpcId;
 		this.rpcId++;
 		const message = JSON.stringify({ jsonrpc: '2.0', method, params, id });
-		console.log(message);
 		this.ws?.send(message);
 	}
 
@@ -120,7 +121,7 @@ export class WSConnection {
 					if (!subId) {
 						return;
 					}
-					if (this.subListeners[subId].length > 0) {
+					if (this.subListeners[subId]?.length > 0) {
 						const notification = parsed as JsonRpcNotification;
 						this.subListeners[subId].forEach((cb) => cb(notification.params.payload));
 					}
@@ -150,8 +151,8 @@ export class WSConnection {
 			},
 			this.rpcId
 		);
-		this.rpcId++;
 		this.sendRequest('subscribe', { ...params, subId });
+		this.rpcId++;
 		return subId;
 	}
 
