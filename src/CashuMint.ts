@@ -449,7 +449,11 @@ class CashuMint {
 			this.ws = new WSConnection(
 				`${mintUrl.protocol === 'https' ? 'wss' : 'ws'}://${mintUrl.host}/v1/ws`
 			);
-			await this.ws.connect();
+			try {
+				await this.ws.connect();
+			} catch (e) {
+				throw new Error('Failed to connect to WebSocket...');
+			}
 		}
 	}
 	get webSocketConnection() {

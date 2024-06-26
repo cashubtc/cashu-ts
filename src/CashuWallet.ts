@@ -863,22 +863,38 @@ class CashuWallet {
 		return states;
 	}
 
-	async onQuotePaid(quoteId: string, callback: (payload: any) => any) {
-		await this.mint.connectWebSocket();
+	async onQuotePaid(
+		quoteId: string,
+		callback: (payload: any) => any,
+		errorCallback: (e: Error) => void
+	) {
+		try {
+			await this.mint.connectWebSocket();
+		} catch (e) {
+			console.log('caught in quote paid');
+			if (e instanceof Error) {
+				return errorCallback(e);
+			} else if (e) {
+				return errorCallback(new Error('Something went wrong'));
+			}
+		}
 		if (!this.mint.webSocketConnection) {
 			throw new Error('failed to establish WebSocket connection.');
 		}
+		const subCallback = (payload: any) => {
+			if (payload.paid) {
+				callback(payload);
+			}
+		};
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
-			(payload) => {
-				console.log(payload);
-			},
-			(e) => {
-				throw new Error(e.message);
+			subCallback,
+			(e: Error) => {
+				errorCallback(e);
 			}
 		);
 		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+			this.mint.webSocketConnection?.cancelSubscription(subId, subCallback);
 		};
 	}
 
