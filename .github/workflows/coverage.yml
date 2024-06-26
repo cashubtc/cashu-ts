@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+      - staging
 
 jobs:
   build:
@@ -29,5 +30,5 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          destination_dir: coverage
+          destination_dir: coverage/${{ github.head_ref || github.ref_name }}
           publish_dir: ./coverage/lcov-report

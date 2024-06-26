@@ -35,6 +35,7 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md)
 - [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
 - [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
+- [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
 
 Supported token formats:
 
@@ -59,8 +60,8 @@ import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 
 const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
-const request = await wallet.getMintQuote(64);
-const tokens = await wallet.mintTokens(64, request.quote);
+const mintQuote = await wallet.mintQuote(64);
+const tokens = await wallet.mintTokens(64, mintQuote.quote);
 ```
 
 ## Contribute

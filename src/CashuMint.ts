@@ -9,8 +9,8 @@ import type {
 	PostRestoreResponse,
 	MintQuoteResponse,
 	SerializedBlindedMessage,
-	SplitPayload,
-	SplitResponse,
+	SwapPayload,
+	SwapResponse,
 	MintQuotePayload,
 	MintPayload,
 	MintResponse,
@@ -56,12 +56,47 @@ class CashuMint {
 	async getInfo(): Promise<GetInfoResponse> {
 		return CashuMint.getInfo(this._mintUrl, this._customRequest);
 	}
+
 	/**
-	 * Starts a minting process by requesting an invoice from the mint
+	 * Performs a swap operation with ecash inputs and outputs.
 	 * @param mintUrl
-	 * @param amount Amount requesting for mint.
+	 * @param swapPayload payload containing inputs and outputs
 	 * @param customRequest
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * @returns signed outputs
+	 */
+	public static async split(
+		mintUrl: string,
+		swapPayload: SwapPayload,
+		customRequest?: typeof request
+	): Promise<SwapResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<SwapResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/swap'),
+			method: 'POST',
+			requestBody: swapPayload
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			throw new Error(data.detail ?? 'bad response');
+		}
+
+		return data;
+	}
+	/**
+	 * Performs a swap operation with ecash inputs and outputs.
+	 * @param swapPayload payload containing inputs and outputs
+	 * @returns signed outputs
+	 */
+	async split(swapPayload: SwapPayload): Promise<SwapResponse> {
+		return CashuMint.split(this._mintUrl, swapPayload, this._customRequest);
+	}
+
+	/**
+	 * Requests a new mint quote from the mint.
+	 * @param mintUrl
+	 * @param mintQuotePayload Payload for creating a new mint quote
+	 * @param customRequest
+	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
 	public static async mintQuote(
 		mintUrl: string,
@@ -75,20 +110,46 @@ class CashuMint {
 			requestBody: mintQuotePayload
 		});
 	}
-
 	/**
-	 * Starts a minting process by requesting an invoice from the mint
-	 * @param amount Amount requesting for mint.
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * Requests a new mint quote from the mint.
+	 * @param mintQuotePayload Payload for creating a new mint quote
+	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
 	async mintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
 		return CashuMint.mintQuote(this._mintUrl, mintQuotePayload, this._customRequest);
 	}
+
 	/**
-	 * Requests the mint to perform token minting after the LN invoice has been paid
+	 * Gets an existing mint quote from the mint.
 	 * @param mintUrl
-	 * @param payloads outputs (Blinded messages) that can be written
-	 * @param hash hash (id) used for by the mint to keep track of wether the invoice has been paid yet
+	 * @param quote Quote ID
+	 * @param customRequest
+	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 */
+	public static async getMintQuote(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request
+	): Promise<MintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		return requestInstance<MintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
+			method: 'GET'
+		});
+	}
+	/**
+	 * Gets an existing mint quote from the mint.
+	 * @param quote Quote ID
+	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 */
+	async getMintQuote(quote: string): Promise<MintQuoteResponse> {
+		return CashuMint.getMintQuote(this._mintUrl, quote, this._customRequest);
+	}
+
+	/**
+	 * Mints new tokens by requesting blind signatures on the provided outputs.
+	 * @param mintUrl
+	 * @param mintPayload Payload containing the outputs to get blind signatures on
 	 * @param customRequest
 	 * @returns serialized blinded signatures
 	 */
@@ -111,14 +172,151 @@ class CashuMint {
 		return data;
 	}
 	/**
-	 * Requests the mint to perform token minting after the LN invoice has been paid
-	 * @param payloads outputs (Blinded messages) that can be written
-	 * @param hash hash (id) used for by the mint to keep track of wether the invoice has been paid yet
+	 * Mints new tokens by requesting blind signatures on the provided outputs.
+	 * @param mintPayload Payload containing the outputs to get blind signatures on
 	 * @returns serialized blinded signatures
 	 */
 	async mint(mintPayload: MintPayload) {
 		return CashuMint.mint(this._mintUrl, mintPayload, this._customRequest);
 	}
+
+	/**
+	 * Requests a new melt quote from the mint.
+	 * @param mintUrl
+	 * @param MeltQuotePayload
+	 * @returns
+	 */
+	public static async meltQuote(
+		mintUrl: string,
+		meltQuotePayload: MeltQuotePayload,
+		customRequest?: typeof request
+	): Promise<MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
+			method: 'POST',
+			requestBody: meltQuotePayload
+		});
+
+		if (
+			!isObj(data) ||
+			typeof data?.amount !== 'number' ||
+			typeof data?.fee_reserve !== 'number' ||
+			typeof data?.quote !== 'string'
+		) {
+			throw new Error('bad response');
+		}
+		return data;
+	}
+	/**
+	 * Requests a new melt quote from the mint.
+	 * @param MeltQuotePayload
+	 * @returns
+	 */
+	async meltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+		return CashuMint.meltQuote(this._mintUrl, meltQuotePayload, this._customRequest);
+	}
+
+	/**
+	 * Gets an existing melt quote.
+	 * @param mintUrl
+	 * @param quote Quote ID
+	 * @returns
+	 */
+	public static async getMeltQuote(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request
+	): Promise<MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
+			method: 'GET'
+		});
+
+		if (
+			!isObj(data) ||
+			typeof data?.amount !== 'number' ||
+			typeof data?.fee_reserve !== 'number' ||
+			typeof data?.quote !== 'string'
+		) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+	/**
+	 * Gets an existing melt quote.
+	 * @param quote Quote ID
+	 * @returns
+	 */
+	async getMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+		return CashuMint.getMeltQuote(this._mintUrl, quote, this._customRequest);
+	}
+
+	/**
+	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent. The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can also contain blank outputs in order to receive back overpaid Lightning fees.
+	 * @param mintUrl
+	 * @param meltPayload
+	 * @param customRequest
+	 * @returns
+	 */
+	public static async melt(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request
+	): Promise<MeltResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<MeltResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
+			method: 'POST',
+			requestBody: meltPayload
+		});
+
+		if (
+			!isObj(data) ||
+			typeof data?.paid !== 'boolean' ||
+			(data?.payment_preimage !== null && typeof data?.payment_preimage !== 'string')
+		) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+	/**
+	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
+	 * @param meltPayload
+	 * @returns
+	 */
+	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
+		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest);
+	}
+	/**
+	 * Checks if specific proofs have already been redeemed
+	 * @param mintUrl
+	 * @param checkPayload
+	 * @param customRequest
+	 * @returns redeemed and unredeemed ordered list of booleans
+	 */
+	public static async check(
+		mintUrl: string,
+		checkPayload: CheckStatePayload,
+		customRequest?: typeof request
+	): Promise<CheckStateResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<CheckStateResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/checkstate'),
+			method: 'POST',
+			requestBody: checkPayload
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.states)) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
 	/**
 	 * Get the mints public keys
 	 * @param mintUrl
@@ -182,138 +380,6 @@ class CashuMint {
 		return CashuMint.getKeySets(this._mintUrl, this._customRequest);
 	}
 
-	/**
-	 * Ask mint to perform a split operation
-	 * @param mintUrl
-	 * @param splitPayload data needed for performing a token split
-	 * @param customRequest
-	 * @returns split tokens
-	 */
-	public static async split(
-		mintUrl: string,
-		splitPayload: SplitPayload,
-		customRequest?: typeof request
-	): Promise<SplitResponse> {
-		const requestInstance = customRequest || request;
-		const data = await requestInstance<SplitResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/swap'),
-			method: 'POST',
-			requestBody: splitPayload
-		});
-
-		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			throw new Error(data.detail ?? 'bad response');
-		}
-
-		return data;
-	}
-	/**
-	 * Ask mint to perform a split operation
-	 * @param splitPayload data needed for performing a token split
-	 * @returns split tokens
-	 */
-	async split(splitPayload: SplitPayload): Promise<SplitResponse> {
-		return CashuMint.split(this._mintUrl, splitPayload, this._customRequest);
-	}
-	/**
-	 * Asks the mint for a melt quote
-	 * @param mintUrl
-	 * @param MeltQuotePayload
-	 * @returns
-	 */
-	public static async meltQuote(
-		mintUrl: string,
-		meltQuotePayload: MeltQuotePayload,
-		customRequest?: typeof request
-	): Promise<MeltQuoteResponse> {
-		const requestInstance = customRequest || request;
-		const data = await requestInstance<MeltQuoteResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
-			method: 'POST',
-			requestBody: meltQuotePayload
-		});
-
-		if (
-			!isObj(data) ||
-			typeof data?.amount !== 'number' ||
-			typeof data?.fee_reserve !== 'number' ||
-			typeof data?.quote !== 'string'
-		) {
-			throw new Error('bad response');
-		}
-
-		return data;
-	}
-	/**
-	 * Asks the mint for a melt quote
-	 * @param MeltQuotePayload
-	 * @returns
-	 */
-	async meltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
-		return CashuMint.meltQuote(this._mintUrl, meltQuotePayload, this._customRequest);
-	}
-	/**
-	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
-	 * @param mintUrl
-	 * @param meltPayload
-	 * @param customRequest
-	 * @returns
-	 */
-	public static async melt(
-		mintUrl: string,
-		meltPayload: MeltPayload,
-		customRequest?: typeof request
-	): Promise<MeltResponse> {
-		const requestInstance = customRequest || request;
-		const data = await requestInstance<MeltResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
-			method: 'POST',
-			requestBody: meltPayload
-		});
-
-		if (
-			!isObj(data) ||
-			typeof data?.paid !== 'boolean' ||
-			(data?.payment_preimage !== null && typeof data?.payment_preimage !== 'string')
-		) {
-			throw new Error('bad response');
-		}
-
-		return data;
-	}
-	/**
-	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
-	 * @param meltPayload
-	 * @returns
-	 */
-	async melt(meltPayload: MeltPayload): Promise<MeltResponse> {
-		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest);
-	}
-	/**
-	 * Checks if specific proofs have already been redeemed
-	 * @param mintUrl
-	 * @param checkPayload
-	 * @param customRequest
-	 * @returns redeemed and unredeemed ordered list of booleans
-	 */
-	public static async check(
-		mintUrl: string,
-		checkPayload: CheckStatePayload,
-		customRequest?: typeof request
-	): Promise<CheckStateResponse> {
-		const requestInstance = customRequest || request;
-		const data = await requestInstance<CheckStateResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/checkstate'),
-			method: 'POST',
-			requestBody: checkPayload
-		});
-
-		if (!isObj(data) || !Array.isArray(data?.states)) {
-			throw new Error('bad response');
-		}
-
-		return data;
-	}
 	/**
 	 * Checks if specific proofs have already been redeemed
 	 * @param checkPayload

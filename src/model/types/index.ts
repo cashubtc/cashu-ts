@@ -89,10 +89,6 @@ export type ReceiveTokenEntryResponse = {
 	 * Received proofs
 	 */
 	proofs: Array<Proof>;
-	/**
-	 * Proofs that could not be received. Doesn't throw an error, but if this field is populated it should be handled by the implementation accordingly
-	 */
-	proofsWithError: Array<Proof> | undefined;
 };
 
 /**
@@ -166,6 +162,14 @@ export type MeltQuoteResponse = {
 	 * Fee reserve to be added to the amount
 	 */
 	fee_reserve: number;
+	/**
+	 * Whether the quote has been paid.
+	 */
+	paid: boolean;
+	/**
+	 * Timestamp of when the quote expires
+	 */
+	expiry: number;
 } & ApiError;
 
 /**
@@ -225,7 +229,7 @@ export type MeltTokensResponse = {
 /**
  * Payload that needs to be sent to the mint when performing a split action
  */
-export type SplitPayload = {
+export type SwapPayload = {
 	/**
 	 * Inputs to the split operation
 	 */
@@ -238,7 +242,7 @@ export type SplitPayload = {
 /**
  * Response from the mint after performing a split action
  */
-export type SplitResponse = {
+export type SwapResponse = {
 	/**
 	 * represents the outputs after the split
 	 */
@@ -280,8 +284,22 @@ export type MintQuotePayload = {
  * Response from the mint after requesting a mint
  */
 export type MintQuoteResponse = {
+	/**
+	 * Payment request
+	 */
 	request: string;
+	/**
+	 * Quote ID
+	 */
 	quote: string;
+	/**
+	 * Whether the quote has been paid.
+	 */
+	paid: boolean;
+	/**
+	 * Timestamp of when the quote expires
+	 */
+	expiry: number;
 } & ApiError;
 
 /**

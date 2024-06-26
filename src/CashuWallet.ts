@@ -1,6 +1,5 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
-import * as dhke from './DHKE.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
 	type AmountPreference,
@@ -12,30 +11,38 @@ import {
 	type MeltTokensResponse,
 	type MintPayload,
 	type Proof,
-	type ReceiveResponse,
-	type ReceiveTokenEntryResponse,
 	type MintQuotePayload,
+	type MeltQuotePayload,
 	type SendResponse,
 	type SerializedBlindedMessage,
-	type SplitPayload,
+	type SwapPayload,
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
+	SerializedBlindedSignature,
 	Preferences
 } from './model/types/index.js';
 import {
 	bytesToNumber,
-	cleanToken,
 	getDecodedToken,
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
-import { deriveBlindingFactor, deriveSecret, deriveSeedFromMnemonic } from './secrets.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
+import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
+import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof
+} from '@cashu/crypto/modules/client';
+import {
+	deriveBlindingFactor,
+	deriveSecret,
+	deriveSeedFromMnemonic
+} from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { serializeProof } from '@cashu/crypto/modules/client';
-import { pointFromHex } from './DHKE';
+import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 
 /**
  * Class that represents a Cashu wallet.
@@ -97,7 +104,7 @@ class CashuWallet {
 	}
 
 	/**
-	 * Receive an encoded or raw Cashu token
+	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
 	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
@@ -114,41 +121,23 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 		}
-	): Promise<ReceiveResponse> {
-		let decodedToken: Array<TokenEntry>;
-		if (typeof token === 'string') {
-			decodedToken = cleanToken(getDecodedToken(token)).token;
-		} else {
-			decodedToken = token.token;
-		}
-		const tokenEntries: Array<TokenEntry> = [];
-		const tokenEntriesWithError: Array<TokenEntry> = [];
-		for (const tokenEntry of decodedToken) {
-			if (!tokenEntry?.proofs?.length) {
-				continue;
+	): Promise<Array<Proof>> {
+		try {
+			if (typeof token === 'string') {
+				token = getDecodedToken(token);
 			}
-			try {
-				const { proofs, proofsWithError } = await this.receiveTokenEntry(tokenEntry, {
-					keysetId: options?.keysetId,
-					preference: options?.preference,
-					counter: options?.counter,
-					pubkey: options?.pubkey,
-					privkey: options?.privkey
-				});
-				if (proofsWithError?.length) {
-					tokenEntriesWithError.push(tokenEntry);
-					continue;
-				}
-				tokenEntries.push({ mint: tokenEntry.mint, proofs: [...proofs] });
-			} catch (error) {
-				console.error(error);
-				tokenEntriesWithError.push(tokenEntry);
-			}
+			const tokenEntries: Array<TokenEntry> = token.token;
+			const proofs = await this.receiveTokenEntry(tokenEntries[0], {
+				keysetId: options?.keysetId,
+				preference: options?.preference,
+				counter: options?.counter,
+				pubkey: options?.pubkey,
+				privkey: options?.privkey
+			});
+			return proofs;
+		} catch (error) {
+			throw new Error('Error when receiving');
 		}
-		return {
-			token: { token: tokenEntries },
-			tokensWithErrors: tokenEntriesWithError.length ? { token: tokenEntriesWithError } : undefined
-		};
 	}
 
 	/**
@@ -169,8 +158,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 		}
-	): Promise<ReceiveTokenEntryResponse> {
-		const proofsWithError: Array<Proof> = [];
+	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
@@ -180,7 +168,7 @@ class CashuWallet {
 				preference = getDefaultAmountPreference(amount, keys);
 			}
 			let pref: Preferences = { sendPreference: preference };
-			const { payload, blindedMessages } = this.createSplitPayload(
+			const { payload, blindedMessages } = this.createSwapPayload(
 				amount,
 				tokenEntry.proofs,
 				keys,
@@ -190,7 +178,7 @@ class CashuWallet {
 				options?.privkey
 			);
 			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
-			const newProofs = dhke.constructProofs(
+			const newProofs = this.constructProofs(
 				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
@@ -198,13 +186,9 @@ class CashuWallet {
 			);
 			proofs.push(...newProofs);
 		} catch (error) {
-			console.error(error);
-			proofsWithError.push(...tokenEntry.proofs);
+			throw new Error('Error receiving token entry');
 		}
-		return {
-			proofs,
-			proofsWithError: proofsWithError.length ? proofsWithError : undefined
-		};
+		return proofs;
 	}
 
 	/**
@@ -223,11 +207,11 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			keysetId?: string;
 			preference?: Preferences;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
+			keysetId?: string;
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
@@ -254,7 +238,7 @@ class CashuWallet {
 		}
 		if (amount < amountAvailable || options?.preference || options?.pubkey) {
 			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
-			const { payload, blindedMessages } = this.createSplitPayload(
+			const { payload, blindedMessages } = this.createSwapPayload(
 				amountSend,
 				proofsToSend,
 				keyset,
@@ -264,7 +248,7 @@ class CashuWallet {
 				options?.privkey
 			);
 			const { signatures } = await this.mint.split(payload);
-			const proofs = dhke.constructProofs(
+			const proofs = this.constructProofs(
 				signatures,
 				blindedMessages.rs,
 				blindedMessages.secrets,
@@ -320,7 +304,7 @@ class CashuWallet {
 		);
 
 		return {
-			proofs: dhke.constructProofs(promises, validRs, validSecrets, keys)
+			proofs: this.constructProofs(promises, validRs, validSecrets, keys)
 		};
 	}
 
@@ -351,14 +335,23 @@ class CashuWallet {
 	/**
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async getMintQuote(amount: number) {
+	async mintQuote(amount: number) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
 		return await this.mint.mintQuote(mintQuotePayload);
+	}
+
+	/**
+	 * Gets an existing mint quote from the mint.
+	 * @param quote Quote ID
+	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 */
+	async getMintQuote(quote: string) {
+		return await this.mint.getMintQuote(quote);
 	}
 
 	/**
@@ -372,7 +365,7 @@ class CashuWallet {
 		quote: string,
 		options?: {
 			keysetId?: string;
-			amountPreference?: Array<AmountPreference>;
+			preference?: Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
 		}
@@ -381,7 +374,7 @@ class CashuWallet {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			keyset,
-			options?.amountPreference,
+			options?.preference,
 			options?.counter,
 			options?.pubkey
 		);
@@ -391,19 +384,34 @@ class CashuWallet {
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
 		return {
-			proofs: dhke.constructProofs(signatures, rs, secrets, keyset)
+			proofs: this.constructProofs(signatures, rs, secrets, keyset)
 		};
 	}
 
 	/**
 	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.
 	 * @param invoice LN invoice that needs to get a fee estimate
-	 * @returns estimated Fee
+	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async getMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
+	async meltQuote(invoice: string): Promise<MeltQuoteResponse> {
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice
+		};
+		const meltQuote = await this.mint.meltQuote(meltQuotePayload);
 		return meltQuote;
 	}
+
+	/**
+	 * Return an existing melt quote from the mint.
+	 * @param quote ID of the melt quote
+	 * @returns the mint will return an existing melt quote
+	 */
+	async getMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+		const meltQuote = await this.mint.getMeltQuote(quote);
+		return meltQuote;
+	}
+
 	/**
 	 * Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
 	 * Returns payment proof and change proofs
@@ -439,7 +447,7 @@ class CashuWallet {
 			isPaid: meltResponse.paid ?? false,
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
-				? dhke.constructProofs(meltResponse.change, rs, secrets, keys)
+				? this.constructProofs(meltResponse.change, rs, secrets, keys)
 				: []
 		};
 	}
@@ -509,7 +517,7 @@ class CashuWallet {
 	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
 	 * @returns
 	 */
-	private createSplitPayload(
+	private createSwapPayload(
 		amount: number,
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
@@ -518,7 +526,7 @@ class CashuWallet {
 		pubkey?: string,
 		privkey?: string
 	): {
-		payload: SplitPayload;
+		payload: SwapPayload;
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
@@ -549,7 +557,7 @@ class CashuWallet {
 					};
 				}),
 				privkey
-			).map((p) => serializeProof(p));
+			).map((p: NUT11Proof) => serializeProof(p));
 		}
 
 		// join keepBlindedMessages and sendBlindedMessages
@@ -576,7 +584,7 @@ class CashuWallet {
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p) => dhke.hashToCurve(enc.encode(p.secret)).toHex(true));
+		const Ys = proofs.map((p) => hashToCurve(enc.encode(p.secret)).toHex(true));
 		const payload = {
 			// array of Ys of proofs to check
 			Ys: Ys
@@ -656,7 +664,7 @@ class CashuWallet {
 				secretBytes = new TextEncoder().encode(secretHex);
 			}
 			secrets.push(secretBytes);
-			const { B_, r } = dhke.blindMessage(secretBytes, deterministicR);
+			const { B_, r } = blindMessage(secretBytes, deterministicR);
 			rs.push(r);
 			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
@@ -685,6 +693,31 @@ class CashuWallet {
 		const amounts = count ? Array(count).fill(1) : [];
 		const { blindedMessages, rs, secrets } = this.createBlindedMessages(amounts, keysetId, counter);
 		return { blindedMessages, secrets, rs };
+	}
+
+	/**
+	 * construct proofs from @params promises, @params rs, @params secrets, and @params keyset
+	 * @param promises array of serialized blinded signatures
+	 * @param rs arrays of binding factors
+	 * @param secrets array of secrets
+	 * @param keyset mint keyset
+	 * @returns array of serialized proofs
+	 */
+	private constructProofs(
+		promises: Array<SerializedBlindedSignature>,
+		rs: Array<bigint>,
+		secrets: Array<Uint8Array>,
+		keyset: MintKeys
+	): Array<Proof> {
+		return promises
+			.map((p: SerializedBlindedSignature, i: number) => {
+				const blindSignature = { id: p.id, amount: p.amount, C_: pointFromHex(p.C_) };
+				const r = rs[i];
+				const secret = secrets[i];
+				const A = pointFromHex(keyset.keys[p.amount]);
+				return constructProofFromPromise(blindSignature, r, secret, A);
+			})
+			.map((p) => serializeProof(p) as Proof);
 	}
 }
 
