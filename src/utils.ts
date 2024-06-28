@@ -81,9 +81,9 @@ function getEncodedToken(token: Token): string {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string): Token {
+function getDecodedToken(token: string) {
 	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix) => {
 		if (!token.startsWith(prefix)) {
 			return;
@@ -97,21 +97,29 @@ function getDecodedToken(token: string): Token {
  * @param token
  * @returns
  */
-function handleTokens(token: string): Token {
-	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
-
-	// check if v3
-	if ('token' in obj) {
-		return obj;
+function handleTokens(token: string): Token | undefined {
+	const version = token.slice(0, 1);
+	const encodedToken = token.slice(1);
+	if (version === 'A') {
+		return encodeBase64ToJson<Token>(encodedToken);
+	} else if (version === 'B') {
+		const uInt8Token = encodeBase64toUint8(encodedToken);
+		const tokenData = decode(uInt8Token) as {
+			t: { p: { a: number; s: string; c: string }[]; i: string }[];
+			m: string;
+		};
+		const tokenEntries = tokenData.t.map(
+			(tokenEntry): TokenEntry => ({
+				mint: tokenData.m,
+				proofs: tokenEntry.p.map(
+					(p): Proof => ({ secret: p.s, C: p.c, amount: p.a, id: tokenEntry.i })
+				)
+			})
+		);
+		return { token: tokenEntries, memo: '' };
+	} else {
+		throw new Error('Token version is not supported');
 	}
-
-	// check if v1
-	if (Array.isArray(obj)) {
-		return { token: [{ proofs: obj, mint: '' }] };
-	}
-
-	// if v2 token return v3 format
-	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
 /**
  * Returns the keyset id of a set of keys
