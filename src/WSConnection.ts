@@ -33,16 +33,16 @@ export class WSConnection {
 
 	connect() {
 		return new Promise((res, rej) => {
-			console.log('running connect');
 			try {
 				this.ws = new _WS(this.url);
 			} catch (err) {
-				console.log(err);
 				rej(err);
 				return;
 			}
 			this.ws.onopen = res;
-			this.ws.onerror = rej;
+			this.ws.onerror = (e) => {
+				rej(e);
+			};
 			this.ws.onmessage = (e) => {
 				this.messageQueue.enqueue(e.data);
 				if (!this.handlingInterval) {
@@ -55,6 +55,9 @@ export class WSConnection {
 	sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
 	sendRequest(method: 'unsubscribe', params: { subId: string }): void;
 	sendRequest(method: 'subscribe' | 'unsubscribe', params: Partial<JsonRpcReqParams>) {
+		if (this.ws?.readyState !== 1) {
+			throw new Error('Socket not open...');
+		}
 		const id = this.rpcId;
 		this.rpcId++;
 		const message = JSON.stringify({ jsonrpc: '2.0', method, params, id });

@@ -609,7 +609,6 @@ class CashuWallet {
 		try {
 			await this.mint.connectWebSocket();
 		} catch (e) {
-			console.log('caught in quote paid');
 			if (e instanceof Error) {
 				return errorCallback(e);
 			} else if (e) {
