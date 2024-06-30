@@ -1,8 +1,9 @@
-import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, Proof, Token, TokenV2 } from './model/types/index.js';
+import { encodeBase64ToJson, encodeBase64toUint8, encodeJsonToBase64 } from './base64.js';
+import { AmountPreference, Keys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
+import { decodeCBOR } from './cbor.js';
 
 function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
@@ -104,7 +105,7 @@ function handleTokens(token: string): Token | undefined {
 		return encodeBase64ToJson<Token>(encodedToken);
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
-		const tokenData = decode(uInt8Token) as {
+		const tokenData = decodeCBOR(uInt8Token) as {
 			t: { p: { a: number; s: string; c: string }[]; i: string }[];
 			m: string;
 		};
