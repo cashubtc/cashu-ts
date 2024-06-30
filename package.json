@@ -52,7 +52,6 @@
 		"@noble/hashes": "^1.3.3",
 		"@scure/bip32": "^1.3.3",
 		"@scure/bip39": "^1.2.2",
-		"buffer": "^6.0.3",
-		"cbor-x": "^1.5.9"
+		"buffer": "^6.0.3"
 	}
 }
