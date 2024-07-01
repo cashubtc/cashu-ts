@@ -115,27 +115,15 @@ describe('test decode token', () => {
 	});
 	test('testing v4 Token', () => {
 		const v3Token = {
-			memo: '',
+			memo: 'Thank you',
 			token: [
 				{
-					mint: 'https://mint.minibits.cash/Bitcoin',
+					mint: 'http://localhost:3338',
 					proofs: [
 						{
-							secret: '7e98535c6f8cd7a5eff150963a2743613a91e9498150fd5af8d2bfcfd5babe68',
-							C: '03022a28d163cf63792c1533e6660112f2b75db2fe46aa840e7f5d0f979a2c6cfd',
-							id: '00500550f0494146',
-							amount: 16
-						},
-						{
-							amount: 4,
-							secret: '96bd8480717673311bc70e92818b5babcb665edee39b639defad5584d8d18b1f',
-							C: '030936759e03235867f9cea58f047c043acdd7455f604c92c75839e5e08a91e198',
-							id: '00500550f0494146'
-						},
-						{
-							secret: 'e145fa7fba21a9cd3c8743c9de5e4de33e0095abc50b262f1b3831b69b8f63df',
-							id: '00500550f0494146',
-							C: '03eba391a31e101e1ba1853db1e4bbb6a166d4fbbb1e181e82892c3301e4e02015',
+							secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+							C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+							id: '00ad268c4d1f5826',
 							amount: 1
 						}
 					]
@@ -144,10 +132,45 @@ describe('test decode token', () => {
 		};
 
 		const token =
-			'cashuBuQACYXSBuQACYXCDuQADYWEQYXN4QDdlOTg1MzVjNmY4Y2Q3YTVlZmYxNTA5NjNhMjc0MzYxM2E5MWU5NDk4MTUwZmQ1YWY4ZDJiZmNmZDViYWJlNjhhY3hCMDMwMjJhMjhkMTYzY2Y2Mzc5MmMxNTMzZTY2NjAxMTJmMmI3NWRiMmZlNDZhYTg0MGU3ZjVkMGY5NzlhMmM2Y2ZkuQADYWEEYXN4QDk2YmQ4NDgwNzE3NjczMzExYmM3MGU5MjgxOGI1YmFiY2I2NjVlZGVlMzliNjM5ZGVmYWQ1NTg0ZDhkMThiMWZhY3hCMDMwOTM2NzU5ZTAzMjM1ODY3ZjljZWE1OGYwNDdjMDQzYWNkZDc0NTVmNjA0YzkyYzc1ODM5ZTVlMDhhOTFlMTk4uQADYWEBYXN4QGUxNDVmYTdmYmEyMWE5Y2QzYzg3NDNjOWRlNWU0ZGUzM2UwMDk1YWJjNTBiMjYyZjFiMzgzMWI2OWI4ZjYzZGZhY3hCMDNlYmEzOTFhMzFlMTAxZTFiYTE4NTNkYjFlNGJiYjZhMTY2ZDRmYmJiMWUxODFlODI4OTJjMzMwMWU0ZTAyMDE1YWlwMDA1MDA1NTBmMDQ5NDE0NmFteCJodHRwczovL21pbnQubWluaWJpdHMuY2FzaC9CaXRjb2lu';
+			'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
 
 		const result = utils.getDecodedToken(token);
-		console.log(JSON.stringify(result));
+		expect(result).toStrictEqual(v3Token);
+	});
+	test('testing v4 Token with multi keyset', () => {
+		const v3Token = {
+			memo: '',
+			token: [
+				{
+					mint: 'http://localhost:3338',
+					proofs: [
+						{
+							secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
+							C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
+							id: '00ffd48b8f5ecf80',
+							amount: 1
+						},
+						{
+							secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
+							C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
+							id: '00ad268c4d1f5826',
+							amount: 2
+						},
+						{
+							secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
+							C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
+							id: '00ad268c4d1f5826',
+							amount: 1
+						}
+					]
+				}
+			]
+		};
+
+		const token =
+			'cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA==';
+
+		const result = utils.getDecodedToken(token);
 		expect(result).toStrictEqual(v3Token);
 	});
 	test('testing joining urls', () => {

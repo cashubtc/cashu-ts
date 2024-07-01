@@ -108,21 +108,20 @@ function handleTokens(token: string): Token | undefined {
 		const tokenData = decodeCBOR(uInt8Token) as {
 			t: { p: { a: number; s: string; c: Uint8Array }[]; i: Uint8Array }[];
 			m: string;
+			d: string;
 		};
-		const tokenEntries = tokenData.t.map(
-			(tokenEntry): TokenEntry => ({
-				mint: tokenData.m,
-				proofs: tokenEntry.p.map(
-					(p): Proof => ({
-						secret: p.s,
-						C: bytesToHex(p.c),
-						amount: p.a,
-						id: bytesToHex(tokenEntry.i)
-					})
-				)
+		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
+		tokenData.t.forEach((tokenEntry) =>
+			tokenEntry.p.forEach((p) => {
+				mergedTokenEntry.proofs.push({
+					secret: p.s,
+					C: bytesToHex(p.c),
+					amount: p.a,
+					id: bytesToHex(tokenEntry.i)
+				});
 			})
 		);
-		return { token: tokenEntries, memo: '' };
+		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
 	} else {
 		throw new Error('Token version is not supported');
 	}
