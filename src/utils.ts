@@ -98,7 +98,7 @@ function getDecodedToken(token: string) {
  * @param token
  * @returns
  */
-function handleTokens(token: string): Token | undefined {
+function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
 	const encodedToken = token.slice(1);
 	if (version === 'A') {
