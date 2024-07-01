@@ -106,14 +106,19 @@ function handleTokens(token: string): Token | undefined {
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
 		const tokenData = decodeCBOR(uInt8Token) as {
-			t: { p: { a: number; s: string; c: string }[]; i: string }[];
+			t: { p: { a: number; s: string; c: Uint8Array }[]; i: Uint8Array }[];
 			m: string;
 		};
 		const tokenEntries = tokenData.t.map(
 			(tokenEntry): TokenEntry => ({
 				mint: tokenData.m,
 				proofs: tokenEntry.p.map(
-					(p): Proof => ({ secret: p.s, C: p.c, amount: p.a, id: tokenEntry.i })
+					(p): Proof => ({
+						secret: p.s,
+						C: bytesToHex(p.c),
+						amount: p.a,
+						id: bytesToHex(tokenEntry.i)
+					})
 				)
 			})
 		);
