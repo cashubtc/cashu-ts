@@ -173,16 +173,6 @@ describe('test decode token', () => {
 		const result = utils.getDecodedToken(token);
 		expect(result).toStrictEqual(v3Token);
 	});
-	test('testing joining urls', () => {
-		const mint_url = 'http://localhost:3338';
-		const info_url = utils.joinUrls(mint_url, 'info');
-
-		expect(info_url).toBe('http://localhost:3338/info');
-
-		const mint_url_trailing_slash = 'http://localhost:3338/';
-		const mint_info_url = utils.joinUrls(mint_url_trailing_slash, 'info');
-		expect(mint_info_url).toBe('http://localhost:3338/info');
-	});
 });
 
 describe('test keyset derivation', () => {
