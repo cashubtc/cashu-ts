@@ -20,11 +20,13 @@ function encodeBase64ToJson<T extends object>(base64String: string): T {
 }
 
 function base64urlToBase64(str: string) {
-	return str.replace(/-/g, '+').replace(/_/g, '/').replace(/./g, '=');
+	return str.replace(/-/g, '+').replace(/_/g, '/').split('=')[0]
+	// .replace(/./g, '=');
 }
 
 function base64urlFromBase64(str: string) {
-	return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '.');
+	return str.replace(/\+/g, '-').replace(/\//g, '_').split('=')[0]
+	// .replace(/=/g, '.');
 }
 
 export { encodeUint8toBase64, encodeBase64toUint8, encodeJsonToBase64, encodeBase64ToJson };
