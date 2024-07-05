@@ -79,7 +79,7 @@ describe('test fees', () => {
 			} as MeltQuoteResponse);
 		const wallet = new CashuWallet(mint, { unit });
 
-		const fee = await wallet.getMeltQuote('test');
+		const fee = await wallet.checkMeltQuote('test');
 		const amount = 2000;
 
 		expect(fee.fee_reserve + amount).toEqual(2020);
@@ -242,7 +242,7 @@ describe('payLnInvoice', () => {
 			} as MeltQuoteResponse);
 
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.getMeltQuote('test');
+		const meltQuote = await wallet.checkMeltQuote('test');
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
 
@@ -291,7 +291,7 @@ describe('payLnInvoice', () => {
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.getMeltQuote('test');
+		const meltQuote = await wallet.checkMeltQuote('test');
 		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
 		expect(result.isPaid).toBe(true);
