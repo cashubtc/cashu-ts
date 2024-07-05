@@ -341,12 +341,12 @@ class CashuWallet {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async mintQuote(amount: number) {
+	async createMintQuote(amount: number) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
-		return await this.mint.mintQuote(mintQuotePayload);
+		return await this.mint.postMintQuote(mintQuotePayload);
 	}
 
 	/**
@@ -354,7 +354,7 @@ class CashuWallet {
 	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async getMintQuote(quote: string) {
+	async checkMintQuote(quote: string) {
 		return await this.mint.getMintQuote(quote);
 	}
 
@@ -397,12 +397,12 @@ class CashuWallet {
 	 * @param invoice LN invoice that needs to get a fee estimate
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async meltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
 		};
-		const meltQuote = await this.mint.meltQuote(meltQuotePayload);
+		const meltQuote = await this.mint.postMeltQuote(meltQuotePayload);
 		return meltQuote;
 	}
 
@@ -411,7 +411,7 @@ class CashuWallet {
 	 * @param quote ID of the melt quote
 	 * @returns the mint will return an existing melt quote
 	 */
-	async getMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
 		const meltQuote = await this.mint.getMeltQuote(quote);
 		return meltQuote;
 	}
@@ -476,7 +476,7 @@ class CashuWallet {
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
-			meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
+			meltQuote = await this.mint.postMeltQuote({ unit: this._unit, request: invoice });
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,

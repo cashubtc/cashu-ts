@@ -111,7 +111,7 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
-	public static async mintQuote(
+	public static async postMintQuote(
 		mintUrl: string,
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request
@@ -130,8 +130,8 @@ class CashuMint {
 	 * @param mintQuotePayload Payload for creating a new mint quote
 	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
-	async mintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
-		return CashuMint.mintQuote(this._mintUrl, mintQuotePayload, this._customRequest);
+	async postMintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
+		return CashuMint.postMintQuote(this._mintUrl, mintQuotePayload, this._customRequest);
 	}
 
 	/**
@@ -204,7 +204,7 @@ class CashuMint {
 	 * @param MeltQuotePayload
 	 * @returns
 	 */
-	public static async meltQuote(
+	public static async postMeltQuote(
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: typeof request
@@ -233,8 +233,8 @@ class CashuMint {
 	 * @param MeltQuotePayload
 	 * @returns
 	 */
-	async meltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
-		return CashuMint.meltQuote(this._mintUrl, meltQuotePayload, this._customRequest);
+	async postMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+		return CashuMint.postMeltQuote(this._mintUrl, meltQuotePayload, this._customRequest);
 	}
 
 	/**
