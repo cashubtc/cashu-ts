@@ -72,16 +72,13 @@ describe('testing WSConnection', () => {
 		const server = new Server(fakeUrl, { mock: false });
 		server.on('connection', (socket) => {
 			socket.on('message', (m) => {
-				console.log(m);
 				try {
 					const parsed = JSON.parse(m.toString());
 					if (parsed.method === 'subscribe') {
-						const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}", "id": ${parsed.id}}}`;
-						console.log(message);
+						const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
 						socket.send(message);
 						setTimeout(() => {
 							const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "paid": true, "expiry": 123}}}`;
-							console.log(message);
 							socket.send(message);
 						}, 500);
 					}
@@ -93,17 +90,17 @@ describe('testing WSConnection', () => {
 		const conn = new WSConnection(fakeUrl);
 		await conn.connect();
 
-		await new Promise((res) => {
-			const callback = jest.fn((p) => {
-				console.log('Payload received! ', p);
+		const payload = await new Promise((res) => {
+			const callback = jest.fn((p: any) => {
 				res(p);
 			});
 			const errorCallback = jest.fn();
-			const subId = conn.createSubscription(
+			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['123'] },
 				callback,
 				errorCallback
 			);
 		});
+		expect(payload).toMatchObject({ quote: '123', request: '456', paid: true, expiry: 123 });
 	});
 });
