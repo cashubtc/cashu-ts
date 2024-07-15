@@ -33,7 +33,7 @@ To reduce complexity, simplify error handling and to prepare for token V4, this 
 
 Utility functions now have an `options` object for optional parameters, instead of passing them directly
 
-**`requestMint(amount: number)` --> `mintQuote(amount: number)`**
+**`requestMint(amount: number)` --> `createMintQuote(amount: number)`**
 Now returns the following:
 
 ```typescript
@@ -51,7 +51,7 @@ where `request` is the invoice to be paid, and `quote` is the identifier used to
 
 ---
 
-**`getMeltQuote(invoice: string)`** is now used to get fee estimation and conversion quotes instead of `getFee()` and returns:
+**`createMeltQuote(invoice: string)`** is now used to get fee estimation and conversion quotes instead of `getFee()` and returns:
 
 ```typescript
 type MeltQuoteResponse = {
