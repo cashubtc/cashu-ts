@@ -102,5 +102,6 @@ describe('testing WSConnection', () => {
 			);
 		});
 		expect(payload).toMatchObject({ quote: '123', request: '456', paid: true, expiry: 123 });
+		server.stop();
 	});
 });
