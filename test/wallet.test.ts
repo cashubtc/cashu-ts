@@ -5,6 +5,10 @@ import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js'
 import { getDecodedToken } from '../src/utils.js';
 import { AmountPreference } from '../src/model/types/index';
 import { Proof } from '@cashu/crypto/modules/common';
+import { injectWebSocketImpl } from '../src/WSConnection.js';
+import { Server, WebSocket } from 'mock-socket';
+
+injectWebSocketImpl(WebSocket);
 
 const dummyKeysResp = {
 	keysets: [
@@ -621,5 +625,40 @@ describe('deterministic', () => {
 				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit counter param.'
 			)
 		);
+	});
+});
+
+describe('WebSocket Updates', () => {
+	test('mint update', async () => {
+		const fakeUrl = 'ws://localhost:3338/v1/ws';
+		const server = new Server(fakeUrl, { mock: false });
+		server.on('connection', (socket) => {
+			socket.on('message', (m) => {
+				console.log(m);
+				try {
+					const parsed = JSON.parse(m.toString());
+					if (parsed.method === 'subscribe') {
+						const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
+						socket.send(message);
+						setTimeout(() => {
+							const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "paid": true, "expiry": 123}}}`;
+							socket.send(message);
+						}, 500);
+					}
+				} catch {
+					console.log('Server parsing failed...');
+				}
+			});
+		});
+		const wallet = new CashuWallet(mint);
+		await new Promise((res) => {
+			const callback = (p: any) => {
+				console.log(p);
+				res(p);
+			};
+			const test = wallet.onQuotePaid('123', callback, () => {
+				console.log('error');
+			});
+		});
 	});
 });
