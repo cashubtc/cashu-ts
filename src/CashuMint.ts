@@ -51,8 +51,6 @@ class CashuMint {
 	 * @param customRequest
 	 */
 	public static async getInfo(
-
-
 		mintUrl: string,
 		customRequest?: typeof request
 	): Promise<GetInfoResponse> {
