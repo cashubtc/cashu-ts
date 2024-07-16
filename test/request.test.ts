@@ -2,6 +2,7 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { setGlobalRequestOptions } from '../src/request.js';
+import { MeltQuoteResponse } from '../src/model/types/index.js';
 
 let request: Record<string, string> | undefined;
 const mintUrl = 'https://localhost:3338';
@@ -29,8 +30,10 @@ describe('requests', () => {
 				return {
 					quote: 'test_melt_quote_id',
 					amount: 2000,
-					fee_reserve: 20
-				};
+					fee_reserve: 20,
+					payment_preimage: null,
+					state: 'UNPAID'
+				} as MeltQuoteResponse;
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
@@ -49,8 +52,10 @@ describe('requests', () => {
 				return {
 					quote: 'test_melt_quote_id',
 					amount: 2000,
-					fee_reserve: 20
-				};
+					fee_reserve: 20,
+					payment_preimage: null,
+					state: 'UNPAID'
+				} as MeltQuoteResponse;
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
