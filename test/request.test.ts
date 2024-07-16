@@ -37,7 +37,7 @@ describe('requests', () => {
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
-		await wallet.getMeltQuote('test');
+		await wallet.checkMeltQuote('test');
 
 		expect(request).toBeDefined();
 		// expect(request!['content-type']).toContain('application/json');
@@ -61,7 +61,7 @@ describe('requests', () => {
 		const wallet = new CashuWallet(mint, { unit });
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 
-		await wallet.getMeltQuote('test');
+		await wallet.checkMeltQuote('test');
 
 		expect(request).toBeDefined();
 		expect(request!['x-cashu']).toContain('xyz-123-abc');
