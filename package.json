@@ -18,6 +18,7 @@
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write .",
+		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts"
 	},
 	"keywords": [
