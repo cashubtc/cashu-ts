@@ -10,8 +10,8 @@ export function handleMintQuoteResponseDeprecated(
 ): MintQuoteResponse {
 	// if the response MeltQuoteResponse has a "paid" flag, we monkey patch it to the state enum
 	if (!response.state) {
-		console.warn(
-			"Deprecated field 'paid' found in MintQuoteResponse. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)"
+		console.log(
+			"Field 'state' not found in MintQuoteResponse. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)"
 		);
 	}
 	if (typeof response.paid === 'boolean') {
