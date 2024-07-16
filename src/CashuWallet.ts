@@ -346,7 +346,7 @@ class CashuWallet {
 			unit: this._unit,
 			amount: amount
 		};
-		return await this.mint.postMintQuote(mintQuotePayload);
+		return await this.mint.createMintQuote(mintQuotePayload);
 	}
 
 	/**
@@ -355,7 +355,7 @@ class CashuWallet {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async checkMintQuote(quote: string) {
-		return await this.mint.getMintQuote(quote);
+		return await this.mint.checkMintQuote(quote);
 	}
 
 	/**
@@ -402,7 +402,7 @@ class CashuWallet {
 			unit: this._unit,
 			request: invoice
 		};
-		const meltQuote = await this.mint.postMeltQuote(meltQuotePayload);
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
 	}
 
@@ -412,7 +412,7 @@ class CashuWallet {
 	 * @returns the mint will return an existing melt quote
 	 */
 	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.getMeltQuote(quote);
+		const meltQuote = await this.mint.checkMeltQuote(quote);
 		return meltQuote;
 	}
 
@@ -476,7 +476,7 @@ class CashuWallet {
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
-			meltQuote = await this.mint.postMeltQuote({ unit: this._unit, request: invoice });
+			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
