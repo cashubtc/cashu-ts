@@ -285,17 +285,16 @@ class CashuMint {
 		customRequest?: typeof request
 	): Promise<MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
-		const data = await requestInstance<MeltQuoteResponse>({
+		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
 			method: 'POST',
 			requestBody: meltPayload
 		});
 
+		const data = handleMeltQuoteResponseDeprecated(response);
+
 		if (
 			!isObj(data) ||
-			typeof data?.amount !== 'number' ||
-			typeof data?.fee_reserve !== 'number' ||
-			typeof data?.quote !== 'string' ||
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
