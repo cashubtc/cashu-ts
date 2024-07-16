@@ -104,6 +104,14 @@ class CashuWallet {
 	}
 
 	/**
+	 * Get information about the mint
+	 * @returns mint info
+	 */
+	async getMintInfo() {
+		return this.mint.getInfo();
+	}
+
+	/**
 	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
 	 * @param {(string|Token)} token - Cashu token
 	 * @param preference optional preference for splitting proofs into specific amounts

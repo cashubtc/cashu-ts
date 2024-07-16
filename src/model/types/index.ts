@@ -476,6 +476,11 @@ export type BlindedMessageData = {
 	rs: Array<bigint>;
 };
 
+export type MintContactInfo = {
+	method: string;
+	info: string;
+};
+
 /**
  * Response from mint at /info endpoint
  */
@@ -485,7 +490,7 @@ export type GetInfoResponse = {
 	version: string;
 	description?: string;
 	description_long?: string;
-	contact: Array<[string, string]>;
+	contact: Array<MintContactInfo>;
 	nuts: {
 		'4': {
 			methods: Array<SwapMethod>;

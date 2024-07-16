@@ -15,7 +15,8 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse
+	MeltQuoteResponse,
+	MintContactInfo
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
@@ -28,6 +29,7 @@ import {
 	MintQuoteResponsePaidDeprecated,
 	handleMintQuoteResponseDeprecated
 } from './legacy/nut-04.js';
+import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
@@ -55,7 +57,11 @@ class CashuMint {
 		customRequest?: typeof request
 	): Promise<GetInfoResponse> {
 		const requestInstance = customRequest || request;
-		return requestInstance<GetInfoResponse>({ endpoint: joinUrls(mintUrl, '/v1/info') });
+		const response = await requestInstance<GetInfoResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/info')
+		});
+		const data = handleMintInfoContactFieldDeprecated(response);
+		return data;
 	}
 	/**
 	 * fetches mints info at the /info endpoint
