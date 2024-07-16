@@ -146,6 +146,12 @@ export type MeltQuotePayload = {
 	request: string;
 };
 
+export enum MeltQuoteState {
+	UNPAID = 'UNPAID',
+	PENDING = 'PENDING',
+	PAID = 'PAID'
+}
+
 /**
  * Response from the mint after requesting a melt quote
  */
@@ -163,13 +169,21 @@ export type MeltQuoteResponse = {
 	 */
 	fee_reserve: number;
 	/**
-	 * Whether the quote has been paid.
+	 * State of the melt quote
 	 */
-	paid: boolean;
+	state: MeltQuoteState;
 	/**
 	 * Timestamp of when the quote expires
 	 */
 	expiry: number;
+	/**
+	 * preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null, depending on which LN-backend the mint uses
+	 */
+	payment_preimage: string | null;
+	/**
+	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
+	 */
+	change?: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 /**
@@ -189,24 +203,6 @@ export type MeltPayload = {
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
-
-/**
- * Response from the mint after paying a lightning invoice (melt)
- */
-export type MeltResponse = {
-	/**
-	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
-	 */
-	paid: boolean;
-	/**
-	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
-	 */
-	payment_preimage: string | null;
-	/**
-	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
-	 */
-	change?: Array<SerializedBlindedSignature>;
-} & ApiError;
 
 /**
  * Response after paying a Lightning invoice
@@ -280,6 +276,13 @@ export type MintQuotePayload = {
 	 */
 	amount: number;
 };
+
+export enum MintQuoteState {
+	UNPAID = 'UNPAID',
+	PAID = 'PAID',
+	ISSUED = 'ISSUED'
+}
+
 /**
  * Response from the mint after requesting a mint
  */
@@ -293,9 +296,9 @@ export type MintQuoteResponse = {
 	 */
 	quote: string;
 	/**
-	 * Whether the quote has been paid.
+	 * State of the mint quote
 	 */
-	paid: boolean;
+	state: MintQuoteState;
 	/**
 	 * Timestamp of when the quote expires
 	 */

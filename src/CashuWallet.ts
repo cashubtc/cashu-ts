@@ -19,7 +19,8 @@ import {
 	type Token,
 	type TokenEntry,
 	CheckStateEnum,
-	SerializedBlindedSignature
+	SerializedBlindedSignature,
+	MeltQuoteState
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -447,7 +448,7 @@ class CashuWallet {
 		const meltResponse = await this.mint.melt(meltPayload);
 
 		return {
-			isPaid: meltResponse.paid ?? false,
+			isPaid: meltResponse.state === MeltQuoteState.PAID,
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? this.constructProofs(meltResponse.change, rs, secrets, keys)
