@@ -35,11 +35,15 @@ beforeEach(() => {
 
 describe('test fees', () => {
 	test('test melt quote fees', async () => {
-		nock(mintUrl).get('/v1/melt/quote/bolt11/test').reply(200, {
-			quote: 'test_melt_quote_id',
-			amount: 2000,
-			fee_reserve: 20
-		});
+		nock(mintUrl)
+			.get('/v1/melt/quote/bolt11/test')
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: null,
+				state: 'UNPAID'
+			} as MeltQuoteResponse);
 		const wallet = new CashuWallet(mint, { unit });
 
 		const fee = await wallet.getMeltQuote('test');
@@ -187,15 +191,29 @@ describe('payLnInvoice', () => {
 	test('test payLnInvoice base case', async () => {
 		nock(mintUrl)
 			.get('/v1/melt/quote/bolt11/test')
-			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 0 });
-		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: null,
+				state: 'PAID'
+			} as MeltQuoteResponse);
+		nock(mintUrl)
+			.post('/v1/melt/bolt11')
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: null,
+				state: 'PAID'
+			} as MeltQuoteResponse);
 
 		const wallet = new CashuWallet(mint, { unit });
 		const meltQuote = await wallet.getMeltQuote('test');
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
 
-		expect(result).toEqual({ isPaid: true, preimage: '', change: [] });
+		expect(result).toEqual({ isPaid: true, preimage: null, change: [] });
 	});
 	test('test payLnInvoice change', async () => {
 		nock.cleanAll();
@@ -215,12 +233,21 @@ describe('payLnInvoice', () => {
 			});
 		nock(mintUrl)
 			.get('/v1/melt/quote/bolt11/test')
-			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 2 });
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: 'asd',
+				state: 'PAID'
+			} as MeltQuoteResponse);
 		nock(mintUrl)
 			.post('/v1/melt/bolt11')
 			.reply(200, {
-				paid: true,
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
 				payment_preimage: 'asd',
+				state: 'PAID',
 				change: [
 					{
 						id: '009a1f293253e41e',
