@@ -29,6 +29,7 @@ import {
 	MintQuoteResponsePaidDeprecated,
 	handleMintQuoteResponseDeprecated
 } from './legacy/nut-04.js';
+import { handeMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
@@ -56,27 +57,10 @@ class CashuMint {
 		customRequest?: typeof request
 	): Promise<GetInfoResponse> {
 		const requestInstance = customRequest || request;
-		const data = await requestInstance<GetInfoResponse>({
+		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/info')
 		});
-		// BEGIN DEPRECATED
-		// Monkey patch old contact field ["email", "me@mail.com"] Array<[string, string]>; to new contact field [{method: "email", info: "me@mail.com"}] Array<MintContactInfo>
-		// This is to maintain backwards compatibility with older versions of the mint
-		if (Array.isArray(data?.contact) && data?.contact.length > 0) {
-			data.contact = data.contact.map((contact: MintContactInfo) => {
-				if (
-					Array.isArray(contact) &&
-					contact.length === 2 &&
-					typeof contact[0] === 'string' &&
-					typeof contact[1] === 'string'
-				) {
-					return { method: contact[0], info: contact[1] } as MintContactInfo;
-				}
-				return contact;
-			});
-		}
-		// END DEPRECATED
-
+		const data = handeMintInfoContactFieldDeprecated(response);
 		return data;
 	}
 	/**
