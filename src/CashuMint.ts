@@ -29,7 +29,7 @@ import {
 	MintQuoteResponsePaidDeprecated,
 	handleMintQuoteResponseDeprecated
 } from './legacy/nut-04.js';
-import { handeMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
+import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
@@ -60,7 +60,7 @@ class CashuMint {
 		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/info')
 		});
-		const data = handeMintInfoContactFieldDeprecated(response);
+		const data = handleMintInfoContactFieldDeprecated(response);
 		return data;
 	}
 	/**
