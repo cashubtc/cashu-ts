@@ -2,6 +2,7 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { setGlobalRequestOptions } from '../src/request.js';
+import { MeltQuoteResponse } from '../src/model/types/index.js';
 
 let request: Record<string, string> | undefined;
 const mintUrl = 'https://localhost:3338';
@@ -29,12 +30,14 @@ describe('requests', () => {
 				return {
 					quote: 'test_melt_quote_id',
 					amount: 2000,
-					fee_reserve: 20
-				};
+					fee_reserve: 20,
+					payment_preimage: null,
+					state: 'UNPAID'
+				} as MeltQuoteResponse;
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
-		await wallet.getMeltQuote('test');
+		await wallet.checkMeltQuote('test');
 
 		expect(request).toBeDefined();
 		// expect(request!['content-type']).toContain('application/json');
@@ -49,14 +52,16 @@ describe('requests', () => {
 				return {
 					quote: 'test_melt_quote_id',
 					amount: 2000,
-					fee_reserve: 20
-				};
+					fee_reserve: 20,
+					payment_preimage: null,
+					state: 'UNPAID'
+				} as MeltQuoteResponse;
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 
-		await wallet.getMeltQuote('test');
+		await wallet.checkMeltQuote('test');
 
 		expect(request).toBeDefined();
 		expect(request!['x-cashu']).toContain('xyz-123-abc');
