@@ -628,7 +628,7 @@ class CashuWallet {
 		});
 	}
 
-	async onQuotePaid(
+	async onMintQuotePaid(
 		quoteId: string,
 		callback: (payload: any) => any,
 		errorCallback: (e: Error) => void

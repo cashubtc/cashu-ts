@@ -656,7 +656,7 @@ describe('WebSocket Updates', () => {
 				console.log(p);
 				res(p);
 			};
-			const test = wallet.onQuotePaid('123', callback, () => {
+			const test = wallet.onMintQuotePaid('123', callback, () => {
 				console.log('error');
 			});
 		});
