@@ -20,7 +20,8 @@ import {
 	type TokenEntry,
 	CheckStateEnum,
 	SerializedBlindedSignature,
-	MeltQuoteState
+	MeltQuoteState,
+	MintQuoteResponse
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -603,7 +604,7 @@ class CashuWallet {
 
 	async onMintQuotePaid(
 		quoteId: string,
-		callback: (payload: any) => any,
+		callback: (payload: MintQuoteResponse) => any,
 		errorCallback: (e: Error) => void
 	) {
 		try {
@@ -618,8 +619,8 @@ class CashuWallet {
 		if (!this.mint.webSocketConnection) {
 			throw new Error('failed to establish WebSocket connection.');
 		}
-		const subCallback = (payload: any) => {
-			if (payload.paid) {
+		const subCallback = (payload: MintQuoteResponse) => {
+			if (payload.state === 'PAID') {
 				callback(payload);
 			}
 		};
