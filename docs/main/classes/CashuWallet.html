@@ -1,0 +1,796 @@
+<!DOCTYPE html><html class="default" lang="en"><head><meta charSet="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>CashuWallet | @cashu/cashu-ts</title><meta name="description" content="Documentation for @cashu/cashu-ts"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/search.js" id="tsd-search-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os"</script><header class="tsd-page-toolbar">
+<div class="tsd-toolbar-contents container">
+<div class="table-cell" id="tsd-search" data-base="..">
+<div class="field"><label for="tsd-search-field" class="tsd-widget tsd-toolbar-icon search no-caption"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M15.7824 13.833L12.6666 10.7177C12.5259 10.5771 12.3353 10.499 12.1353 10.499H11.6259C12.4884 9.39596 13.001 8.00859 13.001 6.49937C13.001 2.90909 10.0914 0 6.50048 0C2.90959 0 0 2.90909 0 6.49937C0 10.0896 2.90959 12.9987 6.50048 12.9987C8.00996 12.9987 9.39756 12.4863 10.5008 11.6239V12.1332C10.5008 12.3332 10.5789 12.5238 10.7195 12.6644L13.8354 15.7797C14.1292 16.0734 14.6042 16.0734 14.8948 15.7797L15.7793 14.8954C16.0731 14.6017 16.0731 14.1267 15.7824 13.833ZM6.50048 10.499C4.29094 10.499 2.50018 8.71165 2.50018 6.49937C2.50018 4.29021 4.28781 2.49976 6.50048 2.49976C8.71001 2.49976 10.5008 4.28708 10.5008 6.49937C10.5008 8.70852 8.71314 10.499 6.50048 10.499Z" fill="var(--color-text)"></path></svg></label><input type="text" id="tsd-search-field" aria-label="Search"/></div>
+<div class="field">
+<div id="tsd-toolbar-links"></div></div>
+<ul class="results">
+<li class="state loading">Preparing search index...</li>
+<li class="state failure">The search index is not available</li></ul><a href="../index.html" class="title">@cashu/cashu-ts</a></div>
+<div class="table-cell" id="tsd-widgets"><a href="#" class="tsd-widget tsd-toolbar-icon menu no-caption" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="2" fill="var(--color-text)"></rect><rect x="1" y="7" width="14" height="2" fill="var(--color-text)"></rect><rect x="1" y="11" width="14" height="2" fill="var(--color-text)"></rect></svg></a></div></div></header>
+<div class="container container-main">
+<div class="col-content">
+<div class="tsd-page-title">
+<ul class="tsd-breadcrumb">
+<li><a href="../modules.html">@cashu/cashu-ts</a></li>
+<li><a href="CashuWallet.html">CashuWallet</a></li></ul>
+<h1>Class CashuWallet</h1></div>
+<section class="tsd-panel tsd-comment">
+<div class="tsd-comment tsd-typography"><p>Class that represents a Cashu wallet.
+This class should act as the entry point for this library</p>
+</div></section>
+<section class="tsd-panel tsd-hierarchy">
+<h4>Hierarchy</h4>
+<ul class="tsd-hierarchy">
+<li><span class="target">CashuWallet</span></li></ul></section><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L51">src/CashuWallet.ts:51</a></li></ul></aside>
+<section class="tsd-panel-group tsd-index-group">
+<section class="tsd-panel tsd-index-panel">
+<details class="tsd-index-content tsd-index-accordion" open><summary class="tsd-accordion-summary tsd-index-summary">
+<h5 class="tsd-index-heading uppercase" role="button" aria-expanded="false" tabIndex=0><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1.5 5.50969L8 11.6609L14.5 5.50969L12.5466 3.66086L8 7.96494L3.45341 3.66086L1.5 5.50969Z" fill="var(--color-text)"></path></svg> Index</h5></summary>
+<div class="tsd-accordion-details">
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading">Constructors</h3>
+<div class="tsd-index-list"><a href="CashuWallet.html#constructor" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="#4D7FFF" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="12" id="icon-512-path"></rect><path d="M11.898 16.1201C11.098 16.1201 10.466 15.8961 10.002 15.4481C9.53803 15.0001 9.30603 14.3841 9.30603 13.6001V9.64012C9.30603 8.85612 9.53803 8.24012 10.002 7.79212C10.466 7.34412 11.098 7.12012 11.898 7.12012C12.682 7.12012 13.306 7.34812 13.77 7.80412C14.234 8.25212 14.466 8.86412 14.466 9.64012H13.386C13.386 9.14412 13.254 8.76412 12.99 8.50012C12.734 8.22812 12.37 8.09212 11.898 8.09212C11.426 8.09212 11.054 8.22412 10.782 8.48812C10.518 8.75212 10.386 9.13212 10.386 9.62812V13.6001C10.386 14.0961 10.518 14.4801 10.782 14.7521C11.054 15.0161 11.426 15.1481 11.898 15.1481C12.37 15.1481 12.734 15.0161 12.99 14.7521C13.254 14.4801 13.386 14.0961 13.386 13.6001H14.466C14.466 14.3761 14.234 14.9921 13.77 15.4481C13.306 15.8961 12.682 16.1201 11.898 16.1201Z" fill="var(--color-text)" id="icon-512-text"></path></svg><span>constructor</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading">Properties</h3>
+<div class="tsd-index-list"><a href="CashuWallet.html#_keys" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="#FF984D" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="12" id="icon-1024-path"></rect><path d="M9.354 16V7.24H12.174C12.99 7.24 13.638 7.476 14.118 7.948C14.606 8.412 14.85 9.036 14.85 9.82C14.85 10.604 14.606 11.232 14.118 11.704C13.638 12.168 12.99 12.4 12.174 12.4H10.434V16H9.354ZM10.434 11.428H12.174C12.646 11.428 13.022 11.284 13.302 10.996C13.59 10.7 13.734 10.308 13.734 9.82C13.734 9.324 13.59 8.932 13.302 8.644C13.022 8.356 12.646 8.212 12.174 8.212H10.434V11.428Z" fill="var(--color-text)" id="icon-1024-text"></path></svg><span>_keys</span></a>
+<a href="CashuWallet.html#_seed" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>_seed</span></a>
+<a href="CashuWallet.html#_unit" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>_unit</span></a>
+<a href="CashuWallet.html#mint" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>mint</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading">Accessors</h3>
+<div class="tsd-index-list"><a href="CashuWallet.html#keys" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="#FF4D4D" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="12" id="icon-262144-path"></rect><path d="M8.85 16L11.13 7.24H12.582L14.85 16H13.758L13.182 13.672H10.53L9.954 16H8.85ZM10.746 12.76H12.954L12.282 10.06C12.154 9.548 12.054 9.12 11.982 8.776C11.91 8.432 11.866 8.208 11.85 8.104C11.834 8.208 11.79 8.432 11.718 8.776C11.646 9.12 11.546 9.544 11.418 10.048L10.746 12.76Z" fill="var(--color-text)" id="icon-262144-text"></path></svg><span>keys</span></a>
+<a href="CashuWallet.html#unit" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-262144-path"></use><use href="#icon-262144-text"></use></svg><span>unit</span></a>
+</div></section>
+<section class="tsd-index-section">
+<h3 class="tsd-index-heading">Methods</h3>
+<div class="tsd-index-list"><a href="CashuWallet.html#checkMeltQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="#FF4DB8" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="12" id="icon-2048-path"></rect><path d="M9.162 16V7.24H10.578L11.514 10.072C11.602 10.328 11.674 10.584 11.73 10.84C11.794 11.088 11.842 11.28 11.874 11.416C11.906 11.28 11.954 11.088 12.018 10.84C12.082 10.584 12.154 10.324 12.234 10.06L13.122 7.24H14.538V16H13.482V12.82C13.482 12.468 13.49 12.068 13.506 11.62C13.53 11.172 13.558 10.716 13.59 10.252C13.622 9.78 13.654 9.332 13.686 8.908C13.726 8.476 13.762 8.1 13.794 7.78L12.366 12.16H11.334L9.894 7.78C9.934 8.092 9.97 8.456 10.002 8.872C10.042 9.28 10.078 9.716 10.11 10.18C10.142 10.636 10.166 11.092 10.182 11.548C10.206 12.004 10.218 12.428 10.218 12.82V16H9.162Z" fill="var(--color-text)" id="icon-2048-text"></path></svg><span>check<wbr/>Melt<wbr/>Quote</span></a>
+<a href="CashuWallet.html#checkMintQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>check<wbr/>Mint<wbr/>Quote</span></a>
+<a href="CashuWallet.html#checkProofsSpent" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>check<wbr/>Proofs<wbr/>Spent</span></a>
+<a href="CashuWallet.html#constructProofs" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>construct<wbr/>Proofs</span></a>
+<a href="CashuWallet.html#createBlankOutputs" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blank<wbr/>Outputs</span></a>
+<a href="CashuWallet.html#createBlindedMessages" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blinded<wbr/>Messages</span></a>
+<a href="CashuWallet.html#createMeltQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Melt<wbr/>Quote</span></a>
+<a href="CashuWallet.html#createMintQuote" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Mint<wbr/>Quote</span></a>
+<a href="CashuWallet.html#createRandomBlindedMessages" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span></a>
+<a href="CashuWallet.html#createSwapPayload" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Swap<wbr/>Payload</span></a>
+<a href="CashuWallet.html#getKeys" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Keys</span></a>
+<a href="CashuWallet.html#getMintInfo" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Mint<wbr/>Info</span></a>
+<a href="CashuWallet.html#meltTokens" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>melt<wbr/>Tokens</span></a>
+<a href="CashuWallet.html#mintTokens" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>mint<wbr/>Tokens</span></a>
+<a href="CashuWallet.html#payLnInvoice" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice</span></a>
+<a href="CashuWallet.html#payLnInvoiceWithToken" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span></a>
+<a href="CashuWallet.html#receive" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>receive</span></a>
+<a href="CashuWallet.html#receiveTokenEntry" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>receive<wbr/>Token<wbr/>Entry</span></a>
+<a href="CashuWallet.html#restore" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>restore</span></a>
+<a href="CashuWallet.html#send" class="tsd-index-link"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>send</span></a>
+<a href="CashuWallet.html#splitReceive" class="tsd-index-link tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>split<wbr/>Receive</span></a>
+</div></section></div></details></section></section>
+<section class="tsd-panel-group tsd-member-group">
+<h2>Constructors</h2>
+<section class="tsd-panel tsd-member"><a id="constructor" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>constructor</span><a href="#constructor" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" id="icon-anchor-a"></path><path d="M10 14a3.5 3.5 0 0 0 5 0l4 -4a3.5 3.5 0 0 0 -5 -5l-.5 .5" id="icon-anchor-b"></path><path d="M14 10a3.5 3.5 0 0 0 -5 0l-4 4a3.5 3.5 0 0 0 5 5l.5 -.5" id="icon-anchor-c"></path></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="constructor.new_CashuWallet"><span class="tsd-kind-constructor-signature">new <wbr/>Cashu<wbr/>Wallet</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">mint</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="CashuWallet.html" class="tsd-signature-type tsd-kind-class">CashuWallet</a><a href="#constructor.new_CashuWallet" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">mint</span>: <a href="CashuMint.html" class="tsd-signature-type tsd-kind-class">CashuMint</a></h5>
+<div class="tsd-comment tsd-typography"><p>Cashu mint instance is used to make api calls</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">keys</span><span class="tsd-signature-symbol">?: </span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">mnemonicOrSeed</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type ">Uint8Array</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">unit</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keys</span><span class="tsd-signature-symbol">?: </span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">mnemonic<wbr/>Or<wbr/>Seed</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type ">Uint8Array</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">unit</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="CashuWallet.html" class="tsd-signature-type tsd-kind-class">CashuWallet</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L64">src/CashuWallet.ts:64</a></li></ul></aside></li></ul></section></section>
+<section class="tsd-panel-group tsd-member-group">
+<h2>Properties</h2>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="_keys" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>_keys</span><a href="#_keys" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">_keys</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L52">src/CashuWallet.ts:52</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="_seed" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>_seed</span><a href="#_seed" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">_seed</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type ">Uint8Array</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L53">src/CashuWallet.ts:53</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="_unit" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>_unit</span><a href="#_unit" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">_unit</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> = &#39;sat&#39;</span></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L54">src/CashuWallet.ts:54</a></li></ul></aside></section>
+<section class="tsd-panel tsd-member"><a id="mint" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>mint</span><a href="#mint" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<div class="tsd-signature"><span class="tsd-kind-property">mint</span><span class="tsd-signature-symbol">:</span> <a href="CashuMint.html" class="tsd-signature-type tsd-kind-class">CashuMint</a></div><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L55">src/CashuWallet.ts:55</a></li></ul></aside></section></section>
+<section class="tsd-panel-group tsd-member-group">
+<h2>Accessors</h2>
+<section class="tsd-panel tsd-member"><a id="keys" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>keys</span><a href="#keys" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature" id="keys.keys-1"><span class="tsd-signature-symbol">get</span> keys<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></li>
+<li class="tsd-description">
+<h4 class="tsd-returns-title">Returns <a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L95">src/CashuWallet.ts:95</a></li></ul></aside></li>
+<li class="tsd-signature" id="keys.keys-2"><span class="tsd-signature-symbol">set</span> keys<span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">keys</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">void</span></li>
+<li class="tsd-description">
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">keys</span>: <a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">void</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L101">src/CashuWallet.ts:101</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="unit" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>unit</span><a href="#unit" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature" id="unit.unit-1"><span class="tsd-signature-symbol">get</span> unit<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span></li>
+<li class="tsd-description">
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">string</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L91">src/CashuWallet.ts:91</a></li></ul></aside></li></ul></section></section>
+<section class="tsd-panel-group tsd-member-group">
+<h2>Methods</h2>
+<section class="tsd-panel tsd-member"><a id="checkMeltQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>check<wbr/>Melt<wbr/>Quote</span><a href="#checkMeltQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="checkMeltQuote.checkMeltQuote-1"><span class="tsd-kind-call-signature">check<wbr/>Melt<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">quote</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#checkMeltQuote.checkMeltQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Return an existing melt quote from the mint.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">quote</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>ID of the melt quote</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will return an existing melt quote</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L414">src/CashuWallet.ts:414</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="checkMintQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>check<wbr/>Mint<wbr/>Quote</span><a href="#checkMintQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="checkMintQuote.checkMintQuote-1"><span class="tsd-kind-call-signature">check<wbr/>Mint<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">quote</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#checkMintQuote.checkMintQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Gets an existing mint quote from the mint.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">quote</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>Quote ID</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will create and return a Lightning invoice for the specified amount</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L357">src/CashuWallet.ts:357</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="checkProofsSpent" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>check<wbr/>Proofs<wbr/>Spent</span><a href="#checkProofsSpent" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="checkProofsSpent.checkProofsSpent-1"><span class="tsd-kind-call-signature">check<wbr/>Proofs<wbr/>Spent</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type tsd-kind-type-parameter">T</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">proofs</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type tsd-kind-type-parameter">T</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span><a href="#checkProofsSpent.checkProofsSpent-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>returns proofs that are already spent (use for keeping wallet state clean)</p>
+</div>
+<section class="tsd-panel">
+<h4>Type Parameters</h4>
+<ul class="tsd-type-parameter-list">
+<li>
+<h4><span class="tsd-kind-type-parameter">T</span><span class="tsd-signature-symbol"> extends </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">secret</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4></li></ul></section>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">proofs</span>: <span class="tsd-signature-type tsd-kind-type-parameter">T</span><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>(only the &#39;Y&#39; field is required)</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type tsd-kind-type-parameter">T</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L589">src/CashuWallet.ts:589</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="constructProofs" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>construct<wbr/>Proofs</span><a href="#constructProofs" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="constructProofs.constructProofs-1"><span class="tsd-kind-call-signature">construct<wbr/>Proofs</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">promises</span>, <span class="tsd-kind-parameter">rs</span>, <span class="tsd-kind-parameter">secrets</span>, <span class="tsd-kind-parameter">keyset</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><a href="#constructProofs.constructProofs-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>construct proofs from</p>
+
+<h3>Params</h3><p>promises,</p>
+
+<h3>Params</h3><p>rs,</p>
+
+<h3>Params</h3><p>secrets, and</p>
+
+<h3>Params</h3><p>keyset</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">promises</span>: <a href="../types/SerializedBlindedSignature.html" class="tsd-signature-type tsd-kind-type-alias">SerializedBlindedSignature</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>array of serialized blinded signatures</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">rs</span>: <span class="tsd-signature-type">bigint</span><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>arrays of binding factors</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">secrets</span>: <span class="tsd-signature-type ">Uint8Array</span><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>array of secrets</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">keyset</span>: <a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h5>
+<div class="tsd-comment tsd-typography"><p>mint keyset</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span></h4><p>array of serialized proofs</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L710">src/CashuWallet.ts:710</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="createBlankOutputs" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Blank<wbr/>Outputs</span><a href="#createBlankOutputs" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="createBlankOutputs.createBlankOutputs-1"><span class="tsd-kind-call-signature">create<wbr/>Blank<wbr/>Outputs</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">feeReserve</span>, <span class="tsd-kind-parameter">keysetId</span>, <span class="tsd-kind-parameter">counter</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><a href="#createBlankOutputs.createBlankOutputs-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates NUT-08 blank outputs (fee returns) for a given fee reserve
+See: <a href="https://github.com/cashubtc/nuts/blob/main/08.md">https://github.com/cashubtc/nuts/blob/main/08.md</a></p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">feeReserve</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>amount to cover with blank outputs</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">keysetId</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>mint keysetId</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">counter</span>: <span class="tsd-signature-type">number</span></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a></h4><p>blinded messages, secrets, and rs</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L687">src/CashuWallet.ts:687</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="createBlindedMessages" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Blinded<wbr/>Messages</span><a href="#createBlindedMessages" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="createBlindedMessages.createBlindedMessages-1"><span class="tsd-kind-call-signature">create<wbr/>Blinded<wbr/>Messages</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amounts</span>, <span class="tsd-kind-parameter">keysetId</span>, <span class="tsd-kind-parameter">counter</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">pubkey</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><span class="tsd-signature-symbol"> &amp; </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><a href="#createBlindedMessages.createBlindedMessages-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates blinded messages for a according to</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amounts</span>: <span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h5></li>
+<li>
+<h5><span class="tsd-kind-parameter">keysetId</span>: <span class="tsd-signature-type">string</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">counter</span>: <span class="tsd-signature-type">number</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">pubkey</span>: <span class="tsd-signature-type">string</span></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><span class="tsd-signature-symbol"> &amp; </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4><p>blinded messages, secrets, rs, and amounts</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L640">src/CashuWallet.ts:640</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="createMeltQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>create<wbr/>Melt<wbr/>Quote</span><a href="#createMeltQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="createMeltQuote.createMeltQuote-1"><span class="tsd-kind-call-signature">create<wbr/>Melt<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">invoice</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#createMeltQuote.createMeltQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">invoice</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>LN invoice that needs to get a fee estimate</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will create and return a melt quote for the invoice with an amount and fee reserve</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L400">src/CashuWallet.ts:400</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="createMintQuote" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>create<wbr/>Mint<wbr/>Quote</span><a href="#createMintQuote" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="createMintQuote.createMintQuote-1"><span class="tsd-kind-call-signature">create<wbr/>Mint<wbr/>Quote</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#createMintQuote.createMintQuote-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>Amount requesting for mint.</p>
+</div></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MintQuoteResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L344">src/CashuWallet.ts:344</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="createRandomBlindedMessages" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span><a href="#createRandomBlindedMessages" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="createRandomBlindedMessages.createRandomBlindedMessages-1"><span class="tsd-kind-call-signature">create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">keysetId</span>, <span class="tsd-kind-parameter">amountPreference</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">counter</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">pubkey</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><span class="tsd-signature-symbol"> &amp; </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><a href="#createRandomBlindedMessages.createRandomBlindedMessages-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates blinded messages for a given amount</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>amount to create blinded messages for</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">keysetId</span>: <span class="tsd-signature-type">string</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">amountPreference</span>: <a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>optional preference for splitting proofs into specific amounts. overrides amount param</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">counter</span>: <span class="tsd-signature-type">number</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">pubkey</span>: <span class="tsd-signature-type">string</span></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <a href="../types/BlindedMessageData.html" class="tsd-signature-type tsd-kind-type-alias">BlindedMessageData</a><span class="tsd-signature-symbol"> &amp; </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4><p>blinded messages, secrets, rs, and amounts</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L621">src/CashuWallet.ts:621</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="createSwapPayload" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>create<wbr/>Swap<wbr/>Payload</span><a href="#createSwapPayload" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="createSwapPayload.createSwapPayload-1"><span class="tsd-kind-call-signature">create<wbr/>Swap<wbr/>Payload</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">proofsToSend</span>, <span class="tsd-kind-parameter">keyset</span>, <span class="tsd-kind-parameter">preference</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">counter</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">pubkey</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">privkey</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SwapPayload.html" class="tsd-signature-type tsd-kind-type-alias">SwapPayload</a><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><a href="#createSwapPayload.createSwapPayload-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Creates a split payload</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>amount to send</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">proofsToSend</span>: <a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>proofs to split*</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">keyset</span>: <a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">preference</span>: <a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>optional preference for splitting proofs into specific amounts. overrides amount param</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">counter</span>: <span class="tsd-signature-type">number</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">pubkey</span>: <span class="tsd-signature-type">string</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">privkey</span>: <span class="tsd-signature-type">string</span></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SwapPayload.html" class="tsd-signature-type tsd-kind-type-alias">SwapPayload</a><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><span class="tsd-kind-property">blinded<wbr/>Messages</span><span class="tsd-signature-symbol">: </span><a href="../types/BlindedTransaction.html" class="tsd-signature-type tsd-kind-type-alias">BlindedTransaction</a></h5></li>
+<li class="tsd-parameter">
+<h5><span class="tsd-kind-property">payload</span><span class="tsd-signature-symbol">: </span><a href="../types/SwapPayload.html" class="tsd-signature-type tsd-kind-type-alias">SwapPayload</a></h5></li></ul><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L524">src/CashuWallet.ts:524</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="getKeys" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>get<wbr/>Keys</span><a href="#getKeys" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="getKeys.getKeys-1"><span class="tsd-kind-call-signature">get<wbr/>Keys</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">keysetId</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">unit</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a><span class="tsd-signature-symbol">&gt;</span><a href="#getKeys.getKeys-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Initialize the wallet with the mints public keys</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">keysetId</span>: <span class="tsd-signature-type">string</span></h5></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">unit</span>: <span class="tsd-signature-type">string</span></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MintKeys.html" class="tsd-signature-type tsd-kind-type-alias">MintKeys</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L318">src/CashuWallet.ts:318</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="getMintInfo" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>get<wbr/>Mint<wbr/>Info</span><a href="#getMintInfo" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="getMintInfo.getMintInfo-1"><span class="tsd-kind-call-signature">get<wbr/>Mint<wbr/>Info</span><span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/GetInfoResponse.html" class="tsd-signature-type tsd-kind-type-alias">GetInfoResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#getMintInfo.getMintInfo-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Get information about the mint</p>
+</div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/GetInfoResponse.html" class="tsd-signature-type tsd-kind-type-alias">GetInfoResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>mint info</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L110">src/CashuWallet.ts:110</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="meltTokens" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>melt<wbr/>Tokens</span><a href="#meltTokens" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="meltTokens.meltTokens-1"><span class="tsd-kind-call-signature">melt<wbr/>Tokens</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">meltQuote</span>, <span class="tsd-kind-parameter">proofsToSend</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#meltTokens.meltTokens-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
+Returns payment proof and change proofs</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">meltQuote</span>: <a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a></h5>
+<div class="tsd-comment tsd-typography"><p>ID of the melt quote</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">proofsToSend</span>: <a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>proofs to melt</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L428">src/CashuWallet.ts:428</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="mintTokens" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>mint<wbr/>Tokens</span><a href="#mintTokens" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="mintTokens.mintTokens-1"><span class="tsd-kind-call-signature">mint<wbr/>Tokens</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">quote</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">proofs</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span><a href="#mintTokens.mintTokens-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Mint tokens for a given mint quote</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>amount to request</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">quote</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>ID of mint quote</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">proofs</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4><p>proofs</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L367">src/CashuWallet.ts:367</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="payLnInvoice" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>pay<wbr/>Ln<wbr/>Invoice</span><a href="#payLnInvoice" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="payLnInvoice.payLnInvoice-1"><span class="tsd-kind-call-signature">pay<wbr/>Ln<wbr/>Invoice</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">invoice</span>, <span class="tsd-kind-parameter">proofsToSend</span>, <span class="tsd-kind-parameter">meltQuote</span><span class="tsd-signature-symbol">?</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#payLnInvoice.payLnInvoice-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Helper function that pays a Lightning invoice directly without having to create a melt quote before
+The combined amount of Proofs must match the payment amount including fees.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">invoice</span>: <span class="tsd-signature-type">string</span></h5></li>
+<li>
+<h5><span class="tsd-kind-parameter">proofsToSend</span>: <a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>the exact amount to send including fees</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">meltQuote</span>: <a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a></h5>
+<div class="tsd-comment tsd-typography"><p>melt quote for the invoice</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L469">src/CashuWallet.ts:469</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="payLnInvoiceWithToken" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span><a href="#payLnInvoiceWithToken" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="payLnInvoiceWithToken.payLnInvoiceWithToken-1"><span class="tsd-kind-call-signature">pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">invoice</span>, <span class="tsd-kind-parameter">token</span>, <span class="tsd-kind-parameter">meltQuote</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#payLnInvoiceWithToken.payLnInvoiceWithToken-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Helper function to ingest a Cashu token and pay a Lightning invoice with it.</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">invoice</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>Lightning invoice</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">token</span>: <span class="tsd-signature-type">string</span></h5>
+<div class="tsd-comment tsd-typography"><p>cashu token</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">meltQuote</span>: <a href="../types/MeltQuoteResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltQuoteResponse</a></h5>
+<div class="tsd-comment tsd-typography"><p>melt quote for the invoice</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/MeltTokensResponse.html" class="tsd-signature-type tsd-kind-type-alias">MeltTokensResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L495">src/CashuWallet.ts:495</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="receive" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>receive</span><a href="#receive" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="receive.receive-1"><span class="tsd-kind-call-signature">receive</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">token</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span><a href="#receive.receive-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">token</span>: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><a href="../types/Token.html" class="tsd-signature-type tsd-kind-type-alias">Token</a></h5>
+<div class="tsd-comment tsd-typography"><p>Cashu token</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">privkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">privkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><p>New token with newly created proofs, token entries that had errors</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L123">src/CashuWallet.ts:123</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="receiveTokenEntry" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>receive<wbr/>Token<wbr/>Entry</span><a href="#receiveTokenEntry" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="receiveTokenEntry.receiveTokenEntry-1"><span class="tsd-kind-call-signature">receive<wbr/>Token<wbr/>Entry</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">tokenEntry</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span><a href="#receiveTokenEntry.receiveTokenEntry-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Receive a single cashu token entry</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">tokenEntry</span>: <a href="../types/TokenEntry.html" class="tsd-signature-type tsd-kind-type-alias">TokenEntry</a></h5>
+<div class="tsd-comment tsd-typography"><p>a single entry of a cashu token</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">privkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">privkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4><p>New token entry with newly created proofs, proofs that had errors</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L160">src/CashuWallet.ts:160</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="restore" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>restore</span><a href="#restore" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="restore.restore-1"><span class="tsd-kind-call-signature">restore</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">start</span>, <span class="tsd-kind-parameter">count</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">proofs</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span><a href="#restore.restore-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Regenerates</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">start</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>set starting point for count (first cycle for each keyset should usually be 0)</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">count</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>set number of blinded messages that should be generated</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">proofs</span><span class="tsd-signature-symbol">: </span><a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><span class="tsd-signature-symbol">&gt;</span></h4><p>proofs</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L287">src/CashuWallet.ts:287</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member"><a id="send" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><span>send</span><a href="#send" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures">
+<li class="tsd-signature tsd-anchor-link" id="send.send-1"><span class="tsd-kind-call-signature">send</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">proofs</span>, <span class="tsd-kind-parameter">options</span><span class="tsd-signature-symbol">?</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/SendResponse.html" class="tsd-signature-type tsd-kind-type-alias">SendResponse</a><span class="tsd-signature-symbol">&gt;</span><a href="#send.send-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-comment tsd-typography"><p>Splits and creates sendable tokens
+if no amount is specified, the amount is implied by the cumulative amount of all proofs
+if both amount and preference are set, but the preference cannot fulfill the amount, then we use the default split</p>
+</div>
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5>
+<div class="tsd-comment tsd-typography"><p>amount to send while performing the optimal split (least proofs possible). can be set to undefined if preference is set</p>
+</div></li>
+<li>
+<h5><span class="tsd-kind-parameter">proofs</span>: <a href="../types/Proof.html" class="tsd-signature-type tsd-kind-type-alias">Proof</a><span class="tsd-signature-symbol">[]</span></h5>
+<div class="tsd-comment tsd-typography"><p>proofs matching that amount</p>
+</div></li>
+<li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-parameter">options</span>: <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">keysetId</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">privkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h5>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">counter</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keyset<wbr/>Id</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">preference</span><span class="tsd-signature-symbol">?: </span><a href="../types/AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">privkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li>
+<li class="tsd-parameter">
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">pubkey</span><span class="tsd-signature-symbol">?: </span><span class="tsd-signature-type">string</span></h5></li></ul></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type ">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../types/SendResponse.html" class="tsd-signature-type tsd-kind-type-alias">SendResponse</a><span class="tsd-signature-symbol">&gt;</span></h4><p>promise of the change- and send-proofs</p>
+<aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L213">src/CashuWallet.ts:213</a></li></ul></aside></li></ul></section>
+<section class="tsd-panel tsd-member tsd-is-private"><a id="splitReceive" class="tsd-anchor"></a>
+<h3 class="tsd-anchor-link"><code class="tsd-tag ts-flagPrivate">Private</code> <span>split<wbr/>Receive</span><a href="#splitReceive" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></h3>
+<ul class="tsd-signatures tsd-is-private">
+<li class="tsd-signature tsd-anchor-link" id="splitReceive.splitReceive-1"><span class="tsd-kind-call-signature">split<wbr/>Receive</span><span class="tsd-signature-symbol">(</span><span class="tsd-kind-parameter">amount</span>, <span class="tsd-kind-parameter">amountAvailable</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amountKeep</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">amountSend</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span><a href="#splitReceive.splitReceive-1" aria-label="Permalink" class="tsd-anchor-icon"><svg class="icon icon-tabler icon-tabler-link" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round"><use href="#icon-anchor-a"></use><use href="#icon-anchor-b"></use><use href="#icon-anchor-c"></use></svg></a></li>
+<li class="tsd-description">
+<div class="tsd-parameters">
+<h4 class="tsd-parameters-title">Parameters</h4>
+<ul class="tsd-parameter-list">
+<li>
+<h5><span class="tsd-kind-parameter">amount</span>: <span class="tsd-signature-type">number</span></h5></li>
+<li>
+<h5><span class="tsd-kind-parameter">amountAvailable</span>: <span class="tsd-signature-type">number</span></h5></li></ul></div>
+<h4 class="tsd-returns-title">Returns <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amountKeep</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">amountSend</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></h4>
+<ul class="tsd-parameters">
+<li class="tsd-parameter">
+<h5><span class="tsd-kind-property">amount<wbr/>Keep</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span></h5></li>
+<li class="tsd-parameter">
+<h5><span class="tsd-kind-property">amount<wbr/>Send</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span></h5></li></ul><aside class="tsd-sources">
+<ul>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/7c582f9/src/CashuWallet.ts#L603">src/CashuWallet.ts:603</a></li></ul></aside></li></ul></section></section></div>
+<div class="col-sidebar">
+<div class="page-menu">
+<div class="tsd-navigation settings">
+<details class="tsd-index-accordion"><summary class="tsd-accordion-summary">
+<h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4.93896 8.531L12 15.591L19.061 8.531L16.939 6.409L12 11.349L7.06098 6.409L4.93896 8.531Z" fill="var(--color-text)"></path></svg>Settings</h3></summary>
+<div class="tsd-accordion-details">
+<div class="tsd-filter-visibility">
+<h4 class="uppercase">Member Visibility</h4><form>
+<ul id="tsd-filter-options">
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-private" name="private"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Private</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li>
+<li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></form></div>
+<div class="tsd-theme-toggle">
+<h4 class="uppercase">Theme</h4><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div>
+<details open class="tsd-index-accordion tsd-page-navigation"><summary class="tsd-accordion-summary">
+<h3><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4.93896 8.531L12 15.591L19.061 8.531L16.939 6.409L12 11.349L7.06098 6.409L4.93896 8.531Z" fill="var(--color-text)"></path></svg>On This Page</h3></summary>
+<div class="tsd-accordion-details">
+<ul>
+<li><a href="#constructor" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-512-path"></use><use href="#icon-512-text"></use></svg><span>constructor</span></a></li>
+<li><a href="#_keys" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>_keys</span></a></li>
+<li><a href="#_seed" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>_seed</span></a></li>
+<li><a href="#_unit" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>_unit</span></a></li>
+<li><a href="#mint" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-1024-path"></use><use href="#icon-1024-text"></use></svg><span>mint</span></a></li>
+<li><a href="#keys" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-262144-path"></use><use href="#icon-262144-text"></use></svg><span>keys</span></a></li>
+<li><a href="#unit" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-262144-path"></use><use href="#icon-262144-text"></use></svg><span>unit</span></a></li>
+<li><a href="#checkMeltQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>check<wbr/>Melt<wbr/>Quote</span></a></li>
+<li><a href="#checkMintQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>check<wbr/>Mint<wbr/>Quote</span></a></li>
+<li><a href="#checkProofsSpent" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>check<wbr/>Proofs<wbr/>Spent</span></a></li>
+<li><a href="#constructProofs" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>construct<wbr/>Proofs</span></a></li>
+<li><a href="#createBlankOutputs" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blank<wbr/>Outputs</span></a></li>
+<li><a href="#createBlindedMessages" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Blinded<wbr/>Messages</span></a></li>
+<li><a href="#createMeltQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Melt<wbr/>Quote</span></a></li>
+<li><a href="#createMintQuote" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Mint<wbr/>Quote</span></a></li>
+<li><a href="#createRandomBlindedMessages" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Random<wbr/>Blinded<wbr/>Messages</span></a></li>
+<li><a href="#createSwapPayload" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>create<wbr/>Swap<wbr/>Payload</span></a></li>
+<li><a href="#getKeys" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Keys</span></a></li>
+<li><a href="#getMintInfo" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>get<wbr/>Mint<wbr/>Info</span></a></li>
+<li><a href="#meltTokens" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>melt<wbr/>Tokens</span></a></li>
+<li><a href="#mintTokens" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>mint<wbr/>Tokens</span></a></li>
+<li><a href="#payLnInvoice" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice</span></a></li>
+<li><a href="#payLnInvoiceWithToken" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>pay<wbr/>Ln<wbr/>Invoice<wbr/>With<wbr/>Token</span></a></li>
+<li><a href="#receive" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>receive</span></a></li>
+<li><a href="#receiveTokenEntry" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>receive<wbr/>Token<wbr/>Entry</span></a></li>
+<li><a href="#restore" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>restore</span></a></li>
+<li><a href="#send" class=""><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>send</span></a></li>
+<li><a href="#splitReceive" class="tsd-is-private"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-2048-path"></use><use href="#icon-2048-text"></use></svg><span>split<wbr/>Receive</span></a></li></ul></div></details></div>
+<div class="site-menu">
+<nav class="tsd-navigation"><a href="../modules.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="var(--color-ts-namespace)" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="6" id="icon-4-path"></rect><path d="M9.33 16V7.24H10.77L13.446 14.74C13.43 14.54 13.41 14.296 13.386 14.008C13.37 13.712 13.354 13.404 13.338 13.084C13.33 12.756 13.326 12.448 13.326 12.16V7.24H14.37V16H12.93L10.266 8.5C10.282 8.692 10.298 8.936 10.314 9.232C10.33 9.52 10.342 9.828 10.35 10.156C10.366 10.476 10.374 10.784 10.374 11.08V16H9.33Z" fill="var(--color-text)" id="icon-4-text"></path></svg><span>@cashu/cashu-<wbr/>ts</span></a>
+<ul class="tsd-small-nested-navigation">
+<li><a href="../enums/CheckStateEnum.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="var(--color-ts-enum)" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="6" id="icon-8-path"></rect><path d="M9.45 16V7.24H14.49V8.224H10.518V10.936H14.07V11.908H10.518V15.016H14.49V16H9.45Z" fill="var(--color-text)" id="icon-8-text"></path></svg><span>Check<wbr/>State<wbr/>Enum</span></a></li>
+<li><a href="../enums/MeltQuoteState.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-8-path"></use><use href="#icon-8-text"></use></svg><span>Melt<wbr/>Quote<wbr/>State</span></a></li>
+<li><a href="../enums/MintQuoteState.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-8-path"></use><use href="#icon-8-text"></use></svg><span>Mint<wbr/>Quote<wbr/>State</span></a></li>
+<li><a href="CashuMint.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="var(--color-ts-class)" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="6" id="icon-128-path"></rect><path d="M11.898 16.1201C11.098 16.1201 10.466 15.8961 10.002 15.4481C9.53803 15.0001 9.30603 14.3841 9.30603 13.6001V9.64012C9.30603 8.85612 9.53803 8.24012 10.002 7.79212C10.466 7.34412 11.098 7.12012 11.898 7.12012C12.682 7.12012 13.306 7.34812 13.77 7.80412C14.234 8.25212 14.466 8.86412 14.466 9.64012H13.386C13.386 9.14412 13.254 8.76412 12.99 8.50012C12.734 8.22812 12.37 8.09212 11.898 8.09212C11.426 8.09212 11.054 8.22412 10.782 8.48812C10.518 8.75212 10.386 9.13212 10.386 9.62812V13.6001C10.386 14.0961 10.518 14.4801 10.782 14.7521C11.054 15.0161 11.426 15.1481 11.898 15.1481C12.37 15.1481 12.734 15.0161 12.99 14.7521C13.254 14.4801 13.386 14.0961 13.386 13.6001H14.466C14.466 14.3761 14.234 14.9921 13.77 15.4481C13.306 15.8961 12.682 16.1201 11.898 16.1201Z" fill="var(--color-text)" id="icon-128-text"></path></svg><span>Cashu<wbr/>Mint</span></a></li>
+<li><a href="CashuWallet.html" class="current"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-128-path"></use><use href="#icon-128-text"></use></svg><span>Cashu<wbr/>Wallet</span></a></li>
+<li><a href="../types/AmountPreference.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="var(--color-ts-type-alias)" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="6" id="icon-4194304-path"></rect><path d="M11.31 16V8.224H8.91V7.24H14.79V8.224H12.39V16H11.31Z" fill="var(--color-text)" id="icon-4194304-text"></path></svg><span>Amount<wbr/>Preference</span></a></li>
+<li><a href="../types/ApiError.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Api<wbr/>Error</span></a></li>
+<li><a href="../types/BlindedMessageData.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Blinded<wbr/>Message<wbr/>Data</span></a></li>
+<li><a href="../types/BlindedTransaction.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Blinded<wbr/>Transaction</span></a></li>
+<li><a href="../types/CheckStateEntry.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Check<wbr/>State<wbr/>Entry</span></a></li>
+<li><a href="../types/CheckStatePayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Check<wbr/>State<wbr/>Payload</span></a></li>
+<li><a href="../types/CheckStateResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Check<wbr/>State<wbr/>Response</span></a></li>
+<li><a href="../types/GetInfoResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Get<wbr/>Info<wbr/>Response</span></a></li>
+<li><a href="../types/InvoiceData.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Invoice<wbr/>Data</span></a></li>
+<li><a href="../types/Keys.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Keys</span></a></li>
+<li><a href="../types/MeltPayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Melt<wbr/>Payload</span></a></li>
+<li><a href="../types/MeltQuotePayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Melt<wbr/>Quote<wbr/>Payload</span></a></li>
+<li><a href="../types/MeltQuoteResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Melt<wbr/>Quote<wbr/>Response</span></a></li>
+<li><a href="../types/MeltTokensResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Melt<wbr/>Tokens<wbr/>Response</span></a></li>
+<li><a href="../types/MintActiveKeys.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Active<wbr/>Keys</span></a></li>
+<li><a href="../types/MintAllKeysets.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>All<wbr/>Keysets</span></a></li>
+<li><a href="../types/MintContactInfo.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Contact<wbr/>Info</span></a></li>
+<li><a href="../types/MintKeys.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Keys</span></a></li>
+<li><a href="../types/MintKeyset.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Keyset</span></a></li>
+<li><a href="../types/MintPayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Payload</span></a></li>
+<li><a href="../types/MintQuotePayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Quote<wbr/>Payload</span></a></li>
+<li><a href="../types/MintQuoteResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Quote<wbr/>Response</span></a></li>
+<li><a href="../types/MintResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Mint<wbr/>Response</span></a></li>
+<li><a href="../types/PaymentPayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Payment<wbr/>Payload</span></a></li>
+<li><a href="../types/PostRestorePayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Post<wbr/>Restore<wbr/>Payload</span></a></li>
+<li><a href="../types/PostRestoreResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Post<wbr/>Restore<wbr/>Response</span></a></li>
+<li><a href="../types/Proof.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Proof</span></a></li>
+<li><a href="../types/ReceiveResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Receive<wbr/>Response</span></a></li>
+<li><a href="../types/ReceiveTokenEntryResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Receive<wbr/>Token<wbr/>Entry<wbr/>Response</span></a></li>
+<li><a href="../types/SendResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Send<wbr/>Response</span></a></li>
+<li><a href="../types/SerializedBlindedMessage.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Serialized<wbr/>Blinded<wbr/>Message</span></a></li>
+<li><a href="../types/SerializedBlindedSignature.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Serialized<wbr/>Blinded<wbr/>Signature</span></a></li>
+<li><a href="../types/SwapMethod.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Swap<wbr/>Method</span></a></li>
+<li><a href="../types/SwapPayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Swap<wbr/>Payload</span></a></li>
+<li><a href="../types/SwapResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Swap<wbr/>Response</span></a></li>
+<li><a href="../types/Token.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Token</span></a></li>
+<li><a href="../types/TokenEntry.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Token<wbr/>Entry</span></a></li>
+<li><a href="../types/TokenV2.html" class="deprecated"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Token<wbr/>V2</span></a></li>
+<li><a href="../functions/deriveKeysetId.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="var(--color-ts-function)" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="6" id="icon-64-path"></rect><path d="M9.39 16V7.24H14.55V8.224H10.446V11.128H14.238V12.112H10.47V16H9.39Z" fill="var(--color-text)" id="icon-64-text"></path></svg><span>derive<wbr/>Keyset<wbr/>Id</span></a></li>
+<li><a href="../functions/deriveSeedFromMnemonic.html" class="tsd-is-external"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-64-path"></use><use href="#icon-64-text"></use></svg><span>derive<wbr/>Seed<wbr/>From<wbr/>Mnemonic</span></a></li>
+<li><a href="../functions/generateNewMnemonic.html" class="tsd-is-external"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-64-path"></use><use href="#icon-64-text"></use></svg><span>generate<wbr/>New<wbr/>Mnemonic</span></a></li>
+<li><a href="../functions/getDecodedToken.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-64-path"></use><use href="#icon-64-text"></use></svg><span>get<wbr/>Decoded<wbr/>Token</span></a></li>
+<li><a href="../functions/getEncodedToken.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-64-path"></use><use href="#icon-64-text"></use></svg><span>get<wbr/>Encoded<wbr/>Token</span></a></li>
+<li><a href="../functions/setGlobalRequestOptions.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-64-path"></use><use href="#icon-64-text"></use></svg><span>set<wbr/>Global<wbr/>Request<wbr/>Options</span></a></li></ul></nav></div></div></div>
+<div class="tsd-generator">
+<p>Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p></div>
+<div class="overlay"></div></body></html>
