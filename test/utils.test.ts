@@ -1,5 +1,6 @@
 import { AmountPreference } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
+import { PUBKEYS } from './consts.js';
 
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
@@ -58,7 +59,7 @@ describe('test decode token', () => {
 	});
 	test('testing v2 Token', async () => {
 		const token =
-			'eyJwcm9vZnMiOlt7ImlkIjoiSTJ5TitpUllma3pUIiwiYW1vdW50IjoxLCJzZWNyZXQiOiI5N3pmbW1hR2Y1azhNZzBnYWpwbmJtcGVydlR0RWVFOHd3S3JpN3JXcFVzPSIsIkMiOiIwMjE5NTA4MWU2MjJmOThiZmMxOWEwNWViZTIzNDFkOTU1YzBkMTI1ODhjNTk0OGM4NThkMDdhZGVjMDA3YmMxZTQifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovLzgzMzMuc3BhY2U6MzMzOCIsImlkcyI6WyJMM3p4eFJCL0k4dUUiLCJJMnlOK2lSWWZrelQiXX1dfQ';
+			'eyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IkkyeU4raVJZZmt6VCIsImFtb3VudCI6MSwic2VjcmV0IjoiOTd6Zm1tYUdmNWs4TWcwZ2FqcG5ibXBlcnZUdEVlRTh3d0tyaTdyV3BVcz0iLCJDIjoiMDIxOTUwODFlNjIyZjk4YmZjMTlhMDVlYmUyMzQxZDk1NWMwZDEyNTg4YzU5NDhjODU4ZDA3YWRlYzAwN2JjMWU0In1dLCJtaW50IjoiaHR0cDovL2xvY2FsaG9zdDozMzM4In1dfQ';
 
 		const result = utils.getDecodedToken(token);
 		expect(result).toStrictEqual({
@@ -72,14 +73,14 @@ describe('test decode token', () => {
 							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4'
 						}
 					],
-					mint: 'https://8333.space:3338'
+					mint: 'http://localhost:3338'
 				}
 			]
 		});
 	});
 	test('testing v2 Token 2', () => {
 		const token =
-			'eyJwcm9vZnMiOlt7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxLCJzZWNyZXQiOiJreHFYWXBiQ1ZvSXV4NGxtV0lEWHgzb00yLzdLVnNocWpKSUlleHRxTWFVPSIsIkMiOiIwMmE0MjE0MGQxYmJkNTljYTRjNWJhOWViNzNkMDIwZjMxZjY4ZjRlMzA3OGZkM2FmMWVlNjRlYmVjZTUyYjZlZGEifV0sIm1pbnRzIjpbeyJ1cmwiOiJodHRwczovL2xlZ2VuZC5sbmJpdHMuY29tL2Nhc2h1L2FwaS92MS80Z3I5WGNtejNYRWtVTndpQmlRR29DIiwiaWRzIjpbIjBOSTNUVUFzMVNmeSJdfV19';
+			'eyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjBOSTNUVUFzMVNmeSIsImFtb3VudCI6MSwic2VjcmV0Ijoia3hxWFlwYkNWb0l1eDRsbVdJRFh4M29NMi83S1ZzaHFqSklJZXh0cU1hVT0iLCJDIjoiMDJhNDIxNDBkMWJiZDU5Y2E0YzViYTllYjczZDAyMGYzMWY2OGY0ZTMwNzhmZDNhZjFlZTY0ZWJlY2U1MmI2ZWRhIn1dLCJtaW50IjoiaHR0cDovL2xvY2FsaG9zdDozMzM4In1dfQ';
 
 		const result = utils.getDecodedToken(token);
 		expect(result).toStrictEqual({
@@ -93,7 +94,7 @@ describe('test decode token', () => {
 							C: '02a42140d1bbd59ca4c5ba9eb73d020f31f68f4e3078fd3af1ee64ebece52b6eda'
 						}
 					],
-					mint: 'https://legend.lnbits.com/cashu/api/v1/4gr9Xcmz3XEkUNwiBiQGoC'
+					mint: 'http://localhost:3338'
 				}
 			]
 		});
@@ -109,7 +110,7 @@ describe('test decode token', () => {
 describe('test encode token', () => {
 	test('testing v3 Token', async () => {
 		const token =
-			'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJpZCI6IkkyeU4raVJZZmt6VCIsImFtb3VudCI6MSwic2VjcmV0IjoiOTd6Zm1tYUdmNWs4TWcwZ2FqcG5ibXBlcnZUdEVlRTh3d0tyaTdyV3BVcz0iLCJDIjoiMDIxOTUwODFlNjIyZjk4YmZjMTlhMDVlYmUyMzQxZDk1NWMwZDEyNTg4YzU5NDhjODU4ZDA3YWRlYzAwN2JjMWU0In1dfV19';
+			'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
 
 		const obj = {
 			proofs: [
@@ -120,7 +121,7 @@ describe('test encode token', () => {
 					C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4'
 				}
 			],
-			mints: [{ url: 'https://8333.space:3338', ids: ['L3zxxRB/I8uE', 'I2yN+iRYfkzT'] }]
+			mints: [{ url: 'http://localhost:3338', ids: ['L3zxxRB/I8uE', 'I2yN+iRYfkzT'] }]
 		};
 
 		const result = utils.getEncodedToken({
@@ -143,7 +144,7 @@ describe('test decode token', () => {
 							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
 						}
 					],
-					mint: 'https://8333.space:3338'
+					mint: 'http://localhost:3338'
 				}
 			]
 		};
@@ -151,7 +152,7 @@ describe('test decode token', () => {
 		uriPrefixes.forEach((prefix) => {
 			const token =
 				prefix +
-				'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJpZCI6IkkyeU4raVJZZmt6VCIsImFtb3VudCI6MSwic2VjcmV0IjoiOTd6Zm1tYUdmNWs4TWcwZ2FqcG5ibXBlcnZUdEVlRTh3d0tyaTdyV3BVcz0iLCJDIjoiMDIxOTUwODFlNjIyZjk4YmZjMTlhMDVlYmUyMzQxZDk1NWMwZDEyNTg4YzU5NDhjODU4ZDA3YWRlYzAwN2JjMWU0In1dfV19';
+				'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
 
 			const result = utils.getDecodedToken(token);
 			expect(result).toStrictEqual(obj);
@@ -169,148 +170,22 @@ describe('test decode token', () => {
 							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
 						}
 					],
-					mint: 'https://8333.space:3338'
+					mint: 'http://localhost:3338'
 				}
 			]
 		};
 
 		const token =
-			'eyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJpZCI6IkkyeU4raVJZZmt6VCIsImFtb3VudCI6MSwic2VjcmV0IjoiOTd6Zm1tYUdmNWs4TWcwZ2FqcG5ibXBlcnZUdEVlRTh3d0tyaTdyV3BVcz0iLCJDIjoiMDIxOTUwODFlNjIyZjk4YmZjMTlhMDVlYmUyMzQxZDk1NWMwZDEyNTg4YzU5NDhjODU4ZDA3YWRlYzAwN2JjMWU0In1dfV19';
+			'eyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
 		const result = utils.getDecodedToken(token);
 		expect(result).toStrictEqual(obj);
 	});
 });
 
-describe('test cleanToken', () => {
-	test('testing cleanToken no mint', async () => {
-		const obj = {
-			token: [
-				{
-					proofs: [
-						{
-							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-							amount: 1,
-							id: 'I2yN+iRYfkzT',
-							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-						}
-					],
-					mint: ''
-				}
-			]
-		};
-		const result = utils.cleanToken(obj);
-		expect(result).toStrictEqual({ token: [], memo: undefined });
-	});
-	test('testing cleanToken no proofs', async () => {
-		const obj = {
-			token: [
-				{
-					proofs: [],
-					mint: 'test'
-				}
-			]
-		};
-		const result = utils.cleanToken(obj);
-		expect(result).toStrictEqual({ token: [], memo: undefined });
-	});
-	test('testing cleanToken 2 tokenEntries from same mint', async () => {
-		const obj = {
-			token: [
-				{
-					proofs: [
-						{
-							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-							amount: 1,
-							id: 'I2yN+iRYfkzT',
-							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-						}
-					],
-					mint: 'test'
-				},
-				{
-					proofs: [
-						{
-							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-							amount: 1,
-							id: 'I2yN+iRYfkzT',
-							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-						}
-					],
-					mint: 'test'
-				}
-			]
-		};
-		const result = utils.cleanToken(obj);
-
-		expect(result.token).toHaveLength(1);
-		expect(result).toStrictEqual({
-			token: [
-				{
-					mint: 'test',
-					proofs: obj.token.flatMap((x) => x.proofs)
-				}
-			],
-			memo: undefined
-		});
-	});
-	test('testing cleanToken proofs sorted', async () => {
-		const obj = {
-			token: [
-				{
-					proofs: [
-						{
-							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-							amount: 1,
-							id: 'I2yN+iRYfkzT',
-							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-						},
-						{
-							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-							amount: 1,
-							id: 'test',
-							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-						},
-						{
-							C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-							amount: 1,
-							id: 'I2yN+iRYfkzT',
-							secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs='
-						}
-					],
-					mint: 'test'
-				}
-			]
-		};
-		const result = utils.cleanToken(obj);
-		expect(result.token[0].proofs).toHaveLength(3);
-		expect(result.token[0].proofs[0].id).toBe('I2yN+iRYfkzT');
-		expect(result.token[0].proofs[1].id).toBe('I2yN+iRYfkzT');
-		expect(result.token[0].proofs[2].id).toBe('test');
-	});
-	test('testing joining urls', () => {
-		const mint_url = 'https://8333.space:3338';
-		const info_url = utils.joinUrls(mint_url, 'info');
-
-		expect(info_url).toBe('https://8333.space:3338/info');
-
-		const mint_url_trailing_slash = 'https://8333.space:3338/';
-		const mint_info_url = utils.joinUrls(mint_url_trailing_slash, 'info');
-		expect(mint_info_url).toBe('https://8333.space:3338/info');
-	});
-});
-
-describe('test decodeInvoice', () => {
-	test('decoding a lightning invoice', async () => {
-		const invoice =
-			'lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs';
-		const invoiceData = utils.decodeInvoice(invoice);
-		expect(invoiceData.timestamp).toStrictEqual(1651105770);
-		expect(invoiceData.amountInMSats).toStrictEqual(1500000);
-		expect(invoiceData.amountInSats).toStrictEqual(1500);
-		expect(invoiceData.paymentHash).toStrictEqual(
-			'90570c8d3688ad5012aa5ff982606971ae46b3f9df0a100cb15f05f61718f223'
-		);
-		expect(invoiceData.expiry).toStrictEqual(600);
-		expect(invoiceData.memo).toStrictEqual('bolt11.org');
+describe('test keyset derivation', () => {
+	test('derive', () => {
+		const keys = PUBKEYS;
+		const keysetId = utils.deriveKeysetId(keys);
+		expect(keysetId).toBe('009a1f293253e41e');
 	});
 });

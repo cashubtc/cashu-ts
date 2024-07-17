@@ -35,6 +35,7 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md)
 - [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
 - [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
+- [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
 
 Supported token formats:
 
@@ -44,7 +45,7 @@ Supported token formats:
 
 ## Usage
 
-Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage.
+Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
 ### Install
 
@@ -52,34 +53,23 @@ Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage.
 npm i @cashu/cashu-ts
 ```
 
-### Import
+### Example
 
 ```typescript
 import { CashuMint, CashuWallet, getEncodedToken } from '@cashu/cashu-ts';
 
-const wallet = new CashuWallet(new CashuMint('{MINT_URL}'));
-
-const { pr, hash } = await wallet.requestMint(200);
-
-//pay this LN invoice
-console.log({ pr }, { hash });
-
-async function invoiceHasBeenPaid() {
-	const { proofs } = await wallet.requestTokens(200, hash);
-	//Encoded proofs can be spent at the mint
-	const encoded = getEncodedToken({
-		token: [{ mint: '{MINT_URL}', proofs }]
-	});
-	console.log(encoded);
-}
+const mint = new CashuMint(mintUrl);
+const wallet = new CashuWallet(mint);
+const mintQuote = await wallet.mintQuote(64);
+const tokens = await wallet.mintTokens(64, mintQuote.quote);
 ```
 
 ## Contribute
 
 Contributions are very welcome.
 
-If you want to contribute, please open an Issue or a PR. 
-If you open a PR, please do so from the `development` branch as the base branch. 
+If you want to contribute, please open an Issue or a PR.
+If you open a PR, please do so from the `development` branch as the base branch.
 
 ### Version
 
@@ -90,17 +80,17 @@ If you open a PR, please do so from the `development` branch as the base branch.
 | | * `hotfix`
 | |
 | * `staging`
-| |\ 
+| |\
 | |\ \
 | | | * `bugfix`
 | | |
-| | * `development`  
-| | |\ 
+| | * `development`
+| | |\
 | | | * `feature1`
 | | | |
 | | |/
 | | *
-| | |\ 
+| | |\
 | | | * `feature2`
 | | |/
 | |/

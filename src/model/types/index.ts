@@ -21,9 +21,65 @@ export type Proof = {
 };
 
 /**
- * A mints publickey-set.
+ * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
  */
-export type MintKeys = { [k: number]: string };
+export type Keys = { [amount: number]: string };
+
+/**
+ * An array of mint keysets
+ */
+export type MintActiveKeys = {
+	/**
+	 * Keysets
+	 */
+	keysets: Array<MintKeys>;
+};
+
+/**
+ * A mint keyset.
+ */
+export type MintKeys = {
+	/**
+	 * Keyset ID
+	 */
+	id: string;
+	/**
+	 * Unit of the keyset.
+	 */
+	unit: string;
+	/**
+	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+	 */
+	keys: Keys;
+};
+
+/**
+ * An array of mint keyset entries.
+ */
+export type MintAllKeysets = {
+	/**
+	 * Keysets
+	 */
+	keysets: Array<MintKeyset>;
+};
+
+/**
+ * A mint keyset entry.
+ */
+export type MintKeyset = {
+	/**
+	 * Keyset ID
+	 */
+	id: string;
+	/**
+	 * Unit of the keyset.
+	 */
+	unit: string;
+	/**
+	 * Whether the keyset is active or not.
+	 */
+	active: boolean;
+};
 
 /**
  * response when after receiving a single TokenEntry
@@ -33,14 +89,6 @@ export type ReceiveTokenEntryResponse = {
 	 * Received proofs
 	 */
 	proofs: Array<Proof>;
-	/**
-	 * Proofs that could not be received. Doesn't throw an error, but if this field is populated it should be handled by the implementation accordingly
-	 */
-	proofsWithError: Array<Proof> | undefined;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 
 /**
@@ -55,10 +103,6 @@ export type SendResponse = {
 	 * Proofs to be sent, matching the chosen amount
 	 */
 	send: Array<Proof>;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 /**
  * Response when receiving a complete token.
@@ -72,10 +116,6 @@ export type ReceiveResponse = {
 	 * TokenEntries that had errors. No error will be thrown, but clients can choose to handle tokens with errors accordingly.
 	 */
 	tokensWithErrors: Token | undefined;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 
 /**
@@ -93,35 +133,53 @@ export type PaymentPayload = {
 };
 
 /**
- * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
+ * Payload that needs to be send to the mint to request a melt quote
  */
-export type MeltPayload = {
+export type MeltQuotePayload = {
 	/**
-	 * Payment request/Lighting invoice that should get paid by the mint.
+	 * Unit to be melted
 	 */
-	pr: string;
+	unit: string;
 	/**
-	 * Proofs, matching Lightning invoices amount + fees.
+	 * Request to be melted to
 	 */
-	proofs: Array<Proof>;
-	/**
-	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees
-	 */
-	outputs: Array<SerializedBlindedMessage>;
+	request: string;
 };
 
+export enum MeltQuoteState {
+	UNPAID = 'UNPAID',
+	PENDING = 'PENDING',
+	PAID = 'PAID'
+}
+
 /**
- * Response from the mint after paying a lightning invoice (melt)
+ * Response from the mint after requesting a melt quote
  */
-export type MeltResponse = {
+export type MeltQuoteResponse = {
 	/**
-	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
+	 * Quote ID
 	 */
-	paid: boolean;
+	quote: string;
 	/**
-	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
+	 * Amount to be melted
 	 */
-	preimage: string | null;
+	amount: number;
+	/**
+	 * Fee reserve to be added to the amount
+	 */
+	fee_reserve: number;
+	/**
+	 * State of the melt quote
+	 */
+	state: MeltQuoteState;
+	/**
+	 * Timestamp of when the quote expires
+	 */
+	expiry: number;
+	/**
+	 * preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null, depending on which LN-backend the mint uses
+	 */
+	payment_preimage: string | null;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
@@ -129,9 +187,27 @@ export type MeltResponse = {
 } & ApiError;
 
 /**
+ * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
+ */
+export type MeltPayload = {
+	/**
+	 * ID of the melt quote
+	 */
+	quote: string;
+	/**
+	 * Inputs (Proofs) to be melted
+	 */
+	inputs: Array<Proof>;
+	/**
+	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees
+	 */
+	outputs: Array<SerializedBlindedMessage>;
+};
+
+/**
  * Response after paying a Lightning invoice
  */
-export type PayLnInvoiceResponse = {
+export type MeltTokensResponse = {
 	/**
 	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
 	 */
@@ -144,33 +220,29 @@ export type PayLnInvoiceResponse = {
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
 	change: Array<Proof>;
-	/**
-	 * If the mint has rotated keys, this field will be populated with the new keys.
-	 */
-	newKeys?: MintKeys;
 };
 
 /**
  * Payload that needs to be sent to the mint when performing a split action
  */
-export type SplitPayload = {
+export type SwapPayload = {
 	/**
-	 * Proofs to be split
+	 * Inputs to the split operation
 	 */
-	proofs: Array<Proof>;
+	inputs: Array<Proof>;
 	/**
-	 * Fresh blinded messages to be signed by the mint to create the split proofs
+	 * Outputs (blinded messages) to be signed by the mint
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
 /**
  * Response from the mint after performing a split action
  */
-export type SplitResponse = {
+export type SwapResponse = {
 	/**
 	 * represents the outputs after the split
 	 */
-	promises: Array<SerializedBlindedSignature>;
+	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 /**
@@ -191,30 +263,104 @@ export type ApiError = {
 	detail?: string;
 };
 
-export type RequestMintResponse = {
-	pr: string;
-	hash: string;
+/**
+ * Payload that needs to be sent to the mint when requesting a mint
+ */
+export type MintQuotePayload = {
+	/**
+	 * Unit to be minted
+	 */
+	unit: string;
+	/**
+	 * Amount to be minted
+	 */
+	amount: number;
+};
+
+export enum MintQuoteState {
+	UNPAID = 'UNPAID',
+	PAID = 'PAID',
+	ISSUED = 'ISSUED'
+}
+
+/**
+ * Response from the mint after requesting a mint
+ */
+export type MintQuoteResponse = {
+	/**
+	 * Payment request
+	 */
+	request: string;
+	/**
+	 * Quote ID
+	 */
+	quote: string;
+	/**
+	 * State of the mint quote
+	 */
+	state: MintQuoteState;
+	/**
+	 * Timestamp of when the quote expires
+	 */
+	expiry: number;
+} & ApiError;
+
+/**
+ * Payload that needs to be sent to the mint when requesting a mint
+ */
+export type MintPayload = {
+	/**
+	 * Quote ID received from the mint.
+	 */
+	quote: string;
+	/**
+	 * Outputs (blinded messages) to be signed by the mint.
+	 */
+	outputs: Array<SerializedBlindedMessage>;
+};
+/**
+ * Response from the mint after requesting a mint
+ */
+export type MintResponse = {
+	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 /**
  * Payload that needs to be sent to the mint when checking for spendable proofs
  */
-export type CheckSpendablePayload = {
+export type CheckStatePayload = {
 	/**
-	 * array of proofs. Only the secret is strictly needed.
-	 * If the whole object is passed, it will be stripped of other objects before sending it to the mint.
+	 * The Y = hash_to_curve(secret) of the proofs to be checked.
 	 */
-	proofs: Array<{ secret: string }>;
+	Ys: Array<string>;
+};
+
+/**
+ * Enum for the state of a proof
+ */
+export enum CheckStateEnum {
+	UNSPENT = 'UNSPENT',
+	PENDING = 'PENDING',
+	SPENT = 'SPENT'
+}
+
+/**
+ * Entries of CheckStateResponse with state of the proof
+ */
+export type CheckStateEntry = {
+	Y: string;
+	state: CheckStateEnum;
+	witness: string | null;
 };
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
  */
-export type CheckSpendableResponse = {
+export type CheckStateResponse = {
 	/**
-	 * Ordered list for checked proofs. True if the secret has not been redeemed at the mint before
+	 *
 	 */
-	spendable: Array<boolean>;
+	states: Array<CheckStateEntry>;
 } & ApiError;
 /**
  * blinded message for sending to the mint
@@ -228,6 +374,10 @@ export type SerializedBlindedMessage = {
 	 * Blinded message
 	 */
 	B_: string;
+	/**
+	 * Keyset id
+	 */
+	id: string;
 };
 /**
  * Blinded signature as it is received from the mint
@@ -259,6 +409,10 @@ export type Token = {
 	 * a message to send along with the token
 	 */
 	memo?: string;
+	/**
+	 * the unit of the token
+	 */
+	unit?: string;
 };
 /**
  * TokenEntry that stores proofs and mints
@@ -322,6 +476,11 @@ export type BlindedMessageData = {
 	rs: Array<bigint>;
 };
 
+export type MintContactInfo = {
+	method: string;
+	info: string;
+};
+
 /**
  * Response from mint at /info endpoint
  */
@@ -331,13 +490,61 @@ export type GetInfoResponse = {
 	version: string;
 	description?: string;
 	description_long?: string;
-	contact: Array<Array<string>>;
-	nuts: Array<string>;
+	contact: Array<MintContactInfo>;
+	nuts: {
+		'4': {
+			methods: Array<SwapMethod>;
+			disabled: boolean;
+		};
+		'5': {
+			methods: Array<SwapMethod>;
+			disabled: boolean;
+		};
+		'7'?: {
+			supported: boolean;
+		};
+		'8'?: {
+			supported: boolean;
+		};
+		'9'?: {
+			supported: boolean;
+		};
+		'10'?: {
+			supported: boolean;
+		};
+		'11'?: {
+			supported: boolean;
+		};
+		'12'?: {
+			supported: boolean;
+		};
+		'13'?: {
+			supported: boolean;
+		};
+	};
 	motd?: string;
-	parameter: { peg_out_only: boolean };
 };
+
 /**
- * Response from mint at /restore endpoint
+ * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}
+ */
+export type SwapMethod = {
+	method: string;
+	unit: string;
+	min_amount: number;
+	max_amount: number;
+};
+
+/**
+ * Request to mint at /v1/restore endpoint
+ */
+
+export type PostRestorePayload = {
+	outputs: Array<SerializedBlindedMessage>;
+};
+
+/**
+ * Response from mint at /v1/restore endpoint
  */
 export type PostRestoreResponse = {
 	outputs: Array<SerializedBlindedMessage>;
