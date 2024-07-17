@@ -12,7 +12,7 @@ export default {
 		{
 			displayName: 'browser',
 			transform: { '^.+\\.ts?$': 'ts-jest' },
-			testEnvironment: 'jsdom',
+			testEnvironment: './jest-env-jsdom.js',
 			resolver: 'ts-jest-resolver',
 			testRegex: '/test/.*\\.(test|spec)?\\.(ts|tsx)$',
 			moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
