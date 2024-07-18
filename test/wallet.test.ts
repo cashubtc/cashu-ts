@@ -1,8 +1,8 @@
 import nock from 'nock';
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js';
-import { getDecodedToken } from '../src/utils.js';
+import { CashuMint } from '../src/CashuMint';
+import { CashuWallet } from '../src/CashuWallet';
+import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types';
+import { getDecodedToken } from '../src/utils';
 import { AmountPreference } from '../src/model/types/index';
 import { Proof } from '@cashu/crypto/modules/common';
 
