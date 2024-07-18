@@ -4,6 +4,7 @@
 		"target": "ESNext",
 		"lib": ["ESNext", "DOM"],
 		"outDir": "./lib/types",
+		"declaration": true,
 		"emitDeclarationOnly": true,
 		"moduleResolution": "node",
 		"strict": true
