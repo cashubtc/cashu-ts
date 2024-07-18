@@ -6,7 +6,7 @@
 		"outDir": "./lib/types",
 		"declaration": true,
 		"emitDeclarationOnly": true,
-		"moduleResolution": "node",
+		"moduleResolution": "Bundler",
 		"esModuleInterop": true,
 		"strict": true
 	},
