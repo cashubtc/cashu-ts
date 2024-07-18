@@ -1,6 +1,6 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { CashuMint } from './CashuMint.js';
-import { BlindedMessage } from './model/BlindedMessage.js';
+import { CashuMint } from './CashuMint';
+import { BlindedMessage } from './model/BlindedMessage';
 import {
 	type AmountPreference,
 	type BlindedMessageData,
@@ -21,13 +21,8 @@ import {
 	CheckStateEnum,
 	SerializedBlindedSignature,
 	MeltQuoteState
-} from './model/types/index.js';
-import {
-	bytesToNumber,
-	getDecodedToken,
-	getDefaultAmountPreference,
-	splitAmount
-} from './utils.js';
+} from './model/types';
+import { bytesToNumber, getDecodedToken, getDefaultAmountPreference, splitAmount } from './utils';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -42,7 +37,7 @@ import {
 	deriveSeedFromMnemonic
 } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common';
 
 /**
  * Class that represents a Cashu wallet.

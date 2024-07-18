@@ -1,6 +1,6 @@
-import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, Proof, Token, TokenV2 } from './model/types/index.js';
-import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
+import { encodeBase64ToJson, encodeJsonToBase64 } from './base64';
+import { AmountPreference, Keys, Proof, Token, TokenV2 } from './model/types/index';
+import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
