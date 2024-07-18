@@ -1,8 +1,8 @@
 import nock from 'nock';
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
-import { setGlobalRequestOptions } from '../src/request.js';
-import { MeltQuoteResponse } from '../src/model/types/index.js';
+import { CashuMint } from '../src/CashuMint';
+import { CashuWallet } from '../src/CashuWallet';
+import { setGlobalRequestOptions } from '../src/request';
+import { MeltQuoteResponse } from '../src/model/types';
 
 let request: Record<string, string> | undefined;
 const mintUrl = 'https://localhost:3338';

@@ -1,5 +1,5 @@
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
+import { CashuMint } from '../src/CashuMint';
+import { CashuWallet } from '../src/CashuWallet';
 
 import dns from 'node:dns';
 import { deriveKeysetId, getEncodedToken } from '../src/utils.js';

@@ -1,6 +1,6 @@
-import { AmountPreference, Token } from '../src/model/types/index.js';
-import * as utils from '../src/utils.js';
-import { PUBKEYS } from './consts.js';
+import { AmountPreference } from '../src/model/types';
+import * as utils from '../src/utils';
+import { PUBKEYS } from './consts';
 
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {

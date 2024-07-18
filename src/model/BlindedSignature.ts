@@ -1,5 +1,5 @@
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { SerializedBlindedSignature } from './types/index.js';
+import { SerializedBlindedSignature } from './types';
 
 class BlindedSignature {
 	id: string;

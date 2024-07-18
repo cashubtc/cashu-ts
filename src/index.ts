@@ -1,8 +1,8 @@
-import { CashuMint } from './CashuMint.js';
-import { CashuWallet } from './CashuWallet.js';
-import { setGlobalRequestOptions } from './request.js';
+import { CashuMint } from './CashuMint';
+import { CashuWallet } from './CashuWallet';
+import { setGlobalRequestOptions } from './request';
 import { generateNewMnemonic, deriveSeedFromMnemonic } from '@cashu/crypto/modules/client/NUT09';
-import { getEncodedToken, getEncodedTokenV4, getDecodedToken, deriveKeysetId } from './utils.js';
+import { getEncodedToken, getDecodedToken, deriveKeysetId } from './utils';
 
 export * from './model/types/index.js';
 

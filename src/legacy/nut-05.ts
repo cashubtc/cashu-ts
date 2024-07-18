@@ -1,5 +1,5 @@
-import type { MeltQuoteResponse } from '../model/types/index.js';
-import { MeltQuoteState } from '../model/types/index.js';
+import type { MeltQuoteResponse } from '../model/types';
+import { MeltQuoteState } from '../model/types';
 
 export type MeltQuoteResponsePaidDeprecated = {
 	paid?: boolean;

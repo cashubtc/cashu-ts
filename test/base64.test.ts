@@ -3,7 +3,7 @@ import {
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64
-} from '../src/base64.js';
+} from '../src/base64';
 describe('testing uint8 encoding', () => {
 	test('uint8 to base64', async () => {
 		const message = 'test';
