@@ -1,5 +1,5 @@
-export * from "./mint/index"
-export * from "./wallet/index"
+export * from './mint/index';
+export * from './wallet/index';
 
 export type InvoiceData = {
 	paymentRequest: string;
