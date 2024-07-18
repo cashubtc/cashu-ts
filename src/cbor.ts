@@ -177,6 +177,19 @@ function decodeMap(view: DataView, offset: number, additionalInfo: number): Deco
 	return { value: map, offset: currentOffset };
 }
 
+function decodeFloat16(uint16: number): number {
+	const exponent = (uint16 & 0x7c00) >> 10;
+	const fraction = uint16 & 0x03ff;
+	const sign = uint16 & 0x8000 ? -1 : 1;
+
+	if (exponent === 0) {
+		return sign * 2 ** -14 * (fraction / 1024);
+	} else if (exponent === 0x1f) {
+		return fraction ? NaN : sign * Infinity;
+	}
+	return sign * 2 ** (exponent - 15) * (1 + fraction / 1024);
+}
+
 function decodeSimpleAndFloat(
 	view: DataView,
 	offset: number,
@@ -198,7 +211,7 @@ function decodeSimpleAndFloat(
 	}
 	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
 	if (additionalInfo === 25) {
-		const value = view.getUint16(offset, false);
+		const value = decodeFloat16(view.getUint16(offset, false));
 		offset += 2;
 		return { value, offset };
 	}
