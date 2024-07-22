@@ -53,7 +53,7 @@ class CashuWallet {
 	private _keys: Map<string, MintKeys> = new Map();
 	private _keyset_id: string | undefined;
 	private _keysets: Array<MintKeyset> = [];
-	private _seed: Uint8Array | undefined;
+	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';
 	mint: CashuMint;
 
@@ -230,7 +230,7 @@ class CashuWallet {
 			});
 			return proofs;
 		} catch (error) {
-			throw new Error('Error when receiving');
+			throw new Error(`Error receiving token: ${error}`);
 		}
 	}
 
