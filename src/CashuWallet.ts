@@ -420,6 +420,20 @@ class CashuWallet {
 	}
 
 	/**
+	 * @deprecated use {@link CashuWallet.melt} instead
+	 */
+	async meltTokens(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Array<Proof>,
+		options?: {
+			keysetId?: string;
+			counter?: number;
+		}
+	): Promise<MeltTokensResponse> {
+		return this.melt(meltQuote, proofsToSend, options);
+	}
+
+	/**
 	 * Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
 	 * Returns payment proof and change proofs
 	 * @param meltQuote ID of the melt quote
