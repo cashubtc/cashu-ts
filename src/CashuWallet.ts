@@ -241,7 +241,10 @@ class CashuWallet {
 			throw new Error('Not enough funds available');
 		}
 		if (amount < amountAvailable || options?.preference || options?.pubkey) {
-			const { amountKeep, amountSend } = { amountKeep: amountAvailable - amount, amountSend: amount };
+			const { amountKeep, amountSend } = {
+				amountKeep: amountAvailable - amount,
+				amountSend: amount
+			};
 			const { payload, blindedMessages } = this.createSwapPayload(
 				amountSend,
 				proofsToSend,

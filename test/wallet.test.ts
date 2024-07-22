@@ -300,9 +300,7 @@ describe('melt', () => {
 	test('test melt bad resonse', async () => {
 		nock(mintUrl).post('/v1/melt/bolt11').reply(200, {});
 		const wallet = new CashuWallet(mint, { unit });
-		const result = await wallet
-			.melt({} as MeltQuoteResponse, proofs)
-			.catch((e) => e);
+		const result = await wallet.melt({} as MeltQuoteResponse, proofs).catch((e) => e);
 
 		expect(result).toEqual(new Error('bad response'));
 	});
