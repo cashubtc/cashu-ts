@@ -79,6 +79,10 @@ export type MintKeyset = {
 	 * Whether the keyset is active or not.
 	 */
 	active: boolean;
+	/**
+	 * Input fees for keyset (in ppk)
+	 */
+	input_fees_ppk?: number;
 };
 
 /**

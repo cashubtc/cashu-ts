@@ -8,6 +8,7 @@ import {
 	type MeltPayload,
 	type MeltQuoteResponse,
 	type MintKeys,
+	type MintKeyset,
 	type MeltTokensResponse,
 	type MintPayload,
 	type Proof,
@@ -49,7 +50,9 @@ import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
  * This class should act as the entry point for this library
  */
 class CashuWallet {
-	private _keys: MintKeys | undefined;
+	private _keys: Map<string, MintKeys> = new Map();
+	private _keyset_id: string | undefined;
+	private _keysets: Array<MintKeyset> = [];
 	private _seed: Uint8Array | undefined;
 	private _unit = 'sat';
 	mint: CashuMint;
@@ -65,27 +68,26 @@ class CashuWallet {
 		mint: CashuMint,
 		options?: {
 			unit?: string;
-			keys?: MintKeys;
+			keys?: Array<MintKeys>;
+			keysets?: Array<MintKeyset>;
 			mnemonicOrSeed?: string | Uint8Array;
 		}
 	) {
 		this.mint = mint;
 		if (options?.unit) this._unit = options?.unit;
-		if (options?.keys) {
-			this._keys = options.keys;
-			this._unit = options.keys.unit;
-		}
+		if (options?.keys) options.keys.forEach((key) => this._keys.set(key.id, key));
+		if (options?.keysets) this._keysets = options.keysets;
+
 		if (!options?.mnemonicOrSeed) {
 			return;
-		}
-		if (options?.mnemonicOrSeed instanceof Uint8Array) {
+		} else if (options?.mnemonicOrSeed instanceof Uint8Array) {
 			this._seed = options.mnemonicOrSeed;
-			return;
+		} else {
+			if (!validateMnemonic(options.mnemonicOrSeed, wordlist)) {
+				throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
+			}
+			this._seed = deriveSeedFromMnemonic(options.mnemonicOrSeed);
 		}
-		if (!validateMnemonic(options.mnemonicOrSeed, wordlist)) {
-			throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
-		}
-		this._seed = deriveSeedFromMnemonic(options.mnemonicOrSeed);
 	}
 
 	get unit(): string {
@@ -93,14 +95,23 @@ class CashuWallet {
 	}
 
 	get keys(): MintKeys {
-		if (!this._keys) {
+		if (!this._keyset_id || !this._keys.get(this._keyset_id)) {
 			throw new Error('Keys are not set');
 		}
-		return this._keys;
+		return this._keys.get(this._keyset_id) as MintKeys;
 	}
 	set keys(keys: MintKeys) {
-		this._keys = keys;
-		this._unit = keys.unit;
+		if (keys.unit !== this._unit) {
+			throw new Error('Unit of keyset does not match the unit of the wallet');
+		}
+		this._keys.set(keys.id, keys);
+		this._keyset_id = keys.id;
+	}
+	get keysets(): Array<MintKeyset> {
+		return this._keysets;
+	}
+	set keysets(keysets: Array<MintKeyset>) {
+		this._keysets = keysets;
 	}
 
 	/**
@@ -109,6 +120,81 @@ class CashuWallet {
 	 */
 	async getMintInfo() {
 		return this.mint.getInfo();
+	}
+
+	/**
+	 * Load mint information, keysets and keys. This function can be called if no keysets are passed in the constructor
+	 */
+	async loadMint() {
+		await this.getMintInfo();
+		if (!this._keys.size) {
+			await this.getKeys()
+		} else {
+			await this.getKeySets();
+			// get all keysets from this._keysets which are not already in this._keys
+			this._keysets.forEach(async (keyset) => {
+				if (!this._keys.get(keyset.id)) {
+					await this.getKeys(keyset.id);
+				}
+			});
+		}
+	}
+
+	/**
+	 * Get keysets from the mint with the unit of the wallet
+	 * @returns keysets
+	 */
+	async getKeySets(): Promise<Array<MintKeyset>> {
+		const allKeysets = await this.mint.getKeySets();
+		const unitKeysets = allKeysets.keysets.filter((k) => k.unit === this._unit);
+		this._keysets = unitKeysets;
+		return this._keysets;
+	}
+
+	/**
+	 * Get public keys from the mint. 
+	 * If a keysetId is set, it will fetch and return that speficic keyset.
+	 * Otherwise, we select an active keyset with the unit of the wallet.
+	 * 
+	 * @param keysetId optional keysetId to get keys for
+	 * @param unit optional unit to get keys for
+	 * @returns keyset
+	 */
+	async getKeys(keysetId?: string): Promise<MintKeys> {
+		if (keysetId) {
+			if (this._keys.get(keysetId)) {
+				this._keyset_id = keysetId;
+				return this._keys.get(keysetId) as MintKeys;
+			}
+			const allKeysets = await this.mint.getKeys(keysetId)
+			const keyset = allKeysets.keysets[0];
+			if (!keyset) {
+				throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
+			}
+			this._keys.set(keysetId, keyset);
+			this._keyset_id = keysetId;
+			return keyset;
+		}
+
+		// no keysetId was set, so we get the active keyset with the unit of the wallet with the lowest fees
+		const allKeysets = await this.mint.getKeySets();
+		const keysetToActivate = allKeysets.keysets
+			.filter((k) => k.unit === this._unit && k.active)
+			.sort((a, b) => (a.input_fees_ppk ?? 0) - (b.input_fees_ppk ?? 0))[0];
+		if (!keysetToActivate) {
+			throw new Error(`could not initialize keys. No active keyset with unit '${this._unit}' found`);
+		}
+
+		if (!this._keys.get(keysetToActivate.id)) {
+			const keysetGet = await this.mint.getKeys(keysetToActivate.id);
+			const keys = keysetGet.keysets.find((k) => k.id === keysetToActivate.id);
+			if (!keys) {
+				throw new Error(`could not initialize keys. No keyset with id '${keysetToActivate.id}' found`);
+			}
+			this._keys.set(keys.id, keys);
+		}
+		this._keyset_id = keysetToActivate.id;
+		return this._keys.get(keysetToActivate.id) as MintKeys;
 	}
 
 	/**
@@ -310,30 +396,6 @@ class CashuWallet {
 		return {
 			proofs: this.constructProofs(promises, validRs, validSecrets, keys)
 		};
-	}
-
-	/**
-	 * Initialize the wallet with the mints public keys
-	 */
-	private async getKeys(keysetId?: string, unit?: string): Promise<MintKeys> {
-		if (!this._keys || (keysetId !== undefined && this._keys.id !== keysetId)) {
-			const allKeys = await this.mint.getKeys(keysetId);
-			let keys;
-			if (keysetId) {
-				keys = allKeys.keysets.find((k) => k.id === keysetId);
-			} else {
-				keys = allKeys.keysets.find((k) => (unit ? k.unit === unit : k.unit === 'sat'));
-			}
-			if (!keys) {
-				throw new Error(
-					`could not initialize keys. No keyset with unit '${unit ? unit : 'sat'}' found`
-				);
-			}
-			if (!this._keys) {
-				this._keys = keys;
-			}
-		}
-		return this._keys;
 	}
 
 	/**
