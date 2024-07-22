@@ -241,7 +241,7 @@ class CashuWallet {
 			throw new Error('Not enough funds available');
 		}
 		if (amount < amountAvailable || options?.preference || options?.pubkey) {
-			const { amountKeep, amountSend } = this.splitReceive(amount, amountAvailable);
+			const { amountKeep, amountSend } = { amountKeep: amountAvailable - amount, amountSend: amount };
 			const { payload, blindedMessages } = this.createSwapPayload(
 				amountSend,
 				proofsToSend,
@@ -425,7 +425,7 @@ class CashuWallet {
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns
 	 */
-	async meltTokens(
+	async melt(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
 		options?: {
@@ -454,61 +454,6 @@ class CashuWallet {
 				? this.constructProofs(meltResponse.change, rs, secrets, keys)
 				: []
 		};
-	}
-
-	/**
-	 * Helper function that pays a Lightning invoice directly without having to create a melt quote before
-	 * The combined amount of Proofs must match the payment amount including fees.
-	 * @param invoice
-	 * @param proofsToSend the exact amount to send including fees
-	 * @param meltQuote melt quote for the invoice
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @returns
-	 */
-	async payLnInvoice(
-		invoice: string,
-		proofsToSend: Array<Proof>,
-		meltQuote?: MeltQuoteResponse,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-		}
-	): Promise<MeltTokensResponse> {
-		if (!meltQuote) {
-			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
-		}
-		return await this.meltTokens(meltQuote, proofsToSend, {
-			keysetId: options?.keysetId,
-			counter: options?.counter
-		});
-	}
-
-	/**
-	 * Helper function to ingest a Cashu token and pay a Lightning invoice with it.
-	 * @param invoice Lightning invoice
-	 * @param token cashu token
-	 * @param meltQuote melt quote for the invoice
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 */
-	async payLnInvoiceWithToken(
-		invoice: string,
-		token: string,
-		meltQuote: MeltQuoteResponse,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-		}
-	): Promise<MeltTokensResponse> {
-		const decodedToken = getDecodedToken(token);
-		const proofs = decodedToken.token
-			.filter((x) => x.mint === this.mint.mintUrl)
-			.flatMap((t) => t.proofs);
-		return this.payLnInvoice(invoice, proofs, meltQuote, {
-			keysetId: options?.keysetId,
-			counter: options?.counter
-		});
 	}
 
 	/**
@@ -599,14 +544,6 @@ class CashuWallet {
 			const state = states.find((state) => state.Y === Ys[i]);
 			return state && state.state === CheckStateEnum.SPENT;
 		});
-	}
-	private splitReceive(
-		amount: number,
-		amountAvailable: number
-	): { amountKeep: number; amountSend: number } {
-		const amountKeep: number = amountAvailable - amount;
-		const amountSend: number = amount;
-		return { amountKeep, amountSend };
 	}
 
 	/**

@@ -86,7 +86,8 @@ describe('mint api', () => {
 		expect(quote_).toBeDefined();
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
-		const response = await wallet.payLnInvoice(mintQuote.request, sendResponse.send, quote);
+		const meltQuote = await wallet.createMeltQuote(mintQuote.request);
+		const response = await wallet.melt(meltQuote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
@@ -116,7 +117,9 @@ describe('mint api', () => {
 		expect(quote_).toBeDefined();
 
 		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);
-		const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send, meltQuote);
+
+		const meltQuote2 = await wallet.createMeltQuote(externalInvoice);
+		const response = await wallet.melt(meltQuote2, sendResponse.send);
 
 		expect(response).toBeDefined();
 		// expect that we have not received the fee back, since it was external

@@ -63,7 +63,7 @@ type MeltQuoteResponse = {
 };
 ```
 
-where `quote` is the identifier to pass to `meltTokens()`
+where `quote` is the identifier to pass to `melt()`
 
 ---
 
