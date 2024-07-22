@@ -56,36 +56,38 @@ npm i @cashu/cashu-ts
 ### Examples
 
 #### Mint tokens
+
 ```typescript
 import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
-const mintUrl = 'http://localhost:3338' // the mint URL
+const mintUrl = 'http://localhost:3338'; // the mint URL
 const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
 const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
-const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote)
+const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
 if (mintQuoteChecked.state == MintQuoteState.PAID) {
-    const {proofs} = await wallet.mintTokens(64, mintQuote.quote);
+	const { proofs } = await wallet.mintTokens(64, mintQuote.quote);
 }
 ```
 
 #### Melt tokens
+
 ```typescript
 import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
-const mintUrl = 'http://localhost:3338' // the mint URL
+const mintUrl = 'http://localhost:3338'; // the mint URL
 const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
 
-const invoice = 'lnbc......' // Lightning invoice to pay
+const invoice = 'lnbc......'; // Lightning invoice to pay
 const meltQuote = await wallet.createMeltQuote(invoice);
 const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 
 // in a real wallet, we would coin select the correct amount of proofs from the wallet's storage
 // instead of that, here we swap `proofs` with the mint to get the correct amount of proofs
-const { returnChange: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs)
+const { returnChange: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs);
 // store proofsToKeep in wallet ..
 
-const meltResponse = await wallet.meltTokens(meltQuote, proofsToSend)
+const meltResponse = await wallet.meltTokens(meltQuote, proofsToSend);
 // store meltResponse.change in wallet ..
 ```
 
