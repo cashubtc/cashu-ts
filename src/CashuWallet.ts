@@ -312,25 +312,14 @@ class CashuWallet {
 		if (sumProofs(proofs) < amount) {
 			throw new Error('Not enough funds available to send');
 		}
-		// try to select the exact amount of proofs to send (without fees)
-		console.log("calling selectProofsToSend");
-		console.log(`proofs: ${sumProofs(proofs)}, amount: ${amount}`);
 		const { returnChange: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(proofs, amount);
-		console.log(`keepProofsOffline: ${sumProofs(keepProofsOffline)}, sendProofOffline: ${sumProofs(sendProofOffline)}, amount: ${amount}`);
-		const fees = this.getFeesForProofs(sendProofOffline);
-		console.log(`fees: ${fees}`);
-
 		if (
 			sumProofs(sendProofOffline) != amount || // if the exact amount cannot be selected
 			options?.preference || options?.pubkey || options?.privkey || options?.keysetId // these options require a swap
 		) {
-			console.log(`>>>>>>> must do swap with ${sumProofs(proofs)} sat`);
 			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(proofs, amount, true);
-			console.log(`keepProofsSelect: ${sumProofs(keepProofsSelect)}, sendProofs: ${sumProofs(sendProofs)}, amount: ${amount}`);
 			const { returnChange, send } = await this.swap(amount, sendProofs, options);
-			console.log(`returnChange: ${sumProofs(returnChange)}, send: ${sumProofs(send)}`);
 			const returnChangeProofs = keepProofsSelect.concat(returnChange);
-			console.log(`returnChangeProofs: ${sumProofs(returnChangeProofs)}`);
 			return { returnChange: returnChangeProofs, send };
 		}
 
@@ -349,29 +338,14 @@ class CashuWallet {
 		const biggerProofs = sortedProofs.filter((p) => p.amount > amountToSend).sort((a, b) => a.amount - b.amount);
 		const nextBigger = biggerProofs[0];
 
-		console.log(`> enter select with proofs: ${sumProofs(proofs)}, amountToSend: ${amountToSend}, smallerProofs: ${sumProofs(smallerProofs)}, biggerProofs: ${sumProofs(biggerProofs)}, nextBigger: ${nextBigger?.amount}`);
+		if (!smallerProofs.length && nextBigger)
+			return { returnChange: proofs.filter((p) => p.id !== nextBigger.id), send: [nextBigger] };
 
-		if (!smallerProofs.length && nextBigger) {
-			console.log(`! no smallerProofs and nextBigger: ${nextBigger.amount}`);
-			console.log(`< 0 select ${nextBigger.amount}, return: ${sumProofs(proofs.filter((p) => p.id !== nextBigger.id))}`);
-			return {
-				returnChange: proofs.filter((p) => p.id !== nextBigger.id),
-				send: [nextBigger]
-			};
-		}
-
-		if (!smallerProofs.length && !nextBigger) {
-			console.log(`! no smallerProofs and no nextBigger, change: ${sumProofs(proofs)}`);
-			console.log(`< 1 select: 0, return: ${sumProofs(proofs)}`);
-			return {
-				returnChange: proofs,
-				send: []
-			};
-		}
+		if (!smallerProofs.length && !nextBigger)
+			return { returnChange: proofs, send: [] };
 
 		let remainder = amountToSend;
 		let selectedProofs = [smallerProofs[0]];
-		console.log(`>> select ${smallerProofs[0].amount} – rest: ${sumProofs(proofs.filter((p) => !selectedProofs.includes(p)))} – total: ${sumProofs(proofs)}`);
 		const returnedProofs = []
 		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
 		remainder -= smallerProofs[0].amount - feePPK / 1000;
@@ -380,14 +354,10 @@ class CashuWallet {
 			selectedProofs.push(...send);
 			returnedProofs.push(...returnChange);
 		}
-		console.log(`>> EXIT select ${smallerProofs[0].amount} – rest: ${sumProofs(proofs.filter((p) => !selectedProofs.includes(p)))} – total: ${sumProofs(proofs)} - returnedProofs: ${sumProofs(returnedProofs)}`);
 
-		if (sumProofs(selectedProofs) < amountToSend && nextBigger) {
-			console.log(`! selectedProofs (${sumProofs(selectedProofs)}) < amountToSend (${amountToSend}) and nextBigger: ${nextBigger.amount}`);
-			console.log(`< 3 select ${nextBigger.amount}, return: ${sumProofs(proofs.filter((p) => p.id !== nextBigger.id))} – total: ${sumProofs(proofs)}`);
+		if (sumProofs(selectedProofs) < amountToSend && nextBigger)
 			selectedProofs = [nextBigger]
-		}
-		console.log(`< 4 select: ${sumProofs(selectedProofs)}, return: ${sumProofs(proofs.filter((p) => !selectedProofs.includes(p)))} – total: ${sumProofs(proofs)}`);
+
 		return {
 			returnChange: proofs.filter((p) => !selectedProofs.includes(p)),
 			send: selectedProofs
@@ -436,7 +406,6 @@ class CashuWallet {
 		}
 		const amountToSend = amount + this.getFeesForProofs(proofsToSend)
 		const amountToKeep = sumProofs(proofsToSend) - amountToSend
-		console.log(`amountToKeep: ${amountToKeep}, amountToSend: ${amountToSend}`);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
