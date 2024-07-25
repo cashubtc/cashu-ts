@@ -33,16 +33,53 @@ beforeEach(() => {
 	nock(mintUrl).get('/v1/keys/009a1f293253e41e').reply(200, dummyKeysResp);
 });
 
-describe('test fees', () => {
-	test('test melt quote fees', async () => {
-		nock(mintUrl).get('/v1/melt/quote/bolt11/test').reply(200, {
-			quote: 'test_melt_quote_id',
-			amount: 2000,
-			fee_reserve: 20
-		});
+describe('test info', () => {
+	const mintInfoResp = JSON.parse(
+		'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.0","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. All your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[{"method":"email","info":"contact@me.com"},{"method":"twitter","info":"@me"},{"method":"nostr","info":"npub..."}],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"17":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}'
+	);
+	test('test info', async () => {
+		nock(mintUrl).get('/v1/info').reply(200, mintInfoResp);
 		const wallet = new CashuWallet(mint, { unit });
 
-		const fee = await wallet.getMeltQuote('test');
+		const info = await wallet.getMintInfo();
+		expect(info.contact).toEqual([
+			{ method: 'email', info: 'contact@me.com' },
+			{ method: 'twitter', info: '@me' },
+			{ method: 'nostr', info: 'npub...' }
+		]);
+		expect(info).toEqual(mintInfoResp);
+	});
+	test('test info with deprecated contact field', async () => {
+		// mintInfoRespDeprecated is the same as mintInfoResp but with the contact field in the old format
+		const mintInfoRespDeprecated = JSON.parse(
+			'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.0","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. All your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[["email","contact@me.com"],["twitter","@me"],["nostr","npub..."]],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"17":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}'
+		);
+		nock(mintUrl).get('/v1/info').reply(200, mintInfoRespDeprecated);
+		const wallet = new CashuWallet(mint, { unit });
+		const info = await wallet.getMintInfo();
+		expect(info.contact).toEqual([
+			{ method: 'email', info: 'contact@me.com' },
+			{ method: 'twitter', info: '@me' },
+			{ method: 'nostr', info: 'npub...' }
+		]);
+		expect(info).toEqual(mintInfoResp);
+	});
+});
+
+describe('test fees', () => {
+	test('test melt quote fees', async () => {
+		nock(mintUrl)
+			.get('/v1/melt/quote/bolt11/test')
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: null,
+				state: 'UNPAID'
+			} as MeltQuoteResponse);
+		const wallet = new CashuWallet(mint, { unit });
+
+		const fee = await wallet.checkMeltQuote('test');
 		const amount = 2000;
 
 		expect(fee.fee_reserve + amount).toEqual(2020);
@@ -187,15 +224,29 @@ describe('payLnInvoice', () => {
 	test('test payLnInvoice base case', async () => {
 		nock(mintUrl)
 			.get('/v1/melt/quote/bolt11/test')
-			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 0 });
-		nock(mintUrl).post('/v1/melt/bolt11').reply(200, { paid: true, payment_preimage: '' });
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: null,
+				state: 'PAID'
+			} as MeltQuoteResponse);
+		nock(mintUrl)
+			.post('/v1/melt/bolt11')
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: null,
+				state: 'PAID'
+			} as MeltQuoteResponse);
 
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.getMeltQuote('test');
+		const meltQuote = await wallet.checkMeltQuote('test');
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
 
-		expect(result).toEqual({ isPaid: true, preimage: '', change: [] });
+		expect(result).toEqual({ isPaid: true, preimage: null, change: [] });
 	});
 	test('test payLnInvoice change', async () => {
 		nock.cleanAll();
@@ -215,12 +266,21 @@ describe('payLnInvoice', () => {
 			});
 		nock(mintUrl)
 			.get('/v1/melt/quote/bolt11/test')
-			.reply(200, { quote: 'quote_id', amount: 123, fee_reserve: 2 });
+			.reply(200, {
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
+				payment_preimage: 'asd',
+				state: 'PAID'
+			} as MeltQuoteResponse);
 		nock(mintUrl)
 			.post('/v1/melt/bolt11')
 			.reply(200, {
-				paid: true,
+				quote: 'test_melt_quote_id',
+				amount: 2000,
+				fee_reserve: 20,
 				payment_preimage: 'asd',
+				state: 'PAID',
 				change: [
 					{
 						id: '009a1f293253e41e',
@@ -231,7 +291,7 @@ describe('payLnInvoice', () => {
 			});
 
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.getMeltQuote('test');
+		const meltQuote = await wallet.checkMeltQuote('test');
 		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
 		expect(result.isPaid).toBe(true);

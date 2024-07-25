@@ -68,8 +68,8 @@ const tokens = await wallet.mintTokens(64, mintQuote.quote);
 
 Contributions are very welcome.
 
-If you want to contribute, please open an Issue or a PR. 
-If you open a PR, please do so from the `development` branch as the base branch. 
+If you want to contribute, please open an Issue or a PR.
+If you open a PR, please do so from the `development` branch as the base branch.
 
 ### Version
 
@@ -80,17 +80,17 @@ If you open a PR, please do so from the `development` branch as the base branch.
 | | * `hotfix`
 | |
 | * `staging`
-| |\ 
+| |\
 | |\ \
 | | | * `bugfix`
 | | |
-| | * `development`  
-| | |\ 
+| | * `development`
+| | |\
 | | | * `feature1`
 | | | |
 | | |/
 | | *
-| | |\ 
+| | |\
 | | | * `feature2`
 | | |/
 | |/

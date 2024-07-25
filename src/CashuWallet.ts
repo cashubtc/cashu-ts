@@ -20,6 +20,7 @@ import {
 	type TokenEntry,
 	CheckStateEnum,
 	SerializedBlindedSignature,
+	MeltQuoteState,
 	Preferences
 } from './model/types/index.js';
 import {
@@ -101,6 +102,14 @@ class CashuWallet {
 	set keys(keys: MintKeys) {
 		this._keys = keys;
 		this._unit = keys.unit;
+	}
+
+	/**
+	 * Get information about the mint
+	 * @returns mint info
+	 */
+	async getMintInfo() {
+		return this.mint.getInfo();
 	}
 
 	/**
@@ -337,12 +346,12 @@ class CashuWallet {
 	 * @param amount Amount requesting for mint.
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async mintQuote(amount: number) {
+	async createMintQuote(amount: number) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount
 		};
-		return await this.mint.mintQuote(mintQuotePayload);
+		return await this.mint.createMintQuote(mintQuotePayload);
 	}
 
 	/**
@@ -350,8 +359,8 @@ class CashuWallet {
 	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async getMintQuote(quote: string) {
-		return await this.mint.getMintQuote(quote);
+	async checkMintQuote(quote: string) {
+		return await this.mint.checkMintQuote(quote);
 	}
 
 	/**
@@ -393,12 +402,12 @@ class CashuWallet {
 	 * @param invoice LN invoice that needs to get a fee estimate
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async meltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
 		};
-		const meltQuote = await this.mint.meltQuote(meltQuotePayload);
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
 	}
 
@@ -407,8 +416,8 @@ class CashuWallet {
 	 * @param quote ID of the melt quote
 	 * @returns the mint will return an existing melt quote
 	 */
-	async getMeltQuote(quote: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.getMeltQuote(quote);
+	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+		const meltQuote = await this.mint.checkMeltQuote(quote);
 		return meltQuote;
 	}
 
@@ -444,7 +453,7 @@ class CashuWallet {
 		const meltResponse = await this.mint.melt(meltPayload);
 
 		return {
-			isPaid: meltResponse.paid ?? false,
+			isPaid: meltResponse.state === MeltQuoteState.PAID,
 			preimage: meltResponse.payment_preimage,
 			change: meltResponse?.change
 				? this.constructProofs(meltResponse.change, rs, secrets, keys)
@@ -472,7 +481,7 @@ class CashuWallet {
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
-			meltQuote = await this.mint.meltQuote({ unit: this._unit, request: invoice });
+			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,

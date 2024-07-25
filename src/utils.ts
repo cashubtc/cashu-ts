@@ -1,8 +1,9 @@
-import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
+import { encodeBase64ToJson, encodeBase64toUint8, encodeJsonToBase64 } from './base64.js';
 import { AmountPreference, Keys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
+import { decodeCBOR } from './cbor.js';
 
 function splitAmount(
 	value: number,
@@ -94,9 +95,9 @@ function getEncodedToken(token: Token): string {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string): Token {
+function getDecodedToken(token: string) {
 	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix) => {
 		if (!token.startsWith(prefix)) {
 			return;
@@ -111,20 +112,32 @@ function getDecodedToken(token: string): Token {
  * @returns
  */
 function handleTokens(token: string): Token {
-	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
-
-	// check if v3
-	if ('token' in obj) {
-		return obj;
+	const version = token.slice(0, 1);
+	const encodedToken = token.slice(1);
+	if (version === 'A') {
+		return encodeBase64ToJson<Token>(encodedToken);
+	} else if (version === 'B') {
+		const uInt8Token = encodeBase64toUint8(encodedToken);
+		const tokenData = decodeCBOR(uInt8Token) as {
+			t: { p: { a: number; s: string; c: Uint8Array }[]; i: Uint8Array }[];
+			m: string;
+			d: string;
+		};
+		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
+		tokenData.t.forEach((tokenEntry) =>
+			tokenEntry.p.forEach((p) => {
+				mergedTokenEntry.proofs.push({
+					secret: p.s,
+					C: bytesToHex(p.c),
+					amount: p.a,
+					id: bytesToHex(tokenEntry.i)
+				});
+			})
+		);
+		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
+	} else {
+		throw new Error('Token version is not supported');
 	}
-
-	// check if v1
-	if (Array.isArray(obj)) {
-		return { token: [{ proofs: obj, mint: '' }] };
-	}
-
-	// if v2 token return v3 format
-	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
 }
 /**
  * Returns the keyset id of a set of keys
