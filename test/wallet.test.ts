@@ -21,7 +21,7 @@ const dummyKeysetResp = {
 			id: '009a1f293253e41e',
 			unit: 'sat',
 			active: true,
-			input_fees_ppk: 0,
+			input_fee_ppk: 0,
 		}
 	]
 };
@@ -570,7 +570,7 @@ describe('send', () => {
 
 		const result = await wallet.send(2, proofs).catch((e) => e);
 
-		expect(result).toEqual(new Error('Not enough funds available'));
+		expect(result).toEqual(new Error('Not enough funds available to send'));
 	});
 	test('test send bad response', async () => {
 		nock(mintUrl).post('/v1/swap').reply(200, {});

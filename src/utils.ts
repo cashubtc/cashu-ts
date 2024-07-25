@@ -162,6 +162,10 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
+export function sumProofs(proofs: Array<Proof>) {
+	return proofs.reduce((acc, proof) => acc + proof.amount, 0);
+}
+
 export {
 	bigIntStringify,
 	bytesToNumber,
@@ -169,5 +173,5 @@ export {
 	getEncodedToken,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference
+	getDefaultAmountPreference,
 };

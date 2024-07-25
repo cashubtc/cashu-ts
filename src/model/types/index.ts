@@ -80,9 +80,9 @@ export type MintKeyset = {
 	 */
 	active: boolean;
 	/**
-	 * Input fees for keyset (in ppk)
+	 * Input fee for keyset (in ppk)
 	 */
-	input_fees_ppk?: number;
+	input_fee_ppk?: number;
 };
 
 /**
@@ -488,7 +488,7 @@ export type MintContactInfo = {
 /**
  * Response from mint at /info endpoint
  */
-export type GetInfoResponse = {
+export type MintInfo = {
 	name: string;
 	pubkey: string;
 	version: string;
@@ -530,7 +530,7 @@ export type GetInfoResponse = {
 };
 
 /**
- * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}
+ * Ecash to other MoE swap method, displayed in @type {MintInfo}
  */
 export type SwapMethod = {
 	method: string;
