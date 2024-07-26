@@ -1,5 +1,13 @@
 import { encodeBase64ToJson, encodeBase64toUint8, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, OutputAmounts, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
+import {
+	AmountPreference,
+	Keys,
+	OutputAmounts,
+	Proof,
+	Token,
+	TokenEntry,
+	TokenV2
+} from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
@@ -42,11 +50,7 @@ function hasCorrespondingKey(amount: number, keyset: Keys) {
 	return amount in keyset;
 }
 
-function getPreference(
-	amount: number,
-	keyset: Keys,
-	split: Array<number>
-): Array<number> {
+function getPreference(amount: number, keyset: Keys, split: Array<number>): Array<number> {
 	const chunks: Array<number> = [];
 	split.forEach((splitAmount) => {
 		if (!hasCorrespondingKey(splitAmount, keyset)) {
@@ -135,7 +139,6 @@ function handleTokens(token: string): Token {
 		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
 	}
 	throw new Error('Token version is not supported');
-
 }
 /**
  * Returns the keyset id of a set of keys
@@ -193,5 +196,5 @@ export {
 	getEncodedToken,
 	hexToNumber,
 	splitAmount,
-	deprecatedPreferenceToOutputAmounts,
+	deprecatedPreferenceToOutputAmounts
 };

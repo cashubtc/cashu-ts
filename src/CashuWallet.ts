@@ -133,7 +133,8 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
-		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		try {
 			if (typeof token === 'string') {
 				token = getDecodedToken(token);
@@ -172,7 +173,8 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
-		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
@@ -225,7 +227,8 @@ class CashuWallet {
 			keysetId?: string;
 		}
 	): Promise<SendResponse> {
-		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options?.keysetId);
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
@@ -377,12 +380,13 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			preference?: Array<AmountPreference>;
-			outputAmounts?: OutputAmounts,
+			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
-		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
@@ -524,7 +528,7 @@ class CashuWallet {
 	 * Creates a split payload
 	 * @param amount amount to send
 	 * @param proofsToSend proofs to split*
-	 * @param outputAmounts? optionally specify the output's amounts to keep and to send. 
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
