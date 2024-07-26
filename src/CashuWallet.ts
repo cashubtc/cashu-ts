@@ -80,17 +80,17 @@ class CashuWallet {
 			mnemonicOrSeed?: string | Uint8Array;
 		}
 	) {
+
+		this.mint = mint;
 		let keys: Array<MintKeys> = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
 		} else if (options?.keys && Array.isArray(options?.keys)) {
 			keys = options?.keys;
 		}
-		this.mint = mint;
-		if (options?.unit) this._unit = options?.unit;
 		if (keys) keys.forEach((key) => this._keys.set(key.id, key));
+		if (options?.unit) this._unit = options?.unit;
 		if (options?.keysets) this._keysets = options.keysets;
-
 		if (!options?.mnemonicOrSeed) {
 			return;
 		} else if (options?.mnemonicOrSeed instanceof Uint8Array) {
