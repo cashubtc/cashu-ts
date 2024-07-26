@@ -182,3 +182,28 @@ describe('test keyset derivation', () => {
 		expect(keysetId).toBe('009a1f293253e41e');
 	});
 });
+
+describe('test v4 encoding', () => {
+	test('standard token', async () => {
+		const v3Token = {
+			memo: 'Thank you',
+			token: [
+				{
+					mint: 'http://localhost:3338',
+					proofs: [
+						{
+							secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+							C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+							id: '00ad268c4d1f5826',
+							amount: 1
+						}
+					]
+				}
+			]
+		};
+		const encoded = utils.getEncodedTokenV4(v3Token);
+		console.log(encoded);
+		const decoded = utils.getDecodedToken(encoded);
+		console.log(decoded);
+	});
+});
