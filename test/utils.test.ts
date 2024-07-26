@@ -39,10 +39,18 @@ describe('test split custom amounts ', () => {
 		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
 		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
-	const fiveTwelve = [512, 512];
+	test('testing amount 12', async () => {
+		const chunks = utils.splitAmount(12, keys, tenToOneAndTwo);
+		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2, 2]);
+	});
+	const fiveTwelve = [512];
 	test('testing amount 518', async () => {
 		const chunks = utils.splitAmount(518, keys, fiveTwelve, 'desc');
 		expect(chunks).toStrictEqual([512, 4, 2]);
+	});
+	const tooMuch = [512, 512];
+	test('testing amount 512 but split too much', async () => {
+		expect(() => utils.splitAmount(512, keys, tooMuch)).toThrowError();
 	});
 	const illegal = [3, 3];
 	test('testing non pow2', async () => {

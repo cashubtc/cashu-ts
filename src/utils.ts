@@ -1,5 +1,5 @@
 import { encodeBase64ToJson, encodeBase64toUint8, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
+import { AmountPreference, Keys, OutputAmounts, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
@@ -13,6 +13,9 @@ function splitAmount(
 ): Array<number> {
 	const chunks: Array<number> = [];
 	if (split) {
+		if (split.reduce((a, b) => a + b, 0) > value) {
+			throw new Error('Split amount is greater than the value');
+		}
 		chunks.push(...getPreference(value, keyset, split));
 		value =
 			value -
@@ -45,23 +48,24 @@ function getPreference(
 	split: Array<number>
 ): Array<number> {
 	const chunks: Array<number> = [];
-	let accumulator = 0;
 	split.forEach((splitAmount) => {
 		if (!hasCorrespondingKey(splitAmount, keyset)) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
-		const count = split.filter(value => value === splitAmount).length;
-		for (let i = 1; i <= count; i++) {
-			accumulator += splitAmount;
-			if (accumulator > amount) {
-				return;
-			}
-			chunks.push(splitAmount);
-		}
+		chunks.push(splitAmount);
 	});
 	return chunks;
 }
 
+function deprecatedPreferenceToOutputAmounts(preference?: Array<AmountPreference>): OutputAmounts {
+	const sendAmounts: Array<number> = [];
+	preference?.forEach(({ count, amount }) => {
+		for (let i = 0; i < count; i++) {
+			sendAmounts.push(amount);
+		}
+	});
+	return { sendAmounts };
+}
 function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
@@ -189,4 +193,5 @@ export {
 	getEncodedToken,
 	hexToNumber,
 	splitAmount,
+	deprecatedPreferenceToOutputAmounts,
 };

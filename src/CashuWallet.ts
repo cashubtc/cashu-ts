@@ -26,7 +26,8 @@ import {
 import {
 	bytesToNumber,
 	getDecodedToken,
-	splitAmount
+	splitAmount,
+	deprecatedPreferenceToOutputAmounts
 } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
@@ -132,6 +133,7 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
+		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		try {
 			if (typeof token === 'string') {
 				token = getDecodedToken(token);
@@ -170,6 +172,7 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
+		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
@@ -222,6 +225,7 @@ class CashuWallet {
 			keysetId?: string;
 		}
 	): Promise<SendResponse> {
+		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options?.keysetId);
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
@@ -361,7 +365,6 @@ class CashuWallet {
 	 * @param amount amount to request
 	 * @param quote ID of mint quote
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @deprecated
 	 * @param preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
 	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
@@ -379,6 +382,7 @@ class CashuWallet {
 			pubkey?: string;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
+		if (options?.preference) options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
