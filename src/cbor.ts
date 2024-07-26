@@ -17,6 +17,8 @@ function encodeItem(value: any, buffer: Array<number>) {
 		encodeString(value, buffer);
 	} else if (Array.isArray(value)) {
 		encodeArray(value, buffer);
+	} else if (value instanceof Uint8Array) {
+		encodeByteString(value, buffer);
 	} else if (typeof value === 'object') {
 		encodeObject(value, buffer);
 	} else {
@@ -35,6 +37,32 @@ function encodeUnsigned(value: number, buffer: Array<number>) {
 		buffer.push(0x1a, value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
 	} else {
 		throw new Error('Unsupported integer size');
+	}
+}
+
+function encodeByteString(value: Uint8Array, buffer: Array<number>) {
+	const length = value.length;
+
+	if (length < 24) {
+		buffer.push(0x40 + length);
+	} else if (length < 256) {
+		buffer.push(0x58, length);
+	} else if (length < 65536) {
+		buffer.push(0x59, (length >> 8) & 0xff, length & 0xff);
+	} else if (length < 4294967296) {
+		buffer.push(
+			0x5a,
+			(length >> 24) & 0xff,
+			(length >> 16) & 0xff,
+			(length >> 8) & 0xff,
+			length & 0xff
+		);
+	} else {
+		throw new Error('Byte string too long to encode');
+	}
+
+	for (let i = 0; i < value.length; i++) {
+		buffer.push(value[i]);
 	}
 }
 
@@ -60,7 +88,6 @@ function encodeString(value: string, buffer: Array<number>) {
 		throw new Error('String too long to encode');
 	}
 
-	// Use a traditional for loop to iterate over Uint8Array
 	for (let i = 0; i < utf8.length; i++) {
 		buffer.push(utf8[i]);
 	}
