@@ -1,59 +1,75 @@
-import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, Proof, Token, TokenV2 } from './model/types/index.js';
+import { encodeBase64ToJson, encodeBase64toUint8, encodeJsonToBase64 } from './base64.js';
+import {
+	AmountPreference,
+	Keys,
+	OutputAmounts,
+	Proof,
+	Token,
+	TokenEntry,
+	TokenV2
+} from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
+import { decodeCBOR } from './cbor.js';
 
-function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
+function splitAmount(
+	value: number,
+	keyset: Keys,
+	split?: Array<number>,
+	order?: string
+): Array<number> {
 	const chunks: Array<number> = [];
-	if (amountPreference) {
-		chunks.push(...getPreference(value, amountPreference));
+	if (split) {
+		if (split.reduce((a, b) => a + b, 0) > value) {
+			throw new Error('Split amount is greater than the value');
+		}
+		chunks.push(...getPreference(value, keyset, split));
 		value =
 			value -
 			chunks.reduce((curr, acc) => {
 				return curr + acc;
 			}, 0);
 	}
-	for (let i = 0; i < 32; i++) {
-		const mask: number = 1 << i;
-		if ((value & mask) !== 0) {
-			chunks.push(Math.pow(2, i));
-		}
-	}
-	return chunks;
+	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
+		.map((k) => parseInt(k))
+		.sort((a, b) => b - a);
+	sortedKeyAmounts.forEach((amt) => {
+		const q = Math.floor(value / amt);
+		for (let i = 0; i < q; ++i) chunks.push(amt);
+		value %= amt;
+	});
+	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
 
-function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
+function hasCorrespondingKey(amount: number, keyset: Keys) {
+	return amount in keyset;
+}
+
+function getPreference(amount: number, keyset: Keys, split: Array<number>): Array<number> {
 	const chunks: Array<number> = [];
-	let accumulator = 0;
-	preferredAmounts.forEach((pa) => {
-		if (!isPowerOfTwo(pa.amount)) {
-			throw new Error(
-				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
-			);
+	split.forEach((splitAmount) => {
+		if (!hasCorrespondingKey(splitAmount, keyset)) {
+			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
-		for (let i = 1; i <= pa.count; i++) {
-			accumulator += pa.amount;
-			if (accumulator > amount) {
-				return;
-			}
-			chunks.push(pa.amount);
-		}
+		chunks.push(splitAmount);
 	});
 	return chunks;
 }
 
-function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
-	const amounts = splitAmount(amount);
-	return amounts.map((a) => {
-		return { amount: a, count: 1 };
+function deprecatedPreferenceToOutputAmounts(preference?: Array<AmountPreference>): OutputAmounts {
+	const sendAmounts: Array<number> = [];
+	preference?.forEach(({ count, amount }) => {
+		for (let i = 0; i < count; i++) {
+			sendAmounts.push(amount);
+		}
 	});
+	return { sendAmounts };
 }
-
 function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
@@ -81,9 +97,9 @@ function getEncodedToken(token: Token): string {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string): Token {
+function getDecodedToken(token: string) {
 	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix) => {
 		if (!token.startsWith(prefix)) {
 			return;
@@ -98,20 +114,31 @@ function getDecodedToken(token: string): Token {
  * @returns
  */
 function handleTokens(token: string): Token {
-	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
-
-	// check if v3
-	if ('token' in obj) {
-		return obj;
+	const version = token.slice(0, 1);
+	const encodedToken = token.slice(1);
+	if (version === 'A') {
+		return encodeBase64ToJson<Token>(encodedToken);
+	} else if (version === 'B') {
+		const uInt8Token = encodeBase64toUint8(encodedToken);
+		const tokenData = decodeCBOR(uInt8Token) as {
+			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
+			m: string;
+			d: string;
+		};
+		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
+		tokenData.t.forEach((tokenEntry) =>
+			tokenEntry.p.forEach((p) => {
+				mergedTokenEntry.proofs.push({
+					secret: p.s,
+					C: bytesToHex(p.c),
+					amount: p.a,
+					id: bytesToHex(tokenEntry.i)
+				});
+			})
+		);
+		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
 	}
-
-	// check if v1
-	if (Array.isArray(obj)) {
-		return { token: [{ proofs: obj, mint: '' }] };
-	}
-
-	// if v2 token return v3 format
-	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
+	throw new Error('Token version is not supported');
 }
 /**
  * Returns the keyset id of a set of keys
@@ -173,5 +200,5 @@ export {
 	getEncodedToken,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference,
+	deprecatedPreferenceToOutputAmounts
 };

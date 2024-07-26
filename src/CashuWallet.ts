@@ -22,14 +22,15 @@ import {
 	CheckStateEnum,
 	SerializedBlindedSignature,
 	MeltQuoteState,
-	MintInfo
+	MintInfo,
+	OutputAmounts
 } from './model/types/index.js';
 import {
 	bytesToNumber,
 	getDecodedToken,
-	getDefaultAmountPreference,
 	splitAmount,
-	sumProofs
+	sumProofs,
+	deprecatedPreferenceToOutputAmounts
 } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
@@ -213,7 +214,8 @@ class CashuWallet {
 	/**
 	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
 	 * @param {(string|Token)} token - Cashu token
-	 * @param preference optional preference for splitting proofs into specific amounts
+	 * @param preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param privkey? will create a signature on the @param token secrets if set
@@ -224,11 +226,14 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			preference?: Array<AmountPreference>;
+			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		try {
 			if (typeof token === 'string') {
 				token = getDecodedToken(token);
@@ -236,7 +241,7 @@ class CashuWallet {
 			const tokenEntries: Array<TokenEntry> = token.token;
 			const proofs = await this.receiveTokenEntry(tokenEntries[0], {
 				keysetId: options?.keysetId,
-				preference: options?.preference,
+				outputAmounts: options?.outputAmounts,
 				counter: options?.counter,
 				pubkey: options?.pubkey,
 				privkey: options?.privkey
@@ -261,24 +266,23 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			preference?: Array<AmountPreference>;
+			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const proofs: Array<Proof> = [];
 		try {
 			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			let preference = options?.preference;
-			if (!preference) {
-				preference = getDefaultAmountPreference(amount);
-			}
 			const keys = await this.getKeys(options?.keysetId);
 			const { payload, blindedMessages } = this.createSwapPayload(
 				amount,
 				tokenEntry.proofs,
 				keys,
-				preference,
+				options?.outputAmounts,
 				options?.counter,
 				options?.pubkey,
 				options?.privkey
@@ -378,7 +382,8 @@ class CashuWallet {
 	 * if both amount and preference are set, but the preference cannot fulfill the amount, then we use the default split
 	 * @param amount amount to send while performing the optimal split (least proofs possible). can be set to undefined if preference is set
 	 * @param proofs proofs matching that amount
-	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param preference Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param privkey? will create a signature on the @param proofs secrets if set
@@ -389,15 +394,15 @@ class CashuWallet {
 		proofs: Array<Proof>,
 		options?: {
 			preference?: Array<AmountPreference>;
+			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
 			keysetId?: string;
 		}
 	): Promise<SendResponse> {
-		if (options?.preference) {
-			amount = options?.preference?.reduce((acc, curr) => acc + curr.amount * curr.count, 0);
-		}
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options?.keysetId);
 		const proofsToSend = proofs;
 		const amountAvailable = sumProofs(proofs);
@@ -410,7 +415,7 @@ class CashuWallet {
 			amountToSend,
 			proofsToSend,
 			keyset,
-			options?.preference,
+			options?.outputAmounts,
 			options?.counter,
 			options?.pubkey,
 			options?.privkey
@@ -500,6 +505,11 @@ class CashuWallet {
 	 * Mint tokens for a given mint quote
 	 * @param amount amount to request
 	 * @param quote ID of mint quote
+	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
+	 * @param preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
+	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns proofs
 	 */
 	async mintTokens(
@@ -508,15 +518,18 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			preference?: Array<AmountPreference>;
+			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			options?.keysetId ?? keyset.id,
-			options?.preference,
+			keyset,
+			options?.outputAmounts?.keepAmounts,
 			options?.counter,
 			options?.pubkey
 		);
@@ -652,7 +665,7 @@ class CashuWallet {
 	 * Creates a split payload
 	 * @param amount amount to send
 	 * @param proofsToSend proofs to split*
-	 * @param preference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
@@ -662,7 +675,7 @@ class CashuWallet {
 		amount: number,
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
-		preference?: Array<AmountPreference>,
+		outputAmounts?: OutputAmounts,
 		counter?: number,
 		pubkey?: string,
 		privkey?: string
@@ -671,10 +684,13 @@ class CashuWallet {
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
+		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts?.length) {
+			outputAmounts.keepAmounts = splitAmount(totalAmount - amount, keyset.keys);
+		}
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount - this.getFeesForProofs(proofsToSend),
-			keyset.id,
-			undefined,
+			keyset,
+			outputAmounts?.keepAmounts,
 			counter
 		);
 		if (this._seed && counter) {
@@ -682,8 +698,8 @@ class CashuWallet {
 		}
 		const sendBlindedMessages = this.createRandomBlindedMessages(
 			amount,
-			keyset.id,
-			preference,
+			keyset,
+			outputAmounts?.sendAmounts,
 			counter,
 			pubkey
 		);
@@ -749,13 +765,13 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
-		keysetId: string,
-		amountPreference?: Array<AmountPreference>,
+		keyset: MintKeys,
+		split?: Array<number>,
 		counter?: number,
 		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
-		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, keysetId, counter, pubkey);
+		const amounts = splitAmount(amount, keyset.keys, split);
+		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
 	}
 
 	/**

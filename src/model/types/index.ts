@@ -560,6 +560,11 @@ export type AmountPreference = {
 	count: number;
 };
 
+export type OutputAmounts = {
+	sendAmounts: Array<number>;
+	keepAmounts?: Array<number>;
+};
+
 export type InvoiceData = {
 	paymentRequest: string;
 	amountInSats?: number;
