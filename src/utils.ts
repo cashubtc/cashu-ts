@@ -2,7 +2,8 @@ import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
-	encodeUint8toBase64
+	encodeUint8toBase64,
+	encodeUint8toBase64Url
 } from './base64.js';
 import {
 	AmountPreference,
@@ -124,12 +125,10 @@ function getEncodedTokenV4(token: Token): string {
 		)
 	} as TokenV4Template;
 
-	console.log(tokenTemplate.t[0].p[0]);
-
 	const encodedData = encodeCBOR(tokenTemplate);
 	const prefix = 'cashu';
 	const version = 'B';
-	const base64Data = encodeUint8toBase64(encodedData);
+	const base64Data = encodeUint8toBase64Url(encodedData);
 	return prefix + version + base64Data;
 }
 
