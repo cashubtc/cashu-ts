@@ -8,12 +8,12 @@ import { decodeCBOR } from './cbor.js';
 function splitAmount(
 	value: number,
 	keyset: Keys,
-	amountPreference?: Array<AmountPreference>,
+	split?: Array<number>,
 	order?: string
 ): Array<number> {
 	const chunks: Array<number> = [];
-	if (amountPreference) {
-		chunks.push(...getPreference(value, keyset, amountPreference));
+	if (split) {
+		chunks.push(...getPreference(value, keyset, split));
 		value =
 			value -
 			chunks.reduce((curr, acc) => {
@@ -24,7 +24,7 @@ function splitAmount(
 		.map((k) => parseInt(k))
 		.sort((a, b) => b - a);
 	sortedKeyAmounts.forEach((amt) => {
-		let q = Math.floor(value / amt);
+		const q = Math.floor(value / amt);
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
@@ -42,30 +42,24 @@ function hasCorrespondingKey(amount: number, keyset: Keys) {
 function getPreference(
 	amount: number,
 	keyset: Keys,
-	preferredAmounts: Array<AmountPreference>
+	split: Array<number>
 ): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
-	preferredAmounts.forEach((pa) => {
-		if (!hasCorrespondingKey(pa.amount, keyset)) {
+	split.forEach((splitAmount) => {
+		if (!hasCorrespondingKey(splitAmount, keyset)) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
-		for (let i = 1; i <= pa.count; i++) {
-			accumulator += pa.amount;
+		const count = split.filter(value => value === splitAmount).length;
+		for (let i = 1; i <= count; i++) {
+			accumulator += splitAmount;
 			if (accumulator > amount) {
 				return;
 			}
-			chunks.push(pa.amount);
+			chunks.push(splitAmount);
 		}
 	});
 	return chunks;
-}
-
-function getDefaultAmountPreference(amount: number, keyset: Keys): Array<AmountPreference> {
-	const amounts = splitAmount(amount, keyset);
-	return amounts.map((a) => {
-		return { amount: a, count: 1 };
-	});
 }
 
 function bytesToNumber(bytes: Uint8Array): bigint {
@@ -119,7 +113,7 @@ function handleTokens(token: string): Token {
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
 		const tokenData = decodeCBOR(uInt8Token) as {
-			t: { p: { a: number; s: string; c: Uint8Array }[]; i: Uint8Array }[];
+			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
 			m: string;
 			d: string;
 		};
@@ -135,9 +129,9 @@ function handleTokens(token: string): Token {
 			})
 		);
 		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
-	} else {
-		throw new Error('Token version is not supported');
 	}
+	throw new Error('Token version is not supported');
+
 }
 /**
  * Returns the keyset id of a set of keys
@@ -195,5 +189,4 @@ export {
 	getEncodedToken,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference
 };

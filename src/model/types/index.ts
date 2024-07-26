@@ -556,9 +556,9 @@ export type AmountPreference = {
 	count: number;
 };
 
-export type Preferences = {
-	sendPreference: Array<AmountPreference>;
-	keepPreference?: Array<AmountPreference>;
+export type OutputAmounts = {
+	sendAmounts: Array<number>;
+	keepAmounts?: Array<number>;
 };
 
 export type InvoiceData = {

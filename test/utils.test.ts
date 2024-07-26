@@ -29,29 +29,26 @@ describe('test split amounts ', () => {
 });
 
 describe('test split custom amounts ', () => {
-	const fiveToOne: AmountPreference = { amount: 1, count: 5 };
+	const fiveToOne = [1, 1, 1, 1, 1];
 	test('testing amount 5', async () => {
-		const chunks = utils.splitAmount(5, keys, [fiveToOne]);
+		const chunks = utils.splitAmount(5, keys, fiveToOne);
 		expect(chunks).toStrictEqual([1, 1, 1, 1, 1]);
 	});
-	const tenToOneAndTwo: Array<AmountPreference> = [
-		{ amount: 1, count: 2 },
-		{ amount: 2, count: 4 }
-	];
+	const tenToOneAndTwo = [1, 1, 2, 2, 2, 2];
 	test('testing amount 10', async () => {
 		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
 		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
-	const fiveTwelve: Array<AmountPreference> = [{ amount: 512, count: 2 }];
+	const fiveTwelve = [512, 512];
 	test('testing amount 518', async () => {
 		const chunks = utils.splitAmount(518, keys, fiveTwelve, 'desc');
 		expect(chunks).toStrictEqual([512, 4, 2]);
 	});
-	const illegal: Array<AmountPreference> = [{ amount: 3, count: 2 }];
+	const illegal = [3, 3];
 	test('testing non pow2', async () => {
 		expect(() => utils.splitAmount(6, keys, illegal)).toThrowError();
 	});
-	const empty: Array<AmountPreference> = [];
+	const empty: Array<number> = [];
 	test('testing empty', async () => {
 		const chunks = utils.splitAmount(5, keys, empty, 'desc');
 		expect(chunks).toStrictEqual([4, 1]);

@@ -492,7 +492,8 @@ describe('send', () => {
 			}
 		];
 		const result = await wallet.send(4, overpayProofs, {
-			preference: { sendPreference: [{ amount: 1, count: 4 }] }
+			// preference: { sendPreference: [{ amount: 1, count: 4 }] }
+			outputAmounts: { "sendAmounts": [1, 1, 1, 1], "keepAmounts": [] }
 		});
 
 		expect(result.send).toHaveLength(4);
@@ -548,8 +549,9 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
-		const result = await wallet.send(4, overpayProofs, {
-			preference: { sendPreference: [{ amount: 1, count: 3 }] }
+		const result = await wallet.send(3, overpayProofs, {
+			// preference: { sendPreference: [{ amount: 1, count: 3 }] }
+			outputAmounts: { "sendAmounts": [1, 1, 1], "keepAmounts": [] }
 		});
 
 		expect(result.send).toHaveLength(3);
