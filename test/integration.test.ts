@@ -2,7 +2,7 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { deriveKeysetId, getEncodedToken } from '../src/utils.js';
+import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 dns.setDefaultResultOrder('ipv4first');
@@ -144,6 +144,7 @@ describe('mint api', () => {
 		expect(sendResponse.returnChange).toBeDefined();
 		expect(sendResponse.send.length).toBe(1);
 		expect(sendResponse.returnChange.length).toBe(0);
+		expect(sumProofs(sendResponse.send)).toBe(64);
 	});
 	test('test send tokens with change', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -156,8 +157,10 @@ describe('mint api', () => {
 		expect(sendResponse.send).toBeDefined();
 		expect(sendResponse.returnChange).toBeDefined();
 		expect(sendResponse.send.length).toBe(2);
-		expect(sendResponse.returnChange.length).toBe(4);
-	});
+		expect(sendResponse.returnChange.length).toBe(5);
+		expect(sumProofs(sendResponse.send)).toBe(10);
+		expect(sumProofs(sendResponse.returnChange)).toBe(90);
+	}, 10000000);
 	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
@@ -203,7 +206,7 @@ describe('mint api', () => {
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
-		expect(result).toEqual(new Error('Error when receiving'));
+		expect(result).toEqual(new Error('Error receiving token: Error: Error receiving token entry'));
 
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 
