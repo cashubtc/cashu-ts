@@ -1,7 +1,7 @@
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
-	GetInfoResponse,
+	MintInfo,
 	MeltPayload,
 	MintActiveKeys,
 	MintAllKeysets,
@@ -52,12 +52,9 @@ class CashuMint {
 	 * @param mintUrl
 	 * @param customRequest
 	 */
-	public static async getInfo(
-		mintUrl: string,
-		customRequest?: typeof request
-	): Promise<GetInfoResponse> {
+	public static async getInfo(mintUrl: string, customRequest?: typeof request): Promise<MintInfo> {
 		const requestInstance = customRequest || request;
-		const response = await requestInstance<GetInfoResponse>({
+		const response = await requestInstance<MintInfo>({
 			endpoint: joinUrls(mintUrl, '/v1/info')
 		});
 		const data = handleMintInfoContactFieldDeprecated(response);
@@ -66,7 +63,7 @@ class CashuMint {
 	/**
 	 * fetches mints info at the /info endpoint
 	 */
-	async getInfo(): Promise<GetInfoResponse> {
+	async getInfo(): Promise<MintInfo> {
 		return CashuMint.getInfo(this._mintUrl, this._customRequest);
 	}
 

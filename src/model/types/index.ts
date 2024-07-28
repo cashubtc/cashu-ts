@@ -79,6 +79,10 @@ export type MintKeyset = {
 	 * Whether the keyset is active or not.
 	 */
 	active: boolean;
+	/**
+	 * Input fee for keyset (in ppk)
+	 */
+	input_fee_ppk?: number;
 };
 
 /**
@@ -484,7 +488,7 @@ export type MintContactInfo = {
 /**
  * Response from mint at /info endpoint
  */
-export type GetInfoResponse = {
+export type MintInfo = {
 	name: string;
 	pubkey: string;
 	version: string;
@@ -526,7 +530,7 @@ export type GetInfoResponse = {
 };
 
 /**
- * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}
+ * Ecash to other MoE swap method, displayed in @type {MintInfo}
  */
 export type SwapMethod = {
 	method: string;
@@ -554,6 +558,11 @@ export type PostRestoreResponse = {
 export type AmountPreference = {
 	amount: number;
 	count: number;
+};
+
+export type OutputAmounts = {
+	sendAmounts: Array<number>;
+	keepAmounts?: Array<number>;
 };
 
 export type InvoiceData = {

@@ -11,7 +11,20 @@ const dummyKeysResp = {
 		{
 			id: '009a1f293253e41e',
 			unit: 'sat',
-			keys: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
+			keys: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
+			}
+		}
+	]
+};
+const dummyKeysetResp = {
+	keysets: [
+		{
+			id: '009a1f293253e41e',
+			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0
 		}
 	]
 };
@@ -31,6 +44,7 @@ beforeEach(() => {
 	nock.cleanAll();
 	nock(mintUrl).get('/v1/keys').reply(200, dummyKeysResp);
 	nock(mintUrl).get('/v1/keys/009a1f293253e41e').reply(200, dummyKeysResp);
+	nock(mintUrl).get('/v1/keysets').reply(200, dummyKeysetResp);
 });
 
 describe('test info', () => {
@@ -180,14 +194,14 @@ describe('receive', () => {
 		nock(mintUrl).post('/v1/swap').reply(400, { detail: msg });
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('Error when receiving'));
+		expect(result).toEqual(new Error('Error receiving token: Error: Error receiving token entry'));
 	});
 
 	test('test receive could not verify proofs', async () => {
 		nock(mintUrl).post('/v1/swap').reply(400, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('Error when receiving'));
+		expect(result).toEqual(new Error('Error receiving token: Error: Error receiving token entry'));
 	});
 });
 
@@ -249,21 +263,6 @@ describe('payLnInvoice', () => {
 		expect(result).toEqual({ isPaid: true, preimage: null, change: [] });
 	});
 	test('test payLnInvoice change', async () => {
-		nock.cleanAll();
-		nock(mintUrl)
-			.get('/v1/keys')
-			.reply(200, {
-				keysets: [
-					{
-						id: '009a1f293253e41e',
-						unit: 'sat',
-						keys: {
-							1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-							2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
-						}
-					}
-				]
-			});
 		nock(mintUrl)
 			.get('/v1/melt/quote/bolt11/test')
 			.reply(200, {
@@ -352,7 +351,7 @@ describe('send', () => {
 	];
 	test('test send base case', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -491,7 +490,10 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
-		const result = await wallet.send(4, overpayProofs, { preference: [{ amount: 1, count: 4 }] });
+		const result = await wallet.send(4, overpayProofs, {
+			// preference: { sendPreference: [{ amount: 1, count: 4 }] }
+			outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] }
+		});
 
 		expect(result.send).toHaveLength(4);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
@@ -546,7 +548,10 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
-		const result = await wallet.send(4, overpayProofs, { preference: [{ amount: 1, count: 3 }] });
+		const result = await wallet.send(3, overpayProofs, {
+			// preference: { sendPreference: [{ amount: 1, count: 3 }] }
+			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [] }
+		});
 
 		expect(result.send).toHaveLength(3);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
@@ -574,7 +579,7 @@ describe('send', () => {
 
 		const result = await wallet.send(2, proofs).catch((e) => e);
 
-		expect(result).toEqual(new Error('Not enough funds available'));
+		expect(result).toEqual(new Error('Not enough funds available to send'));
 	});
 	test('test send bad response', async () => {
 		nock(mintUrl).post('/v1/swap').reply(200, {});
