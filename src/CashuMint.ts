@@ -52,10 +52,7 @@ class CashuMint {
 	 * @param mintUrl
 	 * @param customRequest
 	 */
-	public static async getInfo(
-		mintUrl: string,
-		customRequest?: typeof request
-	): Promise<MintInfo> {
+	public static async getInfo(mintUrl: string, customRequest?: typeof request): Promise<MintInfo> {
 		const requestInstance = customRequest || request;
 		const response = await requestInstance<MintInfo>({
 			endpoint: joinUrls(mintUrl, '/v1/info')

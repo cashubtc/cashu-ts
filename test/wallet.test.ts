@@ -11,7 +11,10 @@ const dummyKeysResp = {
 		{
 			id: '009a1f293253e41e',
 			unit: 'sat',
-			keys: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181', 2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5' }
+			keys: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
+			}
 		}
 	]
 };
@@ -21,7 +24,7 @@ const dummyKeysetResp = {
 			id: '009a1f293253e41e',
 			unit: 'sat',
 			active: true,
-			input_fee_ppk: 0,
+			input_fee_ppk: 0
 		}
 	]
 };

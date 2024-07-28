@@ -22,7 +22,9 @@ function splitAmount(
 	const chunks: Array<number> = [];
 	if (split) {
 		if (split.reduce((a, b) => a + b, 0) > value) {
-			throw new Error('Split amount is greater than the value');
+			throw new Error(
+				`Split is greater than total amount: ${split.reduce((a, b) => a + b, 0)} > ${value}`
+			);
 		}
 		chunks.push(...getPreference(value, keyset, split));
 		value =
@@ -31,9 +33,7 @@ function splitAmount(
 				return curr + acc;
 			}, 0);
 	}
-	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
-		.map((k) => parseInt(k))
-		.sort((a, b) => b - a);
+	const sortedKeyAmounts = getKeysetAmounts(keyset);
 	sortedKeyAmounts.forEach((amt) => {
 		const q = Math.floor(value / amt);
 		for (let i = 0; i < q; ++i) chunks.push(amt);
@@ -42,8 +42,32 @@ function splitAmount(
 	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
+function getKeepAmounts(
+	proofsWeHave: Array<Proof>,
+	amountToKeep: number,
+	keyset: Keys,
+	targetCount: number
+): Array<number> {
+	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
+	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
+	const amountWeWant: Array<number> = [];
+	const amountsWeHave = proofsWeHave.map((p) => p.amount);
+	const sortedKeyAmounts = getKeysetAmounts(keyset);
+	sortedKeyAmounts.forEach((amt) => {
+		const count = amountsWeHave.filter((a) => a === amt).length;
+		const q = Math.floor(targetCount - count);
+		for (let i = 0; i < q; ++i) amountWeWant.push(amt);
+	});
+	return amountWeWant;
+}
+
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
+}
+function getKeysetAmounts(keyset: Keys): Array<number> {
+	return Object.keys(keyset)
+		.map((k) => parseInt(k))
+		.sort((a, b) => b - a);
 }
 
 function hasCorrespondingKey(amount: number, keyset: Keys) {
@@ -200,5 +224,6 @@ export {
 	getEncodedToken,
 	hexToNumber,
 	splitAmount,
-	deprecatedPreferenceToOutputAmounts
+	deprecatedPreferenceToOutputAmounts,
+	getKeepAmounts
 };

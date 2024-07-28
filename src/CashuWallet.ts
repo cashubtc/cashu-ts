@@ -30,7 +30,8 @@ import {
 	getDecodedToken,
 	splitAmount,
 	sumProofs,
-	deprecatedPreferenceToOutputAmounts
+	deprecatedPreferenceToOutputAmounts,
+	getKeepAmounts
 } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
@@ -81,7 +82,6 @@ class CashuWallet {
 			mnemonicOrSeed?: string | Uint8Array;
 		}
 	) {
-
 		this.mint = mint;
 		let keys: Array<MintKeys> = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
@@ -108,7 +108,7 @@ class CashuWallet {
 		return this._unit;
 	}
 	get keys(): Map<string, MintKeys> {
-		return this._keys
+		return this._keys;
 	}
 	get keysetId(): string {
 		if (!this._keysetId) {
@@ -166,10 +166,10 @@ class CashuWallet {
 
 	/**
 	 * Get public keys from the mint. If keys were already fetched, it will return those.
-	 * 
+	 *
 	 * If `keysetId` is set, it will fetch and return that specific keyset.
 	 * Otherwise, we select an active keyset with the unit of the wallet.
-	 * 
+	 *
 	 * @param keysetId optional keysetId to get keys for
 	 * @param unit optional unit to get keys for
 	 * @returns keyset
@@ -180,7 +180,7 @@ class CashuWallet {
 				this.keysetId = keysetId;
 				return this._keys.get(keysetId) as MintKeys;
 			}
-			const allKeysets = await this.mint.getKeys(keysetId)
+			const allKeysets = await this.mint.getKeys(keysetId);
 			const keyset = allKeysets.keysets[0];
 			if (!keyset) {
 				throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
@@ -196,14 +196,18 @@ class CashuWallet {
 			.filter((k) => k.unit === this._unit && k.active)
 			.sort((a, b) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0))[0];
 		if (!keysetToActivate) {
-			throw new Error(`could not initialize keys. No active keyset with unit '${this._unit}' found`);
+			throw new Error(
+				`could not initialize keys. No active keyset with unit '${this._unit}' found`
+			);
 		}
 
 		if (!this._keys.get(keysetToActivate.id)) {
 			const keysetGet = await this.mint.getKeys(keysetToActivate.id);
 			const keys = keysetGet.keysets.find((k) => k.id === keysetToActivate.id);
 			if (!keys) {
-				throw new Error(`could not initialize keys. No keyset with id '${keysetToActivate.id}' found`);
+				throw new Error(
+					`could not initialize keys. No keyset with id '${keysetToActivate.id}' found`
+				);
 			}
 			this._keys.set(keys.id, keys);
 		}
@@ -306,62 +310,130 @@ class CashuWallet {
 		proofs: Array<Proof>,
 		options?: {
 			preference?: Array<AmountPreference>;
+			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
 			keysetId?: string;
-			offline?: boolean,
+			offline?: boolean;
 		}
 	): Promise<SendResponse> {
+		if (options?.preference)
+			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		if (sumProofs(proofs) < amount) {
 			throw new Error('Not enough funds available to send');
 		}
-		const { returnChange: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(proofs, amount);
+		const { returnChange: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
+			proofs,
+			amount
+		);
 		if (
 			sumProofs(sendProofOffline) != amount || // if the exact amount cannot be selected
-			options?.preference || options?.pubkey || options?.privkey || options?.keysetId // these options require a swap
+			options?.outputAmounts ||
+			options?.pubkey ||
+			options?.privkey ||
+			options?.keysetId // these options require a swap
 		) {
-			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(proofs, amount, true);
+			console.log('>> yes swap');
+			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
+				proofs,
+				amount,
+				true
+			);
+			console.log(
+				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(sendProofs)}`
+			);
+			// if (options && !options?.outputAmounts?.keepAmounts) {
+			// 	options.outputAmounts = {
+			// 		keepAmounts: getKeepAmounts(keepProofsSelect, sumProofs(keepProofsSelect), this._keys.get(options?.keysetId || this.keysetId) as MintKeys, 3),
+			// 		sendAmounts: options?.outputAmounts?.sendAmounts || []
+			// 	}
+			// }
 			const { returnChange, send } = await this.swap(amount, sendProofs, options);
+			console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
 			const returnChangeProofs = keepProofsSelect.concat(returnChange);
+			console.log(`returnChangeProofs: ${sumProofs(returnChangeProofs)}`);
 			return { returnChange: returnChangeProofs, send };
 		}
-
+		console.log('>> no swap');
+		// console.log(`keepProofsOffline: ${sumProofs(keepProofsOffline)} | sendProofOffline: ${sumProofs(sendProofOffline)}`);
 		return { returnChange: keepProofsOffline, send: sendProofOffline };
-
 	}
-
 
 	private selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
 		includeFees = false
 	): SendResponse {
+		// heavy logging in this function
 		const sortedProofs = proofs.sort((a, b) => a.amount - b.amount);
-		const smallerProofs = sortedProofs.filter((p) => p.amount <= amountToSend).sort((a, b) => b.amount - a.amount);
-		const biggerProofs = sortedProofs.filter((p) => p.amount > amountToSend).sort((a, b) => a.amount - b.amount);
+		const smallerProofs = sortedProofs
+			.filter((p) => p.amount <= amountToSend)
+			.sort((a, b) => b.amount - a.amount);
+		const biggerProofs = sortedProofs
+			.filter((p) => p.amount > amountToSend)
+			.sort((a, b) => a.amount - b.amount);
 		const nextBigger = biggerProofs[0];
+		console.log(
+			`> enter | amountToSend: ${amountToSend} | proofs: ${sumProofs(
+				proofs
+			)} | smallerProofs: ${sumProofs(smallerProofs)} | nextBigger: ${nextBigger?.amount}`
+		);
+		if (!smallerProofs.length && nextBigger) {
+			console.log(
+				`< [0] exit: no smallerProofs, nextBigger: ${nextBigger.amount} | keep: ${sumProofs(
+					proofs.filter((p) => p.secret !== nextBigger.secret)
+				)} | proofs: ${sumProofs(proofs)}`
+			);
+			return {
+				returnChange: proofs.filter((p) => p.secret !== nextBigger.secret),
+				send: [nextBigger]
+			};
+		}
 
-		if (!smallerProofs.length && nextBigger)
-			return { returnChange: proofs.filter((p) => p.id !== nextBigger.id), send: [nextBigger] };
-
-		if (!smallerProofs.length && !nextBigger)
+		if (!smallerProofs.length && !nextBigger) {
+			console.log(
+				`< [1] exit: no smallerProofs, no nextBigger | amountToSend: ${amountToSend} | keep: ${sumProofs(
+					proofs
+				)}`
+			);
 			return { returnChange: proofs, send: [] };
+		}
 
 		let remainder = amountToSend;
 		let selectedProofs = [smallerProofs[0]];
-		const returnedProofs = []
+		console.log(`Selected proof: ${smallerProofs[0].amount}`);
+		const returnedProofs = [];
 		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
 		remainder -= smallerProofs[0].amount - feePPK / 1000;
 		if (remainder > 0) {
-			const { returnChange, send } = this.selectProofsToSend(smallerProofs.slice(1), remainder, includeFees);
+			const { returnChange, send } = this.selectProofsToSend(
+				smallerProofs.slice(1),
+				remainder,
+				includeFees
+			);
+			// if (!send.length) {
+			// 	send = [nextBigger];
+			// 	console.log(`< exit [2.1] no send | send: ${sumProofs(send)} | returnChange: ${sumProofs(returnChange)}`);
+			// }
 			selectedProofs.push(...send);
 			returnedProofs.push(...returnChange);
 		}
 
-		if (sumProofs(selectedProofs) < amountToSend && nextBigger)
-			selectedProofs = [nextBigger]
+		if (sumProofs(selectedProofs) < amountToSend && nextBigger) {
+			selectedProofs = [nextBigger];
+			console.log(
+				`< exit [2.2] selecting nextBigger | amountToSend: ${amountToSend} | selectedProofs: ${sumProofs(
+					selectedProofs
+				)} | returnedProofs: ${sumProofs(returnedProofs)}`
+			);
+		}
 
+		console.log(
+			`< exit [2] selectProofsToSend | amountToSend: ${amountToSend} | selectedProofs: ${sumProofs(
+				selectedProofs
+			)} | returnedProofs: ${sumProofs(proofs.filter((p) => !selectedProofs.includes(p)))}`
+		);
 		return {
 			returnChange: proofs.filter((p) => !selectedProofs.includes(p)),
 			send: selectedProofs
@@ -369,10 +441,18 @@ class CashuWallet {
 	}
 
 	getFeesForProofs(proofs: Array<Proof>): number {
-		const fees = Math.floor(Math.max(
-			(proofs.reduce((total, curr) => total + (this._keysets.find((k) => k.id === curr.id)?.input_fee_ppk || 0), 0) + 999) / 1000,
-			0
-		))
+		const fees = Math.floor(
+			Math.max(
+				(proofs.reduce(
+					(total, curr) =>
+						total + (this._keysets.find((k) => k.id === curr.id)?.input_fee_ppk || 0),
+					0
+				) +
+					999) /
+					1000,
+				0
+			)
+		);
 		return fees;
 	}
 
@@ -407,10 +487,15 @@ class CashuWallet {
 		const proofsToSend = proofs;
 		const amountAvailable = sumProofs(proofs);
 		if (amount + this.getFeesForProofs(proofsToSend) > amountAvailable) {
+			console.log(
+				`amount: ${amount} | fees: ${this.getFeesForProofs(
+					proofsToSend
+				)} | amountAvailable: ${amountAvailable}`
+			);
 			throw new Error('Not enough funds available');
 		}
-		const amountToSend = amount + this.getFeesForProofs(proofsToSend)
-		const amountToKeep = sumProofs(proofsToSend) - amountToSend
+		const amountToSend = amount + this.getFeesForProofs(proofsToSend);
+		const amountToKeep = sumProofs(proofsToSend) - amountToSend;
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
@@ -525,11 +610,18 @@ class CashuWallet {
 	): Promise<{ proofs: Array<Proof> }> {
 		if (options?.preference)
 			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
+		console.log(
+			`outputAmounts: ${
+				options?.outputAmounts?.keepAmounts
+			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a, b) => a + b, 0)}) | ${
+				options?.outputAmounts?.sendAmounts
+			} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a, b) => a + b, 0)})`
+		);
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			keyset,
-			options?.outputAmounts?.keepAmounts,
+			options?.outputAmounts?.sendAmounts,
 			options?.counter,
 			options?.pubkey
 		);
@@ -868,7 +960,6 @@ class CashuWallet {
 			})
 			.map((p) => serializeProof(p) as Proof);
 	}
-
 }
 
 export { CashuWallet };
