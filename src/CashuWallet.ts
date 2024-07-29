@@ -449,7 +449,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-					1000,
+				1000,
 				0
 			)
 		);
@@ -611,10 +611,8 @@ class CashuWallet {
 		if (options?.preference)
 			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		console.log(
-			`outputAmounts: ${
-				options?.outputAmounts?.keepAmounts
-			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a, b) => a + b, 0)}) | ${
-				options?.outputAmounts?.sendAmounts
+			`outputAmounts: ${options?.outputAmounts?.keepAmounts
+			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a, b) => a + b, 0)}) | ${options?.outputAmounts?.sendAmounts
 			} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a, b) => a + b, 0)})`
 		);
 		const keyset = await this.getKeys(options?.keysetId);
