@@ -45,20 +45,34 @@ function splitAmount(
 function getKeepAmounts(
 	proofsWeHave: Array<Proof>,
 	amountToKeep: number,
-	keyset: Keys,
+	keys: Keys,
 	targetCount: number
 ): Array<number> {
 	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
-	const amountWeWant: Array<number> = [];
+	const amountsWeWant: Array<number> = [];
 	const amountsWeHave = proofsWeHave.map((p) => p.amount);
-	const sortedKeyAmounts = getKeysetAmounts(keyset);
+	const sortedKeyAmounts = getKeysetAmounts(keys);
 	sortedKeyAmounts.forEach((amt) => {
-		const count = amountsWeHave.filter((a) => a === amt).length;
-		const q = Math.floor(targetCount - count);
-		for (let i = 0; i < q; ++i) amountWeWant.push(amt);
+		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
+		const countWeWant = Math.floor(targetCount - countWeHave);
+		for (let i = 0; i < countWeWant; ++i) {
+			if (amountsWeWant.reduce((a, b) => a + b, 0) + amt > amountToKeep) {
+				break;
+			}
+			amountsWeWant.push(amt)
+		}
 	});
-	return amountWeWant;
+	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
+	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0)
+	if (amountDiff) {
+		const remainingAmounts = splitAmount(amountDiff, keys)
+		remainingAmounts.forEach((amt) => { amountsWeWant.push(amt) })
+	}
+	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b)
+	console.log(`amountsWeHave: ${amountsWeHave}`)
+	console.log(`amountsWeWant: ${sortedAmountsWeWant}`);
+	return sortedAmountsWeWant;
 }
 
 function isPowerOfTwo(number: number) {
@@ -67,7 +81,7 @@ function isPowerOfTwo(number: number) {
 function getKeysetAmounts(keyset: Keys): Array<number> {
 	return Object.keys(keyset)
 		.map((k) => parseInt(k))
-		.sort((a, b) => b - a);
+		.sort((a, b) => a - b);
 }
 
 function hasCorrespondingKey(amount: number, keyset: Keys) {

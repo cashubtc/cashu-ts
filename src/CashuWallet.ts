@@ -145,8 +145,31 @@ class CashuWallet {
 		await this.getMintInfo();
 		await this.getKeySets();
 		await this.getAllKeys();
+		this.keysetId = this.getActiveKeyset(this._keysets).id;
 	}
 
+	/**
+	 * Choose a keyset to activate based on the lowest input fee
+	 * 
+	 * Note: this function will filter out deprecated base64 keysets
+	 * 
+	 * @param keysets keysets to choose from
+	 * @returns active keyset
+	 */
+	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
+		let activeKeysets = keysets.filter((k) => k.active)
+		// begin deprecated: if there are keyset IDs that are not hex strings, we need to filter them out
+		const hexKeysets = activeKeysets.filter((k) => /^[0-9a-fA-F]+$/.test(k.id));
+		if (hexKeysets.length > 0) {
+			activeKeysets = hexKeysets;
+		}
+		// end deprecated
+		const activeKeyset = activeKeysets.sort((a, b) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0))[0];
+		if (!activeKeyset) {
+			throw new Error('No active keyset found');
+		}
+		return activeKeyset;
+	}
 	/**
 	 * Get keysets from the mint with the unit of the wallet
 	 * @returns keysets
@@ -192,27 +215,9 @@ class CashuWallet {
 
 		// no keysetId was set, so we select an active keyset with the unit of the wallet with the lowest fees and use that
 		const allKeysets = await this.mint.getKeySets();
-		const keysetToActivate = allKeysets.keysets
-			.filter((k) => k.unit === this._unit && k.active)
-			.sort((a, b) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0))[0];
-		if (!keysetToActivate) {
-			throw new Error(
-				`could not initialize keys. No active keyset with unit '${this._unit}' found`
-			);
-		}
-
-		if (!this._keys.get(keysetToActivate.id)) {
-			const keysetGet = await this.mint.getKeys(keysetToActivate.id);
-			const keys = keysetGet.keysets.find((k) => k.id === keysetToActivate.id);
-			if (!keys) {
-				throw new Error(
-					`could not initialize keys. No keyset with id '${keysetToActivate.id}' found`
-				);
-			}
-			this._keys.set(keys.id, keys);
-		}
-		this.keysetId = keysetToActivate.id;
-		return this._keys.get(keysetToActivate.id) as MintKeys;
+		const keysetToActivate = this.getActiveKeyset(allKeysets.keysets)
+		const keyset = await this.getKeys(keysetToActivate.id);
+		return keyset
 	}
 
 	/**
@@ -311,6 +316,7 @@ class CashuWallet {
 		options?: {
 			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
+			proofsWeHave?: Array<Proof>;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
@@ -343,12 +349,12 @@ class CashuWallet {
 			console.log(
 				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(sendProofs)}`
 			);
-			// if (options && !options?.outputAmounts?.keepAmounts) {
-			// 	options.outputAmounts = {
-			// 		keepAmounts: getKeepAmounts(keepProofsSelect, sumProofs(keepProofsSelect), this._keys.get(options?.keysetId || this.keysetId) as MintKeys, 3),
-			// 		sendAmounts: options?.outputAmounts?.sendAmounts || []
-			// 	}
-			// }
+			if (options && !options?.outputAmounts?.keepAmounts && options?.proofsWeHave) {
+				options.outputAmounts = {
+					keepAmounts: getKeepAmounts(options.proofsWeHave, sumProofs(keepProofsSelect), this._keys.get(options?.keysetId || this.keysetId) as MintKeys, 3),
+					sendAmounts: options?.outputAmounts?.sendAmounts || []
+				}
+			}
 			const { returnChange, send } = await this.swap(amount, sendProofs, options);
 			console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
 			const returnChangeProofs = keepProofsSelect.concat(returnChange);
@@ -374,17 +380,17 @@ class CashuWallet {
 			.filter((p) => p.amount > amountToSend)
 			.sort((a, b) => a.amount - b.amount);
 		const nextBigger = biggerProofs[0];
-		console.log(
-			`> enter | amountToSend: ${amountToSend} | proofs: ${sumProofs(
-				proofs
-			)} | smallerProofs: ${sumProofs(smallerProofs)} | nextBigger: ${nextBigger?.amount}`
-		);
+		// console.log(
+		// 	`> enter | amountToSend: ${amountToSend} | proofs: ${sumProofs(
+		// 		proofs
+		// 	)} | smallerProofs: ${sumProofs(smallerProofs)} | nextBigger: ${nextBigger?.amount}`
+		// );
 		if (!smallerProofs.length && nextBigger) {
-			console.log(
-				`< [0] exit: no smallerProofs, nextBigger: ${nextBigger.amount} | keep: ${sumProofs(
-					proofs.filter((p) => p.secret !== nextBigger.secret)
-				)} | proofs: ${sumProofs(proofs)}`
-			);
+			// console.log(
+			// 	`< [0] exit: no smallerProofs, nextBigger: ${nextBigger.amount} | keep: ${sumProofs(
+			// 		proofs.filter((p) => p.secret !== nextBigger.secret)
+			// 	)} | proofs: ${sumProofs(proofs)}`
+			// );
 			return {
 				returnChange: proofs.filter((p) => p.secret !== nextBigger.secret),
 				send: [nextBigger]
@@ -392,17 +398,17 @@ class CashuWallet {
 		}
 
 		if (!smallerProofs.length && !nextBigger) {
-			console.log(
-				`< [1] exit: no smallerProofs, no nextBigger | amountToSend: ${amountToSend} | keep: ${sumProofs(
-					proofs
-				)}`
-			);
+			// console.log(
+			// 	`< [1] exit: no smallerProofs, no nextBigger | amountToSend: ${amountToSend} | keep: ${sumProofs(
+			// 		proofs
+			// 	)}`
+			// );
 			return { returnChange: proofs, send: [] };
 		}
 
 		let remainder = amountToSend;
 		let selectedProofs = [smallerProofs[0]];
-		console.log(`Selected proof: ${smallerProofs[0].amount}`);
+		// console.log(`Selected proof: ${smallerProofs[0].amount}`);
 		const returnedProofs = [];
 		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
 		remainder -= smallerProofs[0].amount - feePPK / 1000;
@@ -422,18 +428,18 @@ class CashuWallet {
 
 		if (sumProofs(selectedProofs) < amountToSend && nextBigger) {
 			selectedProofs = [nextBigger];
-			console.log(
-				`< exit [2.2] selecting nextBigger | amountToSend: ${amountToSend} | selectedProofs: ${sumProofs(
-					selectedProofs
-				)} | returnedProofs: ${sumProofs(returnedProofs)}`
-			);
+			// console.log(
+			// 	`< exit [2.2] selecting nextBigger | amountToSend: ${amountToSend} | selectedProofs: ${sumProofs(
+			// 		selectedProofs
+			// 	)} | returnedProofs: ${sumProofs(returnedProofs)}`
+			// );
 		}
 
-		console.log(
-			`< exit [2] selectProofsToSend | amountToSend: ${amountToSend} | selectedProofs: ${sumProofs(
-				selectedProofs
-			)} | returnedProofs: ${sumProofs(proofs.filter((p) => !selectedProofs.includes(p)))}`
-		);
+		// console.log(
+		// 	`< exit [2] selectProofsToSend | amountToSend: ${amountToSend} | selectedProofs: ${sumProofs(
+		// 		selectedProofs
+		// 	)} | returnedProofs: ${sumProofs(proofs.filter((p) => !selectedProofs.includes(p)))}`
+		// );
 		return {
 			returnChange: proofs.filter((p) => !selectedProofs.includes(p)),
 			send: selectedProofs
@@ -604,18 +610,34 @@ class CashuWallet {
 			keysetId?: string;
 			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
+			proofsWeHave?: Array<Proof>;
 			counter?: number;
 			pubkey?: string;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
+		const keyset = await this.getKeys(options?.keysetId);
+
 		if (options?.preference)
 			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
+
+		if (!options?.outputAmounts && options?.proofsWeHave) {
+			options.outputAmounts = {
+				keepAmounts: getKeepAmounts(
+					options.proofsWeHave,
+					amount,
+					keyset.keys,
+					3
+				),
+				sendAmounts: []
+			};
+		}
 		console.log(
 			`outputAmounts: ${options?.outputAmounts?.keepAmounts
 			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a, b) => a + b, 0)}) | ${options?.outputAmounts?.sendAmounts
 			} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a, b) => a + b, 0)})`
 		);
-		const keyset = await this.getKeys(options?.keysetId);
+		console.log(JSON.stringify(options?.outputAmounts));
+
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			keyset,
