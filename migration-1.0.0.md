@@ -25,7 +25,7 @@ Decoding LN invoices is no longer used inside the lib.
 
 ### `CashuWallet` interface changes
 
-**`receive()` does no longer support multi-token tokens**
+**`receive()` no longer supports multi-token tokens**
 
 To reduce complexity, simplify error handling and to prepare for token V4, this feature has been removed. only the first token inside a token will be processed
 
@@ -42,6 +42,7 @@ type MintQuoteResponse = {
 	quote: string;
 	paid: boolean;
 	expiry: number;
+	state: MintQuoteState;
 };
 ```
 
@@ -60,10 +61,19 @@ type MeltQuoteResponse = {
 	fee_reserve: number;
 	paid: boolean;
 	expiry: number;
+	payment_preimage: string;
+	state: MeltQuoteState;
+	change?: Array<SerializedBlindedSignature>;
 };
 ```
 
 where `quote` is the identifier to pass to `meltTokens()`
+
+---
+
+**`receive()`** and **`receiveTokenEntry()`** now return `Array<Proofs>`
+
+where `Proofs` are the newly created `Proofs` from the received token. Will now throw an error instead of returning `proofsWithError`
 
 ---
 
