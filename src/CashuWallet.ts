@@ -423,6 +423,7 @@ class CashuWallet {
 	 * @param proofsToSend proofs to melt
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.privkey? optionally set a private key to unlock P2PK proofs
 	 * @returns
 	 */
 	async meltTokens(
@@ -431,6 +432,7 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			counter?: number;
+			privkey?: string;
 		}
 	): Promise<MeltTokensResponse> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -440,6 +442,19 @@ class CashuWallet {
 			keys.id,
 			options?.counter
 		);
+		if (options?.privkey != undefined) {
+			proofsToSend = getSignedProofs(
+				proofsToSend.map((p) => {
+					return {
+						amount: p.amount,
+						C: pointFromHex(p.C),
+						id: p.id,
+						secret: new TextEncoder().encode(p.secret)
+					};
+				}),
+				options.privkey
+			).map((p: NUT11Proof) => serializeProof(p));
+		}
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
@@ -464,6 +479,7 @@ class CashuWallet {
 	 * @param meltQuote melt quote for the invoice
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.privkey? optionally set a private key to unlock P2PK proofs
 	 * @returns
 	 */
 	async payLnInvoice(
@@ -473,6 +489,7 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			counter?: number;
+			privkey?: string;
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
@@ -480,7 +497,8 @@ class CashuWallet {
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
-			counter: options?.counter
+			counter: options?.counter,
+			privkey: options?.privkey
 		});
 	}
 
