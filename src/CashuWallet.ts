@@ -432,6 +432,19 @@ class CashuWallet {
 			keys.id,
 			options?.counter
 		);
+		if (options?.privkey != undefined) {
+			proofsToSend = getSignedProofs(
+				proofsToSend.map((p) => {
+					return {
+						amount: p.amount,
+						C: pointFromHex(p.C),
+						id: p.id,
+						secret: new TextEncoder().encode(p.secret)
+					};
+				}),
+				options.privkey
+			).map((p: NUT11Proof) => serializeProof(p));
+		}
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
@@ -472,7 +485,8 @@ class CashuWallet {
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
-			counter: options?.counter
+			counter: options?.counter,
+			privkey: options?.privkey
 		});
 	}
 
