@@ -114,7 +114,6 @@ function getEncodedTokenV4(token: Token): string {
 		}
 	}
 	const tokenTemplate: TokenV4Template = {
-		d: token.memo || '',
 		m: mint,
 		u: token.unit || 'sat',
 		t: Object.keys(idMap).map(
@@ -124,6 +123,10 @@ function getEncodedTokenV4(token: Token): string {
 			})
 		)
 	} as TokenV4Template;
+
+	if (token.memo) {
+		tokenTemplate.d = token.memo;
+	}
 
 	const encodedData = encodeCBOR(tokenTemplate);
 	const prefix = 'cashu';
@@ -164,6 +167,7 @@ function handleTokens(token: string): Token {
 			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
 			m: string;
 			d: string;
+			u: string;
 		};
 		console.log(tokenData.t[0].p[0]);
 		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
@@ -177,7 +181,7 @@ function handleTokens(token: string): Token {
 				});
 			})
 		);
-		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
+		return { token: [mergedTokenEntry], memo: tokenData.d || '', unit: tokenData.u || 'sat' };
 	}
 	throw new Error('Token version is not supported');
 }
