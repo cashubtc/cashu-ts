@@ -222,13 +222,17 @@ describe('mint api', () => {
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const mintRequest = await wallet.createMintQuote(3000);
-		
-		const proofs = await wallet.mintTokens(3000, mintRequest.quote, {pubkey: bytesToHex(pubKeyBob)});
+
+		const proofs = await wallet.mintTokens(3000, mintRequest.quote, {
+			pubkey: bytesToHex(pubKeyBob)
+		});
 
 		const meltRequest = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltRequest.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
-		const response = await wallet.meltTokens(meltRequest, proofs.proofs, {privkey: bytesToHex(privKeyBob)});
+		const response = await wallet.meltTokens(meltRequest, proofs.proofs, {
+			privkey: bytesToHex(privKeyBob)
+		});
 		expect(response).toBeDefined();
 		expect(response.isPaid).toBe(true);
 	});

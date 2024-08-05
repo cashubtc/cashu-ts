@@ -451,7 +451,8 @@ class CashuWallet {
 						id: p.id,
 						secret: new TextEncoder().encode(p.secret)
 					};
-				}), options.privkey
+				}),
+				options.privkey
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
 		const meltPayload: MeltPayload = {
@@ -497,7 +498,7 @@ class CashuWallet {
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
 			counter: options?.counter,
-			privkey: options?.privkey,
+			privkey: options?.privkey
 		});
 	}
 
