@@ -1,9 +1,25 @@
-import { encodeBase64ToJson, encodeBase64toUint8, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, Proof, Token, TokenEntry, TokenV2 } from './model/types/index.js';
+import {
+	encodeBase64ToJson,
+	encodeBase64toUint8,
+	encodeJsonToBase64,
+	encodeUint8toBase64,
+	encodeUint8toBase64Url
+} from './base64.js';
+import {
+	AmountPreference,
+	Keys,
+	Proof,
+	Token,
+	TokenEntry,
+	TokenV2,
+	TokenV4Template,
+	V4InnerToken,
+	V4ProofTemplate
+} from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
-import { decodeCBOR } from './cbor.js';
+import { decodeCBOR, encodeCBOR } from './cbor.js';
 
 function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
@@ -77,6 +93,48 @@ function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
+function getEncodedTokenV4(token: Token): string {
+	const idMap: { [id: string]: Array<Proof> } = {};
+	let mint: string | undefined = undefined;
+	for (let i = 0; i < token.token.length; i++) {
+		if (!mint) {
+			mint = token.token[i].mint;
+		} else {
+			if (mint !== token.token[i].mint) {
+				throw new Error('Multimint token can not be encoded as V4 token');
+			}
+		}
+		for (let j = 0; j < token.token[i].proofs.length; j++) {
+			const proof = token.token[i].proofs[j];
+			if (idMap[proof.id]) {
+				idMap[proof.id].push(proof);
+			} else {
+				idMap[proof.id] = [proof];
+			}
+		}
+	}
+	const tokenTemplate: TokenV4Template = {
+		m: mint,
+		u: token.unit || 'sat',
+		t: Object.keys(idMap).map(
+			(id): V4InnerToken => ({
+				i: hexToBytes(id),
+				p: idMap[id].map((p): V4ProofTemplate => ({ a: p.amount, s: p.secret, c: hexToBytes(p.C) }))
+			})
+		)
+	} as TokenV4Template;
+
+	if (token.memo) {
+		tokenTemplate.d = token.memo;
+	}
+
+	const encodedData = encodeCBOR(tokenTemplate);
+	const prefix = 'cashu';
+	const version = 'B';
+	const base64Data = encodeUint8toBase64Url(encodedData);
+	return prefix + version + base64Data;
+}
+
 /**
  * Helper function to decode cashu tokens into object
  * @param token an encoded cashu token (cashuAey...)
@@ -106,9 +164,10 @@ function handleTokens(token: string): Token {
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
 		const tokenData = decodeCBOR(uInt8Token) as {
-			t: { p: { a: number; s: string; c: Uint8Array }[]; i: Uint8Array }[];
+			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
 			m: string;
 			d: string;
+			u: string;
 		};
 		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
 		tokenData.t.forEach((tokenEntry) =>
@@ -121,10 +180,9 @@ function handleTokens(token: string): Token {
 				});
 			})
 		);
-		return { token: [mergedTokenEntry], memo: tokenData.d || '' };
-	} else {
-		throw new Error('Token version is not supported');
+		return { token: [mergedTokenEntry], memo: tokenData.d || '', unit: tokenData.u || 'sat' };
 	}
+	throw new Error('Token version is not supported');
 }
 /**
  * Returns the keyset id of a set of keys
@@ -180,6 +238,7 @@ export {
 	bytesToNumber,
 	getDecodedToken,
 	getEncodedToken,
+	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
 	getDefaultAmountPreference

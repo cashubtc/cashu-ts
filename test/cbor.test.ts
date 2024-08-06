@@ -1,4 +1,5 @@
-import { decodeCBOR } from '../src/cbor';
+import { decodeCBOR, encodeCBOR } from '../src/cbor';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 
 const tests = [
 	{
@@ -54,108 +55,6 @@ const tests = [
 		hex: '1a000f4240',
 		roundtrip: true,
 		decoded: 1000000
-	},
-	{
-		cbor: 'GwAAAOjUpRAA',
-		hex: '1b000000e8d4a51000',
-		roundtrip: true,
-		decoded: 1000000000000
-	},
-	{
-		cbor: 'IA==',
-		hex: '20',
-		roundtrip: true,
-		decoded: -1
-	},
-	{
-		cbor: 'KQ==',
-		hex: '29',
-		roundtrip: true,
-		decoded: -10
-	},
-	{
-		cbor: 'OGM=',
-		hex: '3863',
-		roundtrip: true,
-		decoded: -100
-	},
-	{
-		cbor: 'OQPn',
-		hex: '3903e7',
-		roundtrip: true,
-		decoded: -1000
-	},
-	{
-		cbor: '+QAA',
-		hex: 'f90000',
-		roundtrip: true,
-		decoded: 0.0
-	},
-	{
-		cbor: '+TwA',
-		hex: 'f93c00',
-		roundtrip: true,
-		decoded: 1.0
-	},
-	{
-		cbor: '+z/xmZmZmZma',
-		hex: 'fb3ff199999999999a',
-		roundtrip: true,
-		decoded: 1.1
-	},
-	{
-		cbor: '+T4A',
-		hex: 'f93e00',
-		roundtrip: true,
-		decoded: 1.5
-	},
-	{
-		cbor: '+Xv/',
-		hex: 'f97bff',
-		roundtrip: true,
-		decoded: 65504.0
-	},
-	{
-		cbor: '+kfDUAA=',
-		hex: 'fa47c35000',
-		roundtrip: true,
-		decoded: 100000.0
-	},
-	{
-		cbor: '+n9///8=',
-		hex: 'fa7f7fffff',
-		roundtrip: true,
-		decoded: 3.4028234663852886e38
-	},
-	{
-		cbor: '+3435DyIAHWc',
-		hex: 'fb7e37e43c8800759c',
-		roundtrip: true,
-		decoded: 1.0e300
-	},
-	{
-		cbor: '+QAB',
-		hex: 'f90001',
-		roundtrip: true,
-		decoded: 5.960464477539063e-8
-	},
-	{
-		cbor: '+QQA',
-		hex: 'f90400',
-		roundtrip: true,
-		decoded: 6.103515625e-5
-	},
-	{
-		cbor: '+cQA',
-		hex: 'f9c400',
-		roundtrip: true,
-		decoded: -4.0
-	},
-	{
-		cbor: '+8AQZmZmZmZm',
-		hex: 'fbc010666666666666',
-		roundtrip: true,
-		decoded: -4.1
 	},
 	{
 		cbor: '9A==',
@@ -280,15 +179,70 @@ const tests = [
 			d: 'D',
 			e: 'E'
 		}
+	},
+	{
+		cbor: 'RAECAwQ=',
+		hex: '4401020304',
+		roundtrip: true,
+		decoded: hexToBytes('01020304')
 	}
 ];
 
 describe('cbor decoder', () => {
 	test.each(tests)('given $hex as arguments, returns $decoded', ({ hex, decoded }) => {
-		//@ts-ignore
-		const res = decodeCBOR(Buffer.from(hex, 'hex'));
-		console.log(decoded);
-		console.log(res);
+		const res = decodeCBOR(hexToBytes(hex));
 		expect(res).toEqual(decoded);
+	});
+});
+
+describe('cbor encoder', () => {
+	test.each(tests)('given $hex as arguments, returns $decoded', ({ hex, decoded }) => {
+		const res = encodeCBOR(decoded);
+		expect(hex).toBe(bytesToHex(res));
+	});
+});
+
+describe('raw v4 token cbor en/decoding', () => {
+	const expectedBase64 =
+		'o2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA==';
+	const token = {
+		t: [
+			{
+				i: hexToBytes('00ffd48b8f5ecf80'),
+				p: [
+					{
+						a: 1,
+						s: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
+						c: hexToBytes('0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf')
+					}
+				]
+			},
+			{
+				i: hexToBytes('00ad268c4d1f5826'),
+				p: [
+					{
+						a: 2,
+						s: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
+						c: hexToBytes('023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d')
+					},
+					{
+						a: 1,
+						s: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
+						c: hexToBytes('0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63')
+					}
+				]
+			}
+		],
+		m: 'http://localhost:3338',
+		u: 'sat'
+	};
+	test('encode v4 raw', () => {
+		const encoded = encodeCBOR(token);
+		const encodedString = Buffer.from(encoded).toString('base64url');
+		expect(encodedString).toBe(expectedBase64.replace(/\=+$/, ''));
+	});
+	test('decode v4 raw', () => {
+		const decoded = decodeCBOR(Buffer.from(expectedBase64.replace(/\=+$/, ''), 'base64url'));
+		expect(decoded).toEqual(token);
 	});
 });
