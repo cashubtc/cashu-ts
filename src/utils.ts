@@ -169,7 +169,6 @@ function handleTokens(token: string): Token {
 			d: string;
 			u: string;
 		};
-		console.log(tokenData.t[0].p[0]);
 		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
 		tokenData.t.forEach((tokenEntry) =>
 			tokenEntry.p.forEach((p) => {
