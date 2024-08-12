@@ -116,6 +116,7 @@ describe('test decode token', () => {
 	test('testing v4 Token', () => {
 		const v3Token = {
 			memo: 'Thank you',
+			unit: 'sat',
 			token: [
 				{
 					mint: 'http://localhost:3338',
@@ -140,6 +141,7 @@ describe('test decode token', () => {
 	test('testing v4 Token with multi keyset', () => {
 		const v3Token = {
 			memo: '',
+			unit: 'sat',
 			token: [
 				{
 					mint: 'http://localhost:3338',
@@ -180,5 +182,73 @@ describe('test keyset derivation', () => {
 		const keys = PUBKEYS;
 		const keysetId = utils.deriveKeysetId(keys);
 		expect(keysetId).toBe('009a1f293253e41e');
+	});
+});
+
+describe('test v4 encoding', () => {
+	test('standard token', async () => {
+		const encodedV4 =
+			'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
+		const v3Token = {
+			memo: 'Thank you',
+			token: [
+				{
+					mint: 'http://localhost:3338',
+					proofs: [
+						{
+							secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+							C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+							id: '00ad268c4d1f5826',
+							amount: 1
+						}
+					]
+				}
+			],
+			unit: 'sat'
+		};
+		const encoded = utils.getEncodedTokenV4(v3Token);
+		const decodedEncodedToken = utils.getDecodedToken(encoded);
+		const decodedExpectedToken = utils.getDecodedToken(encodedV4);
+		expect(decodedEncodedToken).toEqual(v3Token);
+		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
+	});
+	test('multi Id token', async () => {
+		const encodedV4 =
+			'cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA';
+		const v3Token = {
+			token: [
+				{
+					mint: 'http://localhost:3338',
+					proofs: [
+						{
+							secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
+							C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
+							id: '00ffd48b8f5ecf80',
+							amount: 1
+						},
+						{
+							secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
+							C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
+							id: '00ad268c4d1f5826',
+							amount: 2
+						},
+						{
+							secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
+							C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
+							id: '00ad268c4d1f5826',
+							amount: 1
+						}
+					]
+				}
+			],
+			memo: '',
+			unit: 'sat'
+		};
+
+		const encoded = utils.getEncodedTokenV4(v3Token);
+		const decodedEncodedToken = utils.getDecodedToken(encoded);
+		const decodedExpectedToken = utils.getDecodedToken(encodedV4);
+		expect(decodedEncodedToken).toEqual(v3Token);
+		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
 	});
 });
