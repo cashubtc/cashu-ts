@@ -4,6 +4,10 @@ function encodeUint8toBase64(uint8array: Uint8Array): string {
 	return Buffer.from(uint8array).toString('base64');
 }
 
+function encodeUint8toBase64Url(bytes: Uint8Array): string {
+	return Buffer.from(bytes).toString('base64url').replace(/\=+$/, '');
+}
+
 function encodeBase64toUint8(base64String: string): Uint8Array {
 	return Buffer.from(base64String, 'base64');
 }
@@ -29,4 +33,10 @@ function base64urlFromBase64(str: string) {
 	// .replace(/=/g, '.');
 }
 
-export { encodeUint8toBase64, encodeBase64toUint8, encodeJsonToBase64, encodeBase64ToJson };
+export {
+	encodeUint8toBase64,
+	encodeUint8toBase64Url,
+	encodeBase64toUint8,
+	encodeJsonToBase64,
+	encodeBase64ToJson
+};
