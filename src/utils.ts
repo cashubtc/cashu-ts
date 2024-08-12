@@ -20,6 +20,7 @@ import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
+import { hashToCurve } from '@cashu/crypto/modules/common';
 
 function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
@@ -231,6 +232,31 @@ export function joinUrls(...parts: Array<string>): string {
 
 export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
+}
+
+/**
+ * Sorts Ys of a set of proofs in descending order, concatenates them and returns the SHA256 hash of the concatenated string
+ * @param proofs - Array of proofs
+ * @returns hex string of the SHA256 hash
+ */
+export function computeTxId(proofs: Array<Proof>): string {
+	const enc = new TextEncoder();
+	const Ys = proofs.map((p) => hashToCurve(enc.encode(p.secret)).toRawBytes(true));
+	Ys.sort((a, b) => {
+		for (let i = 0; i < a.length; i++) {
+			if (a[i] !== b[i]) {
+				return a[i] - b[i]; // descending order
+			}
+		}
+		return 0;
+	});
+	const hasher = sha256.create();
+	// concatenate Ys and hash
+	for (const y of Ys) {
+		hasher.update(y);
+	}
+	const hash = hasher.digest();
+	return bytesToHex(hash);
 }
 
 export {
