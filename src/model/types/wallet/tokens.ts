@@ -30,3 +30,57 @@ export type TokenEntry = {
 	 */
 	mint: string;
 };
+
+/**
+ * Template for a Proof inside a V4 Token
+ */
+export type V4ProofTemplate = {
+	/**
+	 * Amount
+	 */
+	a: number;
+	/**
+	 * Secret
+	 */
+	s: string;
+	/**
+	 * Signature
+	 */
+	c: Uint8Array;
+};
+
+/**
+ * TokenEntry in a V4 Token
+ */
+export type V4InnerToken = {
+	/**
+	 * ID
+	 */
+	i: Uint8Array;
+	/**
+	 * Proofs
+	 */
+	p: Array<V4ProofTemplate>;
+};
+
+/**
+ * Template for a V4 Token
+ */
+export type TokenV4Template = {
+	/**
+	 * TokenEntries
+	 */
+	t: Array<V4InnerToken>;
+	/**
+	 * Memo
+	 */
+	d: string;
+	/**
+	 * Mint Url
+	 */
+	m: string;
+	/**
+	 * Unit
+	 */
+	u: string;
+};
