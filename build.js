@@ -21,3 +21,19 @@ esbuild
 		format: 'cjs'
 	})
 	.catch(() => process.exit(1));
+
+esbuild
+	.build({
+		bundle: true,
+		sourcemap: 'external',
+		entryPoints: ['src/index.ts'],
+		outfile: 'lib/cashu.bundle.js',
+		format: 'iife',
+		globalName: 'CashuTs',
+		define: {
+			window: 'self',
+			global: 'self',
+			process: '{"env": {}}'
+		}
+	})
+	.then(() => console.log('standalone build success.'));
