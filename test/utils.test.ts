@@ -253,12 +253,70 @@ describe('test v4 encoding', () => {
 	});
 });
 
+describe('test getProofsFromToken', () => {
+	const token = {
+		token: [
+			{
+				mint: 'http://localhost:3338',
+				proofs: [
+					{
+						id: '009a1f293253e41e',
+						amount: 2,
+						secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+						C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea'
+					},
+					{
+						id: '009a1f293253e41e',
+						amount: 8,
+						secret: 'fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be',
+						C: '029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059'
+					}
+				]
+			}
+		]
+	};
+	test('testing decoded token', async () => {
+		const proofs = utils.getProofsFromToken(token);
+		expect(proofs).toStrictEqual(token.token[0].proofs);
+	});
+
+	test('testing encoded token', async () => {
+		const encodedToken = utils.getEncodedToken(token);
+		const proofs = utils.getProofsFromToken(encodedToken);
+		expect(proofs).toStrictEqual(token.token[0].proofs);
+	});
+});
+
 describe('test computeTxId', () => {
-	test('compute', () => {
-		const proofs = JSON.parse(
-			'[{"id":"009a1f293253e41e","amount":2,"secret":"407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837","C":"02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea"},{"id":"009a1f293253e41e","amount":8,"secret":"fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be","C":"029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059"}]'
-		);
+	const proofs = JSON.parse(
+		'[{"id":"009a1f293253e41e","amount":2,"secret":"407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837","C":"02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea"},{"id":"009a1f293253e41e","amount":8,"secret":"fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be","C":"029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059"}]'
+	);
+	const token = {
+		token: [
+			{
+				mint: 'http://localhost:3338',
+				proofs: proofs
+			}
+		]
+	};
+	test('compute with proofs', () => {
 		const txId = utils.computeTxId(proofs);
+		expect(txId).toBe('dac0748828d855ac4bc0e0a008cbc4b02e7d4238af06d730461cc559a5ae24b1');
+	});
+
+	test('compute with encoded token', () => {
+		const encodedToken = utils.getEncodedToken(token);
+		const txId = utils.computeTxId(encodedToken);
+		expect(txId).toBe('dac0748828d855ac4bc0e0a008cbc4b02e7d4238af06d730461cc559a5ae24b1');
+	});
+
+	test('compute with decoded token', () => {
+		const txId = utils.computeTxId(token);
+		expect(txId).toBe('dac0748828d855ac4bc0e0a008cbc4b02e7d4238af06d730461cc559a5ae24b1');
+	});
+
+	test('compute with proofs reversed', () => {
+		const txId = utils.computeTxId(proofs.reverse());
 		expect(txId).toBe('dac0748828d855ac4bc0e0a008cbc4b02e7d4238af06d730461cc559a5ae24b1');
 	});
 });

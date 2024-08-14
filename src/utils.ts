@@ -234,12 +234,18 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
+export const getProofsFromToken = (token: Token | string) => {
+	const decodedToken = typeof token === 'string' ? getDecodedToken(token) : token;
+	return decodedToken.token[0].proofs;
+};
+
 /**
  * Sorts Ys of a set of proofs in descending order, concatenates them and returns the SHA256 hash of the concatenated string
  * @param proofs - Array of proofs
  * @returns hex string of the SHA256 hash
  */
-export function computeTxId(proofs: Array<Proof>): string {
+export function computeTxId(tx: Array<Proof> | string | Token): string {
+	const proofs: Array<Proof> = !Array.isArray(tx) ? getProofsFromToken(tx) : tx;
 	const enc = new TextEncoder();
 	const Ys = proofs.map((p) => hashToCurve(enc.encode(p.secret)).toRawBytes(true));
 	Ys.sort((a, b) => {
