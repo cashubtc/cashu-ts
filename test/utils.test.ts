@@ -1,4 +1,4 @@
-import { AmountPreference } from '../src/model/types';
+import { AmountPreference, Token } from '../src/model/types';
 import * as utils from '../src/utils';
 import { PUBKEYS } from './consts';
 
