@@ -10,7 +10,8 @@ esbuild
 		sourcemap: 'external',
 		format: 'esm'
 	})
-	.catch(() => process.exit(1));
+	.catch(() => process.exit(1))
+	.then(() => console.log('ESM build succeeded...'));
 
 esbuild
 	.build({
@@ -20,7 +21,8 @@ esbuild
 		sourcemap: 'external',
 		format: 'cjs'
 	})
-	.catch(() => process.exit(1));
+	.catch(() => process.exit(1))
+	.then(() => console.log('CommonJS build succeeded...'));
 
 esbuild
 	.build({
@@ -36,4 +38,5 @@ esbuild
 			process: '{"env": {}}'
 		}
 	})
-	.then(() => console.log('standalone build success.'));
+	.catch(() => process.exit(1))
+	.then(() => console.log('Standalone build success.'));
