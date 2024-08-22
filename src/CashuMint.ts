@@ -15,21 +15,20 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse,
-	MintContactInfo
-} from './model/types/index.js';
-import { MeltQuoteState } from './model/types/index.js';
+	MeltQuoteResponse
+} from './model/types';
+import { MeltQuoteState } from './model/types';
 import request from './request.js';
-import { isObj, joinUrls, sanitizeUrl } from './utils.js';
+import { isObj, joinUrls, sanitizeUrl } from './utils';
 import {
 	MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated
-} from './legacy/nut-05.js';
+} from './legacy/nut-05';
 import {
 	MintQuoteResponsePaidDeprecated,
 	handleMintQuoteResponseDeprecated
-} from './legacy/nut-04.js';
-import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
+} from './legacy/nut-04';
+import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
