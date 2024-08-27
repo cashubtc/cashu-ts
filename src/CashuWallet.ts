@@ -350,11 +350,13 @@ class CashuWallet {
 				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(sendProofs)}`
 			);
 			if (options && !options?.outputAmounts?.keepAmounts && options?.proofsWeHave) {
+				const keyset = await this.getKeys(options?.keysetId);
 				options.outputAmounts = {
-					keepAmounts: getKeepAmounts(options.proofsWeHave, sumProofs(keepProofsSelect), this._keys.get(options?.keysetId || this.keysetId) as MintKeys, 3),
+					keepAmounts: getKeepAmounts(options.proofsWeHave, amount, keyset.keys, 3),
 					sendAmounts: options?.outputAmounts?.sendAmounts || []
 				}
 			}
+			console.log(`keepAmounts: ${options?.outputAmounts?.keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`)
 			const { returnChange, send } = await this.swap(amount, sendProofs, options);
 			console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
 			const returnChangeProofs = keepProofsSelect.concat(returnChange);
@@ -641,7 +643,7 @@ class CashuWallet {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			keyset,
-			options?.outputAmounts?.sendAmounts,
+			// options?.outputAmounts?.keepAmounts,
 			options?.counter,
 			options?.pubkey
 		);

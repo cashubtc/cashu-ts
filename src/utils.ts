@@ -69,7 +69,7 @@ function getKeepAmounts(
 		const remainingAmounts = splitAmount(amountDiff, keys)
 		remainingAmounts.forEach((amt) => { amountsWeWant.push(amt) })
 	}
-	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b)
+	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
 	console.log(`amountsWeHave: ${amountsWeHave}`)
 	console.log(`amountsWeWant: ${sortedAmountsWeWant}`);
 	return sortedAmountsWeWant;
