@@ -18,6 +18,7 @@ import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
+import { PaymentRequest } from './model/PaymentRequest.js';
 
 function splitAmount(
 	value: number,
@@ -246,6 +247,29 @@ export function joinUrls(...parts: Array<string>): string {
 
 export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
+}
+
+export function decodePaymentRequest(paymentRequest: string) {
+	const version = paymentRequest[4];
+	if (version !== 'A') {
+		throw new Error('unsupported version...');
+	}
+	const encodedData = paymentRequest.slice(5);
+	const data = encodeBase64toUint8(encodedData);
+	const decoded = decodeCBOR(data);
+	if (!decoded.m) {
+		throw new Error('unsupported pr: memo undefined');
+	}
+	const transports = decoded.t.map((t: { t: string; a: string }) => ({ type: t.t, target: t.a }));
+	return new PaymentRequest(
+		decoded.u,
+		transports,
+		decoded.m,
+		decoded.a,
+		decoded.r,
+		decoded.d,
+		decoded.l
+	);
 }
 
 export {
