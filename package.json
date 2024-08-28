@@ -1,6 +1,6 @@
 {
 	"name": "@cashu/cashu-ts",
-	"version": "1.1.0-1",
+	"version": "1.1.0-2",
 	"description": "cashu library for communicating with a cashu mint",
 	"main": "dist/lib/es5/index.js",
 	"module": "dist/lib/es6/index.js",
@@ -47,7 +47,7 @@
 		"typescript": "^5.0.4"
 	},
 	"dependencies": {
-		"@cashu/crypto": "^0.2.6",
+		"@cashu/crypto": "^0.2.7",
 		"@noble/curves": "^1.3.0",
 		"@noble/hashes": "^1.3.3",
 		"@scure/bip32": "^1.3.3",
