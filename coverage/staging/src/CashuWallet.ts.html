@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">76.7% </span>
+                <span class="strong">76.51% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>191/249</span>
+                <span class='fraction'>189/247</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">71.49% </span>
+                <span class="strong">71.36% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>158/221</span>
+                <span class='fraction'>157/220</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">77.46% </span>
+                <span class="strong">77.25% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>165/213</span>
+                <span class='fraction'>163/211</span>
             </div>
         
             
@@ -783,15 +783,7 @@
 <a name='L718'></a><a href='#L718'>718</a>
 <a name='L719'></a><a href='#L719'>719</a>
 <a name='L720'></a><a href='#L720'>720</a>
-<a name='L721'></a><a href='#L721'>721</a>
-<a name='L722'></a><a href='#L722'>722</a>
-<a name='L723'></a><a href='#L723'>723</a>
-<a name='L724'></a><a href='#L724'>724</a>
-<a name='L725'></a><a href='#L725'>725</a>
-<a name='L726'></a><a href='#L726'>726</a>
-<a name='L727'></a><a href='#L727'>727</a>
-<a name='L728'></a><a href='#L728'>728</a>
-<a name='L729'></a><a href='#L729'>729</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
+<a name='L721'></a><a href='#L721'>721</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
@@ -914,7 +906,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -937,9 +928,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -961,7 +949,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">5x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">6x</span>
 <span class="cline-any cline-yes">5x</span>
 <span class="cline-any cline-yes">5x</span>
@@ -985,9 +972,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1651,22 +1635,18 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise&lt;Array&lt;Proof&gt;&gt; {
-		try {
-			if (typeof token === 'string') {
-				token = getDecodedToken(token);
-			}
-			const tokenEntries: Array&lt;TokenEntry&gt; = token.token;
-			const proofs = await this.receiveTokenEntry(tokenEntries[0], {
-				keysetId: options?.keysetId,
-				preference: options?.preference,
-				counter: options?.counter,
-				pubkey: options?.pubkey,
-				privkey: options?.privkey
-			});
-			return proofs;
-		} catch (error) {
-			throw new Error('Error when receiving');
+		if (typeof token === 'string') {
+			token = getDecodedToken(token);
 		}
+		const tokenEntries: Array&lt;TokenEntry&gt; = token.token;
+		const proofs = await this.receiveTokenEntry(tokenEntries[0], {
+			keysetId: options?.keysetId,
+			preference: options?.preference,
+			counter: options?.counter,
+			pubkey: options?.pubkey,
+			privkey: options?.privkey
+		});
+		return proofs;
 	}
 &nbsp;
 	/**
@@ -1689,33 +1669,29 @@ class CashuWallet {
 		}
 	): Promise&lt;Array&lt;Proof&gt;&gt; {
 		const proofs: Array&lt;Proof&gt; = [];
-		try {
-			const amount = tokenEntry.proofs.reduce((total, curr) =&gt; total + curr.amount, 0);
-			let preference = options<span class="branch-0 cbranch-no" title="branch not covered" >?.p</span>reference;
-			if (!preference) {
-				preference = getDefaultAmountPreference(amount);
-			}
-			const keys = await this.getKeys(options<span class="branch-0 cbranch-no" title="branch not covered" >?.k</span>eysetId);
-			const { payload, blindedMessages } = this.createSwapPayload(
-				amount,
-				tokenEntry.proofs,
-				keys,
-				preference,
-				options<span class="branch-0 cbranch-no" title="branch not covered" >?.c</span>ounter,
-				options<span class="branch-0 cbranch-no" title="branch not covered" >?.p</span>ubkey,
-				options<span class="branch-0 cbranch-no" title="branch not covered" >?.p</span>rivkey
-			);
-			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
-			const newProofs = this.constructProofs(
-				signatures,
-				blindedMessages.rs,
-				blindedMessages.secrets,
-				keys
-			);
-			proofs.push(...newProofs);
-		} catch (error) {
-			throw new Error('Error receiving token entry');
+		const amount = tokenEntry.proofs.reduce((total, curr) =&gt; total + curr.amount, 0);
+		let preference = options<span class="branch-0 cbranch-no" title="branch not covered" >?.p</span>reference;
+		if (!preference) {
+			preference = getDefaultAmountPreference(amount);
 		}
+		const keys = await this.getKeys(options<span class="branch-0 cbranch-no" title="branch not covered" >?.k</span>eysetId);
+		const { payload, blindedMessages } = this.createSwapPayload(
+			amount,
+			tokenEntry.proofs,
+			keys,
+			preference,
+			options<span class="branch-0 cbranch-no" title="branch not covered" >?.c</span>ounter,
+			options<span class="branch-0 cbranch-no" title="branch not covered" >?.p</span>ubkey,
+			options<span class="branch-0 cbranch-no" title="branch not covered" >?.p</span>rivkey
+		);
+		const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
+		const newProofs = this.constructProofs(
+			signatures,
+			blindedMessages.rs,
+			blindedMessages.secrets,
+			keys
+		);
+		proofs.push(...newProofs);
 		return proofs;
 	}
 &nbsp;
@@ -2254,7 +2230,7 @@ export { CashuWallet };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2024-08-28T11:48:47.624Z
+                at 2024-08-30T06:37:00.878Z
             </div>
         <script src="../prettify.js"></script>
         <script>
