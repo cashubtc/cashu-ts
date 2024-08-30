@@ -15,8 +15,7 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse,
-	MintContactInfo
+	MeltQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';

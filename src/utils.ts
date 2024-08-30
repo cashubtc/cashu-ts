@@ -2,7 +2,6 @@ import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
-	encodeUint8toBase64,
 	encodeUint8toBase64Url
 } from './base64.js';
 import {
@@ -11,7 +10,6 @@ import {
 	Proof,
 	Token,
 	TokenEntry,
-	TokenV2,
 	TokenV4Template,
 	V4InnerToken,
 	V4ProofTemplate
@@ -27,7 +25,7 @@ function splitAmount(value: number, amountPreference?: Array<AmountPreference>):
 		chunks.push(...getPreference(value, amountPreference));
 		value =
 			value -
-			chunks.reduce((curr, acc) => {
+			chunks.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
 	}
@@ -47,7 +45,7 @@ function isPowerOfTwo(number: number) {
 function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
-	preferredAmounts.forEach((pa) => {
+	preferredAmounts.forEach((pa: AmountPreference) => {
 		if (!isPowerOfTwo(pa.amount)) {
 			throw new Error(
 				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
@@ -66,7 +64,7 @@ function getPreference(amount: number, preferredAmounts: Array<AmountPreference>
 
 function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
 	const amounts = splitAmount(amount);
-	return amounts.map((a) => {
+	return amounts.map((a: number) => {
 		return { amount: a, count: 1 };
 	});
 }
@@ -117,9 +115,11 @@ function getEncodedTokenV4(token: Token): string {
 		m: mint,
 		u: token.unit || 'sat',
 		t: Object.keys(idMap).map(
-			(id): V4InnerToken => ({
+			(id: string): V4InnerToken => ({
 				i: hexToBytes(id),
-				p: idMap[id].map((p): V4ProofTemplate => ({ a: p.amount, s: p.secret, c: hexToBytes(p.C) }))
+				p: idMap[id].map(
+					(p: Proof): V4ProofTemplate => ({ a: p.amount, s: p.secret, c: hexToBytes(p.C) })
+				)
 			})
 		)
 	} as TokenV4Template;
@@ -143,7 +143,7 @@ function getEncodedTokenV4(token: Token): string {
 function getDecodedToken(token: string) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
-	uriPrefixes.forEach((prefix) => {
+	uriPrefixes.forEach((prefix: string) => {
 		if (!token.startsWith(prefix)) {
 			return;
 		}
@@ -170,8 +170,8 @@ function handleTokens(token: string): Token {
 			u: string;
 		};
 		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
-		tokenData.t.forEach((tokenEntry) =>
-			tokenEntry.p.forEach((p) => {
+		tokenData.t.forEach((tokenEntry: V4InnerToken) =>
+			tokenEntry.p.forEach((p: V4ProofTemplate) => {
 				mergedTokenEntry.proofs.push({
 					secret: p.s,
 					C: bytesToHex(p.c),
@@ -191,9 +191,9 @@ function handleTokens(token: string): Token {
  */
 export function deriveKeysetId(keys: Keys) {
 	const pubkeysConcat = Object.entries(keys)
-		.sort((a, b) => +a[0] - +b[0])
-		.map(([, pubKey]) => hexToBytes(pubKey))
-		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
+		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
+		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
+		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 	const hash = sha256(pubkeysConcat);
 	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
 	return '00' + hashHex;
@@ -208,7 +208,7 @@ function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 }
 
 export function sortProofsById(proofs: Array<Proof>) {
-	return proofs.sort((a, b) => a.id.localeCompare(b.id));
+	return proofs.sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
 }
 
 export function isObj(v: unknown): v is object {
@@ -226,7 +226,7 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 }
 
 export function joinUrls(...parts: Array<string>): string {
-	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
+	return parts.map((part: string) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
 export function sanitizeUrl(url: string): string {
