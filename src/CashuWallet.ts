@@ -130,22 +130,18 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
-		try {
-			if (typeof token === 'string') {
-				token = getDecodedToken(token);
-			}
-			const tokenEntries: Array<TokenEntry> = token.token;
-			const proofs = await this.receiveTokenEntry(tokenEntries[0], {
-				keysetId: options?.keysetId,
-				preference: options?.preference,
-				counter: options?.counter,
-				pubkey: options?.pubkey,
-				privkey: options?.privkey
-			});
-			return proofs;
-		} catch (error) {
-			throw new Error('Error when receiving');
+		if (typeof token === 'string') {
+			token = getDecodedToken(token);
 		}
+		const tokenEntries: Array<TokenEntry> = token.token;
+		const proofs = await this.receiveTokenEntry(tokenEntries[0], {
+			keysetId: options?.keysetId,
+			preference: options?.preference,
+			counter: options?.counter,
+			pubkey: options?.pubkey,
+			privkey: options?.privkey
+		});
+		return proofs;
 	}
 
 	/**
@@ -168,33 +164,29 @@ class CashuWallet {
 		}
 	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
-		try {
-			const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
-			let preference = options?.preference;
-			if (!preference) {
-				preference = getDefaultAmountPreference(amount);
-			}
-			const keys = await this.getKeys(options?.keysetId);
-			const { payload, blindedMessages } = this.createSwapPayload(
-				amount,
-				tokenEntry.proofs,
-				keys,
-				preference,
-				options?.counter,
-				options?.pubkey,
-				options?.privkey
-			);
-			const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
-			const newProofs = this.constructProofs(
-				signatures,
-				blindedMessages.rs,
-				blindedMessages.secrets,
-				keys
-			);
-			proofs.push(...newProofs);
-		} catch (error) {
-			throw new Error('Error receiving token entry');
+		const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
+		let preference = options?.preference;
+		if (!preference) {
+			preference = getDefaultAmountPreference(amount);
 		}
+		const keys = await this.getKeys(options?.keysetId);
+		const { payload, blindedMessages } = this.createSwapPayload(
+			amount,
+			tokenEntry.proofs,
+			keys,
+			preference,
+			options?.counter,
+			options?.pubkey,
+			options?.privkey
+		);
+		const { signatures } = await CashuMint.split(tokenEntry.mint, payload);
+		const newProofs = this.constructProofs(
+			signatures,
+			blindedMessages.rs,
+			blindedMessages.secrets,
+			keys
+		);
+		proofs.push(...newProofs);
 		return proofs;
 	}
 
