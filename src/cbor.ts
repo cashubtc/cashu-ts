@@ -1,3 +1,26 @@
+type SimpleValue = boolean | null | undefined;
+
+export type ResultObject = { [key: string]: ResultValue };
+export type ResultValue =
+	| SimpleValue
+	| number
+	| string
+	| Uint8Array
+	| Array<ResultValue>
+	| ResultObject;
+
+type ResultKeyType = Extract<ResultValue, number | string>;
+export type ValidDecodedType = Extract<ResultValue, ResultObject>;
+
+function isResultKeyType(value: ResultValue): value is ResultKeyType {
+	return typeof value === 'number' || typeof value === 'string';
+}
+
+type DecodeResult<T extends ResultValue> = {
+	value: T;
+	offset: number;
+};
+
 export function encodeCBOR(value: any) {
 	const buffer: Array<number> = [];
 	encodeItem(value, buffer);
@@ -119,18 +142,14 @@ function encodeObject(value: { [key: string]: any }, buffer: Array<number>) {
 		encodeItem(value[key], buffer);
 	}
 }
-type DecodeResult = {
-	value: any;
-	offset: number;
-};
 
-export function decodeCBOR(data: Uint8Array): any {
+export function decodeCBOR(data: Uint8Array): ResultValue {
 	const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 	const result = decodeItem(view, 0);
 	return result.value;
 }
 
-function decodeItem(view: DataView, offset: number): DecodeResult {
+function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
 	if (offset >= view.byteLength) {
 		throw new Error('Unexpected end of data');
 	}
@@ -158,7 +177,11 @@ function decodeItem(view: DataView, offset: number): DecodeResult {
 	}
 }
 
-function decodeLength(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeLength(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<number> {
 	if (additionalInfo < 24) return { value: additionalInfo, offset };
 	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
 	if (additionalInfo === 25) {
@@ -180,17 +203,29 @@ function decodeLength(view: DataView, offset: number, additionalInfo: number): D
 	throw new Error(`Unsupported length: ${additionalInfo}`);
 }
 
-function decodeUnsigned(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeUnsigned(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<number> {
 	const { value, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	return { value, offset: newOffset };
 }
 
-function decodeSigned(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeSigned(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<number> {
 	const { value, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	return { value: -1 - value, offset: newOffset };
 }
 
-function decodeByteString(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeByteString(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<Uint8Array> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	if (newOffset + length > view.byteLength) {
 		throw new Error('Byte string length exceeds data length');
@@ -199,7 +234,11 @@ function decodeByteString(view: DataView, offset: number, additionalInfo: number
 	return { value, offset: newOffset + length };
 }
 
-function decodeString(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeString(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<string> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	if (newOffset + length > view.byteLength) {
 		throw new Error('String length exceeds data length');
@@ -209,7 +248,11 @@ function decodeString(view: DataView, offset: number, additionalInfo: number): D
 	return { value, offset: newOffset + length };
 }
 
-function decodeArray(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeArray(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<Array<ResultValue>> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	const array = [];
 	let currentOffset = newOffset;
@@ -221,12 +264,19 @@ function decodeArray(view: DataView, offset: number, additionalInfo: number): De
 	return { value: array, offset: currentOffset };
 }
 
-function decodeMap(view: DataView, offset: number, additionalInfo: number): DecodeResult {
+function decodeMap(
+	view: DataView,
+	offset: number,
+	additionalInfo: number
+): DecodeResult<Record<string, ResultValue>> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
-	const map: { [key: string]: any } = {};
+	const map: { [key: string]: ResultValue } = {};
 	let currentOffset = newOffset;
 	for (let i = 0; i < length; i++) {
 		const keyResult = decodeItem(view, currentOffset);
+		if (!isResultKeyType(keyResult.value)) {
+			throw new Error('Invalid key type');
+		}
 		const valueResult = decodeItem(view, keyResult.offset);
 		map[keyResult.value] = valueResult.value;
 		currentOffset = valueResult.offset;
@@ -251,7 +301,7 @@ function decodeSimpleAndFloat(
 	view: DataView,
 	offset: number,
 	additionalInfo: number
-): DecodeResult {
+): DecodeResult<SimpleValue | number> {
 	if (additionalInfo < 24) {
 		switch (additionalInfo) {
 			case 20:
