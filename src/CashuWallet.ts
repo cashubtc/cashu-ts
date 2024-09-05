@@ -415,6 +415,7 @@ class CashuWallet {
 	 * @param proofsToSend proofs to melt
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
 	 * @returns
 	 */
 	async meltTokens(
@@ -423,6 +424,7 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			counter?: number;
+			privkey?: string;
 		}
 	): Promise<MeltTokensResponse> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -469,6 +471,7 @@ class CashuWallet {
 	 * @param meltQuote melt quote for the invoice
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
 	 * @returns
 	 */
 	async payLnInvoice(
@@ -478,6 +481,7 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			counter?: number;
+			privkey?: string;
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
