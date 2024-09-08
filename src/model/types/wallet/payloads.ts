@@ -101,7 +101,7 @@ export type MintQuotePayload = {
 	/**
 	 * Description for the invoice
 	 */
-	description: string | null;
+	description?: string;
 };
 
 /**

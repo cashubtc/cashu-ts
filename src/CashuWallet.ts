@@ -339,7 +339,7 @@ class CashuWallet {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
-			description: description || null
+			description: description
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
