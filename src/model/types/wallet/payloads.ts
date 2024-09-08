@@ -98,6 +98,10 @@ export type MintQuotePayload = {
 	 * Amount to be minted
 	 */
 	amount: number;
+	/**
+	 * Description for the invoice
+	 */
+	description: string | null;
 };
 
 /**

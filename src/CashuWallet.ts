@@ -20,7 +20,8 @@ import {
 	type TokenEntry,
 	CheckStateEnum,
 	SerializedBlindedSignature,
-	MeltQuoteState
+	MeltQuoteState,
+	MintQuoteResponse
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -331,12 +332,14 @@ class CashuWallet {
 	/**
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
+	 * @param description optional description for the mint quote
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async createMintQuote(amount: number) {
+	async createMintQuote(amount: number, description?: string) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
-			amount: amount
+			amount: amount,
+			description: description || null,
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
