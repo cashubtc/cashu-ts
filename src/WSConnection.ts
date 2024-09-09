@@ -164,4 +164,10 @@ export class WSConnection {
 		this.rpcId++;
 		this.sendRequest('unsubscribe', { subId });
 	}
+
+	close() {
+		if (this.ws) {
+			this.ws?.close();
+		}
+	}
 }
