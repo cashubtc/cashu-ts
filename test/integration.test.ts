@@ -61,6 +61,13 @@ describe('mint api', () => {
 		// because local invoice, fee should be 0
 		expect(fee).toBe(0);
 	});
+	test('invoice with description', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint, { unit });
+		const quote = await wallet.createMintQuote(100, 'test description');
+		expect(quote).toBeDefined();
+		console.log(`invoice with description: ${quote.request}`);
+	});
 	test('get fee for external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
