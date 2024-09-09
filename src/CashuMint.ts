@@ -452,10 +452,18 @@ class CashuMint {
 			try {
 				await this.ws.connect();
 			} catch (e) {
+				console.log(e);
 				throw new Error('Failed to connect to WebSocket...');
 			}
 		}
 	}
+
+	disconnectWebSocket() {
+		if (this.ws) {
+			this.ws.close();
+		}
+	}
+
 	get webSocketConnection() {
 		return this.ws;
 	}
