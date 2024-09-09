@@ -641,7 +641,7 @@ describe('WebSocket Updates', () => {
 						const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
 						socket.send(message);
 						setTimeout(() => {
-							const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "paid": true, "expiry": 123}}}`;
+							const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "state": "PAID", "paid": true, "expiry": 123}}}`;
 							socket.send(message);
 						}, 500);
 					}
@@ -651,12 +651,13 @@ describe('WebSocket Updates', () => {
 			});
 		});
 		const wallet = new CashuWallet(mint);
-		await new Promise((res) => {
+		await new Promise((res, rej) => {
 			const callback = (p: any) => {
 				console.log(p);
 				res(p);
 			};
 			const test = wallet.onMintQuotePaid('123', callback, () => {
+				rej();
 				console.log('error');
 			});
 		});
