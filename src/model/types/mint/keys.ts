@@ -40,8 +40,8 @@ export type MintKeys = {
 	 */
 	keys: Keys;
 	/**
-	  * optional fee per input.
-	  */
+	 * optional fee per input.
+	 */
 	input_fee_ppk?: number;
 };
 
@@ -62,7 +62,7 @@ export type MintKeyset = {
 	 */
 	active: boolean;
 	/**
-	  * optional fee per input.
-	  */
+	 * optional fee per input.
+	 */
 	input_fee_ppk?: number;
 };
