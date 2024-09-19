@@ -21,7 +21,7 @@ import {
 	CheckStateEnum,
 	SerializedBlindedSignature,
 	MeltQuoteState,
-	MintQuoteResponse,
+	CheckStateEntry,
 	Preferences
 } from './model/types/index.js';
 import {
@@ -166,7 +166,7 @@ class CashuWallet {
 		}
 	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
-		const amount = tokenEntry.proofs.reduce((total, curr) => total + curr.amount, 0);
+		const amount = tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		let preference = options?.preference;
 		const keys = await this.getKeys(options?.keysetId);
 		if (!preference) {
@@ -218,7 +218,7 @@ class CashuWallet {
 	): Promise<SendResponse> {
 		if (options?.preference) {
 			amount = options?.preference?.sendPreference.reduce(
-				(acc, curr) => acc + curr.amount * curr.count,
+				(acc: number, curr: AmountPreference) => acc + curr.amount * curr.count,
 				0
 			);
 		}
@@ -226,7 +226,7 @@ class CashuWallet {
 		let amountAvailable = 0;
 		const proofsToSend: Array<Proof> = [];
 		const proofsToKeep: Array<Proof> = [];
-		proofs.forEach((proof) => {
+		proofs.forEach((proof: Proof) => {
 			if (amountAvailable >= amount) {
 				proofsToKeep.push(proof);
 				return;
@@ -260,7 +260,7 @@ class CashuWallet {
 			const splitProofsToKeep: Array<Proof> = [];
 			const splitProofsToSend: Array<Proof> = [];
 			let amountKeepCounter = 0;
-			proofs.forEach((proof) => {
+			proofs.forEach((proof: Proof) => {
 				if (amountKeepCounter < amountKeep) {
 					amountKeepCounter += proof.amount;
 					splitProofsToKeep.push(proof);
@@ -300,9 +300,11 @@ class CashuWallet {
 		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
 
 		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint
-		const validRs = rs.filter((r, i) => outputs.map((o) => o.B_).includes(blindedMessages[i].B_));
-		const validSecrets = secrets.filter((s, i) =>
-			outputs.map((o) => o.B_).includes(blindedMessages[i].B_)
+		const validRs = rs.filter((_: bigint, i: number) =>
+			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
+		);
+		const validSecrets = secrets.filter((_: Uint8Array, i: number) =>
+			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
 		);
 
 		return {
@@ -318,9 +320,9 @@ class CashuWallet {
 			const allKeys = await this.mint.getKeys(keysetId);
 			let keys;
 			if (keysetId) {
-				keys = allKeys.keysets.find((k) => k.id === keysetId);
+				keys = allKeys.keysets.find((k: MintKeys) => k.id === keysetId);
 			} else {
-				keys = allKeys.keysets.find((k) => (unit ? k.unit === unit : k.unit === 'sat'));
+				keys = allKeys.keysets.find((k: MintKeys) => (unit ? k.unit === unit : k.unit === 'sat'));
 			}
 			if (!keys) {
 				throw new Error(
@@ -521,8 +523,8 @@ class CashuWallet {
 	): Promise<MeltTokensResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
-			.filter((x) => x.mint === this.mint.mintUrl)
-			.flatMap((t) => t.proofs);
+			.filter((x: TokenEntry) => x.mint === this.mint.mintUrl)
+			.flatMap((t: TokenEntry) => t.proofs);
 		return this.payLnInvoice(invoice, proofs, meltQuote, {
 			keysetId: options?.keysetId,
 			counter: options?.counter
@@ -551,7 +553,7 @@ class CashuWallet {
 		payload: SwapPayload;
 		blindedMessages: BlindedTransaction;
 	} {
-		const totalAmount = proofsToSend.reduce((total, curr) => total + curr.amount, 0);
+		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
 			keyset,
@@ -570,7 +572,7 @@ class CashuWallet {
 		);
 		if (privkey) {
 			proofsToSend = getSignedProofs(
-				proofsToSend.map((p) => {
+				proofsToSend.map((p: Proof) => {
 					return {
 						amount: p.amount,
 						C: pointFromHex(p.C),
@@ -606,15 +608,15 @@ class CashuWallet {
 	 */
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		const Ys = proofs.map((p: T) => hashToCurve(enc.encode(p.secret)).toHex(true));
 		const payload = {
 			// array of Ys of proofs to check
 			Ys: Ys
 		};
 		const { states } = await this.mint.check(payload);
 
-		return proofs.filter((_, i) => {
-			const state = states.find((state) => state.Y === Ys[i]);
+		return proofs.filter((_: T, i: number) => {
+			const state = states.find((state: CheckStateEntry) => state.Y === Ys[i]);
 			return state && state.state === CheckStateEnum.SPENT;
 		});
 	}
@@ -739,7 +741,7 @@ class CashuWallet {
 				const A = pointFromHex(keyset.keys[p.amount]);
 				return constructProofFromPromise(blindSignature, r, secret, A);
 			})
-			.map((p) => serializeProof(p) as Proof);
+			.map((p: NUT11Proof) => serializeProof(p) as Proof);
 	}
 }
 
