@@ -446,7 +446,7 @@ class CashuWallet {
 		);
 		if (options?.privkey != undefined) {
 			proofsToSend = getSignedProofs(
-				proofsToSend.map((p) => {
+				proofsToSend.map((p: Proof) => {
 					return {
 						amount: p.amount,
 						C: pointFromHex(p.C),
