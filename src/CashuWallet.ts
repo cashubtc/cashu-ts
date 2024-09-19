@@ -337,12 +337,14 @@ class CashuWallet {
 	/**
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
+	 * @param description optional description for the mint quote
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async createMintQuote(amount: number) {
+	async createMintQuote(amount: number, description?: string) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
-			amount: amount
+			amount: amount,
+			description: description
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
@@ -421,6 +423,7 @@ class CashuWallet {
 	 * @param proofsToSend proofs to melt
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
 	 * @returns
 	 */
 	async meltTokens(
@@ -429,6 +432,7 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			counter?: number;
+			privkey?: string;
 		}
 	): Promise<MeltTokensResponse> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -438,6 +442,19 @@ class CashuWallet {
 			keys.id,
 			options?.counter
 		);
+		if (options?.privkey != undefined) {
+			proofsToSend = getSignedProofs(
+				proofsToSend.map((p) => {
+					return {
+						amount: p.amount,
+						C: pointFromHex(p.C),
+						id: p.id,
+						secret: new TextEncoder().encode(p.secret)
+					};
+				}),
+				options.privkey
+			).map((p: NUT11Proof) => serializeProof(p));
+		}
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
@@ -462,6 +479,7 @@ class CashuWallet {
 	 * @param meltQuote melt quote for the invoice
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
+	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
 	 * @returns
 	 */
 	async payLnInvoice(
@@ -471,6 +489,7 @@ class CashuWallet {
 		options?: {
 			keysetId?: string;
 			counter?: number;
+			privkey?: string;
 		}
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
@@ -478,7 +497,8 @@ class CashuWallet {
 		}
 		return await this.meltTokens(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
-			counter: options?.counter
+			counter: options?.counter,
+			privkey: options?.privkey
 		});
 	}
 
