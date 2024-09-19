@@ -1,3 +1,5 @@
+import { AmountPreference } from './wallet/index';
+
 export * from './mint/index';
 export * from './wallet/index';
 
