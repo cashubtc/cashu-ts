@@ -30,6 +30,7 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
+import { isAmountPreferenceArray, deprecatedAmountPreferences } from './legacy/cashu-ts';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -209,7 +210,7 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			preference?: Preferences;
+			preference?: Preferences | Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
@@ -217,6 +218,9 @@ class CashuWallet {
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
+			if (isAmountPreferenceArray(options.preference)) {
+				options.preference = deprecatedAmountPreferences(options.preference);
+			}
 			amount = options?.preference?.sendPreference.reduce(
 				(acc: number, curr: AmountPreference) => acc + curr.amount * curr.count,
 				0
@@ -545,7 +549,7 @@ class CashuWallet {
 		amount: number,
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
-		preference?: Preferences,
+		preference?: Preferences | Array<AmountPreference>,
 		counter?: number,
 		pubkey?: string,
 		privkey?: string
@@ -553,6 +557,9 @@ class CashuWallet {
 		payload: SwapPayload;
 		blindedMessages: BlindedTransaction;
 	} {
+		if (isAmountPreferenceArray(preference)) {
+			preference = deprecatedAmountPreferences(preference);
+		}
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,

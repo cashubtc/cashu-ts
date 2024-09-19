@@ -45,11 +45,13 @@ function splitAmount(
 	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
+/*
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
+*/
 
-function hasCorrespondingKey(amount: number, keyset: Keys) {
+function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 	return amount in keyset;
 }
 
@@ -60,7 +62,7 @@ function getPreference(
 ): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
-	preferredAmounts.forEach((pa) => {
+	preferredAmounts.forEach((pa: AmountPreference) => {
 		if (!hasCorrespondingKey(pa.amount, keyset)) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
