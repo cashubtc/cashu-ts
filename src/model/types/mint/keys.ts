@@ -39,6 +39,10 @@ export type MintKeys = {
 	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
 	 */
 	keys: Keys;
+	/**
+	  * optional fee per input.
+	  */
+	input_fee_ppk?: number;
 };
 
 /**
@@ -57,4 +61,8 @@ export type MintKeyset = {
 	 * Whether the keyset is active or not.
 	 */
 	active: boolean;
+	/**
+	  * optional fee per input.
+	  */
+	input_fee_ppk?: number;
 };
