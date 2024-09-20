@@ -44,7 +44,7 @@ describe('test split custom amounts ', () => {
 	});
 	const fiveTwelve: Array<AmountPreference> = [{ amount: 512, count: 2 }];
 	test('testing amount 518', async () => {
-		const chunks = utils.splitAmount(518, keys, fiveTwelve, 'desc');
+		const chunks = utils.splitAmount(518, keys, fiveTwelve, true);
 		expect(chunks).toStrictEqual([512, 4, 2]);
 	});
 	const illegal: Array<AmountPreference> = [{ amount: 3, count: 2 }];
@@ -53,7 +53,7 @@ describe('test split custom amounts ', () => {
 	});
 	const empty: Array<AmountPreference> = [];
 	test('testing empty', async () => {
-		const chunks = utils.splitAmount(5, keys, empty, 'desc');
+		const chunks = utils.splitAmount(5, keys, empty, true);
 		expect(chunks).toStrictEqual([4, 1]);
 	});
 	const undef = undefined;
@@ -65,7 +65,7 @@ describe('test split custom amounts ', () => {
 
 describe('test split different key amount', () => {
 	test('testing amount 68251', async () => {
-		const chunks = utils.splitAmount(68251, keys_base10, undefined, 'desc');
+		const chunks = utils.splitAmount(68251, keys_base10, undefined, true);
 		expect(chunks).toStrictEqual([
 			10000, 10000, 10000, 10000, 10000, 10000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 100,
 			100, 10, 10, 10, 10, 10, 1

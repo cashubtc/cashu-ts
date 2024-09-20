@@ -23,7 +23,7 @@ function splitAmount(
 	value: number,
 	keyset: Keys,
 	amountPreference?: Array<AmountPreference>,
-	order?: string
+	isDesc?: boolean
 ): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
@@ -42,7 +42,7 @@ function splitAmount(
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
+	return chunks.sort((a, b) => ( isDesc ? b - a : a - b));
 }
 
 /*
