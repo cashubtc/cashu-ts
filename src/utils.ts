@@ -19,37 +19,52 @@ import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
 
-function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
+function splitAmount(
+	value: number,
+	keyset: Keys,
+	amountPreference?: Array<AmountPreference>,
+	isDesc?: boolean
+): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
-		chunks.push(...getPreference(value, amountPreference));
+		chunks.push(...getPreference(value, keyset, amountPreference));
 		value =
 			value -
 			chunks.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
 	}
-	for (let i = 0; i < 32; i++) {
-		const mask: number = 1 << i;
-		if ((value & mask) !== 0) {
-			chunks.push(Math.pow(2, i));
-		}
-	}
-	return chunks;
+	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
+		.map((k) => parseInt(k))
+		.sort((a, b) => b - a);
+	sortedKeyAmounts.forEach((amt) => {
+		let q = Math.floor(value / amt);
+		for (let i = 0; i < q; ++i) chunks.push(amt);
+		value %= amt;
+	});
+	return chunks.sort((a, b) => ( isDesc ? b - a : a - b));
 }
 
+/*
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
+*/
 
-function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
+function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
+	return amount in keyset;
+}
+
+function getPreference(
+	amount: number,
+	keyset: Keys,
+	preferredAmounts: Array<AmountPreference>
+): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
 	preferredAmounts.forEach((pa: AmountPreference) => {
-		if (!isPowerOfTwo(pa.amount)) {
-			throw new Error(
-				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
-			);
+		if (!hasCorrespondingKey(pa.amount, keyset)) {
+			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
 		for (let i = 1; i <= pa.count; i++) {
 			accumulator += pa.amount;
@@ -62,8 +77,8 @@ function getPreference(amount: number, preferredAmounts: Array<AmountPreference>
 	return chunks;
 }
 
-function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
-	const amounts = splitAmount(amount);
+function getDefaultAmountPreference(amount: number, keyset: Keys): Array<AmountPreference> {
+	const amounts = splitAmount(amount, keyset);
 	return amounts.map((a: number) => {
 		return { amount: a, count: 1 };
 	});

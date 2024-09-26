@@ -21,7 +21,8 @@ import {
 	CheckStateEnum,
 	SerializedBlindedSignature,
 	MeltQuoteState,
-	CheckStateEntry
+	CheckStateEntry,
+	Preferences
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -29,6 +30,7 @@ import {
 	getDefaultAmountPreference,
 	splitAmount
 } from './utils.js';
+import { isAmountPreferenceArray, deprecatedAmountPreferences } from './legacy/cashu-ts';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -167,15 +169,16 @@ class CashuWallet {
 		const proofs: Array<Proof> = [];
 		const amount = tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		let preference = options?.preference;
-		if (!preference) {
-			preference = getDefaultAmountPreference(amount);
-		}
 		const keys = await this.getKeys(options?.keysetId);
+		if (!preference) {
+			preference = getDefaultAmountPreference(amount, keys);
+		}
+		const pref: Preferences = { sendPreference: preference };
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
 			tokenEntry.proofs,
 			keys,
-			preference,
+			pref,
 			options?.counter,
 			options?.pubkey,
 			options?.privkey
@@ -207,7 +210,7 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			preference?: Array<AmountPreference>;
+			preference?: Preferences | Array<AmountPreference>;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
@@ -215,7 +218,10 @@ class CashuWallet {
 		}
 	): Promise<SendResponse> {
 		if (options?.preference) {
-			amount = options?.preference?.reduce(
+			if (isAmountPreferenceArray(options.preference)) {
+				options.preference = deprecatedAmountPreferences(options.preference);
+			}
+			amount = options?.preference?.sendPreference.reduce(
 				(acc: number, curr: AmountPreference) => acc + curr.amount * curr.count,
 				0
 			);
@@ -377,7 +383,7 @@ class CashuWallet {
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
-			options?.keysetId ?? keyset.id,
+			keyset,
 			options?.preference,
 			options?.counter,
 			options?.pubkey
@@ -444,7 +450,7 @@ class CashuWallet {
 		);
 		if (options?.privkey != undefined) {
 			proofsToSend = getSignedProofs(
-				proofsToSend.map((p) => {
+				proofsToSend.map((p: Proof) => {
 					return {
 						amount: p.amount,
 						C: pointFromHex(p.C),
@@ -543,7 +549,7 @@ class CashuWallet {
 		amount: number,
 		proofsToSend: Array<Proof>,
 		keyset: MintKeys,
-		preference?: Array<AmountPreference>,
+		preference?: Preferences | Array<AmountPreference>,
 		counter?: number,
 		pubkey?: string,
 		privkey?: string
@@ -551,11 +557,14 @@ class CashuWallet {
 		payload: SwapPayload;
 		blindedMessages: BlindedTransaction;
 	} {
+		if (isAmountPreferenceArray(preference)) {
+			preference = deprecatedAmountPreferences(preference);
+		}
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount,
-			keyset.id,
-			undefined,
+			keyset,
+			preference?.keepPreference,
 			counter
 		);
 		if (this._seed && counter) {
@@ -563,8 +572,8 @@ class CashuWallet {
 		}
 		const sendBlindedMessages = this.createRandomBlindedMessages(
 			amount,
-			keyset.id,
-			preference,
+			keyset,
+			preference?.sendPreference,
 			counter,
 			pubkey
 		);
@@ -638,13 +647,13 @@ class CashuWallet {
 	 */
 	private createRandomBlindedMessages(
 		amount: number,
-		keysetId: string,
+		keyset: MintKeys,
 		amountPreference?: Array<AmountPreference>,
 		counter?: number,
 		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
-		const amounts = splitAmount(amount, amountPreference);
-		return this.createBlindedMessages(amounts, keysetId, counter, pubkey);
+		const amounts = splitAmount(amount, keyset.keys, amountPreference);
+		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
 	}
 
 	/**
