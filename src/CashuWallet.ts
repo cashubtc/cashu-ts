@@ -20,6 +20,9 @@ import {
 	OutputAmounts,
 	ProofState,
 	BlindingData
+	MeltQuoteState,
+	CheckStateEntry,
+	MintQuoteResponse
 } from './model/types/index.js';
 import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -31,6 +34,7 @@ import {
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -865,16 +869,16 @@ class CashuWallet {
 
 	async onMintQuotePaid(
 		quoteId: string,
-		callback: (payload: MintQuoteResponse) => any,
+		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void
-	) {
+	): Promise<SubscriptionCanceller> {
 		try {
 			await this.mint.connectWebSocket();
 		} catch (e) {
 			if (e instanceof Error) {
-				return errorCallback(e);
+				throw e;
 			} else if (e) {
-				return errorCallback(new Error('Something went wrong'));
+				throw new Error('Something went wrong');
 			}
 		}
 		if (!this.mint.webSocketConnection) {
