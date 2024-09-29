@@ -22,7 +22,8 @@ import {
 	SerializedBlindedSignature,
 	MeltQuoteState,
 	CheckStateEntry,
-	Preferences
+	Preferences,
+	MintQuoteResponse
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -46,6 +47,7 @@ import {
 } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -630,16 +632,16 @@ class CashuWallet {
 
 	async onMintQuotePaid(
 		quoteId: string,
-		callback: (payload: MintQuoteResponse) => any,
+		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void
-	) {
+	): Promise<SubscriptionCanceller> {
 		try {
 			await this.mint.connectWebSocket();
 		} catch (e) {
 			if (e instanceof Error) {
-				return errorCallback(e);
+				throw e;
 			} else if (e) {
-				return errorCallback(new Error('Something went wrong'));
+				throw new Error('Something went wrong');
 			}
 		}
 		if (!this.mint.webSocketConnection) {
