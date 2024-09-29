@@ -6,6 +6,7 @@ import {
 	JsonRpcReqParams,
 	RpcSubId
 } from './model/types';
+import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
 
 let _WS: typeof WebSocket;
 
@@ -20,6 +21,7 @@ export function injectWebSocketImpl(ws: any) {
 export class WSConnection {
 	public readonly url: URL;
 	private ws: WebSocket | undefined;
+	private connectionPromise: Promise<void> | undefined;
 	private subListeners: { [subId: string]: Array<(payload: any) => any> } = {};
 	private rpcListeners: { [rpsSubId: string]: any } = {};
 	private messageQueue: MessageQueue;
@@ -32,24 +34,29 @@ export class WSConnection {
 	}
 
 	connect() {
-		return new Promise((res, rej) => {
-			try {
-				this.ws = new _WS(this.url);
-			} catch (err) {
-				rej(err);
-				return;
-			}
-			this.ws.onopen = res;
-			this.ws.onerror = (e) => {
-				rej(e);
-			};
-			this.ws.onmessage = (e) => {
-				this.messageQueue.enqueue(e.data);
-				if (!this.handlingInterval) {
-					this.handlingInterval = setInterval(this.handleNextMesage.bind(this), 0);
+		if (!this.connectionPromise) {
+			this.connectionPromise = new Promise((res: OnOpenSuccess, rej: OnOpenError) => {
+				try {
+					this.ws = new _WS(this.url);
+				} catch (err) {
+					rej(err);
+					return;
 				}
-			};
-		});
+				this.ws.onopen = () => {
+					res();
+				};
+				this.ws.onerror = () => {
+					rej(new Error('Failed to open WebSocket'));
+				};
+				this.ws.onmessage = (e: MessageEvent) => {
+					this.messageQueue.enqueue(e.data);
+					if (!this.handlingInterval) {
+						this.handlingInterval = setInterval(this.handleNextMesage.bind(this), 0);
+					}
+				};
+			});
+		}
+		return this.connectionPromise;
 	}
 
 	sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
