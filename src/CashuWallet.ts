@@ -22,7 +22,8 @@ import {
 	SerializedBlindedSignature,
 	MeltQuoteState,
 	CheckStateEntry,
-	Preferences
+	Preferences,
+	MintQuoteResponse
 } from './model/types/index.js';
 import {
 	bytesToNumber,
@@ -46,6 +47,7 @@ import {
 } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 
 /**
  * Class that represents a Cashu wallet.
@@ -627,6 +629,75 @@ class CashuWallet {
 			return state && state.state === CheckStateEnum.SPENT;
 		});
 	}
+
+	async onMintQuotePaid(
+		quoteId: string,
+		callback: (payload: MintQuoteResponse) => void,
+		errorCallback: (e: Error) => void
+	): Promise<SubscriptionCanceller> {
+		try {
+			await this.mint.connectWebSocket();
+		} catch (e) {
+			if (e instanceof Error) {
+				throw e;
+			} else if (e) {
+				throw new Error('Something went wrong');
+			}
+		}
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		const subCallback = (payload: MintQuoteResponse) => {
+			if (payload.state === 'PAID') {
+				callback(payload);
+			}
+		};
+		const subId = this.mint.webSocketConnection.createSubscription(
+			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
+			subCallback,
+			(e: Error) => {
+				errorCallback(e);
+			}
+		);
+		return () => {
+			this.mint.webSocketConnection?.cancelSubscription(subId, subCallback);
+		};
+	}
+
+	async onMeltQuotePaid(
+		quoteId: string,
+		callback: (payload: MeltQuoteResponse) => any,
+		errorCallback: (e: Error) => void
+	) {
+		try {
+			await this.mint.connectWebSocket();
+		} catch (e) {
+			if (e instanceof Error) {
+				return errorCallback(e);
+			} else if (e) {
+				return errorCallback(new Error('Something went wrong'));
+			}
+		}
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		const subCallback = (payload: MeltQuoteResponse) => {
+			if (payload.state === 'PAID') {
+				callback(payload);
+			}
+		};
+		const subId = this.mint.webSocketConnection.createSubscription(
+			{ kind: 'bolt11_melt_quote', filters: [quoteId] },
+			subCallback,
+			(e: Error) => {
+				errorCallback(e);
+			}
+		);
+		return () => {
+			this.mint.webSocketConnection?.cancelSubscription(subId, subCallback);
+		};
+	}
+
 	private splitReceive(
 		amount: number,
 		amountAvailable: number

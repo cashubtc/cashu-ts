@@ -5,6 +5,8 @@ import dns from 'node:dns';
 import { deriveKeysetId, getEncodedToken } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
+import { injectWebSocketImpl } from '../src/WSConnection.js';
+import ws from 'ws';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -13,6 +15,8 @@ const externalInvoice =
 let request: Record<string, string> | undefined;
 const mintUrl = 'http://localhost:3338';
 const unit = 'sat';
+
+injectWebSocketImpl(ws);
 
 describe('mint api', () => {
 	test('get keys', async () => {
@@ -242,5 +246,28 @@ describe('mint api', () => {
 		});
 		expect(response).toBeDefined();
 		expect(response.isPaid).toBe(true);
+	});
+	test('websocket updates', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const mintQuote = await wallet.createMintQuote(21);
+		const callback = jest.fn();
+		const res = await new Promise((res, rej) => {
+			wallet.onMintQuotePaid(
+				mintQuote.quote,
+				() => {
+					callback();
+					res(1);
+				},
+				(e) => {
+					console.log(e);
+					rej(e);
+				}
+			);
+		});
+		mint.disconnectWebSocket();
+		expect(res).toBe(1);
+		expect(callback).toBeCalled();
 	});
 });
