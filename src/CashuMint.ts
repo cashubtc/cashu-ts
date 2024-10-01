@@ -1,7 +1,7 @@
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
-	MintInfo,
+	GetInfoResponse,
 	MeltPayload,
 	MintActiveKeys,
 	MintAllKeysets,
@@ -15,8 +15,7 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse,
-	MintContactInfo
+	MeltQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
@@ -52,9 +51,9 @@ class CashuMint {
 	 * @param mintUrl
 	 * @param customRequest
 	 */
-	public static async getInfo(mintUrl: string, customRequest?: typeof request): Promise<MintInfo> {
+	public static async getInfo(mintUrl: string, customRequest?: typeof request): Promise<GetInfoResponse> {
 		const requestInstance = customRequest || request;
-		const response = await requestInstance<MintInfo>({
+		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/info')
 		});
 		const data = handleMintInfoContactFieldDeprecated(response);
@@ -63,7 +62,7 @@ class CashuMint {
 	/**
 	 * fetches mints info at the /info endpoint
 	 */
-	async getInfo(): Promise<MintInfo> {
+	async getInfo(): Promise<GetInfoResponse> {
 		return CashuMint.getInfo(this._mintUrl, this._customRequest);
 	}
 

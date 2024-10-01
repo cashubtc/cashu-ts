@@ -194,14 +194,14 @@ describe('receive', () => {
 		nock(mintUrl).post('/v1/swap').reply(400, { detail: msg });
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('Error receiving token: Error: Error receiving token entry'));
+		expect(result).toEqual(new Error('tokens already spent. Secret: asdasdasd'));
 	});
 
 	test('test receive could not verify proofs', async () => {
 		nock(mintUrl).post('/v1/swap').reply(400, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('Error receiving token: Error: Error receiving token entry'));
+		expect(result).toEqual(new Error('could not verify proofs.'));
 	});
 });
 

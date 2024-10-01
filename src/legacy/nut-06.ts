@@ -1,6 +1,6 @@
-import type { MintContactInfo, MintInfo } from '../model/types/index.js';
+import type { MintContactInfo, GetInfoResponse } from '../model/types/index.js';
 
-export function handleMintInfoContactFieldDeprecated(data: MintInfo) {
+export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse) {
 	// Monkey patch old contact field ["email", "me@mail.com"] Array<[string, string]>; to new contact field [{method: "email", info: "me@mail.com"}] Array<MintContactInfo>
 	// This is to maintain backwards compatibility with older versions of the mint
 	if (Array.isArray(data?.contact) && data?.contact.length > 0) {
