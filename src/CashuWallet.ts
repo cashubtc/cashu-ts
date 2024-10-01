@@ -340,20 +340,23 @@ class CashuWallet {
 			options?.privkey ||
 			options?.keysetId // these options require a swap
 		) {
-			console.log('>> yes swap');
+			console.log(`>> yes swap | sendProofOffline: ${sumProofs(sendProofOffline)} | amount: ${amount}`);
 			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
 				true
 			);
+			const returnAmount = sumProofs(sendProofs) - amount;
 			console.log(
-				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(sendProofs)}`
+				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(sendProofs)} | sendProofs amounts: ${sendProofs.map(
+					(p) => p.amount
+				)}`
 			);
 			if (options && !options?.outputAmounts?.keepAmounts && options?.proofsWeHave) {
 				const keyset = await this.getKeys(options?.keysetId);
 				options.outputAmounts = {
-					keepAmounts: getKeepAmounts(options.proofsWeHave, amount, keyset.keys, 3),
-					sendAmounts: options?.outputAmounts?.sendAmounts || []
+					keepAmounts: getKeepAmounts(keepProofsSelect, returnAmount, keyset.keys, 3),
+					sendAmounts: options?.outputAmounts?.sendAmounts || splitAmount(amount, keyset.keys)
 				}
 			}
 			console.log(`keepAmounts: ${options?.outputAmounts?.keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`)
@@ -643,7 +646,7 @@ class CashuWallet {
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
 			keyset,
-			// options?.outputAmounts?.keepAmounts,
+			options?.outputAmounts?.keepAmounts,
 			options?.counter,
 			options?.pubkey
 		);

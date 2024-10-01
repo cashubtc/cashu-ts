@@ -52,7 +52,7 @@ function getKeepAmounts(
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
 	const amountsWeWant: Array<number> = [];
 	const amountsWeHave = proofsWeHave.map((p) => p.amount);
-	const sortedKeyAmounts = getKeysetAmounts(keys);
+	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
 	sortedKeyAmounts.forEach((amt) => {
 		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
 		const countWeWant = Math.floor(targetCount - countWeHave);
@@ -70,18 +70,25 @@ function getKeepAmounts(
 		remainingAmounts.forEach((amt) => { amountsWeWant.push(amt) })
 	}
 	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
-	console.log(`amountsWeHave: ${amountsWeHave}`)
-	console.log(`amountsWeWant: ${sortedAmountsWeWant}`);
+	console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`)
+	console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`)
+	console.log(`# getKeepAmounts: amountsWeWant: ${sortedAmountsWeWant}`);
 	return sortedAmountsWeWant;
 }
 
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
-function getKeysetAmounts(keyset: Keys): Array<number> {
+function getKeysetAmounts(keyset: Keys, order = 'desc'): Array<number> {
+	if (order == 'desc') {
+		return Object.keys(keyset)
+			.map((k) => parseInt(k))
+			.sort((a, b) => b - a);
+	}
 	return Object.keys(keyset)
 		.map((k) => parseInt(k))
 		.sort((a, b) => a - b);
+
 }
 
 function hasCorrespondingKey(amount: number, keyset: Keys) {
