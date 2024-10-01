@@ -67,22 +67,23 @@ function getKeepAmounts(
 			if (amountsWeWant.reduce((a, b) => a + b, 0) + amt > amountToKeep) {
 				break;
 			}
-			amountsWeWant.push(amt)
+			amountsWeWant.push(amt);
 		}
 	});
 	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
-	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0)
+	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0);
 	if (amountDiff) {
-		const remainingAmounts = splitAmount(amountDiff, keys)
-		remainingAmounts.forEach((amt) => { amountsWeWant.push(amt) })
+		const remainingAmounts = splitAmount(amountDiff, keys);
+		remainingAmounts.forEach((amt) => {
+			amountsWeWant.push(amt);
+		});
 	}
 	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
-	console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`)
-	console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`)
+	console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`);
+	console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`);
 	console.log(`# getKeepAmounts: amountsWeWant: ${sortedAmountsWeWant}`);
 	return sortedAmountsWeWant;
 }
-
 
 // function isPowerOfTwo(number: number) {
 // 	return number && !(number & (number - 1));
@@ -96,7 +97,6 @@ function getKeysetAmounts(keyset: Keys, order = 'desc'): Array<number> {
 	return Object.keys(keyset)
 		.map((k: string) => parseInt(k))
 		.sort((a: number, b: number) => a - b);
-
 }
 
 function hasCorrespondingKey(amount: number, keyset: Keys) {

@@ -151,21 +151,23 @@ class CashuWallet {
 
 	/**
 	 * Choose a keyset to activate based on the lowest input fee
-	 * 
+	 *
 	 * Note: this function will filter out deprecated base64 keysets
-	 * 
+	 *
 	 * @param keysets keysets to choose from
 	 * @returns active keyset
 	 */
 	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
-		let activeKeysets = keysets.filter((k) => k.active)
+		let activeKeysets = keysets.filter((k) => k.active);
 		// begin deprecated: if there are keyset IDs that are not hex strings, we need to filter them out
 		const hexKeysets = activeKeysets.filter((k) => /^[0-9a-fA-F]+$/.test(k.id));
 		if (hexKeysets.length > 0) {
 			activeKeysets = hexKeysets;
 		}
 		// end deprecated
-		const activeKeyset = activeKeysets.sort((a, b) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0))[0];
+		const activeKeyset = activeKeysets.sort(
+			(a, b) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0)
+		)[0];
 		if (!activeKeyset) {
 			throw new Error('No active keyset found');
 		}
@@ -216,9 +218,9 @@ class CashuWallet {
 
 		// no keysetId was set, so we select an active keyset with the unit of the wallet with the lowest fees and use that
 		const allKeysets = await this.mint.getKeySets();
-		const keysetToActivate = this.getActiveKeyset(allKeysets.keysets)
+		const keysetToActivate = this.getActiveKeyset(allKeysets.keysets);
 		const keyset = await this.getKeys(keysetToActivate.id);
-		return keyset
+		return keyset;
 	}
 
 	/**
@@ -333,7 +335,9 @@ class CashuWallet {
 			options?.privkey ||
 			options?.keysetId // these options require a swap
 		) {
-			console.log(`>> yes swap | sendProofOffline: ${sumProofs(sendProofOffline)} | amount: ${amount}`);
+			console.log(
+				`>> yes swap | sendProofOffline: ${sumProofs(sendProofOffline)} | amount: ${amount}`
+			);
 			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
@@ -341,18 +345,20 @@ class CashuWallet {
 			);
 			const returnAmount = sumProofs(sendProofs) - amount;
 			console.log(
-				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(sendProofs)} | sendProofs amounts: ${sendProofs.map(
-					(p) => p.amount
-				)}`
+				`keepProofsSelect: ${sumProofs(keepProofsSelect)} | sendProofs: ${sumProofs(
+					sendProofs
+				)} | sendProofs amounts: ${sendProofs.map((p) => p.amount)}`
 			);
 			if (options && !options?.outputAmounts?.keepAmounts && options?.proofsWeHave) {
 				const keyset = await this.getKeys(options?.keysetId);
 				options.outputAmounts = {
 					keepAmounts: getKeepAmounts(keepProofsSelect, returnAmount, keyset.keys, 3),
 					sendAmounts: options?.outputAmounts?.sendAmounts || splitAmount(amount, keyset.keys)
-				}
+				};
 			}
-			console.log(`keepAmounts: ${options?.outputAmounts?.keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`)
+			console.log(
+				`keepAmounts: ${options?.outputAmounts?.keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`
+			);
 			const { returnChange, send } = await this.swap(amount, sendProofs, options);
 			console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
 			const returnChangeProofs = keepProofsSelect.concat(returnChange);
@@ -453,7 +459,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-				1000,
+					1000,
 				0
 			)
 		);
@@ -624,18 +630,15 @@ class CashuWallet {
 
 		if (!options?.outputAmounts && options?.proofsWeHave) {
 			options.outputAmounts = {
-				keepAmounts: getKeepAmounts(
-					options.proofsWeHave,
-					amount,
-					keyset.keys,
-					3
-				),
+				keepAmounts: getKeepAmounts(options.proofsWeHave, amount, keyset.keys, 3),
 				sendAmounts: []
 			};
 		}
 		console.log(
-			`outputAmounts: ${options?.outputAmounts?.keepAmounts
-			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a, b) => a + b, 0)}) | ${options?.outputAmounts?.sendAmounts
+			`outputAmounts: ${
+				options?.outputAmounts?.keepAmounts
+			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a, b) => a + b, 0)}) | ${
+				options?.outputAmounts?.sendAmounts
 			} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a, b) => a + b, 0)})`
 		);
 		console.log(JSON.stringify(options?.outputAmounts));
