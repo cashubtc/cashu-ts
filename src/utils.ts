@@ -28,9 +28,9 @@ function splitAmount(
 ): Array<number> {
 	const chunks: Array<number> = [];
 	if (split) {
-		if (split.reduce((a, b) => a + b, 0) > value) {
+		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
 			throw new Error(
-				`Split is greater than total amount: ${split.reduce((a, b) => a + b, 0)} > ${value}`
+				`Split is greater than total amount: ${split.reduce((a: number, b: number) => a + b, 0)} > ${value}`
 			);
 		}
 		chunks.push(...getPreference(value, keyset, split));
@@ -74,7 +74,7 @@ function getKeepAmounts(
 	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0);
 	if (amountDiff) {
 		const remainingAmounts = splitAmount(amountDiff, keys);
-		remainingAmounts.forEach((amt) => {
+		remainingAmounts.forEach((amt: number) => {
 			amountsWeWant.push(amt);
 		});
 	}
@@ -288,7 +288,7 @@ export function sanitizeUrl(url: string): string {
 }
 
 export function sumProofs(proofs: Array<Proof>) {
-	return proofs.reduce((acc, proof) => acc + proof.amount, 0);
+	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
 }
 
 export {
