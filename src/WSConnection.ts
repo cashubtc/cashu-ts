@@ -94,7 +94,11 @@ export class WSConnection {
 	}
 
 	private removeListener(subId: string, callback: (payload: any) => any) {
-		(this.subListeners[subId] = this.subListeners[subId] || []).filter((fn) => fn !== callback);
+		if (this.subListeners[subId].length === 1) {
+			delete this.subListeners[subId];
+			return;
+		}
+		this.subListeners[subId] = this.subListeners[subId].filter((fn: any) => fn !== callback);
 	}
 
 	async ensureConnection() {
@@ -170,6 +174,10 @@ export class WSConnection {
 		this.removeListener(subId, callback);
 		this.rpcId++;
 		this.sendRequest('unsubscribe', { subId });
+	}
+
+	get activeSubscriptions() {
+		return Object.keys(this.subListeners);
 	}
 
 	close() {
