@@ -280,4 +280,40 @@ describe('mint api', () => {
 		expect(res).toBe(1);
 		expect(callback).toBeCalled();
 	});
+	test('websocket mint quote updates on multiple ids', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const mintQuote1 = await wallet.createMintQuote(21);
+		const mintQuote2 = await wallet.createMintQuote(22);
+
+		const callbackRef = jest.fn();
+		const res = await new Promise(async (res, rej) => {
+			let counter = 0;
+			const unsub = await wallet.onMintQuoteUpdates(
+				[mintQuote1.quote, mintQuote2.quote],
+				(p) => {
+					console.log(p);
+					counter++;
+					callbackRef();
+					if (counter === 4) {
+						unsub();
+						res(1);
+					}
+				},
+				(e) => {
+					counter++;
+					console.log(e);
+					if (counter === 4) {
+						unsub();
+						rej();
+					}
+				}
+			);
+		});
+		mint.disconnectWebSocket();
+		expect(res).toBe(1);
+		expect(callbackRef).toHaveBeenCalledTimes(4);
+		expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
+	});
 });
