@@ -867,20 +867,31 @@ class CashuWallet {
 		return states;
 	}
 
+	async onMintQuoteUpdates(
+		quoteIds: Array<string>,
+		callback: (payload: MintQuoteResponse) => void,
+		errorCallback: (e: Error) => void
+	): Promise<SubscriptionCanceller> {
+		await this.mint.connectWebSocket();
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		const subId = this.mint.webSocketConnection.createSubscription(
+			{ kind: 'bolt11_mint_quote', filters: quoteIds },
+			callback,
+			errorCallback
+		);
+		return () => {
+			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+		};
+	}
+
 	async onMintQuotePaid(
 		quoteId: string,
 		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void
 	): Promise<SubscriptionCanceller> {
-		try {
-			await this.mint.connectWebSocket();
-		} catch (e) {
-			if (e instanceof Error) {
-				throw e;
-			} else if (e) {
-				throw new Error('Something went wrong');
-			}
-		}
+		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
 			throw new Error('failed to establish WebSocket connection.');
 		}
@@ -892,9 +903,7 @@ class CashuWallet {
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
 			subCallback,
-			(e: Error) => {
-				errorCallback(e);
-			}
+			errorCallback
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, subCallback);
