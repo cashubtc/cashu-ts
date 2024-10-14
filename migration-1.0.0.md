@@ -126,6 +126,7 @@ type BlindedMessage {
 - in `SendResponse`, `returnChange` is now called `keep`
 - `mintTokens` is now called `mintProofs`
 - `meltTokens` is now called `meltProofs`
+- `CashuMint.split` is now called `CashuMint.swap`
 
 ---
 

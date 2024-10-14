@@ -297,7 +297,7 @@ class CashuWallet {
 			options?.pubkey,
 			options?.privkey
 		);
-		const { signatures } = await this.mint.split(payload);
+		const { signatures } = await this.mint.swap(payload);
 		const newProofs = this.constructProofs(
 			signatures,
 			blindedMessages.rs,
@@ -475,7 +475,7 @@ class CashuWallet {
 			options?.pubkey,
 			options?.privkey
 		);
-		const { signatures } = await this.mint.split(payload);
+		const { signatures } = await this.mint.swap(payload);
 		const swapProofs = this.constructProofs(
 			signatures,
 			blindedMessages.rs,
