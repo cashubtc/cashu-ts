@@ -103,10 +103,10 @@ describe('mint api', () => {
 		expect(sentProofsSpent).toBeDefined();
 		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
 		expect(sentProofsSpent).toEqual(sendResponse.send);
-		// expect none of the sendResponse.returnChange to be spent
-		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange);
-		expect(returnChangeSpent).toBeDefined();
-		expect(returnChangeSpent).toEqual([]);
+		// expect none of the sendResponse.keep to be spent
+		const keepSpent = await wallet.checkProofsSpent(sendResponse.keep);
+		expect(keepSpent).toBeDefined();
+		expect(keepSpent).toEqual([]);
 	});
 	test('pay external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -134,10 +134,10 @@ describe('mint api', () => {
 		expect(sentProofsSpent).toBeDefined();
 		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
 		expect(sentProofsSpent).toEqual(sendResponse.send);
-		// expect none of the sendResponse.returnChange to be spent
-		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange);
-		expect(returnChangeSpent).toBeDefined();
-		expect(returnChangeSpent).toEqual([]);
+		// expect none of the sendResponse.keep to be spent
+		const keepSpent = await wallet.checkProofsSpent(sendResponse.keep);
+		expect(keepSpent).toBeDefined();
+		expect(keepSpent).toEqual([]);
 	});
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -148,9 +148,9 @@ describe('mint api', () => {
 		const sendResponse = await wallet.send(64, tokens.proofs);
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
-		expect(sendResponse.returnChange).toBeDefined();
+		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(1);
-		expect(sendResponse.returnChange.length).toBe(0);
+		expect(sendResponse.keep.length).toBe(0);
 		expect(sumProofs(sendResponse.send)).toBe(64);
 	});
 	test('test send tokens with change', async () => {
@@ -162,11 +162,11 @@ describe('mint api', () => {
 		const sendResponse = await wallet.send(10, tokens.proofs);
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
-		expect(sendResponse.returnChange).toBeDefined();
+		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(2);
-		expect(sendResponse.returnChange.length).toBe(5);
+		expect(sendResponse.keep.length).toBe(5);
 		expect(sumProofs(sendResponse.send)).toBe(10);
-		expect(sumProofs(sendResponse.returnChange)).toBe(90);
+		expect(sumProofs(sendResponse.keep)).toBe(90);
 	}, 10000000);
 	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);

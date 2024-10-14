@@ -85,7 +85,7 @@ const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 
 // in a real wallet, we would coin select the correct amount of proofs from the wallet's storage
 // instead of that, here we swap `proofs` with the mint to get the correct amount of proofs
-const { returnChange: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs);
+const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs);
 // store proofsToKeep in wallet ..
 
 const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);

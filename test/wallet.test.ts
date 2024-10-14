@@ -365,7 +365,7 @@ describe('send', () => {
 
 		const result = await wallet.send(1, proofs);
 
-		expect(result.returnChange).toHaveLength(0);
+		expect(result.keep).toHaveLength(0);
 		expect(result.send).toHaveLength(1);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
@@ -403,10 +403,10 @@ describe('send', () => {
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
 	});
 
 	test('test send over paying2', async () => {
@@ -442,10 +442,10 @@ describe('send', () => {
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
 	});
 	test('test send preference', async () => {
 		nock(mintUrl)
@@ -502,7 +502,7 @@ describe('send', () => {
 		expect(result.send[3]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(0);
+		expect(result.keep).toHaveLength(0);
 	});
 
 	test('test send preference overpay', async () => {
@@ -559,8 +559,8 @@ describe('send', () => {
 		expect(result.send[2]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 	});
 
 	test('test send not enough funds', async () => {

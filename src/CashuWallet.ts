@@ -20,7 +20,6 @@ import {
 	type TokenEntry,
 	CheckStateEnum,
 	SerializedBlindedSignature,
-	MeltQuoteState,
 	GetInfoResponse,
 	OutputAmounts,
 	CheckStateEntry,
@@ -326,7 +325,7 @@ class CashuWallet {
 		if (sumProofs(proofs) < amount) {
 			throw new Error('Not enough funds available to send');
 		}
-		const { returnChange: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
+		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
 			amount
 		);
@@ -337,25 +336,18 @@ class CashuWallet {
 			options?.privkey ||
 			options?.keysetId // these options require a swap
 		) {
-			// console.log(
-			// 	`>> yes swap | sendProofOffline: ${sumProofs(sendProofOffline)} | amount: ${amount}`
-			// );
 			// input selection
-			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
+			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
 				true
 			);
 			options?.proofsWeHave?.push(...keepProofsSelect);
-			const { returnChange, send } = await this.swap(amount, sendProofs, options);
-			// console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
-			const returnChangeProofs = keepProofsSelect.concat(returnChange);
-			// console.log(`returnChangeProofs: ${sumProofs(returnChangeProofs)}`);
-			return { returnChange: returnChangeProofs, send };
+			const { keep, send } = await this.swap(amount, sendProofs, options);
+			const keepProofs = keepProofsSelect.concat(keep);
+			return { keep: keepProofs, send };
 		}
-		// console.log('>> no swap');
-		// console.log(`keepProofsOffline: ${sumProofs(keepProofsOffline)} | sendProofOffline: ${sumProofs(sendProofOffline)}`);
-		return { returnChange: keepProofsOffline, send: sendProofOffline };
+		return { keep: keepProofsOffline, send: sendProofOffline };
 	}
 
 	private selectProofsToSend(
@@ -363,7 +355,6 @@ class CashuWallet {
 		amountToSend: number,
 		includeFees = false
 	): SendResponse {
-		// heavy logging in this function
 		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const smallerProofs = sortedProofs
 			.filter((p: Proof) => p.amount <= amountToSend)
@@ -374,13 +365,13 @@ class CashuWallet {
 		const nextBigger = biggerProofs[0];
 		if (!smallerProofs.length && nextBigger) {
 			return {
-				returnChange: proofs.filter((p: Proof) => p.secret !== nextBigger.secret),
+				keep: proofs.filter((p: Proof) => p.secret !== nextBigger.secret),
 				send: [nextBigger]
 			};
 		}
 
 		if (!smallerProofs.length && !nextBigger) {
-			return { returnChange: proofs, send: [] };
+			return { keep: proofs, send: [] };
 		}
 
 		let remainder = amountToSend;
@@ -389,20 +380,20 @@ class CashuWallet {
 		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
 		remainder -= smallerProofs[0].amount - feePPK / 1000;
 		if (remainder > 0) {
-			const { returnChange, send } = this.selectProofsToSend(
+			const { keep, send } = this.selectProofsToSend(
 				smallerProofs.slice(1),
 				remainder,
 				includeFees
 			);
 			selectedProofs.push(...send);
-			returnedProofs.push(...returnChange);
+			returnedProofs.push(...keep);
 		}
 
 		if (sumProofs(selectedProofs) < amountToSend && nextBigger) {
 			selectedProofs = [nextBigger];
 		}
 		return {
-			returnChange: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
+			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
 			send: selectedProofs
 		};
 	}
@@ -461,21 +452,9 @@ class CashuWallet {
 		const amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 
 		if (amount + this.getFeesForProofs(proofsToSend) > amountAvailable) {
-			// console.log(
-			// 	`amount: ${amount} | fees: ${this.getFeesForProofs(
-			// 		proofsToSend
-			// 	)} | amountAvailable: ${amountAvailable}`
-			// );
 			throw new Error('Not enough funds available');
 		}
 		// output selection
-		// if (options.proofsWeHave) {
-		// 	console.log(
-		// 		`proofsWeHave: ${sumProofs(options.proofsWeHave)} | sendProofs: ${sumProofs(
-		// 			proofsToSend
-		// 		)} | sendProofs amounts: ${proofsToSend.map((p: Proof) => p.amount)}`
-		// 	);
-		// }
 		let keepAmounts;
 		if (options && !options.outputAmounts?.keepAmounts && options.proofsWeHave) {
 			keepAmounts = getKeepAmounts(options.proofsWeHave, amountToKeep, keyset.keys, 3)
@@ -487,10 +466,6 @@ class CashuWallet {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
-		// console.log(
-		// 	`keepAmounts: ${keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`
-		// );
-		// console.log(`>> amountToSend: ${amountToSend}`);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
@@ -519,7 +494,7 @@ class CashuWallet {
 			splitProofsToSend.push(proof);
 		});
 		return {
-			returnChange: splitProofsToKeep,
+			keep: splitProofsToKeep,
 			send: splitProofsToSend
 		};
 	}
@@ -618,12 +593,6 @@ class CashuWallet {
 				sendAmounts: []
 			};
 		}
-		// console.log(
-		// 	`outputAmounts: ${options?.outputAmounts?.keepAmounts
-		// 	} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a: number, b: number) => a + b, 0)}) | ${options?.outputAmounts?.sendAmounts
-		// 	} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a: number, b: number) => a + b, 0)})`
-		// );
-		// console.log(JSON.stringify(options?.outputAmounts));
 
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,

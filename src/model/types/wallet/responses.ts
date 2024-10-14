@@ -36,7 +36,7 @@ export type SendResponse = {
 	/**
 	 * Proofs that exceeded the needed amount
 	 */
-	returnChange: Array<Proof>;
+	keep: Array<Proof>;
 	/**
 	 * Proofs to be sent, matching the chosen amount
 	 */
