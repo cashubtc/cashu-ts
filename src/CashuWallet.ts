@@ -636,7 +636,7 @@ class CashuWallet {
 	}
 
 	/**
-	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
+	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote. This function does not perform coin selection!.
 	 * Returns melt quote and change proofs
 	 * @param meltQuote ID of the melt quote
 	 * @param proofsToSend proofs to melt
@@ -656,7 +656,7 @@ class CashuWallet {
 	): Promise<meltProofsResponse> {
 		const keys = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createBlankOutputs(
-			meltQuote.fee_reserve,
+			sumProofs(proofsToSend) - meltQuote.amount,
 			keys.id,
 			options?.counter
 		);
@@ -910,17 +910,17 @@ class CashuWallet {
 	/**
 	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve
 	 * See: https://github.com/cashubtc/nuts/blob/main/08.md
-	 * @param feeReserve amount to cover with blank outputs
+	 * @param amount amount to cover with blank outputs
 	 * @param keysetId mint keysetId
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
 	private createBlankOutputs(
-		feeReserve: number,
+		amount: number,
 		keysetId: string,
 		counter?: number
 	): BlindedMessageData {
-		let count = Math.ceil(Math.log2(feeReserve)) || 1;
+		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {
 			count = 0;

@@ -119,6 +119,16 @@ type BlindedMessage {
 
 ---
 
+**`amountPreference`** is not used anymore.
+
+`preference?: Array<AmountPreference>;` -> `outputAmounts?: OutputAmounts;`
+
+- in `SendResponse`, `returnChange` is now called `keep`
+- `mintTokens` is now called `mintProofs`
+- `meltTokens` is now called `meltProofs`
+
+---
+
 ### Pattern changes
 
 **removed `newKeys` from returns**: Functions no longer return `newKeys`. Wallets now specify the keyset they use in the BlindedMessage via the `id` field.
