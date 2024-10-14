@@ -653,7 +653,7 @@ class CashuWallet {
 		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
 		const amounts = splitAmount(amount, keyset.keys, amountPreference);
-		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
+		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey, amountPreference);
 	}
 
 	/**
@@ -662,13 +662,15 @@ class CashuWallet {
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param amountPreference? optional preference for splitting proofs into specific amounts with specific pubkeys
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createBlindedMessages(
 		amounts: Array<number>,
 		keysetId: string,
 		counter?: number,
-		pubkey?: string
+		pubkey?: string,
+		amountPreference?: Array<AmountPreference>
 	): BlindedMessageData & { amounts: Array<number> } {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
@@ -682,15 +684,22 @@ class CashuWallet {
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secretBytes = undefined;
-			if (pubkey) {
-				secretBytes = createP2PKsecret(pubkey);
+			let currentPubkey = pubkey;
+
+			// If amountPreference is provided, use the pubkey from it
+			if (amountPreference && amountPreference[i] && amountPreference[i].pubkey) {
+				currentPubkey = amountPreference[i].pubkey;
+			}
+
+			if (currentPubkey) {
+				secretBytes = createP2PKsecret(currentPubkey);
 			} else if (this._seed && counter != undefined) {
 				secretBytes = deriveSecret(this._seed, keysetId, counter + i);
 				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, keysetId, counter + i));
 			} else {
 				secretBytes = randomBytes(32);
 			}
-			if (!pubkey) {
+			if (!currentPubkey) {
 				const secretHex = bytesToHex(secretBytes);
 				secretBytes = new TextEncoder().encode(secretHex);
 			}

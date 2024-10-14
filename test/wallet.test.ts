@@ -562,6 +562,62 @@ describe('send', () => {
 		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 	});
 
+	test('test send preference with many pubkeys', async () => {
+		nock(mintUrl)
+			.post('/v1/swap')
+			.reply(200, {
+				signatures: [
+					{
+						id: '009a1f293253e41e',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: '009a1f293253e41e',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					},
+					{
+						id: '009a1f293253e41e',
+						amount: 1,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+					}
+				]
+			});
+		const wallet = new CashuWallet(mint, { unit });
+
+		const inputProofs = [
+			{
+				id: '009a1f293253e41e',
+				amount: 3,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			}
+		];
+
+		const pubkey1 = '02' + 'a'.repeat(64).slice(0, 64);
+		const pubkey2 = '03' + 'b'.repeat(64).slice(0, 64);
+		const pubkey3 = '02' + 'c'.repeat(64).slice(0, 64);
+
+		const result = await wallet.send(6, inputProofs, {
+			preference: {
+				sendPreference: [
+					{ amount: 1, count: 1, pubkey: pubkey1 },
+					{ amount: 1, count: 1, pubkey: pubkey2 },
+					{ amount: 1, count: 1, pubkey: pubkey3 }
+				]
+			}
+		});
+
+		expect(result.send).toHaveLength(3);
+
+		expect(result.send[0].secret.includes(pubkey1)).toBe(true);
+		expect(result.send[1].secret.includes(pubkey2)).toBe(true);
+		expect(result.send[2].secret.includes(pubkey3)).toBe(true);
+
+		expect(result.returnChange).toHaveLength(0);
+	});
+
 	test('test send not enough funds', async () => {
 		nock(mintUrl)
 			.post('/v1/swap')
