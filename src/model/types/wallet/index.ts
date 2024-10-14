@@ -5,6 +5,7 @@ export * from './tokens';
 export type AmountPreference = {
 	amount: number;
 	count: number;
+	pubkey?: string;
 };
 
 /**
