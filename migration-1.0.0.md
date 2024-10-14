@@ -46,9 +46,9 @@ type MintQuoteResponse = {
 };
 ```
 
-where `request` is the invoice to be paid, and `quote` is the identifier used to pass to `mintTokens()`.
+where `request` is the invoice to be paid, and `quote` is the identifier used to pass to `mintProofs()`.
 
-**`requestTokens()` --> `mintTokens()`**
+**`requestTokens()` --> `mintProofs()`**
 
 ---
 
@@ -67,7 +67,7 @@ type MeltQuoteResponse = {
 };
 ```
 
-where `quote` is the identifier to pass to `meltTokens()`
+where `quote` is the identifier to pass to `meltProofs()`
 
 ---
 

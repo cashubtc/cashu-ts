@@ -1,7 +1,7 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js';
+import { MeltQuoteResponse, MeltQuoteState, ReceiveResponse } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
 import { AmountPreference } from '../src/model/types/index';
 import { Proof } from '@cashu/crypto/modules/common';
@@ -260,7 +260,7 @@ describe('payLnInvoice', () => {
 
 		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
 
-		expect(result).toEqual({ isPaid: true, preimage: null, change: [] });
+		expect(result).toEqual({ quote: meltQuote, change: [] });
 	});
 	test('test payLnInvoice change', async () => {
 		nock(mintUrl)
@@ -293,8 +293,8 @@ describe('payLnInvoice', () => {
 		const meltQuote = await wallet.checkMeltQuote('test');
 		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
-		expect(result.isPaid).toBe(true);
-		expect(result.preimage).toBe('asd');
+		expect(result.quote.state == MeltQuoteState.PAID).toBe(true);
+		expect(result.quote.payment_preimage).toBe('asd');
 		expect(result.change).toHaveLength(1);
 	});
 	test('test payLnInvoice bad resonse', async () => {
@@ -323,7 +323,7 @@ describe('requestTokens', () => {
 			});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const { proofs } = await wallet.mintTokens(1, '');
+		const { proofs } = await wallet.mintProofs(1, '');
 
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
@@ -334,7 +334,7 @@ describe('requestTokens', () => {
 		nock(mintUrl).post('/v1/mint/bolt11').reply(200, {});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const result = await wallet.mintTokens(1, '').catch((e) => e);
+		const result = await wallet.mintProofs(1, '').catch((e) => e);
 
 		expect(result).toEqual(new Error('bad response'));
 	});

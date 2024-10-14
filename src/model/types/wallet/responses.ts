@@ -1,17 +1,14 @@
+import { MeltQuoteResponse } from '../mint';
 import { Proof, Token } from './index';
 
 /**
  * Response after paying a Lightning invoice
  */
-export type MeltTokensResponse = {
+export type meltProofsResponse = {
 	/**
 	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
 	 */
-	isPaid: boolean;
-	/**
-	 * preimage of the paid invoice. can be null, depending on which LN-backend the mint uses
-	 */
-	preimage: string | null;
+	quote: MeltQuoteResponse;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */

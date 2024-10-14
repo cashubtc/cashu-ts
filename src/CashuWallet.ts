@@ -8,7 +8,7 @@ import {
 	type MeltQuoteResponse,
 	type MintKeys,
 	type MintKeyset,
-	type MeltTokensResponse,
+	type meltProofsResponse,
 	type MintPayload,
 	type Proof,
 	type MintQuotePayload,
@@ -337,9 +337,9 @@ class CashuWallet {
 			options?.privkey ||
 			options?.keysetId // these options require a swap
 		) {
-			console.log(
-				`>> yes swap | sendProofOffline: ${sumProofs(sendProofOffline)} | amount: ${amount}`
-			);
+			// console.log(
+			// 	`>> yes swap | sendProofOffline: ${sumProofs(sendProofOffline)} | amount: ${amount}`
+			// );
 			// input selection
 			const { returnChange: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
@@ -348,12 +348,12 @@ class CashuWallet {
 			);
 			options?.proofsWeHave?.push(...keepProofsSelect);
 			const { returnChange, send } = await this.swap(amount, sendProofs, options);
-			console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
+			// console.log(`returnChange: ${sumProofs(returnChange)} | send: ${sumProofs(send)}`);
 			const returnChangeProofs = keepProofsSelect.concat(returnChange);
-			console.log(`returnChangeProofs: ${sumProofs(returnChangeProofs)}`);
+			// console.log(`returnChangeProofs: ${sumProofs(returnChangeProofs)}`);
 			return { returnChange: returnChangeProofs, send };
 		}
-		console.log('>> no swap');
+		// console.log('>> no swap');
 		// console.log(`keepProofsOffline: ${sumProofs(keepProofsOffline)} | sendProofOffline: ${sumProofs(sendProofOffline)}`);
 		return { returnChange: keepProofsOffline, send: sendProofOffline };
 	}
@@ -461,21 +461,21 @@ class CashuWallet {
 		const amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 
 		if (amount + this.getFeesForProofs(proofsToSend) > amountAvailable) {
-			console.log(
-				`amount: ${amount} | fees: ${this.getFeesForProofs(
-					proofsToSend
-				)} | amountAvailable: ${amountAvailable}`
-			);
+			// console.log(
+			// 	`amount: ${amount} | fees: ${this.getFeesForProofs(
+			// 		proofsToSend
+			// 	)} | amountAvailable: ${amountAvailable}`
+			// );
 			throw new Error('Not enough funds available');
 		}
 		// output selection
-		if (options.proofsWeHave) {
-			console.log(
-				`proofsWeHave: ${sumProofs(options.proofsWeHave)} | sendProofs: ${sumProofs(
-					proofsToSend
-				)} | sendProofs amounts: ${proofsToSend.map((p: Proof) => p.amount)}`
-			);
-		}
+		// if (options.proofsWeHave) {
+		// 	console.log(
+		// 		`proofsWeHave: ${sumProofs(options.proofsWeHave)} | sendProofs: ${sumProofs(
+		// 			proofsToSend
+		// 		)} | sendProofs amounts: ${proofsToSend.map((p: Proof) => p.amount)}`
+		// 	);
+		// }
 		let keepAmounts;
 		if (options && !options.outputAmounts?.keepAmounts && options.proofsWeHave) {
 			keepAmounts = getKeepAmounts(options.proofsWeHave, amountToKeep, keyset.keys, 3)
@@ -487,10 +487,10 @@ class CashuWallet {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
-		console.log(
-			`keepAmounts: ${keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`
-		);
-		console.log(`>> amountToSend: ${amountToSend}`);
+		// console.log(
+		// 	`keepAmounts: ${keepAmounts} | sendAmounts: ${options?.outputAmounts?.sendAmounts}`
+		// );
+		// console.log(`>> amountToSend: ${amountToSend}`);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
@@ -585,7 +585,7 @@ class CashuWallet {
 	}
 
 	/**
-	 * Mint tokens for a given mint quote
+	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
 	 * @param quote ID of mint quote
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
@@ -595,7 +595,7 @@ class CashuWallet {
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns proofs
 	 */
-	async mintTokens(
+	async mintProofs(
 		amount: number,
 		quote: string,
 		options?: {
@@ -618,12 +618,12 @@ class CashuWallet {
 				sendAmounts: []
 			};
 		}
-		console.log(
-			`outputAmounts: ${options?.outputAmounts?.keepAmounts
-			} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a: number, b: number) => a + b, 0)}) | ${options?.outputAmounts?.sendAmounts
-			} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a: number, b: number) => a + b, 0)})`
-		);
-		console.log(JSON.stringify(options?.outputAmounts));
+		// console.log(
+		// 	`outputAmounts: ${options?.outputAmounts?.keepAmounts
+		// 	} (sum: ${options?.outputAmounts?.keepAmounts?.reduce((a: number, b: number) => a + b, 0)}) | ${options?.outputAmounts?.sendAmounts
+		// 	} (sum: ${options?.outputAmounts?.sendAmounts.reduce((a: number, b: number) => a + b, 0)})`
+		// );
+		// console.log(JSON.stringify(options?.outputAmounts));
 
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
 			amount,
@@ -667,8 +667,8 @@ class CashuWallet {
 	}
 
 	/**
-	 * Melt tokens for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
-	 * Returns payment proof and change proofs
+	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote.
+	 * Returns melt quote and change proofs
 	 * @param meltQuote ID of the melt quote
 	 * @param proofsToSend proofs to melt
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
@@ -676,7 +676,7 @@ class CashuWallet {
 	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
 	 * @returns
 	 */
-	async meltTokens(
+	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
 		options?: {
@@ -684,7 +684,7 @@ class CashuWallet {
 			counter?: number;
 			privkey?: string;
 		}
-	): Promise<MeltTokensResponse> {
+	): Promise<meltProofsResponse> {
 		const keys = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createBlankOutputs(
 			meltQuote.fee_reserve,
@@ -710,13 +710,13 @@ class CashuWallet {
 			outputs: [...blindedMessages]
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
-
+		let change: Array<Proof> = [];
+		if (meltResponse.change) {
+			change = this.constructProofs(meltResponse.change, rs, secrets, keys)
+		}
 		return {
-			isPaid: meltResponse.state === MeltQuoteState.PAID,
-			preimage: meltResponse.payment_preimage,
-			change: meltResponse?.change
-				? this.constructProofs(meltResponse.change, rs, secrets, keys)
-				: []
+			quote: meltResponse,
+			change: change
 		};
 	}
 
@@ -740,11 +740,11 @@ class CashuWallet {
 			counter?: number;
 			privkey?: string;
 		}
-	): Promise<MeltTokensResponse> {
+	): Promise<meltProofsResponse> {
 		if (!meltQuote) {
 			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
 		}
-		return await this.meltTokens(meltQuote, proofsToSend, {
+		return await this.meltProofs(meltQuote, proofsToSend, {
 			keysetId: options?.keysetId,
 			counter: options?.counter,
 			privkey: options?.privkey
@@ -767,7 +767,7 @@ class CashuWallet {
 			keysetId?: string;
 			counter?: number;
 		}
-	): Promise<MeltTokensResponse> {
+	): Promise<meltProofsResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
 			.filter((x: TokenEntry) => x.mint === this.mint.mintUrl)

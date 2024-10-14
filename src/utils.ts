@@ -79,9 +79,9 @@ function getKeepAmounts(
 		});
 	}
 	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
-	console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`);
-	console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`);
-	console.log(`# getKeepAmounts: amountsWeWant: ${sortedAmountsWeWant}`);
+	// console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`);
+	// console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`);
+	// console.log(`# getKeepAmounts: amountsWeWant: ${sortedAmountsWeWant}`);
 	return sortedAmountsWeWant;
 }
 

@@ -67,7 +67,7 @@ const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
 if (mintQuoteChecked.state == MintQuoteState.PAID) {
-	const { proofs } = await wallet.mintTokens(64, mintQuote.quote);
+	const { proofs } = await wallet.mintProofs(64, mintQuote.quote);
 }
 ```
 
@@ -88,7 +88,7 @@ const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 const { returnChange: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs);
 // store proofsToKeep in wallet ..
 
-const meltResponse = await wallet.meltTokens(meltQuote, proofsToSend);
+const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 // store meltResponse.change in wallet ..
 ```
 

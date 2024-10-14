@@ -47,7 +47,7 @@ describe('mint api', () => {
 		const request = await wallet.createMintQuote(1337);
 		expect(request).toBeDefined();
 		expect(request.request).toContain('lnbc1337');
-		const tokens = await wallet.mintTokens(1337, request.quote);
+		const tokens = await wallet.mintProofs(1337, request.quote);
 		expect(tokens).toBeDefined();
 		// expect that the sum of all tokens.proofs.amount is equal to the requested amount
 		expect(tokens.proofs.reduce((a, b) => a + b.amount, 0)).toBe(1337);
@@ -80,7 +80,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintTokens(100, request.quote);
+		const tokens = await wallet.mintProofs(100, request.quote);
 
 		// expect no fee because local invoice
 		const mintQuote = await wallet.createMintQuote(10);
@@ -112,7 +112,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(3000);
-		const tokens = await wallet.mintTokens(3000, request.quote);
+		const tokens = await wallet.mintProofs(3000, request.quote);
 
 		const meltQuote = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltQuote.fee_reserve;
@@ -143,7 +143,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintTokens(64, request.quote);
+		const tokens = await wallet.mintProofs(64, request.quote);
 
 		const sendResponse = await wallet.send(64, tokens.proofs);
 		expect(sendResponse).toBeDefined();
@@ -157,7 +157,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintTokens(100, request.quote);
+		const tokens = await wallet.mintProofs(100, request.quote);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
 		expect(sendResponse).toBeDefined();
@@ -172,7 +172,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintTokens(100, request.quote);
+		const tokens = await wallet.mintProofs(100, request.quote);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
 		const encoded = getEncodedToken({
@@ -185,7 +185,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintTokens(64, request.quote);
+		const tokens = await wallet.mintProofs(64, request.quote);
 		const encoded = getEncodedToken({
 			token: [{ mint: mintUrl, proofs: tokens.proofs }]
 		});
@@ -203,7 +203,7 @@ describe('mint api', () => {
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintTokens(64, request.quote);
+		const tokens = await wallet.mintProofs(64, request.quote);
 
 		const { send } = await wallet.send(64, tokens.proofs, { pubkey: bytesToHex(pubKeyBob) });
 		const encoded = getEncodedToken({
@@ -233,14 +233,14 @@ describe('mint api', () => {
 
 		const mintRequest = await wallet.createMintQuote(3000);
 
-		const proofs = await wallet.mintTokens(3000, mintRequest.quote, {
+		const proofs = await wallet.mintProofs(3000, mintRequest.quote, {
 			pubkey: bytesToHex(pubKeyBob)
 		});
 
 		const meltRequest = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltRequest.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
-		const response = await wallet.meltTokens(meltRequest, proofs.proofs, {
+		const response = await wallet.meltProofs(meltRequest, proofs.proofs, {
 			privkey: bytesToHex(privKeyBob)
 		});
 		expect(response).toBeDefined();
