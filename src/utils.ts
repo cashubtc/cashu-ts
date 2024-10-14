@@ -5,8 +5,6 @@ import {
 	encodeUint8toBase64Url
 } from './base64.js';
 import {
-	AmountPreference,
-	OutputAmounts,
 	Keys,
 	Proof,
 	Token,
@@ -114,15 +112,6 @@ function getPreference(amount: number, keyset: Keys, split: Array<number>): Arra
 	return chunks;
 }
 
-function deprecatedPreferenceToOutputAmounts(preference?: Array<AmountPreference>): OutputAmounts {
-	const sendAmounts: Array<number> = [];
-	preference?.forEach(({ count, amount }) => {
-		for (let i = 0; i < count; i++) {
-			sendAmounts.push(amount);
-		}
-	});
-	return { sendAmounts };
-}
 function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
@@ -299,6 +288,5 @@ export {
 	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
-	deprecatedPreferenceToOutputAmounts,
 	getKeepAmounts
 };

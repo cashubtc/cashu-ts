@@ -1,9 +1,8 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse, MeltQuoteState, ReceiveResponse } from '../src/model/types/index.js';
+import { MeltQuoteResponse, MeltQuoteState, OutputAmounts } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
-import { AmountPreference } from '../src/model/types/index';
 import { Proof } from '@cashu/crypto/modules/common';
 
 const dummyKeysResp = {
@@ -176,7 +175,7 @@ describe('receive', () => {
 			'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICJlN2MxYjc2ZDFiMzFlMmJjYTJiMjI5ZDE2MGJkZjYwNDZmMzNiYzQ1NzAyMjIzMDRiNjUxMTBkOTI2ZjdhZjg5IiwgIkMiOiAiMDM4OWNkOWY0Zjk4OGUzODBhNzk4OWQ0ZDQ4OGE3YzkxYzUyNzdmYjkzMDQ3ZTdhMmNjMWVkOGUzMzk2Yjg1NGZmIn0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjMiLCAiQyI6ICIwMmRlNDBjNTlkOTAzODNiODg1M2NjZjNhNGIyMDg2NGFjODNiYTc1OGZjZTNkOTU5ZGJiODkzNjEwMDJlOGNlNDcifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0=';
 
 		const proofs = await wallet.receive(token3sat, {
-			preference: [{ amount: 1, count: 3 }]
+			outputAmounts: { keepAmounts: [1, 1, 1], sendAmounts: [] }
 		});
 
 		expect(proofs).toHaveLength(3);

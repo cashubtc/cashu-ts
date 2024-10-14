@@ -7,10 +7,6 @@ export type OutputAmounts = {
 };
 
 // deprecated
-export type AmountPreference = {
-	amount: number;
-	count: number;
-};
 
 export type InvoiceData = {
 	paymentRequest: string;

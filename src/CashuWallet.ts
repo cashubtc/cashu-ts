@@ -22,15 +22,13 @@ import {
 	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
-	CheckStateEntry,
-	AmountPreference
+	CheckStateEntry
 } from './model/types/index.js';
 import {
 	bytesToNumber,
 	getDecodedToken,
 	splitAmount,
 	sumProofs,
-	deprecatedPreferenceToOutputAmounts,
 	getKeepAmounts
 } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
@@ -236,7 +234,6 @@ class CashuWallet {
 		token: string | Token,
 		options?: {
 			keysetId?: string;
-			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
 			proofsWeHave?: Array<Proof>;
 			counter?: number;
@@ -244,9 +241,6 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
-		if (options?.preference)
-			// preference is only kept for backwards compatibility
-			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
@@ -275,16 +269,12 @@ class CashuWallet {
 		tokenEntry: TokenEntry,
 		options?: {
 			keysetId?: string;
-			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
-		if (options?.preference)
-			// preference is only kept for backwards compatibility
-			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const proofs: Array<Proof> = [];
 		const amount = tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) - this.getFeesForProofs(tokenEntry.proofs);
 		const keys = await this.getKeys(options?.keysetId);
@@ -312,7 +302,6 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
 			proofsWeHave?: Array<Proof>;
 			counter?: number;
@@ -431,7 +420,6 @@ class CashuWallet {
 		amount: number,
 		proofs: Array<Proof>,
 		options?: {
-			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
 			proofsWeHave?: Array<Proof>;
 			counter?: number;
@@ -443,8 +431,6 @@ class CashuWallet {
 		if (!options) {
 			options = {};
 		}
-		if (options.preference)
-			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
 		const keyset = await this.getKeys(options.keysetId);
 		const proofsToSend = proofs;
 		const amountToSend = amount
@@ -575,7 +561,6 @@ class CashuWallet {
 		quote: string,
 		options?: {
 			keysetId?: string;
-			preference?: Array<AmountPreference>;
 			outputAmounts?: OutputAmounts;
 			proofsWeHave?: Array<Proof>;
 			counter?: number;
@@ -583,10 +568,6 @@ class CashuWallet {
 		}
 	): Promise<{ proofs: Array<Proof> }> {
 		const keyset = await this.getKeys(options?.keysetId);
-
-		if (options?.preference)
-			options.outputAmounts = deprecatedPreferenceToOutputAmounts(options.preference);
-
 		if (!options?.outputAmounts && options?.proofsWeHave) {
 			options.outputAmounts = {
 				keepAmounts: getKeepAmounts(options.proofsWeHave, amount, keyset.keys, 3),
@@ -843,7 +824,7 @@ class CashuWallet {
 	/**
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for
-	 * @param amountPreference optional preference for splitting proofs into specific amounts. overrides amount param
+	 * @param split optional preference for splitting proofs into specific amounts. overrides amount param
 	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
