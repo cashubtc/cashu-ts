@@ -1,40 +1,38 @@
 import { encodeBase64toUint8 } from '../base64';
 import { decodeCBOR, encodeCBOR } from '../cbor';
-import { RawPaymentRequest, Transport } from './types';
+import { RawPaymentRequest, RawTransport, Transport } from './types';
 
 export class PaymentRequest {
 	constructor(
-		public unit: string,
 		public transport: Array<Transport>,
-		public memo: string,
+		public id?: string,
 		public amount?: number,
-		public mint?: string,
+		public unit?: string,
+		public mints?: Array<string>,
 		public description?: string,
-		public lock?: string
-	) {}
+	) { }
 
 	toEncodedRequest() {
 		const rawRequest: RawPaymentRequest = {
-			u: this.unit,
-			t: this.transport.map((t) => ({ t: t.type, a: t.target }))
+			t: this.transport.map((t: Transport) => ({ t: t.type, a: t.target }))
 		};
-		if (this.lock) {
-			rawRequest.l = this.lock;
-		}
-		if (this.memo) {
-			rawRequest.m = this.memo;
-		}
-		if (this.mint) {
-			rawRequest.r = this.mint;
+		if (this.id) {
+			rawRequest.i = this.id;
 		}
 		if (this.amount) {
 			rawRequest.a = this.amount;
+		}
+		if (this.unit) {
+			rawRequest.u = this.unit;
+		}
+		if (this.mints) {
+			rawRequest.m = this.mints;
 		}
 		if (this.description) {
 			rawRequest.d = this.description;
 		}
 		const data = encodeCBOR(rawRequest);
-		const encodedData = Buffer.from(data).toString('base64');
+		const encodedData = Buffer.from(data).toString('base64url');
 		return 'creq' + 'A' + encodedData;
 	}
 
@@ -49,15 +47,14 @@ export class PaymentRequest {
 		if (!decoded.m) {
 			throw new Error('unsupported pr: memo undefined');
 		}
-		const transports = decoded.t.map((t) => ({ type: t.t, target: t.a }));
+		const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a }));
 		return new PaymentRequest(
-			decoded.u,
 			transports,
-			decoded.m,
+			decoded.i,
 			decoded.a,
-			decoded.r,
+			decoded.u,
+			decoded.m,
 			decoded.d,
-			decoded.l
 		);
 	}
 }
