@@ -251,7 +251,7 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
-export function decodePaymentRequest(paymentRequest: string) {
+function decodePaymentRequest(paymentRequest: string) {
 	if (!paymentRequest.startsWith('creq')) {
 		throw new Error('unsupported pr: invalid prefix');
 	}
@@ -275,4 +275,5 @@ export {
 	hexToNumber,
 	splitAmount,
 	getDefaultAmountPreference,
+	decodePaymentRequest
 };
