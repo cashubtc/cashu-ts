@@ -41,7 +41,7 @@ function splitAmount(
 		.map((k) => parseInt(k))
 		.sort((a, b) => b - a);
 	sortedKeyAmounts.forEach((amt) => {
-		let q = Math.floor(value / amt);
+		const q = Math.floor(value / amt);
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
@@ -252,16 +252,16 @@ export function sanitizeUrl(url: string): string {
 }
 
 export function decodePaymentRequest(paymentRequest: string) {
+	if (!paymentRequest.startsWith('creq')) {
+		throw new Error('unsupported pr: invalid prefix');
+	}
 	const version = paymentRequest[4];
 	if (version !== 'A') {
-		throw new Error('unsupported version...');
+		throw new Error('unsupported pr version');
 	}
 	const encodedData = paymentRequest.slice(5);
 	const data = encodeBase64toUint8(encodedData);
 	const decoded = decodeCBOR(data) as RawPaymentRequest;
-	if (!decoded.m) {
-		throw new Error('unsupported pr: memo undefined');
-	}
 	const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a, tags: t.g }));
 	return new PaymentRequest(transports, decoded.i, decoded.a, decoded.u, decoded.m, decoded.d);
 }
@@ -274,5 +274,5 @@ export {
 	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference
+	getDefaultAmountPreference,
 };
