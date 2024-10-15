@@ -5,6 +5,7 @@ import dns from 'node:dns';
 import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
+import { MeltQuoteState } from '../src/model/types/index.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -244,6 +245,6 @@ describe('mint api', () => {
 			privkey: bytesToHex(privKeyBob)
 		});
 		expect(response).toBeDefined();
-		expect(response.isPaid).toBe(true);
+		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
 });
