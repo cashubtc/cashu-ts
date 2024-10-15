@@ -8,6 +8,8 @@ import {
 	AmountPreference,
 	Keys,
 	Proof,
+	RawPaymentRequest,
+	RawTransport,
 	Token,
 	TokenEntry,
 	TokenV4Template,
@@ -43,7 +45,7 @@ function splitAmount(
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => ( isDesc ? b - a : a - b));
+	return chunks.sort((a, b) => (isDesc ? b - a : a - b));
 }
 
 /*
@@ -256,20 +258,12 @@ export function decodePaymentRequest(paymentRequest: string) {
 	}
 	const encodedData = paymentRequest.slice(5);
 	const data = encodeBase64toUint8(encodedData);
-	const decoded = decodeCBOR(data);
+	const decoded = decodeCBOR(data) as RawPaymentRequest;
 	if (!decoded.m) {
 		throw new Error('unsupported pr: memo undefined');
 	}
-	const transports = decoded.t.map((t: { t: string; a: string }) => ({ type: t.t, target: t.a }));
-	return new PaymentRequest(
-		decoded.u,
-		transports,
-		decoded.m,
-		decoded.a,
-		decoded.r,
-		decoded.d,
-		decoded.l
-	);
+	const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a, tags: t.g }));
+	return new PaymentRequest(transports, decoded.i, decoded.a, decoded.u, decoded.m, decoded.d);
 }
 
 export {
