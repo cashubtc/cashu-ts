@@ -38,17 +38,17 @@ export class PaymentRequest {
 	}
 
 	static fromEncodedRequest(encodedRequest: string): PaymentRequest {
+		if (!encodedRequest.startsWith('creq')) {
+			throw new Error('unsupported pr: invalid prefix');
+		}
 		const version = encodedRequest[4];
 		if (version !== 'A') {
-			throw new Error('unsupported version...');
+			throw new Error('unsupported pr version');
 		}
 		const encodedData = encodedRequest.slice(5);
 		const data = encodeBase64toUint8(encodedData);
 		const decoded = decodeCBOR(data) as RawPaymentRequest;
-		if (!decoded.m) {
-			throw new Error('unsupported pr: memo undefined');
-		}
-		const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a }));
+		const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a, tags: t.g }));
 		return new PaymentRequest(transports, decoded.i, decoded.a, decoded.u, decoded.m, decoded.d);
 	}
 }
