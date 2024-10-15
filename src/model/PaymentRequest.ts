@@ -1,6 +1,7 @@
 import { encodeBase64toUint8 } from '../base64';
 import { decodeCBOR, encodeCBOR } from '../cbor';
 import { RawPaymentRequest, RawTransport, PaymentRequestTransport } from './types';
+import { Buffer } from 'buffer';
 
 export class PaymentRequest {
 	constructor(
@@ -32,7 +33,7 @@ export class PaymentRequest {
 			rawRequest.d = this.description;
 		}
 		const data = encodeCBOR(rawRequest);
-		const encodedData = Buffer.from(data).toString('base64url');
+		const encodedData = Buffer.from(data).toString('base64');
 		return 'creq' + 'A' + encodedData;
 	}
 
