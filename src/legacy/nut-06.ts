@@ -11,11 +11,11 @@ export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse) {
 				typeof contact[0] === 'string' &&
 				typeof contact[1] === 'string'
 			) {
+				console.warn(
+					`Mint returned deprecated 'contact' field: Update NUT-06: https://github.com/cashubtc/nuts/pull/117`
+				);
 				return { method: contact[0], info: contact[1] } as MintContactInfo;
 			}
-			console.warn(
-				"Mint returned deprecated 'contact' field. Update NUT-06: https://github.com/cashubtc/nuts/pull/117"
-			);
 			return contact;
 		});
 	}

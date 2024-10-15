@@ -2,11 +2,6 @@ export * from './payloads';
 export * from './responses';
 export * from './tokens';
 
-export type AmountPreference = {
-	amount: number;
-	count: number;
-};
-
 /**
  * represents a single Cashu proof.
  */
