@@ -1,20 +1,20 @@
 import { encodeBase64toUint8 } from '../base64';
 import { decodeCBOR, encodeCBOR } from '../cbor';
-import { RawPaymentRequest, RawTransport, Transport } from './types';
+import { RawPaymentRequest, RawTransport, PaymentRequestTransport } from './types';
 
 export class PaymentRequest {
 	constructor(
-		public transport: Array<Transport>,
+		public transport: Array<PaymentRequestTransport>,
 		public id?: string,
 		public amount?: number,
 		public unit?: string,
 		public mints?: Array<string>,
-		public description?: string,
-	) { }
+		public description?: string
+	) {}
 
 	toEncodedRequest() {
 		const rawRequest: RawPaymentRequest = {
-			t: this.transport.map((t: Transport) => ({ t: t.type, a: t.target }))
+			t: this.transport.map((t: PaymentRequestTransport) => ({ t: t.type, a: t.target }))
 		};
 		if (this.id) {
 			rawRequest.i = this.id;
@@ -48,13 +48,6 @@ export class PaymentRequest {
 			throw new Error('unsupported pr: memo undefined');
 		}
 		const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a }));
-		return new PaymentRequest(
-			transports,
-			decoded.i,
-			decoded.a,
-			decoded.u,
-			decoded.m,
-			decoded.d,
-		);
+		return new PaymentRequest(transports, decoded.i, decoded.a, decoded.u, decoded.m, decoded.d);
 	}
 }
