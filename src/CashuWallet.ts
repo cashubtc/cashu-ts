@@ -31,19 +31,13 @@ import {
 	splitAmount
 } from './utils.js';
 import { isAmountPreferenceArray, deprecatedAmountPreferences } from './legacy/cashu-ts';
-import { validateMnemonic } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
 	blindMessage,
 	constructProofFromPromise,
 	serializeProof
 } from '@cashu/crypto/modules/client';
-import {
-	deriveBlindingFactor,
-	deriveSecret,
-	deriveSeedFromMnemonic
-} from '@cashu/crypto/modules/client/NUT09';
+import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 
@@ -69,7 +63,7 @@ class CashuWallet {
 		options?: {
 			unit?: string;
 			keys?: MintKeys;
-			mnemonicOrSeed?: string | Uint8Array;
+			bip39seed?: Uint8Array;
 		}
 	) {
 		this.mint = mint;
@@ -78,17 +72,13 @@ class CashuWallet {
 			this._keys = options.keys;
 			this._unit = options.keys.unit;
 		}
-		if (!options?.mnemonicOrSeed) {
-			return;
+		if (options?.bip39seed) {
+			if (options.bip39seed instanceof Uint8Array) {
+				this._seed = options.bip39seed;
+				return;
+			}
+			throw new Error('bip39seed must be a valid UInt8Array');
 		}
-		if (options?.mnemonicOrSeed instanceof Uint8Array) {
-			this._seed = options.mnemonicOrSeed;
-			return;
-		}
-		if (!validateMnemonic(options.mnemonicOrSeed, wordlist)) {
-			throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
-		}
-		this._seed = deriveSeedFromMnemonic(options.mnemonicOrSeed);
 	}
 
 	get unit(): string {

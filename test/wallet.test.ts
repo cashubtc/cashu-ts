@@ -1,10 +1,8 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js';
+import { MeltQuoteResponse } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
-import { AmountPreference } from '../src/model/types/index';
-import { Proof } from '@cashu/crypto/modules/common';
 
 const dummyKeysResp = {
 	keysets: [
@@ -20,8 +18,6 @@ const mint = new CashuMint(mintUrl);
 const unit = 'sat';
 const invoice =
 	'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
-
-const mnemonic = 'half depart obvious quality work element tank gorilla view sugar picture humble';
 
 beforeAll(() => {
 	nock.disableNetConnect();
