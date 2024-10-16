@@ -4,14 +4,11 @@ import {
 	RawPaymentRequest,
 	RawTransport,
 	PaymentRequestTransport,
-	PaymentRequestTransportType,
-	PaymentRequestTag
+	PaymentRequestTransportType
 } from './types';
 import { Buffer } from 'buffer';
 
 export class PaymentRequest {
-	private tags: Map<string, string>;
-
 	constructor(
 		public transport: Array<PaymentRequestTransport>,
 		public id?: string,
@@ -19,24 +16,11 @@ export class PaymentRequest {
 		public unit?: string,
 		public mints?: Array<string>,
 		public description?: string
-	) {
-		this.tags = new Map();
-		this.transport.forEach((t: PaymentRequestTransport) => {
-			if (t.tags) {
-				t.tags.forEach((tag: PaymentRequestTag) => {
-					if (Array.isArray(tag) && tag.length === 2) {
-						this.tags.set(tag[0], tag[1]);
-					} else {
-						throw new Error('invalid tag');
-					}
-				});
-			}
-		});
-	}
+	) {}
 
 	toEncodedRequest() {
 		const rawRequest: RawPaymentRequest = {
-			t: this.transport.map((t: PaymentRequestTransport) => ({ t: t.type, a: t.target }))
+			t: this.transport.map((t: PaymentRequestTransport) => ({ t: t.type, a: t.target, g: t.tags }))
 		};
 		if (this.id) {
 			rawRequest.i = this.id;
@@ -60,10 +44,6 @@ export class PaymentRequest {
 
 	getTransport(type: PaymentRequestTransportType) {
 		return this.transport.find((t: PaymentRequestTransport) => t.type === type);
-	}
-
-	getTag(tag: string) {
-		return this.tags.get(tag);
 	}
 
 	static fromEncodedRequest(encodedRequest: string): PaymentRequest {

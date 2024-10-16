@@ -16,12 +16,10 @@ export type RawPaymentRequest = {
 	t: Array<RawTransport>;
 };
 
-export type PaymentRequestTag = Array<string>;
-
 export type PaymentRequestTransport = {
 	type: PaymentRequestTransportType;
 	target: string;
-	tags?: Array<PaymentRequestTag>;
+	tags?: Array<Array<string>>;
 };
 
 export type PaymentRequestPayload = {
