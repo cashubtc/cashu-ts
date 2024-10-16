@@ -7,19 +7,11 @@ import {
 	RpcSubId
 } from './model/types';
 import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
-
-let _WS: typeof WebSocket;
-
-if (typeof WebSocket !== 'undefined') {
-	_WS = WebSocket;
-}
-
-export function injectWebSocketImpl(ws: any) {
-	_WS = ws;
-}
+import { getWebSocketImpl } from './ws';
 
 export class WSConnection {
 	public readonly url: URL;
+	private readonly _WS: typeof WebSocket;
 	private ws: WebSocket | undefined;
 	private connectionPromise: Promise<void> | undefined;
 	private subListeners: { [subId: string]: Array<(payload: any) => any> } = {};
@@ -29,6 +21,7 @@ export class WSConnection {
 	private rpcId = 0;
 
 	constructor(url: string) {
+		this._WS = getWebSocketImpl();
 		this.url = new URL(url);
 		this.messageQueue = new MessageQueue();
 	}
@@ -37,7 +30,7 @@ export class WSConnection {
 		if (!this.connectionPromise) {
 			this.connectionPromise = new Promise((res: OnOpenSuccess, rej: OnOpenError) => {
 				try {
-					this.ws = new _WS(this.url);
+					this.ws = new this._WS(this.url);
 				} catch (err) {
 					rej(err);
 					return;

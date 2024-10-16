@@ -1,5 +1,6 @@
-import { WSConnection, injectWebSocketImpl } from '../src/WSConnection';
+import { WSConnection } from '../src/WSConnection';
 import { Server, WebSocket } from 'mock-socket';
+import { injectWebSocketImpl } from '../src/ws';
 
 injectWebSocketImpl(WebSocket);
 
