@@ -42,7 +42,7 @@ function splitAmount(
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => ( isDesc ? b - a : a - b));
+	return chunks.sort((a, b) => (isDesc ? b - a : a - b));
 }
 
 /*
