@@ -5,8 +5,8 @@ import { MeltQuoteResponse, ReceiveResponse } from '../src/model/types/index.js'
 import { getDecodedToken } from '../src/utils.js';
 import { AmountPreference } from '../src/model/types/index';
 import { Proof } from '@cashu/crypto/modules/common';
-import { injectWebSocketImpl } from '../src/WSConnection.js';
 import { Server, WebSocket } from 'mock-socket';
+import { injectWebSocketImpl } from '../src/ws.js';
 
 injectWebSocketImpl(WebSocket);
 
