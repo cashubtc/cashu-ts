@@ -1,6 +1,7 @@
 export * from './payloads';
 export * from './responses';
 export * from './tokens';
+export * from './paymentRequests';
 
 /**
  * represents a single Cashu proof.
