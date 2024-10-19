@@ -15,7 +15,8 @@ export class PaymentRequest {
 		public amount?: number,
 		public unit?: string,
 		public mints?: Array<string>,
-		public description?: string
+		public description?: string,
+		public singleUse: boolean = false
 	) {}
 
 	toEncodedRequest() {
@@ -37,6 +38,10 @@ export class PaymentRequest {
 		if (this.description) {
 			rawRequest.d = this.description;
 		}
+		if (this.singleUse) {
+			rawRequest.s = this.singleUse;
+		}
+
 		const data = encodeCBOR(rawRequest);
 		const encodedData = Buffer.from(data).toString('base64');
 		return 'creq' + 'A' + encodedData;

@@ -25,7 +25,8 @@ describe('payment requests', () => {
 			1000,
 			'sat',
 			['https://mint.com'],
-			'test'
+			'test',
+			true // single use
 		);
 		const pr = request.toEncodedRequest();
 		expect(pr).toBeDefined();
@@ -37,6 +38,7 @@ describe('payment requests', () => {
 		expect(decodedRequest.mints).toStrictEqual(['https://mint.com']);
 		expect(decodedRequest.description).toBe('test');
 		expect(decodedRequest.transport).toHaveLength(1);
+		expect(decodedRequest.singleUse).toBe(true);
 		expect(decodedRequest.transport[0].type).toBe(PaymentRequestTransportType.NOSTR);
 		expect(decodedRequest.transport[0].target).toBe('asd');
 		expect(decodedRequest.transport[0].tags).toStrictEqual([['n', '17']]);

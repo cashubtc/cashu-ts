@@ -263,7 +263,15 @@ function decodePaymentRequest(paymentRequest: string) {
 	const data = encodeBase64toUint8(encodedData);
 	const decoded = decodeCBOR(data) as RawPaymentRequest;
 	const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a, tags: t.g }));
-	return new PaymentRequest(transports, decoded.i, decoded.a, decoded.u, decoded.m, decoded.d);
+	return new PaymentRequest(
+		transports,
+		decoded.i,
+		decoded.a,
+		decoded.u,
+		decoded.m,
+		decoded.d,
+		decoded.s
+	);
 }
 
 export {
