@@ -305,6 +305,7 @@ class CashuWallet {
 			privkey?: string;
 			keysetId?: string;
 			offline?: boolean;
+			includeFees?: boolean
 		}
 	): Promise<SendResponse> {
 		if (sumProofs(proofs) < amount) {
@@ -312,7 +313,8 @@ class CashuWallet {
 		}
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
-			amount
+			amount,
+			options?.includeFees
 		);
 		if (
 			sumProofs(sendProofOffline) != amount || // if the exact amount cannot be selected
@@ -321,13 +323,30 @@ class CashuWallet {
 			options?.privkey ||
 			options?.keysetId // these options require a swap
 		) {
+			// we need to swap
+			console.log("NOW WE SWAP")
 			// input selection
 			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
 				true
 			);
+			console.log(`Selected amount: ${sumProofs(sendProofs)}`);
 			options?.proofsWeHave?.push(...keepProofsSelect);
+			if (options?.includeFees) {
+				const keyset = await this.getKeys(options.keysetId);
+				const outputAmounts = splitAmount(amount, keyset.keys)
+				// create dummyProofs which are `Proof` objects with amounts from the outputAmounts
+				const dummyProofs: Array<Proof> = outputAmounts.map((amount: number) => {
+					return {
+						amount: amount,
+						id: keyset.id,
+						secret: "dummy",
+						C: "dummy"
+					} as Proof;
+				});
+				amount += this.getFeesForProofs(dummyProofs);
+			}
 			const { keep, send } = await this.swap(amount, sendProofs, options);
 			const keepProofs = keepProofsSelect.concat(keep);
 			return { keep: keepProofs, send };
@@ -338,7 +357,7 @@ class CashuWallet {
 	private selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees = false
+		includeFees?: boolean,
 	): SendResponse {
 		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const smallerProofs = sortedProofs
@@ -422,6 +441,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 			keysetId?: string;
+			includeFees?: boolean;
 		}
 	): Promise<SendResponse> {
 		if (!options) {
@@ -433,9 +453,6 @@ class CashuWallet {
 		const amountAvailable = sumProofs(proofs);
 		const amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 
-		if (amount + this.getFeesForProofs(proofsToSend) > amountAvailable) {
-			throw new Error('Not enough funds available');
-		}
 		// output selection
 		let keepAmounts;
 		if (options && !options.outputAmounts?.keepAmounts && options.proofsWeHave) {
@@ -443,7 +460,16 @@ class CashuWallet {
 		} else if (options.outputAmounts) {
 			keepAmounts = options.outputAmounts.keepAmounts;
 		}
-		const sendAmounts = options?.outputAmounts?.sendAmounts || splitAmount(amount, keyset.keys);
+		const sendAmounts = options?.outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
+
+		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
+			throw new Error('Not enough funds available');
+		}
+
+		console.log(`# swap: amountToKeep: ${amountToKeep}`);
+		console.log(`# swap: amountToSend: ${amountToSend}`);
+		console.log(`# swap: keepAmounts: ${keepAmounts}`);
+		console.log(`# swap: sendAmounts: ${sendAmounts}`);
 		options.outputAmounts = {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
@@ -747,8 +773,11 @@ class CashuWallet {
 		blindedMessages: BlindedTransaction;
 	} {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
+		console.log(`# createSwapPayload: amount: ${amount} | input amount: ${totalAmount}`);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
-			outputAmounts.keepAmounts = splitAmount(totalAmount - amount, keyset.keys);
+			console.log(`# splitting amount: ${totalAmount} - ${amount}`);
+			outputAmounts.keepAmounts = splitAmount(totalAmount - amount - this.getFeesForProofs(proofsToSend), keyset.keys);
+			console.log(`# keepAmounts: ${outputAmounts.keepAmounts}`);
 		}
 		const keepBlindedMessages = this.createRandomBlindedMessages(
 			totalAmount - amount - this.getFeesForProofs(proofsToSend),
@@ -795,6 +824,7 @@ class CashuWallet {
 			inputs: proofsToSend,
 			outputs: [...blindedMessages.blindedMessages]
 		};
+		console.log(`# createSwapPayload: amount: ${amount}`);
 		return { payload, blindedMessages };
 	}
 	/**
@@ -833,6 +863,7 @@ class CashuWallet {
 		counter?: number,
 		pubkey?: string
 	): BlindedMessageData & { amounts: Array<number> } {
+		console.log(`# createRandomBlindedMessages: amount: ${amount} split: ${split}`);
 		const amounts = splitAmount(amount, keyset.keys, split);
 		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
 	}

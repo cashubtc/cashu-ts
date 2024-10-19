@@ -80,6 +80,7 @@ describe('mint api', () => {
 	test('pay local invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
+		await wallet.loadMint();
 		const request = await wallet.createMintQuote(100);
 		const tokens = await wallet.mintProofs(100, request.quote);
 
@@ -93,8 +94,9 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(quote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.send(10, tokens.proofs);
-		const response = await wallet.payLnInvoice(mintQuote.request, sendResponse.send, quote);
+		const sendResponse = await wallet.send(10, tokens.proofs, { includeFees: true });
+		// const response = await wallet.payLnInvoice(mintQuote.request, sendResponse.send, quote);
+		const response = await wallet.meltProofs(quote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
@@ -112,6 +114,7 @@ describe('mint api', () => {
 	test('pay external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
+		await wallet.loadMint();
 		const request = await wallet.createMintQuote(3000);
 		const tokens = await wallet.mintProofs(3000, request.quote);
 
@@ -123,8 +126,9 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(meltQuote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);
-		const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send, meltQuote);
+		const sendResponse = await wallet.send(2000 + fee, tokens.proofs, { includeFees: true });
+		// const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send, meltQuote);
+		const response = await wallet.meltProofs(meltQuote, sendResponse.send);
 
 		expect(response).toBeDefined();
 		// expect that we have not received the fee back, since it was external
@@ -157,21 +161,23 @@ describe('mint api', () => {
 	test('test send tokens with change', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
+		await wallet.loadMint();
 		const request = await wallet.createMintQuote(100);
 		const tokens = await wallet.mintProofs(100, request.quote);
 
-		const sendResponse = await wallet.send(10, tokens.proofs);
+		const sendResponse = await wallet.send(10, tokens.proofs, { includeFees: false });
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
 		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(2);
 		expect(sendResponse.keep.length).toBe(5);
 		expect(sumProofs(sendResponse.send)).toBe(10);
-		expect(sumProofs(sendResponse.keep)).toBe(90);
+		expect(sumProofs(sendResponse.keep)).toBe(89);
 	}, 10000000);
 	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
+		await wallet.loadMint();
 		const request = await wallet.createMintQuote(100);
 		const tokens = await wallet.mintProofs(100, request.quote);
 
@@ -185,6 +191,7 @@ describe('mint api', () => {
 	test('receive tokens with previous mint', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
+		await wallet.loadMint();
 		const request = await wallet.createMintQuote(64);
 		const tokens = await wallet.mintProofs(64, request.quote);
 		const encoded = getEncodedToken({
@@ -196,6 +203,7 @@ describe('mint api', () => {
 	test('send and receive p2pk', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
+		await wallet.loadMint();
 
 		const privKeyAlice = secp256k1.utils.randomPrivateKey();
 		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice);
@@ -203,8 +211,8 @@ describe('mint api', () => {
 		const privKeyBob = secp256k1.utils.randomPrivateKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
-		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintProofs(64, request.quote);
+		const request = await wallet.createMintQuote(128);
+		const tokens = await wallet.mintProofs(128, request.quote);
 
 		const { send } = await wallet.send(64, tokens.proofs, { pubkey: bytesToHex(pubKeyBob) });
 		const encoded = getEncodedToken({
@@ -222,7 +230,7 @@ describe('mint api', () => {
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;
 			}, 0)
-		).toBe(64);
+		).toBe(63);
 	});
 
 	test('mint and melt p2pk', async () => {
