@@ -79,8 +79,7 @@ describe('mint api', () => {
 	});
 	test('pay local invoice', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { unit });
-		await wallet.loadMint();
+		const wallet = new CashuWallet(mint, { unit, loadMint: true });
 		const request = await wallet.createMintQuote(100);
 		const tokens = await wallet.mintProofs(100, request.quote);
 
@@ -113,8 +112,7 @@ describe('mint api', () => {
 	});
 	test('pay external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { unit });
-		await wallet.loadMint();
+		const wallet = new CashuWallet(mint, { unit, loadMint: true });
 		const request = await wallet.createMintQuote(3000);
 		const tokens = await wallet.mintProofs(3000, request.quote);
 
@@ -160,8 +158,7 @@ describe('mint api', () => {
 	});
 	test('test send tokens with change', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { unit });
-		await wallet.loadMint();
+		const wallet = new CashuWallet(mint, { unit, loadMint: true });
 		const request = await wallet.createMintQuote(100);
 		const tokens = await wallet.mintProofs(100, request.quote);
 
@@ -176,8 +173,7 @@ describe('mint api', () => {
 	}, 10000000);
 	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { unit });
-		await wallet.loadMint();
+		const wallet = new CashuWallet(mint, { unit, loadMint: true });
 		const request = await wallet.createMintQuote(100);
 		const tokens = await wallet.mintProofs(100, request.quote);
 
@@ -190,8 +186,7 @@ describe('mint api', () => {
 	});
 	test('receive tokens with previous mint', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { unit });
-		await wallet.loadMint();
+		const wallet = new CashuWallet(mint, { unit, loadMint: true });
 		const request = await wallet.createMintQuote(64);
 		const tokens = await wallet.mintProofs(64, request.quote);
 		const encoded = getEncodedToken({
@@ -202,8 +197,7 @@ describe('mint api', () => {
 	});
 	test('send and receive p2pk', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint);
-		await wallet.loadMint();
+		const wallet = new CashuWallet(mint, { unit, loadMint: true });
 
 		const privKeyAlice = secp256k1.utils.randomPrivateKey();
 		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice);

@@ -548,8 +548,7 @@ describe('send', () => {
 			}
 		];
 		const result = await wallet.send(3, overpayProofs, {
-			// preference: { sendPreference: [{ amount: 1, count: 3 }] }
-			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [] }
+			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [1] }
 		});
 
 		expect(result.send).toHaveLength(3);

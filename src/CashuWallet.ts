@@ -41,6 +41,9 @@ import {
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 
+const DEFAULT_DENOMINATION_TARGET = 3;
+const DEFAULT_UNIT = 'sat';
+
 /**
  * Class that represents a Cashu wallet.
  * This class should act as the entry point for this library
@@ -50,8 +53,9 @@ class CashuWallet {
 	private _keysetId: string | undefined;
 	private _keysets: Array<MintKeyset> = [];
 	private _seed: Uint8Array | undefined = undefined;
-	private _unit = 'sat';
+	private _unit = DEFAULT_UNIT;
 	private _mintInfo: GetInfoResponse | undefined = undefined;
+	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
 
 	mint: CashuMint;
 
@@ -72,6 +76,8 @@ class CashuWallet {
 			keysets?: Array<MintKeyset>;
 			mintInfo?: GetInfoResponse;
 			mnemonicOrSeed?: string | Uint8Array;
+			denominationTarget?: number;
+			loadMint?: boolean;
 		}
 	) {
 		this.mint = mint;
@@ -84,6 +90,20 @@ class CashuWallet {
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
 		if (options?.unit) this._unit = options?.unit;
 		if (options?.keysets) this._keysets = options.keysets;
+		if (options?.denominationTarget) {
+			this._denominationTarget = options.denominationTarget;
+		}
+
+		if (options?.loadMint) {
+			this.loadMint()
+				.then(() => {
+					console.log('Mint loaded');
+				})
+				.catch((e: Error) => {
+					console.error('Failed to load mint', e);
+				});
+		}
+
 		if (!options?.mnemonicOrSeed) {
 			return;
 		} else if (options?.mnemonicOrSeed instanceof Uint8Array) {
@@ -136,8 +156,7 @@ class CashuWallet {
 	async loadMint() {
 		await this.getMintInfo();
 		await this.getKeySets();
-		await this.getAllKeys();
-		this.keysetId = this.getActiveKeyset(this._keysets).id;
+		await this.getKeys();
 	}
 
 	/**
@@ -178,6 +197,7 @@ class CashuWallet {
 	async getAllKeys(): Promise<Array<MintKeys>> {
 		const keysets = await this.mint.getKeys();
 		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
+		this.keysetId = this.getActiveKeyset(this._keysets).id;
 		return keysets.keysets;
 	}
 
@@ -192,25 +212,22 @@ class CashuWallet {
 	 * @returns keyset
 	 */
 	async getKeys(keysetId?: string): Promise<MintKeys> {
-		if (keysetId) {
-			if (this._keys.get(keysetId)) {
-				this.keysetId = keysetId;
-				return this._keys.get(keysetId) as MintKeys;
-			}
-			const allKeysets = await this.mint.getKeys(keysetId);
-			const keyset = allKeysets.keysets[0];
-			if (!keyset) {
-				throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
-			}
-			this._keys.set(keysetId, keyset);
-			this.keysetId = keysetId;
-			return keyset;
+		if (!keysetId) {
+			const allKeysets = await this.mint.getKeySets();
+			const keysetToActivate = this.getActiveKeyset(allKeysets.keysets);
+			keysetId = keysetToActivate.id;
 		}
-
-		// no keysetId was set, so we select an active keyset with the unit of the wallet with the lowest fees and use that
-		const allKeysets = await this.mint.getKeySets();
-		const keysetToActivate = this.getActiveKeyset(allKeysets.keysets);
-		const keyset = await this.getKeys(keysetToActivate.id);
+		if (this._keys.get(keysetId)) {
+			this.keysetId = keysetId;
+			return this._keys.get(keysetId) as MintKeys;
+		}
+		const allKeysets = await this.mint.getKeys(keysetId);
+		const keyset = allKeysets.keysets[0];
+		if (!keyset) {
+			throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
+		}
+		this._keys.set(keysetId, keyset);
+		this.keysetId = keysetId;
 		return keyset;
 	}
 
@@ -305,7 +322,7 @@ class CashuWallet {
 			privkey?: string;
 			keysetId?: string;
 			offline?: boolean;
-			includeFees?: boolean
+			includeFees?: boolean;
 		}
 	): Promise<SendResponse> {
 		if (sumProofs(proofs) < amount) {
@@ -316,16 +333,18 @@ class CashuWallet {
 			amount,
 			options?.includeFees
 		);
+		const expectedFee = options?.includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
-			sumProofs(sendProofOffline) != amount || // if the exact amount cannot be selected
-			options?.outputAmounts ||
-			options?.pubkey ||
-			options?.privkey ||
-			options?.keysetId // these options require a swap
+			!options?.offline &&
+			(sumProofs(sendProofOffline) != amount + expectedFee || // if the exact amount cannot be selected
+				options?.outputAmounts ||
+				options?.pubkey ||
+				options?.privkey ||
+				options?.keysetId) // these options require a swap
 		) {
 			// we need to swap
-			console.log("NOW WE SWAP")
-			// input selection
+			console.log('NOW WE SWAP');
+			// input selection, needs fees because of the swap
 			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
@@ -333,23 +352,28 @@ class CashuWallet {
 			);
 			console.log(`Selected amount: ${sumProofs(sendProofs)}`);
 			options?.proofsWeHave?.push(...keepProofsSelect);
-			if (options?.includeFees) {
-				const keyset = await this.getKeys(options.keysetId);
-				const outputAmounts = splitAmount(amount, keyset.keys)
-				// create dummyProofs which are `Proof` objects with amounts from the outputAmounts
-				const dummyProofs: Array<Proof> = outputAmounts.map((amount: number) => {
-					return {
-						amount: amount,
-						id: keyset.id,
-						secret: "dummy",
-						C: "dummy"
-					} as Proof;
-				});
-				amount += this.getFeesForProofs(dummyProofs);
-			}
+
+			// // we need to include the fees to the outputs of the swap
+			// if (options?.includeFees) {
+			// 	const keyset = await this.getKeys(options.keysetId);
+			// 	const outputAmounts = splitAmount(amount, keyset.keys)
+			// 	const dummyProofs: Array<Proof> = outputAmounts.map((amount: number) => {
+			// 		return {
+			// 			amount: amount,
+			// 			id: keyset.id,
+			// 			secret: "dummy",
+			// 			C: "dummy"
+			// 		} as Proof;
+			// 	});
+			// 	amount += this.getFeesForProofs(dummyProofs);
+			// }
 			const { keep, send } = await this.swap(amount, sendProofs, options);
 			const keepProofs = keepProofsSelect.concat(keep);
 			return { keep: keepProofs, send };
+		}
+
+		if (sumProofs(sendProofOffline) < amount + expectedFee) {
+			throw new Error('Not enough funds available to send');
 		}
 		return { keep: keepProofsOffline, send: sendProofOffline };
 	}
@@ -357,7 +381,7 @@ class CashuWallet {
 	private selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees?: boolean,
+		includeFees?: boolean
 	): SendResponse {
 		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const smallerProofs = sortedProofs
@@ -411,7 +435,19 @@ class CashuWallet {
 					0
 				) +
 					999) /
-				1000,
+					1000,
+				0
+			)
+		);
+		return fees;
+	}
+
+	getFeesForKeyset(nInputs: number, keysetId: string): number {
+		const fees = Math.floor(
+			Math.max(
+				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
+					999) /
+					1000,
 				0
 			)
 		);
@@ -444,32 +480,62 @@ class CashuWallet {
 			includeFees?: boolean;
 		}
 	): Promise<SendResponse> {
-		if (!options) {
-			options = {};
-		}
+		if (!options) options = {};
 		const keyset = await this.getKeys(options.keysetId);
 		const proofsToSend = proofs;
-		const amountToSend = amount;
+		let amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
-		const amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
+		let amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 
-		// output selection
+		// send output selection
+		let sendAmounts = options?.outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
+
+		// include the fees to spend the the outputs of the swap
+		if (options?.includeFees) {
+			let outputFee = this.getFeesForKeyset(sendAmounts.length, keyset.id);
+			let sendAmountsFee = splitAmount(outputFee, keyset.keys);
+			while (
+				this.getFeesForKeyset(sendAmounts.concat(sendAmountsFee).length, keyset.id) > outputFee
+			) {
+				outputFee++;
+				sendAmountsFee = splitAmount(outputFee, keyset.keys);
+			}
+			sendAmounts = sendAmounts.concat(sendAmountsFee);
+			amountToSend += outputFee;
+			amountToKeep -= outputFee;
+		}
+
+		// keep output selection
 		let keepAmounts;
 		if (options && !options.outputAmounts?.keepAmounts && options.proofsWeHave) {
-			keepAmounts = getKeepAmounts(options.proofsWeHave, amountToKeep, keyset.keys, 3);
+			keepAmounts = getKeepAmounts(
+				options.proofsWeHave,
+				amountToKeep,
+				keyset.keys,
+				this._denominationTarget
+			);
 		} else if (options.outputAmounts) {
+			if (
+				options.outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) !=
+				amountToKeep
+			) {
+				throw new Error('Keep amounts do not match amount to keep');
+			}
 			keepAmounts = options.outputAmounts.keepAmounts;
 		}
-		const sendAmounts = options?.outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
 
 		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
-			throw new Error('Not enough funds available');
+			throw new Error('Not enough funds available for swap');
 		}
 
-		console.log(`# swap: amountToKeep: ${amountToKeep}`);
-		console.log(`# swap: amountToSend: ${amountToSend}`);
-		console.log(`# swap: keepAmounts: ${keepAmounts}`);
-		console.log(`# swap: sendAmounts: ${sendAmounts}`);
+		if (amountToSend + this.getFeesForProofs(proofsToSend) + amountToKeep != amountAvailable) {
+			throw new Error('Amounts do not match for swap');
+		}
+
+		// console.log(`# swap: amountToKeep: ${amountToKeep}`);
+		// console.log(`# swap: amountToSend: ${amountToSend}`);
+		// console.log(`# swap: keepAmounts: ${keepAmounts}`);
+		// console.log(`# swap: sendAmounts: ${sendAmounts}`);
 		options.outputAmounts = {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
@@ -592,7 +658,12 @@ class CashuWallet {
 		const keyset = await this.getKeys(options?.keysetId);
 		if (!options?.outputAmounts && options?.proofsWeHave) {
 			options.outputAmounts = {
-				keepAmounts: getKeepAmounts(options.proofsWeHave, amount, keyset.keys, 3),
+				keepAmounts: getKeepAmounts(
+					options.proofsWeHave,
+					amount,
+					keyset.keys,
+					this._denominationTarget
+				),
 				sendAmounts: []
 			};
 		}
@@ -776,7 +847,10 @@ class CashuWallet {
 		console.log(`# createSwapPayload: amount: ${amount} | input amount: ${totalAmount}`);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
 			console.log(`# splitting amount: ${totalAmount} - ${amount}`);
-			outputAmounts.keepAmounts = splitAmount(totalAmount - amount - this.getFeesForProofs(proofsToSend), keyset.keys);
+			outputAmounts.keepAmounts = splitAmount(
+				totalAmount - amount - this.getFeesForProofs(proofsToSend),
+				keyset.keys
+			);
 			console.log(`# keepAmounts: ${outputAmounts.keepAmounts}`);
 		}
 		const keepBlindedMessages = this.createRandomBlindedMessages(
