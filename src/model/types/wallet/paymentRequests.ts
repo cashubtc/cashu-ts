@@ -1,36 +1,36 @@
 import { Proof } from './index';
 
 export type RawTransport = {
-	t: PaymentRequestTransportType;
-	a: string;
-	g?: Array<Array<string>>;
+    t: PaymentRequestTransportType; // type
+    a: string; // target
+    g?: Array<Array<string>>; // tags
 };
 
 export type RawPaymentRequest = {
-	i?: string;
-	a?: number;
-	u?: string;
-	r?: boolean;
-	m?: Array<string>;
-	d?: string;
-	t: Array<RawTransport>;
+    i?: string; // id
+    a?: number; // amount
+    u?: string; // unit
+    s?: boolean; // single use
+    m?: Array<string>; // mints
+    d?: string; // description
+    t: Array<RawTransport>; // transports
 };
 
 export type PaymentRequestTransport = {
-	type: PaymentRequestTransportType;
-	target: string;
-	tags?: Array<Array<string>>;
+    type: PaymentRequestTransportType;
+    target: string;
+    tags?: Array<Array<string>>;
 };
 
 export type PaymentRequestPayload = {
-	id?: string;
-	memo?: string;
-	unit: string;
-	mint: string;
-	proofs: Array<Proof>;
+    id?: string;
+    memo?: string;
+    unit: string;
+    mint: string;
+    proofs: Array<Proof>;
 };
 
 export enum PaymentRequestTransportType {
-	POST = 'post',
-	NOSTR = 'nostr'
+    POST = 'post',
+    NOSTR = 'nostr'
 }
