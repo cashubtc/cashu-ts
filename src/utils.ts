@@ -7,6 +7,8 @@ import {
 import {
 	Keys,
 	Proof,
+	RawPaymentRequest,
+	RawTransport,
 	Token,
 	TokenEntry,
 	TokenV4Template,
@@ -17,6 +19,7 @@ import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
+import { PaymentRequest } from './model/PaymentRequest.js';
 
 function splitAmount(
 	value: number,
@@ -283,6 +286,10 @@ export function sumProofs(proofs: Array<Proof>) {
 	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
 }
 
+function decodePaymentRequest(paymentRequest: string) {
+	return PaymentRequest.fromEncodedRequest(paymentRequest);
+}
+
 export {
 	bigIntStringify,
 	bytesToNumber,
@@ -291,5 +298,7 @@ export {
 	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
-	getKeepAmounts
+	getKeepAmounts,
+	getDefaultAmountPreference,
+	decodePaymentRequest
 };
