@@ -8,7 +8,7 @@ import {
 	type MeltQuoteResponse,
 	type MintKeys,
 	type MintKeyset,
-	type meltProofsResponse,
+	type MeltProofsResponse,
 	type MintPayload,
 	type Proof,
 	type MintQuotePayload,
@@ -392,7 +392,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-					1000,
+				1000,
 				0
 			)
 		);
@@ -630,7 +630,7 @@ class CashuWallet {
 			counter?: number;
 			privkey?: string;
 		}
-	): Promise<meltProofsResponse> {
+	): Promise<MeltProofsResponse> {
 		const keys = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,
@@ -686,7 +686,7 @@ class CashuWallet {
 			counter?: number;
 			privkey?: string;
 		}
-	): Promise<meltProofsResponse> {
+	): Promise<MeltProofsResponse> {
 		if (!meltQuote) {
 			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
 		}
@@ -713,7 +713,7 @@ class CashuWallet {
 			keysetId?: string;
 			counter?: number;
 		}
-	): Promise<meltProofsResponse> {
+	): Promise<MeltProofsResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token
 			.filter((x: TokenEntry) => x.mint === this.mint.mintUrl)

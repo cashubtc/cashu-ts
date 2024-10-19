@@ -4,7 +4,7 @@ import { Proof, Token } from './index';
 /**
  * Response after paying a Lightning invoice
  */
-export type meltProofsResponse = {
+export type MeltProofsResponse = {
 	/**
 	 * if false, the proofs have not been invalidated and the payment can be tried later again with the same proofs
 	 */
