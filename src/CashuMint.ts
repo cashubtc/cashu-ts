@@ -76,7 +76,7 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns signed outputs
 	 */
-	public static async split(
+	public static async swap(
 		mintUrl: string,
 		swapPayload: SwapPayload,
 		customRequest?: typeof request
@@ -99,8 +99,8 @@ class CashuMint {
 	 * @param swapPayload payload containing inputs and outputs
 	 * @returns signed outputs
 	 */
-	async split(swapPayload: SwapPayload): Promise<SwapResponse> {
-		return CashuMint.split(this._mintUrl, swapPayload, this._customRequest);
+	async swap(swapPayload: SwapPayload): Promise<SwapResponse> {
+		return CashuMint.swap(this._mintUrl, swapPayload, this._customRequest);
 	}
 
 	/**
