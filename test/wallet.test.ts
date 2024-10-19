@@ -614,7 +614,7 @@ describe('deterministic', () => {
 			.catch((e) => e);
 		expect(result).toEqual(
 			new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit counter param.'
+				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
 			)
 		);
 	});

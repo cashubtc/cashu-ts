@@ -55,7 +55,7 @@ class CashuWallet {
 	 * @param unit optionally set unit
 	 * @param keys public keys from the mint. If set, it will override the unit with the keysets unit
 	 * @param mint Cashu mint instance is used to make api calls
-	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
+	 * @param bip39seed BIP39 seed for deterministic secrets.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
@@ -285,7 +285,7 @@ class CashuWallet {
 	): Promise<{ proofs: Array<Proof> }> {
 		const keys = await this.getKeys(options?.keysetId);
 		if (!this._seed) {
-			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
+			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
@@ -663,7 +663,7 @@ class CashuWallet {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
 			throw new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit counter param.'
+				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
 			);
 		}
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
