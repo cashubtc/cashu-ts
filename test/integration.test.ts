@@ -61,6 +61,13 @@ describe('mint api', () => {
 		// because local invoice, fee should be 0
 		expect(fee).toBe(0);
 	});
+	test('invoice with description', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint, { unit });
+		const quote = await wallet.createMintQuote(100, 'test description');
+		expect(quote).toBeDefined();
+		console.log(`invoice with description: ${quote.request}`);
+	});
 	test('get fee for external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
@@ -212,5 +219,28 @@ describe('mint api', () => {
 				return curr + acc.amount;
 			}, 0)
 		).toBe(64);
+	});
+
+	test('mint and melt p2pk', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const privKeyBob = secp256k1.utils.randomPrivateKey();
+		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
+
+		const mintRequest = await wallet.createMintQuote(3000);
+
+		const proofs = await wallet.mintTokens(3000, mintRequest.quote, {
+			pubkey: bytesToHex(pubKeyBob)
+		});
+
+		const meltRequest = await wallet.createMeltQuote(externalInvoice);
+		const fee = meltRequest.fee_reserve;
+		expect(fee).toBeGreaterThan(0);
+		const response = await wallet.meltTokens(meltRequest, proofs.proofs, {
+			privkey: bytesToHex(privKeyBob)
+		});
+		expect(response).toBeDefined();
+		expect(response.isPaid).toBe(true);
 	});
 });
