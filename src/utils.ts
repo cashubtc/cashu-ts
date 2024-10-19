@@ -252,26 +252,7 @@ export function sanitizeUrl(url: string): string {
 }
 
 function decodePaymentRequest(paymentRequest: string) {
-	if (!paymentRequest.startsWith('creq')) {
-		throw new Error('unsupported pr: invalid prefix');
-	}
-	const version = paymentRequest[4];
-	if (version !== 'A') {
-		throw new Error('unsupported pr version');
-	}
-	const encodedData = paymentRequest.slice(5);
-	const data = encodeBase64toUint8(encodedData);
-	const decoded = decodeCBOR(data) as RawPaymentRequest;
-	const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a, tags: t.g }));
-	return new PaymentRequest(
-		transports,
-		decoded.i,
-		decoded.a,
-		decoded.u,
-		decoded.m,
-		decoded.d,
-		decoded.s
-	);
+	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 
 export {
