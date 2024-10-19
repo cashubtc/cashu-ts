@@ -299,6 +299,5 @@ export {
 	hexToNumber,
 	splitAmount,
 	getKeepAmounts,
-	getDefaultAmountPreference,
 	decodePaymentRequest
 };
