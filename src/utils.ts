@@ -8,6 +8,8 @@ import {
 	AmountPreference,
 	Keys,
 	Proof,
+	RawPaymentRequest,
+	RawTransport,
 	Token,
 	TokenEntry,
 	TokenV4Template,
@@ -18,6 +20,7 @@ import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
+import { PaymentRequest } from './model/PaymentRequest.js';
 
 function splitAmount(
 	value: number,
@@ -38,11 +41,11 @@ function splitAmount(
 		.map((k) => parseInt(k))
 		.sort((a, b) => b - a);
 	sortedKeyAmounts.forEach((amt) => {
-		let q = Math.floor(value / amt);
+		const q = Math.floor(value / amt);
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => ( isDesc ? b - a : a - b));
+	return chunks.sort((a, b) => (isDesc ? b - a : a - b));
 }
 
 /*
@@ -248,6 +251,10 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
+function decodePaymentRequest(paymentRequest: string) {
+	return PaymentRequest.fromEncodedRequest(paymentRequest);
+}
+
 export {
 	bigIntStringify,
 	bytesToNumber,
@@ -256,5 +263,6 @@ export {
 	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference
+	getDefaultAmountPreference,
+	decodePaymentRequest
 };
