@@ -22,6 +22,11 @@ export type PaymentRequestTransport = {
 	tags?: Array<Array<string>>;
 };
 
+export enum PaymentRequestTransportType {
+	POST = 'post',
+	NOSTR = 'nostr'
+}
+
 export type PaymentRequestPayload = {
 	id?: string;
 	memo?: string;
@@ -29,8 +34,3 @@ export type PaymentRequestPayload = {
 	mint: string;
 	proofs: Array<Proof>;
 };
-
-export enum PaymentRequestTransportType {
-	POST = 'post',
-	NOSTR = 'nostr'
-}
