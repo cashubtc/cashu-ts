@@ -28,7 +28,10 @@ function splitAmount(
 	if (split) {
 		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
 			throw new Error(
-				`Split is greater than total amount: ${split.reduce((a: number, b: number) => a + b, 0)} > ${value}`
+				`Split is greater than total amount: ${split.reduce(
+					(a: number, b: number) => a + b,
+					0
+				)} > ${value}`
 			);
 		}
 		chunks.push(...getPreference(value, keyset, split));

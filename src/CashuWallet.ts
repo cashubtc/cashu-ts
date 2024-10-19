@@ -24,13 +24,7 @@ import {
 	OutputAmounts,
 	CheckStateEntry
 } from './model/types/index.js';
-import {
-	bytesToNumber,
-	getDecodedToken,
-	splitAmount,
-	sumProofs,
-	getKeepAmounts
-} from './utils.js';
+import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -276,7 +270,9 @@ class CashuWallet {
 		}
 	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
-		const amount = tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) - this.getFeesForProofs(tokenEntry.proofs);
+		const amount =
+			tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
+			this.getFeesForProofs(tokenEntry.proofs);
 		const keys = await this.getKeys(options?.keysetId);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
@@ -396,7 +392,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-				1000,
+					1000,
 				0
 			)
 		);
@@ -433,7 +429,7 @@ class CashuWallet {
 		}
 		const keyset = await this.getKeys(options.keysetId);
 		const proofsToSend = proofs;
-		const amountToSend = amount
+		const amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
 		const amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 
@@ -443,7 +439,7 @@ class CashuWallet {
 		// output selection
 		let keepAmounts;
 		if (options && !options.outputAmounts?.keepAmounts && options.proofsWeHave) {
-			keepAmounts = getKeepAmounts(options.proofsWeHave, amountToKeep, keyset.keys, 3)
+			keepAmounts = getKeepAmounts(options.proofsWeHave, amountToKeep, keyset.keys, 3);
 		} else if (options.outputAmounts) {
 			keepAmounts = options.outputAmounts.keepAmounts;
 		}
@@ -662,7 +658,7 @@ class CashuWallet {
 		const meltResponse = await this.mint.melt(meltPayload);
 		let change: Array<Proof> = [];
 		if (meltResponse.change) {
-			change = this.constructProofs(meltResponse.change, rs, secrets, keys)
+			change = this.constructProofs(meltResponse.change, rs, secrets, keys);
 		}
 		return {
 			quote: meltResponse,
