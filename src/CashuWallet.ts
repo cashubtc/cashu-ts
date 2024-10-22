@@ -427,7 +427,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-				1000,
+					1000,
 				0
 			)
 		);
@@ -439,7 +439,7 @@ class CashuWallet {
 			Math.max(
 				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
-				1000,
+					1000,
 				0
 			)
 		);
@@ -516,7 +516,11 @@ class CashuWallet {
 		}
 
 		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
-			console.error(`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(proofsToSend)} | length: ${proofsToSend.length}`);
+			console.error(
+				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
+					proofsToSend
+				)} | length: ${proofsToSend.length}`
+			);
 			throw new Error(`Not enough funds available for swap`);
 		}
 
