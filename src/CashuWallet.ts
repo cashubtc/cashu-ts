@@ -257,7 +257,6 @@ class CashuWallet {
 			privkey?: string;
 		}
 	): Promise<Array<Proof>> {
-		console.log(`enter receive: token: ${token} | options: ${JSON.stringify(options)}`);
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
@@ -331,7 +330,7 @@ class CashuWallet {
 			includeFees?: boolean;
 		}
 	): Promise<SendResponse> {
-		console.log(`enter send: amount: ${amount} | proofs: ${proofs.length} | options: ${JSON.stringify(options)}`);
+		console.log(`### SEND: ${amount} | ${sumProofs(proofs)}`);
 		if (sumProofs(proofs) < amount) {
 			throw new Error('Not enough funds available to send');
 		}
@@ -356,7 +355,6 @@ class CashuWallet {
 				amount,
 				true
 			);
-			console.log(`Keep proofs: ${keepProofsSelect.length} | Amount: ${sumProofs(keepProofsSelect)} <> Send proofs: ${sendProofs.length} | Amount: ${sumProofs(sendProofs)}`);
 			options?.proofsWeHave?.push(...keepProofsSelect);
 
 			const { keep, send } = await this.swap(amount, sendProofs, options);
@@ -367,6 +365,7 @@ class CashuWallet {
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
 			throw new Error('Not enough funds available to send');
 		}
+
 		return { keep: keepProofsOffline, send: sendProofOffline };
 	}
 
@@ -375,7 +374,6 @@ class CashuWallet {
 		amountToSend: number,
 		includeFees?: boolean
 	): SendResponse {
-		console.log(`selectProofsToSend: length: ${proofs.length} | sum: ${sumProofs(proofs)} | amountToSend: ${amountToSend} | includeFees: ${includeFees}`);
 		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const smallerProofs = sortedProofs
 			.filter((p: Proof) => p.amount <= amountToSend)
@@ -385,7 +383,6 @@ class CashuWallet {
 			.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const nextBigger = biggerProofs[0];
 		if (!smallerProofs.length && nextBigger) {
-			console.log(`No smaller proofs found. Next bigger proof: ${nextBigger.amount}`);
 			return {
 				keep: proofs.filter((p: Proof) => p.secret !== nextBigger.secret),
 				send: [nextBigger]
@@ -393,7 +390,6 @@ class CashuWallet {
 		}
 
 		if (!smallerProofs.length && !nextBigger) {
-			console.log('No proofs found, returning empty');
 			return { keep: proofs, send: [] };
 		}
 
@@ -402,7 +398,6 @@ class CashuWallet {
 		const returnedProofs = [];
 		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
 		remainder -= selectedProofs[0].amount - feePPK / 1000;
-		console.log(`Selected proof: ${smallerProofs[0].amount} | Remainder: ${remainder} | Fee: ${feePPK}`);
 		if (remainder > 0) {
 			const { keep, send } = this.selectProofsToSend(
 				smallerProofs.slice(1),
@@ -415,10 +410,8 @@ class CashuWallet {
 
 		const selectedFeePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
 		if (sumProofs(selectedProofs) < amountToSend + selectedFeePPK && nextBigger) {
-			console.log("Selecting next bigger proof");
 			selectedProofs = [nextBigger];
 		}
-		console.log(`Selected proofs: ${selectedProofs.length} | Amount: ${sumProofs(selectedProofs)}`);
 		return {
 			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
 			send: selectedProofs
@@ -485,7 +478,6 @@ class CashuWallet {
 		let amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
 		let amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
-		console.log(`Amount to send: ${amountToSend} | Amount to keep: ${amountToKeep} | Amount available: ${amountAvailable}`);
 		// send output selection
 		let sendAmounts = options?.outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
 
@@ -502,7 +494,6 @@ class CashuWallet {
 			sendAmounts = sendAmounts.concat(sendAmountsFee);
 			amountToSend += outputFee;
 			amountToKeep -= outputFee;
-			console.log(`Amount to send: ${amountToSend} | Amount to keep: ${amountToKeep} | Output fee: ${outputFee}`);
 		}
 
 		// keep output selection
@@ -840,7 +831,6 @@ class CashuWallet {
 		payload: SwapPayload;
 		blindedMessages: BlindedTransaction;
 	} {
-		console.log(`### createSwapPayload: amount: ${amount}, proofsToSend: ${proofsToSend.length}, keyset: ${keyset.id}, outputAmounts: ${outputAmounts}, counter: ${counter}, pubkey: ${pubkey}, privkey: ${privkey}`);
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
 			outputAmounts.keepAmounts = splitAmount(
