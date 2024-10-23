@@ -17,7 +17,6 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	type TokenEntry,
 	CheckStateEnum,
 	SerializedBlindedSignature,
 	GetInfoResponse,
@@ -260,45 +259,13 @@ class CashuWallet {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
-		const tokenEntries: Array<TokenEntry> = token.token;
-		const proofs = await this.receiveTokenEntry(tokenEntries[0], {
-			keysetId: options?.keysetId,
-			outputAmounts: options?.outputAmounts,
-			counter: options?.counter,
-			pubkey: options?.pubkey,
-			privkey: options?.privkey
-		});
-		return proofs;
-	}
-
-	/**
-	 * Receive a single cashu token entry
-	 * @param tokenEntry a single entry of a cashu token
-	 * @param preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
-	 * @param outputAmounts? optionally specify the output's amounts to keep.
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param privkey? will create a signature on the @param tokenEntry secrets if set
-	 * @returns New token entry with newly created proofs, proofs that had errors
-	 */
-	async receiveTokenEntry(
-		tokenEntry: TokenEntry,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-		}
-	): Promise<Array<Proof>> {
-		const proofs: Array<Proof> = [];
 		const amount =
-			tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
-			this.getFeesForProofs(tokenEntry.proofs);
+			token.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
+			this.getFeesForProofs(token.proofs);
 		const keys = await this.getKeys(options?.keysetId);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
-			tokenEntry.proofs,
+			token.proofs,
 			keys,
 			options?.outputAmounts,
 			options?.counter,
@@ -306,14 +273,13 @@ class CashuWallet {
 			options?.privkey
 		);
 		const { signatures } = await this.mint.swap(payload);
-		const newProofs = this.constructProofs(
+		const freshProofs = this.constructProofs(
 			signatures,
 			blindedMessages.rs,
 			blindedMessages.secrets,
 			keys
 		);
-		proofs.push(...newProofs);
-		return proofs;
+		return freshProofs;
 	}
 
 	async send(

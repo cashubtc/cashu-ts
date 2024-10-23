@@ -5,9 +5,13 @@ import { Proof } from './index';
  */
 export type Token = {
 	/**
-	 * token entries
+	 * the mints URL
 	 */
-	token: Array<TokenEntry>;
+	mint: string;
+	/**
+	 * a list of proofs
+	 */
+	proofs: Array<Proof>;
 	/**
 	 * a message to send along with the token
 	 */
@@ -16,19 +20,6 @@ export type Token = {
 	 * the unit of the token
 	 */
 	unit?: string;
-};
-/**
- * TokenEntry that stores proofs and mints
- */
-export type TokenEntry = {
-	/**
-	 * a list of proofs
-	 */
-	proofs: Array<Proof>;
-	/**
-	 * the mints URL
-	 */
-	mint: string;
 };
 
 /**
