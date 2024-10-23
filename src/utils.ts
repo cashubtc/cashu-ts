@@ -7,10 +7,7 @@ import {
 import {
 	Keys,
 	Proof,
-	RawPaymentRequest,
-	RawTransport,
 	Token,
-	TokenEntry,
 	TokenV4Template,
 	V4InnerToken,
 	V4ProofTemplate
@@ -178,22 +175,13 @@ export function getEncodedToken(token: Token): string {
  */
 export function getEncodedTokenV4(token: Token): string {
 	const idMap: { [id: string]: Array<Proof> } = {};
-	let mint: string | undefined = undefined;
-	for (let i = 0; i < token.token.length; i++) {
-		if (!mint) {
-			mint = token.token[i].mint;
+	const mint = token.mint;
+	for (let i = 0; i < token.proofs.length; i++) {
+		const proof = token.proofs[i];
+		if (idMap[proof.id]) {
+			idMap[proof.id].push(proof);
 		} else {
-			if (mint !== token.token[i].mint) {
-				throw new Error('Multimint token can not be encoded as V4 token');
-			}
-		}
-		for (let j = 0; j < token.token[i].proofs.length; j++) {
-			const proof = token.token[i].proofs[j];
-			if (idMap[proof.id]) {
-				idMap[proof.id].push(proof);
-			} else {
-				idMap[proof.id] = [proof];
-			}
+			idMap[proof.id] = [proof];
 		}
 	}
 	const tokenTemplate: TokenV4Template = {
@@ -249,24 +237,23 @@ export function handleTokens(token: string): Token {
 		return encodeBase64ToJson<Token>(encodedToken);
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
-		const tokenData = decodeCBOR(uInt8Token) as {
-			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
-			m: string;
-			d: string;
-			u: string;
-		};
-		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
-		tokenData.t.forEach((tokenEntry: V4InnerToken) =>
-			tokenEntry.p.forEach((p: V4ProofTemplate) => {
-				mergedTokenEntry.proofs.push({
+		const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
+		const proofs: Array<Proof> = [];
+		tokenData.t.forEach((t) =>
+			t.p.forEach((p) => {
+				proofs.push({
 					secret: p.s,
 					C: bytesToHex(p.c),
 					amount: p.a,
-					id: bytesToHex(tokenEntry.i)
+					id: bytesToHex(t.i)
 				});
 			})
 		);
-		return { token: [mergedTokenEntry], memo: tokenData.d || '', unit: tokenData.u || 'sat' };
+		const decodedToken: Token = { mint: tokenData.m, proofs, unit: tokenData.u || 'sat' };
+		if (tokenData.d) {
+			decodedToken.memo = tokenData.d;
+		}
+		return decodedToken;
 	}
 	throw new Error('Token version is not supported');
 }
