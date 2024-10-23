@@ -5,6 +5,7 @@ import {
 	encodeUint8toBase64Url
 } from './base64.js';
 import {
+	DeprecatedToken,
 	Keys,
 	Proof,
 	Token,
@@ -234,7 +235,20 @@ export function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
 	const encodedToken = token.slice(1);
 	if (version === 'A') {
-		return encodeBase64ToJson<Token>(encodedToken);
+		const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+		if (parsedV3Token.token.length > 1) {
+			throw new Error('Multi entry token are not supported');
+		}
+		const entry = parsedV3Token.token[0];
+		const tokenObj: Token = {
+			mint: entry.mint,
+			proofs: entry.proofs,
+			unit: parsedV3Token.unit || 'sat'
+		};
+		if (parsedV3Token.memo) {
+			tokenObj.memo = parsedV3Token.memo;
+		}
+		return tokenObj;
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
 		const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
