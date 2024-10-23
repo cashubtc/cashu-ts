@@ -6,6 +6,7 @@ export * from './paymentRequests';
 export type AmountPreference = {
 	amount: number;
 	count: number;
+	pubkey?: string;
 };
 
 /**
