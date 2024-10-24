@@ -1,12 +1,12 @@
-import { AmountPreference } from './wallet/index';
-
 export * from './mint/index';
 export * from './wallet/index';
 
-export type Preferences = {
-	sendPreference: Array<AmountPreference>;
-	keepPreference?: Array<AmountPreference>;
+export type OutputAmounts = {
+	sendAmounts: Array<number>;
+	keepAmounts?: Array<number>;
 };
+
+// deprecated
 
 export type InvoiceData = {
 	paymentRequest: string;
