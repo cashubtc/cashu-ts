@@ -21,13 +21,21 @@ import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
 
-function splitAmount(
+/**
+ * Splits the amount into denominations of the provided @param keyset
+ * @param value amount to split
+ * @param keyset keys to look up split amounts
+ * @param split? optional custom split amounts 
+ * @param order? optional order for split amounts (default: "asc")
+ * @returns Array of split amounts
+ * @throws Error if @param split amount is greater than @param value amount
+ */
+export function splitAmount(
 	value: number,
 	keyset: Keys,
 	split?: Array<number>,
 	order?: "desc" | "asc"
 ): Array<number> {
-	const chunks: Array<number> = [];
 	if (split) {
 		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
 			throw new Error(
@@ -37,23 +45,38 @@ function splitAmount(
 				)} > ${value}`
 			);
 		}
-		chunks.push(...getPreference(value, keyset, split));
+		split.forEach((amt: number)  => {
+			if (!hasCorrespondingKey(amt, keyset)) {
+				throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
+			}
+		})
 		value =
 			value -
-			chunks.reduce((curr: number, acc: number) => {
+			split.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
+	}
+	else {
+		split = [];
 	}
 	const sortedKeyAmounts = getKeysetAmounts(keyset);
 	sortedKeyAmounts.forEach((amt: number) => {
 		const q = Math.floor(value / amt);
-		for (let i = 0; i < q; ++i) chunks.push(amt);
+		for (let i = 0; i < q; ++i) split?.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
+	return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
-function getKeepAmounts(
+/**
+ * Creates a list of amounts to keep based on the proofs we have and the proofs we want to reach.
+ * @param proofsWeHave complete set of proofs stored (from current mint)
+ * @param amountToKeep amount to keep
+ * @param keys keys of current keyset
+ * @param targetCount the target number of proofs to reach
+ * @returns an array of amounts to keep
+ */
+export function getKeepAmounts(
 	proofsWeHave: Array<Proof>,
 	amountToKeep: number,
 	keys: Keys,
@@ -83,16 +106,15 @@ function getKeepAmounts(
 		});
 	}
 	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
-	// console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`);
-	// console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`);
-	// console.log(`# getKeepAmounts: amountsWeWant: ${sortedAmountsWeWant}`);
 	return sortedAmountsWeWant;
 }
-
-// function isPowerOfTwo(number: number) {
-// 	return number && !(number & (number - 1));
-// }
-function getKeysetAmounts(keyset: Keys, order = 'desc'): Array<number> {
+/**
+ * returns the amounts in the keyset sorted by the order specified
+ * @param keyset to search in
+ * @param order order to sort the amounts in
+ * @returns the amounts in the keyset sorted by the order specified
+ */
+export function getKeysetAmounts(keyset: Keys, order: "asc" | "desc" = 'desc'): Array<number> {
 	if (order == 'desc') {
 		return Object.keys(keyset)
 			.map((k: string) => parseInt(k))
@@ -103,44 +125,59 @@ function getKeysetAmounts(keyset: Keys, order = 'desc'): Array<number> {
 		.sort((a: number, b: number) => a - b);
 }
 
-function hasCorrespondingKey(amount: number, keyset: Keys) {
+/**
+ * Checks if the provided amount is in the keyset.
+ * @param amount amount to check
+ * @param keyset to search in
+ * @returns true if the amount is in the keyset, false otherwise
+ */
+export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 	return amount in keyset;
 }
 
-function getPreference(amount: number, keyset: Keys, split: Array<number>): Array<number> {
-	const chunks: Array<number> = [];
-	split.forEach((splitAmount: number) => {
-		if (!hasCorrespondingKey(splitAmount, keyset)) {
-			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
-		}
-		chunks.push(splitAmount);
-	});
-	return chunks;
-}
-
-function bytesToNumber(bytes: Uint8Array): bigint {
+/**
+ * Converts a bytes array to a number.
+ * @param bytes to convert to number
+ * @returns  number
+ */
+export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
 
-function hexToNumber(hex: string): bigint {
+/**
+ * Converts a hex string to a number.
+ * @param hex to convert to number
+ * @returns number
+ */
+export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
-//used for json serialization
-function bigIntStringify<T>(_key: unknown, value: T) {
+/**
+  * Helper function to stringify a bigint
+  * @param _key 
+  * @param value to stringify
+  * @returns stringified bigint
+  */
+export function bigIntStringify<T>(_key: unknown, value: T): string | T {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
 /**
  * Helper function to encode a v3 cashu token
- * @param token
- * @returns
+ * @param token to encode
+ * @returns encoded token
  */
-function getEncodedToken(token: Token): string {
+export function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
-function getEncodedTokenV4(token: Token): string {
+/**
+  * Helper function to encode a v4 cashu token
+  * @param token to encode
+  * @returns encoded token
+  */
+export function getEncodedTokenV4(token: Token): string {
 	const idMap: { [id: string]: Array<Proof> } = {};
 	let mint: string | undefined = undefined;
 	for (let i = 0; i < token.token.length; i++) {
@@ -189,7 +226,7 @@ function getEncodedTokenV4(token: Token): string {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string) {
+export function getDecodedToken(token: string) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
@@ -202,10 +239,11 @@ function getDecodedToken(token: string) {
 }
 
 /**
- * @param token
- * @returns
+ * Helper function to decode different versions of cashu tokens into an object
+ * @param token an encoded cashu token (cashuAey...)
+ * @returns cashu Token object
  */
-function handleTokens(token: string): Token {
+export function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
 	const encodedToken = token.slice(1);
 	if (version === 'A') {
@@ -248,7 +286,7 @@ export function deriveKeysetId(keys: Keys) {
 	return '00' + hashHex;
 }
 
-function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
+export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 	// sum of individual array lengths
 	const mergedArray = new Uint8Array(a1.length + a2.length);
 	mergedArray.set(a1);
@@ -286,18 +324,6 @@ export function sumProofs(proofs: Array<Proof>) {
 	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
 }
 
-function decodePaymentRequest(paymentRequest: string) {
+export function decodePaymentRequest(paymentRequest: string) {
 	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
-
-export {
-	bigIntStringify,
-	bytesToNumber,
-	getDecodedToken,
-	getEncodedToken,
-	getEncodedTokenV4,
-	hexToNumber,
-	splitAmount,
-	getKeepAmounts,
-	decodePaymentRequest
-};
