@@ -1,4 +1,4 @@
-<!DOCTYPE html><html class="default" lang="en"><head><meta charSet="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>BlindedTransaction | @cashu/cashu-ts</title><meta name="description" content="Documentation for @cashu/cashu-ts"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/search.js" id="tsd-search-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os"</script><header class="tsd-page-toolbar">
+<!DOCTYPE html><html class="default" lang="en"><head><meta charSet="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>Preferences | @cashu/cashu-ts</title><meta name="description" content="Documentation for @cashu/cashu-ts"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><script defer src="../assets/main.js"></script><script async src="../assets/search.js" id="tsd-search-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os"</script><header class="tsd-page-toolbar">
 <div class="tsd-toolbar-contents container">
 <div class="table-cell" id="tsd-search" data-base="..">
 <div class="field"><label for="tsd-search-field" class="tsd-widget tsd-toolbar-icon search no-caption"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M15.7824 13.833L12.6666 10.7177C12.5259 10.5771 12.3353 10.499 12.1353 10.499H11.6259C12.4884 9.39596 13.001 8.00859 13.001 6.49937C13.001 2.90909 10.0914 0 6.50048 0C2.90959 0 0 2.90909 0 6.49937C0 10.0896 2.90959 12.9987 6.50048 12.9987C8.00996 12.9987 9.39756 12.4863 10.5008 11.6239V12.1332C10.5008 12.3332 10.5789 12.5238 10.7195 12.6644L13.8354 15.7797C14.1292 16.0734 14.6042 16.0734 14.8948 15.7797L15.7793 14.8954C16.0731 14.6017 16.0731 14.1267 15.7824 13.833ZM6.50048 10.499C4.29094 10.499 2.50018 8.71165 2.50018 6.49937C2.50018 4.29021 4.28781 2.49976 6.50048 2.49976C8.71001 2.49976 10.5008 4.28708 10.5008 6.49937C10.5008 8.70852 8.71314 10.499 6.50048 10.499Z" fill="var(--color-text)"></path></svg></label><input type="text" id="tsd-search-field" aria-label="Search"/></div>
@@ -13,32 +13,18 @@
 <div class="tsd-page-title">
 <ul class="tsd-breadcrumb">
 <li><a href="../modules.html">@cashu/cashu-ts</a></li>
-<li><a href="BlindedTransaction.html">BlindedTransaction</a></li></ul>
-<h1>Type alias BlindedTransaction</h1></div>
-<div class="tsd-signature"><span class="tsd-kind-type-alias">Blinded<wbr/>Transaction</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">blindedMessages</span><span class="tsd-signature-symbol">: </span><a href="SerializedBlindedMessage.html" class="tsd-signature-type tsd-kind-type-alias">SerializedBlindedMessage</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">rs</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">bigint</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">secrets</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Uint8Array</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></div>
-<div class="tsd-comment tsd-typography"><p>Data that the library needs to hold in memory while it awaits the blinded signatures for the mint. It is later used for unblinding the signatures.</p>
-</div>
+<li><a href="Preferences.html">Preferences</a></li></ul>
+<h1>Type alias Preferences</h1></div>
+<div class="tsd-signature"><span class="tsd-kind-type-alias">Preferences</span><span class="tsd-signature-symbol">:</span> <span class="tsd-signature-symbol">{ </span><br/><span>    </span><span class="tsd-kind-property">keepPreference</span><span class="tsd-signature-symbol">?: </span><a href="AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span>    </span><span class="tsd-kind-property">sendPreference</span><span class="tsd-signature-symbol">: </span><a href="AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">; </span><br/><span class="tsd-signature-symbol">}</span></div>
 <div class="tsd-type-declaration">
 <h4>Type declaration</h4>
 <ul class="tsd-parameters">
 <li class="tsd-parameter">
-<h5><span class="tsd-kind-property">amounts</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">number</span><span class="tsd-signature-symbol">[]</span></h5>
-<div class="tsd-comment tsd-typography"><p>amounts denominated in Satoshi</p>
-</div></li>
+<h5><code class="tsd-tag ts-flagOptional">Optional</code> <span class="tsd-kind-property">keep<wbr/>Preference</span><span class="tsd-signature-symbol">?: </span><a href="AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5></li>
 <li class="tsd-parameter">
-<h5><span class="tsd-kind-property">blinded<wbr/>Messages</span><span class="tsd-signature-symbol">: </span><a href="SerializedBlindedMessage.html" class="tsd-signature-type tsd-kind-type-alias">SerializedBlindedMessage</a><span class="tsd-signature-symbol">[]</span></h5>
-<div class="tsd-comment tsd-typography"><p>Blinded messages sent to the mint for signing.</p>
-</div></li>
-<li class="tsd-parameter">
-<h5><span class="tsd-kind-property">rs</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">bigint</span><span class="tsd-signature-symbol">[]</span></h5>
-<div class="tsd-comment tsd-typography"><p>Blinding factor used for blinding messages and unblinding signatures after they are received from the mint.</p>
-</div></li>
-<li class="tsd-parameter">
-<h5><span class="tsd-kind-property">secrets</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type ">Uint8Array</span><span class="tsd-signature-symbol">[]</span></h5>
-<div class="tsd-comment tsd-typography"><p>secrets, kept client side for constructing proofs later.</p>
-</div></li></ul></div><aside class="tsd-sources">
+<h5><span class="tsd-kind-property">send<wbr/>Preference</span><span class="tsd-signature-symbol">: </span><a href="AmountPreference.html" class="tsd-signature-type tsd-kind-type-alias">AmountPreference</a><span class="tsd-signature-symbol">[]</span></h5></li></ul></div><aside class="tsd-sources">
 <ul>
-<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d149123/src/model/types/wallet/payloads.ts#L24">src/model/types/wallet/payloads.ts:24</a></li></ul></aside></div>
+<li>Defined in <a href="https://github.com/cashubtc/cashu-ts/blob/d149123/src/model/types/index.ts#L6">src/model/types/index.ts:6</a></li></ul></aside></div>
 <div class="col-sidebar">
 <div class="page-menu">
 <div class="tsd-navigation settings">
@@ -67,7 +53,7 @@
 <li><a href="AmountPreference.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><rect fill="var(--color-icon-background)" stroke="var(--color-ts-type-alias)" stroke-width="1.5" x="1" y="1" width="22" height="22" rx="6" id="icon-4194304-path"></rect><path d="M11.31 16V8.224H8.91V7.24H14.79V8.224H12.39V16H11.31Z" fill="var(--color-text)" id="icon-4194304-text"></path></svg><span>Amount<wbr/>Preference</span></a></li>
 <li><a href="ApiError.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Api<wbr/>Error</span></a></li>
 <li><a href="BlindedMessageData.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Blinded<wbr/>Message<wbr/>Data</span></a></li>
-<li><a href="BlindedTransaction.html" class="current"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Blinded<wbr/>Transaction</span></a></li>
+<li><a href="BlindedTransaction.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Blinded<wbr/>Transaction</span></a></li>
 <li><a href="CheckStateEntry.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Check<wbr/>State<wbr/>Entry</span></a></li>
 <li><a href="CheckStatePayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Check<wbr/>State<wbr/>Payload</span></a></li>
 <li><a href="CheckStateResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Check<wbr/>State<wbr/>Response</span></a></li>
@@ -92,7 +78,7 @@
 <li><a href="PaymentRequestTransport.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Payment<wbr/>Request<wbr/>Transport</span></a></li>
 <li><a href="PostRestorePayload.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Post<wbr/>Restore<wbr/>Payload</span></a></li>
 <li><a href="PostRestoreResponse.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Post<wbr/>Restore<wbr/>Response</span></a></li>
-<li><a href="Preferences.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Preferences</span></a></li>
+<li><a href="Preferences.html" class="current"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Preferences</span></a></li>
 <li><a href="Proof.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Proof</span></a></li>
 <li><a href="RawPaymentRequest.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Raw<wbr/>Payment<wbr/>Request</span></a></li>
 <li><a href="RawTransport.html"><svg class="tsd-kind-icon" width="24" height="24" viewBox="0 0 24 24"><use href="#icon-4194304-path"></use><use href="#icon-4194304-text"></use></svg><span>Raw<wbr/>Transport</span></a></li>
