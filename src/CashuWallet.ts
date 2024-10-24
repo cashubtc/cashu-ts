@@ -756,64 +756,6 @@ class CashuWallet {
 	}
 
 	/**
-	 * Helper function that pays a Lightning invoice directly without having to create a melt quote before
-	 * The combined amount of Proofs must match the payment amount including fees.
-	 * @param invoice
-	 * @param proofsToSend the exact amount to send including fees
-	 * @param meltQuote melt quote for the invoice
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
-	 * @returns
-	 */
-	async payLnInvoice(
-		invoice: string,
-		proofsToSend: Array<Proof>,
-		meltQuote?: MeltQuoteResponse,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-			privkey?: string;
-		}
-	): Promise<MeltProofsResponse> {
-		if (!meltQuote) {
-			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
-		}
-		return await this.meltProofs(meltQuote, proofsToSend, {
-			keysetId: options?.keysetId,
-			counter: options?.counter,
-			privkey: options?.privkey
-		});
-	}
-
-	/**
-	 * Helper function to ingest a Cashu token and pay a Lightning invoice with it.
-	 * @param invoice Lightning invoice
-	 * @param token cashu token
-	 * @param meltQuote melt quote for the invoice
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 */
-	async payLnInvoiceWithToken(
-		invoice: string,
-		token: string,
-		meltQuote: MeltQuoteResponse,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-		}
-	): Promise<MeltProofsResponse> {
-		const decodedToken = getDecodedToken(token);
-		const proofs = decodedToken.token
-			.filter((x: TokenEntry) => x.mint === this.mint.mintUrl)
-			.flatMap((t: TokenEntry) => t.proofs);
-		return this.payLnInvoice(invoice, proofs, meltQuote, {
-			keysetId: options?.keysetId,
-			counter: options?.counter
-		});
-	}
-
-	/**
 	 * Creates a split payload
 	 * @param amount amount to send
 	 * @param proofsToSend proofs to split*
