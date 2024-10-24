@@ -150,13 +150,12 @@ export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
-/**
- * Helper function to stringify a bigint
- * @param _key
- * @param value to stringify
- * @returns stringified bigint
- */
-export function bigIntStringify<T>(_key: unknown, value: T): string | T {
+function isValidHex(str: string) {
+	return /^[a-f0-9]*$/i.test(str);
+}
+
+//used for json serialization
+function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
@@ -177,11 +176,22 @@ export function getEncodedToken(token: Token): string {
 }
 
 /**
- * Helper function to encode a v4 cashu token
- * @param token to encode
- * @returns encoded token
+ * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
+ * @param token
+ * @param [opts]
  */
-export function getEncodedTokenV4(token: Token): string {
+function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
+	const hasNonHexId = token.proofs.some((p) => !isValidHex(p.id));
+	if (hasNonHexId || opts?.version === 3) {
+		if (opts?.version === 4) {
+			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+		}
+		return getEncodedTokenV3(token);
+	}
+	return getEncodedTokenV4(token);
+}
+
+function getEncodedTokenV4(token: Token): string {
 	const idMap: { [id: string]: Array<Proof> } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
