@@ -135,7 +135,14 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns
  */
 function getEncodedToken(token: Token): string {
-	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
+	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
+	if (token.unit) {
+		v3TokenObj.unit = token.unit;
+	}
+	if (token.memo) {
+		v3TokenObj.memo = token.unit;
+	}
+	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
 }
 
 function getEncodedTokenV4(token: Token): string {
