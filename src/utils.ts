@@ -25,7 +25,7 @@ function splitAmount(
 	value: number,
 	keyset: Keys,
 	split?: Array<number>,
-	order?: string
+	order?: "desc" | "asc"
 ): Array<number> {
 	const chunks: Array<number> = [];
 	if (split) {
