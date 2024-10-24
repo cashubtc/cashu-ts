@@ -124,6 +124,10 @@ function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
+function isValidHex(str: string) {
+	return /^[a-f0-9]*$/i.test(str);
+}
+
 //used for json serialization
 function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
@@ -132,9 +136,8 @@ function bigIntStringify<T>(_key: unknown, value: T) {
 /**
  * Helper function to encode a v3 cashu token
  * @param token
- * @returns
  */
-function getEncodedToken(token: Token): string {
+function getEncodedTokenV3(token: Token): string {
 	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
@@ -143,6 +146,22 @@ function getEncodedToken(token: Token): string {
 		v3TokenObj.memo = token.unit;
 	}
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
+}
+
+/**
+ * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
+ * @param token
+ * @param [opts]
+ */
+function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
+	const hasNonHexId = token.proofs.some((p) => !isValidHex(p.id));
+	if (hasNonHexId || opts?.version === 3) {
+		if (opts?.version === 4) {
+			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+		}
+		return getEncodedTokenV3(token);
+	}
+	return getEncodedTokenV4(token);
 }
 
 function getEncodedTokenV4(token: Token): string {
@@ -303,6 +322,7 @@ export {
 	bytesToNumber,
 	getDecodedToken,
 	getEncodedToken,
+	getEncodedTokenV3,
 	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
