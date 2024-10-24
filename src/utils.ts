@@ -1,40 +1,73 @@
-import { encodeBase64ToJson, encodeJsonToBase64 } from './base64.js';
-import { AmountPreference, Keys, Proof, Token, TokenV2 } from './model/types/index.js';
+import {
+	encodeBase64ToJson,
+	encodeBase64toUint8,
+	encodeJsonToBase64,
+	encodeUint8toBase64Url
+} from './base64.js';
+import {
+	AmountPreference,
+	Keys,
+	Proof,
+	RawPaymentRequest,
+	RawTransport,
+	Token,
+	TokenEntry,
+	TokenV4Template,
+	V4InnerToken,
+	V4ProofTemplate
+} from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
+import { decodeCBOR, encodeCBOR } from './cbor.js';
+import { PaymentRequest } from './model/PaymentRequest.js';
 
-function splitAmount(value: number, amountPreference?: Array<AmountPreference>): Array<number> {
+function splitAmount(
+	value: number,
+	keyset: Keys,
+	amountPreference?: Array<AmountPreference>,
+	isDesc?: boolean
+): Array<number> {
 	const chunks: Array<number> = [];
 	if (amountPreference) {
-		chunks.push(...getPreference(value, amountPreference));
+		chunks.push(...getPreference(value, keyset, amountPreference));
 		value =
 			value -
-			chunks.reduce((curr, acc) => {
+			chunks.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
 	}
-	for (let i = 0; i < 32; i++) {
-		const mask: number = 1 << i;
-		if ((value & mask) !== 0) {
-			chunks.push(Math.pow(2, i));
-		}
-	}
-	return chunks;
+	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
+		.map((k) => parseInt(k))
+		.sort((a, b) => b - a);
+	sortedKeyAmounts.forEach((amt) => {
+		const q = Math.floor(value / amt);
+		for (let i = 0; i < q; ++i) chunks.push(amt);
+		value %= amt;
+	});
+	return chunks.sort((a, b) => (isDesc ? b - a : a - b));
 }
 
+/*
 function isPowerOfTwo(number: number) {
 	return number && !(number & (number - 1));
 }
+*/
 
-function getPreference(amount: number, preferredAmounts: Array<AmountPreference>): Array<number> {
+function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
+	return amount in keyset;
+}
+
+function getPreference(
+	amount: number,
+	keyset: Keys,
+	preferredAmounts: Array<AmountPreference>
+): Array<number> {
 	const chunks: Array<number> = [];
 	let accumulator = 0;
-	preferredAmounts.forEach((pa) => {
-		if (!isPowerOfTwo(pa.amount)) {
-			throw new Error(
-				'Provided amount preferences contain non-power-of-2 numbers. Use only ^2 numbers'
-			);
+	preferredAmounts.forEach((pa: AmountPreference) => {
+		if (!hasCorrespondingKey(pa.amount, keyset)) {
+			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
 		for (let i = 1; i <= pa.count; i++) {
 			accumulator += pa.amount;
@@ -47,9 +80,9 @@ function getPreference(amount: number, preferredAmounts: Array<AmountPreference>
 	return chunks;
 }
 
-function getDefaultAmountPreference(amount: number): Array<AmountPreference> {
-	const amounts = splitAmount(amount);
-	return amounts.map((a) => {
+function getDefaultAmountPreference(amount: number, keyset: Keys): Array<AmountPreference> {
+	const amounts = splitAmount(amount, keyset);
+	return amounts.map((a: number) => {
 		return { amount: a, count: 1 };
 	});
 }
@@ -76,15 +109,59 @@ function getEncodedToken(token: Token): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
 }
 
+function getEncodedTokenV4(token: Token): string {
+	const idMap: { [id: string]: Array<Proof> } = {};
+	let mint: string | undefined = undefined;
+	for (let i = 0; i < token.token.length; i++) {
+		if (!mint) {
+			mint = token.token[i].mint;
+		} else {
+			if (mint !== token.token[i].mint) {
+				throw new Error('Multimint token can not be encoded as V4 token');
+			}
+		}
+		for (let j = 0; j < token.token[i].proofs.length; j++) {
+			const proof = token.token[i].proofs[j];
+			if (idMap[proof.id]) {
+				idMap[proof.id].push(proof);
+			} else {
+				idMap[proof.id] = [proof];
+			}
+		}
+	}
+	const tokenTemplate: TokenV4Template = {
+		m: mint,
+		u: token.unit || 'sat',
+		t: Object.keys(idMap).map(
+			(id: string): V4InnerToken => ({
+				i: hexToBytes(id),
+				p: idMap[id].map(
+					(p: Proof): V4ProofTemplate => ({ a: p.amount, s: p.secret, c: hexToBytes(p.C) })
+				)
+			})
+		)
+	} as TokenV4Template;
+
+	if (token.memo) {
+		tokenTemplate.d = token.memo;
+	}
+
+	const encodedData = encodeCBOR(tokenTemplate);
+	const prefix = 'cashu';
+	const version = 'B';
+	const base64Data = encodeUint8toBase64Url(encodedData);
+	return prefix + version + base64Data;
+}
+
 /**
  * Helper function to decode cashu tokens into object
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string): Token {
+function getDecodedToken(token: string) {
 	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashuA'];
-	uriPrefixes.forEach((prefix) => {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
+	uriPrefixes.forEach((prefix: string) => {
 		if (!token.startsWith(prefix)) {
 			return;
 		}
@@ -98,20 +175,32 @@ function getDecodedToken(token: string): Token {
  * @returns
  */
 function handleTokens(token: string): Token {
-	const obj = encodeBase64ToJson<TokenV2 | Array<Proof> | Token>(token);
-
-	// check if v3
-	if ('token' in obj) {
-		return obj;
+	const version = token.slice(0, 1);
+	const encodedToken = token.slice(1);
+	if (version === 'A') {
+		return encodeBase64ToJson<Token>(encodedToken);
+	} else if (version === 'B') {
+		const uInt8Token = encodeBase64toUint8(encodedToken);
+		const tokenData = decodeCBOR(uInt8Token) as {
+			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
+			m: string;
+			d: string;
+			u: string;
+		};
+		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
+		tokenData.t.forEach((tokenEntry: V4InnerToken) =>
+			tokenEntry.p.forEach((p: V4ProofTemplate) => {
+				mergedTokenEntry.proofs.push({
+					secret: p.s,
+					C: bytesToHex(p.c),
+					amount: p.a,
+					id: bytesToHex(tokenEntry.i)
+				});
+			})
+		);
+		return { token: [mergedTokenEntry], memo: tokenData.d || '', unit: tokenData.u || 'sat' };
 	}
-
-	// check if v1
-	if (Array.isArray(obj)) {
-		return { token: [{ proofs: obj, mint: '' }] };
-	}
-
-	// if v2 token return v3 format
-	return { token: [{ proofs: obj.proofs, mint: obj?.mints[0]?.url ?? '' }] };
+	throw new Error('Token version is not supported');
 }
 /**
  * Returns the keyset id of a set of keys
@@ -120,9 +209,9 @@ function handleTokens(token: string): Token {
  */
 export function deriveKeysetId(keys: Keys) {
 	const pubkeysConcat = Object.entries(keys)
-		.sort((a, b) => +a[0] - +b[0])
-		.map(([, pubKey]) => hexToBytes(pubKey))
-		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
+		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
+		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
+		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 	const hash = sha256(pubkeysConcat);
 	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
 	return '00' + hashHex;
@@ -137,7 +226,7 @@ function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 }
 
 export function sortProofsById(proofs: Array<Proof>) {
-	return proofs.sort((a, b) => a.id.localeCompare(b.id));
+	return proofs.sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
 }
 
 export function isObj(v: unknown): v is object {
@@ -155,11 +244,15 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 }
 
 export function joinUrls(...parts: Array<string>): string {
-	return parts.map((part) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
+	return parts.map((part: string) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
 export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
+}
+
+function decodePaymentRequest(paymentRequest: string) {
+	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 
 export {
@@ -167,7 +260,9 @@ export {
 	bytesToNumber,
 	getDecodedToken,
 	getEncodedToken,
+	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference
+	getDefaultAmountPreference,
+	decodePaymentRequest
 };

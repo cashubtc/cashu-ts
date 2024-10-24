@@ -180,14 +180,14 @@ describe('receive', () => {
 		nock(mintUrl).post('/v1/swap').reply(400, { detail: msg });
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('Error when receiving'));
+		expect(result).toEqual(new Error('tokens already spent. Secret: asdasdasd'));
 	});
 
 	test('test receive could not verify proofs', async () => {
 		nock(mintUrl).post('/v1/swap').reply(400, { code: 0, error: 'could not verify proofs.' });
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('Error when receiving'));
+		expect(result).toEqual(new Error('could not verify proofs.'));
 	});
 });
 
@@ -491,7 +491,9 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
-		const result = await wallet.send(4, overpayProofs, { preference: [{ amount: 1, count: 4 }] });
+		const result = await wallet.send(4, overpayProofs, {
+			preference: { sendPreference: [{ amount: 1, count: 4 }] }
+		});
 
 		expect(result.send).toHaveLength(4);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
@@ -546,7 +548,9 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
-		const result = await wallet.send(4, overpayProofs, { preference: [{ amount: 1, count: 3 }] });
+		const result = await wallet.send(4, overpayProofs, {
+			preference: { sendPreference: [{ amount: 1, count: 3 }] }
+		});
 
 		expect(result.send).toHaveLength(3);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });

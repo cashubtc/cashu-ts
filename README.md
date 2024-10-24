@@ -42,6 +42,7 @@ Supported token formats:
 - [x] v1 read
 - [x] v2 read (deprecated)
 - [x] v3 read/write
+- [x] v4 read/write
 
 ## Usage
 
