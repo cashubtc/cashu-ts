@@ -5,13 +5,10 @@ import {
 	encodeUint8toBase64Url
 } from './base64.js';
 import {
-	AmountPreference,
+	DeprecatedToken,
 	Keys,
 	Proof,
-	RawPaymentRequest,
-	RawTransport,
 	Token,
-	TokenEntry,
 	TokenV4Template,
 	V4InnerToken,
 	V4ProofTemplate
@@ -25,66 +22,98 @@ import { PaymentRequest } from './model/PaymentRequest.js';
 function splitAmount(
 	value: number,
 	keyset: Keys,
-	amountPreference?: Array<AmountPreference>,
-	isDesc?: boolean
+	split?: Array<number>,
+	order?: string
 ): Array<number> {
 	const chunks: Array<number> = [];
-	if (amountPreference) {
-		chunks.push(...getPreference(value, keyset, amountPreference));
+	if (split) {
+		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
+			throw new Error(
+				`Split is greater than total amount: ${split.reduce(
+					(a: number, b: number) => a + b,
+					0
+				)} > ${value}`
+			);
+		}
+		chunks.push(...getPreference(value, keyset, split));
 		value =
 			value -
 			chunks.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
 	}
-	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
-		.map((k) => parseInt(k))
-		.sort((a, b) => b - a);
-	sortedKeyAmounts.forEach((amt) => {
+	const sortedKeyAmounts = getKeysetAmounts(keyset);
+	sortedKeyAmounts.forEach((amt: number) => {
 		const q = Math.floor(value / amt);
 		for (let i = 0; i < q; ++i) chunks.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => (isDesc ? b - a : a - b));
+	return chunks.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
-/*
-function isPowerOfTwo(number: number) {
-	return number && !(number & (number - 1));
+function getKeepAmounts(
+	proofsWeHave: Array<Proof>,
+	amountToKeep: number,
+	keys: Keys,
+	targetCount: number
+): Array<number> {
+	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
+	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
+	const amountsWeWant: Array<number> = [];
+	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
+	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
+	sortedKeyAmounts.forEach((amt) => {
+		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
+		const countWeWant = Math.floor(targetCount - countWeHave);
+		for (let i = 0; i < countWeWant; ++i) {
+			if (amountsWeWant.reduce((a, b) => a + b, 0) + amt > amountToKeep) {
+				break;
+			}
+			amountsWeWant.push(amt);
+		}
+	});
+	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
+	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0);
+	if (amountDiff) {
+		const remainingAmounts = splitAmount(amountDiff, keys);
+		remainingAmounts.forEach((amt: number) => {
+			amountsWeWant.push(amt);
+		});
+	}
+	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
+	// console.log(`# getKeepAmounts: amountToKeep: ${amountToKeep}`);
+	// console.log(`# getKeepAmounts: amountsWeHave: ${amountsWeHave}`);
+	// console.log(`# getKeepAmounts: amountsWeWant: ${sortedAmountsWeWant}`);
+	return sortedAmountsWeWant;
 }
-*/
 
-function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
+// function isPowerOfTwo(number: number) {
+// 	return number && !(number & (number - 1));
+// }
+function getKeysetAmounts(keyset: Keys, order = 'desc'): Array<number> {
+	if (order == 'desc') {
+		return Object.keys(keyset)
+			.map((k: string) => parseInt(k))
+			.sort((a: number, b: number) => b - a);
+	}
+	return Object.keys(keyset)
+		.map((k: string) => parseInt(k))
+		.sort((a: number, b: number) => a - b);
+}
+
+function hasCorrespondingKey(amount: number, keyset: Keys) {
 	return amount in keyset;
 }
 
-function getPreference(
-	amount: number,
-	keyset: Keys,
-	preferredAmounts: Array<AmountPreference>
-): Array<number> {
+function getPreference(amount: number, keyset: Keys, split: Array<number>): Array<number> {
 	const chunks: Array<number> = [];
-	let accumulator = 0;
-	preferredAmounts.forEach((pa: AmountPreference) => {
-		if (!hasCorrespondingKey(pa.amount, keyset)) {
+	split.forEach((splitAmount: number) => {
+		if (!hasCorrespondingKey(splitAmount, keyset)) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
-		for (let i = 1; i <= pa.count; i++) {
-			accumulator += pa.amount;
-			if (accumulator > amount) {
-				return;
-			}
-			chunks.push(pa.amount);
-		}
+		chunks.push(splitAmount);
 	});
 	return chunks;
-}
-
-function getDefaultAmountPreference(amount: number, keyset: Keys): Array<AmountPreference> {
-	const amounts = splitAmount(amount, keyset);
-	return amounts.map((a: number) => {
-		return { amount: a, count: 1 };
-	});
 }
 
 function bytesToNumber(bytes: Uint8Array): bigint {
@@ -106,27 +135,25 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns
  */
 function getEncodedToken(token: Token): string {
-	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
+	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
+	if (token.unit) {
+		v3TokenObj.unit = token.unit;
+	}
+	if (token.memo) {
+		v3TokenObj.memo = token.unit;
+	}
+	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
 }
 
 function getEncodedTokenV4(token: Token): string {
 	const idMap: { [id: string]: Array<Proof> } = {};
-	let mint: string | undefined = undefined;
-	for (let i = 0; i < token.token.length; i++) {
-		if (!mint) {
-			mint = token.token[i].mint;
+	const mint = token.mint;
+	for (let i = 0; i < token.proofs.length; i++) {
+		const proof = token.proofs[i];
+		if (idMap[proof.id]) {
+			idMap[proof.id].push(proof);
 		} else {
-			if (mint !== token.token[i].mint) {
-				throw new Error('Multimint token can not be encoded as V4 token');
-			}
-		}
-		for (let j = 0; j < token.token[i].proofs.length; j++) {
-			const proof = token.token[i].proofs[j];
-			if (idMap[proof.id]) {
-				idMap[proof.id].push(proof);
-			} else {
-				idMap[proof.id] = [proof];
-			}
+			idMap[proof.id] = [proof];
 		}
 	}
 	const tokenTemplate: TokenV4Template = {
@@ -178,27 +205,39 @@ function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
 	const encodedToken = token.slice(1);
 	if (version === 'A') {
-		return encodeBase64ToJson<Token>(encodedToken);
+		const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+		if (parsedV3Token.token.length > 1) {
+			throw new Error('Multi entry token are not supported');
+		}
+		const entry = parsedV3Token.token[0];
+		const tokenObj: Token = {
+			mint: entry.mint,
+			proofs: entry.proofs,
+			unit: parsedV3Token.unit || 'sat'
+		};
+		if (parsedV3Token.memo) {
+			tokenObj.memo = parsedV3Token.memo;
+		}
+		return tokenObj;
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
-		const tokenData = decodeCBOR(uInt8Token) as {
-			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
-			m: string;
-			d: string;
-			u: string;
-		};
-		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
-		tokenData.t.forEach((tokenEntry: V4InnerToken) =>
-			tokenEntry.p.forEach((p: V4ProofTemplate) => {
-				mergedTokenEntry.proofs.push({
+		const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
+		const proofs: Array<Proof> = [];
+		tokenData.t.forEach((t) =>
+			t.p.forEach((p) => {
+				proofs.push({
 					secret: p.s,
 					C: bytesToHex(p.c),
 					amount: p.a,
-					id: bytesToHex(tokenEntry.i)
+					id: bytesToHex(t.i)
 				});
 			})
 		);
-		return { token: [mergedTokenEntry], memo: tokenData.d || '', unit: tokenData.u || 'sat' };
+		const decodedToken: Token = { mint: tokenData.m, proofs, unit: tokenData.u || 'sat' };
+		if (tokenData.d) {
+			decodedToken.memo = tokenData.d;
+		}
+		return decodedToken;
 	}
 	throw new Error('Token version is not supported');
 }
@@ -251,6 +290,10 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
+export function sumProofs(proofs: Array<Proof>) {
+	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
+}
+
 function decodePaymentRequest(paymentRequest: string) {
 	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
@@ -263,6 +306,6 @@ export {
 	getEncodedTokenV4,
 	hexToNumber,
 	splitAmount,
-	getDefaultAmountPreference,
+	getKeepAmounts,
 	decodePaymentRequest
 };
