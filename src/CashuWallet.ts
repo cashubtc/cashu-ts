@@ -41,10 +41,9 @@ import {
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 
-
 /**
-  * The default number of proofs per denomination to keep in a wallet.
-*/
+ * The default number of proofs per denomination to keep in a wallet.
+ */
 const DEFAULT_DENOMINATION_TARGET = 3;
 
 /**
@@ -76,7 +75,7 @@ class CashuWallet {
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
 	 * @param options.mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
-	 * @param options.loadMint if set to true info will be loaded from mint 
+	 * @param options.loadMint if set to true info will be loaded from mint
 	 */
 	constructor(
 		mint: CashuMint,
@@ -256,7 +255,7 @@ class CashuWallet {
 	 * @param {(string|Token)} token - Cashu token, either as string or decoded
 	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts 
+	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the @param token secrets if set
@@ -338,7 +337,7 @@ class CashuWallet {
 	 * @param proofs array of proofs (accumulated amount of proofs must be >= than amount)
 	 * @param options.outputAmounts? optionally specify the output's amounts to keep and send.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts 
+	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the output secrets if set
 	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
@@ -461,7 +460,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-				1000,
+					1000,
 				0
 			)
 		);
@@ -479,7 +478,7 @@ class CashuWallet {
 			Math.max(
 				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
-				1000,
+					1000,
 				0
 			)
 		);
@@ -496,7 +495,7 @@ class CashuWallet {
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param options.includeFees? include estimated fees for the receiver to receive the proofs
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts 
+	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the @param proofs secrets if set
 	 * @returns promise of the change- and send-proofs

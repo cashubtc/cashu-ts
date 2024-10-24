@@ -19,7 +19,7 @@ const payRes = await wallet.meltProofs(quote, send);
 
 ---
 
-#### Preference for outputs are now passed  as a object of simple arrays 
+#### Preference for outputs are now passed as a object of simple arrays
 
 **`AmountPreference`** is not used anymore.
 
@@ -28,16 +28,13 @@ const payRes = await wallet.meltProofs(quote, send);
 where
 
 ```typescript
-
 export type OutputAmounts = {
 	sendAmounts: Array<number>;
 	keepAmounts?: Array<number>;
 };
-
-
 ```
 
-#### renamed functions 
+#### renamed functions
 
 - in `SendResponse`, `returnChange` is now called `keep`
 - `CashuWallet.mintTokens()` is now called `CashuWallet.mintProofs()`

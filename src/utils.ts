@@ -25,7 +25,7 @@ import { PaymentRequest } from './model/PaymentRequest.js';
  * Splits the amount into denominations of the provided @param keyset
  * @param value amount to split
  * @param keyset keys to look up split amounts
- * @param split? optional custom split amounts 
+ * @param split? optional custom split amounts
  * @param order? optional order for split amounts (default: "asc")
  * @returns Array of split amounts
  * @throws Error if @param split amount is greater than @param value amount
@@ -34,7 +34,7 @@ export function splitAmount(
 	value: number,
 	keyset: Keys,
 	split?: Array<number>,
-	order?: "desc" | "asc"
+	order?: 'desc' | 'asc'
 ): Array<number> {
 	if (split) {
 		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
@@ -45,18 +45,17 @@ export function splitAmount(
 				)} > ${value}`
 			);
 		}
-		split.forEach((amt: number)  => {
+		split.forEach((amt: number) => {
 			if (!hasCorrespondingKey(amt, keyset)) {
 				throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 			}
-		})
+		});
 		value =
 			value -
 			split.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
-	}
-	else {
+	} else {
 		split = [];
 	}
 	const sortedKeyAmounts = getKeysetAmounts(keyset);
@@ -114,7 +113,7 @@ export function getKeepAmounts(
  * @param order order to sort the amounts in
  * @returns the amounts in the keyset sorted by the order specified
  */
-export function getKeysetAmounts(keyset: Keys, order: "asc" | "desc" = 'desc'): Array<number> {
+export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): Array<number> {
 	if (order == 'desc') {
 		return Object.keys(keyset)
 			.map((k: string) => parseInt(k))
@@ -154,11 +153,11 @@ export function hexToNumber(hex: string): bigint {
 }
 
 /**
-  * Helper function to stringify a bigint
-  * @param _key 
-  * @param value to stringify
-  * @returns stringified bigint
-  */
+ * Helper function to stringify a bigint
+ * @param _key
+ * @param value to stringify
+ * @returns stringified bigint
+ */
 export function bigIntStringify<T>(_key: unknown, value: T): string | T {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
@@ -173,10 +172,10 @@ export function getEncodedToken(token: Token): string {
 }
 
 /**
-  * Helper function to encode a v4 cashu token
-  * @param token to encode
-  * @returns encoded token
-  */
+ * Helper function to encode a v4 cashu token
+ * @param token to encode
+ * @returns encoded token
+ */
 export function getEncodedTokenV4(token: Token): string {
 	const idMap: { [id: string]: Array<Proof> } = {};
 	let mint: string | undefined = undefined;
