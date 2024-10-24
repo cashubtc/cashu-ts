@@ -46,9 +46,9 @@ type MintQuoteResponse = {
 };
 ```
 
-where `request` is the invoice to be paid, and `quote` is the identifier used to pass to `mintProofs()`.
+where `request` is the invoice to be paid, and `quote` is the identifier used to pass to `mintTokens()`.
 
-**`requestTokens()` --> `mintProofs()`**
+**`requestTokens()` --> `mintTokens()`**
 
 ---
 
@@ -67,7 +67,7 @@ type MeltQuoteResponse = {
 };
 ```
 
-where `quote` is the identifier to pass to `meltProofs()`
+where `quote` is the identifier to pass to `meltTokens()`
 
 ---
 
@@ -116,17 +116,6 @@ type BlindedMessage {
 	id: string;
 }
 ```
-
----
-
-**`amountPreference`** is not used anymore.
-
-`preference?: Array<AmountPreference>;` -> `outputAmounts?: OutputAmounts;`
-
-- in `SendResponse`, `returnChange` is now called `keep`
-- `mintTokens` is now called `mintProofs`
-- `meltTokens` is now called `meltProofs`
-- `CashuMint.split` is now called `CashuMint.swap`
 
 ---
 

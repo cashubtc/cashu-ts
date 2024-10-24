@@ -16,3 +16,30 @@ const totalAmount = quote.fee_reserve + invoiceAmount;
 const { keep, send } = await wallet.send(totalAmount, proofs);
 const payRes = await wallet.meltProofs(quote, send);
 ```
+
+---
+
+#### Preference for outputs are now passed  as a object of simple arrays 
+
+**`AmountPreference`** is not used anymore.
+
+`preference?: Array<AmountPreference>;` -> `outputAmounts?: OutputAmounts;`
+
+where
+
+```typescript
+
+export type OutputAmounts = {
+	sendAmounts: Array<number>;
+	keepAmounts?: Array<number>;
+};
+
+
+```
+
+#### renamed functions 
+
+- in `SendResponse`, `returnChange` is now called `keep`
+- `CashuWallet.mintTokens()` is now called `CashuWallet.mintProofs()`
+- `CashuWallet.meltTokens()` is now called `CashuWallet.meltProofs()`
+- `CashuMint.split()` is now called `CashuMint.swap()`
