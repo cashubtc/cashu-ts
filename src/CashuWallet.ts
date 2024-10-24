@@ -69,14 +69,14 @@ class CashuWallet {
 
 	/**
 	 * @param mint Cashu mint instance is used to make api calls
-	 * @param unit optionally set unit (default is 'sat')
-	 * @param keys public keys from the mint (will be fetched from mint if not provided)
-	 * @param keysets keysets from the mint (will be fetched from mint if not provided)
-	 * @param mintInfo mint info from the mint (will be fetched from mint if not provided)
-	 * @param denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
-	 * @param mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
+	 * @param options.unit optionally set unit (default is 'sat')
+	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
+	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
+	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
+	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
+	 * @param options.mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
-	 * @param loadMint if set to true info will be loaded from mint 
+	 * @param options.loadMint if set to true info will be loaded from mint 
 	 */
 	constructor(
 		mint: CashuMint,
