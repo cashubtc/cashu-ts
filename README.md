@@ -62,7 +62,7 @@ npm i @cashu/cashu-ts
 import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338'; // the mint URL
 const mint = new CashuMint(mintUrl);
-const wallet = new CashuWallet(mint);
+const wallet = new CashuWallet(mint, { loadMint: true });
 const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
@@ -98,7 +98,13 @@ const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 #### Create a token and receive it
 
 ```typescript
+// we assume that `wallet` already minted `proofs`, as above
+const wallet2 = new CashuWallet(mint, { loadMint: true }) // receiving wallet
+const { keep, send } = await wallet.send(32, proofs);
+const token = getEncodedTokenV4({ token: [{ mint: mintUrl, proofs: send }] });
+console.log(token);
 
+const receiveProofs = await wallet2.receive(token);
 ```
 
 ## Contribute
