@@ -88,7 +88,7 @@ export function getKeepAmounts(
 	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
 	sortedKeyAmounts.forEach((amt) => {
 		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
-		const countWeWant = Math.floor(targetCount - countWeHave);
+		const countWeWant = Math.max(targetCount - countWeHave, 0);
 		for (let i = 0; i < countWeWant; ++i) {
 			if (amountsWeWant.reduce((a, b) => a + b, 0) + amt > amountToKeep) {
 				break;

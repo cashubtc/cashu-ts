@@ -73,7 +73,7 @@ class CashuWallet {
 	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
 	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
-	 * @param options.mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallets deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
+	 * @param options.mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallet's deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 * @param options.loadMint if set to true info will be loaded from mint
 	 */
@@ -195,7 +195,7 @@ class CashuWallet {
 
 	/**
 	 * Get keysets from the mint with the unit of the wallet
-	 * @returns keysets with wallets unit
+	 * @returns keysets with wallet's unit
 	 */
 	async getKeySets(): Promise<Array<MintKeyset>> {
 		const allKeysets = await this.mint.getKeySets();
