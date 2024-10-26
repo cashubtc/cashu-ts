@@ -166,12 +166,6 @@ class CashuWallet {
 	 */
 	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active);
-		// begin deprecated: if there are keyset IDs that are not hex strings, we need to filter them out
-		const hexKeysets = activeKeysets.filter((k: MintKeyset) => /^[0-9a-fA-F]+$/.test(k.id));
-		if (hexKeysets.length > 0) {
-			activeKeysets = hexKeysets;
-		}
-		// end deprecated
 
 		// we only consider keyset IDs that start with "00"
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
