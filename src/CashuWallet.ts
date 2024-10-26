@@ -75,7 +75,6 @@ class CashuWallet {
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
 	 * @param options.mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallet's deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
 	 * This can lead to poor performance, in which case the seed should be directly provided
-	 * @param options.loadMint if set to true info will be loaded from mint
 	 */
 	constructor(
 		mint: CashuMint,
@@ -86,7 +85,6 @@ class CashuWallet {
 			mintInfo?: GetInfoResponse;
 			mnemonicOrSeed?: string | Uint8Array;
 			denominationTarget?: number;
-			loadMint?: boolean;
 		}
 	) {
 		this.mint = mint;
@@ -101,16 +99,6 @@ class CashuWallet {
 		if (options?.keysets) this._keysets = options.keysets;
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
-		}
-
-		if (options?.loadMint) {
-			this.loadMint()
-				.then(() => {
-					console.log('Mint loaded');
-				})
-				.catch((e: Error) => {
-					console.error('Failed to load mint', e);
-				});
 		}
 
 		if (!options?.mnemonicOrSeed) {
@@ -184,6 +172,10 @@ class CashuWallet {
 			activeKeysets = hexKeysets;
 		}
 		// end deprecated
+
+		// we only consider keyset IDs that start with "00"
+		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
+
 		const activeKeyset = activeKeysets.sort(
 			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0)
 		)[0];
@@ -226,28 +218,31 @@ class CashuWallet {
 	 * @returns keyset
 	 */
 	async getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys> {
+		if (!(this._keysets.length > 0) || forceRefresh) {
+			await this.getKeySets();
+		}
+		// no keyset id is chosen, let's choose one
 		if (!keysetId) {
-			if (!(this._keysets.length > 0) || forceRefresh) {
-				const allKeysets = await this.mint.getKeySets();
-				const keysetToActivate = this.getActiveKeyset(allKeysets.keysets);
-				keysetId = keysetToActivate.id;
-			} else {
-				const localKeyset = this.getActiveKeyset(this._keysets);
-				keysetId = localKeyset.id;
+			const localKeyset = this.getActiveKeyset(this._keysets);
+			keysetId = localKeyset.id;
+		}
+		// make sure we have keyset for this id
+		if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
+			await this.getKeySets();
+			if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
+				throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
 			}
 		}
-		if (this._keys.get(keysetId)) {
-			this.keysetId = keysetId;
-			return this._keys.get(keysetId) as MintKeys;
+
+		// make sure we have keys for this id
+		if (!this._keys.get(keysetId)) {
+			const keys = await this.mint.getKeys(keysetId);
+			this._keys.set(keysetId, keys.keysets[0]);
 		}
-		const allKeysets = await this.mint.getKeys(keysetId);
-		const keyset = allKeysets.keysets[0];
-		if (!keyset) {
-			throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
-		}
-		this._keys.set(keysetId, keyset);
+
+		// set and return
 		this.keysetId = keysetId;
-		return keyset;
+		return this._keys.get(keysetId) as MintKeys;
 	}
 
 	/**
@@ -276,13 +271,7 @@ class CashuWallet {
 			token = getDecodedToken(token);
 		}
 		const tokenEntries: Array<TokenEntry> = token.token;
-		const proofs = await this.receiveTokenEntry(tokenEntries[0], {
-			keysetId: options?.keysetId,
-			outputAmounts: options?.outputAmounts,
-			counter: options?.counter,
-			pubkey: options?.pubkey,
-			privkey: options?.privkey
-		});
+		const proofs = await this.receiveTokenEntry(tokenEntries[0], options);
 		return proofs;
 	}
 
@@ -307,10 +296,10 @@ class CashuWallet {
 		}
 	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
+		const keys = await this.getKeys(options?.keysetId);
 		const amount =
 			tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
 			this.getFeesForProofs(tokenEntry.proofs);
-		const keys = await this.getKeys(options?.keysetId);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
 			tokenEntry.proofs,
@@ -452,6 +441,16 @@ class CashuWallet {
 	 * @returns fee amount
 	 */
 	getFeesForProofs(proofs: Array<Proof>): number {
+		if (!this._keysets.length) {
+			throw new Error('Could not calculate fees. No keysets found');
+		}
+		const keysetIds = new Set(proofs.map((p: Proof) => p.id));
+		keysetIds.forEach((id: string) => {
+			if (!this._keysets.find((k: MintKeyset) => k.id === id)) {
+				throw new Error(`Could not calculate fees. No keyset found with id: ${id}`);
+			}
+		});
+
 		const fees = Math.floor(
 			Math.max(
 				(proofs.reduce(

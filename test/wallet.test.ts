@@ -407,6 +407,7 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
+		await wallet.getKeys();
 		const result = await wallet.send(4, overpayProofs, {
 			// preference: { sendPreference: [{ amount: 1, count: 4 }] }
 			outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] }
@@ -465,6 +466,7 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
+		await wallet.getKeys();
 		const result = await wallet.send(3, overpayProofs, {
 			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [1] }
 		});
@@ -519,12 +521,13 @@ describe('send', () => {
 describe('deterministic', () => {
 	test('no seed', async () => {
 		const wallet = new CashuWallet(mint);
+		await wallet.getKeys();
 		const result = await wallet
 			.send(
 				1,
 				[
 					{
-						id: 'z32vUtKgNCm1',
+						id: '009a1f293253e41e',
 						amount: 2,
 						secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 						C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
