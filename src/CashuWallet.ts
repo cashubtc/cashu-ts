@@ -380,7 +380,7 @@ class CashuWallet {
 		return { keep: keepProofsOffline, send: sendProofOffline };
 	}
 
-	private selectProofsToSend(
+	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
 		includeFees?: boolean
