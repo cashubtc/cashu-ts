@@ -19,28 +19,6 @@ export type BlindedMessageData = {
 };
 
 /**
- * Data that the library needs to hold in memory while it awaits the blinded signatures for the mint. It is later used for unblinding the signatures.
- */
-export type BlindedTransaction = {
-	/**
-	 * Blinded messages sent to the mint for signing.
-	 */
-	blindedMessages: Array<SerializedBlindedMessage>;
-	/**
-	 * secrets, kept client side for constructing proofs later.
-	 */
-	secrets: Array<Uint8Array>;
-	/**
-	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint.
-	 */
-	rs: Array<bigint>;
-	/**
-	 * amounts denominated in Satoshi
-	 */
-	amounts: Array<number>;
-};
-
-/**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
  */
 export type MeltPayload = {

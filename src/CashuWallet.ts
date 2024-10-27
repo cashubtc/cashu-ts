@@ -3,7 +3,6 @@ import { CashuMint } from './CashuMint.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
 	type BlindedMessageData,
-	type BlindedTransaction,
 	type MeltPayload,
 	type MeltQuoteResponse,
 	type MintKeys,
@@ -294,7 +293,7 @@ class CashuWallet {
 		const amount =
 			tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
 			this.getFeesForProofs(tokenEntry.proofs);
-		const { payload, blindedMessages } = this.createSwapPayload(
+		const { payload, blindedMessageData } = this.createSwapPayload(
 			amount,
 			tokenEntry.proofs,
 			keys,
@@ -306,8 +305,8 @@ class CashuWallet {
 		const { signatures } = await this.mint.swap(payload);
 		const newProofs = this.constructProofs(
 			signatures,
-			blindedMessages.rs,
-			blindedMessages.secrets,
+			blindedMessageData.rs,
+			blindedMessageData.secrets,
 			keys
 		);
 		proofs.push(...newProofs);
@@ -566,7 +565,7 @@ class CashuWallet {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
-		const { payload, blindedMessages } = this.createSwapPayload(
+		const { payload, blindedMessageData } = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
 			keyset,
@@ -578,8 +577,8 @@ class CashuWallet {
 		const { signatures } = await this.mint.swap(payload);
 		const swapProofs = this.constructProofs(
 			signatures,
-			blindedMessages.rs,
-			blindedMessages.secrets,
+			blindedMessageData.rs,
+			blindedMessageData.secrets,
 			keyset
 		);
 		const splitProofsToKeep: Array<Proof> = [];
@@ -810,7 +809,7 @@ class CashuWallet {
 		privkey?: string
 	): {
 		payload: SwapPayload;
-		blindedMessages: BlindedTransaction;
+		blindedMessageData: BlindedMessageData;
 	} {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
@@ -850,21 +849,20 @@ class CashuWallet {
 		}
 
 		// join keepBlindedMessages and sendBlindedMessages
-		const blindedMessages: BlindedTransaction = {
+		const blindedMessageData: BlindedMessageData = {
 			blindedMessages: [
 				...keepBlindedMessages.blindedMessages,
 				...sendBlindedMessages.blindedMessages
 			],
 			secrets: [...keepBlindedMessages.secrets, ...sendBlindedMessages.secrets],
-			rs: [...keepBlindedMessages.rs, ...sendBlindedMessages.rs],
-			amounts: [...keepBlindedMessages.amounts, ...sendBlindedMessages.amounts]
+			rs: [...keepBlindedMessages.rs, ...sendBlindedMessages.rs]
 		};
 
 		const payload = {
 			inputs: proofsToSend,
-			outputs: [...blindedMessages.blindedMessages]
+			outputs: [...blindedMessageData.blindedMessages]
 		};
-		return { payload, blindedMessages };
+		return { payload, blindedMessageData };
 	}
 	/**
 	 * returns proofs that are already spent (use for keeping wallet state clean)
