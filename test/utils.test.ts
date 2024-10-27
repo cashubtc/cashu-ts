@@ -1,4 +1,4 @@
-import { AmountPreference, Token, Keys } from '../src/model/types/index.js';
+import { Token, Keys, Proof } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';
 
@@ -29,31 +29,36 @@ describe('test split amounts ', () => {
 });
 
 describe('test split custom amounts ', () => {
-	const fiveToOne: AmountPreference = { amount: 1, count: 5 };
+	const fiveToOne = [1, 1, 1, 1, 1];
 	test('testing amount 5', async () => {
-		const chunks = utils.splitAmount(5, keys, [fiveToOne]);
+		const chunks = utils.splitAmount(5, keys, fiveToOne);
 		expect(chunks).toStrictEqual([1, 1, 1, 1, 1]);
 	});
-	const tenToOneAndTwo: Array<AmountPreference> = [
-		{ amount: 1, count: 2 },
-		{ amount: 2, count: 4 }
-	];
+	const tenToOneAndTwo = [1, 1, 2, 2, 2, 2];
 	test('testing amount 10', async () => {
 		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
 		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
-	const fiveTwelve: Array<AmountPreference> = [{ amount: 512, count: 2 }];
+	test('testing amount 12', async () => {
+		const chunks = utils.splitAmount(12, keys, tenToOneAndTwo);
+		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2, 2]);
+	});
+	const fiveTwelve = [512];
 	test('testing amount 518', async () => {
-		const chunks = utils.splitAmount(518, keys, fiveTwelve, true);
+		const chunks = utils.splitAmount(518, keys, fiveTwelve, 'desc');
 		expect(chunks).toStrictEqual([512, 4, 2]);
 	});
-	const illegal: Array<AmountPreference> = [{ amount: 3, count: 2 }];
+	const tooMuch = [512, 512];
+	test('testing amount 512 but split too much', async () => {
+		expect(() => utils.splitAmount(512, keys, tooMuch)).toThrowError();
+	});
+	const illegal = [3, 3];
 	test('testing non pow2', async () => {
 		expect(() => utils.splitAmount(6, keys, illegal)).toThrowError();
 	});
-	const empty: Array<AmountPreference> = [];
+	const empty: Array<number> = [];
 	test('testing empty', async () => {
-		const chunks = utils.splitAmount(5, keys, empty, true);
+		const chunks = utils.splitAmount(5, keys, empty, 'desc');
 		expect(chunks).toStrictEqual([4, 1]);
 	});
 	const undef = undefined;
@@ -65,7 +70,7 @@ describe('test split custom amounts ', () => {
 
 describe('test split different key amount', () => {
 	test('testing amount 68251', async () => {
-		const chunks = utils.splitAmount(68251, keys_base10, undefined, true);
+		const chunks = utils.splitAmount(68251, keys_base10, undefined, 'desc');
 		expect(chunks).toStrictEqual([
 			10000, 10000, 10000, 10000, 10000, 10000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 100,
 			100, 10, 10, 10, 10, 10, 1
@@ -287,5 +292,35 @@ describe('test v4 encoding', () => {
 		const decodedExpectedToken = utils.getDecodedToken(encodedV4);
 		expect(decodedEncodedToken).toEqual(v3Token);
 		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
+	});
+});
+
+describe('test output selection', () => {
+	test('keep amounts', () => {
+		const amountsWeHave = [1, 2, 4, 4, 4, 8];
+		const proofsWeHave = amountsWeHave.map((amount) => {
+			return {
+				amount: amount,
+				id: 'id',
+				C: 'C'
+			} as Proof;
+		});
+		const keys = PUBKEYS as Keys;
+
+		// info: getKeepAmounts returns the amounts we need to fill up
+		// the wallet to a target number of denominations plus an optimal
+		// split of the remaining amount (to reach the total amount)
+
+		let amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 3);
+		// keeping 22 with a target count of 3, we expect two 1s, two 2s, no 4s, and two 8s, and no extra to reach 22
+		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
+
+		// keeping 22 with a target count of 4, we expect three 1s, three 2s, one 4, and one 8 and another 1 to reach 22
+		amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 4);
+		expect(amountsToKeep).toEqual([1, 1, 1, 1, 2, 2, 2, 4, 8]);
+
+		// keeping 22 with a target of 2, we expect one 1, one 2, no 4s, one 8, and another 1, 2, 8 to reach 22
+		amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 2);
+		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
 	});
 });
