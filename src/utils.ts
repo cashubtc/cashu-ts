@@ -165,13 +165,13 @@ export function bigIntStringify<T>(_key: unknown, value: T): string | T {
  * @param token to encode
  * @returns encoded token
  */
-function getEncodedToken(token: Token): string {
+export function getEncodedToken(token: Token): string {
 	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
 	}
 	if (token.memo) {
-		v3TokenObj.memo = token.unit;
+		v3TokenObj.memo = token.memo;
 	}
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
 }
