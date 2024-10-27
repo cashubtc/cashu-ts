@@ -3,7 +3,7 @@ import { Proof } from './index';
 /**
  * Data that the library needs to hold in memory while it awaits the blinded signatures for the mint. It is later used for unblinding the signatures.
  */
-export type BlindedMessageData = {
+export type BlindingData = {
 	/**
 	 * Blinded messages sent to the mint for signing.
 	 */
@@ -15,7 +15,7 @@ export type BlindedMessageData = {
 	/**
 	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint.
 	 */
-	rs: Array<bigint>;
+	blindingFactors: Array<bigint>;
 };
 
 /**
