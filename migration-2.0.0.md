@@ -40,3 +40,11 @@ export type OutputAmounts = {
 - `CashuWallet.mintTokens()` is now called `CashuWallet.mintProofs()`
 - `CashuWallet.meltTokens()` is now called `CashuWallet.meltProofs()`
 - `CashuMint.split()` is now called `CashuMint.swap()`
+
+### Type changes
+
+#### Wallet payload types
+
+- `BlindedTransaction` has been removed
+- `BlindedMessageData` has been replaced by `BlindingData`
+  - In `BlindingData` `rs` has been renamed to `blindingFactors`
