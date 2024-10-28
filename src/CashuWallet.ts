@@ -263,9 +263,7 @@ class CashuWallet {
 			token = getDecodedToken(token);
 		}
 		const keys = await this.getKeys(options?.keysetId);
-		const amount =
-			token.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
-			this.getFeesForProofs(token.proofs);
+		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
 		const { payload, blindedMessages } = this.createSwapPayload(
 			amount,
 			token.proofs,
