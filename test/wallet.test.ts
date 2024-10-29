@@ -1,7 +1,12 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse, MeltQuoteState, OutputAmounts } from '../src/model/types/index.js';
+import {
+	CheckStateEnum,
+	MeltQuoteResponse,
+	MeltQuoteState,
+	OutputAmounts
+} from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
 import { Proof } from '@cashu/crypto/modules/common';
 
@@ -222,6 +227,28 @@ describe('checkProofsSpent', () => {
 		const result = await wallet.checkProofsSpent(proofs);
 
 		expect(result).toStrictEqual([]);
+	});
+});
+
+describe('checkProofsStates', () => {
+	const proofs = [
+		{
+			id: '009a1f293253e41e',
+			amount: 1,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		}
+	];
+	test('test checkProofsStates - get proofs that are NOT spendable', async () => {
+		nock(mintUrl)
+			.post('/v1/checkstate')
+			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
+		const wallet = new CashuWallet(mint, { unit });
+
+		const result = await wallet.checkProofsStates(proofs);
+		result.forEach((r) => {
+			expect(r).toEqual(CheckStateEnum.UNSPENT);
+		});
 	});
 });
 

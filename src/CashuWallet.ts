@@ -891,6 +891,20 @@ class CashuWallet {
 		});
 	}
 
+	async checkProofsStates(proofs: Array<Proof>): Promise<Array<CheckStateEnum>> {
+		const enc = new TextEncoder();
+		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		const BATCH_SIZE = 100;
+		const states: Array<CheckStateEnum> = [];
+		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
+			const { states: batchStates } = await this.mint.check({
+				Ys: Ys.slice(i, i + BATCH_SIZE)
+			});
+			states.push(...batchStates.map((state: CheckStateEntry) => state.state));
+		}
+		return states;
+	}
+
 	/**
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for

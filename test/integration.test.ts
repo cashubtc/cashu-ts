@@ -5,7 +5,7 @@ import dns from 'node:dns';
 import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
-import { MeltQuoteState } from '../src/model/types/index.js';
+import { CheckStateEnum, MeltQuoteState } from '../src/model/types/index.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -100,14 +100,18 @@ describe('mint api', () => {
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
 
 		// check states of spent and kept proofs after payment
-		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
-		expect(sentProofsSpent).toBeDefined();
-		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
-		expect(sentProofsSpent).toEqual(sendResponse.send);
+		const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+		expect(sentProofsStates).toBeDefined();
+		// expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
+		sentProofsStates.forEach((state) => {
+			expect(state).toBe(CheckStateEnum.SPENT);
+		});
 		// expect none of the sendResponse.keep to be spent
-		const keepSpent = await wallet.checkProofsSpent(sendResponse.keep);
-		expect(keepSpent).toBeDefined();
-		expect(keepSpent).toEqual([]);
+		const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
+		expect(keepProofsStates).toBeDefined();
+		keepProofsStates.forEach((state) => {
+			expect(state).toBe(CheckStateEnum.UNSPENT);
+		});
 	});
 	test('pay external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -131,14 +135,18 @@ describe('mint api', () => {
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBeLessThan(fee);
 
 		// check states of spent and kept proofs after payment
-		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
-		expect(sentProofsSpent).toBeDefined();
-		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
-		expect(sentProofsSpent).toEqual(sendResponse.send);
+		const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+		expect(sentProofsStates).toBeDefined();
+		// expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
+		sentProofsStates.forEach((state) => {
+			expect(state).toBe(CheckStateEnum.SPENT);
+		});
 		// expect none of the sendResponse.keep to be spent
-		const keepSpent = await wallet.checkProofsSpent(sendResponse.keep);
-		expect(keepSpent).toBeDefined();
-		expect(keepSpent).toEqual([]);
+		const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
+		expect(keepProofsStates).toBeDefined();
+		keepProofsStates.forEach((state) => {
+			expect(state).toBe(CheckStateEnum.UNSPENT);
+		});
 	});
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
