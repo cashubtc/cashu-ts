@@ -154,8 +154,20 @@ function isValidHex(str: string) {
 	return /^[a-f0-9]*$/i.test(str);
 }
 
+/**
+ * Checks wether a proof or a list of proofs contains a non-hex id
+ * @param p Proof or list of proofs
+ * @returns boolean
+ */
+export function hasNonHexId(p: Proof | Array<Proof>) {
+	if (Array.isArray(p)) {
+		return p.some((proof) => !isValidHex(proof.id));
+	}
+	return isValidHex(p.id);
+}
+
 //used for json serialization
-function bigIntStringify<T>(_key: unknown, value: T) {
+export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
@@ -164,7 +176,7 @@ function bigIntStringify<T>(_key: unknown, value: T) {
  * @param token to encode
  * @returns encoded token
  */
-export function getEncodedToken(token: Token): string {
+export function getEncodedTokenV3(token: Token): string {
 	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
@@ -180,9 +192,9 @@ export function getEncodedToken(token: Token): string {
  * @param token
  * @param [opts]
  */
-function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
-	const hasNonHexId = token.proofs.some((p) => !isValidHex(p.id));
-	if (hasNonHexId || opts?.version === 3) {
+export function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
+	const nonHex = hasNonHexId(token.proofs);
+	if (nonHex || opts?.version === 3) {
 		if (opts?.version === 4) {
 			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 		}
@@ -191,7 +203,11 @@ function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
 	return getEncodedTokenV4(token);
 }
 
-function getEncodedTokenV4(token: Token): string {
+export function getEncodedTokenV4(token: Token): string {
+	const nonHex = hasNonHexId(token.proofs);
+	if (nonHex) {
+		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+	}
 	const idMap: { [id: string]: Array<Proof> } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
