@@ -34,6 +34,10 @@ export type OutputAmounts = {
 };
 ```
 
+#### `checkProofsStates` replaces `checkProofsSpent`
+
+To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkProofsStates` now returns an array of `CheckStateEnum` for each proof provided. States are now `CheckStateEnum.SPENT`, `CheckStateEnum.UNSPENT`, and `CheckStateEnum.PENDING`.
+
 #### renamed functions
 
 - in `SendResponse`, `returnChange` is now called `keep`
