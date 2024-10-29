@@ -178,6 +178,16 @@ export type PostRestoreResponse = {
 	promises: Array<SerializedBlindedSignature>;
 };
 
+/*
+ * Zero-Knowledge that BlindedSignature
+ * was generated using a specific public key
+ */
+export type SerializedDLEQ = {
+	s: string;
+	e: string;
+	r?: string;
+};
+
 /**
  * Blinded signature as it is received from the mint
  */
@@ -194,6 +204,10 @@ export type SerializedBlindedSignature = {
 	 * Blinded signature
 	 */
 	C_: string;
+	/**
+	 * DLEQ Proof
+	 */
+	dleq?: SerializedDLEQ;
 };
 
 /**

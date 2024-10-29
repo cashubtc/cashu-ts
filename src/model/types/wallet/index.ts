@@ -1,3 +1,5 @@
+import { SerializedDLEQ } from '../mint';
+
 export * from './payloads';
 export * from './responses';
 export * from './tokens';
@@ -23,6 +25,10 @@ export type Proof = {
 	 * The unblinded signature for this secret, signed by the mints private key.
 	 */
 	C: string;
+	/**
+	 * DLEQ proof
+	 */
+	dleq?: SerializedDLEQ;
 };
 
 /**

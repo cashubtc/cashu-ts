@@ -1,4 +1,4 @@
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
@@ -38,7 +38,8 @@ import {
 	deriveSeedFromMnemonic
 } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -276,6 +277,7 @@ class CashuWallet {
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the @param tokenEntry secrets if set
+	 * @param options.requireDLEQ? optionally require a DLEQ proof from the mint
 	 * @returns {Promise<Array<Proof>>} New token entry with newly created proofs, proofs that had errors
 	 */
 	async receiveTokenEntry(
@@ -286,6 +288,7 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
+			requireDLEQ?: boolean;
 		}
 	): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
@@ -303,11 +306,13 @@ class CashuWallet {
 			options?.privkey
 		);
 		const { signatures } = await this.mint.swap(payload);
+		const requireDleq = options?.requireDLEQ;
 		const newProofs = this.constructProofs(
 			signatures,
 			blindingData.blindingFactors,
 			blindingData.secrets,
-			keys
+			keys,
+			requireDleq ?? false
 		);
 		proofs.push(...newProofs);
 		return proofs;
@@ -490,6 +495,7 @@ class CashuWallet {
 	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the @param proofs secrets if set
+	 * @param options.requireDLEQ? optionally require a DLEQ proof from the mint.
 	 * @returns promise of the change- and send-proofs
 	 */
 	async swap(
@@ -503,6 +509,7 @@ class CashuWallet {
 			privkey?: string;
 			keysetId?: string;
 			includeFees?: boolean;
+			requireDLEQ?: boolean;
 		}
 	): Promise<SendResponse> {
 		if (!options) options = {};
@@ -575,11 +582,13 @@ class CashuWallet {
 			options?.privkey
 		);
 		const { signatures } = await this.mint.swap(payload);
+		const requireDleq = options?.requireDLEQ;
 		const swapProofs = this.constructProofs(
 			signatures,
 			blindingData.blindingFactors,
 			blindingData.secrets,
-			keyset
+			keyset,
+			requireDleq ?? false
 		);
 		const splitProofsToKeep: Array<Proof> = [];
 		const splitProofsToSend: Array<Proof> = [];
@@ -603,6 +612,7 @@ class CashuWallet {
 	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count set number of blinded messages that should be generated
 	 * @param options.keysetId set a custom keysetId to restore from. keysetIds can be loaded with `CashuMint.getKeySets()`
+	 * @param options.requireDLEQ require a DLEQ proof
 	 * @returns proofs
 	 */
 	async restore(
@@ -610,6 +620,7 @@ class CashuWallet {
 		count: number,
 		options?: {
 			keysetId?: string;
+			requireDLEQ?: boolean;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -633,9 +644,15 @@ class CashuWallet {
 		const validSecrets = secrets.filter((_: Uint8Array, i: number) =>
 			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
 		);
-
+		const requireDleq = options?.requireDLEQ;
 		return {
-			proofs: this.constructProofs(promises, validBlindingFactors, validSecrets, keys)
+			proofs: this.constructProofs(
+				promises,
+				validBlindingFactors,
+				validSecrets,
+				keys,
+				requireDleq ?? false
+			)
 		};
 	}
 
@@ -672,6 +689,7 @@ class CashuWallet {
 	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param options.requireDLEQ? optionally require a DLEQ proof.
 	 * @returns proofs
 	 */
 	async mintProofs(
@@ -683,6 +701,7 @@ class CashuWallet {
 			proofsWeHave?: Array<Proof>;
 			counter?: number;
 			pubkey?: string;
+			requireDLEQ?: boolean;
 		}
 	): Promise<{ proofs: Array<Proof> }> {
 		const keyset = await this.getKeys(options?.keysetId);
@@ -710,8 +729,15 @@ class CashuWallet {
 			quote: quote
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
+		const requireDleq = options?.requireDLEQ;
 		return {
-			proofs: this.constructProofs(signatures, blindingFactors, secrets, keyset)
+			proofs: this.constructProofs(
+				signatures,
+				blindingFactors,
+				secrets,
+				keyset,
+				requireDleq ?? false
+			)
 		};
 	}
 
@@ -756,6 +782,7 @@ class CashuWallet {
 			keysetId?: string;
 			counter?: number;
 			privkey?: string;
+			requireDLEQ?: boolean;
 		}
 	): Promise<MeltProofsResponse> {
 		const keys = await this.getKeys(options?.keysetId);
@@ -784,8 +811,15 @@ class CashuWallet {
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
 		let change: Array<Proof> = [];
+		const requireDleq = options?.requireDLEQ;
 		if (meltResponse.change) {
-			change = this.constructProofs(meltResponse.change, blindingFactors, secrets, keys);
+			change = this.constructProofs(
+				meltResponse.change,
+				blindingFactors,
+				secrets,
+				keys,
+				requireDleq ?? false
+			);
 		}
 		return {
 			quote: meltResponse,
@@ -987,23 +1021,58 @@ class CashuWallet {
 	 * @param rs arrays of binding factors
 	 * @param secrets array of secrets
 	 * @param keyset mint keyset
+	 * @param verifyDLEQ require proof of same secret (DLEQ)
 	 * @returns array of serialized proofs
 	 */
 	private constructProofs(
 		promises: Array<SerializedBlindedSignature>,
 		rs: Array<bigint>,
 		secrets: Array<Uint8Array>,
-		keyset: MintKeys
+		keyset: MintKeys,
+		verifyDLEQ: boolean
 	): Array<Proof> {
-		return promises
-			.map((p: SerializedBlindedSignature, i: number) => {
-				const blindSignature = { id: p.id, amount: p.amount, C_: pointFromHex(p.C_) };
-				const r = rs[i];
-				const secret = secrets[i];
-				const A = pointFromHex(keyset.keys[p.amount]);
-				return constructProofFromPromise(blindSignature, r, secret, A);
-			})
-			.map((p: NUT11Proof) => serializeProof(p) as Proof);
+		return promises.map((p: SerializedBlindedSignature, i: number) => {
+			const dleq =
+				p.dleq == undefined
+					? undefined
+					: ({
+							s: hexToBytes(p.dleq.s),
+							e: hexToBytes(p.dleq.e),
+							r: rs[i]
+					} as DLEQ);
+			const blindSignature = {
+				id: p.id,
+				amount: p.amount,
+				C_: pointFromHex(p.C_),
+				dleq: dleq
+			};
+			const r = rs[i];
+			const secret = secrets[i];
+			const A = pointFromHex(keyset.keys[p.amount]);
+			const proof = constructProofFromPromise(blindSignature, r, secret, A);
+			if (verifyDLEQ) {
+				if (dleq == undefined) {
+					throw new Error('DLEQ verification required, but none found');
+				}
+				if (!verifyDLEQProof_reblind(secret, dleq, proof.C, A)) {
+					throw new Error('DLEQ verification failed');
+				}
+			}
+			return {
+				id: proof.id,
+				amount: proof.amount,
+				secret: bytesToHex(proof.secret),
+				C: proof.C.toHex(true),
+				dleq:
+					dleq == undefined
+						? undefined
+						: {
+								s: bytesToHex(dleq.s),
+								e: bytesToHex(dleq.e),
+								r: dleq.r?.toString(16)
+						}
+			} as Proof;
+		});
 	}
 }
 
