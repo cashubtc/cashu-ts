@@ -879,11 +879,14 @@ class CashuWallet {
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const enc = new TextEncoder();
 		const Ys = proofs.map((p: T) => hashToCurve(enc.encode(p.secret)).toHex(true));
-		const payload = {
-			// array of Ys of proofs to check
-			Ys: Ys
-		};
-		const { states } = await this.mint.check(payload);
+		const BATCH_SIZE = 100;
+		const states: Array<CheckStateEntry> = [];
+		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
+			const { states: batchStates } = await this.mint.check({
+				Ys: Ys.slice(i, i + BATCH_SIZE)
+			});
+			states.push(...batchStates);
+		}
 
 		return proofs.filter((_: T, i: number) => {
 			const state = states.find((state: CheckStateEntry) => state.Y === Ys[i]);
@@ -891,6 +894,11 @@ class CashuWallet {
 		});
 	}
 
+	/**
+	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
+	 * @param proofs (only the `secret` field is required)
+	 * @returns
+	 */
 	async checkProofsStates(proofs: Array<Proof>): Promise<Array<CheckStateEnum>> {
 		const enc = new TextEncoder();
 		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
