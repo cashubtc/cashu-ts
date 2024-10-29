@@ -1,9 +1,8 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse, MeltQuoteState, OutputAmounts } from '../src/model/types/index.js';
+import { MeltQuoteResponse } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
-import { Proof } from '@cashu/crypto/modules/common';
 
 const dummyKeysResp = {
 	keysets: [

@@ -264,7 +264,7 @@ class CashuWallet {
 		}
 		const keys = await this.getKeys(options?.keysetId);
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		const { payload, blindedMessages } = this.createSwapPayload(
+		const { payload, blindingData } = this.createSwapPayload(
 			amount,
 			token.proofs,
 			keys,
