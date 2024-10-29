@@ -452,7 +452,7 @@ class CashuWallet {
 					0
 				) +
 					999) /
-					1000,
+				1000,
 				0
 			)
 		);
@@ -470,7 +470,7 @@ class CashuWallet {
 			Math.max(
 				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
-					1000,
+				1000,
 				0
 			)
 		);
@@ -879,6 +879,7 @@ class CashuWallet {
 	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
 		const enc = new TextEncoder();
 		const Ys = proofs.map((p: T) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
 		const states: Array<CheckStateEntry> = [];
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
@@ -902,6 +903,7 @@ class CashuWallet {
 	async checkProofsStates(proofs: Array<Proof>): Promise<Array<CheckStateEnum>> {
 		const enc = new TextEncoder();
 		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
 		const states: Array<CheckStateEnum> = [];
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
