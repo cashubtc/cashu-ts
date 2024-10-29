@@ -21,7 +21,8 @@ import {
 	GetInfoResponse,
 	OutputAmounts,
 	CheckStateEntry,
-	BlindingData
+	BlindingData,
+	SerializedDLEQ
 } from './model/types/index.js';
 import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
@@ -1058,20 +1059,15 @@ class CashuWallet {
 					throw new Error('DLEQ verification failed');
 				}
 			}
-			return {
-				id: proof.id,
-				amount: proof.amount,
-				secret: bytesToHex(proof.secret),
-				C: proof.C.toHex(true),
-				dleq:
-					dleq == undefined
-						? undefined
-						: {
-								s: bytesToHex(dleq.s),
-								e: bytesToHex(dleq.e),
-								r: dleq.r?.toString(16)
-						}
-			} as Proof;
+			const serializedProof = serializeProof(proof) as Proof;
+			serializedProof.dleq = dleq == undefined
+				? undefined
+				: {
+						s: bytesToHex(dleq.s),
+						e: bytesToHex(dleq.e),
+						r: dleq.r?.toString(16)
+				} as SerializedDLEQ;
+			return serializedProof;
 		});
 	}
 }
