@@ -29,6 +29,10 @@ export type Proof = {
 	 * DLEQ proof
 	 */
 	dleq?: SerializedDLEQ;
+	/**
+	 * Is the associated DLEQ proof valid?
+	 */
+	dleqValid?: boolean;
 };
 
 /**
