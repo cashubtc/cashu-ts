@@ -104,13 +104,15 @@ describe('mint api', () => {
 		expect(sentProofsStates).toBeDefined();
 		// expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
 		sentProofsStates.forEach((state) => {
-			expect(state).toBe(CheckStateEnum.SPENT);
+			expect(state.state).toBe(CheckStateEnum.SPENT);
+			expect(state.witness).toBeNull();
 		});
 		// expect none of the sendResponse.keep to be spent
 		const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
 		expect(keepProofsStates).toBeDefined();
 		keepProofsStates.forEach((state) => {
-			expect(state).toBe(CheckStateEnum.UNSPENT);
+			expect(state.state).toBe(CheckStateEnum.UNSPENT);
+			expect(state.witness).toBeNull();
 		});
 	});
 	test('pay external invoice', async () => {
@@ -139,13 +141,15 @@ describe('mint api', () => {
 		expect(sentProofsStates).toBeDefined();
 		// expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
 		sentProofsStates.forEach((state) => {
-			expect(state).toBe(CheckStateEnum.SPENT);
+			expect(state.state).toBe(CheckStateEnum.SPENT);
+			expect(state.witness).toBeNull();
 		});
 		// expect none of the sendResponse.keep to be spent
 		const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
 		expect(keepProofsStates).toBeDefined();
 		keepProofsStates.forEach((state) => {
-			expect(state).toBe(CheckStateEnum.UNSPENT);
+			expect(state.state).toBe(CheckStateEnum.UNSPENT);
+			expect(state.witness).toBeNull();
 		});
 	});
 	test('test send tokens exact without previous split', async () => {

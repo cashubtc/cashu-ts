@@ -16,11 +16,10 @@ import {
 	type SwapPayload,
 	type Token,
 	type TokenEntry,
-	CheckStateEnum,
 	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
-	CheckStateEntry,
+	ProofState,
 	BlindingData
 } from './model/types/index.js';
 import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
@@ -877,17 +876,25 @@ class CashuWallet {
 	 * @param proofs (only the `secret` field is required)
 	 * @returns
 	 */
-	async checkProofsStates(proofs: Array<Proof>): Promise<Array<CheckStateEnum>> {
+	async checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>> {
 		const enc = new TextEncoder();
 		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
 		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
-		const states: Array<CheckStateEnum> = [];
+		const states: Array<ProofState> = [];
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
+			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
 			const { states: batchStates } = await this.mint.check({
-				Ys: Ys.slice(i, i + BATCH_SIZE)
+				Ys: YsSlice
 			});
-			states.push(...batchStates.map((state: CheckStateEntry) => state.state));
+			for (let j = 0; j < YsSlice.length; j++) {
+				const state = batchStates.find((s: ProofState) => s.Y === YsSlice[j]);
+				if (state) {
+					states.push(state);
+				} else {
+					throw new Error('Could not find state for proof with Y: ' + YsSlice[j]);
+				}
+			}
 		}
 		return states;
 	}

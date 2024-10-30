@@ -221,12 +221,21 @@ describe('checkProofsStates', () => {
 	test('test checkProofsStates - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
 			.post('/v1/checkstate')
-			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
+			.reply(200, {
+				states: [
+					{
+						Y: '02d5dd71f59d917da3f73defe997928e9459e9d67d8bdb771e4989c2b5f50b2fff',
+						state: 'UNSPENT',
+						witness: 'witness-asd'
+					}
+				]
+			});
 		const wallet = new CashuWallet(mint, { unit });
 
 		const result = await wallet.checkProofsStates(proofs);
 		result.forEach((r) => {
-			expect(r).toEqual(CheckStateEnum.UNSPENT);
+			expect(r.state).toEqual(CheckStateEnum.UNSPENT);
+			expect(r.witness).toEqual('witness-asd');
 		});
 	});
 });
