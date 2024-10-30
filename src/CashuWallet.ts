@@ -15,11 +15,10 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	CheckStateEnum,
 	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
-	CheckStateEntry,
+	ProofState,
 	BlindingData
 } from './model/types/index.js';
 import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
@@ -841,24 +840,36 @@ class CashuWallet {
 		};
 		return { payload, blindingData };
 	}
+
 	/**
-	 * returns proofs that are already spent (use for keeping wallet state clean)
+	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
 	 * @param proofs (only the `secret` field is required)
 	 * @returns
 	 */
-	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
+	async checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p: T) => hashToCurve(enc.encode(p.secret)).toHex(true));
-		const payload = {
-			// array of Ys of proofs to check
-			Ys: Ys
-		};
-		const { states } = await this.mint.check(payload);
-
-		return proofs.filter((_: T, i: number) => {
-			const state = states.find((state: CheckStateEntry) => state.Y === Ys[i]);
-			return state && state.state === CheckStateEnum.SPENT;
-		});
+		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		// TODO: Replace this with a value from the info endpoint of the mint eventually
+		const BATCH_SIZE = 100;
+		const states: Array<ProofState> = [];
+		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
+			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
+			const { states: batchStates } = await this.mint.check({
+				Ys: YsSlice
+			});
+			const stateMap: { [y: string]: ProofState } = {};
+			batchStates.forEach((s) => {
+				stateMap[s.Y] = s;
+			});
+			for (let j = 0; j < YsSlice.length; j++) {
+				const state = stateMap[YsSlice[j]];
+				if (!state) {
+					throw new Error('Could not find state for proof with Y: ' + YsSlice[j]);
+				}
+				states.push(state);
+			}
+		}
+		return states;
 	}
 
 	/**

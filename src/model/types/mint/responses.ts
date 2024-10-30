@@ -21,7 +21,7 @@ export type ApiError = {
 /**
  * Entries of CheckStateResponse with state of the proof
  */
-export type CheckStateEntry = {
+export type ProofState = {
 	Y: string;
 	state: CheckStateEnum;
 	witness: string | null;
@@ -43,7 +43,7 @@ export type CheckStateResponse = {
 	/**
 	 *
 	 */
-	states: Array<CheckStateEntry>;
+	states: Array<ProofState>;
 } & ApiError;
 
 /**

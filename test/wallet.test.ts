@@ -1,7 +1,7 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse } from '../src/model/types/index.js';
+import { CheckStateEnum, MeltQuoteResponse } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
 
 const dummyKeysResp = {
@@ -203,7 +203,7 @@ describe('receive', () => {
 	});
 });
 
-describe('checkProofsSpent', () => {
+describe('checkProofsStates', () => {
 	const proofs = [
 		{
 			id: '009a1f293253e41e',
@@ -212,15 +212,25 @@ describe('checkProofsSpent', () => {
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
-	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
+	test('test checkProofsStates - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
 			.post('/v1/checkstate')
-			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
+			.reply(200, {
+				states: [
+					{
+						Y: '02d5dd71f59d917da3f73defe997928e9459e9d67d8bdb771e4989c2b5f50b2fff',
+						state: 'UNSPENT',
+						witness: 'witness-asd'
+					}
+				]
+			});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const result = await wallet.checkProofsSpent(proofs);
-
-		expect(result).toStrictEqual([]);
+		const result = await wallet.checkProofsStates(proofs);
+		result.forEach((r) => {
+			expect(r.state).toEqual(CheckStateEnum.UNSPENT);
+			expect(r.witness).toEqual('witness-asd');
+		});
 	});
 });
 
