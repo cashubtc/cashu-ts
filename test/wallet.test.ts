@@ -1,10 +1,7 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import {
-	CheckStateEnum,
-	MeltQuoteResponse
-} from '../src/model/types/index.js';
+import { CheckStateEnum, MeltQuoteResponse } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
 
 const dummyKeysResp = {
