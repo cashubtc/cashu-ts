@@ -10,6 +10,7 @@ import {
 	Proof,
 	Token,
 	TokenV4Template,
+	V4DLEQTemplate,
 	V4InnerToken,
 	V4ProofTemplate
 } from './model/types/index.js';
@@ -181,7 +182,15 @@ export function getEncodedToken(token: Token): string {
  * @param token to encode
  * @returns encoded token
  */
-export function getEncodedTokenV4(token: Token): string {
+export function getEncodedTokenV4(
+	token: Token,
+): string {
+	// Make sure each DLEQ has its blinding factor
+	token.proofs.forEach(p => {
+		if (p.dleq && p.dleq.r == undefined) {
+			throw new Error("Missing blinding factor in included DLEQ proof");
+		}
+	});
 	const idMap: { [id: string]: Array<Proof> } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
@@ -199,7 +208,18 @@ export function getEncodedTokenV4(token: Token): string {
 			(id: string): V4InnerToken => ({
 				i: hexToBytes(id),
 				p: idMap[id].map(
-					(p: Proof): V4ProofTemplate => ({ a: p.amount, s: p.secret, c: hexToBytes(p.C) })
+					(p: Proof): V4ProofTemplate => ({
+						a: p.amount,
+						s: p.secret,
+						c: hexToBytes(p.C),
+						d: p.dleq == undefined
+							? undefined
+							: {
+								e: hexToBytes(p.dleq.e),
+								s: hexToBytes(p.dleq.s),
+								r: hexToBytes(p.dleq.r ?? "00"),
+							} as V4DLEQTemplate
+					})
 				)
 			})
 		)

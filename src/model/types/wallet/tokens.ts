@@ -22,6 +22,21 @@ export type Token = {
 	unit?: string;
 };
 
+export type V4DLEQTemplate = {
+	/**
+	 * challenge
+	 */
+	e: Uint8Array;
+	/**
+	 * response
+	 */
+	s: Uint8Array;
+	/**
+	 * blinding factor
+	 */
+	r: Uint8Array;
+}
+
 /**
  * Template for a Proof inside a V4 Token
  */
@@ -38,6 +53,10 @@ export type V4ProofTemplate = {
 	 * Signature
 	 */
 	c: Uint8Array;
+	/**
+	 * DLEQ
+	 */
+	d?: V4DLEQTemplate;
 };
 
 /**
