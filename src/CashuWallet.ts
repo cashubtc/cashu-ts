@@ -15,12 +15,10 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	type TokenEntry,
-	CheckStateEnum,
 	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
-	CheckStateEntry,
+	ProofState,
 	BlindingData,
 	SerializedDLEQ
 } from './model/types/index.js';
@@ -265,41 +263,11 @@ class CashuWallet {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
-		const tokenEntries: Array<TokenEntry> = token.token;
-		const proofs = await this.receiveTokenEntry(tokenEntries[0], options);
-		return proofs;
-	}
-
-	/**
-	 * Receive a single cashu token entry
-	 * @param tokenEntry a single entry of a cashu token
-	 * @param options.keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param options.privkey? will create a signature on the @param tokenEntry secrets if set
-	 * @param options.requireDLEQ? optionally require a DLEQ proof from the mint
-	 * @returns {Promise<Array<Proof>>} New token entry with newly created proofs, proofs that had errors
-	 */
-	async receiveTokenEntry(
-		tokenEntry: TokenEntry,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			requireDLEQ?: boolean;
-		}
-	): Promise<Array<Proof>> {
-		const proofs: Array<Proof> = [];
 		const keys = await this.getKeys(options?.keysetId);
-		const amount =
-			tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
-			this.getFeesForProofs(tokenEntry.proofs);
+		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
 		const { payload, blindingData } = this.createSwapPayload(
 			amount,
-			tokenEntry.proofs,
+			token.proofs,
 			keys,
 			options?.outputAmounts,
 			options?.counter,
@@ -308,15 +276,14 @@ class CashuWallet {
 		);
 		const { signatures } = await this.mint.swap(payload);
 		const requireDleq = options?.requireDLEQ;
-		const newProofs = this.constructProofs(
+		const freshProofs = this.constructProofs(
 			signatures,
 			blindingData.blindingFactors,
 			blindingData.secrets,
 			keys,
 			requireDleq ?? false
 		);
-		proofs.push(...newProofs);
-		return proofs;
+		return freshProofs;
 	}
 
 	/**
@@ -906,24 +873,36 @@ class CashuWallet {
 		};
 		return { payload, blindingData };
 	}
+
 	/**
-	 * returns proofs that are already spent (use for keeping wallet state clean)
+	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
 	 * @param proofs (only the `secret` field is required)
 	 * @returns
 	 */
-	async checkProofsSpent<T extends { secret: string }>(proofs: Array<T>): Promise<Array<T>> {
+	async checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p: T) => hashToCurve(enc.encode(p.secret)).toHex(true));
-		const payload = {
-			// array of Ys of proofs to check
-			Ys: Ys
-		};
-		const { states } = await this.mint.check(payload);
-
-		return proofs.filter((_: T, i: number) => {
-			const state = states.find((state: CheckStateEntry) => state.Y === Ys[i]);
-			return state && state.state === CheckStateEnum.SPENT;
-		});
+		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		// TODO: Replace this with a value from the info endpoint of the mint eventually
+		const BATCH_SIZE = 100;
+		const states: Array<ProofState> = [];
+		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
+			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
+			const { states: batchStates } = await this.mint.check({
+				Ys: YsSlice
+			});
+			const stateMap: { [y: string]: ProofState } = {};
+			batchStates.forEach((s) => {
+				stateMap[s.Y] = s;
+			});
+			for (let j = 0; j < YsSlice.length; j++) {
+				const state = stateMap[YsSlice[j]];
+				if (!state) {
+					throw new Error('Could not find state for proof with Y: ' + YsSlice[j]);
+				}
+				states.push(state);
+			}
+		}
+		return states;
 	}
 
 	/**

@@ -34,6 +34,10 @@ export type OutputAmounts = {
 };
 ```
 
+#### `checkProofsStates` replaces `checkProofsSpent`
+
+To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkProofsStates` now returns an array of `ProofState`'s, one for each `Proof` provided. The spent states are in `ProofState.state` and can have the values `CheckStateEnum.SPENT`, `CheckStateEnum.UNSPENT`, and `CheckStateEnum.PENDING`. `ProofState` also contains a `witness` if present.
+
 #### renamed functions
 
 - in `SendResponse`, `returnChange` is now called `keep`
@@ -48,3 +52,18 @@ export type OutputAmounts = {
 - `BlindedTransaction` has been removed
 - `BlindedMessageData` has been replaced by `BlindingData`
   - In `BlindingData` `rs` has been renamed to `blindingFactors`
+
+#### Token Types
+
+- The `Token` type no longer reassembles the token v3 structure, but instead is a simple object type:
+
+```ts
+type Token = {
+	mint: string;
+	proofs: Array<Proof>;
+	memo?: string;
+	unit?: string;
+};
+```
+
+- The old `Token` type got renamed to `DeprecatedToken`
