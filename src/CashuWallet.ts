@@ -15,7 +15,6 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	type TokenEntry,
 	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
@@ -262,39 +261,11 @@ class CashuWallet {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
-		const tokenEntries: Array<TokenEntry> = token.token;
-		const proofs = await this.receiveTokenEntry(tokenEntries[0], options);
-		return proofs;
-	}
-
-	/**
-	 * Receive a single cashu token entry
-	 * @param tokenEntry a single entry of a cashu token
-	 * @param options.keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param options.privkey? will create a signature on the @param tokenEntry secrets if set
-	 * @returns {Promise<Array<Proof>>} New token entry with newly created proofs, proofs that had errors
-	 */
-	async receiveTokenEntry(
-		tokenEntry: TokenEntry,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-		}
-	): Promise<Array<Proof>> {
-		const proofs: Array<Proof> = [];
 		const keys = await this.getKeys(options?.keysetId);
-		const amount =
-			tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0) -
-			this.getFeesForProofs(tokenEntry.proofs);
+		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
 		const { payload, blindingData } = this.createSwapPayload(
 			amount,
-			tokenEntry.proofs,
+			token.proofs,
 			keys,
 			options?.outputAmounts,
 			options?.counter,
@@ -302,14 +273,13 @@ class CashuWallet {
 			options?.privkey
 		);
 		const { signatures } = await this.mint.swap(payload);
-		const newProofs = this.constructProofs(
+		const freshProofs = this.constructProofs(
 			signatures,
 			blindingData.blindingFactors,
 			blindingData.secrets,
 			keys
 		);
-		proofs.push(...newProofs);
-		return proofs;
+		return freshProofs;
 	}
 
 	/**

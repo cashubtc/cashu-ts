@@ -3,12 +3,9 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import {
 	CheckStateEnum,
-	MeltQuoteResponse,
-	MeltQuoteState,
-	OutputAmounts
+	MeltQuoteResponse
 } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
-import { Proof } from '@cashu/crypto/modules/common';
 
 const dummyKeysResp = {
 	keysets: [

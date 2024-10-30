@@ -52,3 +52,18 @@ To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkPro
 - `BlindedTransaction` has been removed
 - `BlindedMessageData` has been replaced by `BlindingData`
   - In `BlindingData` `rs` has been renamed to `blindingFactors`
+
+#### Token Types
+
+- The `Token` type no longer reassembles the token v3 structure, but instead is a simple object type:
+
+```ts
+type Token = {
+	mint: string;
+	proofs: Array<Proof>;
+	memo?: string;
+	unit?: string;
+};
+```
+
+- The old `Token` type got renamed to `DeprecatedToken`

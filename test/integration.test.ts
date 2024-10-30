@@ -188,9 +188,7 @@ describe('mint api', () => {
 		const tokens = await wallet.mintProofs(100, request.quote);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
-		const encoded = getEncodedToken({
-			token: [{ mint: mintUrl, proofs: sendResponse.send }]
-		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: sendResponse.send });
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
 	});
@@ -199,9 +197,7 @@ describe('mint api', () => {
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
 		const tokens = await wallet.mintProofs(64, request.quote);
-		const encoded = getEncodedToken({
-			token: [{ mint: mintUrl, proofs: tokens.proofs }]
-		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: tokens.proofs });
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
 	});
@@ -219,9 +215,7 @@ describe('mint api', () => {
 		const tokens = await wallet.mintProofs(128, request.quote);
 
 		const { send } = await wallet.send(64, tokens.proofs, { pubkey: bytesToHex(pubKeyBob) });
-		const encoded = getEncodedToken({
-			token: [{ mint: mintUrl, proofs: send }]
-		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
 
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
