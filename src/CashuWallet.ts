@@ -857,13 +857,16 @@ class CashuWallet {
 			const { states: batchStates } = await this.mint.check({
 				Ys: YsSlice
 			});
+			const stateMap: { [y: string]: ProofState } = {};
+			batchStates.forEach((s) => {
+				stateMap[s.Y] = s;
+			});
 			for (let j = 0; j < YsSlice.length; j++) {
-				const state = batchStates.find((s: ProofState) => s.Y === YsSlice[j]);
-				if (state) {
-					states.push(state);
-				} else {
+				const state = stateMap[YsSlice[j]];
+				if (!state) {
 					throw new Error('Could not find state for proof with Y: ' + YsSlice[j]);
 				}
+				states.push(state);
 			}
 		}
 		return states;
