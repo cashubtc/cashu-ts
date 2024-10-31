@@ -21,13 +21,7 @@ import {
 	ProofState,
 	BlindingData
 } from './model/types/index.js';
-import {
-	bytesToNumber,
-	getDecodedToken,
-	splitAmount,
-	sumProofs,
-	getKeepAmounts
-} from './utils.js';
+import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
 	blindMessage,
