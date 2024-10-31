@@ -34,9 +34,21 @@ export type OutputAmounts = {
 };
 ```
 
+---
+
+#### CashuWallet can no longer be instantiated using BIP39 mnemonic!
+
+In order to reduce the bundle size, BIP39 has been removed as a dependency of cashu-ts. Therefore users that want to use deterministic secrets with a BIP39 menmonic will have to convert the wordlist into a seed manually and then instantiate the wallet using:
+
+```ts
+const wallet = new CashuWallet(mint, { bip39seed: uint8ArrayOfSeed });
+```
+
 #### `checkProofsStates` replaces `checkProofsSpent`
 
 To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkProofsStates` now returns an array of `ProofState`'s, one for each `Proof` provided. The spent states are in `ProofState.state` and can have the values `CheckStateEnum.SPENT`, `CheckStateEnum.UNSPENT`, and `CheckStateEnum.PENDING`. `ProofState` also contains a `witness` if present.
+
+---
 
 #### renamed functions
 
@@ -45,6 +57,8 @@ To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkPro
 - `CashuWallet.meltTokens()` is now called `CashuWallet.meltProofs()`
 - `CashuMint.split()` is now called `CashuMint.swap()`
 
+---
+
 ### Type changes
 
 #### Wallet payload types
@@ -52,6 +66,8 @@ To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkPro
 - `BlindedTransaction` has been removed
 - `BlindedMessageData` has been replaced by `BlindingData`
   - In `BlindingData` `rs` has been renamed to `blindingFactors`
+
+---
 
 #### Token Types
 
@@ -67,3 +83,5 @@ type Token = {
 ```
 
 - The old `Token` type got renamed to `DeprecatedToken`
+
+---
