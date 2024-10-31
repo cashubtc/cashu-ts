@@ -2,9 +2,10 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { deriveKeysetId, getEncodedToken } from '../src/utils.js';
+import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
+import { CheckStateEnum, MeltQuoteState } from '../src/model/types/index.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -47,7 +48,7 @@ describe('mint api', () => {
 		const request = await wallet.createMintQuote(1337);
 		expect(request).toBeDefined();
 		expect(request.request).toContain('lnbc1337');
-		const tokens = await wallet.mintTokens(1337, request.quote);
+		const tokens = await wallet.mintProofs(1337, request.quote);
 		expect(tokens).toBeDefined();
 		// expect that the sum of all tokens.proofs.amount is equal to the requested amount
 		expect(tokens.proofs.reduce((a, b) => a + b.amount, 0)).toBe(1337);
@@ -80,7 +81,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintTokens(100, request.quote);
+		const tokens = await wallet.mintProofs(100, request.quote);
 
 		// expect no fee because local invoice
 		const mintQuote = await wallet.createMintQuote(10);
@@ -92,27 +93,33 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(quote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.send(10, tokens.proofs);
-		const response = await wallet.payLnInvoice(mintQuote.request, sendResponse.send, quote);
+		const sendResponse = await wallet.send(10, tokens.proofs, { includeFees: true });
+		const response = await wallet.meltProofs(quote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBe(fee);
 
 		// check states of spent and kept proofs after payment
-		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
-		expect(sentProofsSpent).toBeDefined();
-		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
-		expect(sentProofsSpent).toEqual(sendResponse.send);
-		// expect none of the sendResponse.returnChange to be spent
-		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange);
-		expect(returnChangeSpent).toBeDefined();
-		expect(returnChangeSpent).toEqual([]);
+		const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+		expect(sentProofsStates).toBeDefined();
+		// expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
+		sentProofsStates.forEach((state) => {
+			expect(state.state).toBe(CheckStateEnum.SPENT);
+			expect(state.witness).toBeNull();
+		});
+		// expect none of the sendResponse.keep to be spent
+		const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
+		expect(keepProofsStates).toBeDefined();
+		keepProofsStates.forEach((state) => {
+			expect(state.state).toBe(CheckStateEnum.UNSPENT);
+			expect(state.witness).toBeNull();
+		});
 	});
 	test('pay external invoice', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(3000);
-		const tokens = await wallet.mintTokens(3000, request.quote);
+		const tokens = await wallet.mintProofs(3000, request.quote);
 
 		const meltQuote = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltQuote.fee_reserve;
@@ -122,59 +129,66 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(meltQuote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.send(2000 + fee, tokens.proofs);
-		const response = await wallet.payLnInvoice(externalInvoice, sendResponse.send, meltQuote);
+		const sendResponse = await wallet.send(2000 + fee, tokens.proofs, { includeFees: true });
+		const response = await wallet.meltProofs(meltQuote, sendResponse.send);
 
 		expect(response).toBeDefined();
 		// expect that we have not received the fee back, since it was external
 		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBeLessThan(fee);
 
 		// check states of spent and kept proofs after payment
-		const sentProofsSpent = await wallet.checkProofsSpent(sendResponse.send);
-		expect(sentProofsSpent).toBeDefined();
-		// expect that all proofs are spent, i.e. sendProofsSpent == sendResponse.send
-		expect(sentProofsSpent).toEqual(sendResponse.send);
-		// expect none of the sendResponse.returnChange to be spent
-		const returnChangeSpent = await wallet.checkProofsSpent(sendResponse.returnChange);
-		expect(returnChangeSpent).toBeDefined();
-		expect(returnChangeSpent).toEqual([]);
+		const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+		expect(sentProofsStates).toBeDefined();
+		// expect that all proofs are spent, i.e. all are CheckStateEnum.SPENT
+		sentProofsStates.forEach((state) => {
+			expect(state.state).toBe(CheckStateEnum.SPENT);
+			expect(state.witness).toBeNull();
+		});
+		// expect none of the sendResponse.keep to be spent
+		const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
+		expect(keepProofsStates).toBeDefined();
+		keepProofsStates.forEach((state) => {
+			expect(state.state).toBe(CheckStateEnum.UNSPENT);
+			expect(state.witness).toBeNull();
+		});
 	});
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintTokens(64, request.quote);
+		const tokens = await wallet.mintProofs(64, request.quote);
 
 		const sendResponse = await wallet.send(64, tokens.proofs);
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
-		expect(sendResponse.returnChange).toBeDefined();
+		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(1);
-		expect(sendResponse.returnChange.length).toBe(0);
+		expect(sendResponse.keep.length).toBe(0);
+		expect(sumProofs(sendResponse.send)).toBe(64);
 	});
 	test('test send tokens with change', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintTokens(100, request.quote);
+		const tokens = await wallet.mintProofs(100, request.quote);
 
-		const sendResponse = await wallet.send(10, tokens.proofs);
+		const sendResponse = await wallet.send(10, tokens.proofs, { includeFees: false });
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
-		expect(sendResponse.returnChange).toBeDefined();
+		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(2);
-		expect(sendResponse.returnChange.length).toBe(4);
-	});
+		expect(sendResponse.keep.length).toBe(5);
+		expect(sumProofs(sendResponse.send)).toBe(10);
+		expect(sumProofs(sendResponse.keep)).toBe(89);
+	}, 10000000);
 	test('receive tokens with previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintTokens(100, request.quote);
+		const tokens = await wallet.mintProofs(100, request.quote);
 
 		const sendResponse = await wallet.send(10, tokens.proofs);
-		const encoded = getEncodedToken({
-			token: [{ mint: mintUrl, proofs: sendResponse.send }]
-		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: sendResponse.send });
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
 	});
@@ -182,16 +196,14 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintTokens(64, request.quote);
-		const encoded = getEncodedToken({
-			token: [{ mint: mintUrl, proofs: tokens.proofs }]
-		});
+		const tokens = await wallet.mintProofs(64, request.quote);
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: tokens.proofs });
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
 	});
 	test('send and receive p2pk', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint);
+		const wallet = new CashuWallet(mint, { unit });
 
 		const privKeyAlice = secp256k1.utils.randomPrivateKey();
 		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice);
@@ -199,13 +211,11 @@ describe('mint api', () => {
 		const privKeyBob = secp256k1.utils.randomPrivateKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
-		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintTokens(64, request.quote);
+		const request = await wallet.createMintQuote(128);
+		const tokens = await wallet.mintProofs(128, request.quote);
 
 		const { send } = await wallet.send(64, tokens.proofs, { pubkey: bytesToHex(pubKeyBob) });
-		const encoded = getEncodedToken({
-			token: [{ mint: mintUrl, proofs: send }]
-		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
 
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
@@ -218,7 +228,7 @@ describe('mint api', () => {
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;
 			}, 0)
-		).toBe(64);
+		).toBe(63);
 	});
 
 	test('mint and melt p2pk', async () => {
@@ -230,17 +240,17 @@ describe('mint api', () => {
 
 		const mintRequest = await wallet.createMintQuote(3000);
 
-		const proofs = await wallet.mintTokens(3000, mintRequest.quote, {
+		const proofs = await wallet.mintProofs(3000, mintRequest.quote, {
 			pubkey: bytesToHex(pubKeyBob)
 		});
 
 		const meltRequest = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltRequest.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
-		const response = await wallet.meltTokens(meltRequest, proofs.proofs, {
+		const response = await wallet.meltProofs(meltRequest, proofs.proofs, {
 			privkey: bytesToHex(privKeyBob)
 		});
 		expect(response).toBeDefined();
-		expect(response.isPaid).toBe(true);
+		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
 });

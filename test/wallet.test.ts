@@ -1,7 +1,7 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { MeltQuoteResponse } from '../src/model/types/index.js';
+import { CheckStateEnum, MeltQuoteResponse } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
 
 const dummyKeysResp = {
@@ -9,7 +9,20 @@ const dummyKeysResp = {
 		{
 			id: '009a1f293253e41e',
 			unit: 'sat',
-			keys: { 1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181' }
+			keys: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
+			}
+		}
+	]
+};
+const dummyKeysetResp = {
+	keysets: [
+		{
+			id: '009a1f293253e41e',
+			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0
 		}
 	]
 };
@@ -27,6 +40,7 @@ beforeEach(() => {
 	nock.cleanAll();
 	nock(mintUrl).get('/v1/keys').reply(200, dummyKeysResp);
 	nock(mintUrl).get('/v1/keys/009a1f293253e41e').reply(200, dummyKeysResp);
+	nock(mintUrl).get('/v1/keysets').reply(200, dummyKeysetResp);
 });
 
 describe('test info', () => {
@@ -158,7 +172,7 @@ describe('receive', () => {
 			'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICJlN2MxYjc2ZDFiMzFlMmJjYTJiMjI5ZDE2MGJkZjYwNDZmMzNiYzQ1NzAyMjIzMDRiNjUxMTBkOTI2ZjdhZjg5IiwgIkMiOiAiMDM4OWNkOWY0Zjk4OGUzODBhNzk4OWQ0ZDQ4OGE3YzkxYzUyNzdmYjkzMDQ3ZTdhMmNjMWVkOGUzMzk2Yjg1NGZmIn0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjMiLCAiQyI6ICIwMmRlNDBjNTlkOTAzODNiODg1M2NjZjNhNGIyMDg2NGFjODNiYTc1OGZjZTNkOTU5ZGJiODkzNjEwMDJlOGNlNDcifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0=';
 
 		const proofs = await wallet.receive(token3sat, {
-			preference: [{ amount: 1, count: 3 }]
+			outputAmounts: { keepAmounts: [], sendAmounts: [1, 1, 1] }
 		});
 
 		expect(proofs).toHaveLength(3);
@@ -187,7 +201,7 @@ describe('receive', () => {
 	});
 });
 
-describe('checkProofsSpent', () => {
+describe('checkProofsStates', () => {
 	const proofs = [
 		{
 			id: '009a1f293253e41e',
@@ -196,112 +210,25 @@ describe('checkProofsSpent', () => {
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 		}
 	];
-	test('test checkProofsSpent - get proofs that are NOT spendable', async () => {
+	test('test checkProofsStates - get proofs that are NOT spendable', async () => {
 		nock(mintUrl)
 			.post('/v1/checkstate')
-			.reply(200, { states: [{ Y: 'asd', state: 'UNSPENT', witness: 'witness-asd' }] });
-		const wallet = new CashuWallet(mint, { unit });
-
-		const result = await wallet.checkProofsSpent(proofs);
-
-		expect(result).toStrictEqual([]);
-	});
-});
-
-describe('payLnInvoice', () => {
-	const proofs = [
-		{
-			id: '009a1f293253e41e',
-			amount: 1,
-			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
-		}
-	];
-	test('test payLnInvoice base case', async () => {
-		nock(mintUrl)
-			.get('/v1/melt/quote/bolt11/test')
 			.reply(200, {
-				quote: 'test_melt_quote_id',
-				amount: 2000,
-				fee_reserve: 20,
-				payment_preimage: null,
-				state: 'PAID'
-			} as MeltQuoteResponse);
-		nock(mintUrl)
-			.post('/v1/melt/bolt11')
-			.reply(200, {
-				quote: 'test_melt_quote_id',
-				amount: 2000,
-				fee_reserve: 20,
-				payment_preimage: null,
-				state: 'PAID'
-			} as MeltQuoteResponse);
-
-		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.checkMeltQuote('test');
-
-		const result = await wallet.payLnInvoice(invoice, proofs, meltQuote);
-
-		expect(result).toEqual({ isPaid: true, preimage: null, change: [] });
-	});
-	test('test payLnInvoice change', async () => {
-		nock.cleanAll();
-		nock(mintUrl)
-			.get('/v1/keys')
-			.reply(200, {
-				keysets: [
+				states: [
 					{
-						id: '009a1f293253e41e',
-						unit: 'sat',
-						keys: {
-							1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-							2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5'
-						}
+						Y: '02d5dd71f59d917da3f73defe997928e9459e9d67d8bdb771e4989c2b5f50b2fff',
+						state: 'UNSPENT',
+						witness: 'witness-asd'
 					}
 				]
 			});
-		nock(mintUrl)
-			.get('/v1/melt/quote/bolt11/test')
-			.reply(200, {
-				quote: 'test_melt_quote_id',
-				amount: 2000,
-				fee_reserve: 20,
-				payment_preimage: 'asd',
-				state: 'PAID'
-			} as MeltQuoteResponse);
-		nock(mintUrl)
-			.post('/v1/melt/bolt11')
-			.reply(200, {
-				quote: 'test_melt_quote_id',
-				amount: 2000,
-				fee_reserve: 20,
-				payment_preimage: 'asd',
-				state: 'PAID',
-				change: [
-					{
-						id: '009a1f293253e41e',
-						amount: 2,
-						C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625'
-					}
-				]
-			});
-
 		const wallet = new CashuWallet(mint, { unit });
-		const meltQuote = await wallet.checkMeltQuote('test');
-		const result = await wallet.payLnInvoice(invoice, [{ ...proofs[0], amount: 3 }], meltQuote);
 
-		expect(result.isPaid).toBe(true);
-		expect(result.preimage).toBe('asd');
-		expect(result.change).toHaveLength(1);
-	});
-	test('test payLnInvoice bad resonse', async () => {
-		nock(mintUrl).post('/v1/melt/bolt11').reply(200, {});
-		const wallet = new CashuWallet(mint, { unit });
-		const result = await wallet
-			.payLnInvoice(invoice, proofs, {} as MeltQuoteResponse)
-			.catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		const result = await wallet.checkProofsStates(proofs);
+		result.forEach((r) => {
+			expect(r.state).toEqual(CheckStateEnum.UNSPENT);
+			expect(r.witness).toEqual('witness-asd');
+		});
 	});
 });
 
@@ -320,7 +247,7 @@ describe('requestTokens', () => {
 			});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const { proofs } = await wallet.mintTokens(1, '');
+		const { proofs } = await wallet.mintProofs(1, '');
 
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
@@ -331,7 +258,7 @@ describe('requestTokens', () => {
 		nock(mintUrl).post('/v1/mint/bolt11').reply(200, {});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const result = await wallet.mintTokens(1, '').catch((e) => e);
+		const result = await wallet.mintProofs(1, '').catch((e) => e);
 
 		expect(result).toEqual(new Error('bad response'));
 	});
@@ -348,7 +275,7 @@ describe('send', () => {
 	];
 	test('test send base case', async () => {
 		nock(mintUrl)
-			.post('/split')
+			.post('/v1/swap')
 			.reply(200, {
 				signatures: [
 					{
@@ -362,7 +289,7 @@ describe('send', () => {
 
 		const result = await wallet.send(1, proofs);
 
-		expect(result.returnChange).toHaveLength(0);
+		expect(result.keep).toHaveLength(0);
 		expect(result.send).toHaveLength(1);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
@@ -400,10 +327,10 @@ describe('send', () => {
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
 	});
 
 	test('test send over paying2', async () => {
@@ -439,10 +366,10 @@ describe('send', () => {
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].C)).toBe(true);
-		expect(/[0-9a-f]{64}/.test(result.returnChange[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
 	});
 	test('test send preference', async () => {
 		nock(mintUrl)
@@ -487,8 +414,10 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
+		await wallet.getKeys();
 		const result = await wallet.send(4, overpayProofs, {
-			preference: { sendPreference: [{ amount: 1, count: 4 }] }
+			// preference: { sendPreference: [{ amount: 1, count: 4 }] }
+			outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] }
 		});
 
 		expect(result.send).toHaveLength(4);
@@ -498,7 +427,7 @@ describe('send', () => {
 		expect(result.send[3]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(0);
+		expect(result.keep).toHaveLength(0);
 	});
 
 	test('test send preference overpay', async () => {
@@ -544,8 +473,9 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
 			}
 		];
-		const result = await wallet.send(4, overpayProofs, {
-			preference: { sendPreference: [{ amount: 1, count: 3 }] }
+		await wallet.getKeys();
+		const result = await wallet.send(3, overpayProofs, {
+			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [1] }
 		});
 
 		expect(result.send).toHaveLength(3);
@@ -554,8 +484,8 @@ describe('send', () => {
 		expect(result.send[2]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.returnChange).toHaveLength(1);
-		expect(result.returnChange[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 	});
 
 	test('test send not enough funds', async () => {
@@ -574,7 +504,7 @@ describe('send', () => {
 
 		const result = await wallet.send(2, proofs).catch((e) => e);
 
-		expect(result).toEqual(new Error('Not enough funds available'));
+		expect(result).toEqual(new Error('Not enough funds available to send'));
 	});
 	test('test send bad response', async () => {
 		nock(mintUrl).post('/v1/swap').reply(200, {});
@@ -598,12 +528,13 @@ describe('send', () => {
 describe('deterministic', () => {
 	test('no seed', async () => {
 		const wallet = new CashuWallet(mint);
+		await wallet.getKeys();
 		const result = await wallet
 			.send(
 				1,
 				[
 					{
-						id: 'z32vUtKgNCm1',
+						id: '009a1f293253e41e',
 						amount: 2,
 						secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 						C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
