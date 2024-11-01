@@ -28,7 +28,7 @@ class BlindedSignature {
 							s: bytesToHex(this.dleq.s),
 							e: bytesToHex(this.dleq.e),
 							r: this.dleq.r?.toString(16)
-					}
+					  }
 		};
 	}
 }

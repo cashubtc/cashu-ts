@@ -35,7 +35,7 @@ export type V4DLEQTemplate = {
 	 * blinding factor
 	 */
 	r: Uint8Array;
-}
+};
 
 /**
  * Template for a Proof inside a V4 Token

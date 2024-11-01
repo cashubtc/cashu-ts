@@ -22,7 +22,14 @@ import {
 	BlindingData,
 	SerializedDLEQ
 } from './model/types/index.js';
-import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts, hexToNumber } from './utils.js';
+import {
+	bytesToNumber,
+	getDecodedToken,
+	splitAmount,
+	sumProofs,
+	getKeepAmounts,
+	hexToNumber
+} from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -609,12 +616,7 @@ class CashuWallet {
 			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
 		);
 		return {
-			proofs: this.constructProofs(
-				promises,
-				validBlindingFactors,
-				validSecrets,
-				keys,
-			)
+			proofs: this.constructProofs(promises, validBlindingFactors, validSecrets, keys)
 		};
 	}
 
@@ -690,12 +692,7 @@ class CashuWallet {
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
 		return {
-			proofs: this.constructProofs(
-				signatures,
-				blindingFactors,
-				secrets,
-				keyset,
-			)
+			proofs: this.constructProofs(signatures, blindingFactors, secrets, keyset)
 		};
 	}
 
@@ -774,12 +771,7 @@ class CashuWallet {
 		const meltResponse = await this.mint.melt(meltPayload);
 		let change: Array<Proof> = [];
 		if (meltResponse.change) {
-			change = this.constructProofs(
-				meltResponse.change,
-				blindingFactors,
-				secrets,
-				keys,
-			);
+			change = this.constructProofs(meltResponse.change, blindingFactors, secrets, keys);
 		}
 		return {
 			quote: meltResponse,
@@ -1015,7 +1007,7 @@ class CashuWallet {
 							s: hexToBytes(p.dleq.s),
 							e: hexToBytes(p.dleq.e),
 							r: rs[i]
-					} as DLEQ);
+					  } as DLEQ);
 			const blindSignature = {
 				id: p.id,
 				amount: p.amount,
@@ -1027,16 +1019,16 @@ class CashuWallet {
 			const A = pointFromHex(keyset.keys[p.amount]);
 			const proof = constructProofFromPromise(blindSignature, r, secret, A);
 			const serializedProof = serializeProof(proof) as Proof;
-			serializedProof.dleqValid = dleq == undefined
-				? undefined
-				: verifyDLEQProof_reblind(secret, dleq, proof.C, A);
-			serializedProof.dleq = dleq == undefined
-				? undefined
-				: {
-						s: bytesToHex(dleq.s),
-						e: bytesToHex(dleq.e),
-						r: dleq.r?.toString(16)
-				} as SerializedDLEQ;
+			serializedProof.dleqValid =
+				dleq == undefined ? undefined : verifyDLEQProof_reblind(secret, dleq, proof.C, A);
+			serializedProof.dleq =
+				dleq == undefined
+					? undefined
+					: ({
+							s: bytesToHex(dleq.s),
+							e: bytesToHex(dleq.e),
+							r: dleq.r?.toString(16)
+					  } as SerializedDLEQ);
 			return serializedProof;
 		});
 	}
@@ -1055,15 +1047,17 @@ class CashuWallet {
 			const dleq = {
 				e: hexToBytes(p.dleq.e),
 				s: hexToBytes(p.dleq.s),
-				r: hexToNumber(p.dleq.r ?? "00"),
+				r: hexToNumber(p.dleq.r ?? '00')
 			} as DLEQ;
 			const key = keys.keys[p.amount];
-			if (!verifyDLEQProof_reblind(
-				new TextEncoder().encode(p.secret),
-				dleq,
-				pointFromHex(p.C),
-				pointFromHex(key)
-			)) {
+			if (
+				!verifyDLEQProof_reblind(
+					new TextEncoder().encode(p.secret),
+					dleq,
+					pointFromHex(p.C),
+					pointFromHex(key)
+				)
+			) {
 				throw new Error(`${i}-th DLEQ proof is invalid for key ${key}`);
 			}
 		});

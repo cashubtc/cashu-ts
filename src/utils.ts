@@ -183,13 +183,11 @@ export function getEncodedToken(token: Token): string {
  * @param token to encode
  * @returns encoded token
  */
-export function getEncodedTokenV4(
-	token: Token,
-): string {
+export function getEncodedTokenV4(token: Token): string {
 	// Make sure each DLEQ has its blinding factor
-	token.proofs.forEach(p => {
+	token.proofs.forEach((p) => {
 		if (p.dleq && p.dleq.r == undefined) {
-			throw new Error("Missing blinding factor in included DLEQ proof");
+			throw new Error('Missing blinding factor in included DLEQ proof');
 		}
 	});
 	const idMap: { [id: string]: Array<Proof> } = {};
@@ -213,13 +211,14 @@ export function getEncodedTokenV4(
 						a: p.amount,
 						s: p.secret,
 						c: hexToBytes(p.C),
-						d: p.dleq == undefined
-							? undefined
-							: {
-								e: hexToBytes(p.dleq.e),
-								s: hexToBytes(p.dleq.s),
-								r: hexToBytes(p.dleq.r ?? "00"),
-							} as V4DLEQTemplate
+						d:
+							p.dleq == undefined
+								? undefined
+								: ({
+										e: hexToBytes(p.dleq.e),
+										s: hexToBytes(p.dleq.s),
+										r: hexToBytes(p.dleq.r ?? '00')
+								  } as V4DLEQTemplate)
 					})
 				)
 			})
@@ -288,13 +287,14 @@ export function handleTokens(token: string): Token {
 					C: bytesToHex(p.c),
 					amount: p.a,
 					id: bytesToHex(t.i),
-					dleq: p.d == undefined
-						? undefined
-						: {
-							e: bytesToHex(p.d.e),
-							s: bytesToHex(p.d.s),
-							r: bytesToHex(p.d.r)
-						} as SerializedDLEQ,
+					dleq:
+						p.d == undefined
+							? undefined
+							: ({
+									e: bytesToHex(p.d.e),
+									s: bytesToHex(p.d.s),
+									r: bytesToHex(p.d.r)
+							  } as SerializedDLEQ)
 				});
 			})
 		);
