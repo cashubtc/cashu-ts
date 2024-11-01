@@ -22,7 +22,7 @@ import {
 	BlindingData,
 	SerializedDLEQ
 } from './model/types/index.js';
-import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
+import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts, hexToNumber } from './utils.js';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -247,6 +247,7 @@ class CashuWallet {
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the @param token secrets if set
+	 * @param options.requireDleq? will check each proof for DLEQ proofs. Reject the token if any one of them can't be verified.
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(
@@ -258,12 +259,16 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
+			requireDleq?: boolean;
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
 		const keys = await this.getKeys(options?.keysetId);
+		if (options?.requireDleq) {
+			this.requireDLEQ(token, keys);
+		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
 		const { payload, blindingData } = this.createSwapPayload(
 			amount,
@@ -1022,6 +1027,34 @@ class CashuWallet {
 						r: dleq.r?.toString(16)
 				} as SerializedDLEQ;
 			return serializedProof;
+		});
+	}
+
+	/**
+	 * Checks that each proof in `token` has a valid DLEQ proof according to
+	 * keyset `keys`
+	 * @param token The token subject to the verification
+	 * @param keys The Mint's keyset to be used for verification
+	 */
+	private requireDLEQ(token: Token, keys: MintKeys) {
+		token.proofs.forEach((p: Proof, i: number) => {
+			if (p.dleq == undefined) {
+				throw new Error(`${i}-th proof is missing DLEQ proof`);
+			}
+			const dleq = {
+				e: hexToBytes(p.dleq.e),
+				s: hexToBytes(p.dleq.s),
+				r: hexToNumber(p.dleq.r ?? "00"),
+			} as DLEQ;
+			const key = keys.keys[p.amount];
+			if (!verifyDLEQProof_reblind(
+				new TextEncoder().encode(p.secret),
+				dleq,
+				pointFromHex(p.C),
+				pointFromHex(key)
+			)) {
+				throw new Error(`${i}-th DLEQ proof is invalid for key ${key}`);
+			}
 		});
 	}
 }
