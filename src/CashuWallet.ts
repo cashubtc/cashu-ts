@@ -761,6 +761,11 @@ class CashuWallet {
 				options.privkey
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
+		// Strip DLEQs if any
+		proofsToSend.map((p: Proof) => {
+			p.dleq = undefined;
+			return p;
+		});
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
@@ -840,6 +845,12 @@ class CashuWallet {
 				privkey
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
+
+		// Strip DLEQs if any
+		proofsToSend.map((p: Proof) => {
+			p.dleq = undefined;
+			return p;
+		});
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindingData: BlindingData = {
