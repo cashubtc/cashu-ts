@@ -8,6 +8,7 @@ import {
 	DeprecatedToken,
 	Keys,
 	Proof,
+	SerializedDLEQ,
 	Token,
 	TokenV4Template,
 	V4DLEQTemplate,
@@ -286,7 +287,14 @@ export function handleTokens(token: string): Token {
 					secret: p.s,
 					C: bytesToHex(p.c),
 					amount: p.a,
-					id: bytesToHex(t.i)
+					id: bytesToHex(t.i),
+					dleq: p.d == undefined
+						? undefined
+						: {
+							e: bytesToHex(p.d.e),
+							s: bytesToHex(p.d.s),
+							r: bytesToHex(p.d.r)
+						} as SerializedDLEQ,
 				});
 			})
 		);
