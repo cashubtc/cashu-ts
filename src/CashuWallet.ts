@@ -38,11 +38,7 @@ import {
 	constructProofFromPromise,
 	serializeProof
 } from '@cashu/crypto/modules/client';
-import {
-	deriveBlindingFactor,
-	deriveSecret,
-	deriveSeedFromMnemonic
-} from '@cashu/crypto/modules/client/NUT09';
+import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
@@ -79,7 +75,7 @@ class CashuWallet {
 	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
 	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
-	 * @param options.mnemonicOrSeed mnemonic phrase or Seed to initial derivation key for this wallet's deterministic secrets. When the mnemonic is provided, the seed will be derived from it.
+	 * @param options.bip39seed BIP39 seed for deterministic secrets.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
@@ -89,7 +85,7 @@ class CashuWallet {
 			keys?: Array<MintKeys> | MintKeys;
 			keysets?: Array<MintKeyset>;
 			mintInfo?: GetInfoResponse;
-			mnemonicOrSeed?: string | Uint8Array;
+			bip39seed?: Uint8Array;
 			denominationTarget?: number;
 		}
 	) {
@@ -107,15 +103,12 @@ class CashuWallet {
 			this._denominationTarget = options.denominationTarget;
 		}
 
-		if (!options?.mnemonicOrSeed) {
-			return;
-		} else if (options?.mnemonicOrSeed instanceof Uint8Array) {
-			this._seed = options.mnemonicOrSeed;
-		} else {
-			if (!validateMnemonic(options.mnemonicOrSeed, wordlist)) {
-				throw new Error('Tried to instantiate with mnemonic, but mnemonic was invalid');
+		if (options?.bip39seed) {
+			if (options.bip39seed instanceof Uint8Array) {
+				this._seed = options.bip39seed;
+				return;
 			}
-			this._seed = deriveSeedFromMnemonic(options.mnemonicOrSeed);
+			throw new Error('bip39seed must be a valid UInt8Array');
 		}
 	}
 
@@ -596,7 +589,7 @@ class CashuWallet {
 	): Promise<{ proofs: Array<Proof> }> {
 		const keys = await this.getKeys(options?.keysetId);
 		if (!this._seed) {
-			throw new Error('CashuWallet must be initialized with mnemonic to use restore');
+			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
@@ -932,7 +925,7 @@ class CashuWallet {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
 			throw new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a mnemonic, or omit counter param.'
+				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
 			);
 		}
 		const blindedMessages: Array<SerializedBlindedMessage> = [];

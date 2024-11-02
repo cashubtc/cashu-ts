@@ -152,13 +152,24 @@ export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
+function isValidHex(str: string) {
+	return /^[a-f0-9]*$/i.test(str);
+}
+
 /**
- * Helper function to stringify a bigint
- * @param _key
- * @param value to stringify
- * @returns stringified bigint
+ * Checks wether a proof or a list of proofs contains a non-hex id
+ * @param p Proof or list of proofs
+ * @returns boolean
  */
-export function bigIntStringify<T>(_key: unknown, value: T): string | T {
+export function hasNonHexId(p: Proof | Array<Proof>) {
+	if (Array.isArray(p)) {
+		return p.some((proof) => !isValidHex(proof.id));
+	}
+	return isValidHex(p.id);
+}
+
+//used for json serialization
+export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
@@ -167,7 +178,7 @@ export function bigIntStringify<T>(_key: unknown, value: T): string | T {
  * @param token to encode
  * @returns encoded token
  */
-export function getEncodedToken(token: Token): string {
+export function getEncodedTokenV3(token: Token): string {
 	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
@@ -179,10 +190,21 @@ export function getEncodedToken(token: Token): string {
 }
 
 /**
- * Helper function to encode a v4 cashu token
- * @param token to encode
- * @returns encoded token
+ * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
+ * @param token
+ * @param [opts]
  */
+export function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
+	const nonHex = hasNonHexId(token.proofs);
+	if (nonHex || opts?.version === 3) {
+		if (opts?.version === 4) {
+			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+		}
+		return getEncodedTokenV3(token);
+	}
+	return getEncodedTokenV4(token);
+}
+
 export function getEncodedTokenV4(token: Token): string {
 	// Make sure each DLEQ has its blinding factor
 	token.proofs.forEach((p) => {
@@ -190,6 +212,10 @@ export function getEncodedTokenV4(token: Token): string {
 			throw new Error('Missing blinding factor in included DLEQ proof');
 		}
 	});
+	const nonHex = hasNonHexId(token.proofs);
+	if (nonHex) {
+		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+	}
 	const idMap: { [id: string]: Array<Proof> } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
