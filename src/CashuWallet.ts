@@ -19,9 +19,7 @@ import {
 	GetInfoResponse,
 	OutputAmounts,
 	ProofState,
-	BlindingData
-	MeltQuoteState,
-	CheckStateEntry,
+	BlindingData,
 	MintQuoteResponse
 } from './model/types/index.js';
 import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
