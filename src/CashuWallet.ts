@@ -867,6 +867,13 @@ class CashuWallet {
 		return states;
 	}
 
+	/**
+	 * Register a callback to be called whenever a mint quote's state changes
+	 * @param quoteIds List of mint quote IDs that should be subscribed to
+	 * @param callback Callback function that will be called whenever a mint quote state changes
+	 * @param errorCallback
+	 * @returns
+	 */
 	async onMintQuoteUpdates(
 		quoteIds: Array<string>,
 		callback: (payload: MintQuoteResponse) => void,
@@ -886,6 +893,13 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Register a callback to be called whenever a melt quote's state changes
+	 * @param quoteIds List of melt quote IDs that should be subscribed to
+	 * @param callback Callback function that will be called whenever a melt quote state changes
+	 * @param errorCallback
+	 * @returns
+	 */
 	async onMeltQuotePaid(
 		quoteId: string,
 		callback: (payload: MeltQuoteResponse) => void,
@@ -909,6 +923,13 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Register a callback to be called when a single mint quote gets paid
+	 * @param quoteId Mint quote id that should be subscribed to
+	 * @param callback Callback function that will be called when this mint quote gets paid
+	 * @param errorCallback
+	 * @returns
+	 */
 	async onMintQuotePaid(
 		quoteId: string,
 		callback: (payload: MintQuoteResponse) => void,
@@ -932,6 +953,13 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Register a callback to be called when a single melt quote gets paid
+	 * @param quoteId Melt quote id that should be subscribed to
+	 * @param callback Callback function that will be called when this melt quote gets paid
+	 * @param errorCallback
+	 * @returns
+	 */
 	async onMeltQuoteUpdates(
 		quoteIds: Array<string>,
 		callback: (payload: MeltQuoteResponse) => void,
@@ -951,6 +979,13 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Register a callback to be called whenever a subscribed proof state changes
+	 * @param proofs List of proofs that should be subscribed to
+	 * @param callback Callback function that will be called whenever a proof's state changes
+	 * @param errorCallback
+	 * @returns
+	 */
 	async onProofStateUpdates(
 		proofs: Array<Proof>,
 		callback: (payload: ProofState & { proof: Proof }) => void,

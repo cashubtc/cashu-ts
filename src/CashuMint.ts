@@ -441,6 +441,9 @@ class CashuMint {
 		return CashuMint.restore(this._mintUrl, restorePayload, this._customRequest);
 	}
 
+	/**
+	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17
+	 */
 	async connectWebSocket() {
 		if (this.ws) {
 			await this.ws.ensureConnection();
@@ -458,6 +461,9 @@ class CashuMint {
 		}
 	}
 
+	/**
+	 * Closes a websocket connection
+	 */
 	disconnectWebSocket() {
 		if (this.ws) {
 			this.ws.close();
