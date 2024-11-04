@@ -6,8 +6,8 @@ import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { CheckStateEnum, MeltQuoteState } from '../src/model/types/index.js';
-import { injectWebSocketImpl } from '../src/WSConnection.js';
 import ws from 'ws';
+import { injectWebSocketImpl } from '../src/ws.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
