@@ -351,7 +351,7 @@ describe('mint api', () => {
 					console.log(e);
 				}
 			);
-			wallet.swap(63, proofs);
+			wallet.swap(21, proofs);
 		});
 		mint.disconnectWebSocket();
 	}, 10000);
