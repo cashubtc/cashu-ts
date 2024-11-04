@@ -5,7 +5,12 @@ import dns from 'node:dns';
 import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
-import { CheckStateEnum, MeltQuoteState } from '../src/model/types/index.js';
+import {
+	CheckStateEnum,
+	MeltQuoteState,
+	MintQuotePayload,
+	MintQuoteState
+} from '../src/model/types/index.js';
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
 dns.setDefaultResultOrder('ipv4first');
@@ -264,10 +269,10 @@ describe('mint api', () => {
 		const mintQuote = await wallet.createMintQuote(21);
 		const callback = jest.fn();
 		const res = await new Promise((res, rej) => {
-			wallet.onMintQuotePaid(
-				mintQuote.quote,
-				() => {
-					callback();
+			wallet.onMintQuoteUpdates(
+				[mintQuote.quote],
+				(p) => {
+					if (p.state === MintQuoteState.PAID) callback();
 					res(1);
 				},
 				(e) => {
