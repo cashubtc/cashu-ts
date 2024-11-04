@@ -905,7 +905,7 @@ class CashuWallet {
 
 	async onProofStateUpdates(
 		proofs: Array<Proof>,
-		callback: (payload: ProofState) => void,
+		callback: (payload: ProofState & { proof: Proof }) => void,
 		errorCallback: (e: Error) => void
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
@@ -913,10 +913,17 @@ class CashuWallet {
 			throw new Error('failed to establish WebSocket connection.');
 		}
 		const enc = new TextEncoder();
-		const ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		const proofMap: { [y: string]: Proof } = {};
+		for (let i = 0; i < proofs.length; i++) {
+			const y = hashToCurve(enc.encode(proofs[i].secret)).toHex(true);
+			proofMap[y] = proofs[i];
+		}
+		const ys = Object.keys(proofMap);
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'proof_state', filters: ys },
-			callback,
+			(p: ProofState) => {
+				callback({ ...p, proof: proofMap[p.Y] });
+			},
 			errorCallback
 		);
 		return () => {
