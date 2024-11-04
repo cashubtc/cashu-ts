@@ -903,6 +903,27 @@ class CashuWallet {
 		};
 	}
 
+	async onProofStateUpdates(
+		proofs: Array<Proof>,
+		callback: (payload: ProofState) => void,
+		errorCallback: (e: Error) => void
+	): Promise<SubscriptionCanceller> {
+		await this.mint.connectWebSocket();
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		const enc = new TextEncoder();
+		const ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		const subId = this.mint.webSocketConnection.createSubscription(
+			{ kind: 'proof_state', filters: ys },
+			callback,
+			errorCallback
+		);
+		return () => {
+			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+		};
+	}
+
 	/**
 	 * Creates blinded messages for a given amount
 	 * @param amount amount to create blinded messages for

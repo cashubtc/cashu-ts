@@ -9,7 +9,9 @@ import {
 	CheckStateEnum,
 	MeltQuoteState,
 	MintQuotePayload,
-	MintQuoteState
+	MintQuoteResponse,
+	MintQuoteState,
+	ProofState
 } from '../src/model/types/index.js';
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
@@ -320,5 +322,37 @@ describe('mint api', () => {
 		expect(res).toBe(1);
 		expect(callbackRef).toHaveBeenCalledTimes(4);
 		expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
+	});
+	test('websocket proof state + mint quote updates', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const quote = await wallet.createMintQuote(63);
+		await new Promise<void>((res) => {
+			function handleUpdate(p: MintQuoteResponse) {
+				if (p.state === MintQuoteState.PAID) {
+					res();
+				}
+			}
+			wallet.onMintQuoteUpdates([quote.quote], handleUpdate, (e) => {
+				console.log(e);
+			});
+		});
+		const { proofs } = await wallet.mintProofs(63, quote.quote);
+		const data = await new Promise<ProofState>((res) => {
+			wallet.onProofStateUpdates(
+				proofs,
+				(p) => {
+					if (p.state === CheckStateEnum.SPENT) {
+						res(p);
+					}
+				},
+				(e) => {
+					console.log(e);
+				}
+			);
+			wallet.swap(63, proofs);
+		});
+		console.log('final ws boss', data);
 	});
 });
