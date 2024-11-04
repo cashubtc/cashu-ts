@@ -274,8 +274,10 @@ describe('mint api', () => {
 			wallet.onMintQuoteUpdates(
 				[mintQuote.quote],
 				(p) => {
-					if (p.state === MintQuoteState.PAID) callback();
-					res(1);
+					if (p.state === MintQuoteState.PAID) {
+						callback();
+						res(1);
+					}
 				},
 				(e) => {
 					console.log(e);
@@ -299,8 +301,7 @@ describe('mint api', () => {
 			let counter = 0;
 			const unsub = await wallet.onMintQuoteUpdates(
 				[mintQuote1.quote, mintQuote2.quote],
-				(p) => {
-					console.log(p);
+				() => {
 					counter++;
 					callbackRef();
 					if (counter === 4) {
@@ -308,9 +309,8 @@ describe('mint api', () => {
 						res(1);
 					}
 				},
-				(e) => {
+				() => {
 					counter++;
-					console.log(e);
 					if (counter === 4) {
 						unsub();
 						rej();
@@ -353,6 +353,6 @@ describe('mint api', () => {
 			);
 			wallet.swap(63, proofs);
 		});
-		console.log('final ws boss', data);
-	});
+		mint.disconnectWebSocket();
+	}, 10000);
 });
