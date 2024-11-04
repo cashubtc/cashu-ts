@@ -328,15 +328,8 @@ describe('mint api', () => {
 		const wallet = new CashuWallet(mint);
 
 		const quote = await wallet.createMintQuote(63);
-		await new Promise<void>((res) => {
-			function handleUpdate(p: MintQuoteResponse) {
-				if (p.state === MintQuoteState.PAID) {
-					res();
-				}
-			}
-			wallet.onMintQuoteUpdates([quote.quote], handleUpdate, (e) => {
-				console.log(e);
-			});
+		await new Promise((res, rej) => {
+			wallet.onMintQuotePaid(quote.quote, res, rej);
 		});
 		const { proofs } = await wallet.mintProofs(63, quote.quote);
 		const data = await new Promise<ProofState>((res) => {

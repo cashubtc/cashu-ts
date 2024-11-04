@@ -20,7 +20,8 @@ import {
 	OutputAmounts,
 	ProofState,
 	BlindingData,
-	MintQuoteResponse
+	MintQuoteResponse,
+	MintQuoteState
 } from './model/types/index.js';
 import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
@@ -877,6 +878,29 @@ class CashuWallet {
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: quoteIds },
 			callback,
+			errorCallback
+		);
+		return () => {
+			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+		};
+	}
+
+	async onMintQuotePaid(
+		quoteId: string,
+		callback: (payload: MintQuoteResponse) => void,
+		errorCallback: (e: Error) => void
+	): Promise<SubscriptionCanceller> {
+		await this.mint.connectWebSocket();
+		if (!this.mint.webSocketConnection) {
+			throw new Error('failed to establish WebSocket connection.');
+		}
+		const subId = this.mint.webSocketConnection.createSubscription(
+			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
+			(p: MintQuoteResponse) => {
+				if (p.state === MintQuoteState.PAID) {
+					callback(p);
+				}
+			},
 			errorCallback
 		);
 		return () => {
