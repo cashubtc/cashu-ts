@@ -884,61 +884,22 @@ class CashuWallet {
 		};
 	}
 
-	async onMintQuotePaid(
-		quoteId: string,
-		callback: (payload: MintQuoteResponse) => void,
+	async onMeltQuoteUpdates(
+		quoteIds: Array<string>,
+		callback: (payload: MeltQuoteResponse) => void,
 		errorCallback: (e: Error) => void
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
 			throw new Error('failed to establish WebSocket connection.');
 		}
-		const subCallback = (payload: MintQuoteResponse) => {
-			if (payload.state === 'PAID') {
-				callback(payload);
-			}
-		};
 		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
-			subCallback,
+			{ kind: 'bolt11_melt_quote', filters: quoteIds },
+			callback,
 			errorCallback
 		);
 		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, subCallback);
-		};
-	}
-
-	async onMeltQuotePaid(
-		quoteId: string,
-		callback: (payload: MeltQuoteResponse) => any,
-		errorCallback: (e: Error) => void
-	) {
-		try {
-			await this.mint.connectWebSocket();
-		} catch (e) {
-			if (e instanceof Error) {
-				return errorCallback(e);
-			} else if (e) {
-				return errorCallback(new Error('Something went wrong'));
-			}
-		}
-		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
-		}
-		const subCallback = (payload: MeltQuoteResponse) => {
-			if (payload.state === 'PAID') {
-				callback(payload);
-			}
-		};
-		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'bolt11_melt_quote', filters: [quoteId] },
-			subCallback,
-			(e: Error) => {
-				errorCallback(e);
-			}
-		);
-		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, subCallback);
+			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
 		};
 	}
 

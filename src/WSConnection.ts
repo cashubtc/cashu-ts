@@ -47,6 +47,9 @@ export class WSConnection {
 						this.handlingInterval = setInterval(this.handleNextMesage.bind(this), 0);
 					}
 				};
+				this.ws.onclose = () => {
+					this.connectionPromise = undefined;
+				};
 			});
 		}
 		return this.connectionPromise;
