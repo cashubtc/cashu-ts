@@ -1,5 +1,5 @@
 import { WSConnection } from '../src/WSConnection';
-import { Server, WebSocket } from 'mock-socket';
+import { Client, Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
 
 injectWebSocketImpl(WebSocket);
@@ -45,25 +45,40 @@ describe('testing WSConnection', () => {
 	test('unsubscribing', async () => {
 		const fakeUrl = 'ws://localhost:3338/v1/ws';
 		const server = new Server(fakeUrl, { mock: false });
-		const message = await new Promise(async (res) => {
+		let wsSocket: Client;
+		let subId: string;
+		const conn = new WSConnection(fakeUrl);
+		await new Promise<void>(async (res) => {
 			server.on('connection', (socket) => {
-				socket.on('message', (m) => {
-					const parsed = JSON.parse(m.toString());
-					if (parsed.method === 'unsubscribe') res(parsed);
-				});
+				wsSocket = socket;
+				res();
 			});
-			const conn = new WSConnection(fakeUrl);
-			await conn.connect();
-
-			const callback = jest.fn();
-			const errorCallback = jest.fn();
-			const subId = conn.createSubscription(
+			conn.connect();
+		});
+		const callback = jest.fn();
+		const errorCallback = jest.fn();
+		await new Promise<void>((res) => {
+			wsSocket.on('message', (m) => {
+				const parsed = JSON.parse(m.toString());
+				if (parsed.method === 'subscribe') {
+					const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
+					wsSocket.send(message);
+					setTimeout(res, 0);
+				}
+			});
+			subId = conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['123'] },
 				callback,
 				errorCallback
 			);
-			//TODO: Add assertion for subListenerLength once SubscriptionManager is modularised
-			conn.cancelSubscription(subId, callback);
+		});
+
+		const message = await new Promise(async (res) => {
+			wsSocket.on('message', (m) => {
+				const parsed = JSON.parse(m.toString());
+				if (parsed.method === 'unsubscribe') res(parsed);
+			});
+			conn.cancelSubscription(subId!, callback);
 		});
 		expect(message).toMatchObject({ jsonrpc: '2.0', method: 'unsubscribe' });
 		server.stop();
