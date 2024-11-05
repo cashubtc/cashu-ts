@@ -30,8 +30,6 @@ import {
 	getKeepAmounts,
 	hexToNumber
 } from './utils.js';
-import { validateMnemonic } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
 	blindMessage,
