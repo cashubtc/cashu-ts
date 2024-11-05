@@ -450,7 +450,7 @@ class CashuMint {
 		} else {
 			const mintUrl = new URL(this._mintUrl);
 			this.ws = new WSConnection(
-				`${mintUrl.protocol === 'https' ? 'wss' : 'ws'}://${mintUrl.host}/v1/ws`
+				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}/v1/ws`
 			);
 			try {
 				await this.ws.connect();
