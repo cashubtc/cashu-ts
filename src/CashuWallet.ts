@@ -905,22 +905,15 @@ class CashuWallet {
 		callback: (payload: MeltQuoteResponse) => void,
 		errorCallback: (e: Error) => void
 	): Promise<SubscriptionCanceller> {
-		await this.mint.connectWebSocket();
-		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
-		}
-		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'bolt11_melt_quote', filters: [quoteId] },
-			(p: MeltQuoteResponse) => {
+		return this.onMeltQuoteUpdates(
+			[quoteId],
+			(p) => {
 				if (p.state === MeltQuoteState.PAID) {
 					callback(p);
 				}
 			},
 			errorCallback
 		);
-		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
-		};
 	}
 
 	/**
@@ -935,22 +928,15 @@ class CashuWallet {
 		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void
 	): Promise<SubscriptionCanceller> {
-		await this.mint.connectWebSocket();
-		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
-		}
-		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'bolt11_mint_quote', filters: [quoteId] },
-			(p: MintQuoteResponse) => {
+		return this.onMintQuoteUpdates(
+			[quoteId],
+			(p) => {
 				if (p.state === MintQuoteState.PAID) {
 					callback(p);
 				}
 			},
 			errorCallback
 		);
-		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
-		};
 	}
 
 	/**
