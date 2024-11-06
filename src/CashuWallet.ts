@@ -299,6 +299,7 @@ class CashuWallet {
 	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param options.offline? optionally send proofs offline.
 	 * @param options.includeFees? optionally include fees in the response.
+	 * @param options.includeDleq? optionally include DLEQ proof in the proofs to send.
 	 * @returns {SendResponse}
 	 */
 	async send(
@@ -313,6 +314,7 @@ class CashuWallet {
 			keysetId?: string;
 			offline?: boolean;
 			includeFees?: boolean;
+			includeDleq?: boolean;
 		}
 	): Promise<SendResponse> {
 		if (sumProofs(proofs) < amount) {
@@ -321,7 +323,8 @@ class CashuWallet {
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
 			amount,
-			options?.includeFees
+			options?.includeFees,
+			options?.includeDleq,
 		);
 		const expectedFee = options?.includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
@@ -337,7 +340,8 @@ class CashuWallet {
 			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
-				true
+				true,
+				options?.includeDleq,
 			);
 			options?.proofsWeHave?.push(...keepProofsSelect);
 
@@ -356,8 +360,13 @@ class CashuWallet {
 	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees?: boolean
+		includeFees?: boolean,
+		includeDleq?: boolean,
 	): SendResponse {
+		if (includeDleq ?? false) {
+			// only pick the ones with a DLEQ proof
+			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
+		}
 		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const smallerProofs = sortedProofs
 			.filter((p: Proof) => p.amount <= amountToSend)
@@ -386,7 +395,8 @@ class CashuWallet {
 			const { keep, send } = this.selectProofsToSend(
 				smallerProofs.slice(1),
 				remainder,
-				includeFees
+				includeFees,
+				includeDleq,
 			);
 			selectedProofs.push(...send);
 			returnedProofs.push(...keep);
@@ -396,8 +406,19 @@ class CashuWallet {
 		if (sumProofs(selectedProofs) < amountToSend + selectedFeePPK && nextBigger) {
 			selectedProofs = [nextBigger];
 		}
+
+		const keepProofs = proofs.filter((p: Proof) => !selectedProofs.includes(p));
+
+		// if explicitly told to, strip DLEQ
+		if (!includeDleq) {
+			selectedProofs = selectedProofs.map((p: Proof) => {
+				p.dleq = undefined;
+				return p;
+			});
+		}
+		
 		return {
-			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
+			keep: keepProofs,
 			send: selectedProofs
 		};
 	}
@@ -750,7 +771,7 @@ class CashuWallet {
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
 		// Strip DLEQs if any
-		proofsToSend.map((p: Proof) => {
+		proofsToSend = proofsToSend.map((p: Proof) => {
 			p.dleq = undefined;
 			return p;
 		});
@@ -830,7 +851,7 @@ class CashuWallet {
 		}
 
 		// Strip DLEQs if any
-		proofsToSend.map((p: Proof) => {
+		proofsToSend = proofsToSend.map((p: Proof) => {
 			p.dleq = undefined;
 			return p;
 		});

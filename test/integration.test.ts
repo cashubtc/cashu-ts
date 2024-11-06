@@ -2,10 +2,10 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
+import { deriveKeysetId, getEncodedToken, getEncodedTokenV4, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
-import { CheckStateEnum, MeltQuoteState } from '../src/model/types/index.js';
+import { CheckStateEnum, MeltQuoteState, Token } from '../src/model/types/index.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -253,4 +253,42 @@ describe('mint api', () => {
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
+	test('mint and check dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error("Cannot run this test: mint does not support NUT12");
+		}
+		const wallet = new CashuWallet(mint);
+
+		const mintRequest = await wallet.createMintQuote(3000);
+		const { proofs } = await wallet.mintProofs(3000, mintRequest.quote);
+
+		proofs.forEach(p => {
+			expect(p).toHaveProperty('dleq');
+			expect(p.dleq).toHaveProperty('s');
+			expect(p.dleq).toHaveProperty('e');
+			expect(p.dleq).toHaveProperty('r');
+			expect(p).toHaveProperty('dleqValid', true);
+		});
+	});
+	test('send and receive token with dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const mintRequest = await wallet.createMintQuote(3000);
+		const { proofs } = await wallet.mintProofs(3000, mintRequest.quote);
+
+		const { keep, send } = await wallet.send(1500, proofs, { includeDleq: true });
+
+		send.forEach(p => {expect(p.dleq).toBeDefined(); expect(p.dleq?.r).toBeDefined()});
+		const token = {
+			mint: mint.mintUrl,
+			proofs: send
+		} as Token;
+		const encodedToken = getEncodedTokenV4(token);
+		const newProofs = await wallet.receive(encodedToken, { requireDleq: true })
+		console.log(getEncodedTokenV4(token));
+		expect(newProofs).toBeDefined();
+ 	});
 });
