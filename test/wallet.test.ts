@@ -199,13 +199,6 @@ describe('receive', () => {
 		const result = await wallet.receive(tokenInput).catch((e) => e);
 		expect(result).toEqual(new Error('could not verify proofs.'));
 	});
-
-	/*
-	test('test receive with dleq', async() => {
-		nock(mintUrl).post('/v1/swap').reply(200, {});
-		const wallet = new CashuWallet(mint, { unit });
-	})
-	*/
 });
 
 describe('checkProofsStates', () => {

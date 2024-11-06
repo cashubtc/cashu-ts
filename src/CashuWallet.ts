@@ -1062,6 +1062,9 @@ class CashuWallet {
 				r: hexToNumber(p.dleq.r ?? '00')
 			} as DLEQ;
 			const key = keys.keys[p.amount];
+			if (key == undefined) {
+				throw new Error(`undefined key for amount ${p.amount}`);
+			}
 			if (
 				!verifyDLEQProof_reblind(
 					new TextEncoder().encode(p.secret),
