@@ -28,7 +28,8 @@ import {
 	splitAmount,
 	sumProofs,
 	getKeepAmounts,
-	hexToNumber
+	hexToNumber,
+	numberToHexPadded64
 } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
@@ -40,7 +41,6 @@ import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
-
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -1039,7 +1039,7 @@ class CashuWallet {
 					: ({
 							s: bytesToHex(dleq.s),
 							e: bytesToHex(dleq.e),
-							r: dleq.r?.toString(16)
+							r: numberToHexPadded64(dleq.r ?? BigInt(0)),
 					  } as SerializedDLEQ);
 			return serializedProof;
 		});

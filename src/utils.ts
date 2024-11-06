@@ -152,6 +152,15 @@ export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
+/**
+ * 
+ * @param number (bigint) to conver to hex 
+ * @returns hex string start-padded to 64 characters
+ */
+export function numberToHexPadded64(number: bigint): string {
+	return number.toString(16).padStart(64, '0');
+}
+
 function isValidHex(str: string) {
 	return /^[a-f0-9]*$/i.test(str);
 }

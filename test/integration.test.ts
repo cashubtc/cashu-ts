@@ -281,7 +281,11 @@ describe('mint api', () => {
 
 		const { keep, send } = await wallet.send(1500, proofs, { includeDleq: true });
 
-		send.forEach(p => {expect(p.dleq).toBeDefined(); expect(p.dleq?.r).toBeDefined()});
+		send.forEach(p => {
+			expect(p.dleq).toBeDefined();
+			expect(p.dleq?.r).toBeDefined();
+		});
+		
 		const token = {
 			mint: mint.mintUrl,
 			proofs: send
