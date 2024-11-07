@@ -317,14 +317,17 @@ class CashuWallet {
 			includeDleq?: boolean;
 		}
 	): Promise<SendResponse> {
+		if (options?.includeDleq ?? false) {
+			// only pick the ones with a DLEQ proof
+			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
+		}
 		if (sumProofs(proofs) < amount) {
 			throw new Error('Not enough funds available to send');
 		}
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
 			amount,
-			options?.includeFees,
-			options?.includeDleq,
+			options?.includeFees
 		);
 		const expectedFee = options?.includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
@@ -340,18 +343,32 @@ class CashuWallet {
 			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
-				true,
-				options?.includeDleq,
+				true
 			);
 			options?.proofsWeHave?.push(...keepProofsSelect);
 
-			const { keep, send } = await this.swap(amount, sendProofs, options);
-			const keepProofs = keepProofsSelect.concat(keep);
-			return { keep: keepProofs, send };
+			let { keep, send } = await this.swap(amount, sendProofs, options);
+			keep = keepProofsSelect.concat(keep);
+
+			// strip dleq if explicitly told so
+			if (!options?.includeDleq) {
+				send = send.map((p: Proof) => {
+					return {...p, dleq: undefined };
+				});
+			}
+
+			return { keep, send };
 		}
 
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
 			throw new Error('Not enough funds available to send');
+		}
+
+		// strip dleq if explicitly told so
+		if (!options?.includeDleq) {
+			sendProofOffline.forEach((p: Proof) => {
+				p.dleq = undefined;
+			});
 		}
 
 		return { keep: keepProofsOffline, send: sendProofOffline };
@@ -360,13 +377,8 @@ class CashuWallet {
 	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees?: boolean,
-		includeDleq?: boolean,
+		includeFees?: boolean
 	): SendResponse {
-		if (includeDleq ?? false) {
-			// only pick the ones with a DLEQ proof
-			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
-		}
 		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
 		const smallerProofs = sortedProofs
 			.filter((p: Proof) => p.amount <= amountToSend)
@@ -396,7 +408,6 @@ class CashuWallet {
 				smallerProofs.slice(1),
 				remainder,
 				includeFees,
-				includeDleq,
 			);
 			selectedProofs.push(...send);
 			returnedProofs.push(...keep);
@@ -406,19 +417,9 @@ class CashuWallet {
 		if (sumProofs(selectedProofs) < amountToSend + selectedFeePPK && nextBigger) {
 			selectedProofs = [nextBigger];
 		}
-
-		const keepProofs = proofs.filter((p: Proof) => !selectedProofs.includes(p));
-
-		// if explicitly told to, strip DLEQ
-		if (!includeDleq) {
-			selectedProofs = selectedProofs.map((p: Proof) => {
-				p.dleq = undefined;
-				return p;
-			});
-		}
 		
 		return {
-			keep: keepProofs,
+			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
 			send: selectedProofs
 		};
 	}
@@ -772,8 +773,7 @@ class CashuWallet {
 		}
 		// Strip DLEQs if any
 		proofsToSend = proofsToSend.map((p: Proof) => {
-			p.dleq = undefined;
-			return p;
+			return { ...p, dleq: undefined };
 		});
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
@@ -852,8 +852,7 @@ class CashuWallet {
 
 		// Strip DLEQs if any
 		proofsToSend = proofsToSend.map((p: Proof) => {
-			p.dleq = undefined;
-			return p;
+			return { ...p, dleq: undefined };
 		});
 
 		// join keepBlindedMessages and sendBlindedMessages
