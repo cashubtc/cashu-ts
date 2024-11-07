@@ -2,7 +2,14 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { deriveKeysetId, getEncodedToken, getEncodedTokenV4, sumProofs } from '../src/utils.js';
+import {
+	deriveKeysetId,
+	getEncodedToken,
+	getEncodedTokenV4,
+	hexToNumber,
+	numberToHexPadded64,
+	sumProofs
+} from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { CheckStateEnum, MeltQuoteState, Token } from '../src/model/types/index.js';
@@ -339,5 +346,34 @@ describe('dleq', () => {
 
 		const exc = await wallet.send(4, proofs, { includeDleq: true }).catch((e) => e);
 		expect(exc).toEqual(new Error('Not enough funds available to send'));
+	});
+	test('receive with invalid dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(mint);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error('Cannot run this test: mint does not support NUT12');
+		}
+
+		const mintRequest = await wallet.createMintQuote(8);
+		let { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+
+		// alter dleq signature
+		proofs.forEach((p) => {
+			if (p.dleq != undefined) {
+				const s = hexToNumber(p.dleq.s) + BigInt(1);
+				p.dleq.s = numberToHexPadded64(s);
+			}
+		});
+
+		const token = {
+			mint: mint.mintUrl,
+			proofs: proofs
+		} as Token;
+
+		const key = keys.keysets.filter((k) => k.id === proofs[0].id)[0].keys[proofs[0].amount];
+		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
+		expect(exc).toEqual(new Error(`0-th DLEQ proof is invalid for key ${key}`));
 	});
 });
