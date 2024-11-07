@@ -153,8 +153,8 @@ export function hexToNumber(hex: string): bigint {
 }
 
 /**
- * 
- * @param number (bigint) to conver to hex 
+ * Converts a number to a hex string of 64 characters.
+ * @param number (bigint) to conver to hex
  * @returns hex string start-padded to 64 characters
  */
 export function numberToHexPadded64(number: bigint): string {

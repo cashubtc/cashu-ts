@@ -353,7 +353,7 @@ class CashuWallet {
 			// strip dleq if explicitly told so
 			if (!options?.includeDleq) {
 				send = send.map((p: Proof) => {
-					return {...p, dleq: undefined };
+					return { ...p, dleq: undefined };
 				});
 			}
 
@@ -407,7 +407,7 @@ class CashuWallet {
 			const { keep, send } = this.selectProofsToSend(
 				smallerProofs.slice(1),
 				remainder,
-				includeFees,
+				includeFees
 			);
 			selectedProofs.push(...send);
 			returnedProofs.push(...keep);
@@ -417,7 +417,7 @@ class CashuWallet {
 		if (sumProofs(selectedProofs) < amountToSend + selectedFeePPK && nextBigger) {
 			selectedProofs = [nextBigger];
 		}
-		
+
 		return {
 			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
 			send: selectedProofs
@@ -1038,7 +1038,7 @@ class CashuWallet {
 					: ({
 							s: bytesToHex(dleq.s),
 							e: bytesToHex(dleq.e),
-							r: numberToHexPadded64(dleq.r ?? BigInt(0)),
+							r: numberToHexPadded64(dleq.r ?? BigInt(0))
 					  } as SerializedDLEQ);
 			return serializedProof;
 		});
