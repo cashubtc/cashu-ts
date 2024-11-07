@@ -321,4 +321,23 @@ describe('dleq', () => {
 			expect(p.dleq?.r).toBeDefined();
 		});
 	});
+	test('send not enough proofs when dleq is required', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error("Cannot run this test: mint does not support NUT12");
+		}
+
+		const mintRequest = await wallet.createMintQuote(8);
+		let { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+
+		// strip dleq 
+		proofs = proofs.map(p => {
+			return { ...p, dleq: undefined };
+		});
+
+		const exc = await wallet.send(4, proofs, { includeDleq: true }).catch(e => e);
+		expect(exc).toEqual(new Error("Not enough funds available to send"));
+	});
 });
