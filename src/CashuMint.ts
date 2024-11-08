@@ -449,8 +449,16 @@ class CashuMint {
 			await this.ws.ensureConnection();
 		} else {
 			const mintUrl = new URL(this._mintUrl);
+			const wsSegment = 'v1/ws';
+			if (mintUrl.pathname) {
+				if (mintUrl.pathname.endsWith('/')) {
+					mintUrl.pathname += wsSegment;
+				} else {
+					mintUrl.pathname += '/' + wsSegment;
+				}
+			}
 			this.ws = new WSConnection(
-				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}/v1/ws`
+				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`
 			);
 			try {
 				await this.ws.connect();
