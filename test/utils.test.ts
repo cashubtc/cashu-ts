@@ -1,4 +1,8 @@
-import { blindMessage, constructProofFromPromise, serializeProof } from '@cashu/crypto/modules/client';
+import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof
+} from '@cashu/crypto/modules/client';
 import { Keys, Proof } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';
@@ -370,11 +374,11 @@ describe('test zero-knowledge utilities', () => {
 		// make up blinding factor
 		const r = hexToNumber('123456'.padStart(64, '0'));
 		// blind secret
-		const fakeBlindedMessage = blindMessage(fakeSecret, r)
+		const fakeBlindedMessage = blindMessage(fakeSecret, r);
 		// construct DLEQ
 		const fakeDleq = createDLEQProof(fakeBlindedMessage.B_, privkey);
 		// blind signature
-		const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00')
+		const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00');
 		// unblind
 		const proof = constructProofFromPromise(fakeBlindSignature, r, fakeSecret, pubkey);
 		// serialize
@@ -383,16 +387,16 @@ describe('test zero-knowledge utilities', () => {
 			dleq: {
 				r: numberToHexPadded64(r),
 				e: bytesToHex(fakeDleq.e),
-				s: bytesToHex(fakeDleq.s),
+				s: bytesToHex(fakeDleq.s)
 			}
 		} as Proof;
 		// use hasValidDleq to verify DLEQ
 		const keyset = {
 			id: '00',
 			unit: 'sat',
-			keys: {[1]: pubkey.toHex(true)},
+			keys: { [1]: pubkey.toHex(true) }
 		};
 		const validDleq = hasValidDleq(serializedProof, keyset);
 		expect(validDleq).toBe(true);
-	})
+	});
 });

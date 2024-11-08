@@ -255,7 +255,7 @@ export function getEncodedTokenV4(token: Token): string {
 								s: hexToBytes(p.dleq.s),
 								r: hexToBytes(p.dleq.r ?? '00')
 							} as V4DLEQTemplate
-						}),
+						})
 					})
 				)
 			})
@@ -328,7 +328,7 @@ export function handleTokens(token: string): Token {
 						dleq: {
 							r: bytesToHex(p.d.r),
 							s: bytesToHex(p.d.s),
-							e: bytesToHex(p.d.e),
+							e: bytesToHex(p.d.e)
 						} as SerializedDLEQ
 					})
 				});
@@ -405,7 +405,7 @@ export function decodePaymentRequest(paymentRequest: string) {
  * @param proof The proof subject to verification
  * @param keyset The Mint's keyset to be used for verification
  * @returns true if verification succeeded, false otherwise
- * @throws Error if @param proof does not match any key in @param keyset 
+ * @throws Error if @param proof does not match any key in @param keyset
  */
 export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	if (proof.dleq == undefined) {

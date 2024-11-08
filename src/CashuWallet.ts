@@ -266,7 +266,7 @@ class CashuWallet {
 		const keys = await this.getKeys(options?.keysetId);
 		if (options?.requireDleq) {
 			if (token.proofs.some((p: Proof) => !hasValidDleq(p, keys))) {
-				throw new Error("Token contains proofs with invalid DLEQ")
+				throw new Error('Token contains proofs with invalid DLEQ');
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);

@@ -373,6 +373,6 @@ describe('dleq', () => {
 		} as Token;
 
 		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
-		expect(exc).toEqual(new Error("Token contains proofs with invalid DLEQ"));
+		expect(exc).toEqual(new Error('Token contains proofs with invalid DLEQ'));
 	});
 });
