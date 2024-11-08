@@ -212,8 +212,7 @@ describe('test decode token', () => {
 					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
 					C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
 					id: '00ad268c4d1f5826',
-					amount: 1,
-					dleq: undefined
+					amount: 1
 				}
 			]
 		};
@@ -233,22 +232,19 @@ describe('test decode token', () => {
 					secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
 					C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
 					id: '00ffd48b8f5ecf80',
-					amount: 1,
-					dleq: undefined
+					amount: 1
 				},
 				{
 					secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
 					C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
 					id: '00ad268c4d1f5826',
-					amount: 2,
-					dleq: undefined
+					amount: 2
 				},
 				{
 					secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
 					C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
 					id: '00ad268c4d1f5826',
-					amount: 1,
-					dleq: undefined
+					amount: 1
 				}
 			]
 		};
@@ -281,8 +277,7 @@ describe('test v4 encoding', () => {
 					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
 					C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
 					id: '00ad268c4d1f5826',
-					amount: 1,
-					dleq: undefined
+					amount: 1
 				}
 			],
 			unit: 'sat'
