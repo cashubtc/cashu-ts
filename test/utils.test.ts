@@ -364,33 +364,33 @@ describe('test output selection', () => {
 	});
 });
 describe('test zero-knowledge utilities', () => {
-	test('has valid dleq', () => {
-		// create private public key pair
-		const privkey = hexToBytes('1'.padStart(64, '0'));
-		const pubkey = pointFromBytes(getPubKeyFromPrivKey(privkey));
+	// create private public key pair
+	const privkey = hexToBytes('1'.padStart(64, '0'));
+	const pubkey = pointFromBytes(getPubKeyFromPrivKey(privkey));
 
-		// make up a secret
-		const fakeSecret = new TextEncoder().encode('fakeSecret');
-		// make up blinding factor
-		const r = hexToNumber('123456'.padStart(64, '0'));
-		// blind secret
-		const fakeBlindedMessage = blindMessage(fakeSecret, r);
-		// construct DLEQ
-		const fakeDleq = createDLEQProof(fakeBlindedMessage.B_, privkey);
-		// blind signature
-		const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00');
-		// unblind
-		const proof = constructProofFromPromise(fakeBlindSignature, r, fakeSecret, pubkey);
-		// serialize
-		const serializedProof = {
-			...serializeProof(proof),
-			dleq: {
-				r: numberToHexPadded64(r),
-				e: bytesToHex(fakeDleq.e),
-				s: bytesToHex(fakeDleq.s)
-			}
-		} as Proof;
-		// use hasValidDleq to verify DLEQ
+	// make up a secret
+	const fakeSecret = new TextEncoder().encode('fakeSecret');
+	// make up blinding factor
+	const r = hexToNumber('123456'.padStart(64, '0'));
+	// blind secret
+	const fakeBlindedMessage = blindMessage(fakeSecret, r);
+	// construct DLEQ
+	const fakeDleq = createDLEQProof(fakeBlindedMessage.B_, privkey);
+	// blind signature
+	const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00');
+	// unblind
+	const proof = constructProofFromPromise(fakeBlindSignature, r, fakeSecret, pubkey);
+	// serialize
+	const serializedProof = {
+		...serializeProof(proof),
+		dleq: {
+			r: numberToHexPadded64(r),
+			e: bytesToHex(fakeDleq.e),
+			s: bytesToHex(fakeDleq.s)
+		}
+	} as Proof;
+
+	test('has valid dleq', () => {
 		const keyset = {
 			id: '00',
 			unit: 'sat',
@@ -398,5 +398,19 @@ describe('test zero-knowledge utilities', () => {
 		};
 		const validDleq = hasValidDleq(serializedProof, keyset);
 		expect(validDleq).toBe(true);
+	});
+	test('has valid dleq with no matching key', () => {
+		const keyset = {
+			id: '00',
+			unit: 'sat',
+			keys: { [2]: pubkey.toHex(true) }
+		};
+		let exc;
+		try {
+			hasValidDleq(serializedProof, keyset);
+		} catch (e) {
+			exc = e;
+		}
+		expect(exc).toEqual(new Error('undefined key for amount 1'));
 	});
 });
