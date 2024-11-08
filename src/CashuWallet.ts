@@ -28,8 +28,8 @@ import {
 	splitAmount,
 	sumProofs,
 	getKeepAmounts,
-	hexToNumber,
-	numberToHexPadded64
+	numberToHexPadded64,
+	hasValidDleq
 } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
@@ -265,7 +265,9 @@ class CashuWallet {
 		}
 		const keys = await this.getKeys(options?.keysetId);
 		if (options?.requireDleq) {
-			this.requireDLEQ(token, keys);
+			if (token.proofs.some((p: Proof) => !hasValidDleq(p, keys))) {
+				throw new Error("Token contains proofs with invalid DLEQ")
+			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
 		const { payload, blindingData } = this.createSwapPayload(
@@ -317,7 +319,7 @@ class CashuWallet {
 			includeDleq?: boolean;
 		}
 	): Promise<SendResponse> {
-		if (options?.includeDleq ?? false) {
+		if (options?.includeDleq) {
 			// only pick the ones with a DLEQ proof
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
@@ -351,7 +353,7 @@ class CashuWallet {
 			keep = keepProofsSelect.concat(keep);
 
 			// strip dleq if explicitly told so
-			if (!options?.includeDleq) {
+			if (options?.includeDleq === false) {
 				send = send.map((p: Proof) => {
 					return { ...p, dleq: undefined };
 				});
@@ -1029,51 +1031,20 @@ class CashuWallet {
 			const secret = secrets[i];
 			const A = pointFromHex(keyset.keys[p.amount]);
 			const proof = constructProofFromPromise(blindSignature, r, secret, A);
-			const serializedProof = serializeProof(proof) as Proof;
-			serializedProof.dleqValid =
-				dleq == undefined ? undefined : verifyDLEQProof_reblind(secret, dleq, proof.C, A);
-			serializedProof.dleq =
-				dleq == undefined
-					? undefined
-					: ({
-							s: bytesToHex(dleq.s),
-							e: bytesToHex(dleq.e),
-							r: numberToHexPadded64(dleq.r ?? BigInt(0))
-					  } as SerializedDLEQ);
+			const serializedProof = {
+				...serializeProof(proof),
+				...(dleq && {
+					dleqValid: verifyDLEQProof_reblind(secret, dleq, proof.C, A)
+				}),
+				...(dleq && {
+					dleq: {
+						s: bytesToHex(dleq.s),
+						e: bytesToHex(dleq.e),
+						r: numberToHexPadded64(dleq.r ?? BigInt(0))
+					} as SerializedDLEQ
+				})
+			} as Proof;
 			return serializedProof;
-		});
-	}
-
-	/**
-	 * Checks that each proof in `token` has a valid DLEQ proof according to
-	 * keyset `keys`
-	 * @param token The token subject to the verification
-	 * @param keys The Mint's keyset to be used for verification
-	 */
-	private requireDLEQ(token: Token, keys: MintKeys) {
-		token.proofs.forEach((p: Proof, i: number) => {
-			if (p.dleq == undefined) {
-				throw new Error(`${i}-th proof is missing DLEQ proof`);
-			}
-			const dleq = {
-				e: hexToBytes(p.dleq.e),
-				s: hexToBytes(p.dleq.s),
-				r: hexToNumber(p.dleq.r ?? '00')
-			} as DLEQ;
-			const key = keys.keys[p.amount];
-			if (key == undefined) {
-				throw new Error(`undefined key for amount ${p.amount}`);
-			}
-			if (
-				!verifyDLEQProof_reblind(
-					new TextEncoder().encode(p.secret),
-					dleq,
-					pointFromHex(p.C),
-					pointFromHex(key)
-				)
-			) {
-				throw new Error(`${i}-th DLEQ proof is invalid for key ${key}`);
-			}
 		});
 	}
 }

@@ -9,7 +9,7 @@ class BlindedSignature {
 	C_: ProjPointType<bigint>;
 	dleq?: DLEQ;
 
-	constructor(id: string, amount: number, C_: ProjPointType<bigint>, dleq: DLEQ) {
+	constructor(id: string, amount: number, C_: ProjPointType<bigint>, dleq?: DLEQ) {
 		this.id = id;
 		this.amount = amount;
 		this.C_ = C_;

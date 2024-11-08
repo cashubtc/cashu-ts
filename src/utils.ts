@@ -7,6 +7,7 @@ import {
 import {
 	DeprecatedToken,
 	Keys,
+	MintKeys,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -20,6 +21,8 @@ import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
+import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 
 /**
  * Splits the amount into denominations of the provided @param keyset
@@ -246,14 +249,13 @@ export function getEncodedTokenV4(token: Token): string {
 						a: p.amount,
 						s: p.secret,
 						c: hexToBytes(p.C),
-						d:
-							p.dleq == undefined
-								? undefined
-								: ({
-										e: hexToBytes(p.dleq.e),
-										s: hexToBytes(p.dleq.s),
-										r: hexToBytes(p.dleq.r ?? '00')
-								  } as V4DLEQTemplate)
+						...(p.dleq && {
+							d: {
+								e: hexToBytes(p.dleq.e),
+								s: hexToBytes(p.dleq.s),
+								r: hexToBytes(p.dleq.r ?? '00')
+							} as V4DLEQTemplate
+						}),
 					})
 				)
 			})
@@ -322,14 +324,13 @@ export function handleTokens(token: string): Token {
 					C: bytesToHex(p.c),
 					amount: p.a,
 					id: bytesToHex(t.i),
-					dleq:
-						p.d == undefined
-							? undefined
-							: ({
-									e: bytesToHex(p.d.e),
-									s: bytesToHex(p.d.s),
-									r: bytesToHex(p.d.r)
-							  } as SerializedDLEQ)
+					...(p.d && {
+						dleq: {
+							r: bytesToHex(p.d.r),
+							s: bytesToHex(p.d.s),
+							e: bytesToHex(p.d.e),
+						} as SerializedDLEQ
+					})
 				});
 			})
 		);
@@ -396,4 +397,39 @@ export function sumProofs(proofs: Array<Proof>) {
 
 export function decodePaymentRequest(paymentRequest: string) {
 	return PaymentRequest.fromEncodedRequest(paymentRequest);
+}
+
+/**
+ * Checks that the proof has a valid DLEQ proof according to
+ * keyset `keys`
+ * @param proof The proof subject to verification
+ * @param keyset The Mint's keyset to be used for verification
+ * @returns true if verification succeeded, false otherwise
+ * @throws Error if @param proof does not match any key in @param keyset 
+ */
+export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
+	if (proof.dleq == undefined) {
+		return false;
+	}
+	const dleq = {
+		e: hexToBytes(proof.dleq.e),
+		s: hexToBytes(proof.dleq.s),
+		r: hexToNumber(proof.dleq.r ?? '00')
+	} as DLEQ;
+	const key = keyset.keys[proof.amount];
+	if (key == undefined) {
+		throw new Error(`undefined key for amount ${proof.amount}`);
+	}
+	if (
+		!verifyDLEQProof_reblind(
+			new TextEncoder().encode(proof.secret),
+			dleq,
+			pointFromHex(proof.C),
+			pointFromHex(key)
+		)
+	) {
+		return false;
+	}
+
+	return true;
 }

@@ -374,6 +374,6 @@ describe('dleq', () => {
 
 		const key = keys.keysets.filter((k) => k.id === proofs[0].id)[0].keys[proofs[0].amount];
 		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
-		expect(exc).toEqual(new Error(`0-th DLEQ proof is invalid for key ${key}`));
+		expect(exc).toEqual(new Error("Token contains proofs with invalid DLEQ"));
 	});
 });
