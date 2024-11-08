@@ -1,6 +1,12 @@
-import { Token, Keys, Proof } from '../src/model/types/index.js';
+import { blindMessage, constructProofFromPromise, serializeProof } from '@cashu/crypto/modules/client';
+import { Keys, Proof } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';
+import { createDLEQProof } from '@cashu/crypto/modules/mint/NUT12';
+import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../src/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { createBlindSignature, getPubKeyFromPrivKey } from '@cashu/crypto/modules/mint';
+import { pointFromBytes } from '@cashu/crypto/modules/common';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
@@ -352,4 +358,41 @@ describe('test output selection', () => {
 		amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 2);
 		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
 	});
+});
+describe('test zero-knowledge utilities', () => {
+	test('has valid dleq', () => {
+		// create private public key pair
+		const privkey = hexToBytes('1'.padStart(64, '0'));
+		const pubkey = pointFromBytes(getPubKeyFromPrivKey(privkey));
+
+		// make up a secret
+		const fakeSecret = new TextEncoder().encode('fakeSecret');
+		// make up blinding factor
+		const r = hexToNumber('123456'.padStart(64, '0'));
+		// blind secret
+		const fakeBlindedMessage = blindMessage(fakeSecret, r)
+		// construct DLEQ
+		const fakeDleq = createDLEQProof(fakeBlindedMessage.B_, privkey);
+		// blind signature
+		const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00')
+		// unblind
+		const proof = constructProofFromPromise(fakeBlindSignature, r, fakeSecret, pubkey);
+		// serialize
+		const serializedProof = {
+			...serializeProof(proof),
+			dleq: {
+				r: numberToHexPadded64(r),
+				e: bytesToHex(fakeDleq.e),
+				s: bytesToHex(fakeDleq.s),
+			}
+		} as Proof;
+		// use hasValidDleq to verify DLEQ
+		const keyset = {
+			id: '00',
+			unit: 'sat',
+			keys: {[1]: pubkey.toHex(true)},
+		};
+		const validDleq = hasValidDleq(serializedProof, keyset);
+		expect(validDleq).toBe(true);
+	})
 });

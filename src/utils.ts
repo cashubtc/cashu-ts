@@ -416,10 +416,10 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 		s: hexToBytes(proof.dleq.s),
 		r: hexToNumber(proof.dleq.r ?? '00')
 	} as DLEQ;
-	const key = keyset.keys[proof.amount];
-	if (key == undefined) {
+	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
 		throw new Error(`undefined key for amount ${proof.amount}`);
 	}
+	const key = keyset.keys[proof.amount];
 	if (
 		!verifyDLEQProof_reblind(
 			new TextEncoder().encode(proof.secret),
