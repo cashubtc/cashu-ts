@@ -2,6 +2,7 @@ import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { SerializedBlindedSignature } from './types/index.js';
 import { DLEQ } from '@cashu/crypto/modules/common';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { numberToHexPadded64 } from '../utils.js';
 
 class BlindedSignature {
 	id: string;
@@ -21,14 +22,13 @@ class BlindedSignature {
 			id: this.id,
 			amount: this.amount,
 			C_: this.C_.toHex(true),
-			dleq:
-				this.dleq == undefined
-					? undefined
-					: {
-							s: bytesToHex(this.dleq.s),
-							e: bytesToHex(this.dleq.e),
-							r: this.dleq.r?.toString(16)
-					  }
+			...(this.dleq && {
+				dleq: {
+					s: bytesToHex(this.dleq.s),
+					e: bytesToHex(this.dleq.e),
+					r: numberToHexPadded64(this.dleq.r ?? BigInt(0))
+				}
+			})
 		};
 	}
 }
