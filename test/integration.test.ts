@@ -55,10 +55,10 @@ describe('mint api', () => {
 		const request = await wallet.createMintQuote(1337);
 		expect(request).toBeDefined();
 		expect(request.request).toContain('lnbc1337');
-		const tokens = await wallet.mintProofs(1337, request.quote);
-		expect(tokens).toBeDefined();
+		const proofs = await wallet.mintProofs(1337, request.quote);
+		expect(proofs).toBeDefined();
 		// expect that the sum of all tokens.proofs.amount is equal to the requested amount
-		expect(tokens.proofs.reduce((a, b) => a + b.amount, 0)).toBe(1337);
+		expect(sumProofs(proofs)).toBe(1337);
 	});
 	test('get fee for local invoice', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -88,7 +88,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintProofs(100, request.quote);
+		const proofs = await wallet.mintProofs(100, request.quote);
 
 		// expect no fee because local invoice
 		const mintQuote = await wallet.createMintQuote(10);
@@ -100,7 +100,7 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(quote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.send(10, tokens.proofs, { includeFees: true });
+		const sendResponse = await wallet.send(10, proofs, { includeFees: true });
 		const response = await wallet.meltProofs(quote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
@@ -126,7 +126,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(3000);
-		const tokens = await wallet.mintProofs(3000, request.quote);
+		const proofs = await wallet.mintProofs(3000, request.quote);
 
 		const meltQuote = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltQuote.fee_reserve;
@@ -136,7 +136,7 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(meltQuote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.send(2000 + fee, tokens.proofs, { includeFees: true });
+		const sendResponse = await wallet.send(2000 + fee, proofs, { includeFees: true });
 		const response = await wallet.meltProofs(meltQuote, sendResponse.send);
 
 		expect(response).toBeDefined();
@@ -163,9 +163,9 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintProofs(64, request.quote);
+		const proofs = await wallet.mintProofs(64, request.quote);
 
-		const sendResponse = await wallet.send(64, tokens.proofs);
+		const sendResponse = await wallet.send(64, proofs);
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
 		expect(sendResponse.keep).toBeDefined();
@@ -177,9 +177,9 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintProofs(100, request.quote);
+		const proofs = await wallet.mintProofs(100, request.quote);
 
-		const sendResponse = await wallet.send(10, tokens.proofs, { includeFees: false });
+		const sendResponse = await wallet.send(10, proofs, { includeFees: false });
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
 		expect(sendResponse.keep).toBeDefined();
@@ -192,9 +192,9 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(100);
-		const tokens = await wallet.mintProofs(100, request.quote);
+		const proofs = await wallet.mintProofs(100, request.quote);
 
-		const sendResponse = await wallet.send(10, tokens.proofs);
+		const sendResponse = await wallet.send(10, proofs);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: sendResponse.send });
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
@@ -203,8 +203,8 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 		const request = await wallet.createMintQuote(64);
-		const tokens = await wallet.mintProofs(64, request.quote);
-		const encoded = getEncodedToken({ mint: mintUrl, proofs: tokens.proofs });
+		const proofs = await wallet.mintProofs(64, request.quote);
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: proofs });
 		const response = await wallet.receive(encoded);
 		expect(response).toBeDefined();
 	});
@@ -219,9 +219,9 @@ describe('mint api', () => {
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const request = await wallet.createMintQuote(128);
-		const tokens = await wallet.mintProofs(128, request.quote);
+		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
-		const { send } = await wallet.send(64, tokens.proofs, { pubkey: bytesToHex(pubKeyBob) });
+		const { send } = await wallet.send(64, mintedProofs, { pubkey: bytesToHex(pubKeyBob) });
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
 
 		const result = await wallet
@@ -254,7 +254,7 @@ describe('mint api', () => {
 		const meltRequest = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltRequest.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
-		const response = await wallet.meltProofs(meltRequest, proofs.proofs, {
+		const response = await wallet.meltProofs(meltRequest, proofs, {
 			privkey: bytesToHex(privKeyBob)
 		});
 		expect(response).toBeDefined();
@@ -271,7 +271,7 @@ describe('dleq', () => {
 		const wallet = new CashuWallet(mint);
 
 		const mintRequest = await wallet.createMintQuote(3000);
-		const { proofs } = await wallet.mintProofs(3000, mintRequest.quote);
+		const proofs = await wallet.mintProofs(3000, mintRequest.quote);
 
 		proofs.forEach((p) => {
 			expect(p).toHaveProperty('dleq');
@@ -290,7 +290,7 @@ describe('dleq', () => {
 		}
 
 		const mintRequest = await wallet.createMintQuote(8);
-		const { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+		const proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		const { keep, send } = await wallet.send(4, proofs, { includeDleq: true });
 
@@ -317,7 +317,7 @@ describe('dleq', () => {
 		}
 
 		const mintRequest = await wallet.createMintQuote(8);
-		const { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+		const proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		const { keep, send } = await wallet.send(4, proofs, { includeDleq: false });
 		send.forEach((p) => {
@@ -337,7 +337,7 @@ describe('dleq', () => {
 		}
 
 		const mintRequest = await wallet.createMintQuote(8);
-		let { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+		let proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		// strip dleq
 		proofs = proofs.map((p) => {
@@ -357,7 +357,7 @@ describe('dleq', () => {
 		}
 
 		const mintRequest = await wallet.createMintQuote(8);
-		let { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+		let proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		// alter dleq signature
 		proofs.forEach((p) => {
