@@ -29,7 +29,8 @@ import {
 	sumProofs,
 	getKeepAmounts,
 	numberToHexPadded64,
-	hasValidDleq
+	hasValidDleq,
+	stripDleq
 } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
@@ -320,7 +321,6 @@ class CashuWallet {
 		}
 	): Promise<SendResponse> {
 		if (options?.includeDleq) {
-			// only pick the ones with a DLEQ proof
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
 		if (sumProofs(proofs) < amount) {
@@ -352,11 +352,8 @@ class CashuWallet {
 			let { keep, send } = await this.swap(amount, sendProofs, options);
 			keep = keepProofsSelect.concat(keep);
 
-			// strip dleq if explicitly told so
-			if (options?.includeDleq === false) {
-				send = send.map((p: Proof) => {
-					return { ...p, dleq: undefined };
-				});
+			if (!options?.includeDleq) {
+				send = stripDleq(send);
 			}
 
 			return { keep, send };
@@ -366,11 +363,8 @@ class CashuWallet {
 			throw new Error('Not enough funds available to send');
 		}
 
-		// strip dleq if explicitly told so
 		if (!options?.includeDleq) {
-			sendProofOffline.forEach((p: Proof) => {
-				p.dleq = undefined;
-			});
+			return { keep: keepProofsOffline, send: stripDleq(sendProofOffline) };
 		}
 
 		return { keep: keepProofsOffline, send: sendProofOffline };

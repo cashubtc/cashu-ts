@@ -400,6 +400,19 @@ export function decodePaymentRequest(paymentRequest: string) {
 }
 
 /**
+ * Removes all traces of DLEQs from a list of proofs
+ * @param proofs The list of proofs that dleq should be stripped from
+ */
+export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq' | 'dleqValid'>> {
+	return proofs.map((p) => {
+		const newP = { ...p };
+		delete newP['dleq'];
+		delete newP['dleqValid'];
+		return newP;
+	});
+}
+
+/**
  * Checks that the proof has a valid DLEQ proof according to
  * keyset `keys`
  * @param proof The proof subject to verification
