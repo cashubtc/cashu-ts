@@ -1,4 +1,4 @@
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import {
@@ -22,9 +22,19 @@ import {
 	BlindingData,
 	MintQuoteResponse,
 	MintQuoteState,
-	MeltQuoteState
+	MeltQuoteState,
+	SerializedDLEQ
 } from './model/types/index.js';
-import { bytesToNumber, getDecodedToken, splitAmount, sumProofs, getKeepAmounts } from './utils.js';
+import {
+	bytesToNumber,
+	getDecodedToken,
+	splitAmount,
+	sumProofs,
+	getKeepAmounts,
+	numberToHexPadded64,
+	hasValidDleq,
+	stripDleq
+} from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
 	blindMessage,
@@ -33,9 +43,9 @@ import {
 } from '@cashu/crypto/modules/client';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
-
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -92,6 +102,7 @@ class CashuWallet {
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
 		if (options?.unit) this._unit = options?.unit;
 		if (options?.keysets) this._keysets = options.keysets;
+		if (options?.mintInfo) this._mintInfo = options.mintInfo;
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
 		}
@@ -240,6 +251,7 @@ class CashuWallet {
 	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param options.privkey? will create a signature on the @param token secrets if set
+	 * @param options.requireDleq? will check each proof for DLEQ proofs. Reject the token if any one of them can't be verified.
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(
@@ -251,12 +263,18 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			privkey?: string;
+			requireDleq?: boolean;
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
 		const keys = await this.getKeys(options?.keysetId);
+		if (options?.requireDleq) {
+			if (token.proofs.some((p: Proof) => !hasValidDleq(p, keys))) {
+				throw new Error('Token contains proofs with invalid DLEQ');
+			}
+		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
 		const { payload, blindingData } = this.createSwapPayload(
 			amount,
@@ -289,6 +307,7 @@ class CashuWallet {
 	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param options.offline? optionally send proofs offline.
 	 * @param options.includeFees? optionally include fees in the response.
+	 * @param options.includeDleq? optionally include DLEQ proof in the proofs to send.
 	 * @returns {SendResponse}
 	 */
 	async send(
@@ -303,8 +322,12 @@ class CashuWallet {
 			keysetId?: string;
 			offline?: boolean;
 			includeFees?: boolean;
+			includeDleq?: boolean;
 		}
 	): Promise<SendResponse> {
+		if (options?.includeDleq) {
+			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
+		}
 		if (sumProofs(proofs) < amount) {
 			throw new Error('Not enough funds available to send');
 		}
@@ -331,13 +354,22 @@ class CashuWallet {
 			);
 			options?.proofsWeHave?.push(...keepProofsSelect);
 
-			const { keep, send } = await this.swap(amount, sendProofs, options);
-			const keepProofs = keepProofsSelect.concat(keep);
-			return { keep: keepProofs, send };
+			let { keep, send } = await this.swap(amount, sendProofs, options);
+			keep = keepProofsSelect.concat(keep);
+
+			if (!options?.includeDleq) {
+				send = stripDleq(send);
+			}
+
+			return { keep, send };
 		}
 
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
 			throw new Error('Not enough funds available to send');
+		}
+
+		if (!options?.includeDleq) {
+			return { keep: keepProofsOffline, send: stripDleq(sendProofOffline) };
 		}
 
 		return { keep: keepProofsOffline, send: sendProofOffline };
@@ -386,6 +418,7 @@ class CashuWallet {
 		if (sumProofs(selectedProofs) < amountToSend + selectedFeePPK && nextBigger) {
 			selectedProofs = [nextBigger];
 		}
+
 		return {
 			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
 			send: selectedProofs
@@ -567,7 +600,6 @@ class CashuWallet {
 	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count set number of blinded messages that should be generated
 	 * @param options.keysetId set a custom keysetId to restore from. keysetIds can be loaded with `CashuMint.getKeySets()`
-	 * @returns proofs
 	 */
 	async restore(
 		start: number,
@@ -597,7 +629,6 @@ class CashuWallet {
 		const validSecrets = secrets.filter((_: Uint8Array, i: number) =>
 			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
 		);
-
 		return {
 			proofs: this.constructProofs(promises, validBlindingFactors, validSecrets, keys)
 		};
@@ -741,6 +772,9 @@ class CashuWallet {
 				options.privkey
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
+
+		proofsToSend = stripDleq(proofsToSend);
+
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
@@ -815,6 +849,8 @@ class CashuWallet {
 				privkey
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
+
+		proofsToSend = stripDleq(proofsToSend);
 
 		// join keepBlindedMessages and sendBlindedMessages
 		const blindingData: BlindingData = {
@@ -1104,15 +1140,40 @@ class CashuWallet {
 		secrets: Array<Uint8Array>,
 		keyset: MintKeys
 	): Array<Proof> {
-		return promises
-			.map((p: SerializedBlindedSignature, i: number) => {
-				const blindSignature = { id: p.id, amount: p.amount, C_: pointFromHex(p.C_) };
-				const r = rs[i];
-				const secret = secrets[i];
-				const A = pointFromHex(keyset.keys[p.amount]);
-				return constructProofFromPromise(blindSignature, r, secret, A);
-			})
-			.map((p: NUT11Proof) => serializeProof(p) as Proof);
+		return promises.map((p: SerializedBlindedSignature, i: number) => {
+			const dleq =
+				p.dleq == undefined
+					? undefined
+					: ({
+							s: hexToBytes(p.dleq.s),
+							e: hexToBytes(p.dleq.e),
+							r: rs[i]
+					  } as DLEQ);
+			const blindSignature = {
+				id: p.id,
+				amount: p.amount,
+				C_: pointFromHex(p.C_),
+				dleq: dleq
+			};
+			const r = rs[i];
+			const secret = secrets[i];
+			const A = pointFromHex(keyset.keys[p.amount]);
+			const proof = constructProofFromPromise(blindSignature, r, secret, A);
+			const serializedProof = {
+				...serializeProof(proof),
+				...(dleq && {
+					dleqValid: verifyDLEQProof_reblind(secret, dleq, proof.C, A)
+				}),
+				...(dleq && {
+					dleq: {
+						s: bytesToHex(dleq.s),
+						e: bytesToHex(dleq.e),
+						r: numberToHexPadded64(dleq.r ?? BigInt(0))
+					} as SerializedDLEQ
+				})
+			} as Proof;
+			return serializedProof;
+		});
 	}
 }
 

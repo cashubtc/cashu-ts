@@ -2,17 +2,25 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import {
 	CheckStateEnum,
 	MeltQuoteState,
 	MintQuoteState,
-	ProofState
+	ProofState,
+	Token
 } from '../src/model/types/index.js';
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
+import {
+	deriveKeysetId,
+	getEncodedToken,
+	getEncodedTokenV4,
+	hexToNumber,
+	numberToHexPadded64,
+	sumProofs
+} from '../src/utils.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -348,4 +356,119 @@ describe('mint api', () => {
 		});
 		mint.disconnectWebSocket();
 	}, 10000);
+});
+describe('dleq', () => {
+	test('mint and check dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error('Cannot run this test: mint does not support NUT12');
+		}
+		const wallet = new CashuWallet(mint);
+
+		const mintRequest = await wallet.createMintQuote(3000);
+		const { proofs } = await wallet.mintProofs(3000, mintRequest.quote);
+
+		proofs.forEach((p) => {
+			expect(p).toHaveProperty('dleq');
+			expect(p.dleq).toHaveProperty('s');
+			expect(p.dleq).toHaveProperty('e');
+			expect(p.dleq).toHaveProperty('r');
+			expect(p).toHaveProperty('dleqValid', true);
+		});
+	});
+	test('send and receive token with dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error('Cannot run this test: mint does not support NUT12');
+		}
+
+		const mintRequest = await wallet.createMintQuote(8);
+		const { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+
+		const { keep, send } = await wallet.send(4, proofs, { includeDleq: true });
+
+		send.forEach((p) => {
+			expect(p.dleq).toBeDefined();
+			expect(p.dleq?.r).toBeDefined();
+		});
+
+		const token = {
+			mint: mint.mintUrl,
+			proofs: send
+		} as Token;
+		const encodedToken = getEncodedTokenV4(token);
+		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
+		console.log(getEncodedTokenV4(token));
+		expect(newProofs).toBeDefined();
+	});
+	test('send strip dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error('Cannot run this test: mint does not support NUT12');
+		}
+
+		const mintRequest = await wallet.createMintQuote(8);
+		const { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+
+		const { keep, send } = await wallet.send(4, proofs, { includeDleq: false });
+		send.forEach((p) => {
+			expect(p.dleq).toBeUndefined();
+		});
+		keep.forEach((p) => {
+			expect(p.dleq).toBeDefined();
+			expect(p.dleq?.r).toBeDefined();
+		});
+	});
+	test('send not enough proofs when dleq is required', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error('Cannot run this test: mint does not support NUT12');
+		}
+
+		const mintRequest = await wallet.createMintQuote(8);
+		let { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+
+		// strip dleq
+		proofs = proofs.map((p) => {
+			return { ...p, dleq: undefined };
+		});
+
+		const exc = await wallet.send(4, proofs, { includeDleq: true }).catch((e) => e);
+		expect(exc).toEqual(new Error('Not enough funds available to send'));
+	});
+	test('receive with invalid dleq', async () => {
+		const mint = new CashuMint(mintUrl);
+		const keys = await mint.getKeys();
+		const wallet = new CashuWallet(mint);
+		const NUT12 = (await mint.getInfo()).nuts['12'];
+		if (NUT12 == undefined || !NUT12.supported) {
+			throw new Error('Cannot run this test: mint does not support NUT12');
+		}
+
+		const mintRequest = await wallet.createMintQuote(8);
+		let { proofs } = await wallet.mintProofs(8, mintRequest.quote);
+
+		// alter dleq signature
+		proofs.forEach((p) => {
+			if (p.dleq != undefined) {
+				const s = hexToNumber(p.dleq.s) + BigInt(1);
+				p.dleq.s = numberToHexPadded64(s);
+			}
+		});
+
+		const token = {
+			mint: mint.mintUrl,
+			proofs: proofs
+		} as Token;
+
+		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
+		expect(exc).toEqual(new Error('Token contains proofs with invalid DLEQ'));
+	});
 });
