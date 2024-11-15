@@ -9,6 +9,27 @@ import {
 import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
 import { getWebSocketImpl } from './ws';
 
+export class ConnectionManager {
+	static instace: ConnectionManager;
+	private connectionMap: Map<string, WSConnection> = new Map();
+
+	static getInstance() {
+		if (!ConnectionManager.instace) {
+			ConnectionManager.instace = new ConnectionManager();
+		}
+		return ConnectionManager.instace;
+	}
+
+	getConnection(url: string): WSConnection {
+		if (this.connectionMap.has(url)) {
+			return this.connectionMap.get(url) as WSConnection;
+		}
+		const newConn = new WSConnection(url);
+		this.connectionMap.set(url, newConn);
+		return newConn;
+	}
+}
+
 export class WSConnection {
 	public readonly url: URL;
 	private readonly _WS: typeof WebSocket;
