@@ -2,14 +2,12 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
-import { deriveKeysetId, getEncodedToken, sumProofs } from '../src/utils.js';
+import { getEncodedToken, sumProofs } from '../src/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import {
 	CheckStateEnum,
 	MeltQuoteState,
-	MintQuotePayload,
-	MintQuoteResponse,
 	MintQuoteState,
 	ProofState
 } from '../src/model/types/index.js';
@@ -270,18 +268,20 @@ describe('mint api', () => {
 
 		const mintQuote = await wallet.createMintQuote(21);
 		const callback = jest.fn();
-		const res = await new Promise((res, rej) => {
-			wallet.onMintQuoteUpdates(
+		const res = await new Promise(async (res, rej) => {
+			const unsub = await wallet.onMintQuoteUpdates(
 				[mintQuote.quote],
 				(p) => {
 					if (p.state === MintQuoteState.PAID) {
 						callback();
 						res(1);
+						unsub();
 					}
 				},
 				(e) => {
 					console.log(e);
 					rej(e);
+					unsub();
 				}
 			);
 		});
