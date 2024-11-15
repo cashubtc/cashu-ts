@@ -57,34 +57,40 @@ export type GetInfoResponse = {
 	description_long?: string;
 	contact: Array<MintContactInfo>;
 	nuts: {
-		'4': {
+		'4': { // Minting
 			methods: Array<SwapMethod>;
 			disabled: boolean;
 		};
-		'5': {
+		'5': { // Melting
 			methods: Array<SwapMethod>;
 			disabled: boolean;
 		};
-		'7'?: {
+		'7'?: { // Token state check
 			supported: boolean;
 		};
-		'8'?: {
+		'8'?: { // Overpaid melt fees
 			supported: boolean;
 		};
-		'9'?: {
+		'9'?: { // Restore
 			supported: boolean;
 		};
-		'10'?: {
+		'10'?: { // Spending conditions
 			supported: boolean;
 		};
-		'11'?: {
+		'11'?: { // P2PK
 			supported: boolean;
 		};
-		'12'?: {
+		'12'?: { // DLEQ
 			supported: boolean;
 		};
-		'13'?: {
+		'14'?: { // HTLCs
 			supported: boolean;
+		};
+		'15'?: { // MPP
+			supported: boolean;
+		};
+		'17'?: { // WebSockets
+			supported: Array<WebSocketSupport>;
 		};
 	};
 	motd?: string;
@@ -215,3 +221,12 @@ export type SwapResponse = {
 	 */
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
+
+/**
+ * WebSocket supported methods
+ */
+export type WebSocketSupport = {
+	method: string;
+	unit: string;
+	commands: Array<string>;
+};
