@@ -2,6 +2,17 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
+import { secp256k1 } from '@noble/curves/secp256k1';
+import { bytesToHex } from '@noble/curves/abstract/utils';
+import {
+	CheckStateEnum,
+	MeltQuoteState,
+	MintQuoteState,
+	ProofState,
+	Token
+} from '../src/model/types/index.js';
+import ws from 'ws';
+import { injectWebSocketImpl } from '../src/ws.js';
 import {
 	deriveKeysetId,
 	getEncodedToken,
@@ -10,9 +21,6 @@ import {
 	numberToHexPadded64,
 	sumProofs
 } from '../src/utils.js';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/curves/abstract/utils';
-import { CheckStateEnum, MeltQuoteState, Token } from '../src/model/types/index.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -21,6 +29,8 @@ const externalInvoice =
 let request: Record<string, string> | undefined;
 const mintUrl = 'http://localhost:3338';
 const unit = 'sat';
+
+injectWebSocketImpl(ws);
 
 describe('mint api', () => {
 	test('get keys', async () => {
@@ -260,6 +270,92 @@ describe('mint api', () => {
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
+	test('websocket updates', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const mintQuote = await wallet.createMintQuote(21);
+		const callback = jest.fn();
+		const res = await new Promise(async (res, rej) => {
+			const unsub = await wallet.onMintQuoteUpdates(
+				[mintQuote.quote],
+				(p) => {
+					if (p.state === MintQuoteState.PAID) {
+						callback();
+						res(1);
+						unsub();
+					}
+				},
+				(e) => {
+					console.log(e);
+					rej(e);
+					unsub();
+				}
+			);
+		});
+		mint.disconnectWebSocket();
+		expect(res).toBe(1);
+		expect(callback).toBeCalled();
+	});
+	test('websocket mint quote updates on multiple ids', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const mintQuote1 = await wallet.createMintQuote(21);
+		const mintQuote2 = await wallet.createMintQuote(22);
+
+		const callbackRef = jest.fn();
+		const res = await new Promise(async (res, rej) => {
+			let counter = 0;
+			const unsub = await wallet.onMintQuoteUpdates(
+				[mintQuote1.quote, mintQuote2.quote],
+				() => {
+					counter++;
+					callbackRef();
+					if (counter === 4) {
+						unsub();
+						res(1);
+					}
+				},
+				() => {
+					counter++;
+					if (counter === 4) {
+						unsub();
+						rej();
+					}
+				}
+			);
+		});
+		mint.disconnectWebSocket();
+		expect(res).toBe(1);
+		expect(callbackRef).toHaveBeenCalledTimes(4);
+		expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
+	});
+	test('websocket proof state + mint quote updates', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const quote = await wallet.createMintQuote(63);
+		await new Promise((res, rej) => {
+			wallet.onMintQuotePaid(quote.quote, res, rej);
+		});
+		const proofs = await wallet.mintProofs(63, quote.quote);
+		const data = await new Promise<ProofState>((res) => {
+			wallet.onProofStateUpdates(
+				proofs,
+				(p) => {
+					if (p.state === CheckStateEnum.SPENT) {
+						res(p);
+					}
+				},
+				(e) => {
+					console.log(e);
+				}
+			);
+			wallet.swap(21, proofs);
+		});
+		mint.disconnectWebSocket();
+	}, 10000);
 });
 describe('dleq', () => {
 	test('mint and check dleq', async () => {

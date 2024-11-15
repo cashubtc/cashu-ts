@@ -1,8 +1,19 @@
 import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
-import { CheckStateEnum, MeltQuoteResponse } from '../src/model/types/index.js';
+import {
+	CheckStateEnum,
+	MeltQuoteResponse,
+	MeltQuoteState,
+	MintQuoteResponse,
+	MintQuoteState
+} from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
+import { Proof } from '@cashu/crypto/modules/common';
+import { Server, WebSocket } from 'mock-socket';
+import { injectWebSocketImpl } from '../src/ws.js';
+
+injectWebSocketImpl(WebSocket);
 
 const dummyKeysResp = {
 	keysets: [
@@ -548,5 +559,83 @@ describe('deterministic', () => {
 				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
 			)
 		);
+	});
+});
+
+describe('WebSocket Updates', () => {
+	test('mint update', async () => {
+		const fakeUrl = 'ws://localhost:3338/v1/ws';
+		const server = new Server(fakeUrl, { mock: false });
+		server.on('connection', (socket) => {
+			socket.on('message', (m) => {
+				console.log(m);
+				try {
+					const parsed = JSON.parse(m.toString());
+					if (parsed.method === 'subscribe') {
+						const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
+						socket.send(message);
+						setTimeout(() => {
+							const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "state": "PAID", "paid": true, "expiry": 123}}}`;
+							socket.send(message);
+						}, 500);
+					}
+				} catch {
+					console.log('Server parsing failed...');
+				}
+			});
+		});
+		const wallet = new CashuWallet(mint);
+		const state = await new Promise(async (res, rej) => {
+			const callback = (p: MintQuoteResponse) => {
+				if (p.state === MintQuoteState.PAID) {
+					res(p);
+				}
+			};
+			const test = await wallet.onMintQuoteUpdates(['123'], callback, () => {
+				rej();
+				console.log('error');
+			});
+		});
+		expect(state).toMatchObject({ quote: '123' });
+		mint.disconnectWebSocket();
+		server.close();
+	});
+	test('melt update', async () => {
+		const fakeUrl = 'ws://localhost:3338/v1/ws';
+		const server = new Server(fakeUrl, { mock: false });
+		server.on('connection', (socket) => {
+			socket.on('message', (m) => {
+				console.log(m);
+				try {
+					const parsed = JSON.parse(m.toString());
+					if (parsed.method === 'subscribe') {
+						const message = `{"jsonrpc": "2.0", "result": {"status": "OK", "subId": "${parsed.params.subId}"}, "id": ${parsed.id}}`;
+						socket.send(message);
+						setTimeout(() => {
+							const message = `{"jsonrpc": "2.0", "method": "subscribe", "params": {"subId": "${parsed.params.subId}", "payload": {"quote": "123", "request": "456", "state": "PAID", "paid": true, "expiry": 123}}}`;
+							socket.send(message);
+						}, 500);
+					}
+				} catch {
+					console.log('Server parsing failed...');
+				}
+			});
+		});
+		const wallet = new CashuWallet(mint);
+		const state = await new Promise(async (res, rej) => {
+			const callback = (p: MeltQuoteResponse) => {
+				console.log(p);
+				if (p.state === MeltQuoteState.PAID) {
+					res(p);
+				}
+			};
+			const test = await wallet.onMeltQuoteUpdates(['123'], callback, (e) => {
+				console.log(e);
+				rej();
+				console.log('error');
+			});
+		});
+		expect(state).toMatchObject({ quote: '123' });
+		server.close();
 	});
 });
