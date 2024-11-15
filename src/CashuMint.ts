@@ -1,4 +1,4 @@
-import { WSConnection } from './WSConnection.js';
+import { ConnectionManager, WSConnection } from './WSConnection.js';
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
@@ -457,7 +457,7 @@ class CashuMint {
 					mintUrl.pathname += '/' + wsSegment;
 				}
 			}
-			this.ws = new WSConnection(
+			this.ws = ConnectionManager.getInstance().getConnection(
 				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`
 			);
 			try {
