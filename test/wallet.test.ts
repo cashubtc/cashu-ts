@@ -258,7 +258,7 @@ describe('requestTokens', () => {
 			});
 		const wallet = new CashuWallet(mint, { unit });
 
-		const { proofs } = await wallet.mintProofs(1, '');
+		const proofs = await wallet.mintProofs(1, '');
 
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
