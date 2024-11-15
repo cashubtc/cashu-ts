@@ -239,7 +239,6 @@ export type SwapResponse = {
 export type MPPMethod = {
 	method: string;
 	unit: string;
-	mpp: boolean;
 };
 
 /**
