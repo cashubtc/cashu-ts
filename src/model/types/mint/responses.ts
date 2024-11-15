@@ -87,7 +87,7 @@ export type GetInfoResponse = {
 			supported: boolean;
 		};
 		'15'?: { // MPP
-			supported: boolean;
+			methods: Array<MPPMethod>;
 		};
 		'17'?: { // WebSockets
 			supported: Array<WebSocketSupport>;
@@ -221,6 +221,15 @@ export type SwapResponse = {
 	 */
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
+
+/**
+ * MPP supported methods
+ */
+export type MPPMethod = {
+	method: string;
+	unit: string;
+	mpp: boolean;
+};
 
 /**
  * WebSocket supported methods
