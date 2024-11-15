@@ -36,7 +36,7 @@ export class WSConnection {
 	private ws: WebSocket | undefined;
 	private connectionPromise: Promise<void> | undefined;
 	private subListeners: { [subId: string]: Array<(payload: any) => any> } = {};
-	private rpcListeners: { [rpsSubId: string]: any } = {};
+	private rpcListeners: { [rpcSubId: string]: any } = {};
 	private messageQueue: MessageQueue;
 	private handlingInterval?: NodeJS.Timer;
 	private rpcId = 0;
@@ -159,7 +159,7 @@ export class WSConnection {
 				}
 			}
 		} catch (e) {
-			console.log(e);
+			console.error(e);
 			return;
 		}
 	}
