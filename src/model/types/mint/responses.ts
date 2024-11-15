@@ -57,39 +57,50 @@ export type GetInfoResponse = {
 	description_long?: string;
 	contact: Array<MintContactInfo>;
 	nuts: {
-		'4': { // Minting
+		'4': {
+			// Minting
 			methods: Array<SwapMethod>;
 			disabled: boolean;
 		};
-		'5': { // Melting
+		'5': {
+			// Melting
 			methods: Array<SwapMethod>;
 			disabled: boolean;
 		};
-		'7'?: { // Token state check
+		'7'?: {
+			// Token state check
 			supported: boolean;
 		};
-		'8'?: { // Overpaid melt fees
+		'8'?: {
+			// Overpaid melt fees
 			supported: boolean;
 		};
-		'9'?: { // Restore
+		'9'?: {
+			// Restore
 			supported: boolean;
 		};
-		'10'?: { // Spending conditions
+		'10'?: {
+			// Spending conditions
 			supported: boolean;
 		};
-		'11'?: { // P2PK
+		'11'?: {
+			// P2PK
 			supported: boolean;
 		};
-		'12'?: { // DLEQ
+		'12'?: {
+			// DLEQ
 			supported: boolean;
 		};
-		'14'?: { // HTLCs
+		'14'?: {
+			// HTLCs
 			supported: boolean;
 		};
-		'15'?: { // MPP
+		'15'?: {
+			// MPP
 			methods: Array<MPPMethod>;
 		};
-		'17'?: { // WebSockets
+		'17'?: {
+			// WebSockets
 			supported: Array<WebSocketSupport>;
 		};
 	};
