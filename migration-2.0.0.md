@@ -53,7 +53,7 @@ To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkPro
 #### renamed functions
 
 - in `SendResponse`, `returnChange` is now called `keep`
-- `CashuWallet.mintTokens()` is now called `CashuWallet.mintProofs()`
+- `CashuWallet.mintTokens()` is now called `CashuWallet.mintProofs()` and returns <Promise<Array<Proof>> instead of Promise<{proofs: Array<Proof>}>
 - `CashuWallet.meltTokens()` is now called `CashuWallet.meltProofs()`
 - `CashuMint.split()` is now called `CashuMint.swap()`
 

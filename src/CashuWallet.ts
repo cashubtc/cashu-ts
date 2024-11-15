@@ -675,7 +675,7 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 		}
-	): Promise<{ proofs: Array<Proof> }> {
+	): Promise<Array<Proof>> {
 		const keyset = await this.getKeys(options?.keysetId);
 		if (!options?.outputAmounts && options?.proofsWeHave) {
 			options.outputAmounts = {
@@ -701,9 +701,7 @@ class CashuWallet {
 			quote: quote
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
-		return {
-			proofs: this.constructProofs(signatures, blindingFactors, secrets, keyset)
-		};
+		return this.constructProofs(signatures, blindingFactors, secrets, keyset);
 	}
 
 	/**
