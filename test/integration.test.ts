@@ -339,7 +339,7 @@ describe('mint api', () => {
 		await new Promise((res, rej) => {
 			wallet.onMintQuotePaid(quote.quote, res, rej);
 		});
-		const { proofs } = await wallet.mintProofs(63, quote.quote);
+		const proofs = await wallet.mintProofs(63, quote.quote);
 		const data = await new Promise<ProofState>((res) => {
 			wallet.onProofStateUpdates(
 				proofs,
