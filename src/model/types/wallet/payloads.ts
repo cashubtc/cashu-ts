@@ -48,6 +48,10 @@ export type MeltQuotePayload = {
 	 * Request to be melted to
 	 */
 	request: string;
+
+	options?: {
+		mpp?: number;
+	};
 };
 
 /**

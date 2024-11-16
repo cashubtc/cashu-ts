@@ -711,12 +711,15 @@ class CashuWallet {
 	/**
 	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.
 	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @param options.mpp if the melt is part of a multi-path payment, @param options.mpp can be set to the amount
+	 * intended to be paid for this part/melt
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string, options?: { mpp?: number }): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
-			request: invoice
+			request: invoice,
+			options
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
