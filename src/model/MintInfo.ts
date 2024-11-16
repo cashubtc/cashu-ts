@@ -1,62 +1,3 @@
-import { GetInfoResponse, MPPMethod, WebSocketSupport } from './types';
-
-type GetInfoResponse2 = {
-	name: string;
-	pubkey: string;
-	version: string;
-	description?: string;
-	description_long?: string;
-	contact: Array<MintContactInfo>;
-	nuts: {
-		'4': {
-			// Minting
-			methods: Array<SwapMethod>;
-			disabled: boolean;
-		};
-		'5': {
-			// Melting
-			methods: Array<SwapMethod>;
-			disabled: boolean;
-		};
-		'7'?: {
-			// Token state check
-			supported: boolean;
-		};
-		'8'?: {
-			// Overpaid melt fees
-			supported: boolean;
-		};
-		'9'?: {
-			// Restore
-			supported: boolean;
-		};
-		'10'?: {
-			// Spending conditions
-			supported: boolean;
-		};
-		'11'?: {
-			// P2PK
-			supported: boolean;
-		};
-		'12'?: {
-			// DLEQ
-			supported: boolean;
-		};
-		'14'?: {
-			// HTLCs
-			supported: boolean;
-		};
-		'15'?: {
-			// MPP
-			methods: Array<MPPMethod>;
-		};
-		'17'?: {
-			// WebSockets
-			supported: Array<WebSocketSupport>;
-		};
-	};
-	motd?: string;
-};
 import { GetInfoResponse, MPPMethod, SwapMethod, WebSocketSupport } from './types';
 
 export class MintInfo {
@@ -117,5 +58,33 @@ export class MintInfo {
 			return { supported: true, params: this.mintInfo.nuts[15].methods };
 		}
 		return { supported: false };
+	}
+
+	get contact() {
+		return this.mintInfo.contact;
+	}
+
+	get description() {
+		return this.mintInfo.description;
+	}
+
+	get description_long() {
+		return this.mintInfo.description_long;
+	}
+
+	get name() {
+		return this.mintInfo.name;
+	}
+
+	get pubkey() {
+		return this.mintInfo.pubkey;
+	}
+
+	get version() {
+		return this.mintInfo.version;
+	}
+
+	get motd() {
+		return this.mintInfo.motd;
 	}
 }
