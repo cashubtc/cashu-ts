@@ -228,6 +228,17 @@ export function getEncodedTokenV4(token: Token): string {
 	if (nonHex) {
 		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 	}
+
+	const tokenTemplate = templateFromToken(token);
+
+	const encodedData = encodeCBOR(tokenTemplate);
+	const prefix = 'cashu';
+	const version = 'B';
+	const base64Data = encodeUint8toBase64Url(encodedData);
+	return prefix + version + base64Data;
+}
+
+function templateFromToken(token: Token): TokenV4Template {
 	const idMap: { [id: string]: Array<Proof> } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
@@ -261,16 +272,36 @@ export function getEncodedTokenV4(token: Token): string {
 			})
 		)
 	} as TokenV4Template;
-
 	if (token.memo) {
 		tokenTemplate.d = token.memo;
 	}
+	return tokenTemplate;
+}
 
-	const encodedData = encodeCBOR(tokenTemplate);
-	const prefix = 'cashu';
-	const version = 'B';
-	const base64Data = encodeUint8toBase64Url(encodedData);
-	return prefix + version + base64Data;
+function tokenFromTemplate(template: TokenV4Template): Token {
+	const proofs: Array<Proof> = [];
+	template.t.forEach((t) =>
+		t.p.forEach((p) => {
+			proofs.push({
+				secret: p.s,
+				C: bytesToHex(p.c),
+				amount: p.a,
+				id: bytesToHex(t.i),
+				...(p.d && {
+					dleq: {
+						r: bytesToHex(p.d.r),
+						s: bytesToHex(p.d.s),
+						e: bytesToHex(p.d.e)
+					} as SerializedDLEQ
+				})
+			});
+		})
+	);
+	const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
+	if (template.d) {
+		decodedToken.memo = template.d;
+	}
+	return decodedToken;
 }
 
 /**
@@ -316,28 +347,7 @@ export function handleTokens(token: string): Token {
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
 		const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
-		const proofs: Array<Proof> = [];
-		tokenData.t.forEach((t) =>
-			t.p.forEach((p) => {
-				proofs.push({
-					secret: p.s,
-					C: bytesToHex(p.c),
-					amount: p.a,
-					id: bytesToHex(t.i),
-					...(p.d && {
-						dleq: {
-							r: bytesToHex(p.d.r),
-							s: bytesToHex(p.d.s),
-							e: bytesToHex(p.d.e)
-						} as SerializedDLEQ
-					})
-				});
-			})
-		);
-		const decodedToken: Token = { mint: tokenData.m, proofs, unit: tokenData.u || 'sat' };
-		if (tokenData.d) {
-			decodedToken.memo = tokenData.d;
-		}
+		const decodedToken = tokenFromTemplate(tokenData);
 		return decodedToken;
 	}
 	throw new Error('Token version is not supported');
@@ -520,4 +530,17 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	}
 
 	return true;
+}
+
+export function tokenToRawToken(token: string | Token): Uint8Array {
+	if (typeof token === 'string') {
+		token = getDecodedToken(token);
+	}
+	const template = templateFromToken(token);
+	return encodeCBOR(template);
+}
+
+export function rawTokenToToken(bytes: Uint8Array): Token {
+	const decoded = decodeCBOR(bytes) as TokenV4Template;
+	return tokenFromTemplate(decoded);
 }
