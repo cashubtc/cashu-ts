@@ -718,9 +718,11 @@ class CashuWallet {
 	async createMeltQuote(invoice: string, options?: { mpp?: number }): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
-			request: invoice,
-			options
+			request: invoice
 		};
+		if (options?.mpp) {
+			meltQuotePayload.options = options;
+		}
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
 	}
