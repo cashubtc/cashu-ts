@@ -57,6 +57,7 @@ type GetInfoResponse2 = {
 	};
 	motd?: string;
 };
+import { GetInfoResponse, MPPMethod, SwapMethod, WebSocketSupport } from './types';
 
 export class MintInfo {
 	private readonly mintInfo: GetInfoResponse;
@@ -65,11 +66,16 @@ export class MintInfo {
 		this.mintInfo = info;
 	}
 
+	isSupported(num: 4 | 5): { disabled: boolean; params: Array<SwapMethod> };
 	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14): { supported: boolean };
 	isSupported(num: 17): { supported: boolean; params?: Array<WebSocketSupport> };
 	isSupported(num: 15): { supported: boolean; params?: Array<MPPMethod> };
 	isSupported(num: number) {
 		switch (num) {
+			case 4:
+			case 5: {
+				return this.checkMintMelt(num);
+			}
 			case 7:
 			case 8:
 			case 9:
@@ -92,6 +98,13 @@ export class MintInfo {
 			return { supported: true };
 		}
 		return { supported: false };
+	}
+	private checkMintMelt(num: 4 | 5) {
+		const mintMeltInfo = this.mintInfo.nuts[num];
+		if (mintMeltInfo && mintMeltInfo.methods.length > 0 && !mintMeltInfo.disabled) {
+			return { disabled: false, params: mintMeltInfo.methods };
+		}
+		return { disabled: true, params: mintMeltInfo.methods };
 	}
 	private checkNut17() {
 		if (this.mintInfo.nuts['17'] && this.mintInfo.nuts[17].supported.length > 0) {
