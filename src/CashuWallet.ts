@@ -1,41 +1,3 @@
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { CashuMint } from './CashuMint.js';
-import { BlindedMessage } from './model/BlindedMessage.js';
-import {
-	type MeltPayload,
-	type MeltQuoteResponse,
-	type MintKeys,
-	type MintKeyset,
-	type MeltProofsResponse,
-	type MintPayload,
-	type Proof,
-	type MintQuotePayload,
-	type MeltQuotePayload,
-	type SendResponse,
-	type SerializedBlindedMessage,
-	type SwapPayload,
-	type Token,
-	SerializedBlindedSignature,
-	GetInfoResponse,
-	OutputAmounts,
-	ProofState,
-	BlindingData,
-	MintQuoteResponse,
-	MintQuoteState,
-	MeltQuoteState,
-	SerializedDLEQ
-} from './model/types/index.js';
-import {
-	bytesToNumber,
-	getDecodedToken,
-	splitAmount,
-	sumProofs,
-	getKeepAmounts,
-	numberToHexPadded64,
-	hasValidDleq,
-	stripDleq
-} from './utils.js';
-import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -43,9 +5,48 @@ import {
 } from '@cashu/crypto/modules/client';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
-import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
+import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { CashuMint } from './CashuMint.js';
+import { BlindedMessage } from './model/BlindedMessage.js';
+import {
+	BlindingData,
+	GetInfoResponse,
+	MeltQuoteState,
+	MintQuoteResponse,
+	MintQuoteState,
+	OutputAmounts,
+	ProofState,
+	SerializedBlindedSignature,
+	SerializedDLEQ,
+	type MeltPayload,
+	type MeltProofsResponse,
+	type MeltQuotePayload,
+	type MeltQuoteResponse,
+	type MintKeys,
+	type MintKeyset,
+	type MintPayload,
+	type MintQuotePayload,
+	type Proof,
+	type SendResponse,
+	type SerializedBlindedMessage,
+	type SwapPayload,
+	type Token
+} from './model/types/index.js';
+import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
+import {
+	bytesToNumber,
+	getDecodedToken,
+	getKeepAmounts,
+	hasValidDleq,
+	numberToHexPadded64,
+	SendOptions,
+	splitAmount,
+	stripDleq,
+	sumProofs
+} from './utils.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -254,18 +255,7 @@ class CashuWallet {
 	 * @param options.requireDleq? will check each proof for DLEQ proofs. Reject the token if any one of them can't be verified.
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
-	async receive(
-		token: string | Token,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			requireDleq?: boolean;
-		}
-	): Promise<Array<Proof>> {
+	async receive(token: string | Token, options?: SendOptions): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
@@ -310,21 +300,7 @@ class CashuWallet {
 	 * @param options.includeDleq? optionally include DLEQ proof in the proofs to send.
 	 * @returns {SendResponse}
 	 */
-	async send(
-		amount: number,
-		proofs: Array<Proof>,
-		options?: {
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			keysetId?: string;
-			offline?: boolean;
-			includeFees?: boolean;
-			includeDleq?: boolean;
-		}
-	): Promise<SendResponse> {
+	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
 		if (options?.includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
@@ -489,19 +465,7 @@ class CashuWallet {
 	 * @param options.privkey? will create a signature on the @param proofs secrets if set
 	 * @returns promise of the change- and send-proofs
 	 */
-	async swap(
-		amount: number,
-		proofs: Array<Proof>,
-		options?: {
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			keysetId?: string;
-			includeFees?: boolean;
-		}
-	): Promise<SendResponse> {
+	async swap(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
 		if (!options) options = {};
 		const keyset = await this.getKeys(options.keysetId);
 		const proofsToSend = proofs;
@@ -604,9 +568,7 @@ class CashuWallet {
 	async restore(
 		start: number,
 		count: number,
-		options?: {
-			keysetId?: string;
-		}
+		options?: SendOptions
 	): Promise<{ proofs: Array<Proof> }> {
 		const keys = await this.getKeys(options?.keysetId);
 		if (!this._seed) {
@@ -669,17 +631,7 @@ class CashuWallet {
 	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns proofs
 	 */
-	async mintProofs(
-		amount: number,
-		quote: string,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-		}
-	): Promise<Array<Proof>> {
+	async mintProofs(amount: number, quote: string, options?: SendOptions): Promise<Array<Proof>> {
 		const keyset = await this.getKeys(options?.keysetId);
 		if (!options?.outputAmounts && options?.proofsWeHave) {
 			options.outputAmounts = {
@@ -745,11 +697,7 @@ class CashuWallet {
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-			privkey?: string;
-		}
+		options?: SendOptions
 	): Promise<MeltProofsResponse> {
 		const keys = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, blindingFactors } = this.createBlankOutputs(

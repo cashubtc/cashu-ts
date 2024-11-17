@@ -1,9 +1,15 @@
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { sha256 } from '@noble/hashes/sha256';
 import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64Url
 } from './base64.js';
+import { decodeCBOR, encodeCBOR } from './cbor.js';
+import { PaymentRequest } from './model/PaymentRequest.js';
 import {
 	DeprecatedToken,
 	Keys,
@@ -17,12 +23,6 @@ import {
 	V4ProofTemplate
 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { sha256 } from '@noble/hashes/sha256';
-import { decodeCBOR, encodeCBOR } from './cbor.js';
-import { PaymentRequest } from './model/PaymentRequest.js';
-import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
-import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 
 /**
  * Splits the amount into denominations of the provided @param keyset
@@ -521,3 +521,21 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 
 	return true;
 }
+
+type OutputAmounts = {
+	sendAmounts: Array<number>;
+	keepAmounts?: Array<number>;
+};
+
+export type SendOptions = {
+	outputAmounts?: OutputAmounts;
+	proofsWeHave?: Array<Proof>;
+	counter?: number;
+	pubkey?: string;
+	privkey?: string;
+	keysetId?: string;
+	offline?: boolean;
+	includeFees?: boolean;
+	includeDleq?: boolean;
+	requireDleq?: boolean;
+};
