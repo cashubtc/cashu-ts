@@ -264,6 +264,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			blindingData?: BlindingData;
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
@@ -276,15 +277,27 @@ class CashuWallet {
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		const { payload, blindingData } = this.createSwapPayload(
-			amount,
-			token.proofs,
-			keys,
-			options?.outputAmounts,
-			options?.counter,
-			options?.pubkey,
-			options?.privkey
-		);
+		let payload: SwapPayload;
+		let blindingData: BlindingData;
+		if (options?.blindingData) {
+			payload = {
+				inputs: token.proofs,
+				outputs: [...options.blindingData.blindedMessages]
+			};
+			blindingData = options.blindingData;
+		} else {
+			const swapRes = this.createSwapPayload(
+				amount,
+				token.proofs,
+				keys,
+				options?.outputAmounts,
+				options?.counter,
+				options?.pubkey,
+				options?.privkey
+			);
+			payload = swapRes.payload;
+			blindingData = swapRes.blindingData;
+		}
 		const { signatures } = await this.mint.swap(payload);
 		const freshProofs = this.constructProofs(
 			signatures,
@@ -1032,6 +1045,33 @@ class CashuWallet {
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
 		};
+	}
+
+	/**
+	 * Creates P2PK blinded messages according to amounts
+	 * @param amount array of amounts to create blinded messages for
+	 * @param keyksetId the keyset that should be used to create the blinded messages
+	 * @param pubkey the public key that the blinded message should be locked to
+	 * @returns blinded messages, secrets, rs, and amounts
+	 */
+	createP2PKBlindedMessages(
+		amounts: Array<number>,
+		keysetId: string,
+		pubkey: string
+	): BlindingData & { amounts: Array<number> } {
+		const blindedMessages: Array<SerializedBlindedMessage> = [];
+		const secrets: Array<Uint8Array> = [];
+		const blindingFactors: Array<bigint> = [];
+		for (let i = 0; i < amounts.length; i++) {
+			let secretBytes = undefined;
+			secretBytes = createP2PKsecret(pubkey);
+			secrets.push(secretBytes);
+			const { B_, r } = blindMessage(secretBytes);
+			blindingFactors.push(r);
+			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
+			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
+		}
+		return { blindedMessages, secrets, blindingFactors, amounts };
 	}
 
 	/**
