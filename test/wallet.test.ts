@@ -9,7 +9,7 @@ import {
 	MintQuoteResponse,
 	MintQuoteState
 } from '../src/model/types/index.js';
-import { getDecodedToken, splitAmount } from '../src/utils.js';
+import { getDecodedToken, mergeBlindingData, splitAmount } from '../src/utils.js';
 import { Proof } from '@cashu/crypto/modules/common';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
@@ -675,12 +675,7 @@ describe('WebSocket Updates', () => {
 				keys.id,
 				pubkey2
 			);
-			const mergedBlindingData: BlindingData = {
-				blindedMessages: { ...data1.blindedMessages, ...data2.blindedMessages },
-				blindingFactors: { ...data1.blindingFactors, ...data2.blindingFactors },
-				secrets: { ...data1.secrets, ...data2.secrets }
-			};
-			const proofs = await wallet.receive('a token', { blindingData: mergedBlindingData });
+			const mergedBlindingData = mergeBlindingData(data1, data2);
 		});
 	});
 });
