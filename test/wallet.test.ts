@@ -2,13 +2,14 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import {
+	BlindingData,
 	CheckStateEnum,
 	MeltQuoteResponse,
 	MeltQuoteState,
 	MintQuoteResponse,
 	MintQuoteState
 } from '../src/model/types/index.js';
-import { getDecodedToken } from '../src/utils.js';
+import { getDecodedToken, splitAmount } from '../src/utils.js';
 import { Proof } from '@cashu/crypto/modules/common';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
@@ -655,5 +656,31 @@ describe('WebSocket Updates', () => {
 		});
 		expect(state).toMatchObject({ quote: '123' });
 		server.close();
+	});
+	describe('Custom Outputs', () => {
+		test('Multiple pubkeys with varying amount', async () => {
+			const wallet = new CashuWallet(mint);
+			const keys = await wallet.getKeys();
+			const pubkey1 = 'ffffff';
+			const pubkey2 = 'fafafa';
+			const amount1 = 8;
+			const amount2 = 3;
+			const data1 = wallet.createP2PKBlindedMessages(
+				splitAmount(amount1, keys.keys),
+				keys.id,
+				pubkey1
+			);
+			const data2 = wallet.createP2PKBlindedMessages(
+				splitAmount(amount2, keys.keys),
+				keys.id,
+				pubkey2
+			);
+			const mergedBlindingData: BlindingData = {
+				blindedMessages: { ...data1.blindedMessages, ...data2.blindedMessages },
+				blindingFactors: { ...data1.blindingFactors, ...data2.blindingFactors },
+				secrets: { ...data1.secrets, ...data2.secrets }
+			};
+			const proofs = await wallet.receive('a token', { blindingData: mergedBlindingData });
+		});
 	});
 });
