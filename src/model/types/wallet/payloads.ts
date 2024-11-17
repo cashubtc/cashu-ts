@@ -57,7 +57,7 @@ export type MeltQuotePayload = {
 		 * Amount for multi-path payment.
 		 * If set, the melt quote will be handled as a multi-path payment.
 		 */
-		mpp?: number;
+		mpp?: { amount: number };
 	};
 };
 

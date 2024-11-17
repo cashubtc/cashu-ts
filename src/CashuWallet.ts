@@ -721,7 +721,7 @@ class CashuWallet {
 			request: invoice
 		};
 		if (options?.mpp) {
-			meltQuotePayload.options = options;
+			meltQuotePayload.options = { mpp: { amount: options.mpp } };
 		}
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
