@@ -28,7 +28,8 @@ import {
 	bytesToNumber,
 	getDecodedToken,
 	getDefaultAmountPreference,
-	splitAmount
+	splitAmount,
+	SendOption
 } from './utils.js';
 import { isAmountPreferenceArray, deprecatedAmountPreferences } from './legacy/cashu-ts';
 import { validateMnemonic } from '@scure/bip39';
@@ -123,16 +124,7 @@ class CashuWallet {
 	 * @param privkey? will create a signature on the @param token secrets if set
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
-	async receive(
-		token: string | Token,
-		options?: {
-			keysetId?: string;
-			preference?: Array<AmountPreference>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-		}
-	): Promise<Array<Proof>> {
+	async receive(token: string | Token, options?: SendOption): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
@@ -156,16 +148,7 @@ class CashuWallet {
 	 * @param privkey? will create a signature on the @param tokenEntry secrets if set
 	 * @returns New token entry with newly created proofs, proofs that had errors
 	 */
-	async receiveTokenEntry(
-		tokenEntry: TokenEntry,
-		options?: {
-			keysetId?: string;
-			preference?: Array<AmountPreference>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-		}
-	): Promise<Array<Proof>> {
+	async receiveTokenEntry(tokenEntry: TokenEntry, options?: SendOption): Promise<Array<Proof>> {
 		const proofs: Array<Proof> = [];
 		const amount = tokenEntry.proofs.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		let preference = options?.preference;
@@ -289,9 +272,7 @@ class CashuWallet {
 	async restore(
 		start: number,
 		count: number,
-		options?: {
-			keysetId?: string;
-		}
+		options?: SendOption
 	): Promise<{ proofs: Array<Proof> }> {
 		const keys = await this.getKeys(options?.keysetId);
 		if (!this._seed) {
@@ -373,12 +354,7 @@ class CashuWallet {
 	async mintTokens(
 		amount: number,
 		quote: string,
-		options?: {
-			keysetId?: string;
-			preference?: Array<AmountPreference>;
-			counter?: number;
-			pubkey?: string;
-		}
+		options?: SendOption
 	): Promise<{ proofs: Array<Proof> }> {
 		const keyset = await this.getKeys(options?.keysetId);
 		const { blindedMessages, secrets, rs } = this.createRandomBlindedMessages(
@@ -435,11 +411,7 @@ class CashuWallet {
 	async meltTokens(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-			privkey?: string;
-		}
+		options?: SendOption
 	): Promise<MeltTokensResponse> {
 		const keys = await this.getKeys(options?.keysetId);
 
@@ -492,11 +464,7 @@ class CashuWallet {
 		invoice: string,
 		proofsToSend: Array<Proof>,
 		meltQuote?: MeltQuoteResponse,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-			privkey?: string;
-		}
+		options?: SendOption
 	): Promise<MeltTokensResponse> {
 		if (!meltQuote) {
 			meltQuote = await this.mint.createMeltQuote({ unit: this._unit, request: invoice });
@@ -520,10 +488,7 @@ class CashuWallet {
 		invoice: string,
 		token: string,
 		meltQuote: MeltQuoteResponse,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-		}
+		options?: SendOption
 	): Promise<MeltTokensResponse> {
 		const decodedToken = getDecodedToken(token);
 		const proofs = decodedToken.token

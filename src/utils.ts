@@ -255,6 +255,14 @@ function decodePaymentRequest(paymentRequest: string) {
 	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 
+type SendOption = {
+	keysetId?: string;
+	preference?: Array<AmountPreference>;
+	counter?: number;
+	pubkey?: string;
+	privkey?: string;
+};
+
 export {
 	bigIntStringify,
 	bytesToNumber,
@@ -264,5 +272,6 @@ export {
 	hexToNumber,
 	splitAmount,
 	getDefaultAmountPreference,
-	decodePaymentRequest
+	decodePaymentRequest,
+	SendOption
 };
