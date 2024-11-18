@@ -32,6 +32,9 @@ export class MintInfo {
 			case 15: {
 				return this.checkNut15();
 			}
+			default: {
+				throw new Error('nut is not supported by cashu-ts');
+			}
 		}
 	}
 	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14) {
