@@ -48,13 +48,13 @@ export class MintInfo {
 		return { disabled: true, params: mintMeltInfo.methods };
 	}
 	private checkNut17() {
-		if (this.mintInfo.nuts['17'] && this.mintInfo.nuts[17].supported.length > 0) {
+		if (this.mintInfo.nuts[17] && this.mintInfo.nuts[17].supported.length > 0) {
 			return { supported: true, params: this.mintInfo.nuts[17].supported };
 		}
 		return { supported: false };
 	}
 	private checkNut15() {
-		if (this.mintInfo.nuts['15'] && this.mintInfo.nuts[15].methods.length > 0) {
+		if (this.mintInfo.nuts[15] && this.mintInfo.nuts[15].methods.length > 0) {
 			return { supported: true, params: this.mintInfo.nuts[15].methods };
 		}
 		return { supported: false };
