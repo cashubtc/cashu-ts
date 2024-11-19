@@ -16,11 +16,12 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse
+	MeltQuoteResponse,
+	Proof
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
-import { isObj, joinUrls, sanitizeUrl } from './utils.js';
+import { getEncodedAuthToken, getEncodedToken, isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
 	MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated
@@ -39,13 +40,22 @@ class CashuMint {
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request) {
+	constructor(private _mintUrl: string, private _customRequest?: typeof request, private _authProofs?: Array<Proof>) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
+		this._authProofs = _authProofs;
 	}
 
 	get mintUrl() {
 		return this._mintUrl;
+	}
+
+	popBlindAuthToken() {
+		const proof = this._authProofs?.pop();
+		if (!proof) {
+			throw new Error('No more proofs to pop');
+		}
+		return getEncodedAuthToken(proof);
 	}
 
 	/**
@@ -81,13 +91,16 @@ class CashuMint {
 	public static async swap(
 		mintUrl: string,
 		swapPayload: SwapPayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	): Promise<SwapResponse> {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const data = await requestInstance<SwapResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/swap'),
 			method: 'POST',
-			requestBody: swapPayload
+			requestBody: swapPayload,
+			headers
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -102,7 +115,8 @@ class CashuMint {
 	 * @returns signed outputs
 	 */
 	async swap(swapPayload: SwapPayload): Promise<SwapResponse> {
-		return CashuMint.swap(this._mintUrl, swapPayload, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.swap(this._mintUrl, swapPayload, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -115,13 +129,16 @@ class CashuMint {
 	public static async createMintQuote(
 		mintUrl: string,
 		mintQuotePayload: MintQuotePayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	): Promise<MintQuoteResponse> {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MintQuoteResponse & MintQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
-			requestBody: mintQuotePayload
+			requestBody: mintQuotePayload,
+			headers
 		});
 		const data = handleMintQuoteResponseDeprecated(response);
 		return data;
@@ -132,7 +149,8 @@ class CashuMint {
 	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
 	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
-		return CashuMint.createMintQuote(this._mintUrl, mintQuotePayload, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.createMintQuote(this._mintUrl, mintQuotePayload, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -145,12 +163,15 @@ class CashuMint {
 	public static async checkMintQuote(
 		mintUrl: string,
 		quote: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	): Promise<MintQuoteResponse> {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MintQuoteResponse & MintQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
-			method: 'GET'
+			method: 'GET',
+			headers
 		});
 
 		const data = handleMintQuoteResponseDeprecated(response);
@@ -162,7 +183,8 @@ class CashuMint {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async checkMintQuote(quote: string): Promise<MintQuoteResponse> {
-		return CashuMint.checkMintQuote(this._mintUrl, quote, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.checkMintQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -175,13 +197,16 @@ class CashuMint {
 	public static async mint(
 		mintUrl: string,
 		mintPayload: MintPayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	) {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const data = await requestInstance<MintResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/bolt11'),
 			method: 'POST',
-			requestBody: mintPayload
+			requestBody: mintPayload,
+			headers
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -196,7 +221,8 @@ class CashuMint {
 	 * @returns serialized blinded signatures
 	 */
 	async mint(mintPayload: MintPayload) {
-		return CashuMint.mint(this._mintUrl, mintPayload, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.mint(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -208,13 +234,16 @@ class CashuMint {
 	public static async createMeltQuote(
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	): Promise<MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
 			method: 'POST',
-			requestBody: meltQuotePayload
+			requestBody: meltQuotePayload,
+			headers
 		});
 
 		const data = handleMeltQuoteResponseDeprecated(response);
@@ -235,7 +264,8 @@ class CashuMint {
 	 * @returns
 	 */
 	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
-		return CashuMint.createMeltQuote(this._mintUrl, meltQuotePayload, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.createMeltQuote(this._mintUrl, meltQuotePayload, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -247,12 +277,15 @@ class CashuMint {
 	public static async checkMeltQuote(
 		mintUrl: string,
 		quote: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	): Promise<MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
-			method: 'GET'
+			method: 'GET',
+			headers
 		});
 
 		const data = handleMeltQuoteResponseDeprecated(response);
@@ -276,7 +309,8 @@ class CashuMint {
 	 * @returns
 	 */
 	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
-		return CashuMint.checkMeltQuote(this._mintUrl, quote, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.checkMeltQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -289,13 +323,16 @@ class CashuMint {
 	public static async melt(
 		mintUrl: string,
 		meltPayload: MeltPayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		blindAuthToken?: string
 	): Promise<MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
 			method: 'POST',
-			requestBody: meltPayload
+			requestBody: meltPayload,
+			headers
 		});
 
 		const data = handleMeltQuoteResponseDeprecated(response);
@@ -316,7 +353,8 @@ class CashuMint {
 	 * @returns
 	 */
 	async melt(meltPayload: MeltPayload): Promise<MeltQuoteResponse> {
-		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest);
+		const blindAuthToken = this.popBlindAuthToken();
+		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
 	/**
 	 * Checks if specific proofs have already been redeemed
