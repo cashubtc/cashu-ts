@@ -123,4 +123,3 @@ export type BlindAuthMintPayload = {
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
-

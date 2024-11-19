@@ -522,7 +522,6 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	return true;
 }
 
-
 /**
  * Helper function to encode a cashu auth token authA
  * @param proof
@@ -531,7 +530,7 @@ export function getEncodedAuthToken(proof: Proof): string {
 	const token = {
 		id: proof.id,
 		secret: proof.secret,
-		C: proof.C,
+		C: proof.C
 	};
 	const base64Data = encodeJsonToBase64(token);
 	const prefix = 'auth';

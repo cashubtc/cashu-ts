@@ -251,10 +251,10 @@ class CashuAuthWallet {
 			options?.pubkey
 		);
 		const mintPayload: BlindAuthMintPayload = {
-			outputs: blindedMessages,
+			outputs: blindedMessages
 		};
 		const { signatures } = await this.mint.mint(mintPayload, clearAuthToken);
-		return this.constructProofs(signatures, blindingFactors, secrets, keyset)
+		return this.constructProofs(signatures, blindingFactors, secrets, keyset);
 	}
 	/**
 	 * Creates blinded messages for a given amount

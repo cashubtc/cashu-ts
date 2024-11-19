@@ -21,7 +21,7 @@ import type {
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
-import { getEncodedAuthToken, getEncodedToken, isObj, joinUrls, sanitizeUrl } from './utils.js';
+import { getEncodedAuthToken, isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
 	MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated
@@ -40,7 +40,11 @@ class CashuMint {
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request, private _authProofs?: Array<Proof>) {
+	constructor(
+		private _mintUrl: string,
+		private _customRequest?: typeof request,
+		private _authProofs?: Array<Proof>
+	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
 		this._authProofs = _authProofs;
@@ -150,7 +154,12 @@ class CashuMint {
 	 */
 	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
 		const blindAuthToken = this.popBlindAuthToken();
-		return CashuMint.createMintQuote(this._mintUrl, mintQuotePayload, this._customRequest, blindAuthToken);
+		return CashuMint.createMintQuote(
+			this._mintUrl,
+			mintQuotePayload,
+			this._customRequest,
+			blindAuthToken
+		);
 	}
 
 	/**
@@ -265,7 +274,12 @@ class CashuMint {
 	 */
 	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
 		const blindAuthToken = this.popBlindAuthToken();
-		return CashuMint.createMeltQuote(this._mintUrl, meltQuotePayload, this._customRequest, blindAuthToken);
+		return CashuMint.createMeltQuote(
+			this._mintUrl,
+			meltQuotePayload,
+			this._customRequest,
+			blindAuthToken
+		);
 	}
 
 	/**
