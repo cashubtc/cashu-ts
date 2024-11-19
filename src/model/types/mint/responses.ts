@@ -263,3 +263,10 @@ export type WebSocketSupport = {
 	unit: string;
 	commands: Array<string>;
 };
+
+/**
+ * Response from the mint after blind auth minting
+ */
+export type BlindAuthMintResponse = {
+	signatures: Array<SerializedBlindedSignature>;
+} & ApiError;
