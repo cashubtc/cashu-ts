@@ -1,3 +1,5 @@
+import { Proof } from './wallet/index';
+
 export * from './mint/index';
 export * from './wallet/index';
 
@@ -6,6 +8,55 @@ export type OutputAmounts = {
 	keepAmounts?: Array<number>;
 };
 
+export type ReceiveOptions = {
+	keysetId?: string;
+	outputAmounts?: OutputAmounts;
+	proofsWeHave?: Array<Proof>;
+	counter?: number;
+	pubkey?: string;
+	privkey?: string;
+	requireDleq?: boolean;
+};
+
+export type SendOptions = {
+	outputAmounts?: OutputAmounts;
+	proofsWeHave?: Array<Proof>;
+	counter?: number;
+	pubkey?: string;
+	privkey?: string;
+	keysetId?: string;
+	offline?: boolean;
+	includeFees?: boolean;
+	includeDleq?: boolean;
+};
+
+export type SwapOptions = {
+	outputAmounts?: OutputAmounts;
+	proofsWeHave?: Array<Proof>;
+	counter?: number;
+	pubkey?: string;
+	privkey?: string;
+	keysetId?: string;
+	includeFees?: boolean;
+};
+
+export type RestoreOptions = {
+	keysetId?: string;
+};
+
+export type MintProofOptions = {
+	keysetId?: string;
+	outputAmounts?: OutputAmounts;
+	proofsWeHave?: Array<Proof>;
+	counter?: number;
+	pubkey?: string;
+};
+
+export type MeltProofOptions = {
+	keysetId?: string;
+	counter?: number;
+	privkey?: string;
+};
 // deprecated
 
 export type InvoiceData = {

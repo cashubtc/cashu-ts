@@ -526,16 +526,3 @@ type OutputAmounts = {
 	sendAmounts: Array<number>;
 	keepAmounts?: Array<number>;
 };
-
-export type SendOptions = {
-	outputAmounts?: OutputAmounts;
-	proofsWeHave?: Array<Proof>;
-	counter?: number;
-	pubkey?: string;
-	privkey?: string;
-	keysetId?: string;
-	offline?: boolean;
-	includeFees?: boolean;
-	includeDleq?: boolean;
-	requireDleq?: boolean;
-};
