@@ -83,6 +83,10 @@ export class MintInfo {
 		return this._mintInfo.pubkey;
 	}
 
+	get nuts() {
+		return this._mintInfo.nuts;
+	}
+
 	get version() {
 		return this._mintInfo.version;
 	}
