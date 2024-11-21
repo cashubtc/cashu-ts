@@ -433,12 +433,12 @@ describe('test raw tokens', () => {
 		const tokenHex =
 			'a4616d781868747470733a2f2f6578616d706c652e636f6d2f6d696e74617563736174617481a2616948009a1f293253e41e617081a36161016173784061636331323433356537623834383463336366313835303134393231386166393066373136613532626634613565643334376534386563633133663737333838616358210244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf6164646d656d6f';
 
-		const rawToken = utils.tokenToRawToken(token);
+		const rawToken = utils.getEncodedTokenV4Binary(token);
 		const rawTokenHex = bytesToHex(rawToken);
 		expect(rawTokenHex).toBe(tokenHex);
 
 		const tokenBytes = hexToBytes(tokenHex);
-		const decodedToken = utils.rawTokenToToken(tokenBytes);
+		const decodedToken = utils.getDecodedTokenV4Binary(tokenBytes);
 		expect(decodedToken).toEqual(token);
 	});
 });

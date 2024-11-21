@@ -532,7 +532,6 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	return true;
 }
 
-
 export function getEncodedTokenV4Binary(token: Token): Uint8Array {
 	const template = templateFromToken(token);
 	return encodeCBOR(template);
