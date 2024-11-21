@@ -532,15 +532,13 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	return true;
 }
 
-export function tokenToRawToken(token: string | Token): Uint8Array {
-	if (typeof token === 'string') {
-		token = getDecodedToken(token);
-	}
+
+export function getEncodedTokenV4Binary(token: Token): Uint8Array {
 	const template = templateFromToken(token);
 	return encodeCBOR(template);
 }
 
-export function rawTokenToToken(bytes: Uint8Array): Token {
+export function getDecodedTokenV4Binary(bytes: Uint8Array): Token {
 	const decoded = decodeCBOR(bytes) as TokenV4Template;
 	return tokenFromTemplate(decoded);
 }

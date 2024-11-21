@@ -9,8 +9,8 @@ import {
 	getDecodedToken,
 	deriveKeysetId,
 	decodePaymentRequest,
-	rawTokenToToken,
-	tokenToRawToken
+	getDecodedTokenV4Binary,
+	getEncodedTokenV4Binary
 } from './utils.js';
 
 export * from './model/types/index.js';
@@ -25,6 +25,6 @@ export {
 	decodePaymentRequest,
 	deriveKeysetId,
 	setGlobalRequestOptions,
-	rawTokenToToken,
-	tokenToRawToken
+	getDecodedTokenV4Binary,
+	getEncodedTokenV4Binary
 };
