@@ -52,6 +52,19 @@ import {
 	stripDleq,
 	sumProofs
 } from './utils.js';
+import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
+import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof
+} from '@cashu/crypto/modules/client';
+import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
+import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
+import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
+import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { MintInfo } from './model/MintInfo.js';
+
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -72,7 +85,7 @@ class CashuWallet {
 	private _keysets: Array<MintKeyset> = [];
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = DEFAULT_UNIT;
-	private _mintInfo: GetInfoResponse | undefined = undefined;
+	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
 
 	mint: CashuMint;
@@ -108,7 +121,7 @@ class CashuWallet {
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
 		if (options?.unit) this._unit = options?.unit;
 		if (options?.keysets) this._keysets = options.keysets;
-		if (options?.mintInfo) this._mintInfo = options.mintInfo;
+		if (options?.mintInfo) this._mintInfo = new MintInfo(options.mintInfo);
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
 		}
@@ -140,7 +153,7 @@ class CashuWallet {
 	get keysets(): Array<MintKeyset> {
 		return this._keysets;
 	}
-	get mintInfo(): GetInfoResponse {
+	get mintInfo(): MintInfo {
 		if (!this._mintInfo) {
 			throw new Error('Mint info not loaded');
 		}
@@ -151,8 +164,9 @@ class CashuWallet {
 	 * Get information about the mint
 	 * @returns mint info
 	 */
-	async getMintInfo(): Promise<GetInfoResponse> {
-		this._mintInfo = await this.mint.getInfo();
+	async getMintInfo(): Promise<MintInfo> {
+		const infoRes = await this.mint.getInfo();
+		this._mintInfo = new MintInfo(infoRes);
 		return this._mintInfo;
 	}
 
