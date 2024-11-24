@@ -251,14 +251,7 @@ class CashuWallet {
 	/**
 	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
 	 * @param {(string|Token)} token - Cashu token, either as string or decoded
-	 * @param {SendOptions} [options] - Optional configuration for token processing:
-	 *   - `keysetId`: Override the default keyset ID with a custom one fetched from the `/keysets` endpoint.
-	 *   - `outputAmounts`: Specify output amounts for keeping or sending.
-	 *   - `proofsWeHave`: Provide stored proofs for optimal output derivation.
-	 *   - `counter`: Set a counter to deterministically derive secrets (requires CashuWallet initialized with a seed phrase).
-	 *   - `pubkey`: Lock eCash to a public key (non-deterministic, even with a counter set).
-	 *   - `privkey`: Create a signature for token secrets.
-	 *   - `requireDleq`: Verify DLEQ proofs for all provided proofs; reject the token if any proof fails verification.
+	 * @param {ReceiveOptions} [options] - Optional configuration for token processing
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
@@ -297,16 +290,7 @@ class CashuWallet {
 	 * Send proofs of a given amount, by providing at least the required amount of proofs
 	 * @param amount amount to send
 	 * @param proofs array of proofs (accumulated amount of proofs must be >= than amount)
-	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation:
-	 *   - `outputAmounts` (OutputAmounts): Specify the amounts to keep and send in the output.
-	 *   - `counter` (number): Set a counter to derive secrets deterministically. Requires the `CashuWallet` class to be initialized with a seed phrase.
-	 *   - `proofsWeHave` (Array<Proof>): Provide all currently stored proofs for the mint. Used to derive optimal output amounts.
-	 *   - `pubkey` (string): Lock eCash to a specified public key. Note that this will not be deterministic, even if a counter is set.
-	 *   - `privkey` (string): Create a signature for the output secrets if provided.
-	 *   - `keysetId` (string): Override the keyset ID derived from the current mint keys with a custom one. The keyset ID should be fetched from the `/keysets` endpoint.
-	 *   - `offline` (boolean): Send proofs offline, if enabled.
-	 *   - `includeFees` (boolean): Include fees in the response, if enabled.
-	 *   - `includeDleq` (boolean): Include DLEQ proofs in the proofs to be sent, if enabled.
+	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation
 	 * @returns {SendResponse}
 	 */
 	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
@@ -473,15 +457,7 @@ class CashuWallet {
 	 * Splits and creates sendable tokens
 	 * if no amount is specified, the amount is implied by the cumulative amount of all proofs
 	 * if both amount and preference are set, but the preference cannot fulfill the amount, then we use the default split
-	 * @param amount amount to send while performing the optimal split (least proofs possible). can be set to undefined if preference is set
-	 * @param proofs proofs matching that amount
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param options.includeFees? include estimated fees for the receiver to receive the proofs
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param options.privkey? will create a signature on the @param proofs secrets if set
+	 *  @param {SwapOptions} [options] - Optional parameters for configuring the swap operation
 	 * @returns promise of the change- and send-proofs
 	 */
 	async swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse> {
@@ -646,11 +622,7 @@ class CashuWallet {
 	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
 	 * @param quote ID of mint quote
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
 	 * @returns proofs
 	 */
 	async mintProofs(
@@ -711,9 +683,7 @@ class CashuWallet {
 	 * Returns melt quote and change proofs
 	 * @param meltQuote ID of the melt quote
 	 * @param proofsToSend proofs to melt
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
+	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof operation
 	 * @returns
 	 */
 	async meltProofs(

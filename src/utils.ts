@@ -521,8 +521,3 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 
 	return true;
 }
-
-type OutputAmounts = {
-	sendAmounts: Array<number>;
-	keepAmounts?: Array<number>;
-};
