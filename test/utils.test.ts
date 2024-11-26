@@ -27,21 +27,6 @@ for (let i = 1; i <= 0x10000; i *= 16) {
 	keys_base16[i] = 'deadbeef';
 }
 
-const keys: Keys = {};
-for (let i = 1; i <= 2048; i *= 2) {
-	keys[i] = 'deadbeef';
-}
-
-const keys_base10: Keys = {};
-for (let i = 1; i <= 10000; i *= 10) {
-	keys_base10[i] = 'deadbeef';
-}
-
-const keys_base16: Keys = {};
-for (let i = 1; i <= 0x10000; i *= 16) {
-	keys_base16[i] = 'deadbeef';
-}
-
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
 		const chunks = utils.splitAmount(2561, keys);
