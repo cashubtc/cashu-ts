@@ -1,3 +1,4 @@
+import { ConnectionManager, WSConnection } from './WSConnection.js';
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
@@ -33,6 +34,7 @@ import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
 class CashuMint {
+	private ws?: WSConnection;
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
@@ -76,7 +78,7 @@ class CashuMint {
 	 * @param customRequest
 	 * @returns signed outputs
 	 */
-	public static async split(
+	public static async swap(
 		mintUrl: string,
 		swapPayload: SwapPayload,
 		customRequest?: typeof request
@@ -99,8 +101,8 @@ class CashuMint {
 	 * @param swapPayload payload containing inputs and outputs
 	 * @returns signed outputs
 	 */
-	async split(swapPayload: SwapPayload): Promise<SwapResponse> {
-		return CashuMint.split(this._mintUrl, swapPayload, this._customRequest);
+	async swap(swapPayload: SwapPayload): Promise<SwapResponse> {
+		return CashuMint.swap(this._mintUrl, swapPayload, this._customRequest);
 	}
 
 	/**
@@ -437,6 +439,47 @@ class CashuMint {
 		outputs: Array<SerializedBlindedMessage>;
 	}): Promise<PostRestoreResponse> {
 		return CashuMint.restore(this._mintUrl, restorePayload, this._customRequest);
+	}
+
+	/**
+	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17
+	 */
+	async connectWebSocket() {
+		if (this.ws) {
+			await this.ws.ensureConnection();
+		} else {
+			const mintUrl = new URL(this._mintUrl);
+			const wsSegment = 'v1/ws';
+			if (mintUrl.pathname) {
+				if (mintUrl.pathname.endsWith('/')) {
+					mintUrl.pathname += wsSegment;
+				} else {
+					mintUrl.pathname += '/' + wsSegment;
+				}
+			}
+			this.ws = ConnectionManager.getInstance().getConnection(
+				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`
+			);
+			try {
+				await this.ws.connect();
+			} catch (e) {
+				console.log(e);
+				throw new Error('Failed to connect to WebSocket...');
+			}
+		}
+	}
+
+	/**
+	 * Closes a websocket connection
+	 */
+	disconnectWebSocket() {
+		if (this.ws) {
+			this.ws.close();
+		}
+	}
+
+	get webSocketConnection() {
+		return this.ws;
 	}
 }
 

@@ -63,11 +63,12 @@ import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338'; // the mint URL
 const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
+await wallet.loadMint(); // persist wallet.keys and wallet.keysets to avoid calling loadMint() in the future
 const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
 if (mintQuoteChecked.state == MintQuoteState.PAID) {
-	const { proofs } = await wallet.mintTokens(64, mintQuote.quote);
+	const { proofs } = await wallet.mintProofs(64, mintQuote.quote);
 }
 ```
 
@@ -77,19 +78,34 @@ if (mintQuoteChecked.state == MintQuoteState.PAID) {
 import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338'; // the mint URL
 const mint = new CashuMint(mintUrl);
-const wallet = new CashuWallet(mint);
+const wallet = new CashuWallet(mint); // load the keysets of the mint
 
 const invoice = 'lnbc......'; // Lightning invoice to pay
 const meltQuote = await wallet.createMeltQuote(invoice);
 const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 
-// in a real wallet, we would coin select the correct amount of proofs from the wallet's storage
-// instead of that, here we swap `proofs` with the mint to get the correct amount of proofs
-const { returnChange: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs);
+// CashuWallet.send performs coin selection and swaps the proofs with the mint
+// if no appropriate amount can be selected offline. We must include potential
+// ecash fees that the mint might require to melt the resulting proofsToSend later.
+const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs, {
+	includeFees: true
+});
 // store proofsToKeep in wallet ..
 
-const meltResponse = await wallet.meltTokens(meltQuote, proofsToSend);
+const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 // store meltResponse.change in wallet ..
+```
+
+#### Create a token and receive it
+
+```typescript
+// we assume that `wallet` already minted `proofs`, as above
+const { keep, send } = await wallet.send(32, proofs);
+const token = getEncodedTokenV4({ token: [{ mint: mintUrl, proofs: send }] });
+console.log(token);
+
+const wallet2 = new CashuWallet(mint); // receiving wallet
+const receiveProofs = await wallet2.receive(token);
 ```
 
 ## Contribute

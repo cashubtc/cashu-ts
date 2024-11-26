@@ -5,14 +5,14 @@ import {
 	encodeUint8toBase64Url
 } from './base64.js';
 import {
-	AmountPreference,
+	DeprecatedToken,
 	Keys,
+	MintKeys,
 	Proof,
-	RawPaymentRequest,
-	RawTransport,
+	SerializedDLEQ,
 	Token,
-	TokenEntry,
 	TokenV4Template,
+	V4DLEQTemplate,
 	V4InnerToken,
 	V4ProofTemplate
 } from './model/types/index.js';
@@ -21,112 +21,221 @@ import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
+import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 
-function splitAmount(
+/**
+ * Splits the amount into denominations of the provided @param keyset
+ * @param value amount to split
+ * @param keyset keys to look up split amounts
+ * @param split? optional custom split amounts
+ * @param order? optional order for split amounts (default: "asc")
+ * @returns Array of split amounts
+ * @throws Error if @param split amount is greater than @param value amount
+ */
+export function splitAmount(
 	value: number,
 	keyset: Keys,
-	amountPreference?: Array<AmountPreference>,
-	isDesc?: boolean
+	split?: Array<number>,
+	order?: 'desc' | 'asc'
 ): Array<number> {
-	const chunks: Array<number> = [];
-	if (amountPreference) {
-		chunks.push(...getPreference(value, keyset, amountPreference));
+	if (split) {
+		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
+			throw new Error(
+				`Split is greater than total amount: ${split.reduce(
+					(a: number, b: number) => a + b,
+					0
+				)} > ${value}`
+			);
+		}
+		split.forEach((amt: number) => {
+			if (!hasCorrespondingKey(amt, keyset)) {
+				throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
+			}
+		});
 		value =
 			value -
-			chunks.reduce((curr: number, acc: number) => {
+			split.reduce((curr: number, acc: number) => {
 				return curr + acc;
 			}, 0);
+	} else {
+		split = [];
 	}
-	const sortedKeyAmounts: Array<number> = Object.keys(keyset)
-		.map((k) => parseInt(k))
-		.sort((a, b) => b - a);
-	sortedKeyAmounts.forEach((amt) => {
+	const sortedKeyAmounts = getKeysetAmounts(keyset);
+	sortedKeyAmounts.forEach((amt: number) => {
 		const q = Math.floor(value / amt);
-		for (let i = 0; i < q; ++i) chunks.push(amt);
+		for (let i = 0; i < q; ++i) split?.push(amt);
 		value %= amt;
 	});
-	return chunks.sort((a, b) => (isDesc ? b - a : a - b));
+	return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
-/*
-function isPowerOfTwo(number: number) {
-	return number && !(number & (number - 1));
+/**
+ * Creates a list of amounts to keep based on the proofs we have and the proofs we want to reach.
+ * @param proofsWeHave complete set of proofs stored (from current mint)
+ * @param amountToKeep amount to keep
+ * @param keys keys of current keyset
+ * @param targetCount the target number of proofs to reach
+ * @returns an array of amounts to keep
+ */
+export function getKeepAmounts(
+	proofsWeHave: Array<Proof>,
+	amountToKeep: number,
+	keys: Keys,
+	targetCount: number
+): Array<number> {
+	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
+	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
+	const amountsWeWant: Array<number> = [];
+	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
+	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
+	sortedKeyAmounts.forEach((amt) => {
+		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
+		const countWeWant = Math.max(targetCount - countWeHave, 0);
+		for (let i = 0; i < countWeWant; ++i) {
+			if (amountsWeWant.reduce((a, b) => a + b, 0) + amt > amountToKeep) {
+				break;
+			}
+			amountsWeWant.push(amt);
+		}
+	});
+	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
+	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0);
+	if (amountDiff) {
+		const remainingAmounts = splitAmount(amountDiff, keys);
+		remainingAmounts.forEach((amt: number) => {
+			amountsWeWant.push(amt);
+		});
+	}
+	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
+	return sortedAmountsWeWant;
 }
-*/
+/**
+ * returns the amounts in the keyset sorted by the order specified
+ * @param keyset to search in
+ * @param order order to sort the amounts in
+ * @returns the amounts in the keyset sorted by the order specified
+ */
+export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): Array<number> {
+	if (order == 'desc') {
+		return Object.keys(keyset)
+			.map((k: string) => parseInt(k))
+			.sort((a: number, b: number) => b - a);
+	}
+	return Object.keys(keyset)
+		.map((k: string) => parseInt(k))
+		.sort((a: number, b: number) => a - b);
+}
 
-function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
+/**
+ * Checks if the provided amount is in the keyset.
+ * @param amount amount to check
+ * @param keyset to search in
+ * @returns true if the amount is in the keyset, false otherwise
+ */
+export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 	return amount in keyset;
 }
 
-function getPreference(
-	amount: number,
-	keyset: Keys,
-	preferredAmounts: Array<AmountPreference>
-): Array<number> {
-	const chunks: Array<number> = [];
-	let accumulator = 0;
-	preferredAmounts.forEach((pa: AmountPreference) => {
-		if (!hasCorrespondingKey(pa.amount, keyset)) {
-			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
-		}
-		for (let i = 1; i <= pa.count; i++) {
-			accumulator += pa.amount;
-			if (accumulator > amount) {
-				return;
-			}
-			chunks.push(pa.amount);
-		}
-	});
-	return chunks;
-}
-
-function getDefaultAmountPreference(amount: number, keyset: Keys): Array<AmountPreference> {
-	const amounts = splitAmount(amount, keyset);
-	return amounts.map((a: number) => {
-		return { amount: a, count: 1 };
-	});
-}
-
-function bytesToNumber(bytes: Uint8Array): bigint {
+/**
+ * Converts a bytes array to a number.
+ * @param bytes to convert to number
+ * @returns  number
+ */
+export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
 }
 
-function hexToNumber(hex: string): bigint {
+/**
+ * Converts a hex string to a number.
+ * @param hex to convert to number
+ * @returns number
+ */
+export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
 }
 
+/**
+ * Converts a number to a hex string of 64 characters.
+ * @param number (bigint) to conver to hex
+ * @returns hex string start-padded to 64 characters
+ */
+export function numberToHexPadded64(number: bigint): string {
+	return number.toString(16).padStart(64, '0');
+}
+
+function isValidHex(str: string) {
+	return /^[a-f0-9]*$/i.test(str);
+}
+
+/**
+ * Checks wether a proof or a list of proofs contains a non-hex id
+ * @param p Proof or list of proofs
+ * @returns boolean
+ */
+export function hasNonHexId(p: Proof | Array<Proof>) {
+	if (Array.isArray(p)) {
+		return p.some((proof) => !isValidHex(proof.id));
+	}
+	return isValidHex(p.id);
+}
+
 //used for json serialization
-function bigIntStringify<T>(_key: unknown, value: T) {
+export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
 /**
  * Helper function to encode a v3 cashu token
- * @param token
- * @returns
+ * @param token to encode
+ * @returns encoded token
  */
-function getEncodedToken(token: Token): string {
-	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(token);
+export function getEncodedTokenV3(token: Token): string {
+	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
+	if (token.unit) {
+		v3TokenObj.unit = token.unit;
+	}
+	if (token.memo) {
+		v3TokenObj.memo = token.memo;
+	}
+	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
 }
 
-function getEncodedTokenV4(token: Token): string {
-	const idMap: { [id: string]: Array<Proof> } = {};
-	let mint: string | undefined = undefined;
-	for (let i = 0; i < token.token.length; i++) {
-		if (!mint) {
-			mint = token.token[i].mint;
-		} else {
-			if (mint !== token.token[i].mint) {
-				throw new Error('Multimint token can not be encoded as V4 token');
-			}
+/**
+ * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
+ * @param token
+ * @param [opts]
+ */
+export function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
+	const nonHex = hasNonHexId(token.proofs);
+	if (nonHex || opts?.version === 3) {
+		if (opts?.version === 4) {
+			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 		}
-		for (let j = 0; j < token.token[i].proofs.length; j++) {
-			const proof = token.token[i].proofs[j];
-			if (idMap[proof.id]) {
-				idMap[proof.id].push(proof);
-			} else {
-				idMap[proof.id] = [proof];
-			}
+		return getEncodedTokenV3(token);
+	}
+	return getEncodedTokenV4(token);
+}
+
+export function getEncodedTokenV4(token: Token): string {
+	// Make sure each DLEQ has its blinding factor
+	token.proofs.forEach((p) => {
+		if (p.dleq && p.dleq.r == undefined) {
+			throw new Error('Missing blinding factor in included DLEQ proof');
+		}
+	});
+	const nonHex = hasNonHexId(token.proofs);
+	if (nonHex) {
+		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+	}
+	const idMap: { [id: string]: Array<Proof> } = {};
+	const mint = token.mint;
+	for (let i = 0; i < token.proofs.length; i++) {
+		const proof = token.proofs[i];
+		if (idMap[proof.id]) {
+			idMap[proof.id].push(proof);
+		} else {
+			idMap[proof.id] = [proof];
 		}
 	}
 	const tokenTemplate: TokenV4Template = {
@@ -136,7 +245,18 @@ function getEncodedTokenV4(token: Token): string {
 			(id: string): V4InnerToken => ({
 				i: hexToBytes(id),
 				p: idMap[id].map(
-					(p: Proof): V4ProofTemplate => ({ a: p.amount, s: p.secret, c: hexToBytes(p.C) })
+					(p: Proof): V4ProofTemplate => ({
+						a: p.amount,
+						s: p.secret,
+						c: hexToBytes(p.C),
+						...(p.dleq && {
+							d: {
+								e: hexToBytes(p.dleq.e),
+								s: hexToBytes(p.dleq.s),
+								r: hexToBytes(p.dleq.r ?? '00')
+							} as V4DLEQTemplate
+						})
+					})
 				)
 			})
 		)
@@ -158,7 +278,7 @@ function getEncodedTokenV4(token: Token): string {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-function getDecodedToken(token: string) {
+export function getDecodedToken(token: string) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
@@ -171,34 +291,54 @@ function getDecodedToken(token: string) {
 }
 
 /**
- * @param token
- * @returns
+ * Helper function to decode different versions of cashu tokens into an object
+ * @param token an encoded cashu token (cashuAey...)
+ * @returns cashu Token object
  */
-function handleTokens(token: string): Token {
+export function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
 	const encodedToken = token.slice(1);
 	if (version === 'A') {
-		return encodeBase64ToJson<Token>(encodedToken);
+		const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
+		if (parsedV3Token.token.length > 1) {
+			throw new Error('Multi entry token are not supported');
+		}
+		const entry = parsedV3Token.token[0];
+		const tokenObj: Token = {
+			mint: entry.mint,
+			proofs: entry.proofs,
+			unit: parsedV3Token.unit || 'sat'
+		};
+		if (parsedV3Token.memo) {
+			tokenObj.memo = parsedV3Token.memo;
+		}
+		return tokenObj;
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
-		const tokenData = decodeCBOR(uInt8Token) as {
-			t: Array<{ p: Array<{ a: number; s: string; c: Uint8Array }>; i: Uint8Array }>;
-			m: string;
-			d: string;
-			u: string;
-		};
-		const mergedTokenEntry: TokenEntry = { mint: tokenData.m, proofs: [] };
-		tokenData.t.forEach((tokenEntry: V4InnerToken) =>
-			tokenEntry.p.forEach((p: V4ProofTemplate) => {
-				mergedTokenEntry.proofs.push({
+		const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
+		const proofs: Array<Proof> = [];
+		tokenData.t.forEach((t) =>
+			t.p.forEach((p) => {
+				proofs.push({
 					secret: p.s,
 					C: bytesToHex(p.c),
 					amount: p.a,
-					id: bytesToHex(tokenEntry.i)
+					id: bytesToHex(t.i),
+					...(p.d && {
+						dleq: {
+							r: bytesToHex(p.d.r),
+							s: bytesToHex(p.d.s),
+							e: bytesToHex(p.d.e)
+						} as SerializedDLEQ
+					})
 				});
 			})
 		);
-		return { token: [mergedTokenEntry], memo: tokenData.d || '', unit: tokenData.u || 'sat' };
+		const decodedToken: Token = { mint: tokenData.m, proofs, unit: tokenData.u || 'sat' };
+		if (tokenData.d) {
+			decodedToken.memo = tokenData.d;
+		}
+		return decodedToken;
 	}
 	throw new Error('Token version is not supported');
 }
@@ -217,7 +357,7 @@ export function deriveKeysetId(keys: Keys) {
 	return '00' + hashHex;
 }
 
-function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
+export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 	// sum of individual array lengths
 	const mergedArray = new Uint8Array(a1.length + a2.length);
 	mergedArray.set(a1);
@@ -251,18 +391,133 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
-function decodePaymentRequest(paymentRequest: string) {
+export function sumProofs(proofs: Array<Proof>) {
+	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
+}
+
+export function decodePaymentRequest(paymentRequest: string) {
 	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 
-export {
-	bigIntStringify,
-	bytesToNumber,
-	getDecodedToken,
-	getEncodedToken,
-	getEncodedTokenV4,
-	hexToNumber,
-	splitAmount,
-	getDefaultAmountPreference,
-	decodePaymentRequest
-};
+export class MessageNode {
+	private _value: string;
+	private _next: MessageNode | null;
+
+	public get value(): string {
+		return this._value;
+	}
+	public set value(message: string) {
+		this._value = message;
+	}
+	public get next(): MessageNode | null {
+		return this._next;
+	}
+	public set next(node: MessageNode | null) {
+		this._next = node;
+	}
+
+	constructor(message: string) {
+		this._value = message;
+		this._next = null;
+	}
+}
+
+export class MessageQueue {
+	private _first: MessageNode | null;
+	private _last: MessageNode | null;
+
+	public get first(): MessageNode | null {
+		return this._first;
+	}
+	public set first(messageNode: MessageNode | null) {
+		this._first = messageNode;
+	}
+	public get last(): MessageNode | null {
+		return this._last;
+	}
+	public set last(messageNode: MessageNode | null) {
+		this._last = messageNode;
+	}
+	private _size: number;
+	public get size(): number {
+		return this._size;
+	}
+	public set size(v: number) {
+		this._size = v;
+	}
+
+	constructor() {
+		this._first = null;
+		this._last = null;
+		this._size = 0;
+	}
+	enqueue(message: string): boolean {
+		const newNode = new MessageNode(message);
+		if (this._size === 0 || !this._last) {
+			this._first = newNode;
+			this._last = newNode;
+		} else {
+			this._last.next = newNode;
+			this._last = newNode;
+		}
+		this._size++;
+		return true;
+	}
+	dequeue(): string | null {
+		if (this._size === 0 || !this._first) return null;
+
+		const prev = this._first;
+		this._first = prev.next;
+		prev.next = null;
+
+		this._size--;
+		return prev.value;
+	}
+}
+/**
+ * Removes all traces of DLEQs from a list of proofs
+ * @param proofs The list of proofs that dleq should be stripped from
+ */
+export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq' | 'dleqValid'>> {
+	return proofs.map((p) => {
+		const newP = { ...p };
+		delete newP['dleq'];
+		delete newP['dleqValid'];
+		return newP;
+	});
+}
+
+/**
+ * Checks that the proof has a valid DLEQ proof according to
+ * keyset `keys`
+ * @param proof The proof subject to verification
+ * @param keyset The Mint's keyset to be used for verification
+ * @returns true if verification succeeded, false otherwise
+ * @throws Error if @param proof does not match any key in @param keyset
+ */
+export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
+	if (proof.dleq == undefined) {
+		return false;
+	}
+	const dleq = {
+		e: hexToBytes(proof.dleq.e),
+		s: hexToBytes(proof.dleq.s),
+		r: hexToNumber(proof.dleq.r ?? '00')
+	} as DLEQ;
+	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
+		throw new Error(`undefined key for amount ${proof.amount}`);
+	}
+	const key = keyset.keys[proof.amount];
+	if (
+		!verifyDLEQProof_reblind(
+			new TextEncoder().encode(proof.secret),
+			dleq,
+			pointFromHex(proof.C),
+			pointFromHex(key)
+		)
+	) {
+		return false;
+	}
+
+	return true;
+}

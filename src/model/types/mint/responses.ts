@@ -21,7 +21,7 @@ export type ApiError = {
 /**
  * Entries of CheckStateResponse with state of the proof
  */
-export type CheckStateEntry = {
+export type ProofState = {
 	Y: string;
 	state: CheckStateEnum;
 	witness: string | null;
@@ -43,7 +43,7 @@ export type CheckStateResponse = {
 	/**
 	 *
 	 */
-	states: Array<CheckStateEntry>;
+	states: Array<ProofState>;
 } & ApiError;
 
 /**
@@ -58,33 +58,50 @@ export type GetInfoResponse = {
 	contact: Array<MintContactInfo>;
 	nuts: {
 		'4': {
+			// Minting
 			methods: Array<SwapMethod>;
 			disabled: boolean;
 		};
 		'5': {
+			// Melting
 			methods: Array<SwapMethod>;
 			disabled: boolean;
 		};
 		'7'?: {
+			// Token state check
 			supported: boolean;
 		};
 		'8'?: {
+			// Overpaid melt fees
 			supported: boolean;
 		};
 		'9'?: {
+			// Restore
 			supported: boolean;
 		};
 		'10'?: {
+			// Spending conditions
 			supported: boolean;
 		};
 		'11'?: {
+			// P2PK
 			supported: boolean;
 		};
 		'12'?: {
+			// DLEQ
 			supported: boolean;
 		};
-		'13'?: {
+		'14'?: {
+			// HTLCs
 			supported: boolean;
+		};
+		'15'?: {
+			// MPP
+			methods: Array<MPPMethod>;
+		};
+		'17'?: {
+			// WebSockets
+			supported: Array<WebSocketSupport>;
 		};
 	};
 	motd?: string;
@@ -178,6 +195,16 @@ export type PostRestoreResponse = {
 	promises: Array<SerializedBlindedSignature>;
 };
 
+/*
+ * Zero-Knowledge that BlindedSignature
+ * was generated using a specific public key
+ */
+export type SerializedDLEQ = {
+	s: string;
+	e: string;
+	r?: string;
+};
+
 /**
  * Blinded signature as it is received from the mint
  */
@@ -194,6 +221,10 @@ export type SerializedBlindedSignature = {
 	 * Blinded signature
 	 */
 	C_: string;
+	/**
+	 * DLEQ Proof
+	 */
+	dleq?: SerializedDLEQ;
 };
 
 /**
@@ -215,3 +246,20 @@ export type SwapResponse = {
 	 */
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
+
+/**
+ * MPP supported methods
+ */
+export type MPPMethod = {
+	method: string;
+	unit: string;
+};
+
+/**
+ * WebSocket supported methods
+ */
+export type WebSocketSupport = {
+	method: string;
+	unit: string;
+	commands: Array<string>;
+};

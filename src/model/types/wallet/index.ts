@@ -1,12 +1,9 @@
+import { SerializedDLEQ } from '../mint';
+
 export * from './payloads';
 export * from './responses';
 export * from './tokens';
 export * from './paymentRequests';
-
-export type AmountPreference = {
-	amount: number;
-	count: number;
-};
 
 /**
  * represents a single Cashu proof.
@@ -28,6 +25,14 @@ export type Proof = {
 	 * The unblinded signature for this secret, signed by the mints private key.
 	 */
 	C: string;
+	/**
+	 * DLEQ proof
+	 */
+	dleq?: SerializedDLEQ;
+	/**
+	 * Is the associated DLEQ proof valid?
+	 */
+	dleqValid?: boolean;
 };
 
 /**

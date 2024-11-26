@@ -5,9 +5,13 @@ import { Proof } from './index';
  */
 export type Token = {
 	/**
-	 * token entries
+	 * the mints URL
 	 */
-	token: Array<TokenEntry>;
+	mint: string;
+	/**
+	 * a list of proofs
+	 */
+	proofs: Array<Proof>;
 	/**
 	 * a message to send along with the token
 	 */
@@ -17,18 +21,20 @@ export type Token = {
 	 */
 	unit?: string;
 };
-/**
- * TokenEntry that stores proofs and mints
- */
-export type TokenEntry = {
+
+export type V4DLEQTemplate = {
 	/**
-	 * a list of proofs
+	 * challenge
 	 */
-	proofs: Array<Proof>;
+	e: Uint8Array;
 	/**
-	 * the mints URL
+	 * response
 	 */
-	mint: string;
+	s: Uint8Array;
+	/**
+	 * blinding factor
+	 */
+	r: Uint8Array;
 };
 
 /**
@@ -47,6 +53,10 @@ export type V4ProofTemplate = {
 	 * Signature
 	 */
 	c: Uint8Array;
+	/**
+	 * DLEQ
+	 */
+	d?: V4DLEQTemplate;
 };
 
 /**
@@ -83,4 +93,35 @@ export type TokenV4Template = {
 	 * Unit
 	 */
 	u: string;
+};
+
+/**
+ * A Cashu token
+ */
+export type DeprecatedToken = {
+	/**
+	 * token entries
+	 */
+	token: Array<TokenEntry>;
+	/**
+	 * a message to send along with the token
+	 */
+	memo?: string;
+	/**
+	 * the unit of the token
+	 */
+	unit?: string;
+};
+/**
+ * TokenEntry that stores proofs and mints
+ */
+type TokenEntry = {
+	/**
+	 * a list of proofs
+	 */
+	proofs: Array<Proof>;
+	/**
+	 * the mints URL
+	 */
+	mint: string;
 };
