@@ -1,7 +1,7 @@
 import { WSConnection } from '../src/WSConnection';
 import { Client, Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
-import { vi } from 'vitest';
+import { vi, test, describe, expect } from 'vitest';
 
 injectWebSocketImpl(WebSocket);
 

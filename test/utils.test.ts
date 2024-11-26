@@ -3,6 +3,7 @@ import {
 	constructProofFromPromise,
 	serializeProof
 } from '@cashu/crypto/modules/client';
+import { test, describe, expect } from 'vitest';
 import { Keys, Proof } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';

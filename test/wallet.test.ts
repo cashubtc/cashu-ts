@@ -1,6 +1,6 @@
-import nock from 'nock';
 import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
+import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect } from 'vitest';
 
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';

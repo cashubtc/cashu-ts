@@ -1,4 +1,4 @@
-import nock from 'nock';
+import { beforeAll, beforeEach, test, describe, expect } from 'vitest';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import { setGlobalRequestOptions } from '../src/request.js';
