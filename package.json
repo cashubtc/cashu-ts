@@ -1,6 +1,6 @@
 {
 	"name": "@cashu/cashu-ts",
-	"version": "2.0.0-rc4",
+	"version": "2.0.0",
 	"description": "cashu library for communicating with a cashu mint",
 	"main": "dist/lib/es5/index.js",
 	"module": "dist/lib/es6/index.js",
