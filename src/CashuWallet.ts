@@ -43,7 +43,7 @@ import {
 } from '@cashu/crypto/modules/client';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
+import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { MintInfo } from './model/MintInfo.js';
