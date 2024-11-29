@@ -9,6 +9,23 @@ import {
 import { Buffer } from 'buffer';
 
 export class PaymentRequest {
+	static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
+		const transports = rawPaymentRequest.t.map((t: RawTransport) => ({
+			type: t.t,
+			target: t.a,
+			tags: t.g
+		}));
+		return new PaymentRequest(
+			transports,
+			rawPaymentRequest.i,
+			rawPaymentRequest.a,
+			rawPaymentRequest.u,
+			rawPaymentRequest.m,
+			rawPaymentRequest.d,
+			rawPaymentRequest.s
+		);
+	}
+
 	constructor(
 		public transport: Array<PaymentRequestTransport>,
 		public id?: string,
@@ -19,7 +36,7 @@ export class PaymentRequest {
 		public singleUse: boolean = false
 	) {}
 
-	toEncodedRequest() {
+	toRawRequest() {
 		const rawRequest: RawPaymentRequest = {
 			t: this.transport.map((t: PaymentRequestTransport) => ({ t: t.type, a: t.target, g: t.tags }))
 		};
@@ -41,7 +58,11 @@ export class PaymentRequest {
 		if (this.singleUse) {
 			rawRequest.s = this.singleUse;
 		}
+		return rawRequest;
+	}
 
+	toEncodedRequest() {
+		const rawRequest: RawPaymentRequest = this.toRawRequest();
 		const data = encodeCBOR(rawRequest);
 		const encodedData = Buffer.from(data).toString('base64');
 		return 'creq' + 'A' + encodedData;
@@ -62,15 +83,6 @@ export class PaymentRequest {
 		const encodedData = encodedRequest.slice(5);
 		const data = encodeBase64toUint8(encodedData);
 		const decoded = decodeCBOR(data) as RawPaymentRequest;
-		const transports = decoded.t.map((t: RawTransport) => ({ type: t.t, target: t.a, tags: t.g }));
-		return new PaymentRequest(
-			transports,
-			decoded.i,
-			decoded.a,
-			decoded.u,
-			decoded.m,
-			decoded.d,
-			decoded.s
-		);
+		return this.fromRawRequest(decoded);
 	}
 }
