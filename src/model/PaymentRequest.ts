@@ -9,23 +9,6 @@ import {
 import { Buffer } from 'buffer';
 
 export class PaymentRequest {
-	static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
-		const transports = rawPaymentRequest.t.map((t: RawTransport) => ({
-			type: t.t,
-			target: t.a,
-			tags: t.g
-		}));
-		return new PaymentRequest(
-			transports,
-			rawPaymentRequest.i,
-			rawPaymentRequest.a,
-			rawPaymentRequest.u,
-			rawPaymentRequest.m,
-			rawPaymentRequest.d,
-			rawPaymentRequest.s
-		);
-	}
-
 	constructor(
 		public transport: Array<PaymentRequestTransport>,
 		public id?: string,
@@ -70,6 +53,23 @@ export class PaymentRequest {
 
 	getTransport(type: PaymentRequestTransportType) {
 		return this.transport.find((t: PaymentRequestTransport) => t.type === type);
+	}
+
+	static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
+		const transports = rawPaymentRequest.t.map((t: RawTransport) => ({
+			type: t.t,
+			target: t.a,
+			tags: t.g
+		}));
+		return new PaymentRequest(
+			transports,
+			rawPaymentRequest.i,
+			rawPaymentRequest.a,
+			rawPaymentRequest.u,
+			rawPaymentRequest.m,
+			rawPaymentRequest.d,
+			rawPaymentRequest.s
+		);
 	}
 
 	static fromEncodedRequest(encodedRequest: string): PaymentRequest {
