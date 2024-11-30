@@ -46,6 +46,7 @@ import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/
 import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { BlindingDataWithoutSignature, SwapTransaction } from './model/types/wallet/blinding.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -264,7 +265,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 			requireDleq?: boolean;
-			blindingData?: BlindingData;
+			blindingData?: Array<BlindingDataWithoutSignature>;
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
@@ -277,34 +278,20 @@ class CashuWallet {
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		let payload: SwapPayload;
-		let blindingData: BlindingData;
-		if (options?.blindingData) {
-			payload = {
-				inputs: token.proofs,
-				outputs: [...options.blindingData.blindedMessages]
-			};
-			blindingData = options.blindingData;
-		} else {
-			const swapRes = this.createSwapPayload(
-				amount,
-				token.proofs,
-				keys,
-				options?.outputAmounts,
-				options?.counter,
-				options?.pubkey,
-				options?.privkey
-			);
-			payload = swapRes.payload;
-			blindingData = swapRes.blindingData;
-		}
-		const { signatures } = await this.mint.swap(payload);
-		const freshProofs = this.constructProofs(
-			signatures,
-			blindingData.blindingFactors,
-			blindingData.secrets,
-			keys
+		const swapRes = this.createSwapPayload(
+			amount,
+			token.proofs,
+			keys,
+			options?.outputAmounts,
+			options?.counter,
+			options?.pubkey,
+			options?.privkey,
+			{ keep: options?.blindingData }
 		);
+		const payload = swapRes.payload;
+		const blindingData = swapRes.blindingData;
+		const { signatures } = await this.mint.swap(payload);
+		const freshProofs = this.constructProofs(signatures, blindingData, keys);
 		return freshProofs;
 	}
 
@@ -336,6 +323,10 @@ class CashuWallet {
 			offline?: boolean;
 			includeFees?: boolean;
 			includeDleq?: boolean;
+			customBlindingData?: {
+				keep?: Array<BlindingDataWithoutSignature>;
+				send?: Array<BlindingDataWithoutSignature>;
+			};
 		}
 	): Promise<SendResponse> {
 		if (options?.includeDleq) {
@@ -513,6 +504,10 @@ class CashuWallet {
 			privkey?: string;
 			keysetId?: string;
 			includeFees?: boolean;
+			customBlindingData?: {
+				keep?: Array<BlindingDataWithoutSignature>;
+				send?: Array<BlindingDataWithoutSignature>;
+			};
 		}
 	): Promise<SendResponse> {
 		if (!options) options = {};
@@ -575,32 +570,26 @@ class CashuWallet {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
-		const { payload, blindingData } = this.createSwapPayload(
+		const swapTransaction = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
 			keyset,
 			options?.outputAmounts,
 			options?.counter,
 			options?.pubkey,
-			options?.privkey
+			options?.privkey,
+			options.customBlindingData
 		);
-		const { signatures } = await this.mint.swap(payload);
-		const swapProofs = this.constructProofs(
-			signatures,
-			blindingData.blindingFactors,
-			blindingData.secrets,
-			keyset
-		);
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const swapProofs = this.constructProofs(signatures, swapTransaction.blindingData, keyset);
 		const splitProofsToKeep: Array<Proof> = [];
 		const splitProofsToSend: Array<Proof> = [];
-		let amountToKeepCounter = 0;
-		swapProofs.forEach((proof: Proof) => {
-			if (amountToKeepCounter < amountToKeep) {
-				amountToKeepCounter += proof.amount;
-				splitProofsToKeep.push(proof);
-				return;
+		swapProofs.forEach((p, i) => {
+			if (swapTransaction.keepVector[i]) {
+				splitProofsToKeep.push(p);
+			} else {
+				splitProofsToSend.push(p);
 			}
-			splitProofsToSend.push(proof);
 		});
 		return {
 			keep: splitProofsToKeep,
@@ -627,23 +616,15 @@ class CashuWallet {
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
-		const { blindedMessages, blindingFactors, secrets } = this.createBlindedMessages(
-			amounts,
-			keys.id,
-			start
-		);
+		const blindingData = this.createBlindedMessages(amounts, keys.id, start);
 
-		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
+		const { outputs, promises } = await this.mint.restore({
+			outputs: blindingData.map((d) => d.blindedMessage)
+		});
 
-		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint
-		const validBlindingFactors = blindingFactors.filter((_: bigint, i: number) =>
-			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
-		);
-		const validSecrets = secrets.filter((_: Uint8Array, i: number) =>
-			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
-		);
+		const validData = blindingData.filter((d) => outputs.some((o) => d.blindedMessage.B_ === o.B_));
 		return {
-			proofs: this.constructProofs(promises, validBlindingFactors, validSecrets, keys)
+			proofs: this.constructProofs(promises, validData, keys)
 		};
 	}
 
@@ -706,7 +687,7 @@ class CashuWallet {
 			};
 		}
 
-		const { blindedMessages, secrets, blindingFactors } = this.createRandomBlindedMessages(
+		const blindingData = this.createRandomBlindedMessages(
 			amount,
 			keyset,
 			options?.outputAmounts?.keepAmounts,
@@ -714,11 +695,11 @@ class CashuWallet {
 			options?.pubkey
 		);
 		const mintPayload: MintPayload = {
-			outputs: blindedMessages,
+			outputs: blindingData.map((d) => d.blindedMessage),
 			quote: quote
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
-		return this.constructProofs(signatures, blindingFactors, secrets, keyset);
+		return this.constructProofs(signatures, blindingData, keyset);
 	}
 
 	/**
@@ -765,7 +746,7 @@ class CashuWallet {
 		}
 	): Promise<MeltProofsResponse> {
 		const keys = await this.getKeys(options?.keysetId);
-		const { blindedMessages, secrets, blindingFactors } = this.createBlankOutputs(
+		const blindingData = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,
 			keys.id,
 			options?.counter
@@ -789,12 +770,12 @@ class CashuWallet {
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
-			outputs: [...blindedMessages]
+			outputs: blindingData.map((d) => d.blindedMessage)
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
 		let change: Array<Proof> = [];
 		if (meltResponse.change) {
-			change = this.constructProofs(meltResponse.change, blindingFactors, secrets, keys);
+			change = this.constructProofs(meltResponse.change, blindingData, keys);
 		}
 		return {
 			quote: meltResponse,
@@ -819,11 +800,12 @@ class CashuWallet {
 		outputAmounts?: OutputAmounts,
 		counter?: number,
 		pubkey?: string,
-		privkey?: string
-	): {
-		payload: SwapPayload;
-		blindingData: BlindingData;
-	} {
+		privkey?: string,
+		customBlindingData?: {
+			keep?: Array<BlindingDataWithoutSignature>;
+			send?: Array<BlindingDataWithoutSignature>;
+		}
+	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
 			outputAmounts.keepAmounts = splitAmount(
@@ -831,22 +813,33 @@ class CashuWallet {
 				keyset.keys
 			);
 		}
-		const keepBlindedMessages = this.createRandomBlindedMessages(
-			totalAmount - amount - this.getFeesForProofs(proofsToSend),
-			keyset,
-			outputAmounts?.keepAmounts,
-			counter
-		);
-		if (this._seed && counter) {
-			counter = counter + keepBlindedMessages.secrets.length;
+		let keepBlindingData: Array<BlindingDataWithoutSignature>;
+		let sendBlindingData: Array<BlindingDataWithoutSignature>;
+
+		if (customBlindingData?.keep) {
+			keepBlindingData = customBlindingData.keep;
+		} else {
+			keepBlindingData = this.createRandomBlindedMessages(
+				totalAmount - amount - this.getFeesForProofs(proofsToSend),
+				keyset,
+				outputAmounts?.keepAmounts,
+				counter
+			);
+			if (this._seed && counter) {
+				counter = counter + keepBlindingData.length;
+			}
 		}
-		const sendBlindedMessages = this.createRandomBlindedMessages(
-			amount,
-			keyset,
-			outputAmounts?.sendAmounts,
-			counter,
-			pubkey
-		);
+		if (customBlindingData?.send) {
+			sendBlindingData = customBlindingData.send;
+		} else {
+			sendBlindingData = this.createRandomBlindedMessages(
+				amount,
+				keyset,
+				outputAmounts?.sendAmounts,
+				counter,
+				pubkey
+			);
+		}
 		if (privkey) {
 			proofsToSend = getSignedProofs(
 				proofsToSend.map((p: Proof) => {
@@ -863,24 +856,29 @@ class CashuWallet {
 
 		proofsToSend = stripDleq(proofsToSend);
 
-		// join keepBlindedMessages and sendBlindedMessages
-		const blindingData: BlindingData = {
-			blindedMessages: [
-				...keepBlindedMessages.blindedMessages,
-				...sendBlindedMessages.blindedMessages
-			],
-			secrets: [...keepBlindedMessages.secrets, ...sendBlindedMessages.secrets],
-			blindingFactors: [
-				...keepBlindedMessages.blindingFactors,
-				...sendBlindedMessages.blindingFactors
-			]
-		};
+		const mergedBlindingData = [...keepBlindingData, ...sendBlindingData];
+		const indices = mergedBlindingData
+			.map((_, i) => i)
+			.sort(
+				(a, b) =>
+					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount
+			);
+		const keepVector = [
+			...Array(keepBlindingData.length).fill(true),
+			...Array(sendBlindingData.length).fill(false)
+		];
 
-		const payload = {
-			inputs: proofsToSend,
-			outputs: [...blindingData.blindedMessages]
+		const sortedBlindingData = indices.map((i) => mergedBlindingData[i]);
+		const sortedKeepVector = indices.map((i) => keepVector[i]);
+
+		return {
+			payload: {
+				inputs: proofsToSend,
+				outputs: sortedBlindingData.map((d) => d.blindedMessage)
+			},
+			blindingData: sortedBlindingData,
+			keepVector: sortedKeepVector
 		};
-		return { payload, blindingData };
 	}
 
 	/**
@@ -1056,8 +1054,8 @@ class CashuWallet {
 	 */
 	createP2PKBlindedMessages(
 		amounts: Array<number>,
-		keysetId: string,
-		pubkey: string
+		pubkey: string,
+		keysetId: string
 	): BlindingData & { amounts: Array<number> } {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
@@ -1089,7 +1087,7 @@ class CashuWallet {
 		split?: Array<number>,
 		counter?: number,
 		pubkey?: string
-	): BlindingData & { amounts: Array<number> } {
+	): Array<BlindingDataWithoutSignature> {
 		const amounts = splitAmount(amount, keyset.keys, split);
 		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
 	}
@@ -1107,7 +1105,7 @@ class CashuWallet {
 		keysetId: string,
 		counter?: number,
 		pubkey?: string
-	): BlindingData & { amounts: Array<number> } {
+	): Array<BlindingDataWithoutSignature> {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
 			throw new Error(
@@ -1117,6 +1115,7 @@ class CashuWallet {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const blindingFactors: Array<bigint> = [];
+		const blindingDataArray: Array<BlindingDataWithoutSignature> = [];
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secretBytes = undefined;
@@ -1137,8 +1136,13 @@ class CashuWallet {
 			blindingFactors.push(r);
 			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
 			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
+			blindingDataArray.push({
+				blindingFactor: r,
+				secret: secretBytes,
+				blindedMessage: blindedMessage.getSerializedBlindedMessage()
+			});
 		}
-		return { blindedMessages, secrets, blindingFactors, amounts };
+		return blindingDataArray;
 	}
 
 	/**
@@ -1149,19 +1153,18 @@ class CashuWallet {
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
-	private createBlankOutputs(amount: number, keysetId: string, counter?: number): BlindingData {
+	private createBlankOutputs(
+		amount: number,
+		keysetId: string,
+		counter?: number
+	): Array<BlindingDataWithoutSignature> {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {
 			count = 0;
 		}
 		const amounts = count ? Array(count).fill(1) : [];
-		const { blindedMessages, blindingFactors, secrets } = this.createBlindedMessages(
-			amounts,
-			keysetId,
-			counter
-		);
-		return { blindedMessages, secrets, blindingFactors };
+		return this.createBlindedMessages(amounts, keysetId, counter);
 	}
 
 	/**
@@ -1174,8 +1177,7 @@ class CashuWallet {
 	 */
 	private constructProofs(
 		promises: Array<SerializedBlindedSignature>,
-		rs: Array<bigint>,
-		secrets: Array<Uint8Array>,
+		blindingData: Array<BlindingDataWithoutSignature>,
 		keyset: MintKeys
 	): Array<Proof> {
 		return promises.map((p: SerializedBlindedSignature, i: number) => {
@@ -1185,7 +1187,7 @@ class CashuWallet {
 					: ({
 							s: hexToBytes(p.dleq.s),
 							e: hexToBytes(p.dleq.e),
-							r: rs[i]
+							r: blindingData[i].blindingFactor
 					  } as DLEQ);
 			const blindSignature = {
 				id: p.id,
@@ -1193,8 +1195,8 @@ class CashuWallet {
 				C_: pointFromHex(p.C_),
 				dleq: dleq
 			};
-			const r = rs[i];
-			const secret = secrets[i];
+			const r = blindingData[i].blindingFactor;
+			const secret = blindingData[i].secret;
 			const A = pointFromHex(keyset.keys[p.amount]);
 			const proof = constructProofFromPromise(blindSignature, r, secret, A);
 			const serializedProof = {
