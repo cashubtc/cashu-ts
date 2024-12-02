@@ -1,5 +1,6 @@
 import { createP2PKsecret } from '@cashu/crypto/modules/client/NUT11';
 import {
+	Keys,
 	MintKeys,
 	Proof,
 	SerializedBlindedMessage,
@@ -15,7 +16,7 @@ import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
-import { bytesToNumber, numberToHexPadded64 } from '../utils';
+import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 
 export class BlindingData {
@@ -62,7 +63,17 @@ export class BlindingData {
 		return serializedProof;
 	}
 
-	static createP2PKData(pubkey: string, amount: number, keysetId: string) {
+	static createP2PKData(
+		pubkey: string,
+		amount: number,
+		keyset: MintKeys,
+		customSplit?: Array<number>
+	) {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		return amounts.map((a) => this._createP2PKData(pubkey, a, keyset.id));
+	}
+
+	private static _createP2PKData(pubkey: string, amount: number, keysetId: string) {
 		const secretBytes = createP2PKsecret(pubkey);
 		const { r, B_ } = blindMessage(secretBytes);
 		return new BlindingData(
@@ -72,7 +83,12 @@ export class BlindingData {
 		);
 	}
 
-	static createRandomData(amount: number, keysetId: string) {
+	static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>) {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		return amounts.map((a) => this._createRandomData(a, keyset.id));
+	}
+
+	private static _createRandomData(amount: number, keysetId: string) {
 		const randomHex = bytesToHex(randomBytes(32));
 		const secretBytes = new TextEncoder().encode(randomHex);
 		const { r, B_ } = blindMessage(secretBytes);
@@ -84,6 +100,21 @@ export class BlindingData {
 	}
 
 	static createDeterministicData(
+		amount: number,
+		seed: Uint8Array,
+		counter: number,
+		keyset: MintKeys,
+		customSplit?: Array<number>
+	): Array<BlindingData> {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const data: Array<BlindingData> = [];
+		for (let i = 0; i < amounts.length; i++) {
+			data.push(this._createDeterministicData(amount, seed, counter + i, keyset.id));
+		}
+		return data;
+	}
+
+	private static _createDeterministicData(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
