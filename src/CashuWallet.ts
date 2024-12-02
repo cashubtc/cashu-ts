@@ -13,13 +13,11 @@ import {
 	type MeltQuotePayload,
 	type SendResponse,
 	type SerializedBlindedMessage,
-	type SwapPayload,
 	type Token,
 	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
 	ProofState,
-	BlindingData,
 	MintQuoteResponse,
 	MintQuoteState,
 	MeltQuoteState,
@@ -47,6 +45,7 @@ import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/ind
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { BlindingDataWithoutSignature, SwapTransaction } from './model/types/wallet/blinding.js';
+import { BlindingData } from './model/BlindingData.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -265,7 +264,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 			requireDleq?: boolean;
-			blindingData?: Array<BlindingDataWithoutSignature>;
+			blindingData?: Array<BlindingData>;
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
@@ -278,7 +277,7 @@ class CashuWallet {
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		const swapRes = this.createSwapPayload(
+		const swapTransaction = this.createSwapPayload(
 			amount,
 			token.proofs,
 			keys,
@@ -288,10 +287,8 @@ class CashuWallet {
 			options?.privkey,
 			{ keep: options?.blindingData }
 		);
-		const payload = swapRes.payload;
-		const blindingData = swapRes.blindingData;
-		const { signatures } = await this.mint.swap(payload);
-		const freshProofs = this.constructProofs(signatures, blindingData, keys);
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const freshProofs = this.constructProofs(signatures, swapTransaction.blindingData, keys);
 		return freshProofs;
 	}
 
@@ -324,8 +321,8 @@ class CashuWallet {
 			includeFees?: boolean;
 			includeDleq?: boolean;
 			customBlindingData?: {
-				keep?: Array<BlindingDataWithoutSignature>;
-				send?: Array<BlindingDataWithoutSignature>;
+				keep?: Array<BlindingData>;
+				send?: Array<BlindingData>;
 			};
 		}
 	): Promise<SendResponse> {
@@ -347,7 +344,8 @@ class CashuWallet {
 				options?.outputAmounts ||
 				options?.pubkey ||
 				options?.privkey ||
-				options?.keysetId) // these options require a swap
+				options?.keysetId ||
+				options?.customBlindingData) // these options require a swap
 		) {
 			// we need to swap
 			// input selection, needs fees because of the swap
@@ -505,8 +503,8 @@ class CashuWallet {
 			keysetId?: string;
 			includeFees?: boolean;
 			customBlindingData?: {
-				keep?: Array<BlindingDataWithoutSignature>;
-				send?: Array<BlindingDataWithoutSignature>;
+				keep?: Array<BlindingData>;
+				send?: Array<BlindingData>;
 			};
 		}
 	): Promise<SendResponse> {
@@ -578,7 +576,7 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey,
 			options?.privkey,
-			options.customBlindingData
+			options?.customBlindingData
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const swapProofs = this.constructProofs(signatures, swapTransaction.blindingData, keyset);
@@ -802,8 +800,8 @@ class CashuWallet {
 		pubkey?: string,
 		privkey?: string,
 		customBlindingData?: {
-			keep?: Array<BlindingDataWithoutSignature>;
-			send?: Array<BlindingDataWithoutSignature>;
+			keep?: Array<BlindingData>;
+			send?: Array<BlindingData>;
 		}
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
@@ -813,32 +811,39 @@ class CashuWallet {
 				keyset.keys
 			);
 		}
-		let keepBlindingData: Array<BlindingDataWithoutSignature>;
-		let sendBlindingData: Array<BlindingDataWithoutSignature>;
+		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
+		let keepBlindingData: Array<BlindingData>;
+		let sendBlindingData: Array<BlindingData>;
 
 		if (customBlindingData?.keep) {
 			keepBlindingData = customBlindingData.keep;
-		} else {
-			keepBlindingData = this.createRandomBlindedMessages(
-				totalAmount - amount - this.getFeesForProofs(proofsToSend),
-				keyset,
-				outputAmounts?.keepAmounts,
-				counter
+		} else if (this._seed && counter) {
+			keepBlindingData = BlindingData.createDeterministicData(
+				keepAmount,
+				this._seed,
+				counter,
+				keyset
 			);
-			if (this._seed && counter) {
-				counter = counter + keepBlindingData.length;
-			}
+			counter = counter + keepBlindingData.length;
+		} else if (pubkey) {
+			keepBlindingData = BlindingData.createP2PKData(pubkey, keepAmount, keyset);
+		} else {
+			keepBlindingData = BlindingData.createRandomData(amount, keyset);
 		}
 		if (customBlindingData?.send) {
 			sendBlindingData = customBlindingData.send;
-		} else {
-			sendBlindingData = this.createRandomBlindedMessages(
-				amount,
-				keyset,
-				outputAmounts?.sendAmounts,
+		} else if (this._seed && counter) {
+			sendBlindingData = BlindingData.createDeterministicData(
+				keepAmount,
+				this._seed,
 				counter,
-				pubkey
+				keyset
 			);
+			counter = counter + sendBlindingData.length;
+		} else if (pubkey) {
+			sendBlindingData = BlindingData.createP2PKData(pubkey, keepAmount, keyset);
+		} else {
+			sendBlindingData = BlindingData.createRandomData(amount, keyset);
 		}
 		if (privkey) {
 			proofsToSend = getSignedProofs(
