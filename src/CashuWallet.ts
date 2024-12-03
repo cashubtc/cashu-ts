@@ -252,6 +252,7 @@ class CashuWallet {
 			privkey?: string;
 			requireDleq?: boolean;
 			blindingData?: Array<BlindingData>;
+			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
@@ -272,7 +273,8 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey,
 			options?.privkey,
-			options?.blindingData ? { keep: options.blindingData, send: [] } : undefined
+			options?.blindingData ? { keep: options.blindingData, send: [] } : undefined,
+			options?.p2pk
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		return swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keys));
@@ -310,6 +312,7 @@ class CashuWallet {
 				keep?: Array<BlindingData>;
 				send?: Array<BlindingData>;
 			};
+			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
 	): Promise<SendResponse> {
 		if (options?.includeDleq) {
@@ -492,6 +495,7 @@ class CashuWallet {
 				keep?: Array<BlindingData>;
 				send?: Array<BlindingData>;
 			};
+			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
 	): Promise<SendResponse> {
 		if (!options) options = {};
@@ -562,7 +566,8 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey,
 			options?.privkey,
-			options?.customBlindingData
+			options?.customBlindingData,
+			options?.p2pk
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const swapProofs = swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keyset));
@@ -662,6 +667,7 @@ class CashuWallet {
 			proofsWeHave?: Array<Proof>;
 			counter?: number;
 			pubkey?: string;
+			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
 	): Promise<Array<Proof>> {
 		const keyset = await this.getKeys(options?.keysetId);
@@ -682,7 +688,8 @@ class CashuWallet {
 			keyset,
 			options?.counter,
 			options?.pubkey,
-			options?.outputAmounts?.keepAmounts
+			options?.outputAmounts?.keepAmounts,
+			options?.p2pk
 		);
 		const mintPayload: MintPayload = {
 			outputs: blindingData.map((d) => d.blindedMessage),
@@ -790,7 +797,8 @@ class CashuWallet {
 		customBlindingData?: {
 			keep?: Array<BlindingData>;
 			send?: Array<BlindingData>;
-		}
+		},
+		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
@@ -811,7 +819,8 @@ class CashuWallet {
 				keyset,
 				counter,
 				pubkey,
-				outputAmounts?.keepAmounts
+				outputAmounts?.keepAmounts,
+				p2pk
 			);
 		}
 
@@ -823,7 +832,8 @@ class CashuWallet {
 				keyset,
 				counter,
 				pubkey,
-				outputAmounts?.sendAmounts
+				outputAmounts?.sendAmounts,
+				p2pk
 			);
 		}
 
@@ -1045,11 +1055,12 @@ class CashuWallet {
 		keyset: MintKeys,
 		counter?: number,
 		pubkey?: string,
-		outputAmounts?: Array<number>
+		outputAmounts?: Array<number>,
+		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
 	): Array<BlindingData> {
 		let blindingData: Array<BlindingData>;
 		if (pubkey) {
-			blindingData = BlindingData.createP2PKData(pubkey, amount, keyset, outputAmounts);
+			blindingData = BlindingData.createP2PKData({ pubkey }, amount, keyset, outputAmounts);
 		} else if (counter || counter === 0) {
 			if (!this._seed) {
 				throw new Error('cannot create deterministic messages without seed');
@@ -1061,6 +1072,8 @@ class CashuWallet {
 				keyset,
 				outputAmounts
 			);
+		} else if (p2pk) {
+			blindingData = BlindingData.createP2PKData(p2pk, amount, keyset);
 		} else {
 			blindingData = BlindingData.createRandomData(amount, keyset, outputAmounts);
 		}

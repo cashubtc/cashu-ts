@@ -1,6 +1,4 @@
-import { createP2PKsecret } from '@cashu/crypto/modules/client/NUT11';
 import {
-	Keys,
 	MintKeys,
 	Proof,
 	SerializedBlindedMessage,
@@ -64,17 +62,40 @@ export class BlindingData {
 	}
 
 	static createP2PKData(
-		pubkey: string,
+		p2pk: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
 		amount: number,
 		keyset: MintKeys,
 		customSplit?: Array<number>
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		return amounts.map((a) => this._createP2PKData(pubkey, a, keyset.id));
+		return amounts.map((a) =>
+			this._createP2PKData(p2pk.pubkey, a, keyset.id, p2pk.locktime, p2pk.refundKeys)
+		);
 	}
 
-	private static _createP2PKData(pubkey: string, amount: number, keysetId: string) {
-		const secretBytes = createP2PKsecret(pubkey);
+	private static _createP2PKData(
+		pubkey: string,
+		amount: number,
+		keysetId: string,
+		locktime?: number,
+		refundKeys?: Array<string>
+	) {
+		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
+			'P2PK',
+			{
+				nonce: bytesToHex(randomBytes(32)),
+				data: pubkey,
+				tags: []
+			}
+		];
+		if (locktime) {
+			newSecret[1].tags.push(['locktime', locktime]);
+		}
+		if (refundKeys) {
+			newSecret[1].tags.push(['refund', refundKeys]);
+		}
+		const parsed = JSON.stringify(newSecret);
+		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
 		return new BlindingData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
