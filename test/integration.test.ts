@@ -403,7 +403,6 @@ describe('dleq', () => {
 		} as Token;
 		const encodedToken = getEncodedTokenV4(token);
 		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
-		console.log(getEncodedTokenV4(token));
 		expect(newProofs).toBeDefined();
 	});
 	test('send strip dleq', async () => {
@@ -479,23 +478,24 @@ describe('Custom Outputs', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
-		const quoteRes = await wallet.createMintQuote(50);
+		const quoteRes = await wallet.createMintQuote(51);
 		await new Promise((res, rej) => {
 			wallet.onMintQuotePaid(quoteRes.quote, res, rej);
 		});
-		const proofs = await wallet.mintProofs(50, quoteRes.quote);
+		const proofs = await wallet.mintProofs(51, quoteRes.quote);
 		const pubkey1 = 'ffffff';
 		const pubkey2 = 'fafafa';
-		const amountMinusFees = wallet.getFeesForProofs(proofs);
+		const amountMinusFees = 51 - wallet.getFeesForProofs(proofs);
 		const pk1Data = BlindingData.createP2PKData(pubkey1, 8, keys);
 		const pk2Data = BlindingData.createP2PKData(pubkey2, 13, keys);
 		const randomData = BlindingData.createRandomData(amountMinusFees - 8 - 13, keys);
-		const newProofs = wallet.receive(
+		const newProofs = await wallet.receive(
 			{ mint: mintUrl, proofs },
 			{
 				blindingData: [...pk1Data, ...pk2Data, ...randomData]
 			}
 		);
-		console.log(newProofs);
+		mint.disconnectWebSocket();
+		expect(sumProofs(newProofs)).toBe(amountMinusFees);
 	});
 });

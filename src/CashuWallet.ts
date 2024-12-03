@@ -278,7 +278,7 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey,
 			options?.privkey,
-			{ keep: options?.blindingData }
+			options?.blindingData ? { keep: options.blindingData, send: [] } : undefined
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		return swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keys));
