@@ -653,18 +653,4 @@ describe('WebSocket Updates', () => {
 		expect(state).toMatchObject({ quote: '123' });
 		server.close();
 	});
-	// describe('Custom Outputs', () => {
-	// 	test('Multiple pubkeys with varying amount + random secret data', async () => {
-	// 		const wallet = new CashuWallet(mint);
-	// 		const keys = await wallet.getKeys();
-	// 		const pubkey1 = 'ffffff';
-	// 		const pubkey2 = 'fafafa';
-	// 		const pk1Data = BlindingData.createP2PKData(pubkey1, 8, keys);
-	// 		const pk2Data = BlindingData.createP2PKData(pubkey2, 13, keys);
-	// 		const randomData = BlindingData.createRandomData(21, keys);
-	// 		const proofs = wallet.receive(someToken, {
-	// 			blindingData: [...pk1Data, ...pk2Data, ...randomData]
-	// 		});
-	// 	});
-	// });
 });

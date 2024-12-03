@@ -18,9 +18,11 @@ import {
 	getEncodedToken,
 	getEncodedTokenV4,
 	hexToNumber,
+	mergeBlindingData,
 	numberToHexPadded64,
 	sumProofs
 } from '../src/utils.js';
+import { BlindingData } from '../src/model/BlindingData.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -470,5 +472,30 @@ describe('dleq', () => {
 
 		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
 		expect(exc).toEqual(new Error('Token contains proofs with invalid DLEQ'));
+	});
+});
+describe('Custom Outputs', () => {
+	test('Multiple pubkeys with varying amount + random secret data', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const keys = await wallet.getKeys();
+		const quoteRes = await wallet.createMintQuote(50);
+		await new Promise((res, rej) => {
+			wallet.onMintQuotePaid(quoteRes.quote, res, rej);
+		});
+		const proofs = await wallet.mintProofs(50, quoteRes.quote);
+		const pubkey1 = 'ffffff';
+		const pubkey2 = 'fafafa';
+		const amountMinusFees = wallet.getFeesForProofs(proofs);
+		const pk1Data = BlindingData.createP2PKData(pubkey1, 8, keys);
+		const pk2Data = BlindingData.createP2PKData(pubkey2, 13, keys);
+		const randomData = BlindingData.createRandomData(amountMinusFees - 8 - 13, keys);
+		const newProofs = wallet.receive(
+			{ mint: mintUrl, proofs },
+			{
+				blindingData: [...pk1Data, ...pk2Data, ...randomData]
+			}
+		);
+		console.log(newProofs);
 	});
 });
