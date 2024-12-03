@@ -14,11 +14,9 @@ import {
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
 import {
-	deriveKeysetId,
 	getEncodedToken,
 	getEncodedTokenV4,
 	hexToNumber,
-	mergeBlindingData,
 	numberToHexPadded64,
 	sumProofs
 } from '../src/utils.js';

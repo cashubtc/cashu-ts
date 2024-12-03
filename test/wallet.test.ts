@@ -8,11 +8,9 @@ import {
 	MintQuoteResponse,
 	MintQuoteState
 } from '../src/model/types/index.js';
-import { getDecodedToken, mergeBlindingData, splitAmount } from '../src/utils.js';
-import { Proof } from '@cashu/crypto/modules/common';
+import { getDecodedToken } from '../src/utils.js';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
-import { BlindingData } from '../src/model/BlindingData.js';
 
 injectWebSocketImpl(WebSocket);
 

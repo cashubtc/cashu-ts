@@ -5,7 +5,6 @@ import {
 	encodeUint8toBase64Url
 } from './base64.js';
 import {
-	BlindingData,
 	DeprecatedToken,
 	Keys,
 	MintKeys,
@@ -69,16 +68,6 @@ export function splitAmount(
 		value %= amt;
 	});
 	return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
-}
-
-export function mergeBlindingData(...data: Array<BlindingData>): BlindingData {
-	const mergedData: BlindingData = { blindedMessages: [], blindingFactors: [], secrets: [] };
-	data.forEach((d) => {
-		mergedData.secrets.push(...d.secrets);
-		mergedData.blindingFactors.push(...d.blindingFactors);
-		mergedData.blindedMessages.push(...d.blindedMessages);
-	});
-	return mergedData;
 }
 
 /**

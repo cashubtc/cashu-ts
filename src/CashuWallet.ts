@@ -1,4 +1,3 @@
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import {
 	type MeltPayload,
@@ -11,33 +10,28 @@ import {
 	type MintQuotePayload,
 	type MeltQuotePayload,
 	type SendResponse,
-	type SerializedBlindedMessage,
 	type Token,
-	SerializedBlindedSignature,
 	GetInfoResponse,
 	OutputAmounts,
 	ProofState,
 	MintQuoteResponse,
 	MintQuoteState,
 	MeltQuoteState,
-	SerializedDLEQ
+	SwapTransaction
 } from './model/types/index.js';
 import {
 	getDecodedToken,
 	splitAmount,
 	sumProofs,
 	getKeepAmounts,
-	numberToHexPadded64,
 	hasValidDleq,
 	stripDleq
 } from './utils.js';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
-import { constructProofFromPromise, serializeProof } from '@cashu/crypto/modules/client';
+import { serializeProof } from '@cashu/crypto/modules/client';
 import { getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
+import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
-import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
-import { SwapTransaction } from './model/types/wallet/blinding.js';
 import { BlindingData } from './model/BlindingData.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -571,7 +565,7 @@ class CashuWallet {
 			options?.customBlindingData
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const swapProofs = this.constructProofs(signatures, swapTransaction.blindingData, keyset);
+		const swapProofs = swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keyset));
 		const splitProofsToKeep: Array<Proof> = [];
 		const splitProofsToSend: Array<Proof> = [];
 		swapProofs.forEach((p, i) => {
@@ -620,7 +614,7 @@ class CashuWallet {
 
 		const validData = blindingData.filter((d) => outputs.some((o) => d.blindedMessage.B_ === o.B_));
 		return {
-			proofs: this.constructProofs(promises, validData, keys)
+			proofs: validData.map((d, i) => d.toProof(promises[i], keys))
 		};
 	}
 
@@ -683,19 +677,19 @@ class CashuWallet {
 			};
 		}
 
-		const blindingData = this.createRandomBlindedMessages(
+		const blindingData = this.createBlindedMessages(
 			amount,
 			keyset,
-			options?.outputAmounts?.keepAmounts,
 			options?.counter,
-			options?.pubkey
+			options?.pubkey,
+			options?.outputAmounts?.keepAmounts
 		);
 		const mintPayload: MintPayload = {
 			outputs: blindingData.map((d) => d.blindedMessage),
 			quote: quote
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
-		return this.constructProofs(signatures, blindingData, keyset);
+		return blindingData.map((d, i) => d.toProof(signatures[i], keyset));
 	}
 
 	/**
@@ -769,13 +763,9 @@ class CashuWallet {
 			outputs: blindingData.map((d) => d.blindedMessage)
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
-		let change: Array<Proof> = [];
-		if (meltResponse.change) {
-			change = this.constructProofs(meltResponse.change, blindingData, keys);
-		}
 		return {
 			quote: meltResponse,
-			change: change
+			change: meltResponse.change?.map((s, i) => blindingData[i].toProof(s, keys)) ?? []
 		};
 	}
 
@@ -815,53 +805,28 @@ class CashuWallet {
 
 		if (customBlindingData?.keep) {
 			keepBlindingData = customBlindingData.keep;
-		} else if (this._seed && counter) {
-			keepBlindingData = BlindingData.createDeterministicData(
-				keepAmount,
-				this._seed,
-				counter,
-				keyset,
-				outputAmounts?.keepAmounts
-			);
-			counter = counter + keepBlindingData.length;
-		} else if (pubkey) {
-			keepBlindingData = BlindingData.createP2PKData(
-				pubkey,
-				keepAmount,
-				keyset,
-				outputAmounts?.keepAmounts
-			);
 		} else {
-			keepBlindingData = BlindingData.createRandomData(
+			keepBlindingData = this.createBlindedMessages(
 				keepAmount,
 				keyset,
+				counter,
+				pubkey,
 				outputAmounts?.keepAmounts
 			);
 		}
+
 		if (customBlindingData?.send) {
 			sendBlindingData = customBlindingData.send;
-		} else if (counter || counter === 0) {
-			if (!this._seed) {
-				throw new Error('cannot create deterministic messages without seed');
-			}
-			sendBlindingData = BlindingData.createDeterministicData(
-				amount,
-				this._seed,
-				counter,
-				keyset,
-				outputAmounts?.sendAmounts
-			);
-			counter = counter + sendBlindingData.length;
-		} else if (pubkey) {
-			sendBlindingData = BlindingData.createP2PKData(
-				pubkey,
-				amount,
-				keyset,
-				outputAmounts?.sendAmounts
-			);
 		} else {
-			sendBlindingData = BlindingData.createRandomData(amount, keyset, outputAmounts?.sendAmounts);
+			sendBlindingData = this.createBlindedMessages(
+				amount,
+				keyset,
+				counter,
+				pubkey,
+				outputAmounts?.sendAmounts
+			);
 		}
+
 		if (privkey) {
 			proofsToSend = getSignedProofs(
 				proofsToSend.map((p: Proof) => {
@@ -1068,30 +1033,6 @@ class CashuWallet {
 	}
 
 	/**
-	 * Creates blinded messages for a given amount
-	 * @param amount amount to create blinded messages for
-	 * @param split optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @returns blinded messages, secrets, rs, and amounts
-	 */
-	private createRandomBlindedMessages(
-		amount: number,
-		keyset: MintKeys,
-		split?: Array<number>,
-		counter?: number,
-		pubkey?: string
-	): Array<{
-		blindingFactor: bigint;
-		secret: Uint8Array;
-		blindedMessage: SerializedBlindedMessage;
-	}> {
-		const amounts = splitAmount(amount, keyset.keys, split);
-		return this.createBlindedMessages(amount, keyset, counter, pubkey, amounts);
-	}
-
-	/**
 	 * Creates blinded messages for a according to @param amounts
 	 * @param amount array of amounts to create blinded messages for
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
@@ -1138,11 +1079,7 @@ class CashuWallet {
 		amount: number,
 		keyset: MintKeys,
 		counter?: number
-	): Array<{
-		blindingFactor: bigint;
-		secret: Uint8Array;
-		blindedMessage: SerializedBlindedMessage;
-	}> {
+	): Array<BlindingData> {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {
@@ -1150,59 +1087,6 @@ class CashuWallet {
 		}
 		const amounts = count ? Array(count).fill(1) : [];
 		return this.createBlindedMessages(amount, keyset, counter, undefined, amounts);
-	}
-
-	/**
-	 * construct proofs from @params promises, @params rs, @params secrets, and @params keyset
-	 * @param promises array of serialized blinded signatures
-	 * @param rs arrays of binding factors
-	 * @param secrets array of secrets
-	 * @param keyset mint keyset
-	 * @returns array of serialized proofs
-	 */
-	private constructProofs(
-		promises: Array<SerializedBlindedSignature>,
-		blindingData: Array<{
-			blindingFactor: bigint;
-			secret: Uint8Array;
-			blindedMessage: SerializedBlindedMessage;
-		}>,
-		keyset: MintKeys
-	): Array<Proof> {
-		return promises.map((p: SerializedBlindedSignature, i: number) => {
-			const dleq =
-				p.dleq == undefined
-					? undefined
-					: ({
-							s: hexToBytes(p.dleq.s),
-							e: hexToBytes(p.dleq.e),
-							r: blindingData[i].blindingFactor
-					  } as DLEQ);
-			const blindSignature = {
-				id: p.id,
-				amount: p.amount,
-				C_: pointFromHex(p.C_),
-				dleq: dleq
-			};
-			const r = blindingData[i].blindingFactor;
-			const secret = blindingData[i].secret;
-			const A = pointFromHex(keyset.keys[p.amount]);
-			const proof = constructProofFromPromise(blindSignature, r, secret, A);
-			const serializedProof = {
-				...serializeProof(proof),
-				...(dleq && {
-					dleqValid: verifyDLEQProof_reblind(secret, dleq, proof.C, A)
-				}),
-				...(dleq && {
-					dleq: {
-						s: bytesToHex(dleq.s),
-						e: bytesToHex(dleq.e),
-						r: numberToHexPadded64(dleq.r ?? BigInt(0))
-					} as SerializedDLEQ
-				})
-			} as Proof;
-			return serializedProof;
-		});
 	}
 }
 
