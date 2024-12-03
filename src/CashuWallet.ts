@@ -822,28 +822,43 @@ class CashuWallet {
 				keepAmount,
 				this._seed,
 				counter,
-				keyset
+				keyset,
+				outputAmounts?.keepAmounts
 			);
 			counter = counter + keepBlindingData.length;
 		} else if (pubkey) {
-			keepBlindingData = BlindingData.createP2PKData(pubkey, keepAmount, keyset);
+			keepBlindingData = BlindingData.createP2PKData(
+				pubkey,
+				keepAmount,
+				keyset,
+				outputAmounts?.keepAmounts
+			);
 		} else {
-			keepBlindingData = BlindingData.createRandomData(amount, keyset);
+			keepBlindingData = BlindingData.createRandomData(amount, keyset, outputAmounts?.keepAmounts);
 		}
 		if (customBlindingData?.send) {
 			sendBlindingData = customBlindingData.send;
-		} else if (this._seed && counter) {
+		} else if (counter || counter === 0) {
+			if (!this._seed) {
+				throw new Error('cannot create deterministic messages without seed');
+			}
 			sendBlindingData = BlindingData.createDeterministicData(
 				keepAmount,
 				this._seed,
 				counter,
-				keyset
+				keyset,
+				outputAmounts?.sendAmounts
 			);
 			counter = counter + sendBlindingData.length;
 		} else if (pubkey) {
-			sendBlindingData = BlindingData.createP2PKData(pubkey, keepAmount, keyset);
+			sendBlindingData = BlindingData.createP2PKData(
+				pubkey,
+				keepAmount,
+				keyset,
+				outputAmounts?.sendAmounts
+			);
 		} else {
-			sendBlindingData = BlindingData.createRandomData(amount, keyset);
+			sendBlindingData = BlindingData.createRandomData(amount, keyset, outputAmounts?.sendAmounts);
 		}
 		if (privkey) {
 			proofsToSend = getSignedProofs(
@@ -1048,33 +1063,6 @@ class CashuWallet {
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
 		};
-	}
-
-	/**
-	 * Creates P2PK blinded messages according to amounts
-	 * @param amount array of amounts to create blinded messages for
-	 * @param keyksetId the keyset that should be used to create the blinded messages
-	 * @param pubkey the public key that the blinded message should be locked to
-	 * @returns blinded messages, secrets, rs, and amounts
-	 */
-	createP2PKBlindedMessages(
-		amounts: Array<number>,
-		pubkey: string,
-		keysetId: string
-	): BlindingData & { amounts: Array<number> } {
-		const blindedMessages: Array<SerializedBlindedMessage> = [];
-		const secrets: Array<Uint8Array> = [];
-		const blindingFactors: Array<bigint> = [];
-		for (let i = 0; i < amounts.length; i++) {
-			let secretBytes = undefined;
-			secretBytes = createP2PKsecret(pubkey);
-			secrets.push(secretBytes);
-			const { B_, r } = blindMessage(secretBytes);
-			blindingFactors.push(r);
-			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
-			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
-		}
-		return { blindedMessages, secrets, blindingFactors, amounts };
 	}
 
 	/**

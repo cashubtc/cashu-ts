@@ -2,7 +2,6 @@ import nock from 'nock';
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 import {
-	BlindingData,
 	CheckStateEnum,
 	MeltQuoteResponse,
 	MeltQuoteState,
@@ -13,6 +12,7 @@ import { getDecodedToken, mergeBlindingData, splitAmount } from '../src/utils.js
 import { Proof } from '@cashu/crypto/modules/common';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
+import { BlindingData } from '../src/model/BlindingData.js';
 
 injectWebSocketImpl(WebSocket);
 
@@ -573,11 +573,7 @@ describe('deterministic', () => {
 				{ counter: 1 }
 			)
 			.catch((e) => e);
-		expect(result).toEqual(
-			new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
-			)
-		);
+		expect(result).toEqual(new Error('cannot create deterministic messages without seed'));
 	});
 });
 
@@ -657,25 +653,18 @@ describe('WebSocket Updates', () => {
 		expect(state).toMatchObject({ quote: '123' });
 		server.close();
 	});
-	describe('Custom Outputs', () => {
-		test('Multiple pubkeys with varying amount', async () => {
-			const wallet = new CashuWallet(mint);
-			const keys = await wallet.getKeys();
-			const pubkey1 = 'ffffff';
-			const pubkey2 = 'fafafa';
-			const amount1 = 8;
-			const amount2 = 3;
-			const data1 = wallet.createP2PKBlindedMessages(
-				splitAmount(amount1, keys.keys),
-				keys.id,
-				pubkey1
-			);
-			const data2 = wallet.createP2PKBlindedMessages(
-				splitAmount(amount2, keys.keys),
-				keys.id,
-				pubkey2
-			);
-			const mergedBlindingData = mergeBlindingData(data1, data2);
-		});
-	});
+	// describe('Custom Outputs', () => {
+	// 	test('Multiple pubkeys with varying amount + random secret data', async () => {
+	// 		const wallet = new CashuWallet(mint);
+	// 		const keys = await wallet.getKeys();
+	// 		const pubkey1 = 'ffffff';
+	// 		const pubkey2 = 'fafafa';
+	// 		const pk1Data = BlindingData.createP2PKData(pubkey1, 8, keys);
+	// 		const pk2Data = BlindingData.createP2PKData(pubkey2, 13, keys);
+	// 		const randomData = BlindingData.createRandomData(21, keys);
+	// 		const proofs = wallet.receive(someToken, {
+	// 			blindingData: [...pk1Data, ...pk2Data, ...randomData]
+	// 		});
+	// 	});
+	// });
 });
