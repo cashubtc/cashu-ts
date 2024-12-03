@@ -44,7 +44,7 @@ import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/
 import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
-import { BlindingDataWithoutSignature, SwapTransaction } from './model/types/wallet/blinding.js';
+import { SwapTransaction } from './model/types/wallet/blinding.js';
 import { BlindingData } from './model/BlindingData.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -288,8 +288,7 @@ class CashuWallet {
 			{ keep: options?.blindingData }
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const freshProofs = this.constructProofs(signatures, swapTransaction.blindingData, keys);
-		return freshProofs;
+		return swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keys));
 	}
 
 	/**
@@ -834,7 +833,11 @@ class CashuWallet {
 				outputAmounts?.keepAmounts
 			);
 		} else {
-			keepBlindingData = BlindingData.createRandomData(amount, keyset, outputAmounts?.keepAmounts);
+			keepBlindingData = BlindingData.createRandomData(
+				keepAmount,
+				keyset,
+				outputAmounts?.keepAmounts
+			);
 		}
 		if (customBlindingData?.send) {
 			sendBlindingData = customBlindingData.send;
@@ -843,7 +846,7 @@ class CashuWallet {
 				throw new Error('cannot create deterministic messages without seed');
 			}
 			sendBlindingData = BlindingData.createDeterministicData(
-				keepAmount,
+				amount,
 				this._seed,
 				counter,
 				keyset,
@@ -853,7 +856,7 @@ class CashuWallet {
 		} else if (pubkey) {
 			sendBlindingData = BlindingData.createP2PKData(
 				pubkey,
-				keepAmount,
+				amount,
 				keyset,
 				outputAmounts?.sendAmounts
 			);
@@ -1080,7 +1083,11 @@ class CashuWallet {
 		split?: Array<number>,
 		counter?: number,
 		pubkey?: string
-	): Array<BlindingDataWithoutSignature> {
+	): Array<{
+		blindingFactor: bigint;
+		secret: Uint8Array;
+		blindedMessage: SerializedBlindedMessage;
+	}> {
 		const amounts = splitAmount(amount, keyset.keys, split);
 		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
 	}
@@ -1098,7 +1105,11 @@ class CashuWallet {
 		keysetId: string,
 		counter?: number,
 		pubkey?: string
-	): Array<BlindingDataWithoutSignature> {
+	): Array<{
+		blindingFactor: bigint;
+		secret: Uint8Array;
+		blindedMessage: SerializedBlindedMessage;
+	}> {
 		// if we atempt to create deterministic messages without a _seed, abort.
 		if (counter != undefined && !this._seed) {
 			throw new Error(
@@ -1108,7 +1119,11 @@ class CashuWallet {
 		const blindedMessages: Array<SerializedBlindedMessage> = [];
 		const secrets: Array<Uint8Array> = [];
 		const blindingFactors: Array<bigint> = [];
-		const blindingDataArray: Array<BlindingDataWithoutSignature> = [];
+		const blindingDataArray: Array<{
+			blindingFactor: bigint;
+			secret: Uint8Array;
+			blindedMessage: SerializedBlindedMessage;
+		}> = [];
 		for (let i = 0; i < amounts.length; i++) {
 			let deterministicR = undefined;
 			let secretBytes = undefined;
@@ -1150,7 +1165,11 @@ class CashuWallet {
 		amount: number,
 		keysetId: string,
 		counter?: number
-	): Array<BlindingDataWithoutSignature> {
+	): Array<{
+		blindingFactor: bigint;
+		secret: Uint8Array;
+		blindedMessage: SerializedBlindedMessage;
+	}> {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {
@@ -1170,7 +1189,11 @@ class CashuWallet {
 	 */
 	private constructProofs(
 		promises: Array<SerializedBlindedSignature>,
-		blindingData: Array<BlindingDataWithoutSignature>,
+		blindingData: Array<{
+			blindingFactor: bigint;
+			secret: Uint8Array;
+			blindedMessage: SerializedBlindedMessage;
+		}>,
 		keyset: MintKeys
 	): Array<Proof> {
 		return promises.map((p: SerializedBlindedSignature, i: number) => {
