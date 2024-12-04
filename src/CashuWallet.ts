@@ -32,7 +32,7 @@ import { serializeProof } from '@cashu/crypto/modules/client';
 import { getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
-import { BlindingData } from './model/BlindingData.js';
+import { BlindingData, BlindingDataLike } from './model/BlindingData.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -251,7 +251,7 @@ class CashuWallet {
 			pubkey?: string;
 			privkey?: string;
 			requireDleq?: boolean;
-			blindingData?: Array<BlindingData>;
+			blindingData?: Array<BlindingDataLike>;
 		}
 	): Promise<Array<Proof>> {
 		if (typeof token === 'string') {
@@ -307,8 +307,8 @@ class CashuWallet {
 			includeFees?: boolean;
 			includeDleq?: boolean;
 			customBlindingData?: {
-				keep?: Array<BlindingData>;
-				send?: Array<BlindingData>;
+				keep?: Array<BlindingDataLike>;
+				send?: Array<BlindingDataLike>;
 			};
 		}
 	): Promise<SendResponse> {
@@ -489,8 +489,8 @@ class CashuWallet {
 			keysetId?: string;
 			includeFees?: boolean;
 			customBlindingData?: {
-				keep?: Array<BlindingData>;
-				send?: Array<BlindingData>;
+				keep?: Array<BlindingDataLike>;
+				send?: Array<BlindingDataLike>;
 			};
 		}
 	): Promise<SendResponse> {
@@ -788,8 +788,8 @@ class CashuWallet {
 		pubkey?: string,
 		privkey?: string,
 		customBlindingData?: {
-			keep?: Array<BlindingData>;
-			send?: Array<BlindingData>;
+			keep?: Array<BlindingDataLike>;
+			send?: Array<BlindingDataLike>;
 		}
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
@@ -800,8 +800,8 @@ class CashuWallet {
 			);
 		}
 		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
-		let keepBlindingData: Array<BlindingData>;
-		let sendBlindingData: Array<BlindingData>;
+		let keepBlindingData: Array<BlindingDataLike>;
+		let sendBlindingData: Array<BlindingDataLike>;
 
 		if (customBlindingData?.keep) {
 			keepBlindingData = customBlindingData.keep;
@@ -1046,8 +1046,8 @@ class CashuWallet {
 		counter?: number,
 		pubkey?: string,
 		outputAmounts?: Array<number>
-	): Array<BlindingData> {
-		let blindingData: Array<BlindingData>;
+	): Array<BlindingDataLike> {
+		let blindingData: Array<BlindingDataLike>;
 		if (pubkey) {
 			blindingData = BlindingData.createP2PKData(pubkey, amount, keyset, outputAmounts);
 		} else if (counter || counter === 0) {
@@ -1079,7 +1079,7 @@ class CashuWallet {
 		amount: number,
 		keyset: MintKeys,
 		counter?: number
-	): Array<BlindingData> {
+	): Array<BlindingDataLike> {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {

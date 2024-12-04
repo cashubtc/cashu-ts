@@ -1,6 +1,5 @@
 import { createP2PKsecret } from '@cashu/crypto/modules/client/NUT11';
 import {
-	Keys,
 	MintKeys,
 	Proof,
 	SerializedBlindedMessage,
@@ -19,7 +18,15 @@ import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 
-export class BlindingData {
+export interface BlindingDataLike {
+	blindedMessage: SerializedBlindedMessage;
+	blindingFactor: bigint;
+	secret: Uint8Array;
+
+	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
+}
+
+export class BlindingData implements BlindingDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
