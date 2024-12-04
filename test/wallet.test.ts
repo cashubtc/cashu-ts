@@ -11,6 +11,7 @@ import {
 import { getDecodedToken } from '../src/utils.js';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
+import { MintInfo } from '../src/model/MintInfo.js';
 
 injectWebSocketImpl(WebSocket);
 
@@ -67,8 +68,18 @@ describe('test info', () => {
 			{ method: 'twitter', info: '@me' },
 			{ method: 'nostr', info: 'npub1337' }
 		]);
-		expect(info.nuts?.['17']).toEqual({
-			supported: [
+		expect(info.isSupported(10)).toEqual({ supported: true });
+		expect(info.isSupported(5)).toEqual({
+			disabled: false,
+			params: [
+				{ method: 'bolt11', unit: 'sat' },
+				{ method: 'bolt11', unit: 'usd' },
+				{ method: 'bolt11', unit: 'eur' }
+			]
+		});
+		expect(info.isSupported(17)).toEqual({
+			supported: true,
+			params: [
 				{
 					method: 'bolt11',
 					unit: 'sat',
@@ -86,7 +97,7 @@ describe('test info', () => {
 				}
 			]
 		});
-		expect(info).toEqual(mintInfoResp);
+		expect(info).toEqual(new MintInfo(mintInfoResp));
 	});
 	test('test info with deprecated contact field', async () => {
 		// mintInfoRespDeprecated is the same as mintInfoResp but with the contact field in the old format
