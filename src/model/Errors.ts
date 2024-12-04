@@ -3,6 +3,8 @@ export class HttpResponseError extends Error {
 	constructor(message: string, status: number) {
 		super(message);
 		this.status = status;
+		this.name = 'HttpResponseError';
+		Object.setPrototypeOf(this, HttpResponseError.prototype);
 	}
 }
 
@@ -11,135 +13,66 @@ export class NetworkError extends Error {
 	constructor(message: string, status: number) {
 		super(message);
 		this.status = status;
+		this.name = 'NetworkError';
+		Object.setPrototypeOf(this, NetworkError.prototype);
 	}
 }
-
 export class MintOperationError extends Error {
 	code: number;
 	detail: string;
 
-	constructor(message: string, code: number, detail: string) {
+	constructor(code: number, detail: string) {
+		let message: string;
+		switch (code) {
+			case 10002:
+				message = 'Blinded message of output already signed';
+				break;
+			case 10003:
+				message = 'Token could not be verified';
+				break;
+			case 11001:
+				message = 'Token is already spent';
+				break;
+			case 11002:
+				message = 'Transaction is not balanced (inputs != outputs)';
+				break;
+			case 11005:
+				message = 'Unit in request is not supported';
+				break;
+			case 11006:
+				message = 'Amount outside of limit range';
+				break;
+			case 12001:
+				message = 'Keyset is not known';
+				break;
+			case 12002:
+				message = 'Keyset is inactive, cannot sign messages';
+				break;
+			case 20001:
+				message = 'Quote request is not paid';
+				break;
+			case 20002:
+				message = 'Tokens have already been issued for quote';
+				break;
+			case 20003:
+				message = 'Minting is disabled';
+				break;
+			case 20005:
+				message = 'Quote is pending';
+				break;
+			case 20006:
+				message = 'Invoice already paid';
+				break;
+			case 20007:
+				message = 'Quote is expired';
+				break;
+			default:
+				message = 'Unknown mint operation error';
+		}
 		super(message);
 		this.code = code;
 		this.detail = detail;
-	}
-}
-
-export class BlindedMessageAlreadySignedError extends MintOperationError {
-	constructor(detail: string) {
-		super('Blinded message of output already signed', 10002, detail);
-	}
-}
-
-export class TokenVerificationError extends MintOperationError {
-	constructor(detail: string) {
-		super('Token could not be verified', 10003, detail);
-	}
-}
-
-export class TokenAlreadySpentError extends MintOperationError {
-	constructor(detail: string) {
-		super('Token is already spent', 11001, detail);
-	}
-}
-
-export class TransactionNotBalancedError extends MintOperationError {
-	constructor(detail: string) {
-		super('Transaction is not balanced (inputs != outputs)', 11002, detail);
-	}
-}
-
-export class UnsupportedUnitError extends MintOperationError {
-	constructor(detail: string) {
-		super('Unit in request is not supported', 11005, detail);
-	}
-}
-
-export class AmountOutOfLimitError extends MintOperationError {
-	constructor(detail: string) {
-		super('Amount outside of limit range', 11006, detail);
-	}
-}
-
-export class KeysetUnknownError extends MintOperationError {
-	constructor(detail: string) {
-		super('Keyset is not known', 12001, detail);
-	}
-}
-
-export class KeysetInactiveError extends MintOperationError {
-	constructor(detail: string) {
-		super('Keyset is inactive, cannot sign messages', 12002, detail);
-	}
-}
-
-export class QuoteRequestNotPaidError extends MintOperationError {
-	constructor(detail: string) {
-		super('Quote request is not paid', 20001, detail);
-	}
-}
-
-export class TokensAlreadyIssuedError extends MintOperationError {
-	constructor(detail: string) {
-		super('Tokens have already been issued for quote', 20002, detail);
-	}
-}
-
-export class MintingDisabledError extends MintOperationError {
-	constructor(detail: string) {
-		super('Minting is disabled', 20003, detail);
-	}
-}
-
-export class QuotePendingError extends MintOperationError {
-	constructor(detail: string) {
-		super('Quote is pending', 20005, detail);
-	}
-}
-
-export class InvoiceAlreadyPaidError extends MintOperationError {
-	constructor(detail: string) {
-		super('Invoice already paid', 20006, detail);
-	}
-}
-
-export class QuoteExpiredError extends MintOperationError {
-	constructor(detail: string) {
-		super('Quote is expired', 20007, detail);
-	}
-}
-
-export function createMintOperationError(code: number, detail: string): MintOperationError {
-	switch (code) {
-		case 10002:
-			return new BlindedMessageAlreadySignedError(detail);
-		case 10003:
-			return new TokenVerificationError(detail);
-		case 11001:
-			return new TokenAlreadySpentError(detail);
-		case 11002:
-			return new TransactionNotBalancedError(detail);
-		case 11005:
-			return new UnsupportedUnitError(detail);
-		case 11006:
-			return new AmountOutOfLimitError(detail);
-		case 12001:
-			return new KeysetUnknownError(detail);
-		case 12002:
-			return new KeysetInactiveError(detail);
-		case 20001:
-			return new QuoteRequestNotPaidError(detail);
-		case 20002:
-			return new TokensAlreadyIssuedError(detail);
-		case 20003:
-			return new MintingDisabledError(detail);
-		case 20005:
-			return new QuotePendingError(detail);
-		case 20006:
-			return new InvoiceAlreadyPaidError(detail);
-		case 20007:
-			return new QuoteExpiredError(detail);
-		default:
-			return new MintOperationError('Unknown mint operation error', code, detail);
+		this.name = 'MintOperationError';
+		Object.setPrototypeOf(this, MintOperationError.prototype);
 	}
 }

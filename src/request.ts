@@ -1,4 +1,4 @@
-import { HttpResponseError, NetworkError, createMintOperationError } from './model/Errors';
+import { HttpResponseError, NetworkError, MintOperationError } from './model/Errors';
 
 type RequestArgs = {
 	endpoint: string;
@@ -46,7 +46,7 @@ async function _request({
 		const errorData = await response.json().catch(() => ({ error: 'bad response' }));
 
 		if (response.status === 400 && 'code' in errorData && 'detail' in errorData) {
-			throw createMintOperationError(errorData.code as number, errorData.detail as string);
+			throw new MintOperationError(errorData.code as number, errorData.detail as string);
 		}
 
 		throw new HttpResponseError(
