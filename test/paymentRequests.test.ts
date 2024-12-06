@@ -1,12 +1,7 @@
-import nock from 'nock';
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
-import { setGlobalRequestOptions } from '../src/request.js';
-import { MeltQuoteResponse } from '../src/model/types/index.js';
+import { test, describe, expect } from 'vitest';
 import {
 	decodePaymentRequest,
 	PaymentRequest,
-	PaymentRequestPayload,
 	PaymentRequestTransport,
 	PaymentRequestTransportType
 } from '../src/index.js';
