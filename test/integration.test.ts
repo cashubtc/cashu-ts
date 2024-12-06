@@ -169,6 +169,13 @@ describe('mint api', () => {
 			expect(state.witness).toBeNull();
 		});
 	});
+	test('pay invoice shard with MPP', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const meltQuoteForPart = await wallet.createMeltQuote(externalInvoice, { mpp: 50 });
+		expect(meltQuoteForPart.amount).toBe(50);
+	});
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });

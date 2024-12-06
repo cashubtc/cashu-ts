@@ -48,6 +48,17 @@ export type MeltQuotePayload = {
 	 * Request to be melted to
 	 */
 	request: string;
+
+	/**
+	 * optional melt quote options
+	 */
+	options?: {
+		/**
+		 * Amount for multi-path payment.
+		 * If set, the melt quote will be handled as a multi-path payment.
+		 */
+		mpp?: { amount: number };
+	};
 };
 
 /**
