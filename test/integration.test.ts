@@ -479,9 +479,7 @@ describe('Custom Outputs', () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const quoteRes = await wallet.createMintQuote(51);
-		await new Promise((res, rej) => {
-			wallet.onMintQuotePaid(quoteRes.quote, res, rej);
-		});
+		await new Promise((res) => setTimeout(res, 2000));
 		const proofs = await wallet.mintProofs(51, quoteRes.quote);
 		const pubkey1 = 'ffffff';
 		const pubkey2 = 'fafafa';
