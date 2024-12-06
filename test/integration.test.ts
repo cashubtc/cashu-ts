@@ -2,6 +2,8 @@ import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
 
 import dns from 'node:dns';
+import { test, describe, expect } from 'vitest';
+import { vi } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import {
@@ -275,7 +277,7 @@ describe('mint api', () => {
 		const wallet = new CashuWallet(mint);
 
 		const mintQuote = await wallet.createMintQuote(21);
-		const callback = jest.fn();
+		const callback = vi.fn();
 		const res = await new Promise(async (res, rej) => {
 			const unsub = await wallet.onMintQuoteUpdates(
 				[mintQuote.quote],
@@ -304,7 +306,7 @@ describe('mint api', () => {
 		const mintQuote1 = await wallet.createMintQuote(21);
 		const mintQuote2 = await wallet.createMintQuote(22);
 
-		const callbackRef = jest.fn();
+		const callbackRef = vi.fn();
 		const res = await new Promise(async (res, rej) => {
 			let counter = 0;
 			const unsub = await wallet.onMintQuoteUpdates(
