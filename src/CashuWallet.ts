@@ -32,7 +32,12 @@ import { serializeProof } from '@cashu/crypto/modules/client';
 import { getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
-import { BlindingData, BlindingDataLike } from './model/BlindingData.js';
+import {
+	BlindingData,
+	BlindingDataFactory,
+	BlindingDataLike,
+	isBlindingDataFactory
+} from './model/BlindingData.js';
 import { MintInfo } from './model/MintInfo.js';
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -56,6 +61,7 @@ class CashuWallet {
 	private _unit = DEFAULT_UNIT;
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
+	private _keepFactory: BlindingDataFactory | undefined;
 
 	mint: CashuMint;
 
@@ -78,6 +84,7 @@ class CashuWallet {
 			mintInfo?: GetInfoResponse;
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;
+			keepFactory?: BlindingDataFactory;
 		}
 	) {
 		this.mint = mint;
@@ -311,8 +318,8 @@ class CashuWallet {
 			includeFees?: boolean;
 			includeDleq?: boolean;
 			customBlindingData?: {
-				keep?: Array<BlindingDataLike>;
-				send?: Array<BlindingDataLike>;
+				keep?: Array<BlindingDataLike> | BlindingDataFactory;
+				send?: Array<BlindingDataLike> | BlindingDataFactory;
 			};
 			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
@@ -494,8 +501,8 @@ class CashuWallet {
 			keysetId?: string;
 			includeFees?: boolean;
 			customBlindingData?: {
-				keep?: Array<BlindingDataLike>;
-				send?: Array<BlindingDataLike>;
+				keep?: Array<BlindingDataLike> | BlindingDataFactory;
+				send?: Array<BlindingDataLike> | BlindingDataFactory;
 			};
 			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
@@ -560,6 +567,10 @@ class CashuWallet {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
+
+		const customKeepBlindingData = options.customBlindingData?.keep || this._keepFactory;
+		const customSendBlindingData = options.customBlindingData?.send;
+
 		const swapTransaction = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
@@ -568,7 +579,7 @@ class CashuWallet {
 			options?.counter,
 			options?.pubkey,
 			options?.privkey,
-			options?.customBlindingData,
+			{ keep: customKeepBlindingData, send: customSendBlindingData },
 			options?.p2pk
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
@@ -670,6 +681,7 @@ class CashuWallet {
 			counter?: number;
 			pubkey?: string;
 			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+			customBlindingData: Array<BlindingData> | BlindingDataFactory;
 		}
 	): Promise<Array<Proof>> {
 		const keyset = await this.getKeys(options?.keysetId);
@@ -685,14 +697,32 @@ class CashuWallet {
 			};
 		}
 
-		const blindingData = this.createBlindedMessages(
-			amount,
-			keyset,
-			options?.counter,
-			options?.pubkey,
-			options?.outputAmounts?.keepAmounts,
-			options?.p2pk
-		);
+		let blindingData: Array<BlindingData> = [];
+		if (options?.customBlindingData) {
+			if (
+				!Array.isArray(options.customBlindingData) &&
+				isBlindingDataFactory(options.customBlindingData)
+			) {
+				const amounts = splitAmount(amount, keyset, options.outputAmounts?.keepAmounts);
+				for (let i = 0; i < amounts.length; i++) {
+					blindingData.push(options.customBlindingData(amounts[i], keyset));
+				}
+			}
+		} else if (this._keepFactory) {
+			const amounts = splitAmount(amount, keyset, options?.outputAmounts?.keepAmounts);
+			for (let i = 0; i < amounts.length; i++) {
+				blindingData.push(this._keepFactory(amounts[i], keyset));
+			}
+		} else {
+			blindingData = this.createBlindedMessages(
+				amount,
+				keyset,
+				options?.counter,
+				options?.pubkey,
+				options?.outputAmounts?.keepAmounts,
+				options?.p2pk
+			);
+		}
 		const mintPayload: MintPayload = {
 			outputs: blindingData.map((d) => d.blindedMessage),
 			quote: quote
@@ -797,8 +827,8 @@ class CashuWallet {
 		pubkey?: string,
 		privkey?: string,
 		customBlindingData?: {
-			keep?: Array<BlindingDataLike>;
-			send?: Array<BlindingDataLike>;
+			keep?: Array<BlindingDataLike> | BlindingDataFactory;
+			send?: Array<BlindingDataLike> | BlindingDataFactory;
 		},
 		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
 	): SwapTransaction {
@@ -810,11 +840,22 @@ class CashuWallet {
 			);
 		}
 		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
-		let keepBlindingData: Array<BlindingDataLike>;
-		let sendBlindingData: Array<BlindingDataLike>;
+		let keepBlindingData: Array<BlindingDataLike> = [];
+		let sendBlindingData: Array<BlindingDataLike> = [];
 
 		if (customBlindingData?.keep) {
-			keepBlindingData = customBlindingData.keep;
+			if (
+				!Array.isArray(customBlindingData.keep) &&
+				isBlindingDataFactory(customBlindingData.keep)
+			) {
+				const factory = customBlindingData.keep;
+				const amounts = splitAmount(keepAmount, keyset.keys);
+				amounts.forEach((a) => {
+					keepBlindingData.push(factory(a, keyset));
+				});
+			} else {
+				keepBlindingData = customBlindingData.keep;
+			}
 		} else {
 			keepBlindingData = this.createBlindedMessages(
 				keepAmount,
@@ -827,7 +868,18 @@ class CashuWallet {
 		}
 
 		if (customBlindingData?.send) {
-			sendBlindingData = customBlindingData.send;
+			if (
+				!Array.isArray(customBlindingData.send) &&
+				isBlindingDataFactory(customBlindingData.send)
+			) {
+				const factory = customBlindingData.send;
+				const amounts = splitAmount(amount, keyset.keys);
+				amounts.forEach((a) => {
+					keepBlindingData.push(factory(a, keyset));
+				});
+			} else {
+				sendBlindingData = customBlindingData.send;
+			}
 		} else {
 			sendBlindingData = this.createBlindedMessages(
 				amount,

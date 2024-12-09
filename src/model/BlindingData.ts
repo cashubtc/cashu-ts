@@ -25,6 +25,14 @@ export interface BlindingDataLike {
 	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
 }
 
+export type BlindingDataFactory = (amount: number, keys: MintKeys) => BlindingDataLike;
+
+export function isBlindingDataFactory(
+	value: Array<BlindingData> | BlindingDataFactory
+): value is BlindingDataFactory {
+	return typeof value === 'function';
+}
+
 export class BlindingData implements BlindingDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
