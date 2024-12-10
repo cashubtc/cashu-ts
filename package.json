@@ -18,7 +18,7 @@
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write .",
-		"extract-api": "api-extractor run --local",
+		"extract-api": "npm run compile && api-extractor run --local",
 		"extract-api:ci": "api-extractor run",
 		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts"
