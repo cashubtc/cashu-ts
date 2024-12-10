@@ -18,6 +18,8 @@
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write .",
+		"extract-api": "npm run compile && api-extractor run --local",
+		"extract-api:ci": "api-extractor run",
 		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts"
 	},
@@ -27,6 +29,7 @@
 	"author": "gandlaf21",
 	"license": "MIT",
 	"devDependencies": {
+		"@microsoft/api-extractor": "^7.48.0",
 		"@types/node-fetch": "^2.6.4",
 		"@types/ws": "^8.5.10",
 		"@typescript-eslint/eslint-plugin": "^5.59.2",
