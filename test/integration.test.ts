@@ -11,6 +11,7 @@ import {
 	MeltQuoteState,
 	MintKeys,
 	MintQuoteState,
+	Proof,
 	ProofState,
 	Token
 } from '../src/model/types/index.js';
@@ -23,7 +24,7 @@ import {
 	numberToHexPadded64,
 	sumProofs
 } from '../src/utils.js';
-import { BlindingData } from '../src/model/BlindingData.js';
+import { BlindingData, BlindingDataFactory } from '../src/model/BlindingData.js';
 import { randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 
@@ -35,6 +36,13 @@ const mintUrl = 'http://localhost:3338';
 const unit = 'sat';
 
 injectWebSocketImpl(ws);
+
+function expectProofsSecretToEqual(p: Array<Proof>, s: string) {
+	p.forEach((p) => {
+		const parsedSecret = JSON.parse(p.secret);
+		expect(parsedSecret[1].data).toBe(s);
+	});
+}
 
 describe('mint api', () => {
 	test('get keys', async () => {
@@ -497,10 +505,7 @@ describe('Custom Outputs', () => {
 		const proofs = await wallet.mintProofs(32, quoteRes.quote);
 
 		// Because of the keepFactory we expect these proofs to be locked to our public key
-		proofs.forEach((p) => {
-			const parsedSecret = JSON.parse(p.secret);
-			expect(parsedSecret[1].data).toBe(hexPk);
-		});
+		expectProofsSecretToEqual(proofs, hexPk);
 
 		// Lets melt some of these proofs to pay an invoice
 		const meltQuote = await wallet.createMeltQuote(invoice);
@@ -511,19 +516,13 @@ describe('Custom Outputs', () => {
 			includeFees: true
 		});
 		// Again the change we get from the swap are expected to be locked to our public key
-		meltKeep.forEach((p) => {
-			const parsedSecret = JSON.parse(p.secret);
-			expect(parsedSecret[1].data).toBe(hexPk);
-		});
+		expectProofsSecretToEqual(meltKeep, hexPk);
 
 		// We then pay the melt. In this case no private key is required, as our factory only applies to keep Proofs, not send Proofs
 		const meltRes = await wallet.meltProofs(meltQuote, meltSend);
 		// Even the change we receive from the fee reserve is expected to be locked
 		if (meltRes.change && meltRes.change.length > 0) {
-			meltRes.change.forEach((p) => {
-				const parsedSecret = JSON.parse(p.secret);
-				expect(parsedSecret[1].data).toBe(hexPk);
-			});
+			expectProofsSecretToEqual(meltRes.change, hexPk);
 		}
 		// Finally we want to check wheter received token are locked as well
 		const restAmount = sumProofs(meltKeep) - wallet.getFeesForProofs(meltKeep);
@@ -531,12 +530,51 @@ describe('Custom Outputs', () => {
 		const unlockedProofs = await wallet.send(restAmount, meltKeep, {
 			privkey: hexSk
 		});
-		// Just to receive them and lock them again
-		const newProofs = await wallet.receive({ proofs: unlockedProofs.send, mint: mintUrl });
+		// Just to receive them and lock them again, but this time overwriting the default factory
+		const newProofs = await wallet.receive(
+			{ proofs: unlockedProofs.send, mint: mintUrl },
+			{ blindingData: (a, k) => BlindingData.createSingleP2PKData('testKey', a, k.id) }
+		);
 		// Our factory also applies to the receive method, so we expect all received proofs to be locked
-		newProofs.forEach((p) => {
-			const parsedSecret = JSON.parse(p.secret);
-			expect(parsedSecret[1].data).toBe(hexPk);
-		});
+		expectProofsSecretToEqual(newProofs, 'testKey');
 	}, 15000);
+	test('Manual Factory Mint', async () => {
+		function createFactory(pubkey: string): BlindingDataFactory {
+			function inner(a: number, k: MintKeys) {
+				return BlindingData.createSingleP2PKData(pubkey, a, k.id);
+			}
+			return inner;
+		}
+
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const quote = await wallet.createMintQuote(21);
+		await new Promise((res) => setTimeout(res, 1000));
+		const proofs = await wallet.mintProofs(21, quote.quote, {
+			customBlindingData: createFactory('mintTest')
+		});
+		expectProofsSecretToEqual(proofs, 'mintTest');
+	});
+	test('Manual Factory Send', async () => {
+		function createFactory(pubkey: string): BlindingDataFactory {
+			function inner(a: number, k: MintKeys) {
+				return BlindingData.createSingleP2PKData(pubkey, a, k.id);
+			}
+			return inner;
+		}
+
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const quote = await wallet.createMintQuote(21);
+		await new Promise((res) => setTimeout(res, 1000));
+		const proofs = await wallet.mintProofs(21, quote.quote);
+		const amount = sumProofs(proofs) - wallet.getFeesForProofs(proofs);
+		const { send, keep } = await wallet.send(amount, proofs, {
+			customBlindingData: { send: createFactory('send'), keep: createFactory('keep') }
+		});
+		expectProofsSecretToEqual(send, 'send');
+		expectProofsSecretToEqual(keep, 'keep');
+	});
 });
