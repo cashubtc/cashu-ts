@@ -85,11 +85,11 @@ export class BlindingData implements BlindingDataLike {
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) =>
-			this._createP2PKData(p2pk.pubkey, a, keyset.id, p2pk.locktime, p2pk.refundKeys)
+			this.createSingleP2PKData(p2pk.pubkey, a, keyset.id, p2pk.locktime, p2pk.refundKeys)
 		);
 	}
 
-	private static _createP2PKData(
+	static createSingleP2PKData(
 		pubkey: string,
 		amount: number,
 		keysetId: string,
@@ -122,10 +122,10 @@ export class BlindingData implements BlindingDataLike {
 
 	static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		return amounts.map((a) => this._createRandomData(a, keyset.id));
+		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
 
-	private static _createRandomData(amount: number, keysetId: string) {
+	static createSingleRandomData(amount: number, keysetId: string) {
 		const randomHex = bytesToHex(randomBytes(32));
 		const secretBytes = new TextEncoder().encode(randomHex);
 		const { r, B_ } = blindMessage(secretBytes);
@@ -146,12 +146,12 @@ export class BlindingData implements BlindingDataLike {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		const data: Array<BlindingData> = [];
 		for (let i = 0; i < amounts.length; i++) {
-			data.push(this._createDeterministicData(amount, seed, counter + i, keyset.id));
+			data.push(this.createSingleDeterministicData(amount, seed, counter + i, keyset.id));
 		}
 		return data;
 	}
 
-	private static _createDeterministicData(
+	static createSingleDeterministicData(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
