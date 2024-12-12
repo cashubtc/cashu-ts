@@ -4,11 +4,12 @@ import { CashuWallet } from '../src/CashuWallet.js';
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
 import { vi } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import {
 	CheckStateEnum,
 	MeltQuoteState,
+	MintKeys,
 	MintQuoteState,
 	ProofState,
 	Token
@@ -16,13 +17,14 @@ import {
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
 import {
-	deriveKeysetId,
 	getEncodedToken,
 	getEncodedTokenV4,
 	hexToNumber,
 	numberToHexPadded64,
 	sumProofs
 } from '../src/utils.js';
+import { BlindingData } from '../src/model/BlindingData.js';
+import { randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -403,7 +405,6 @@ describe('dleq', () => {
 		} as Token;
 		const encodedToken = getEncodedTokenV4(token);
 		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
-		console.log(getEncodedTokenV4(token));
 		expect(newProofs).toBeDefined();
 	});
 	test('send strip dleq', async () => {
@@ -473,4 +474,68 @@ describe('dleq', () => {
 		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
 		expect(exc).toEqual(new Error('Token contains proofs with invalid DLEQ'));
 	});
+});
+describe('Custom Outputs', () => {
+	const sk = randomBytes(32);
+	const pk = schnorr.getPublicKey(sk);
+	const hexSk = bytesToHex(sk);
+	const hexPk = '02' + bytesToHex(pk);
+	const invoice =
+		'lnbc10n1pn449a7pp5eh3jn9p8hlcq0c0ppcfem2hg9ehptqr9hjk5gst6c0c9qfmrrvgsdq4gdshx6r4ypqkgerjv4ehxcqzpuxqr8pqsp539s9559pdth06j37kexk9zq2pusl4yvy97ruf36jqgyskawlls3s9p4gqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpqysgqy00qa3xgn03jtwrtpu93rqrp806czmpftj8g97cm0r3d2x4rsvlhp5vzgjyzzazl9xf4gpgd35gmys998tlfu8j5zrk7sf3n2nh3t3gpyul75t';
+	test('Default keepFactory', async () => {
+		// First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
+		function p2pkFactory(a: number, k: MintKeys) {
+			return BlindingData.createSingleP2PKData(hexPk, a, k.id);
+		}
+		const mint = new CashuMint(mintUrl);
+		// We then pass out factory to the CashuWallet constructor
+		const wallet = new CashuWallet(mint, { keepFactory: p2pkFactory });
+
+		// Lets mint some fresh proofs
+		const quoteRes = await wallet.createMintQuote(32);
+		await new Promise((res) => setTimeout(res, 2000));
+		const proofs = await wallet.mintProofs(32, quoteRes.quote);
+
+		// Because of the keepFactory we expect these proofs to be locked to our public key
+		proofs.forEach((p) => {
+			const parsedSecret = JSON.parse(p.secret);
+			expect(parsedSecret[1].data).toBe(hexPk);
+		});
+
+		// Lets melt some of these proofs to pay an invoice
+		const meltQuote = await wallet.createMeltQuote(invoice);
+		const meltAmount = meltQuote.amount + meltQuote.fee_reserve;
+		// We need to provide our private key because the proofs are locked
+		const { keep: meltKeep, send: meltSend } = await wallet.send(meltAmount, proofs, {
+			privkey: hexSk
+		});
+		// Again the change we get from the swap are expected to be locked to our public key
+		meltKeep.forEach((p) => {
+			const parsedSecret = JSON.parse(p.secret);
+			expect(parsedSecret[1].data).toBe(hexPk);
+		});
+
+		// We then pay the melt. In this case no private key is required, as our factory only applies to keep Proofs, not send Proofs
+		const meltRes = await wallet.meltProofs(meltQuote, meltSend);
+		// Even the change we receive from the fee reserve is expected to be locked
+		if (meltRes.change && meltRes.change.length > 0) {
+			meltRes.change.forEach((p) => {
+				const parsedSecret = JSON.parse(p.secret);
+				expect(parsedSecret[1].data).toBe(hexPk);
+			});
+		}
+		// Finally we want to check wheter received token are locked as well
+		const restAmount = sumProofs(meltKeep) - wallet.getFeesForProofs(meltKeep);
+		// First we unlock all the proofs that we have left
+		const unlockedProofs = await wallet.send(restAmount, meltKeep, {
+			privkey: hexSk
+		});
+		// Just to receive them and lock them again
+		const newProofs = await wallet.receive({ proofs: unlockedProofs.send, mint: mintUrl });
+		// Our factory also applies to the receive method, so we expect all received proofs to be locked
+		newProofs.forEach((p) => {
+			const parsedSecret = JSON.parse(p.secret);
+			expect(parsedSecret[1].data).toBe(hexPk);
+		});
+	}, 15000);
 });
