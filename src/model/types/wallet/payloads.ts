@@ -113,4 +113,8 @@ export type SwapTransaction = {
 	 * list of booleans to determine which proofs to keep
 	 */
 	keepVector: Array<boolean>;
+	/**
+	 * indices that can be used to restore original output data
+	 */
+	sortedIndices: Array<number>;
 };

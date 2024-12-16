@@ -296,7 +296,12 @@ class CashuWallet {
 			options?.p2pk
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		return swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keys));
+		const proofs = swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keys));
+		const orderedProofs: Array<Proof> = [];
+		swapTransaction.sortedIndices.forEach((s, o) => {
+			orderedProofs[s] = proofs[o];
+		});
+		return orderedProofs;
 	}
 
 	/**
@@ -364,14 +369,16 @@ class CashuWallet {
 			);
 			options?.proofsWeHave?.push(...keepProofsSelect);
 
-			let { keep, send } = await this.swap(amount, sendProofs, options);
+			const sendRes = await this.swap(amount, sendProofs, options);
+			let { keep, send } = sendRes;
+			const serialized = sendRes.serialized;
 			keep = keepProofsSelect.concat(keep);
 
 			if (!options?.includeDleq) {
 				send = stripDleq(send);
 			}
 
-			return { keep, send };
+			return { keep, send, serialized };
 		}
 
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
@@ -516,7 +523,7 @@ class CashuWallet {
 			};
 			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
-	): Promise<SendResponse> {
+	): Promise<SendResponse & { serialized: Array<{ proof: Proof; keep: boolean }> }> {
 		if (!options) options = {};
 		const keyset = await this.getKeys(options.keysetId);
 		const proofsToSend = proofs;
@@ -605,7 +612,8 @@ class CashuWallet {
 		});
 		return {
 			keep: splitProofsToKeep,
-			send: splitProofsToSend
+			send: splitProofsToSend,
+			serialized: swapProofs.map((p, i) => ({ proof: p, keep: swapTransaction.keepVector[i] }))
 		};
 	}
 
@@ -933,7 +941,8 @@ class CashuWallet {
 				outputs: sortedBlindingData.map((d) => d.blindedMessage)
 			},
 			blindingData: sortedBlindingData,
-			keepVector: sortedKeepVector
+			keepVector: sortedKeepVector,
+			sortedIndices: indices
 		};
 	}
 
