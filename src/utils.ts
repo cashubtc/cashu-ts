@@ -532,12 +532,34 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	return true;
 }
 
+function concatByteArrays(...arrays: Array<Uint8Array>): Uint8Array {
+	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
+	const byteArray = new Uint8Array(totalLength);
+	let pointer = 0;
+	for (let i = 0; i < arrays.length; i++) {
+		byteArray.set(arrays[i], pointer);
+		pointer = pointer + arrays[i].length;
+	}
+	return byteArray;
+}
+
 export function getEncodedTokenV4Binary(token: Token): Uint8Array {
+	const utf8Encoder = new TextEncoder();
 	const template = templateFromToken(token);
-	return encodeCBOR(template);
+	const binaryTemplate = encodeCBOR(template);
+	const prefix = utf8Encoder.encode('craw');
+	const version = utf8Encoder.encode('B');
+	return concatByteArrays(prefix, version, binaryTemplate);
 }
 
 export function getDecodedTokenV4Binary(bytes: Uint8Array): Token {
-	const decoded = decodeCBOR(bytes) as TokenV4Template;
+	const utfDecoder = new TextDecoder();
+	const prefix = utfDecoder.decode(bytes.slice(0, 4));
+	const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
+	if (prefix !== 'craw' || version !== 'B') {
+		throw new Error('not a valid binary v4 token');
+	}
+	const binaryToken = bytes.slice(5);
+	const decoded = decodeCBOR(binaryToken) as TokenV4Template;
 	return tokenFromTemplate(decoded);
 }
