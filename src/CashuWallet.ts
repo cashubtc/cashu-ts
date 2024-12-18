@@ -523,7 +523,7 @@ class CashuWallet {
 			};
 			p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 		}
-	): Promise<SendResponse & { serialized: Array<{ proof: Proof; keep: boolean }> }> {
+	): Promise<SendResponse> {
 		if (!options) options = {};
 		const keyset = await this.getKeys(options.keysetId);
 		const proofsToSend = proofs;
@@ -603,8 +603,14 @@ class CashuWallet {
 		const swapProofs = swapTransaction.blindingData.map((d, i) => d.toProof(signatures[i], keyset));
 		const splitProofsToKeep: Array<Proof> = [];
 		const splitProofsToSend: Array<Proof> = [];
-		swapProofs.forEach((p, i) => {
-			if (swapTransaction.keepVector[i]) {
+		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
+		const reorderedProofs = Array(swapProofs.length);
+		swapTransaction.sortedIndices.forEach((s, i) => {
+			reorderedKeepVector[s] = swapTransaction.keepVector[i];
+			reorderedProofs[s] = swapProofs[i];
+		});
+		reorderedProofs.forEach((p, i) => {
+			if (reorderedKeepVector[i]) {
 				splitProofsToKeep.push(p);
 			} else {
 				splitProofsToSend.push(p);
@@ -612,8 +618,7 @@ class CashuWallet {
 		});
 		return {
 			keep: splitProofsToKeep,
-			send: splitProofsToSend,
-			serialized: swapProofs.map((p, i) => ({ proof: p, keep: swapTransaction.keepVector[i] }))
+			send: splitProofsToSend
 		};
 	}
 

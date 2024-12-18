@@ -588,13 +588,13 @@ describe('Custom Outputs', () => {
 		const proofs = await wallet.mintProofs(40, quote.quote);
 		const data1 = BlindingData.createP2PKData({ pubkey: 'key1' }, 10, keys);
 		const data2 = BlindingData.createP2PKData({ pubkey: 'key2' }, 10, keys);
-		const { keep, serialized } = await wallet.send(20, proofs, {
+		const { keep, send } = await wallet.send(20, proofs, {
 			customBlindingData: { send: [...data1, ...data2] }
 		});
-		if (serialized) {
-			const sendInOrder = serialized.filter((o) => !o.keep);
-			console.log(sendInOrder);
-		}
+		const key1Sends = send.slice(0, data1.length);
+		const key2Sends = send.slice(data1.length);
+		expectProofsSecretToEqual(key1Sends, 'key1');
+		expectProofsSecretToEqual(key2Sends, 'key2');
 	});
 });
 describe('Keep Vector and Reordering', () => {
@@ -613,5 +613,24 @@ describe('Keep Vector and Reordering', () => {
 			{ outputAmounts: { keepAmounts: [], sendAmounts: testOutputAmounts } }
 		);
 		receiveProofs.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
+	});
+	test('Send', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const mintQuote = await wallet.createMintQuote(64);
+		await new Promise((res) => setTimeout(res, 1000));
+		const testOutputAmounts = [8, 4, 8, 2, 8, 2];
+		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
+
+		const fees = wallet.getFeesForProofs(testProofs);
+
+		const { send } = await wallet.send(32, testProofs, {
+			outputAmounts: {
+				sendAmounts: testOutputAmounts,
+				keepAmounts: [16, 8, ...Array(8 - fees).fill(1)]
+			}
+		});
+		send.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
 	});
 });
