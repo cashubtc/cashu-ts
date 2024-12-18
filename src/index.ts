@@ -7,7 +7,9 @@ import {
 	getEncodedTokenV4,
 	getDecodedToken,
 	deriveKeysetId,
-	decodePaymentRequest
+	decodePaymentRequest,
+	getDecodedTokenBinary,
+	getEncodedTokenBinary
 } from './utils.js';
 
 export * from './model/types/index.js';
@@ -21,7 +23,9 @@ export {
 	getEncodedTokenV4,
 	decodePaymentRequest,
 	deriveKeysetId,
-	setGlobalRequestOptions
+	setGlobalRequestOptions,
+	getDecodedTokenBinary,
+	getEncodedTokenBinary
 };
 
 export { injectWebSocketImpl } from './ws.js';
