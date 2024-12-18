@@ -416,29 +416,32 @@ describe('test zero-knowledge utilities', () => {
 });
 
 describe('test raw tokens', () => {
-	test('raw token from token', () => {
-		const token: Token = {
-			mint: 'https://example.com/mint',
-			proofs: [
-				{
-					id: '009a1f293253e41e',
-					amount: 1,
-					secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
-					C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf'
-				}
-			],
-			memo: 'memo',
-			unit: 'sat'
-		};
-		const tokenHex =
-			'a4616d781868747470733a2f2f6578616d706c652e636f6d2f6d696e74617563736174617481a2616948009a1f293253e41e617081a36161016173784061636331323433356537623834383463336366313835303134393231386166393066373136613532626634613565643334376534386563633133663737333838616358210244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf6164646d656d6f';
+	const token: Token = {
+		mint: 'http://localhost:3338',
+		proofs: [
+			{
+				id: '00ad268c4d1f5826',
+				amount: 1,
+				secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+				C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792'
+			}
+		],
+		memo: 'Thank you',
+		unit: 'sat'
+	};
 
-		const rawToken = utils.getEncodedTokenV4Binary(token);
-		const rawTokenHex = bytesToHex(rawToken);
-		expect(rawTokenHex).toBe(tokenHex);
+	test('bytes to token', () => {
+		const exptectedBytes = hexToBytes(
+			'6372617742a4617481a261694800ad268c4d1f5826617081a3616101617378403961366462623834376264323332626137366462306466313937323136623239643362386363313435353363643237383237666331636339343266656462346561635821038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d4721267926164695468616e6b20796f75616d75687474703a2f2f6c6f63616c686f73743a33333338617563736174'
+		);
 
-		const tokenBytes = hexToBytes(tokenHex);
-		const decodedToken = utils.getDecodedTokenV4Binary(tokenBytes);
+		const decodedToken = utils.getDecodedTokenBinary(exptectedBytes);
+		expect(decodedToken).toEqual(token);
+	});
+
+	test('token to bytes', () => {
+		const bytes = utils.getEncodedTokenBinary(token);
+		const decodedToken = utils.getDecodedTokenBinary(bytes);
 		expect(decodedToken).toEqual(token);
 	});
 });
