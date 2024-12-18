@@ -1,7 +1,6 @@
 import { CashuMint } from './CashuMint.js';
 import { CashuWallet } from './CashuWallet.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
-import { WSConnection } from './WSConnection.js';
 import { setGlobalRequestOptions } from './request.js';
 import {
 	getEncodedToken,
@@ -28,3 +27,5 @@ export {
 	getDecodedTokenV4Binary,
 	getEncodedTokenV4Binary
 };
+
+export { injectWebSocketImpl } from './ws.js';
