@@ -543,7 +543,7 @@ function concatByteArrays(...arrays: Array<Uint8Array>): Uint8Array {
 	return byteArray;
 }
 
-export function getEncodedTokenV4Binary(token: Token): Uint8Array {
+export function getEncodedTokenBinary(token: Token): Uint8Array {
 	const utf8Encoder = new TextEncoder();
 	const template = templateFromToken(token);
 	const binaryTemplate = encodeCBOR(template);
@@ -552,12 +552,12 @@ export function getEncodedTokenV4Binary(token: Token): Uint8Array {
 	return concatByteArrays(prefix, version, binaryTemplate);
 }
 
-export function getDecodedTokenV4Binary(bytes: Uint8Array): Token {
+export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	const utfDecoder = new TextDecoder();
 	const prefix = utfDecoder.decode(bytes.slice(0, 4));
 	const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
 	if (prefix !== 'craw' || version !== 'B') {
-		throw new Error('not a valid binary v4 token');
+		throw new Error('not a valid binary token');
 	}
 	const binaryToken = bytes.slice(5);
 	const decoded = decodeCBOR(binaryToken) as TokenV4Template;
