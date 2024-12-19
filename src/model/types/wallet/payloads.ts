@@ -1,22 +1,5 @@
+import { OutputData } from '../../OutputData';
 import { Proof } from './index';
-
-/**
- * Data that the library needs to hold in memory while it awaits the blinded signatures for the mint. It is later used for unblinding the signatures.
- */
-export type BlindingData = {
-	/**
-	 * Blinded messages sent to the mint for signing.
-	 */
-	blindedMessages: Array<SerializedBlindedMessage>;
-	/**
-	 * secrets, kept client side for constructing proofs later.
-	 */
-	secrets: Array<Uint8Array>;
-	/**
-	 * Blinding factor used for blinding messages and unblinding signatures after they are received from the mint.
-	 */
-	blindingFactors: Array<bigint>;
-};
 
 /**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
@@ -112,4 +95,26 @@ export type SerializedBlindedMessage = {
 	 * Keyset id
 	 */
 	id: string;
+};
+
+/**
+ * includes all data required to swap inputs for outputs and construct proofs from them.
+ */
+export type SwapTransaction = {
+	/**
+	 * payload that will be sent to the mint for a swap
+	 */
+	payload: SwapPayload;
+	/**
+	 * blinding data required to construct proofs
+	 */
+	outputData: Array<OutputData>;
+	/**
+	 * list of booleans to determine which proofs to keep
+	 */
+	keepVector: Array<boolean>;
+	/**
+	 * indices that can be used to restore original output data
+	 */
+	sortedIndices: Array<number>;
 };
