@@ -17,7 +17,7 @@ import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 
-export interface BlindingDataLike {
+export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -25,15 +25,15 @@ export interface BlindingDataLike {
 	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
 }
 
-export type BlindingDataFactory = (amount: number, keys: MintKeys) => BlindingDataLike;
+export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
 
-export function isBlindingDataFactory(
-	value: Array<BlindingData> | BlindingDataFactory
-): value is BlindingDataFactory {
+export function isOutputDataFactory(
+	value: Array<OutputData> | OutputDataFactory
+): value is OutputDataFactory {
 	return typeof value === 'function';
 }
 
-export class BlindingData implements BlindingDataLike {
+export class OutputData implements OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -113,7 +113,7 @@ export class BlindingData implements BlindingDataLike {
 		const parsed = JSON.stringify(newSecret);
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
-		return new BlindingData(
+		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes
@@ -129,7 +129,7 @@ export class BlindingData implements BlindingDataLike {
 		const randomHex = bytesToHex(randomBytes(32));
 		const secretBytes = new TextEncoder().encode(randomHex);
 		const { r, B_ } = blindMessage(secretBytes);
-		return new BlindingData(
+		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes
@@ -142,9 +142,9 @@ export class BlindingData implements BlindingDataLike {
 		counter: number,
 		keyset: MintKeys,
 		customSplit?: Array<number>
-	): Array<BlindingData> {
+	): Array<OutputData> {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		const data: Array<BlindingData> = [];
+		const data: Array<OutputData> = [];
 		for (let i = 0; i < amounts.length; i++) {
 			data.push(this.createSingleDeterministicData(amount, seed, counter + i, keyset.id));
 		}
@@ -160,7 +160,7 @@ export class BlindingData implements BlindingDataLike {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(secretBytes, deterministicR);
-		return new BlindingData(
+		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes

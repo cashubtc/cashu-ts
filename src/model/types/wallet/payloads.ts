@@ -1,4 +1,4 @@
-import { BlindingData } from '../../BlindingData';
+import { OutputData } from '../../OutputData';
 import { Proof } from './index';
 
 /**
@@ -108,7 +108,7 @@ export type SwapTransaction = {
 	/**
 	 * blinding data required to construct proofs
 	 */
-	blindingData: Array<BlindingData>;
+	outputData: Array<OutputData>;
 	/**
 	 * list of booleans to determine which proofs to keep
 	 */

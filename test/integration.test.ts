@@ -25,7 +25,7 @@ import {
 	splitAmount,
 	sumProofs
 } from '../src/utils.js';
-import { BlindingData, BlindingDataFactory } from '../src/model/BlindingData.js';
+import { OutputData, OutputDataFactory } from '../src/model/OutputData.js';
 import { randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 
@@ -494,7 +494,7 @@ describe('Custom Outputs', () => {
 	test('Default keepFactory', async () => {
 		// First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
 		function p2pkFactory(a: number, k: MintKeys) {
-			return BlindingData.createSingleP2PKData(hexPk, a, k.id);
+			return OutputData.createSingleP2PKData(hexPk, a, k.id);
 		}
 		const mint = new CashuMint(mintUrl);
 		// We then pass out factory to the CashuWallet constructor
@@ -534,15 +534,15 @@ describe('Custom Outputs', () => {
 		// Just to receive them and lock them again, but this time overwriting the default factory
 		const newProofs = await wallet.receive(
 			{ proofs: unlockedProofs.send, mint: mintUrl },
-			{ blindingData: (a, k) => BlindingData.createSingleP2PKData('testKey', a, k.id) }
+			{ outputData: (a, k) => OutputData.createSingleP2PKData('testKey', a, k.id) }
 		);
 		// Our factory also applies to the receive method, so we expect all received proofs to be locked
 		expectProofsSecretToEqual(newProofs, 'testKey');
 	}, 15000);
 	test('Manual Factory Mint', async () => {
-		function createFactory(pubkey: string): BlindingDataFactory {
+		function createFactory(pubkey: string): OutputDataFactory {
 			function inner(a: number, k: MintKeys) {
-				return BlindingData.createSingleP2PKData(pubkey, a, k.id);
+				return OutputData.createSingleP2PKData(pubkey, a, k.id);
 			}
 			return inner;
 		}
@@ -558,9 +558,9 @@ describe('Custom Outputs', () => {
 		expectProofsSecretToEqual(proofs, 'mintTest');
 	});
 	test('Manual Factory Send', async () => {
-		function createFactory(pubkey: string): BlindingDataFactory {
+		function createFactory(pubkey: string): OutputDataFactory {
 			function inner(a: number, k: MintKeys) {
-				return BlindingData.createSingleP2PKData(pubkey, a, k.id);
+				return OutputData.createSingleP2PKData(pubkey, a, k.id);
 			}
 			return inner;
 		}
@@ -573,7 +573,7 @@ describe('Custom Outputs', () => {
 		const proofs = await wallet.mintProofs(21, quote.quote);
 		const amount = sumProofs(proofs) - wallet.getFeesForProofs(proofs);
 		const { send, keep } = await wallet.send(amount, proofs, {
-			blindingData: { send: createFactory('send'), keep: createFactory('keep') }
+			outputData: { send: createFactory('send'), keep: createFactory('keep') }
 		});
 		expectProofsSecretToEqual(send, 'send');
 		expectProofsSecretToEqual(keep, 'keep');
@@ -586,10 +586,10 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuote(40);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(40, quote.quote);
-		const data1 = BlindingData.createP2PKData({ pubkey: 'key1' }, 10, keys);
-		const data2 = BlindingData.createP2PKData({ pubkey: 'key2' }, 10, keys);
+		const data1 = OutputData.createP2PKData({ pubkey: 'key1' }, 10, keys);
+		const data2 = OutputData.createP2PKData({ pubkey: 'key2' }, 10, keys);
 		const { keep, send } = await wallet.send(20, proofs, {
-			blindingData: { send: [...data1, ...data2] }
+			outputData: { send: [...data1, ...data2] }
 		});
 		const key1Sends = send.slice(0, data1.length);
 		const key2Sends = send.slice(data1.length);

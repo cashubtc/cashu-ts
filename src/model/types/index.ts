@@ -1,4 +1,4 @@
-import { BlindingDataFactory, BlindingDataLike } from '../BlindingData';
+import { OutputDataFactory, OutputDataLike } from '../OutputData';
 import { Proof } from './wallet/index';
 
 export * from './mint/index';
@@ -27,7 +27,7 @@ export type ReceiveOptions = {
 	pubkey?: string;
 	privkey?: string;
 	requireDleq?: boolean;
-	blindingData?: Array<BlindingDataLike> | BlindingDataFactory;
+	outputData?: Array<OutputDataLike> | OutputDataFactory;
 	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 
@@ -53,9 +53,9 @@ export type SendOptions = {
 	offline?: boolean;
 	includeFees?: boolean;
 	includeDleq?: boolean;
-	blindingData?: {
-		send?: Array<BlindingDataLike> | BlindingDataFactory;
-		keep?: Array<BlindingDataLike> | BlindingDataFactory;
+	outputData?: {
+		send?: Array<OutputDataLike> | OutputDataFactory;
+		keep?: Array<OutputDataLike> | OutputDataFactory;
 	};
 	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
@@ -80,9 +80,9 @@ export type SwapOptions = {
 	privkey?: string;
 	keysetId?: string;
 	includeFees?: boolean;
-	blindingData?: {
-		send?: Array<BlindingDataLike> | BlindingDataFactory;
-		keep?: Array<BlindingDataLike> | BlindingDataFactory;
+	outputData?: {
+		send?: Array<OutputDataLike> | OutputDataFactory;
+		keep?: Array<OutputDataLike> | OutputDataFactory;
 	};
 	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
@@ -105,7 +105,7 @@ export type MintProofOptions = {
 	proofsWeHave?: Array<Proof>;
 	counter?: number;
 	pubkey?: string;
-	blindingData?: Array<BlindingDataLike> | BlindingDataFactory;
+	blindingData?: Array<OutputDataLike> | OutputDataFactory;
 	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 

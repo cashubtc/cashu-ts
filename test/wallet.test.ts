@@ -15,7 +15,7 @@ import { getDecodedToken } from '../src/utils.js';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
 import { MintInfo } from '../src/model/MintInfo.js';
-import { BlindingData } from '../src/model/BlindingData.js';
+import { OutputData } from '../src/model/OutputData.js';
 
 injectWebSocketImpl(WebSocket);
 
@@ -741,7 +741,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to pk with locktime and single refund key', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
-		const data = BlindingData.createP2PKData(
+		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
 			21,
 			keys
@@ -758,7 +758,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to pk with locktime and multiple refund keys', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
-		const data = BlindingData.createP2PKData(
+		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
 			keys
@@ -775,7 +775,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to pk without locktime and no refund keys', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
-		const data = BlindingData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
+		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
