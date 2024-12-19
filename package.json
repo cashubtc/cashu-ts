@@ -2,6 +2,7 @@
 	"name": "@cashu/cashu-ts",
 	"version": "2.1.0",
 	"description": "cashu library for communicating with a cashu mint",
+	"type": "module",
 	"main": "lib/cashu-ts.cjs.js",
 	"module": "lib/cashu-ts.es.js",
 	"types": "lib/types/index.d.ts",
@@ -13,7 +14,7 @@
 		"url": "https://github.com/cashubtc/cashu-ts/issues"
 	},
 	"scripts": {
-		"compile": "rm -rf lib && vite build && BUILD_FORMAT=iife vite build",
+		"compile": "vite build && BUILD_FORMAT=iife vite build",
 		"test": "vitest run --coverage --exclude ./test/integration.test.ts",
 		"test-integration": "vitest run ./test/integration.test.ts --coverage",
 		"dev": "tsc --watch",

@@ -1,9 +1,6 @@
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
-import pkg from './package.json';
 import dts from 'vite-plugin-dts';
-import { nodeResolve } from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
 
 const config =
 	process.env.BUILD_FORMAT === 'iife'
@@ -24,7 +21,7 @@ const config =
 		  })
 		: defineConfig({
 				build: {
-					emptyOutDir: false,
+					emptyOutDir: true,
 					outDir: 'lib',
 					target: 'es2020',
 					lib: {
