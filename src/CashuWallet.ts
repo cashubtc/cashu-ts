@@ -326,8 +326,7 @@ class CashuWallet {
 			outputAmounts,
 			pubkey,
 			privkey,
-			blindingData,
-			p2pk
+			blindingData
 		} = options || {};
 		if (includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
@@ -489,17 +488,9 @@ class CashuWallet {
 	 * @returns promise of the change- and send-proofs
 	 */
 	async swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse> {
-		let {
-			includeFees,
-			keysetId,
-			outputAmounts,
-			counter,
-			pubkey,
-			privkey,
-			proofsWeHave,
-			blindingData,
-			p2pk
-		} = options || {};
+		let { outputAmounts } = options || {};
+		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, blindingData, p2pk } =
+			options || {};
 		const keyset = await this.getKeys(keysetId);
 
 		const proofsToSend = proofs;
@@ -667,8 +658,9 @@ class CashuWallet {
 		quote: string,
 		options?: MintProofOptions
 	): Promise<Array<Proof>> {
-		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey, blindingData, p2pk } =
-			options || {};
+		let { outputAmounts } = options || {};
+		const { counter, pubkey, p2pk, keysetId, proofsWeHave, blindingData } = options || {};
+
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
 			outputAmounts = {
@@ -696,10 +688,10 @@ class CashuWallet {
 			newBlindingData = this.createBlindedMessages(
 				amount,
 				keyset,
-				options?.counter,
-				options?.pubkey,
-				options?.outputAmounts?.keepAmounts,
-				options?.p2pk
+				counter,
+				pubkey,
+				outputAmounts?.keepAmounts,
+				p2pk
 			);
 		}
 		const mintPayload: MintPayload = {

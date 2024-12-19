@@ -553,7 +553,7 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuote(21);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(21, quote.quote, {
-			customBlindingData: createFactory('mintTest')
+			blindingData: createFactory('mintTest')
 		});
 		expectProofsSecretToEqual(proofs, 'mintTest');
 	});
@@ -573,7 +573,7 @@ describe('Custom Outputs', () => {
 		const proofs = await wallet.mintProofs(21, quote.quote);
 		const amount = sumProofs(proofs) - wallet.getFeesForProofs(proofs);
 		const { send, keep } = await wallet.send(amount, proofs, {
-			customBlindingData: { send: createFactory('send'), keep: createFactory('keep') }
+			blindingData: { send: createFactory('send'), keep: createFactory('keep') }
 		});
 		expectProofsSecretToEqual(send, 'send');
 		expectProofsSecretToEqual(keep, 'keep');
@@ -589,7 +589,7 @@ describe('Custom Outputs', () => {
 		const data1 = BlindingData.createP2PKData({ pubkey: 'key1' }, 10, keys);
 		const data2 = BlindingData.createP2PKData({ pubkey: 'key2' }, 10, keys);
 		const { keep, send } = await wallet.send(20, proofs, {
-			customBlindingData: { send: [...data1, ...data2] }
+			blindingData: { send: [...data1, ...data2] }
 		});
 		const key1Sends = send.slice(0, data1.length);
 		const key2Sends = send.slice(data1.length);
