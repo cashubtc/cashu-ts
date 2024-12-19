@@ -7,7 +7,7 @@ import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
-import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
@@ -258,7 +258,7 @@ class CashuWallet {
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
-		let { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
 
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
@@ -297,7 +297,7 @@ class CashuWallet {
 	 * @returns {SendResponse}
 	 */
 	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
-		let {
+		const {
 			proofsWeHave,
 			offline,
 			includeFees,
@@ -570,7 +570,7 @@ class CashuWallet {
 		count: number,
 		options?: RestoreOptions
 	): Promise<{ proofs: Array<Proof> }> {
-		let { keysetId } = options || {};
+		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
@@ -694,7 +694,7 @@ class CashuWallet {
 		proofsToSend: Array<Proof>,
 		options?: MeltProofOptions
 	): Promise<MeltProofsResponse> {
-		let { keysetId, counter, privkey } = options || {};
+		const { keysetId, counter, privkey } = options || {};
 		const keys = await this.getKeys(keysetId);
 		const { blindedMessages, secrets, blindingFactors } = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,
