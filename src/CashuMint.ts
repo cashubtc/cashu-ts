@@ -185,7 +185,7 @@ class CashuMint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 
 		return data;
@@ -225,7 +225,7 @@ class CashuMint {
 			typeof data?.fee_reserve !== 'number' ||
 			typeof data?.quote !== 'string'
 		) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 		return data;
 	}
@@ -265,7 +265,7 @@ class CashuMint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 
 		return data;
@@ -305,7 +305,7 @@ class CashuMint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 
 		return data;
@@ -338,7 +338,7 @@ class CashuMint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 
 		return data;
@@ -367,7 +367,7 @@ class CashuMint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 
 		return data;
@@ -429,7 +429,7 @@ class CashuMint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.promises)) {
-			throw new Error('bad response');
+			throw new Error('Bad Response');
 		}
 
 		return data;
