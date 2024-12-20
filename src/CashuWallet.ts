@@ -227,7 +227,7 @@ class CashuWallet {
 		if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
 			await this.getKeySets();
 			if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
-				throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
+				throw new Error(`Could not initialize keys. No keyset with id '${keysetId}' found`);
 			}
 		}
 
@@ -915,7 +915,7 @@ class CashuWallet {
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
+			throw new Error('Failed to establish WebSocket connection.');
 		}
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: quoteIds },
@@ -987,7 +987,7 @@ class CashuWallet {
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
+			throw new Error('Failed to establish WebSocket connection.');
 		}
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_melt_quote', filters: quoteIds },
@@ -1013,7 +1013,7 @@ class CashuWallet {
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
+			throw new Error('Failed to establish WebSocket connection.');
 		}
 		const enc = new TextEncoder();
 		const proofMap: { [y: string]: Proof } = {};
