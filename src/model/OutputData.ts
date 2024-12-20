@@ -84,31 +84,27 @@ export class OutputData implements OutputDataLike {
 		customSplit?: Array<number>
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		return amounts.map((a) =>
-			this.createSingleP2PKData(p2pk.pubkey, a, keyset.id, p2pk.locktime, p2pk.refundKeys)
-		);
+		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 
 	static createSingleP2PKData(
-		pubkey: string,
+		p2pk: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
 		amount: number,
-		keysetId: string,
-		locktime?: number,
-		refundKeys?: Array<string>
+		keysetId: string
 	) {
 		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: pubkey,
+				data: p2pk.pubkey,
 				tags: []
 			}
 		];
-		if (locktime) {
-			newSecret[1].tags.push(['locktime', locktime]);
+		if (p2pk.locktime) {
+			newSecret[1].tags.push(['locktime', p2pk.locktime]);
 		}
-		if (refundKeys) {
-			newSecret[1].tags.push(['refund', refundKeys]);
+		if (p2pk.refundKeys) {
+			newSecret[1].tags.push(['refund', p2pk.refundKeys]);
 		}
 		const parsed = JSON.stringify(newSecret);
 		const secretBytes = new TextEncoder().encode(parsed);
