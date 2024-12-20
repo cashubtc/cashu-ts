@@ -144,11 +144,9 @@ export class OutputData implements OutputDataLike {
 		customSplit?: Array<number>
 	): Array<OutputData> {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		const data: Array<OutputData> = [];
-		for (let i = 0; i < amounts.length; i++) {
-			data.push(this.createSingleDeterministicData(amount, seed, counter + i, keyset.id));
-		}
-		return data;
+		return amounts.map((_, i) =>
+			this.createSingleDeterministicData(amount, seed, (counter = i), keyset.id)
+		);
 	}
 
 	static createSingleDeterministicData(
