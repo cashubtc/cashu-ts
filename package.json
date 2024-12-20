@@ -1,6 +1,6 @@
 {
 	"name": "@cashu/cashu-ts",
-	"version": "2.2.0-rc1",
+	"version": "2.2.0-rc2",
 	"description": "cashu library for communicating with a cashu mint",
 	"type": "module",
 	"main": "lib/cashu-ts.cjs.js",
