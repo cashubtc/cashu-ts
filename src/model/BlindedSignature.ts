@@ -1,7 +1,7 @@
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { SerializedBlindedSignature } from './types/index.js';
 import { DLEQ } from '@cashu/crypto/modules/common';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex } from '@noble/hashes/utils';
 import { numberToHexPadded64 } from '../utils.js';
 
 class BlindedSignature {

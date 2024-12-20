@@ -38,7 +38,7 @@ export class WSConnection {
 	private subListeners: { [subId: string]: Array<(payload: any) => any> } = {};
 	private rpcListeners: { [rpcSubId: string]: any } = {};
 	private messageQueue: MessageQueue;
-	private handlingInterval?: NodeJS.Timer;
+	private handlingInterval?: number;
 	private rpcId = 0;
 
 	constructor(url: string) {
@@ -65,7 +65,10 @@ export class WSConnection {
 				this.ws.onmessage = (e: MessageEvent) => {
 					this.messageQueue.enqueue(e.data);
 					if (!this.handlingInterval) {
-						this.handlingInterval = setInterval(this.handleNextMesage.bind(this), 0);
+						this.handlingInterval = setInterval(
+							this.handleNextMesage.bind(this),
+							0
+						) as unknown as number;
 					}
 				};
 				this.ws.onclose = () => {
