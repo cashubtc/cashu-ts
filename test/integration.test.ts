@@ -494,7 +494,7 @@ describe('Custom Outputs', () => {
 	test('Default keepFactory', async () => {
 		// First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
 		function p2pkFactory(a: number, k: MintKeys) {
-			return OutputData.createSingleP2PKData(hexPk, a, k.id);
+			return OutputData.createSingleP2PKData({ pubkey: hexPk }, a, k.id);
 		}
 		const mint = new CashuMint(mintUrl);
 		// We then pass out factory to the CashuWallet constructor
@@ -534,7 +534,7 @@ describe('Custom Outputs', () => {
 		// Just to receive them and lock them again, but this time overwriting the default factory
 		const newProofs = await wallet.receive(
 			{ proofs: unlockedProofs.send, mint: mintUrl },
-			{ outputData: (a, k) => OutputData.createSingleP2PKData('testKey', a, k.id) }
+			{ outputData: (a, k) => OutputData.createSingleP2PKData({ pubkey: 'testKey' }, a, k.id) }
 		);
 		// Our factory also applies to the receive method, so we expect all received proofs to be locked
 		expectProofsSecretToEqual(newProofs, 'testKey');
@@ -542,7 +542,7 @@ describe('Custom Outputs', () => {
 	test('Manual Factory Mint', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
 			function inner(a: number, k: MintKeys) {
-				return OutputData.createSingleP2PKData(pubkey, a, k.id);
+				return OutputData.createSingleP2PKData({ pubkey: pubkey }, a, k.id);
 			}
 			return inner;
 		}
@@ -553,14 +553,14 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuote(21);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(21, quote.quote, {
-			blindingData: createFactory('mintTest')
+			outputData: createFactory('mintTest')
 		});
 		expectProofsSecretToEqual(proofs, 'mintTest');
 	});
 	test('Manual Factory Send', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
 			function inner(a: number, k: MintKeys) {
-				return OutputData.createSingleP2PKData(pubkey, a, k.id);
+				return OutputData.createSingleP2PKData({ pubkey }, a, k.id);
 			}
 			return inner;
 		}

@@ -658,7 +658,7 @@ class CashuWallet {
 		options?: MintProofOptions
 	): Promise<Array<Proof>> {
 		let { outputAmounts } = options || {};
-		const { counter, pubkey, p2pk, keysetId, proofsWeHave, blindingData } = options || {};
+		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData } = options || {};
 
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
@@ -669,14 +669,14 @@ class CashuWallet {
 		}
 
 		let newBlindingData: Array<OutputData> = [];
-		if (blindingData) {
-			if (isOutputDataFactory(blindingData)) {
+		if (outputData) {
+			if (isOutputDataFactory(outputData)) {
 				const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
 				for (let i = 0; i < amounts.length; i++) {
-					newBlindingData.push(blindingData(amounts[i], keyset));
+					newBlindingData.push(outputData(amounts[i], keyset));
 				}
 			} else {
-				newBlindingData = blindingData;
+				newBlindingData = outputData;
 			}
 		} else if (this._keepFactory) {
 			const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);

@@ -105,7 +105,7 @@ export type MintProofOptions = {
 	proofsWeHave?: Array<Proof>;
 	counter?: number;
 	pubkey?: string;
-	blindingData?: Array<OutputDataLike> | OutputDataFactory;
+	outputData?: Array<OutputDataLike> | OutputDataFactory;
 	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 
