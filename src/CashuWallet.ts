@@ -269,7 +269,8 @@ class CashuWallet {
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
-		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
+			options || {};
 
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
