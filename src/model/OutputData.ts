@@ -1,0 +1,167 @@
+import {
+	MintKeys,
+	Proof,
+	SerializedBlindedMessage,
+	SerializedBlindedSignature,
+	SerializedDLEQ
+} from './types';
+import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof
+} from '@cashu/crypto/modules/client';
+import { BlindedMessage } from './BlindedMessage';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
+import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
+import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
+
+export interface OutputDataLike {
+	blindedMessage: SerializedBlindedMessage;
+	blindingFactor: bigint;
+	secret: Uint8Array;
+
+	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
+}
+
+export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
+
+export function isOutputDataFactory(
+	value: Array<OutputData> | OutputDataFactory
+): value is OutputDataFactory {
+	return typeof value === 'function';
+}
+
+export class OutputData implements OutputDataLike {
+	blindedMessage: SerializedBlindedMessage;
+	blindingFactor: bigint;
+	secret: Uint8Array;
+
+	constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array) {
+		this.secret = secret;
+		this.blindingFactor = blidingFactor;
+		this.blindedMessage = blindedMessage;
+	}
+
+	toProof(sig: SerializedBlindedSignature, keyset: MintKeys) {
+		const dleq =
+			sig.dleq == undefined
+				? undefined
+				: ({
+						s: hexToBytes(sig.dleq.s),
+						e: hexToBytes(sig.dleq.e),
+						r: this.blindingFactor
+				  } as DLEQ);
+		const blindSignature = {
+			id: sig.id,
+			amount: sig.amount,
+			C_: pointFromHex(sig.C_),
+			dleq: dleq
+		};
+		const A = pointFromHex(keyset.keys[this.blindedMessage.amount]);
+		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
+		const serializedProof = {
+			...serializeProof(proof),
+			...(dleq && {
+				dleqValid: verifyDLEQProof_reblind(this.secret, dleq, proof.C, A)
+			}),
+			...(dleq && {
+				dleq: {
+					s: bytesToHex(dleq.s),
+					e: bytesToHex(dleq.e),
+					r: numberToHexPadded64(dleq.r ?? BigInt(0))
+				} as SerializedDLEQ
+			})
+		} as Proof;
+		return serializedProof;
+	}
+
+	static createP2PKData(
+		p2pk: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		amount: number,
+		keyset: MintKeys,
+		customSplit?: Array<number>
+	) {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		return amounts.map((a) =>
+			this.createSingleP2PKData(p2pk.pubkey, a, keyset.id, p2pk.locktime, p2pk.refundKeys)
+		);
+	}
+
+	static createSingleP2PKData(
+		pubkey: string,
+		amount: number,
+		keysetId: string,
+		locktime?: number,
+		refundKeys?: Array<string>
+	) {
+		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
+			'P2PK',
+			{
+				nonce: bytesToHex(randomBytes(32)),
+				data: pubkey,
+				tags: []
+			}
+		];
+		if (locktime) {
+			newSecret[1].tags.push(['locktime', locktime]);
+		}
+		if (refundKeys) {
+			newSecret[1].tags.push(['refund', refundKeys]);
+		}
+		const parsed = JSON.stringify(newSecret);
+		const secretBytes = new TextEncoder().encode(parsed);
+		const { r, B_ } = blindMessage(secretBytes);
+		return new OutputData(
+			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			r,
+			secretBytes
+		);
+	}
+
+	static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>) {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
+	}
+
+	static createSingleRandomData(amount: number, keysetId: string) {
+		const randomHex = bytesToHex(randomBytes(32));
+		const secretBytes = new TextEncoder().encode(randomHex);
+		const { r, B_ } = blindMessage(secretBytes);
+		return new OutputData(
+			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			r,
+			secretBytes
+		);
+	}
+
+	static createDeterministicData(
+		amount: number,
+		seed: Uint8Array,
+		counter: number,
+		keyset: MintKeys,
+		customSplit?: Array<number>
+	): Array<OutputData> {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		return amounts.map((_, i) =>
+			this.createSingleDeterministicData(amount, seed, (counter = i), keyset.id)
+		);
+	}
+
+	static createSingleDeterministicData(
+		amount: number,
+		seed: Uint8Array,
+		counter: number,
+		keysetId: string
+	) {
+		const secretBytes = deriveSecret(seed, keysetId, counter);
+		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
+		const { r, B_ } = blindMessage(secretBytes, deterministicR);
+		return new OutputData(
+			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			r,
+			secretBytes
+		);
+	}
+}

@@ -41,4 +41,5 @@ export type SendResponse = {
 	 * Proofs to be sent, matching the chosen amount
 	 */
 	send: Array<Proof>;
+	serialized?: Array<{ proof: Proof; keep: boolean }>;
 };
