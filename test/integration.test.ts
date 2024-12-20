@@ -553,7 +553,7 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuote(21);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(21, quote.quote, {
-			blindingData: createFactory('mintTest')
+			outputData: createFactory('mintTest')
 		});
 		expectProofsSecretToEqual(proofs, 'mintTest');
 	});
