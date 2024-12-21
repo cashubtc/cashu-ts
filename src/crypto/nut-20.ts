@@ -3,7 +3,7 @@ import { SerializedBlindedMessage } from '../model/types';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
-function constructMessage(quote: string, blindedMessages: SerializedBlindedMessage[]): Uint8Array {
+function constructMessage(quote: string, blindedMessages: Array<SerializedBlindedMessage>): Uint8Array {
 	let message = quote;
 	for (const blindedMessage of blindedMessages) {
 		message += blindedMessage.B_;
