@@ -15,7 +15,7 @@ function constructMessage(quote: string, blindedMessages: SerializedBlindedMessa
 export function signMintQuote(
 	privkey: string,
 	quote: string,
-	blindedMessages: SerializedBlindedMessage[]
+	blindedMessages: Array<SerializedBlindedMessage>
 ): string {
 	const message = constructMessage(quote, blindedMessages);
 	const privkeyBytes = hexToBytes(privkey);
@@ -26,7 +26,7 @@ export function signMintQuote(
 export function verifyMintQuoteSignature(
 	pubkey: string,
 	quote: string,
-	blindedMessages: SerializedBlindedMessage[],
+	blindedMessages: Array<SerializedBlindedMessage>,
 	signature: string
 ): boolean {
 	const sigbytes = hexToBytes(signature);
