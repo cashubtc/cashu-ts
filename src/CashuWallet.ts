@@ -53,6 +53,7 @@ import {
 	stripDleq,
 	sumProofs
 } from './utils.js';
+import { signMintQuote } from './crypto/nut-20.js';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -601,13 +602,15 @@ class CashuWallet {
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
 	 * @param description optional description for the mint quote
+	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async createMintQuote(amount: number, description?: string) {
+	async createMintQuote(amount: number, description?: string, pubkey?: string) {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
-			description: description
+			description: description,
+			pubkey: pubkey,
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
@@ -633,7 +636,7 @@ class CashuWallet {
 		quote: string,
 		options?: MintProofOptions
 	): Promise<Array<Proof>> {
-		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey } = options || {};
+		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey, quotePrivkey } = options || {};
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
 			outputAmounts = {
@@ -649,9 +652,11 @@ class CashuWallet {
 			counter,
 			pubkey
 		);
+		const mintQuoteSignature = quotePrivkey ? signMintQuote(quotePrivkey, quote, blindedMessages) : undefined;
 		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
-			quote: quote
+			quote: quote,
+			signature: mintQuoteSignature,
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
 		return this.constructProofs(signatures, blindingFactors, secrets, keyset);

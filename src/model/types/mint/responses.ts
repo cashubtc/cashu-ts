@@ -178,6 +178,10 @@ export type MintQuoteResponse = {
 	 * Timestamp of when the quote expires
 	 */
 	expiry: number;
+	/**
+	 * Public key the quote is locked to
+	 */
+	pubkey?: string;
 } & ApiError;
 
 /**
