@@ -610,7 +610,7 @@ class CashuWallet {
 			unit: this._unit,
 			amount: amount,
 			description: description,
-			pubkey: pubkey,
+			pubkey: pubkey
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
@@ -652,11 +652,13 @@ class CashuWallet {
 			counter,
 			pubkey
 		);
-		const mintQuoteSignature = quotePrivkey ? signMintQuote(quotePrivkey, quote, blindedMessages) : undefined;
+		const mintQuoteSignature = quotePrivkey
+			? signMintQuote(quotePrivkey, quote, blindedMessages)
+			: undefined;
 		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
 			quote: quote,
-			signature: mintQuoteSignature,
+			signature: mintQuoteSignature
 		};
 		const { signatures } = await this.mint.mint(mintPayload);
 		return this.constructProofs(signatures, blindingFactors, secrets, keyset);
