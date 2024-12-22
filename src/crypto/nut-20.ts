@@ -30,7 +30,10 @@ export function verifyMintQuoteSignature(
 	signature: string
 ): boolean {
 	const sigbytes = hexToBytes(signature);
-	const pubkeyBytes = hexToBytes(pubkey);
+	let pubkeyBytes = hexToBytes(pubkey);
+    if (pubkeyBytes.length !== 33)
+        return false;
+    pubkeyBytes = pubkeyBytes.slice(1);
 	const message = constructMessage(quote, blindedMessages);
 	return schnorr.verify(sigbytes, message, pubkeyBytes);
 }
