@@ -227,7 +227,7 @@ class CashuWallet {
 		if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
 			await this.getKeySets();
 			if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
-				throw new Error(`Could not initialize keys. No keyset with id '${keysetId}' found`);
+				throw new Error(`Could not initialize keys. No keyset with id '${keysetId}' found.`);
 			}
 		}
 
