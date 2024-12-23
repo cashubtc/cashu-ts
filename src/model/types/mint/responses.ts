@@ -105,6 +105,7 @@ export type GetInfoResponse = {
 		};
 	};
 	motd?: string;
+	amountless?: boolean;
 };
 
 /**
