@@ -57,15 +57,15 @@ export type MeltQuotePayload = {
  */
 export type MeltQuotePayloadAmountLess = {
 	/**
-   * Optional property for specifying an amountless option.
-   */
+	 * Optional property for specifying an amountless option.
+	 */
 	amountless?: {
 		/**
-     * The amount in milli-satoshis.
-     */
-		amount_msat: number
-	}
-}
+		 * The amount in milli-satoshis.
+		 */
+		amount_msat: number;
+	};
+};
 
 /**
  * Payload that needs to be sent to the mint when requesting a mint

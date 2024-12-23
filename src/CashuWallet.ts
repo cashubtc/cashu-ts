@@ -668,20 +668,19 @@ class CashuWallet {
 			request: invoice
 		};
 
-		if(this._mintInfo?.amountless){
+		if (this._mintInfo?.amountless) {
 			const meltQuotePayload: MeltQuotePayload = {
-  		unit: this._unit,
-			request: invoice,
-			options: {
-				amountless: {
-					amount_msat: amount ?? 0,
-				},
-			},
-		};
-		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
-		return meltQuote;
-		
-	}
+				unit: this._unit,
+				request: invoice,
+				options: {
+					amountless: {
+						amount_msat: amount ?? 0
+					}
+				}
+			};
+			const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+			return meltQuote;
+		}
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
 	}
