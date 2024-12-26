@@ -8,6 +8,11 @@ export type OutputAmounts = {
 	keepAmounts?: Array<number>;
 };
 
+export type LockedMintQuote = {
+	id: string;
+	privkey: string;
+};
+
 /**
  * @param {ReceiveOptions} [options] - Optional configuration for token processing:
  *   - `keysetId`: Override the default keyset ID with a custom one fetched from the `/keysets` endpoint.
@@ -85,7 +90,6 @@ export type RestoreOptions = {
  * - `counter`: optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
  * - `proofsWeHave`: optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
  * - `pubkey`: optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
- * - `privkey`: optional private key to unlock the mint quote. Generates a schnorr signature of the payload.
  */
 export type MintProofOptions = {
 	keysetId?: string;
@@ -93,7 +97,6 @@ export type MintProofOptions = {
 	proofsWeHave?: Array<Proof>;
 	counter?: number;
 	pubkey?: string;
-	quotePrivkey?: string;
 };
 
 /**
