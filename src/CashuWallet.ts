@@ -606,6 +606,12 @@ class CashuWallet {
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
 	async createMintQuote(amount: number, description?: string, pubkey?: string) {
+		if (pubkey) {
+			const { supported } = (await this.getMintInfo()).isSupported(20);
+			if (!supported) {
+				throw new Error('Mint does not support NUT-20');
+			}
+		}
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,

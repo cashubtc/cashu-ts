@@ -103,6 +103,10 @@ export type GetInfoResponse = {
 			// WebSockets
 			supported: Array<WebSocketSupport>;
 		};
+		'20'?: {
+			// Locked Mint Quote
+			supported: boolean;
+		};
 	};
 	motd?: string;
 };
