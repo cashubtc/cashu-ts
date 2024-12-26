@@ -610,11 +610,11 @@ class CashuWallet {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
-			description: description,
+			description: description
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
-	
+
 	/**
 	 * Requests a mint quote from the mint that is locked to a public key.
 	 * @param amount Amount requesting for mint.
@@ -635,7 +635,7 @@ class CashuWallet {
 			pubkey: pubkey
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
-	}	
+	}
 
 	/**
 	 * Gets an existing mint quote from the mint.
@@ -650,7 +650,7 @@ class CashuWallet {
 	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
 	 * @param {string} quote - ID of mint quote (when quote is a string)
- 	 * @param {LockedMintQuote} quote - containing the quote ID and unlocking private key (when quote is a LockedMintQuote)
+	 * @param {LockedMintQuote} quote - containing the quote ID and unlocking private key (when quote is a LockedMintQuote)
 	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
 	 * @returns proofs
 	 */
@@ -674,12 +674,11 @@ class CashuWallet {
 			counter,
 			pubkey
 		);
-		const mintQuoteSignature = typeof quote === 'string'
-			? undefined
-			: signMintQuote(quote.privkey, quote.id, blindedMessages);
-		const quoteId = typeof quote === 'string'
-			? quote
-			: quote.id;
+		const mintQuoteSignature =
+			typeof quote === 'string'
+				? undefined
+				: signMintQuote(quote.privkey, quote.id, blindedMessages);
+		const quoteId = typeof quote === 'string' ? quote : quote.id;
 		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
 			quote: quoteId,
