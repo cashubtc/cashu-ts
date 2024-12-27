@@ -41,7 +41,7 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	LockedMintQuoteReponse
+	LockedMintQuoteResponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -627,7 +627,7 @@ class CashuWallet {
 		amount: number,
 		pubkey: string,
 		description?: string
-	): Promise<LockedMintQuoteReponse> {
+	): Promise<LockedMintQuoteResponse> {
 		const { supported } = (await this.getMintInfo()).isSupported(20);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-20');
@@ -642,7 +642,7 @@ class CashuWallet {
 		if (!res.pubkey) {
 			throw new Error('Mint returned unlocked mint quote');
 		}
-		return res as LockedMintQuoteReponse;
+		return res as LockedMintQuoteResponse;
 	}
 
 	/**
