@@ -41,7 +41,7 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	LockedMintQuote
+	LockedMintQuoteReponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -260,7 +260,7 @@ class CashuWallet {
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
-		let { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
 
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
@@ -299,7 +299,7 @@ class CashuWallet {
 	 * @returns {SendResponse}
 	 */
 	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
-		let {
+		const {
 			proofsWeHave,
 			offline,
 			includeFees,
@@ -572,7 +572,7 @@ class CashuWallet {
 		count: number,
 		options?: RestoreOptions
 	): Promise<{ proofs: Array<Proof> }> {
-		let { keysetId } = options || {};
+		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
@@ -623,7 +623,11 @@ class CashuWallet {
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit.
 	 * The quote will be locked to the specified `pubkey`.
 	 */
-	async createLockedMintQuote(amount: number, pubkey: string, description?: string) {
+	async createLockedMintQuote(
+		amount: number,
+		pubkey: string,
+		description?: string
+	): Promise<LockedMintQuoteReponse> {
 		const { supported } = (await this.getMintInfo()).isSupported(20);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-20');
@@ -634,7 +638,11 @@ class CashuWallet {
 			description: description,
 			pubkey: pubkey
 		};
-		return await this.mint.createMintQuote(mintQuotePayload);
+		const res = await this.mint.createMintQuote(mintQuotePayload);
+		if (!res.pubkey) {
+			throw new Error('Mint returned unlocked mint quote');
+		}
+		return res as LockedMintQuoteReponse;
 	}
 
 	/**
@@ -656,10 +664,20 @@ class CashuWallet {
 	 */
 	async mintProofs(
 		amount: number,
-		quote: string | LockedMintQuote,
+		quote: MintQuoteResponse,
+		options: MintProofOptions & { privateKey: string }
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
+		quote: string,
 		options?: MintProofOptions
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		options?: MintProofOptions & { privateKey?: string }
 	): Promise<Array<Proof>> {
-		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey } = options || {};
+		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey, privateKey } = options || {};
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
 			outputAmounts = {
@@ -674,16 +692,23 @@ class CashuWallet {
 			counter,
 			pubkey
 		);
-		const mintQuoteSignature =
-			typeof quote === 'string'
-				? undefined
-				: signMintQuote(quote.privkey, quote.id, blindedMessages);
-		const quoteId = typeof quote === 'string' ? quote : quote.id;
-		const mintPayload: MintPayload = {
-			outputs: blindedMessages,
-			quote: quoteId,
-			signature: mintQuoteSignature
-		};
+		let mintPayload: MintPayload;
+		if (typeof quote !== 'string') {
+			if (!privateKey) {
+				throw new Error('Can not sign locked quote without private key');
+			}
+			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote.quote,
+				signature: mintQuoteSignature
+			};
+		} else {
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote
+			};
+		}
 		const { signatures } = await this.mint.mint(mintPayload);
 		return this.constructProofs(signatures, blindingFactors, secrets, keyset);
 	}
@@ -725,7 +750,7 @@ class CashuWallet {
 		proofsToSend: Array<Proof>,
 		options?: MeltProofOptions
 	): Promise<MeltProofsResponse> {
-		let { keysetId, counter, privkey } = options || {};
+		const { keysetId, counter, privkey } = options || {};
 		const keys = await this.getKeys(keysetId);
 		const { blindedMessages, secrets, blindingFactors } = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,

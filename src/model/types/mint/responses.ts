@@ -188,6 +188,8 @@ export type MintQuoteResponse = {
 	pubkey?: string;
 } & ApiError;
 
+export type LockedMintQuoteReponse = MintQuoteResponse & { pubkey: string };
+
 /**
  * Response from the mint after requesting a mint
  */
