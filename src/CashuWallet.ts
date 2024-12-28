@@ -679,16 +679,21 @@ class CashuWallet {
 	 * @param partialAmount the partial amount of the invoice's total to be paid by this instance
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async createMultiPathMeltQuote(invoice: string, partialAmount: number): Promise<MeltQuoteResponse> {
+	async createMultiPathMeltQuote(
+		invoice: string,
+		partialAmount: number
+	): Promise<MeltQuoteResponse> {
 		const { supported, params } = (await this.getMintInfo()).isSupported(15);
 		if (!supported) {
-			throw new Error("Mint does not support NUT-15");
+			throw new Error('Mint does not support NUT-15');
 		}
-		if (!params?.filter( (method) => {
-			if (method.method === "bolt11" && method.unit === this.unit) {
-				return true;
-			}
-		}).length) {
+		if (
+			!params?.filter((method) => {
+				if (method.method === 'bolt11' && method.unit === this.unit) {
+					return true;
+				}
+			}).length
+		) {
 			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
 		}
 		const mppOption: MPPOption = {
@@ -696,11 +701,11 @@ class CashuWallet {
 		};
 		const meltOptions: MeltQuoteOptions = {
 			mpp: mppOption
-		}
+		};
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice,
-			options: meltOptions,
+			options: meltOptions
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;

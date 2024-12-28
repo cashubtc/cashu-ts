@@ -59,14 +59,14 @@ export type MeltQuotePayload = {
  */
 export type MeltQuoteOptions = {
 	mpp: MPPOption;
-}
+};
 
 /**
  * Multi path payments option
  */
 export type MPPOption = {
 	amount: number;
-}
+};
 
 /**
  * Payload that needs to be sent to the mint when requesting a mint
