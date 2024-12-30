@@ -94,6 +94,7 @@ class CashuWallet {
 	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
+	 * @param options.keepFactory A function that will be used by all parts of the library that produce proofs to be kept (change, etc.).
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
