@@ -1090,7 +1090,7 @@ class CashuWallet {
 				outputAmounts
 			);
 		} else if (p2pk) {
-			outputData = OutputData.createP2PKData(p2pk, amount, keyset);
+			outputData = OutputData.createP2PKData(p2pk, amount, keyset, outputAmounts);
 		} else if (factory) {
 			const amounts = splitAmount(amount, keyset.keys);
 			outputData = amounts.map((a) => factory(a, keyset));
