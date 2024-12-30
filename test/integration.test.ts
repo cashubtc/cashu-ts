@@ -497,7 +497,7 @@ describe('Custom Outputs', () => {
 			return OutputData.createSingleP2PKData({ pubkey: hexPk }, a, k.id);
 		}
 		const mint = new CashuMint(mintUrl);
-		// We then pass out factory to the CashuWallet constructor
+		// We then pass our factory to the CashuWallet constructor
 		const wallet = new CashuWallet(mint, { keepFactory: p2pkFactory });
 
 		// Lets mint some fresh proofs
@@ -525,7 +525,7 @@ describe('Custom Outputs', () => {
 		if (meltRes.change && meltRes.change.length > 0) {
 			expectNUT10SecretDataToEqual(meltRes.change, hexPk);
 		}
-		// Finally we want to check wheter received token are locked as well
+		// Finally we want to check whether received token are locked as well
 		const restAmount = sumProofs(meltKeep) - wallet.getFeesForProofs(meltKeep);
 		// First we unlock all the proofs that we have left
 		const unlockedProofs = await wallet.send(restAmount, meltKeep, {
