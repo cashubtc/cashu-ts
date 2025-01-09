@@ -683,7 +683,7 @@ class CashuWallet {
 		invoice: string,
 		partialAmount: number
 	): Promise<MeltQuoteResponse> {
-		const { supported, params } = (await this.getMintInfo()).isSupported(15);
+		const { supported, params } = this.mintInfo.isSupported(15);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-15');
 		}
