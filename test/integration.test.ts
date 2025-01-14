@@ -38,7 +38,7 @@ const unit = 'sat';
 
 injectWebSocketImpl(ws);
 
-function expectProofsSecretToEqual(p: Array<Proof>, s: string) {
+function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	p.forEach((p) => {
 		const parsedSecret = JSON.parse(p.secret);
 		expect(parsedSecret[1].data).toBe(s);
@@ -497,7 +497,7 @@ describe('Custom Outputs', () => {
 			return OutputData.createSingleP2PKData({ pubkey: hexPk }, a, k.id);
 		}
 		const mint = new CashuMint(mintUrl);
-		// We then pass out factory to the CashuWallet constructor
+		// We then pass our factory to the CashuWallet constructor
 		const wallet = new CashuWallet(mint, { keepFactory: p2pkFactory });
 
 		// Lets mint some fresh proofs
@@ -506,7 +506,7 @@ describe('Custom Outputs', () => {
 		const proofs = await wallet.mintProofs(32, quoteRes.quote);
 
 		// Because of the keepFactory we expect these proofs to be locked to our public key
-		expectProofsSecretToEqual(proofs, hexPk);
+		expectNUT10SecretDataToEqual(proofs, hexPk);
 
 		// Lets melt some of these proofs to pay an invoice
 		const meltQuote = await wallet.createMeltQuote(invoice);
@@ -517,15 +517,15 @@ describe('Custom Outputs', () => {
 			includeFees: true
 		});
 		// Again the change we get from the swap are expected to be locked to our public key
-		expectProofsSecretToEqual(meltKeep, hexPk);
+		expectNUT10SecretDataToEqual(meltKeep, hexPk);
 
 		// We then pay the melt. In this case no private key is required, as our factory only applies to keep Proofs, not send Proofs
 		const meltRes = await wallet.meltProofs(meltQuote, meltSend);
 		// Even the change we receive from the fee reserve is expected to be locked
 		if (meltRes.change && meltRes.change.length > 0) {
-			expectProofsSecretToEqual(meltRes.change, hexPk);
+			expectNUT10SecretDataToEqual(meltRes.change, hexPk);
 		}
-		// Finally we want to check wheter received token are locked as well
+		// Finally we want to check whether received token are locked as well
 		const restAmount = sumProofs(meltKeep) - wallet.getFeesForProofs(meltKeep);
 		// First we unlock all the proofs that we have left
 		const unlockedProofs = await wallet.send(restAmount, meltKeep, {
@@ -537,7 +537,7 @@ describe('Custom Outputs', () => {
 			{ outputData: (a, k) => OutputData.createSingleP2PKData({ pubkey: 'testKey' }, a, k.id) }
 		);
 		// Our factory also applies to the receive method, so we expect all received proofs to be locked
-		expectProofsSecretToEqual(newProofs, 'testKey');
+		expectNUT10SecretDataToEqual(newProofs, 'testKey');
 	}, 15000);
 	test('Manual Factory Mint', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
@@ -555,7 +555,7 @@ describe('Custom Outputs', () => {
 		const proofs = await wallet.mintProofs(21, quote.quote, {
 			outputData: createFactory('mintTest')
 		});
-		expectProofsSecretToEqual(proofs, 'mintTest');
+		expectNUT10SecretDataToEqual(proofs, 'mintTest');
 	});
 	test('Manual Factory Send', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
@@ -575,8 +575,8 @@ describe('Custom Outputs', () => {
 		const { send, keep } = await wallet.send(amount, proofs, {
 			outputData: { send: createFactory('send'), keep: createFactory('keep') }
 		});
-		expectProofsSecretToEqual(send, 'send');
-		expectProofsSecretToEqual(keep, 'keep');
+		expectNUT10SecretDataToEqual(send, 'send');
+		expectNUT10SecretDataToEqual(keep, 'keep');
 	});
 	test('Manual BlindingData', async () => {
 		const mint = new CashuMint(mintUrl);
@@ -593,8 +593,8 @@ describe('Custom Outputs', () => {
 		});
 		const key1Sends = send.slice(0, data1.length);
 		const key2Sends = send.slice(data1.length);
-		expectProofsSecretToEqual(key1Sends, 'key1');
-		expectProofsSecretToEqual(key2Sends, 'key2');
+		expectNUT10SecretDataToEqual(key1Sends, 'key1');
+		expectNUT10SecretDataToEqual(key2Sends, 'key2');
 	});
 });
 describe('Keep Vector and Reordering', () => {
