@@ -6,7 +6,6 @@ const config =
 	process.env.BUILD_FORMAT === 'iife'
 		? defineConfig({
 				build: {
-					emptyOutDir: false,
 					outDir: 'lib',
 					target: 'es2020',
 					lib: {
@@ -21,7 +20,6 @@ const config =
 		  })
 		: defineConfig({
 				build: {
-					emptyOutDir: true,
 					outDir: 'lib',
 					target: 'es2020',
 					lib: {

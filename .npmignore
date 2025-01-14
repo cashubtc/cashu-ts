@@ -3,3 +3,5 @@
 /.github
 tsconfig.json
 src
+/lib/cashu-ts.iife.js
+/lib/cashu-ts.iife.js.map

@@ -14,7 +14,8 @@
 		"url": "https://github.com/cashubtc/cashu-ts/issues"
 	},
 	"scripts": {
-		"compile": "vite build && BUILD_FORMAT=iife vite build",
+		"compile": "vite build",
+		"compile:standalone": "BUILD_FORMAT=iife vite build",
 		"test": "vitest run --coverage --exclude ./test/integration.test.ts",
 		"test-integration": "vitest run ./test/integration.test.ts --coverage",
 		"dev": "tsc --watch",
@@ -22,6 +23,13 @@
 		"format": "prettier --write .",
 		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts"
+	},
+	"exports": {
+		".": {
+			"require": "./lib/cashu-ts.cjs.js",
+			"import": "./lib/cashu-ts.es.js",
+			"types": "./lib/types/index.d.ts"
+		}
 	},
 	"keywords": [
 		"cashu"
