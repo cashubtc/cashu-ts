@@ -192,7 +192,7 @@ export type MintResponse = {
  */
 export type PostRestoreResponse = {
 	outputs: Array<SerializedBlindedMessage>;
-	promises: Array<SerializedBlindedSignature>;
+	signatures: Array<SerializedBlindedSignature>;
 };
 
 /*

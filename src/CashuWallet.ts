@@ -583,7 +583,7 @@ class CashuWallet {
 			start
 		);
 
-		const { outputs, promises } = await this.mint.restore({ outputs: blindedMessages });
+		const { outputs, signatures } = await this.mint.restore({ outputs: blindedMessages });
 
 		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint
 		const validBlindingFactors = blindingFactors.filter((_: bigint, i: number) =>
@@ -593,7 +593,7 @@ class CashuWallet {
 			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
 		);
 		return {
-			proofs: this.constructProofs(promises, validBlindingFactors, validSecrets, keys)
+			proofs: this.constructProofs(signatures, validBlindingFactors, validSecrets, keys)
 		};
 	}
 
