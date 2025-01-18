@@ -603,7 +603,7 @@ class CashuWallet {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
 		// create blank amounts for unknown restore amounts
-		const amounts = Array(count).fill(1);
+		const amounts = Array(count).fill(0);
 		const outputData = OutputData.createDeterministicData(
 			amounts.length,
 			this._seed,
@@ -616,9 +616,26 @@ class CashuWallet {
 			outputs: outputData.map((d) => d.blindedMessage)
 		});
 
-		const validData = outputData.filter((d) => outputs.some((o) => d.blindedMessage.B_ === o.B_));
+		const outputsWithSignatures: {signature: SerializedBlindedSignature, data: OutputData}[] = []
+
+		console.log(outputs.map(o=>o.amount))
+		console.log(promises.map(o=>o.amount))
+
+		for (let i = 0; i < outputs.length; i++) {
+			const data = outputData.find(d=> d.blindedMessage.B_===outputs[i].B_)
+			if (!data) {
+				continue
+			}
+			outputsWithSignatures[i] = {
+				signature: promises[i],
+				data
+			}
+		}
+		outputsWithSignatures.forEach(o=>o.data.blindedMessage.amount = o.signature.amount)
+
+		
 		return {
-			proofs: validData.map((d, i) => d.toProof(promises[i], keys))
+			proofs: outputsWithSignatures.map((d) => d.data.toProof(d.signature, keys))
 		};
 	}
 
