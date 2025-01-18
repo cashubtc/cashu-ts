@@ -59,7 +59,7 @@ export class OutputData implements OutputDataLike {
 			C_: pointFromHex(sig.C_),
 			dleq: dleq
 		};
-		const A = pointFromHex(keyset.keys[this.blindedMessage.amount]);
+		const A = pointFromHex(keyset.keys[sig.amount]);
 		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
 		const serializedProof = {
 			...serializeProof(proof),
@@ -151,13 +151,16 @@ export class OutputData implements OutputDataLike {
 		counter: number,
 		keysetId: string
 	) {
+		const enc = new TextEncoder()
 		const secretBytes = deriveSecret(seed, keysetId, counter);
+		const secretHex = bytesToHex(secretBytes);
+		const secretHexBytes = enc.encode(secretHex)
 		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
-		const { r, B_ } = blindMessage(secretBytes, deterministicR);
+		const { r, B_ } = blindMessage(secretHexBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
-			secretBytes
+			secretHexBytes
 		);
 	}
 }
