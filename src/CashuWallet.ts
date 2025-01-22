@@ -616,24 +616,23 @@ class CashuWallet {
 			outputs: outputData.map((d) => d.blindedMessage)
 		});
 
-		const outputsWithSignatures: {signature: SerializedBlindedSignature, data: OutputData}[] = []
-
-		console.log(outputs.map(o=>o.amount))
-		console.log(promises.map(o=>o.amount))
+		const outputsWithSignatures: Array<{
+			signature: SerializedBlindedSignature;
+			data: OutputData;
+		}> = [];
 
 		for (let i = 0; i < outputs.length; i++) {
-			const data = outputData.find(d=> d.blindedMessage.B_===outputs[i].B_)
+			const data = outputData.find((d) => d.blindedMessage.B_ === outputs[i].B_);
 			if (!data) {
-				continue
+				continue;
 			}
 			outputsWithSignatures[i] = {
 				signature: promises[i],
 				data
-			}
+			};
 		}
-		outputsWithSignatures.forEach(o=>o.data.blindedMessage.amount = o.signature.amount)
+		outputsWithSignatures.forEach((o) => (o.data.blindedMessage.amount = o.signature.amount));
 
-		
 		return {
 			proofs: outputsWithSignatures.map((d) => d.data.toProof(d.signature, keys))
 		};
