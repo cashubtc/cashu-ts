@@ -8,7 +8,7 @@ export class MintInfo {
 	}
 
 	isSupported(num: 4 | 5): { disabled: boolean; params: Array<SwapMethod> };
-	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14): { supported: boolean };
+	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
 	isSupported(num: 17): { supported: boolean; params?: Array<WebSocketSupport> };
 	isSupported(num: 15): { supported: boolean; params?: Array<MPPMethod> };
 	isSupported(num: number) {
@@ -23,7 +23,8 @@ export class MintInfo {
 			case 10:
 			case 11:
 			case 12:
-			case 14: {
+			case 14:
+			case 20: {
 				return this.checkGenericNut(num);
 			}
 			case 17: {
@@ -37,7 +38,7 @@ export class MintInfo {
 			}
 		}
 	}
-	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14) {
+	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
 		if (this._mintInfo.nuts[num]?.supported) {
 			return { supported: true };
 		}

@@ -103,6 +103,10 @@ export type GetInfoResponse = {
 			// WebSockets
 			supported: Array<WebSocketSupport>;
 		};
+		'20'?: {
+			// Locked Mint Quote
+			supported: boolean;
+		};
 	};
 	motd?: string;
 };
@@ -178,7 +182,13 @@ export type MintQuoteResponse = {
 	 * Timestamp of when the quote expires
 	 */
 	expiry: number;
+	/**
+	 * Public key the quote is locked to
+	 */
+	pubkey?: string;
 } & ApiError;
+
+export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 
 /**
  * Response from the mint after requesting a mint

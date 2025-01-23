@@ -8,6 +8,11 @@ export type OutputAmounts = {
 	keepAmounts?: Array<number>;
 };
 
+export type LockedMintQuote = {
+	id: string;
+	privkey: string;
+};
+
 /**
  * @param {ReceiveOptions} [options] - Optional configuration for token processing:
  *   - `keysetId`: Override the default keyset ID with a custom one fetched from the `/keysets` endpoint.
