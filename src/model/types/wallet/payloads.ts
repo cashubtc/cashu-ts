@@ -48,6 +48,23 @@ export type MeltQuotePayload = {
 	 * Request to be melted to
 	 */
 	request: string;
+
+	options?: MeltQuotePayloadAmountLess;
+};
+
+/**
+ * Payload for a melt quote with an optional amountless option.
+ */
+export type MeltQuotePayloadAmountLess = {
+	/**
+	 * Optional property for specifying an amountless option.
+	 */
+	amountless?: {
+		/**
+		 * The amount in milli-satoshis.
+		 */
+		amount_msat: number;
+	};
 };
 
 /**

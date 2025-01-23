@@ -94,4 +94,7 @@ export class MintInfo {
 	get motd() {
 		return this._mintInfo.motd;
 	}
+	get amountless() {
+		return this._mintInfo.amountless;
+	}
 }

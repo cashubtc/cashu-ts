@@ -662,11 +662,25 @@ class CashuWallet {
 	 * @param invoice LN invoice that needs to get a fee estimate
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string, amount?: number): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
 		};
+
+		if (this._mintInfo?.amountless) {
+			const meltQuotePayload: MeltQuotePayload = {
+				unit: this._unit,
+				request: invoice,
+				options: {
+					amountless: {
+						amount_msat: amount ?? 0
+					}
+				}
+			};
+			const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+			return meltQuote;
+		}
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
 	}
