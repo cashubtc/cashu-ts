@@ -52,6 +52,7 @@ export class OutputData implements OutputDataLike {
 						s: hexToBytes(sig.dleq.s),
 						e: hexToBytes(sig.dleq.e),
 						r: this.blindingFactor
+						// eslint-disable-next-line
 				  } as DLEQ);
 		const blindSignature = {
 			id: sig.id,
@@ -151,10 +152,10 @@ export class OutputData implements OutputDataLike {
 		counter: number,
 		keysetId: string
 	) {
-		const enc = new TextEncoder()
+		const enc = new TextEncoder();
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretHex = bytesToHex(secretBytes);
-		const secretHexBytes = enc.encode(secretHex)
+		const secretHexBytes = enc.encode(secretHex);
 		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(secretHexBytes, deterministicR);
 		return new OutputData(
