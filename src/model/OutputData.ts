@@ -45,15 +45,14 @@ export class OutputData implements OutputDataLike {
 	}
 
 	toProof(sig: SerializedBlindedSignature, keyset: MintKeys) {
-		const dleq =
-			sig.dleq == undefined
-				? undefined
-				: ({
-						s: hexToBytes(sig.dleq.s),
-						e: hexToBytes(sig.dleq.e),
-						r: this.blindingFactor
-						// eslint-disable-next-line
-				  } as DLEQ);
+		let dleq: DLEQ | undefined;
+		if (sig.dleq) {
+			dleq = {
+				s: hexToBytes(sig.dleq.s),
+				e: hexToBytes(sig.dleq.e),
+				r: this.blindingFactor
+			};
+		}
 		const blindSignature = {
 			id: sig.id,
 			amount: sig.amount,
