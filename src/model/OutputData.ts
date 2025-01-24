@@ -152,12 +152,14 @@ export class OutputData implements OutputDataLike {
 		keysetId: string
 	) {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
+		const secretBytesAsHex = bytesToHex(secretBytes);
+		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
 		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
-		const { r, B_ } = blindMessage(secretBytes, deterministicR);
+		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
-			secretBytes
+			utf8SecretBytes
 		);
 	}
 }

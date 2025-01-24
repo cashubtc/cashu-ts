@@ -680,6 +680,7 @@ describe('deterministic', () => {
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
 		const numberR = bytesToNumber(hexToBytes(r));
+		const decoder = new TextDecoder();
 
 		const data = OutputData.createSingleDeterministicData(
 			0,
@@ -687,7 +688,7 @@ describe('deterministic', () => {
 			counter,
 			'009a1f293253e41e'
 		);
-		expect(bytesToHex(data.secret)).toBe(secret);
+		expect(decoder.decode(data.secret)).toBe(secret);
 		expect(data.blindingFactor).toBe(numberR);
 	});
 });
