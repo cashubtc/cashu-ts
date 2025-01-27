@@ -162,6 +162,17 @@ class CashuWallet {
 	}
 
 	/**
+	 * Get stored information about the mint or request it if not loaded.
+	 * @returns mint info
+	 */
+	async lazyGetMintInfo(): Promise<MintInfo> {
+		if (!this._mintInfo) {
+			return await this.getMintInfo();
+		}
+		return this._mintInfo;
+	}
+
+	/**
 	 * Load mint information, keysets and keys. This function can be called if no keysets are passed in the constructor
 	 */
 	async loadMint() {
@@ -683,7 +694,7 @@ class CashuWallet {
 		invoice: string,
 		partialAmount: number
 	): Promise<MeltQuoteResponse> {
-		const { supported, params } = this.mintInfo.isSupported(15);
+		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-15');
 		}
