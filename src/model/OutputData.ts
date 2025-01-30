@@ -45,21 +45,21 @@ export class OutputData implements OutputDataLike {
 	}
 
 	toProof(sig: SerializedBlindedSignature, keyset: MintKeys) {
-		const dleq =
-			sig.dleq == undefined
-				? undefined
-				: ({
-						s: hexToBytes(sig.dleq.s),
-						e: hexToBytes(sig.dleq.e),
-						r: this.blindingFactor
-				  } as DLEQ);
+		let dleq: DLEQ | undefined;
+		if (sig.dleq) {
+			dleq = {
+				s: hexToBytes(sig.dleq.s),
+				e: hexToBytes(sig.dleq.e),
+				r: this.blindingFactor
+			};
+		}
 		const blindSignature = {
 			id: sig.id,
 			amount: sig.amount,
 			C_: pointFromHex(sig.C_),
 			dleq: dleq
 		};
-		const A = pointFromHex(keyset.keys[this.blindedMessage.amount]);
+		const A = pointFromHex(keyset.keys[sig.amount]);
 		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
 		const serializedProof = {
 			...serializeProof(proof),
@@ -152,12 +152,14 @@ export class OutputData implements OutputDataLike {
 		keysetId: string
 	) {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
+		const secretBytesAsHex = bytesToHex(secretBytes);
+		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
 		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
-		const { r, B_ } = blindMessage(secretBytes, deterministicR);
+		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
-			secretBytes
+			utf8SecretBytes
 		);
 	}
 }
