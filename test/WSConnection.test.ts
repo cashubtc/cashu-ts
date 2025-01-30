@@ -1,23 +1,22 @@
 import { WSConnection } from '../src/WSConnection';
 import { Client, Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
+import { vi, test, describe, expect } from 'vitest';
 
 injectWebSocketImpl(WebSocket);
 
+const fakeUrl = 'ws://localhost:3338/v1/ws';
+const server = new Server(fakeUrl, { mock: false });
+
 describe('testing WSConnection', () => {
 	test('connecting...', async () => {
-		const fakeUrl = 'ws://localhost:3338/v1/ws';
-		const server = new Server(fakeUrl, { mock: false });
-		const connectionSpy = jest.fn();
+		const connectionSpy = vi.fn();
 		server.on('connection', connectionSpy);
 		const conn = new WSConnection(fakeUrl);
 		await conn.connect();
 		expect(connectionSpy).toHaveBeenCalled();
-		server.stop();
 	});
 	test('requesting subscription', async () => {
-		const fakeUrl = 'ws://localhost:3338/v1/ws';
-		const server = new Server(fakeUrl, { mock: false });
 		const message = (await new Promise(async (res) => {
 			server.on('connection', (socket) => {
 				socket.on('message', (m) => {
@@ -27,8 +26,8 @@ describe('testing WSConnection', () => {
 			const conn = new WSConnection(fakeUrl);
 			await conn.connect();
 
-			const callback = jest.fn();
-			const errorCallback = jest.fn();
+			const callback = vi.fn();
+			const errorCallback = vi.fn();
 			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['12345'] },
 				callback,
@@ -40,11 +39,8 @@ describe('testing WSConnection', () => {
 			method: 'subscribe',
 			params: { kind: 'bolt11_mint_quote', filters: ['12345'] }
 		});
-		server.stop();
 	});
 	test('unsubscribing', async () => {
-		const fakeUrl = 'ws://localhost:3338/v1/ws';
-		const server = new Server(fakeUrl, { mock: false });
 		let wsSocket: Client;
 		let subId: string;
 		const conn = new WSConnection(fakeUrl);
@@ -55,8 +51,8 @@ describe('testing WSConnection', () => {
 			});
 			conn.connect();
 		});
-		const callback = jest.fn();
-		const errorCallback = jest.fn();
+		const callback = vi.fn();
+		const errorCallback = vi.fn();
 		await new Promise<void>((res) => {
 			wsSocket.on('message', (m) => {
 				const parsed = JSON.parse(m.toString());
@@ -81,11 +77,8 @@ describe('testing WSConnection', () => {
 			conn.cancelSubscription(subId!, callback);
 		});
 		expect(message).toMatchObject({ jsonrpc: '2.0', method: 'unsubscribe' });
-		server.stop();
 	});
 	test('handing a notification', async () => {
-		const fakeUrl = 'ws://localhost:3338/v1/ws';
-		const server = new Server(fakeUrl, { mock: false });
 		server.on('connection', (socket) => {
 			socket.on('message', (m) => {
 				try {
@@ -107,10 +100,10 @@ describe('testing WSConnection', () => {
 		await conn.connect();
 
 		const payload = await new Promise((res) => {
-			const callback = jest.fn((p: any) => {
+			const callback = vi.fn((p: any) => {
 				res(p);
 			});
-			const errorCallback = jest.fn();
+			const errorCallback = vi.fn();
 			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['123'] },
 				callback,
@@ -118,6 +111,5 @@ describe('testing WSConnection', () => {
 			);
 		});
 		expect(payload).toMatchObject({ quote: '123', request: '456', paid: true, expiry: 123 });
-		server.stop();
 	});
 });

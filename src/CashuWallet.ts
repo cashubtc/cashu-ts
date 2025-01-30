@@ -1,41 +1,3 @@
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { CashuMint } from './CashuMint.js';
-import { BlindedMessage } from './model/BlindedMessage.js';
-import {
-	type MeltPayload,
-	type MeltQuoteResponse,
-	type MintKeys,
-	type MintKeyset,
-	type MeltProofsResponse,
-	type MintPayload,
-	type Proof,
-	type MintQuotePayload,
-	type MeltQuotePayload,
-	type SendResponse,
-	type SerializedBlindedMessage,
-	type SwapPayload,
-	type Token,
-	SerializedBlindedSignature,
-	GetInfoResponse,
-	OutputAmounts,
-	ProofState,
-	BlindingData,
-	MintQuoteResponse,
-	MintQuoteState,
-	MeltQuoteState,
-	SerializedDLEQ
-} from './model/types/index.js';
-import {
-	bytesToNumber,
-	getDecodedToken,
-	splitAmount,
-	sumProofs,
-	getKeepAmounts,
-	numberToHexPadded64,
-	hasValidDleq,
-	stripDleq
-} from './utils.js';
-import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -43,9 +5,55 @@ import {
 } from '@cashu/crypto/modules/client';
 import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { type Proof as NUT11Proof, DLEQ } from '@cashu/crypto/modules/common/index';
-import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
+import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { CashuMint } from './CashuMint.js';
+import { BlindedMessage } from './model/BlindedMessage.js';
+import { MintInfo } from './model/MintInfo.js';
+import {
+	BlindingData,
+	GetInfoResponse,
+	MeltProofOptions,
+	MeltQuoteState,
+	MintProofOptions,
+	MintQuoteResponse,
+	MintQuoteState,
+	OutputAmounts,
+	ProofState,
+	ReceiveOptions,
+	RestoreOptions,
+	SendOptions,
+	SerializedBlindedSignature,
+	SerializedDLEQ,
+	SwapOptions,
+	type MeltPayload,
+	type MeltProofsResponse,
+	type MeltQuotePayload,
+	type MeltQuoteResponse,
+	type MintKeys,
+	type MintKeyset,
+	type MintPayload,
+	type MintQuotePayload,
+	type Proof,
+	type SendResponse,
+	type SerializedBlindedMessage,
+	type SwapPayload,
+	type Token
+} from './model/types/index.js';
+import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
+import {
+	bytesToNumber,
+	getDecodedToken,
+	getKeepAmounts,
+	hasValidDleq,
+	numberToHexPadded64,
+	splitAmount,
+	stripDleq,
+	sumProofs
+} from './utils.js';
+
 /**
  * The default number of proofs per denomination to keep in a wallet.
  */
@@ -66,7 +74,7 @@ class CashuWallet {
 	private _keysets: Array<MintKeyset> = [];
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = DEFAULT_UNIT;
-	private _mintInfo: GetInfoResponse | undefined = undefined;
+	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
 
 	mint: CashuMint;
@@ -102,7 +110,7 @@ class CashuWallet {
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
 		if (options?.unit) this._unit = options?.unit;
 		if (options?.keysets) this._keysets = options.keysets;
-		if (options?.mintInfo) this._mintInfo = options.mintInfo;
+		if (options?.mintInfo) this._mintInfo = new MintInfo(options.mintInfo);
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
 		}
@@ -134,7 +142,7 @@ class CashuWallet {
 	get keysets(): Array<MintKeyset> {
 		return this._keysets;
 	}
-	get mintInfo(): GetInfoResponse {
+	get mintInfo(): MintInfo {
 		if (!this._mintInfo) {
 			throw new Error('Mint info not loaded');
 		}
@@ -145,8 +153,9 @@ class CashuWallet {
 	 * Get information about the mint
 	 * @returns mint info
 	 */
-	async getMintInfo(): Promise<GetInfoResponse> {
-		this._mintInfo = await this.mint.getInfo();
+	async getMintInfo(): Promise<MintInfo> {
+		const infoRes = await this.mint.getInfo();
+		this._mintInfo = new MintInfo(infoRes);
 		return this._mintInfo;
 	}
 
@@ -245,32 +254,17 @@ class CashuWallet {
 	/**
 	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
 	 * @param {(string|Token)} token - Cashu token, either as string or decoded
-	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param options.privkey? will create a signature on the @param token secrets if set
-	 * @param options.requireDleq? will check each proof for DLEQ proofs. Reject the token if any one of them can't be verified.
+	 * @param {ReceiveOptions} [options] - Optional configuration for token processing
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
-	async receive(
-		token: string | Token,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			requireDleq?: boolean;
-		}
-	): Promise<Array<Proof>> {
+	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
+		let { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
 		}
-		const keys = await this.getKeys(options?.keysetId);
-		if (options?.requireDleq) {
+		const keys = await this.getKeys(keysetId);
+		if (requireDleq) {
 			if (token.proofs.some((p: Proof) => !hasValidDleq(p, keys))) {
 				throw new Error('Token contains proofs with invalid DLEQ');
 			}
@@ -280,10 +274,10 @@ class CashuWallet {
 			amount,
 			token.proofs,
 			keys,
-			options?.outputAmounts,
-			options?.counter,
-			options?.pubkey,
-			options?.privkey
+			outputAmounts,
+			counter,
+			pubkey,
+			privkey
 		);
 		const { signatures } = await this.mint.swap(payload);
 		const freshProofs = this.constructProofs(
@@ -299,33 +293,21 @@ class CashuWallet {
 	 * Send proofs of a given amount, by providing at least the required amount of proofs
 	 * @param amount amount to send
 	 * @param proofs array of proofs (accumulated amount of proofs must be >= than amount)
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and send.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param options.privkey? will create a signature on the output secrets if set
-	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param options.offline? optionally send proofs offline.
-	 * @param options.includeFees? optionally include fees in the response.
-	 * @param options.includeDleq? optionally include DLEQ proof in the proofs to send.
+	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation
 	 * @returns {SendResponse}
 	 */
-	async send(
-		amount: number,
-		proofs: Array<Proof>,
-		options?: {
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			keysetId?: string;
-			offline?: boolean;
-			includeFees?: boolean;
-			includeDleq?: boolean;
-		}
-	): Promise<SendResponse> {
-		if (options?.includeDleq) {
+	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
+		let {
+			proofsWeHave,
+			offline,
+			includeFees,
+			includeDleq,
+			keysetId,
+			outputAmounts,
+			pubkey,
+			privkey
+		} = options || {};
+		if (includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
 		if (sumProofs(proofs) < amount) {
@@ -336,14 +318,14 @@ class CashuWallet {
 			amount,
 			options?.includeFees
 		);
-		const expectedFee = options?.includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
+		const expectedFee = includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
-			!options?.offline &&
+			!offline &&
 			(sumProofs(sendProofOffline) != amount + expectedFee || // if the exact amount cannot be selected
-				options?.outputAmounts ||
-				options?.pubkey ||
-				options?.privkey ||
-				options?.keysetId) // these options require a swap
+				outputAmounts ||
+				pubkey ||
+				privkey ||
+				keysetId) // these options require a swap
 		) {
 			// we need to swap
 			// input selection, needs fees because of the swap
@@ -352,12 +334,12 @@ class CashuWallet {
 				amount,
 				true
 			);
-			options?.proofsWeHave?.push(...keepProofsSelect);
+			proofsWeHave?.push(...keepProofsSelect);
 
 			let { keep, send } = await this.swap(amount, sendProofs, options);
 			keep = keepProofsSelect.concat(keep);
 
-			if (!options?.includeDleq) {
+			if (!includeDleq) {
 				send = stripDleq(send);
 			}
 
@@ -368,7 +350,7 @@ class CashuWallet {
 			throw new Error('Not enough funds available to send');
 		}
 
-		if (!options?.includeDleq) {
+		if (!includeDleq) {
 			return { keep: keepProofsOffline, send: stripDleq(sendProofOffline) };
 		}
 
@@ -478,41 +460,23 @@ class CashuWallet {
 	 * Splits and creates sendable tokens
 	 * if no amount is specified, the amount is implied by the cumulative amount of all proofs
 	 * if both amount and preference are set, but the preference cannot fulfill the amount, then we use the default split
-	 * @param amount amount to send while performing the optimal split (least proofs possible). can be set to undefined if preference is set
-	 * @param proofs proofs matching that amount
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.keysetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param options.includeFees? include estimated fees for the receiver to receive the proofs
-	 * @param options.proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param options.privkey? will create a signature on the @param proofs secrets if set
+	 *  @param {SwapOptions} [options] - Optional parameters for configuring the swap operation
 	 * @returns promise of the change- and send-proofs
 	 */
-	async swap(
-		amount: number,
-		proofs: Array<Proof>,
-		options?: {
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-			privkey?: string;
-			keysetId?: string;
-			includeFees?: boolean;
-		}
-	): Promise<SendResponse> {
+	async swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse> {
 		if (!options) options = {};
-		const keyset = await this.getKeys(options.keysetId);
+		let { includeFees, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+		const keyset = await this.getKeys(keysetId);
+
 		const proofsToSend = proofs;
 		let amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
 		let amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 		// send output selection
-		let sendAmounts = options?.outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
+		let sendAmounts = outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
 
 		// include the fees to spend the the outputs of the swap
-		if (options?.includeFees) {
+		if (includeFees) {
 			let outputFee = this.getFeesForKeyset(sendAmounts.length, keyset.id);
 			let sendAmountsFee = splitAmount(outputFee, keyset.keys);
 			while (
@@ -528,7 +492,7 @@ class CashuWallet {
 
 		// keep output selection
 		let keepAmounts;
-		if (options && !options.outputAmounts?.keepAmounts && options.proofsWeHave) {
+		if (options && !outputAmounts?.keepAmounts && options.proofsWeHave) {
 			keepAmounts = getKeepAmounts(
 				options.proofsWeHave,
 				amountToKeep,
@@ -558,7 +522,7 @@ class CashuWallet {
 			throw new Error('Amounts do not match for swap');
 		}
 
-		options.outputAmounts = {
+		outputAmounts = {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
@@ -566,10 +530,10 @@ class CashuWallet {
 			amountToSend,
 			proofsToSend,
 			keyset,
-			options?.outputAmounts,
-			options?.counter,
-			options?.pubkey,
-			options?.privkey
+			outputAmounts,
+			counter,
+			pubkey,
+			privkey
 		);
 		const { signatures } = await this.mint.swap(payload);
 		const swapProofs = this.constructProofs(
@@ -604,11 +568,10 @@ class CashuWallet {
 	async restore(
 		start: number,
 		count: number,
-		options?: {
-			keysetId?: string;
-		}
+		options?: RestoreOptions
 	): Promise<{ proofs: Array<Proof> }> {
-		const keys = await this.getKeys(options?.keysetId);
+		let { keysetId } = options || {};
+		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
@@ -662,33 +625,19 @@ class CashuWallet {
 	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
 	 * @param quote ID of mint quote
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
 	 * @returns proofs
 	 */
 	async mintProofs(
 		amount: number,
 		quote: string,
-		options?: {
-			keysetId?: string;
-			outputAmounts?: OutputAmounts;
-			proofsWeHave?: Array<Proof>;
-			counter?: number;
-			pubkey?: string;
-		}
+		options?: MintProofOptions
 	): Promise<Array<Proof>> {
-		const keyset = await this.getKeys(options?.keysetId);
-		if (!options?.outputAmounts && options?.proofsWeHave) {
-			options.outputAmounts = {
-				keepAmounts: getKeepAmounts(
-					options.proofsWeHave,
-					amount,
-					keyset.keys,
-					this._denominationTarget
-				),
+		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey } = options || {};
+		const keyset = await this.getKeys(keysetId);
+		if (!outputAmounts && proofsWeHave) {
+			outputAmounts = {
+				keepAmounts: getKeepAmounts(proofsWeHave, amount, keyset.keys, this._denominationTarget),
 				sendAmounts: []
 			};
 		}
@@ -696,9 +645,9 @@ class CashuWallet {
 		const { blindedMessages, secrets, blindingFactors } = this.createRandomBlindedMessages(
 			amount,
 			keyset,
-			options?.outputAmounts?.keepAmounts,
-			options?.counter,
-			options?.pubkey
+			outputAmounts?.keepAmounts,
+			counter,
+			pubkey
 		);
 		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
@@ -737,27 +686,22 @@ class CashuWallet {
 	 * Returns melt quote and change proofs
 	 * @param meltQuote ID of the melt quote
 	 * @param proofsToSend proofs to melt
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param options.privkey? optionally set a private key to unlock P2PK locked secrets
+	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof operation
 	 * @returns
 	 */
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
-		options?: {
-			keysetId?: string;
-			counter?: number;
-			privkey?: string;
-		}
+		options?: MeltProofOptions
 	): Promise<MeltProofsResponse> {
-		const keys = await this.getKeys(options?.keysetId);
+		let { keysetId, counter, privkey } = options || {};
+		const keys = await this.getKeys(keysetId);
 		const { blindedMessages, secrets, blindingFactors } = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,
 			keys.id,
-			options?.counter
+			counter
 		);
-		if (options?.privkey != undefined) {
+		if (privkey != undefined) {
 			proofsToSend = getSignedProofs(
 				proofsToSend.map((p: Proof) => {
 					return {
@@ -767,7 +711,7 @@ class CashuWallet {
 						secret: new TextEncoder().encode(p.secret)
 					};
 				}),
-				options.privkey
+				privkey
 			).map((p: NUT11Proof) => serializeProof(p));
 		}
 
