@@ -862,7 +862,7 @@ class CashuWallet {
 			sendOutputData = this.createOutputData(
 				amount,
 				keyset,
-				counter?counter+keepOutputData.length:undefined,
+				counter ? counter + keepOutputData.length : undefined,
 				pubkey,
 				outputAmounts?.sendAmounts,
 				p2pk
