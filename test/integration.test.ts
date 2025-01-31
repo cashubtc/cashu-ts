@@ -26,7 +26,7 @@ import {
 	sumProofs
 } from '../src/utils.js';
 import { OutputData, OutputDataFactory } from '../src/model/OutputData.js';
-import { randomBytes } from '@noble/hashes/utils';
+import { hexToBytes, randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -282,6 +282,18 @@ describe('mint api', () => {
 		});
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
+	});
+	test('mint deterministic', async () => {
+		const hexSeed = bytesToHex(randomBytes(64));
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const keys = await wallet.getKeys();
+
+		const data = OutputData.createSingleDeterministicData(1, hexToBytes(hexSeed), 1, keys.id);
+		const quote = await wallet.createMintQuote(1);
+		await new Promise((r) => setTimeout(r, 1500));
+		const proof = await wallet.mintProofs(1, quote.quote, { outputData: [data] });
 	});
 	test('websocket updates', async () => {
 		const mint = new CashuMint(mintUrl);

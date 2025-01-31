@@ -11,11 +11,13 @@ import {
 	MintQuoteResponse,
 	MintQuoteState
 } from '../src/model/types/index.js';
-import { getDecodedToken } from '../src/utils.js';
+import { bytesToNumber, getDecodedToken } from '../src/utils.js';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
 import { MintInfo } from '../src/model/MintInfo.js';
 import { OutputData } from '../src/model/OutputData.js';
+import { hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex } from '@noble/hashes/utils';
 
 injectWebSocketImpl(WebSocket);
 
@@ -656,6 +658,38 @@ describe('deterministic', () => {
 			)
 			.catch((e) => e);
 		expect(result).toEqual(new Error('cannot create deterministic messages without seed'));
+	});
+	test.each([
+		[
+			0,
+			'485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae',
+			'ad00d431add9c673e843d4c2bf9a778a5f402b985b8da2d5550bf39cda41d679'
+		],
+		[
+			1,
+			'8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270',
+			'967d5232515e10b81ff226ecf5a9e2e2aff92d66ebc3edf0987eb56357fd6248'
+		],
+		[
+			2,
+			'bc628c79accd2364fd31511216a0fab62afd4a18ff77a20deded7b858c9860c8',
+			'b20f47bb6ae083659f3aa986bfa0435c55c6d93f687d51a01f26862d9b9a4899'
+		]
+	])('deterministic OutputData: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
+		const hexSeed =
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
+
+		const numberR = bytesToNumber(hexToBytes(r));
+		const decoder = new TextDecoder();
+
+		const data = OutputData.createSingleDeterministicData(
+			0,
+			hexToBytes(hexSeed),
+			counter,
+			'009a1f293253e41e'
+		);
+		expect(decoder.decode(data.secret)).toBe(secret);
+		expect(data.blindingFactor).toBe(numberR);
 	});
 });
 

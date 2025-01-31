@@ -49,7 +49,7 @@ export function splitAmount(
 			);
 		}
 		split.forEach((amt: number) => {
-			if (!hasCorrespondingKey(amt, keyset)) {
+			if (!hasCorrespondingKey(amt, keyset) && amt !== 0) {
 				throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 			}
 		});
