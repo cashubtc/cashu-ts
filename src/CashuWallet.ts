@@ -7,7 +7,7 @@ import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
-import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
