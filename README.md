@@ -46,7 +46,7 @@ Supported token formats:
 
 ## Usage
 
-Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
+Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
 ### Install
 
@@ -114,29 +114,3 @@ Contributions are very welcome.
 
 If you want to contribute, please open an Issue or a PR.
 If you open a PR, please do so from the `development` branch as the base branch.
-
-### Version
-
-```
-* `main`
-|\
-|\ \
-| | * `hotfix`
-| |
-| * `staging`
-| |\
-| |\ \
-| | | * `bugfix`
-| | |
-| | * `development`
-| | |\
-| | | * `feature1`
-| | | |
-| | |/
-| | *
-| | |\
-| | | * `feature2`
-| | |/
-| |/
-|/ (create new version)
-```
