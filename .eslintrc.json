@@ -10,7 +10,6 @@
 
 	"rules": {
 		"@typescript-eslint/no-unused-vars": "error",
-		"@typescript-eslint/consistent-type-definitions": ["warn", "type"],
 		"@typescript-eslint/array-type": ["error", { "default": "generic" }],
 		"require-await": "off",
 		"@typescript-eslint/require-await": "error",
