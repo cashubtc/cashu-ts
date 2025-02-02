@@ -759,13 +759,7 @@ class CashuWallet {
 		if (!supported) {
 			throw new Error('Mint does not support NUT-15');
 		}
-		if (
-			!params?.filter((method) => {
-				if (method.method === 'bolt11' && method.unit === this.unit) {
-					return true;
-				}
-			}).length
-		) {
+		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this.unit)) {
 			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
 		}
 		const mppOption: MPPOption = {
