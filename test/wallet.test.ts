@@ -12,7 +12,6 @@ import {
 	MintQuoteState
 } from '../src/model/types/index.js';
 import { getDecodedToken } from '../src/utils.js';
-import { Proof } from '@cashu/crypto/modules/common';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
 import { MintInfo } from '../src/model/MintInfo.js';
@@ -741,30 +740,43 @@ describe('WebSocket Updates', () => {
 	});
 });
 describe('multi mint', async () => {
-	const mintInfo = JSON.parse('{"name":"Cashu mint","pubkey":"023ef9a3cda9945d5e784e478d3bd0c8d39726bcb3ca11098fe685a95d3f889d28","version":"Nutshell/0.16.4","contact":[],"time":1737973290,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"20":{"supported":true},"15":{"methods":[{"method":"bolt11","unit":"sat"}]},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}');
+	const mintInfo = JSON.parse(
+		'{"name":"Cashu mint","pubkey":"023ef9a3cda9945d5e784e478d3bd0c8d39726bcb3ca11098fe685a95d3f889d28","version":"Nutshell/0.16.4","contact":[],"time":1737973290,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"20":{"supported":true},"15":{"methods":[{"method":"bolt11","unit":"sat"}]},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}'
+	);
 	test('multi path melt quotes', async () => {
 		server.use(
-			http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfo))
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfo);
+			})
 		);
 		server.use(
-			http.post(mintUrl + '/v1/melt/quote/bolt11', () => {
-				return HttpResponse.json({
-					"quote":"K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D",
-					"amount":1,
-					"fee_reserve":2,
-					"paid":false,
-					"state":"UNPAID",
-					"expiry":1673972705,
-					"payment_preimage":null,
-					"change":null
-				});
-			})
+			http.post<any, { options: { mpp: number } }>(
+				mintUrl + '/v1/melt/quote/bolt11',
+				async ({ request }) => {
+					const body = await request.json();
+					if (!body?.options.mpp) {
+						return new HttpResponse('No MPP', { status: 400 });
+					}
+					return HttpResponse.json({
+						quote: 'K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D',
+						amount: 1,
+						fee_reserve: 2,
+						paid: false,
+						state: 'UNPAID',
+						expiry: 1673972705,
+						payment_preimage: null,
+						change: null
+					});
+				}
+			)
 		);
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
-		const invoice = "lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju";
+		const invoice =
+			'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
 		const meltQuote = await wallet.createMultiPathMeltQuote(invoice, 1);
 		expect(meltQuote.amount).toBe(1);
-		expect(meltQuote.quote).toBe("K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D");
-	})
+		expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
+		await expect(wallet.createMeltQuote(invoice)).rejects.toThrow();
+	});
 });
