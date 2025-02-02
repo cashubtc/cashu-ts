@@ -809,7 +809,8 @@ describe('multi mint', async () => {
 		expect(meltQuote.amount).toBe(1);
 		expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
 		await expect(wallet.createMeltQuote(invoice)).rejects.toThrow();
-
+	});
+});
 describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to pk with locktime and single refund key', async () => {
 		const wallet = new CashuWallet(mint);
