@@ -31,6 +31,24 @@ export type MeltQuotePayload = {
 	 * Request to be melted to
 	 */
 	request: string;
+	/**
+	 * Melt Quote options (e.g. multi-path payments NUT-15)
+	 */
+	options?: MeltQuoteOptions;
+};
+
+/**
+ * Melt quote specific options
+ */
+export type MeltQuoteOptions = {
+	mpp: MPPOption;
+};
+
+/**
+ * Multi path payments option
+ */
+export type MPPOption = {
+	amount: number;
 };
 
 /**

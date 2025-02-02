@@ -40,6 +40,8 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
+	MPPOption,
+	MeltQuoteOptions,
 	SwapTransaction
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
@@ -168,6 +170,17 @@ class CashuWallet {
 	async getMintInfo(): Promise<MintInfo> {
 		const infoRes = await this.mint.getInfo();
 		this._mintInfo = new MintInfo(infoRes);
+		return this._mintInfo;
+	}
+
+	/**
+	 * Get stored information about the mint or request it if not loaded.
+	 * @returns mint info
+	 */
+	async lazyGetMintInfo(): Promise<MintInfo> {
+		if (!this._mintInfo) {
+			return await this.getMintInfo();
+		}
 		return this._mintInfo;
 	}
 
@@ -727,6 +740,38 @@ class CashuWallet {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
+		};
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		return meltQuote;
+	}
+
+	/**
+	 * Requests a multi path melt quote from the mint.
+	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @param partialAmount the partial amount of the invoice's total to be paid by this instance
+	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
+	 */
+	async createMultiPathMeltQuote(
+		invoice: string,
+		partialAmount: number
+	): Promise<MeltQuoteResponse> {
+		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
+		if (!supported) {
+			throw new Error('Mint does not support NUT-15');
+		}
+		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this.unit)) {
+			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
+		}
+		const mppOption: MPPOption = {
+			amount: partialAmount
+		};
+		const meltOptions: MeltQuoteOptions = {
+			mpp: mppOption
+		};
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice,
+			options: meltOptions
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
