@@ -1,6 +1,7 @@
 import { CashuMint } from './CashuMint.js';
 import { CashuWallet } from './CashuWallet.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
+import { OutputData } from './model/OutputData.js';
 import { setGlobalRequestOptions } from './request.js';
 import {
 	getEncodedToken,
@@ -18,6 +19,7 @@ export {
 	CashuMint,
 	CashuWallet,
 	PaymentRequest,
+	OutputData,
 	getDecodedToken,
 	getEncodedToken,
 	getEncodedTokenV4,
