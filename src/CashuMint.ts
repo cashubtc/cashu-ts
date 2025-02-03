@@ -37,6 +37,8 @@ import { MintInfo } from './model/MintInfo.js';
 class CashuMint {
 	private ws?: WSConnection;
 	private _mintInfo?: MintInfo;
+	private _authProofGetter?: () => Promise<string>;
+	private _checkNut22 = false;
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
@@ -44,10 +46,14 @@ class CashuMint {
 	constructor(
 		private _mintUrl: string,
 		private _customRequest?: typeof request,
-		private _authProofGetter?: () => Promise<string>
+		authProofGetter?: () => Promise<string>
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
+		if (authProofGetter) {
+			this._checkNut22 = true;
+			this._authProofGetter = authProofGetter;
+		}
 	}
 
 	get mintUrl() {
@@ -536,6 +542,9 @@ class CashuMint {
 	}
 
 	async handleBlindAuth() {
+		if (!this._checkNut22) {
+			return;
+		}
 		const info = await this.getLazyMintInfo();
 		if (info.requiresBlindAuthToken('/v1/swap')) {
 			if (!this._authProofGetter) {
