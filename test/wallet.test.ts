@@ -961,8 +961,8 @@ describe('Blind Authentication', () => {
 		);
 		const wallet = new CashuWallet(mint);
 		const info = await wallet.getMintInfo();
-		const mintRequiresAuth = info.isProtectedEndpoint('/v1/mint/bolt11');
-		const restoreRequiresAuth = info.isProtectedEndpoint('v1/restore');
+		const mintRequiresAuth = info.requiresBlindAuthToken('/v1/mint/bolt11');
+		const restoreRequiresAuth = info.requiresBlindAuthToken('v1/restore');
 		expect(mintRequiresAuth).toBeTruthy();
 		expect(restoreRequiresAuth).toBeFalsy();
 	});
