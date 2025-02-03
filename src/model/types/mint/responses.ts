@@ -103,6 +103,11 @@ export type GetInfoResponse = {
 			// WebSockets
 			supported: Array<WebSocketSupport>;
 		};
+		'22'?: {
+			// Blind Authentication
+			bat_max_mint: number;
+			protected_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
+		};
 	};
 	motd?: string;
 };
