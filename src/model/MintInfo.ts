@@ -53,7 +53,7 @@ export class MintInfo {
 		}
 	}
 
-	isProtectedEndpoint(path: string) {
+	requiresBlindAuthToken(path: string) {
 		if (!this._protectedEnpoints) {
 			return false;
 		}
