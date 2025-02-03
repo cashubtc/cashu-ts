@@ -36,6 +36,7 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
 - [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
 - [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
+- [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md)
 
 Supported token formats:
 
@@ -46,7 +47,7 @@ Supported token formats:
 
 ## Usage
 
-Go to the [docs](https://cashubtc.github.io/cashu-ts/docs) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
+Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
 ### Install
 
@@ -60,7 +61,7 @@ npm i @cashu/cashu-ts
 
 ```typescript
 import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
-const mintUrl = 'http://localhost:3338'; // the mint URL
+const mintUrl = 'http://localhost:3338';
 const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
 await wallet.loadMint(); // persist wallet.keys and wallet.keysets to avoid calling loadMint() in the future
@@ -68,7 +69,7 @@ const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
 if (mintQuoteChecked.state == MintQuoteState.PAID) {
-	const { proofs } = await wallet.mintProofs(64, mintQuote.quote);
+	const proofs = await wallet.mintProofs(64, mintQuote.quote);
 }
 ```
 
@@ -114,29 +115,3 @@ Contributions are very welcome.
 
 If you want to contribute, please open an Issue or a PR.
 If you open a PR, please do so from the `development` branch as the base branch.
-
-### Version
-
-```
-* `main`
-|\
-|\ \
-| | * `hotfix`
-| |
-| * `staging`
-| |\
-| |\ \
-| | | * `bugfix`
-| | |
-| | * `development`
-| | |\
-| | | * `feature1`
-| | | |
-| | |/
-| | *
-| | |\
-| | | * `feature2`
-| | |/
-| |/
-|/ (create new version)
-```

@@ -40,28 +40,18 @@ export function splitAmount(
 	order?: 'desc' | 'asc'
 ): Array<number> {
 	if (split) {
-		if (split.reduce((a: number, b: number) => a + b, 0) > value) {
-			throw new Error(
-				`Split is greater than total amount: ${split.reduce(
-					(a: number, b: number) => a + b,
-					0
-				)} > ${value}`
-			);
+		const totalSplitAmount = sumArray(split);
+		if (totalSplitAmount > value) {
+			throw new Error(`Split is greater than total amount: ${totalSplitAmount} > ${value}`);
 		}
-		split.forEach((amt: number) => {
-			if (!hasCorrespondingKey(amt, keyset)) {
-				throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
-			}
-		});
-		value =
-			value -
-			split.reduce((curr: number, acc: number) => {
-				return curr + acc;
-			}, 0);
+		if (split.some((amt) => !hasCorrespondingKey(amt, keyset))) {
+			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
+		}
+		value = value - sumArray(split);
 	} else {
 		split = [];
 	}
-	const sortedKeyAmounts = getKeysetAmounts(keyset);
+	const sortedKeyAmounts = getKeysetAmounts(keyset, 'desc');
 	sortedKeyAmounts.forEach((amt: number) => {
 		const q = Math.floor(value / amt);
 		for (let i = 0; i < q; ++i) split?.push(amt);
@@ -488,11 +478,10 @@ export class MessageQueue {
  * Removes all traces of DLEQs from a list of proofs
  * @param proofs The list of proofs that dleq should be stripped from
  */
-export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq' | 'dleqValid'>> {
+export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
 	return proofs.map((p) => {
 		const newP = { ...p };
 		delete newP['dleq'];
-		delete newP['dleqValid'];
 		return newP;
 	});
 }
@@ -578,4 +567,8 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	const binaryToken = bytes.slice(5);
 	const decoded = decodeCBOR(binaryToken) as TokenV4Template;
 	return tokenFromTemplate(decoded);
+}
+
+function sumArray(arr: Array<number>) {
+	return arr.reduce((a, c) => a + c, 0);
 }

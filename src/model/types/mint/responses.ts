@@ -55,6 +55,7 @@ export type GetInfoResponse = {
 	version: string;
 	description?: string;
 	description_long?: string;
+	icon_url?: string;
 	contact: Array<MintContactInfo>;
 	nuts: {
 		'4': {
@@ -102,6 +103,10 @@ export type GetInfoResponse = {
 		'17'?: {
 			// WebSockets
 			supported: Array<WebSocketSupport>;
+		};
+		'20'?: {
+			// Locked Mint Quote
+			supported: boolean;
 		};
 		'22'?: {
 			// Blind Authentication
@@ -183,7 +188,13 @@ export type MintQuoteResponse = {
 	 * Timestamp of when the quote expires
 	 */
 	expiry: number;
+	/**
+	 * Public key the quote is locked to
+	 */
+	pubkey?: string;
 } & ApiError;
+
+export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 
 /**
  * Response from the mint after requesting a mint
@@ -197,7 +208,7 @@ export type MintResponse = {
  */
 export type PostRestoreResponse = {
 	outputs: Array<SerializedBlindedMessage>;
-	promises: Array<SerializedBlindedSignature>;
+	signatures: Array<SerializedBlindedSignature>;
 };
 
 /*
