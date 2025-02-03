@@ -16,12 +16,11 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse,
-	Proof
+	MeltQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
-import { getEncodedAuthToken, isObj, joinUrls, sanitizeUrl } from './utils.js';
+import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
 	MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated
@@ -31,11 +30,13 @@ import {
 	handleMintQuoteResponseDeprecated
 } from './legacy/nut-04.js';
 import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
+import { MintInfo } from './model/MintInfo.js';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
 class CashuMint {
 	private ws?: WSConnection;
+	private _mintInfo?: MintInfo;
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
@@ -43,23 +44,14 @@ class CashuMint {
 	constructor(
 		private _mintUrl: string,
 		private _customRequest?: typeof request,
-		private _authProofs?: Array<Proof>
+		private _authProofGetter?: () => Promise<string>
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
-		this._authProofs = _authProofs;
 	}
 
 	get mintUrl() {
 		return this._mintUrl;
-	}
-
-	popBlindAuthToken() {
-		const proof = this._authProofs?.pop();
-		if (!proof) {
-			throw new Error('No more proofs to pop');
-		}
-		return getEncodedAuthToken(proof);
 	}
 
 	/**
@@ -83,6 +75,15 @@ class CashuMint {
 	 */
 	async getInfo(): Promise<GetInfoResponse> {
 		return CashuMint.getInfo(this._mintUrl, this._customRequest);
+	}
+
+	async getLazyMintInfo(): Promise<MintInfo> {
+		if (this._mintInfo) {
+			return this._mintInfo;
+		}
+		const data = await CashuMint.getInfo(this._mintUrl, this._customRequest);
+		this._mintInfo = new MintInfo(data);
+		return this._mintInfo;
 	}
 
 	/**
@@ -119,7 +120,7 @@ class CashuMint {
 	 * @returns signed outputs
 	 */
 	async swap(swapPayload: SwapPayload): Promise<SwapResponse> {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.swap(this._mintUrl, swapPayload, this._customRequest, blindAuthToken);
 	}
 
@@ -153,7 +154,7 @@ class CashuMint {
 	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
 	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.createMintQuote(
 			this._mintUrl,
 			mintQuotePayload,
@@ -192,7 +193,7 @@ class CashuMint {
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
 	async checkMintQuote(quote: string): Promise<MintQuoteResponse> {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.checkMintQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
 	}
 
@@ -230,7 +231,7 @@ class CashuMint {
 	 * @returns serialized blinded signatures
 	 */
 	async mint(mintPayload: MintPayload) {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.mint(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
 	}
 
@@ -273,7 +274,7 @@ class CashuMint {
 	 * @returns
 	 */
 	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.createMeltQuote(
 			this._mintUrl,
 			meltQuotePayload,
@@ -323,7 +324,7 @@ class CashuMint {
 	 * @returns
 	 */
 	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.checkMeltQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
 	}
 
@@ -367,7 +368,7 @@ class CashuMint {
 	 * @returns
 	 */
 	async melt(meltPayload: MeltPayload): Promise<MeltQuoteResponse> {
-		const blindAuthToken = this.popBlindAuthToken();
+		const blindAuthToken = await this.handleBlindAuth();
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
 	/**
@@ -532,6 +533,17 @@ class CashuMint {
 
 	get webSocketConnection() {
 		return this.ws;
+	}
+
+	async handleBlindAuth() {
+		const info = await this.getLazyMintInfo();
+		if (info.requiresBlindAuthToken('/v1/swap')) {
+			if (!this._authProofGetter) {
+				throw new Error('Can not call a protected endpoint without authProofGetter');
+			}
+			return this._authProofGetter();
+		}
+		return undefined;
 	}
 }
 
