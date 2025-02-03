@@ -3,6 +3,7 @@ import { CashuWallet } from './CashuWallet.js';
 import { CashuAuthMint } from './CashuAuthMint.js';
 import { CashuAuthWallet } from './CashuAuthWallet.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
+import { OutputData } from './model/OutputData.js';
 import { setGlobalRequestOptions } from './request.js';
 import {
 	getEncodedToken,
@@ -22,6 +23,7 @@ export {
 	CashuAuthMint,
 	CashuAuthWallet,
 	PaymentRequest,
+	OutputData,
 	getDecodedToken,
 	getEncodedToken,
 	getEncodedTokenV4,
