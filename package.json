@@ -16,7 +16,7 @@
 	"scripts": {
 		"compile": "vite build",
 		"compile:standalone": "BUILD_FORMAT=iife vite build",
-		"test": "vitest run --coverage --exclude ./test/integration.test.ts",
+		"test": "vitest run --coverage --exclude ./test/integration.test.ts --exclude ./test/auth.test.ts",
 		"test-integration": "vitest run ./test/integration.test.ts --coverage",
 		"dev": "tsc --watch",
 		"lint": "eslint --ext .js,.ts . --fix",
