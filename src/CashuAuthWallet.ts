@@ -3,7 +3,6 @@ import {
 	type MintKeys,
 	type MintKeyset,
 	type Proof,
-	GetInfoResponse,
 	BlindAuthMintPayload
 } from './model/types/index.js';
 import { OutputData } from './model/OutputData.js';
@@ -17,7 +16,6 @@ class CashuAuthWallet {
 	private _keysetId: string | undefined;
 	private _keysets: Array<MintKeyset> = [];
 	private _unit = 'auth';
-	private _mintInfo: GetInfoResponse | undefined = undefined;
 
 	mint: CashuAuthMint;
 
@@ -26,7 +24,6 @@ class CashuAuthWallet {
 	 * @param options.unit optionally set unit (default is 'sat')
 	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
 	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
-	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
 	 * This can lead to poor performance, in which case the seed should be directly provided
@@ -36,7 +33,6 @@ class CashuAuthWallet {
 		options?: {
 			keys?: Array<MintKeys> | MintKeys;
 			keysets?: Array<MintKeyset>;
-			mintInfo?: GetInfoResponse;
 		}
 	) {
 		this.mint = mint;
@@ -64,12 +60,6 @@ class CashuAuthWallet {
 	}
 	get keysets(): Array<MintKeyset> {
 		return this._keysets;
-	}
-	get mintInfo(): GetInfoResponse {
-		if (!this._mintInfo) {
-			throw new Error('Mint info not loaded');
-		}
-		return this._mintInfo;
 	}
 
 	/**
