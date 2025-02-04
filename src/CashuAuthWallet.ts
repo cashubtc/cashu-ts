@@ -8,8 +8,7 @@ import {
 import { OutputData } from './model/OutputData.js';
 
 /**
- * Class that represents a Cashu wallet.
- * This class should act as the entry point for this library
+ * Class that represents a Cashu NUT-22 wallet.
  */
 class CashuAuthWallet {
 	private _keys: Map<string, MintKeys> = new Map();
@@ -20,12 +19,9 @@ class CashuAuthWallet {
 	mint: CashuAuthMint;
 
 	/**
-	 * @param mint Cashu mint instance is used to make api calls
-	 * @param options.unit optionally set unit (default is 'sat')
+	 * @param mint NUT-22 auth mint instance
 	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
 	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
-	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
-	 * @param options.bip39seed BIP39 seed for deterministic secrets.
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
@@ -158,10 +154,6 @@ class CashuAuthWallet {
 	 * @param amount amount to request
 	 * @param clearAuthToken clearAuthToken to mint
 	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @param options.preference? Deprecated. Use `outputAmounts` instead. Optional preference for splitting proofs into specific amounts.
-	 * @param options.outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param options.counter? optionally set counter to derive secret deterministically. CashuAuthWallet class must be initialized with seed phrase to take effect
-	 * @param options.pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns proofs
 	 */
 	async mintProofs(

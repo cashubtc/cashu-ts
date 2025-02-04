@@ -27,7 +27,7 @@ class CashuAuthMint {
 	 * Mints new Blinded Authentication tokens by requesting blind signatures on the provided outputs.
 	 * @param mintUrl
 	 * @param mintPayload Payload containing the outputs to get blind signatures on
-	 * @param clearAuthToken A clear auth token obtained out-of-band containing the outputs to get blind signatures on
+	 * @param clearAuthToken A NUT-21 clear auth token
 	 * @param customRequest
 	 * @returns serialized blinded signatures
 	 */
@@ -55,8 +55,9 @@ class CashuAuthMint {
 		return data;
 	}
 	/**
-	 * Mints new tokens by requesting blind signatures on the provided outputs.
+	 * Mints new Blinded Authentication tokens by requesting blind signatures on the provided outputs.
 	 * @param mintPayload Payload containing the outputs to get blind signatures on
+	 * @param clearAuthToken A NUT-21 clear auth token
 	 * @returns serialized blinded signatures
 	 */
 	async mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string) {
@@ -64,7 +65,7 @@ class CashuAuthMint {
 	}
 
 	/**
-	 * Get the mints public keys
+	 * Get the mints public NUT-22 keys
 	 * @param mintUrl
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
 	 * @param customRequest
@@ -94,7 +95,7 @@ class CashuAuthMint {
 		return data;
 	}
 	/**
-	 * Get the mints public keys
+	 * Get the mints public NUT-22 keys
 	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
 	 * @returns the mints public keys
 	 */
@@ -107,7 +108,7 @@ class CashuAuthMint {
 		return allKeys;
 	}
 	/**
-	 * Get the mints keysets in no specific order
+	 * Get the mints NUT-22 keysets in no specific order
 	 * @param mintUrl
 	 * @param customRequest
 	 * @returns all the mints past and current keysets.
@@ -123,7 +124,7 @@ class CashuAuthMint {
 	}
 
 	/**
-	 * Get the mints keysets in no specific order
+	 * Get the mints NUT-22 keysets in no specific order
 	 * @returns all the mints past and current keysets.
 	 */
 	async getKeySets(): Promise<MintAllKeysets> {
