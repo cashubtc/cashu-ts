@@ -7,7 +7,7 @@ import type {
 import request from './request.js';
 import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 /**
- * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
+ * Class represents Cashu Auth Mint API. This class contains Lower level functions that are implemented by CashuAuthWallet.
  */
 class CashuAuthMint {
 	/**
@@ -24,9 +24,10 @@ class CashuAuthMint {
 	}
 
 	/**
-	 * Mints new tokens by requesting blind signatures on the provided outputs.
+	 * Mints new Blinded Authentication tokens by requesting blind signatures on the provided outputs.
 	 * @param mintUrl
 	 * @param mintPayload Payload containing the outputs to get blind signatures on
+	 * @param clearAuthToken A clear auth token obtained out-of-band containing the outputs to get blind signatures on
 	 * @param customRequest
 	 * @returns serialized blinded signatures
 	 */
