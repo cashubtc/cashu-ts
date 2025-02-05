@@ -37,7 +37,7 @@ import { MintInfo } from './model/MintInfo.js';
 class CashuMint {
 	private ws?: WSConnection;
 	private _mintInfo?: MintInfo;
-	private _authProofGetter?: () => Promise<string>;
+	private _authTokenGetter?: () => Promise<string>;
 	private _checkNut22 = false;
 	/**
 	 * @param _mintUrl requires mint URL to create this object
@@ -46,15 +46,17 @@ class CashuMint {
 	constructor(
 		private _mintUrl: string,
 		private _customRequest?: typeof request,
-		authProofGetter?: () => Promise<string>
+		authTokenGetter?: () => Promise<string>
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
-		if (authProofGetter) {
+		if (authTokenGetter) {
 			this._checkNut22 = true;
-			this._authProofGetter = authProofGetter;
+			this._authTokenGetter = authTokenGetter;
 		}
 	}
+
+	//TODO: v3 - refactor CashuMint to take two or less args.
 
 	get mintUrl() {
 		return this._mintUrl;
@@ -547,10 +549,10 @@ class CashuMint {
 		}
 		const info = await this.getLazyMintInfo();
 		if (info.requiresBlindAuthToken('/v1/swap')) {
-			if (!this._authProofGetter) {
+			if (!this._authTokenGetter) {
 				throw new Error('Can not call a protected endpoint without authProofGetter');
 			}
-			return this._authProofGetter();
+			return this._authTokenGetter();
 		}
 		return undefined;
 	}
