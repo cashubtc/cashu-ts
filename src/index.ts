@@ -1,7 +1,5 @@
 import { CashuMint } from './CashuMint.js';
 import { CashuWallet } from './CashuWallet.js';
-import { CashuAuthMint } from './CashuAuthMint.js';
-import { CashuAuthWallet } from './CashuAuthWallet.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
 import { setGlobalRequestOptions } from './request.js';
 import {
@@ -14,6 +12,7 @@ import {
 	getEncodedTokenBinary,
 	hasValidDleq
 } from './utils.js';
+import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
 
 export * from './model/types/index.js';
 
@@ -22,6 +21,8 @@ export {
 	CashuWallet,
 	CashuAuthMint,
 	CashuAuthWallet,
+	getEncodedAuthToken,
+	getBlindedAuthToken,
 	PaymentRequest,
 	getDecodedToken,
 	getEncodedToken,
