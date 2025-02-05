@@ -25,3 +25,5 @@ export async function getBlindedAuthToken(amount: number, url: string, clearAuth
 	const authProofs = await authWallet.mintProofs(amount, clearAuthToken);
 	return authProofs.map((p) => getEncodedAuthToken(p));
 }
+
+export { CashuAuthMint, CashuAuthWallet };
