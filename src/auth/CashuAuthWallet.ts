@@ -1,11 +1,6 @@
-import { CashuAuthMint } from './CashuAuthMint.js';
-import {
-	type MintKeys,
-	type MintKeyset,
-	type Proof,
-	BlindAuthMintPayload
-} from './model/types/index.js';
-import { OutputData } from './model/OutputData.js';
+import { OutputData } from '../model/OutputData';
+import { BlindAuthMintPayload, MintKeys, MintKeyset, Proof } from '../model/types';
+import { CashuAuthMint } from './CashuAuthMint';
 
 /**
  * Class that represents a Cashu NUT-22 wallet.
