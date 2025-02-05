@@ -1,11 +1,12 @@
-import type {
+import {
 	BlindAuthMintPayload,
 	BlindAuthMintResponse,
 	MintActiveKeys,
 	MintAllKeysets
-} from './model/types/index.js';
-import request from './request.js';
-import { isObj, joinUrls, sanitizeUrl } from './utils.js';
+} from '../model/types';
+import request from '../request';
+import { isObj, joinUrls, sanitizeUrl } from '../utils';
+
 /**
  * Class represents Cashu Auth Mint API. This class contains Lower level functions that are implemented by CashuAuthWallet.
  */

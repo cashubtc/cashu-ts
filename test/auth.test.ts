@@ -1,9 +1,7 @@
 import { test, describe, expect } from 'vitest';
-import { CashuAuthWallet } from '../src/CashuAuthWallet.ts';
-import { CashuAuthMint } from '../src/CashuAuthMint.ts';
 import { CashuWallet } from '../src/CashuWallet';
 import { CashuMint } from '../src/CashuMint';
-import { getEncodedAuthToken } from '../src/utils';
+import { getBlindedAuthToken } from '../src/auth';
 
 async function getClearAuthToken() {
 	const res = await fetch(process.env.OICD_TOKEN_ENDPOINT!, {
@@ -40,19 +38,17 @@ class FakeDatabase {
 
 const db = new FakeDatabase();
 
+const mintUrl = 'https://auth.testnut.cashu.space';
+
 describe('NUT-22', () => {
 	test('Mint ecash from protected endpoint', async () => {
 		const clearAuthToken = await getClearAuthToken();
-		const authWallet = new CashuAuthWallet(new CashuAuthMint('https://auth.testnut.cashu.space'));
-		const authProofs = await authWallet.mintProofs(20, clearAuthToken);
-		expect(authProofs.length).toBe(20);
+		const blindedAuthToken = await getBlindedAuthToken(20, mintUrl, clearAuthToken);
+		db.addTokenToDb(blindedAuthToken);
 
-		const authToken = authProofs.map((p) => getEncodedAuthToken(p));
-		db.addTokenToDb(authToken);
+		expect(blindedAuthToken.length).toBe(20);
 
-		const wallet = new CashuWallet(
-			new CashuMint('https://auth.testnut.cashu.space', undefined, db.getTokenFromDb.bind(db))
-		);
+		const wallet = new CashuWallet(new CashuMint(mintUrl, undefined, db.getTokenFromDb.bind(db)));
 		const quote = await wallet.createMintQuote(1);
 		await new Promise((r) => setTimeout(r, 1000));
 		const proofs = await wallet.mintProofs(1, quote.quote);
