@@ -165,7 +165,11 @@ class CashuAuthWallet {
 			outputs: outputData.map((d) => d.blindedMessage)
 		};
 		const { signatures } = await this.mint.mint(mintPayload, clearAuthToken);
-		return outputData.map((d, i) => d.toProof(signatures[i], keyset));
+		const authProofs = outputData.map((d, i) => d.toProof(signatures[i], keyset));
+		if (authProofs.some((p) => !p.dleqValid)) {
+			throw new Error('Mint returned auth proofs with invalid DLEQ');
+		}
+		return authProofs;
 	}
 }
 
