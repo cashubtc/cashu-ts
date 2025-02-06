@@ -12,12 +12,17 @@ import {
 	getDecodedTokenBinary,
 	getEncodedTokenBinary
 } from './utils.js';
+import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
 
 export * from './model/types/index.js';
 
 export {
 	CashuMint,
 	CashuWallet,
+	CashuAuthMint,
+	CashuAuthWallet,
+	getEncodedAuthToken,
+	getBlindedAuthToken,
 	PaymentRequest,
 	OutputData,
 	getDecodedToken,
