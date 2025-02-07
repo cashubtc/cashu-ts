@@ -55,6 +55,7 @@ export type GetInfoResponse = {
 	version: string;
 	description?: string;
 	description_long?: string;
+	icon_url?: string;
 	contact: Array<MintContactInfo>;
 	nuts: {
 		'4': {
