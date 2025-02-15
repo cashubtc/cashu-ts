@@ -753,7 +753,7 @@ class CashuWallet {
 	 */
 	async createMultiPathMeltQuote(
 		invoice: string,
-		partialAmount: number
+		millisatPartialAmount: number
 	): Promise<MeltQuoteResponse> {
 		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
@@ -763,7 +763,7 @@ class CashuWallet {
 			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
 		}
 		const mppOption: MPPOption = {
-			amount: partialAmount
+			amount: millisatPartialAmount
 		};
 		const meltOptions: MeltQuoteOptions = {
 			mpp: mppOption
