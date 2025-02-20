@@ -1,3 +1,4 @@
+import { OutputDataFactory, OutputDataLike } from '../OutputData';
 import { Proof } from './wallet/index';
 
 export * from './mint/index';
@@ -31,6 +32,8 @@ export type ReceiveOptions = {
 	pubkey?: string;
 	privkey?: string;
 	requireDleq?: boolean;
+	outputData?: Array<OutputDataLike> | OutputDataFactory;
+	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 
 /**
@@ -55,6 +58,11 @@ export type SendOptions = {
 	offline?: boolean;
 	includeFees?: boolean;
 	includeDleq?: boolean;
+	outputData?: {
+		send?: Array<OutputDataLike> | OutputDataFactory;
+		keep?: Array<OutputDataLike> | OutputDataFactory;
+	};
+	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 
 /**
@@ -77,6 +85,11 @@ export type SwapOptions = {
 	privkey?: string;
 	keysetId?: string;
 	includeFees?: boolean;
+	outputData?: {
+		send?: Array<OutputDataLike> | OutputDataFactory;
+		keep?: Array<OutputDataLike> | OutputDataFactory;
+	};
+	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 
 export type RestoreOptions = {
@@ -97,6 +110,8 @@ export type MintProofOptions = {
 	proofsWeHave?: Array<Proof>;
 	counter?: number;
 	pubkey?: string;
+	outputData?: Array<OutputDataLike> | OutputDataFactory;
+	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
 };
 
 /**
