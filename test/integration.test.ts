@@ -386,7 +386,7 @@ describe('mint api', () => {
 
 		const privkey = 'd56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
 		const pubkey = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(privkey)));
-		
+
 		const quote = await wallet.createLockedMintQuote(63, pubkey);
 		const proofs = await wallet.mintProofs(63, quote, { privateKey: privkey });
 

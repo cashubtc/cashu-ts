@@ -627,7 +627,6 @@ class CashuWallet {
 			amounts
 		);
 
-
 		const { outputs, signatures } = await this.mint.restore({
 			outputs: outputData.map((d) => d.blindedMessage)
 		});
@@ -772,7 +771,7 @@ class CashuWallet {
 			if (!privateKey) {
 				throw new Error('Can not sign locked quote without private key');
 			}
-			const blindedMessages = newBlindingData.map((d) => d.blindedMessage)
+			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
 			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
 			mintPayload = {
 				outputs: blindedMessages,
