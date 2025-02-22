@@ -42,7 +42,8 @@ import {
 	type Token,
 	MPPOption,
 	MeltQuoteOptions,
-	SwapTransaction
+	SwapTransaction,
+	LockedMintQuoteResponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -55,6 +56,7 @@ import {
 	stripDleq,
 	sumProofs
 } from './utils.js';
+import { signMintQuote } from './crypto/nut-20.js';
 import {
 	OutputData,
 	OutputDataFactory,
@@ -655,6 +657,7 @@ class CashuWallet {
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
 	 * @param description optional description for the mint quote
+	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
 	async createMintQuote(amount: number, description?: string) {
@@ -664,6 +667,36 @@ class CashuWallet {
 			description: description
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
+	}
+
+	/**
+	 * Requests a mint quote from the mint that is locked to a public key.
+	 * @param amount Amount requesting for mint.
+	 * @param pubkey public key to lock the quote to
+	 * @param description optional description for the mint quote
+	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit.
+	 * The quote will be locked to the specified `pubkey`.
+	 */
+	async createLockedMintQuote(
+		amount: number,
+		pubkey: string,
+		description?: string
+	): Promise<LockedMintQuoteResponse> {
+		const { supported } = (await this.getMintInfo()).isSupported(20);
+		if (!supported) {
+			throw new Error('Mint does not support NUT-20');
+		}
+		const mintQuotePayload: MintQuotePayload = {
+			unit: this._unit,
+			amount: amount,
+			description: description,
+			pubkey: pubkey
+		};
+		const res = await this.mint.createMintQuote(mintQuotePayload);
+		if (!res.pubkey) {
+			throw new Error('Mint returned unlocked mint quote');
+		}
+		return res as LockedMintQuoteResponse;
 	}
 
 	/**
@@ -678,17 +711,28 @@ class CashuWallet {
 	/**
 	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
-	 * @param quote ID of mint quote
+	 * @param {string} quote - ID of mint quote (when quote is a string)
+	 * @param {LockedMintQuote} quote - containing the quote ID and unlocking private key (when quote is a LockedMintQuote)
 	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
 	 * @returns proofs
 	 */
 	async mintProofs(
 		amount: number,
+		quote: MintQuoteResponse,
+		options: MintProofOptions & { privateKey: string }
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
 		quote: string,
 		options?: MintProofOptions
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		options?: MintProofOptions & { privateKey?: string }
 	): Promise<Array<Proof>> {
 		let { outputAmounts } = options || {};
-		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData } = options || {};
+		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
 
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
@@ -697,7 +741,6 @@ class CashuWallet {
 				sendAmounts: []
 			};
 		}
-
 		let newBlindingData: Array<OutputData> = [];
 		if (outputData) {
 			if (isOutputDataFactory(outputData)) {
@@ -723,10 +766,24 @@ class CashuWallet {
 				p2pk
 			);
 		}
-		const mintPayload: MintPayload = {
-			outputs: newBlindingData.map((d) => d.blindedMessage),
-			quote: quote
-		};
+		let mintPayload: MintPayload;
+		if (typeof quote !== 'string') {
+			if (!privateKey) {
+				throw new Error('Can not sign locked quote without private key');
+			}
+			const blindedMessages = newBlindingData.map((d) => d.blindedMessage)
+			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote.quote,
+				signature: mintQuoteSignature
+			};
+		} else {
+			mintPayload = {
+				outputs: newBlindingData.map((d) => d.blindedMessage),
+				quote: quote
+			};
+		}
 		const { signatures } = await this.mint.mint(mintPayload);
 		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
 	}

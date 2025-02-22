@@ -5,7 +5,6 @@ import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
 import { vi } from 'vitest';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/curves/abstract/utils';
 import {
 	CheckStateEnum,
 	MeltQuoteState,
@@ -26,7 +25,7 @@ import {
 	sumProofs
 } from '../src/utils.js';
 import { OutputData, OutputDataFactory } from '../src/model/OutputData.js';
-import { hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -381,6 +380,19 @@ describe('mint api', () => {
 		});
 		mint.disconnectWebSocket();
 	}, 10000);
+	test('mint with signed quote and payload', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+
+		const privkey = 'd56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
+		const pubkey = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(privkey)));
+		
+		const quote = await wallet.createLockedMintQuote(63, pubkey);
+		const proofs = await wallet.mintProofs(63, quote, { privateKey: privkey });
+
+		expect(proofs).toBeDefined();
+		expect(proofs.length).toBeGreaterThan(0);
+	});
 });
 describe('dleq', () => {
 	test('mint and check dleq', async () => {
