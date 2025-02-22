@@ -7,13 +7,12 @@ import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client
 import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
 import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
 import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
-import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common/index';
+import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { CashuMint } from './CashuMint.js';
 import { BlindedMessage } from './model/BlindedMessage.js';
 import { MintInfo } from './model/MintInfo.js';
 import {
-	BlindingData,
 	GetInfoResponse,
 	MeltProofOptions,
 	MeltQuoteState,
@@ -40,7 +39,11 @@ import {
 	type SendResponse,
 	type SerializedBlindedMessage,
 	type SwapPayload,
-	type Token
+	type Token,
+	MPPOption,
+	MeltQuoteOptions,
+	SwapTransaction,
+	LockedMintQuoteResponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -53,6 +56,13 @@ import {
 	stripDleq,
 	sumProofs
 } from './utils.js';
+import { signMintQuote } from './crypto/nut-20.js';
+import {
+	OutputData,
+	OutputDataFactory,
+	OutputDataLike,
+	isOutputDataFactory
+} from './model/OutputData.js';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -76,6 +86,7 @@ class CashuWallet {
 	private _unit = DEFAULT_UNIT;
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
+	private _keepFactory: OutputDataFactory | undefined;
 
 	mint: CashuMint;
 
@@ -87,6 +98,7 @@ class CashuWallet {
 	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
 	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
+	 * @param options.keepFactory A function that will be used by all parts of the library that produce proofs to be kept (change, etc.).
 	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
@@ -98,6 +110,7 @@ class CashuWallet {
 			mintInfo?: GetInfoResponse;
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;
+			keepFactory?: OutputDataFactory;
 		}
 	) {
 		this.mint = mint;
@@ -121,6 +134,9 @@ class CashuWallet {
 				return;
 			}
 			throw new Error('bip39seed must be a valid UInt8Array');
+		}
+		if (options?.keepFactory) {
+			this._keepFactory = options.keepFactory;
 		}
 	}
 
@@ -156,6 +172,17 @@ class CashuWallet {
 	async getMintInfo(): Promise<MintInfo> {
 		const infoRes = await this.mint.getInfo();
 		this._mintInfo = new MintInfo(infoRes);
+		return this._mintInfo;
+	}
+
+	/**
+	 * Get stored information about the mint or request it if not loaded.
+	 * @returns mint info
+	 */
+	async lazyGetMintInfo(): Promise<MintInfo> {
+		if (!this._mintInfo) {
+			return await this.getMintInfo();
+		}
 		return this._mintInfo;
 	}
 
@@ -258,7 +285,8 @@ class CashuWallet {
 	 * @returns New token with newly created proofs, token entries that had errors
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
-		let { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
+			options || {};
 
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
@@ -270,23 +298,30 @@ class CashuWallet {
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		const { payload, blindingData } = this.createSwapPayload(
+		let newOutputData: { send: Array<OutputDataLike> | OutputDataFactory } | undefined = undefined;
+		if (outputData) {
+			newOutputData = { send: outputData };
+		} else if (this._keepFactory) {
+			newOutputData = { send: this._keepFactory };
+		}
+		const swapTransaction = this.createSwapPayload(
 			amount,
 			token.proofs,
 			keys,
 			outputAmounts,
 			counter,
 			pubkey,
-			privkey
+			privkey,
+			newOutputData,
+			p2pk
 		);
-		const { signatures } = await this.mint.swap(payload);
-		const freshProofs = this.constructProofs(
-			signatures,
-			blindingData.blindingFactors,
-			blindingData.secrets,
-			keys
-		);
-		return freshProofs;
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const orderedProofs: Array<Proof> = [];
+		swapTransaction.sortedIndices.forEach((s, o) => {
+			orderedProofs[s] = proofs[o];
+		});
+		return orderedProofs;
 	}
 
 	/**
@@ -297,7 +332,7 @@ class CashuWallet {
 	 * @returns {SendResponse}
 	 */
 	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
-		let {
+		const {
 			proofsWeHave,
 			offline,
 			includeFees,
@@ -305,7 +340,8 @@ class CashuWallet {
 			keysetId,
 			outputAmounts,
 			pubkey,
-			privkey
+			privkey,
+			outputData
 		} = options || {};
 		if (includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
@@ -325,7 +361,8 @@ class CashuWallet {
 				outputAmounts ||
 				pubkey ||
 				privkey ||
-				keysetId) // these options require a swap
+				keysetId ||
+				outputData) // these options require a swap
 		) {
 			// we need to swap
 			// input selection, needs fees because of the swap
@@ -336,14 +373,16 @@ class CashuWallet {
 			);
 			proofsWeHave?.push(...keepProofsSelect);
 
-			let { keep, send } = await this.swap(amount, sendProofs, options);
+			const sendRes = await this.swap(amount, sendProofs, options);
+			let { keep, send } = sendRes;
+			const serialized = sendRes.serialized;
 			keep = keepProofsSelect.concat(keep);
 
 			if (!includeDleq) {
 				send = stripDleq(send);
 			}
 
-			return { keep, send };
+			return { keep, send, serialized };
 		}
 
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
@@ -464,8 +503,9 @@ class CashuWallet {
 	 * @returns promise of the change- and send-proofs
 	 */
 	async swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse> {
-		if (!options) options = {};
-		let { includeFees, keysetId, outputAmounts, counter, pubkey, privkey } = options || {};
+		let { outputAmounts } = options || {};
+		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, outputData, p2pk } =
+			options || {};
 		const keyset = await this.getKeys(keysetId);
 
 		const proofsToSend = proofs;
@@ -492,21 +532,18 @@ class CashuWallet {
 
 		// keep output selection
 		let keepAmounts;
-		if (options && !outputAmounts?.keepAmounts && options.proofsWeHave) {
+		if (!outputAmounts?.keepAmounts && proofsWeHave) {
 			keepAmounts = getKeepAmounts(
-				options.proofsWeHave,
+				proofsWeHave,
 				amountToKeep,
 				keyset.keys,
 				this._denominationTarget
 			);
-		} else if (options.outputAmounts) {
-			if (
-				options.outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) !=
-				amountToKeep
-			) {
+		} else if (outputAmounts) {
+			if (outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) != amountToKeep) {
 				throw new Error('Keep amounts do not match amount to keep');
 			}
-			keepAmounts = options.outputAmounts.keepAmounts;
+			keepAmounts = outputAmounts.keepAmounts;
 		}
 
 		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
@@ -526,32 +563,37 @@ class CashuWallet {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts
 		};
-		const { payload, blindingData } = this.createSwapPayload(
+
+		const keepOutputData = outputData?.keep || this._keepFactory;
+		const sendOutputData = outputData?.send;
+
+		const swapTransaction = this.createSwapPayload(
 			amountToSend,
 			proofsToSend,
 			keyset,
 			outputAmounts,
 			counter,
 			pubkey,
-			privkey
+			privkey,
+			{ keep: keepOutputData, send: sendOutputData },
+			p2pk
 		);
-		const { signatures } = await this.mint.swap(payload);
-		const swapProofs = this.constructProofs(
-			signatures,
-			blindingData.blindingFactors,
-			blindingData.secrets,
-			keyset
-		);
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const splitProofsToKeep: Array<Proof> = [];
 		const splitProofsToSend: Array<Proof> = [];
-		let amountToKeepCounter = 0;
-		swapProofs.forEach((proof: Proof) => {
-			if (amountToKeepCounter < amountToKeep) {
-				amountToKeepCounter += proof.amount;
-				splitProofsToKeep.push(proof);
-				return;
+		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
+		const reorderedProofs = Array(swapProofs.length);
+		swapTransaction.sortedIndices.forEach((s, i) => {
+			reorderedKeepVector[s] = swapTransaction.keepVector[i];
+			reorderedProofs[s] = swapProofs[i];
+		});
+		reorderedProofs.forEach((p, i) => {
+			if (reorderedKeepVector[i]) {
+				splitProofsToKeep.push(p);
+			} else {
+				splitProofsToSend.push(p);
 			}
-			splitProofsToSend.push(proof);
 		});
 		return {
 			keep: splitProofsToKeep,
@@ -570,30 +612,45 @@ class CashuWallet {
 		count: number,
 		options?: RestoreOptions
 	): Promise<{ proofs: Array<Proof> }> {
-		let { keysetId } = options || {};
+		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(0);
-		const { blindedMessages, blindingFactors, secrets } = this.createBlindedMessages(
-			amounts,
-			keys.id,
-			start
+		const outputData = OutputData.createDeterministicData(
+			amounts.length,
+			this._seed,
+			start,
+			keys,
+			amounts
 		);
 
-		const { outputs, signatures } = await this.mint.restore({ outputs: blindedMessages });
 
-		// Collect and map the secrets and blinding factors with the blinded messages that were returned from the mint
-		const validBlindingFactors = blindingFactors.filter((_: bigint, i: number) =>
-			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
-		);
-		const validSecrets = secrets.filter((_: Uint8Array, i: number) =>
-			outputs.map((o: SerializedBlindedMessage) => o.B_).includes(blindedMessages[i].B_)
-		);
+		const { outputs, signatures } = await this.mint.restore({
+			outputs: outputData.map((d) => d.blindedMessage)
+		});
+
+		const outputsWithSignatures: Array<{
+			signature: SerializedBlindedSignature;
+			data: OutputData;
+		}> = [];
+
+		for (let i = 0; i < outputs.length; i++) {
+			const data = outputData.find((d) => d.blindedMessage.B_ === outputs[i].B_);
+			if (!data) {
+				continue;
+			}
+			outputsWithSignatures[i] = {
+				signature: signatures[i],
+				data
+			};
+		}
+		outputsWithSignatures.forEach((o) => (o.data.blindedMessage.amount = o.signature.amount));
+
 		return {
-			proofs: this.constructProofs(signatures, validBlindingFactors, validSecrets, keys)
+			proofs: outputsWithSignatures.map((d) => d.data.toProof(d.signature, keys))
 		};
 	}
 
@@ -601,6 +658,7 @@ class CashuWallet {
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
 	 * @param description optional description for the mint quote
+	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
 	async createMintQuote(amount: number, description?: string) {
@@ -610,6 +668,36 @@ class CashuWallet {
 			description: description
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
+	}
+
+	/**
+	 * Requests a mint quote from the mint that is locked to a public key.
+	 * @param amount Amount requesting for mint.
+	 * @param pubkey public key to lock the quote to
+	 * @param description optional description for the mint quote
+	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit.
+	 * The quote will be locked to the specified `pubkey`.
+	 */
+	async createLockedMintQuote(
+		amount: number,
+		pubkey: string,
+		description?: string
+	): Promise<LockedMintQuoteResponse> {
+		const { supported } = (await this.getMintInfo()).isSupported(20);
+		if (!supported) {
+			throw new Error('Mint does not support NUT-20');
+		}
+		const mintQuotePayload: MintQuotePayload = {
+			unit: this._unit,
+			amount: amount,
+			description: description,
+			pubkey: pubkey
+		};
+		const res = await this.mint.createMintQuote(mintQuotePayload);
+		if (!res.pubkey) {
+			throw new Error('Mint returned unlocked mint quote');
+		}
+		return res as LockedMintQuoteResponse;
 	}
 
 	/**
@@ -624,16 +712,29 @@ class CashuWallet {
 	/**
 	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
-	 * @param quote ID of mint quote
+	 * @param {string} quote - ID of mint quote (when quote is a string)
+	 * @param {LockedMintQuote} quote - containing the quote ID and unlocking private key (when quote is a LockedMintQuote)
 	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
 	 * @returns proofs
 	 */
 	async mintProofs(
 		amount: number,
+		quote: MintQuoteResponse,
+		options: MintProofOptions & { privateKey: string }
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
 		quote: string,
 		options?: MintProofOptions
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		options?: MintProofOptions & { privateKey?: string }
 	): Promise<Array<Proof>> {
-		let { keysetId, proofsWeHave, outputAmounts, counter, pubkey } = options || {};
+		let { outputAmounts } = options || {};
+		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
+
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
 			outputAmounts = {
@@ -641,20 +742,51 @@ class CashuWallet {
 				sendAmounts: []
 			};
 		}
-
-		const { blindedMessages, secrets, blindingFactors } = this.createRandomBlindedMessages(
-			amount,
-			keyset,
-			outputAmounts?.keepAmounts,
-			counter,
-			pubkey
-		);
-		const mintPayload: MintPayload = {
-			outputs: blindedMessages,
-			quote: quote
-		};
+		let newBlindingData: Array<OutputData> = [];
+		if (outputData) {
+			if (isOutputDataFactory(outputData)) {
+				const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
+				for (let i = 0; i < amounts.length; i++) {
+					newBlindingData.push(outputData(amounts[i], keyset));
+				}
+			} else {
+				newBlindingData = outputData;
+			}
+		} else if (this._keepFactory) {
+			const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
+			for (let i = 0; i < amounts.length; i++) {
+				newBlindingData.push(this._keepFactory(amounts[i], keyset));
+			}
+		} else {
+			newBlindingData = this.createOutputData(
+				amount,
+				keyset,
+				counter,
+				pubkey,
+				outputAmounts?.keepAmounts,
+				p2pk
+			);
+		}
+		let mintPayload: MintPayload;
+		if (typeof quote !== 'string') {
+			if (!privateKey) {
+				throw new Error('Can not sign locked quote without private key');
+			}
+			const blindedMessages = newBlindingData.map((d) => d.blindedMessage)
+			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote.quote,
+				signature: mintQuoteSignature
+			};
+		} else {
+			mintPayload = {
+				outputs: newBlindingData.map((d) => d.blindedMessage),
+				quote: quote
+			};
+		}
 		const { signatures } = await this.mint.mint(mintPayload);
-		return this.constructProofs(signatures, blindingFactors, secrets, keyset);
+		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
 	}
 
 	/**
@@ -666,6 +798,38 @@ class CashuWallet {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
+		};
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		return meltQuote;
+	}
+
+	/**
+	 * Requests a multi path melt quote from the mint.
+	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @param partialAmount the partial amount of the invoice's total to be paid by this instance
+	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
+	 */
+	async createMultiPathMeltQuote(
+		invoice: string,
+		partialAmount: number
+	): Promise<MeltQuoteResponse> {
+		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
+		if (!supported) {
+			throw new Error('Mint does not support NUT-15');
+		}
+		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this.unit)) {
+			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
+		}
+		const mppOption: MPPOption = {
+			amount: partialAmount
+		};
+		const meltOptions: MeltQuoteOptions = {
+			mpp: mppOption
+		};
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice,
+			options: meltOptions
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;
@@ -694,12 +858,13 @@ class CashuWallet {
 		proofsToSend: Array<Proof>,
 		options?: MeltProofOptions
 	): Promise<MeltProofsResponse> {
-		let { keysetId, counter, privkey } = options || {};
+		const { keysetId, counter, privkey } = options || {};
 		const keys = await this.getKeys(keysetId);
-		const { blindedMessages, secrets, blindingFactors } = this.createBlankOutputs(
+		const outputData = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,
-			keys.id,
-			counter
+			keys,
+			counter,
+			this._keepFactory
 		);
 		if (privkey != undefined) {
 			proofsToSend = getSignedProofs(
@@ -720,16 +885,12 @@ class CashuWallet {
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
-			outputs: [...blindedMessages]
+			outputs: outputData.map((d) => d.blindedMessage)
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
-		let change: Array<Proof> = [];
-		if (meltResponse.change) {
-			change = this.constructProofs(meltResponse.change, blindingFactors, secrets, keys);
-		}
 		return {
 			quote: meltResponse,
-			change: change
+			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? []
 		};
 	}
 
@@ -750,11 +911,13 @@ class CashuWallet {
 		outputAmounts?: OutputAmounts,
 		counter?: number,
 		pubkey?: string,
-		privkey?: string
-	): {
-		payload: SwapPayload;
-		blindingData: BlindingData;
-	} {
+		privkey?: string,
+		customOutputData?: {
+			keep?: Array<OutputDataLike> | OutputDataFactory;
+			send?: Array<OutputDataLike> | OutputDataFactory;
+		},
+		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
+	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
 			outputAmounts.keepAmounts = splitAmount(
@@ -762,22 +925,53 @@ class CashuWallet {
 				keyset.keys
 			);
 		}
-		const keepBlindedMessages = this.createRandomBlindedMessages(
-			totalAmount - amount - this.getFeesForProofs(proofsToSend),
-			keyset,
-			outputAmounts?.keepAmounts,
-			counter
-		);
-		if (this._seed && counter) {
-			counter = counter + keepBlindedMessages.secrets.length;
+		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
+		let keepOutputData: Array<OutputDataLike> = [];
+		let sendOutputData: Array<OutputDataLike> = [];
+
+		if (customOutputData?.keep) {
+			if (isOutputDataFactory(customOutputData.keep)) {
+				const factory = customOutputData.keep;
+				const amounts = splitAmount(keepAmount, keyset.keys);
+				amounts.forEach((a) => {
+					keepOutputData.push(factory(a, keyset));
+				});
+			} else {
+				keepOutputData = customOutputData.keep;
+			}
+		} else {
+			keepOutputData = this.createOutputData(
+				keepAmount,
+				keyset,
+				counter,
+				pubkey,
+				outputAmounts?.keepAmounts,
+				p2pk,
+				this._keepFactory
+			);
 		}
-		const sendBlindedMessages = this.createRandomBlindedMessages(
-			amount,
-			keyset,
-			outputAmounts?.sendAmounts,
-			counter,
-			pubkey
-		);
+
+		if (customOutputData?.send) {
+			if (isOutputDataFactory(customOutputData.send)) {
+				const factory = customOutputData.send;
+				const amounts = splitAmount(amount, keyset.keys);
+				amounts.forEach((a) => {
+					sendOutputData.push(factory(a, keyset));
+				});
+			} else {
+				sendOutputData = customOutputData.send;
+			}
+		} else {
+			sendOutputData = this.createOutputData(
+				amount,
+				keyset,
+				counter ? counter + keepOutputData.length : undefined,
+				pubkey,
+				outputAmounts?.sendAmounts,
+				p2pk
+			);
+		}
+
 		if (privkey) {
 			proofsToSend = getSignedProofs(
 				proofsToSend.map((p: Proof) => {
@@ -794,24 +988,30 @@ class CashuWallet {
 
 		proofsToSend = stripDleq(proofsToSend);
 
-		// join keepBlindedMessages and sendBlindedMessages
-		const blindingData: BlindingData = {
-			blindedMessages: [
-				...keepBlindedMessages.blindedMessages,
-				...sendBlindedMessages.blindedMessages
-			],
-			secrets: [...keepBlindedMessages.secrets, ...sendBlindedMessages.secrets],
-			blindingFactors: [
-				...keepBlindedMessages.blindingFactors,
-				...sendBlindedMessages.blindingFactors
-			]
-		};
+		const mergedBlindingData = [...keepOutputData, ...sendOutputData];
+		const indices = mergedBlindingData
+			.map((_, i) => i)
+			.sort(
+				(a, b) =>
+					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount
+			);
+		const keepVector = [
+			...Array(keepOutputData.length).fill(true),
+			...Array(sendOutputData.length).fill(false)
+		];
 
-		const payload = {
-			inputs: proofsToSend,
-			outputs: [...blindingData.blindedMessages]
+		const sortedOutputData = indices.map((i) => mergedBlindingData[i]);
+		const sortedKeepVector = indices.map((i) => keepVector[i]);
+
+		return {
+			payload: {
+				inputs: proofsToSend,
+				outputs: sortedOutputData.map((d) => d.blindedMessage)
+			},
+			outputData: sortedOutputData,
+			keepVector: sortedKeepVector,
+			sortedIndices: indices
 		};
-		return { payload, blindingData };
 	}
 
 	/**
@@ -979,26 +1179,6 @@ class CashuWallet {
 	}
 
 	/**
-	 * Creates blinded messages for a given amount
-	 * @param amount amount to create blinded messages for
-	 * @param split optional preference for splitting proofs into specific amounts. overrides amount param
-	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @returns blinded messages, secrets, rs, and amounts
-	 */
-	private createRandomBlindedMessages(
-		amount: number,
-		keyset: MintKeys,
-		split?: Array<number>,
-		counter?: number,
-		pubkey?: string
-	): BlindingData & { amounts: Array<number> } {
-		const amounts = splitAmount(amount, keyset.keys, split);
-		return this.createBlindedMessages(amounts, keyset.id, counter, pubkey);
-	}
-
-	/**
 	 * Creates blinded messages for a according to @param amounts
 	 * @param amount array of amounts to create blinded messages for
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
@@ -1006,43 +1186,38 @@ class CashuWallet {
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
-	private createBlindedMessages(
-		amounts: Array<number>,
-		keysetId: string,
+	private createOutputData(
+		amount: number,
+		keyset: MintKeys,
 		counter?: number,
-		pubkey?: string
-	): BlindingData & { amounts: Array<number> } {
-		// if we atempt to create deterministic messages without a _seed, abort.
-		if (counter != undefined && !this._seed) {
-			throw new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
+		pubkey?: string,
+		outputAmounts?: Array<number>,
+		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		factory?: OutputDataFactory
+	): Array<OutputDataLike> {
+		let outputData: Array<OutputDataLike>;
+		if (pubkey) {
+			outputData = OutputData.createP2PKData({ pubkey }, amount, keyset, outputAmounts);
+		} else if (counter || counter === 0) {
+			if (!this._seed) {
+				throw new Error('cannot create deterministic messages without seed');
+			}
+			outputData = OutputData.createDeterministicData(
+				amount,
+				this._seed,
+				counter,
+				keyset,
+				outputAmounts
 			);
+		} else if (p2pk) {
+			outputData = OutputData.createP2PKData(p2pk, amount, keyset, outputAmounts);
+		} else if (factory) {
+			const amounts = splitAmount(amount, keyset.keys);
+			outputData = amounts.map((a) => factory(a, keyset));
+		} else {
+			outputData = OutputData.createRandomData(amount, keyset, outputAmounts);
 		}
-		const blindedMessages: Array<SerializedBlindedMessage> = [];
-		const secrets: Array<Uint8Array> = [];
-		const blindingFactors: Array<bigint> = [];
-		for (let i = 0; i < amounts.length; i++) {
-			let deterministicR = undefined;
-			let secretBytes = undefined;
-			if (pubkey) {
-				secretBytes = createP2PKsecret(pubkey);
-			} else if (this._seed && counter != undefined) {
-				secretBytes = deriveSecret(this._seed, keysetId, counter + i);
-				deterministicR = bytesToNumber(deriveBlindingFactor(this._seed, keysetId, counter + i));
-			} else {
-				secretBytes = randomBytes(32);
-			}
-			if (!pubkey) {
-				const secretHex = bytesToHex(secretBytes);
-				secretBytes = new TextEncoder().encode(secretHex);
-			}
-			secrets.push(secretBytes);
-			const { B_, r } = blindMessage(secretBytes, deterministicR);
-			blindingFactors.push(r);
-			const blindedMessage = new BlindedMessage(amounts[i], B_, keysetId);
-			blindedMessages.push(blindedMessage.getSerializedBlindedMessage());
-		}
-		return { blindedMessages, secrets, blindingFactors, amounts };
+		return outputData;
 	}
 
 	/**
@@ -1053,69 +1228,19 @@ class CashuWallet {
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @returns blinded messages, secrets, and rs
 	 */
-	private createBlankOutputs(amount: number, keysetId: string, counter?: number): BlindingData {
+	private createBlankOutputs(
+		amount: number,
+		keyset: MintKeys,
+		counter?: number,
+		factory?: OutputDataFactory
+	): Array<OutputDataLike> {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {
 			count = 0;
 		}
 		const amounts = count ? Array(count).fill(1) : [];
-		const { blindedMessages, blindingFactors, secrets } = this.createBlindedMessages(
-			amounts,
-			keysetId,
-			counter
-		);
-		return { blindedMessages, secrets, blindingFactors };
-	}
-
-	/**
-	 * construct proofs from @params promises, @params rs, @params secrets, and @params keyset
-	 * @param promises array of serialized blinded signatures
-	 * @param rs arrays of binding factors
-	 * @param secrets array of secrets
-	 * @param keyset mint keyset
-	 * @returns array of serialized proofs
-	 */
-	private constructProofs(
-		promises: Array<SerializedBlindedSignature>,
-		rs: Array<bigint>,
-		secrets: Array<Uint8Array>,
-		keyset: MintKeys
-	): Array<Proof> {
-		return promises.map((p: SerializedBlindedSignature, i: number) => {
-			const dleq =
-				p.dleq == undefined
-					? undefined
-					: ({
-							s: hexToBytes(p.dleq.s),
-							e: hexToBytes(p.dleq.e),
-							r: rs[i]
-					  } as DLEQ);
-			const blindSignature = {
-				id: p.id,
-				amount: p.amount,
-				C_: pointFromHex(p.C_),
-				dleq: dleq
-			};
-			const r = rs[i];
-			const secret = secrets[i];
-			const A = pointFromHex(keyset.keys[p.amount]);
-			const proof = constructProofFromPromise(blindSignature, r, secret, A);
-			const serializedProof = {
-				...serializeProof(proof),
-				...(dleq && {
-					dleqValid: verifyDLEQProof_reblind(secret, dleq, proof.C, A)
-				}),
-				...(dleq && {
-					dleq: {
-						s: bytesToHex(dleq.s),
-						e: bytesToHex(dleq.e),
-						r: numberToHexPadded64(dleq.r ?? BigInt(0))
-					} as SerializedDLEQ
-				})
-			} as Proof;
-			return serializedProof;
-		});
+		return this.createOutputData(amount, keyset, counter, undefined, amounts, undefined, factory);
 	}
 }
 

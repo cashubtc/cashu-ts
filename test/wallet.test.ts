@@ -11,11 +11,13 @@ import {
 	MintQuoteResponse,
 	MintQuoteState
 } from '../src/model/types/index.js';
-import { getDecodedToken } from '../src/utils.js';
-import { Proof } from '@cashu/crypto/modules/common';
+import { bytesToNumber, getDecodedToken } from '../src/utils.js';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws.js';
 import { MintInfo } from '../src/model/MintInfo.js';
+import { OutputData } from '../src/model/OutputData.js';
+import { hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex } from '@noble/hashes/utils';
 
 injectWebSocketImpl(WebSocket);
 
@@ -655,11 +657,39 @@ describe('deterministic', () => {
 				{ counter: 1 }
 			)
 			.catch((e) => e);
-		expect(result).toEqual(
-			new Error(
-				'Cannot create deterministic messages without seed. Instantiate CashuWallet with a bip39seed, or omit counter param.'
-			)
+		expect(result).toEqual(new Error('cannot create deterministic messages without seed'));
+	});
+	test.each([
+		[
+			0,
+			'485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae',
+			'ad00d431add9c673e843d4c2bf9a778a5f402b985b8da2d5550bf39cda41d679'
+		],
+		[
+			1,
+			'8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270',
+			'967d5232515e10b81ff226ecf5a9e2e2aff92d66ebc3edf0987eb56357fd6248'
+		],
+		[
+			2,
+			'bc628c79accd2364fd31511216a0fab62afd4a18ff77a20deded7b858c9860c8',
+			'b20f47bb6ae083659f3aa986bfa0435c55c6d93f687d51a01f26862d9b9a4899'
+		]
+	])('deterministic OutputData: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
+		const hexSeed =
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
+
+		const numberR = bytesToNumber(hexToBytes(r));
+		const decoder = new TextDecoder();
+
+		const data = OutputData.createSingleDeterministicData(
+			0,
+			hexToBytes(hexSeed),
+			counter,
+			'009a1f293253e41e'
 		);
+		expect(decoder.decode(data.secret)).toBe(secret);
+		expect(data.blindingFactor).toBe(numberR);
 	});
 });
 
@@ -738,5 +768,94 @@ describe('WebSocket Updates', () => {
 		});
 		expect(state).toMatchObject({ quote: '123' });
 		server.close();
+	});
+});
+describe('multi mint', async () => {
+	const mintInfo = JSON.parse(
+		'{"name":"Cashu mint","pubkey":"023ef9a3cda9945d5e784e478d3bd0c8d39726bcb3ca11098fe685a95d3f889d28","version":"Nutshell/0.16.4","contact":[],"time":1737973290,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"20":{"supported":true},"15":{"methods":[{"method":"bolt11","unit":"sat"}]},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}'
+	);
+	test('multi path melt quotes', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfo);
+			})
+		);
+		server.use(
+			http.post<any, { options: { mpp: number } }>(
+				mintUrl + '/v1/melt/quote/bolt11',
+				async ({ request }) => {
+					const body = await request.json();
+					if (!body?.options.mpp) {
+						return new HttpResponse('No MPP', { status: 400 });
+					}
+					return HttpResponse.json({
+						quote: 'K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D',
+						amount: 1,
+						fee_reserve: 2,
+						paid: false,
+						state: 'UNPAID',
+						expiry: 1673972705,
+						payment_preimage: null,
+						change: null
+					});
+				}
+			)
+		);
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint);
+		const invoice =
+			'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
+		const meltQuote = await wallet.createMultiPathMeltQuote(invoice, 1);
+		expect(meltQuote.amount).toBe(1);
+		expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
+		await expect(wallet.createMeltQuote(invoice)).rejects.toThrow();
+	});
+});
+describe('P2PK BlindingData', () => {
+	test('Create BlindingData locked to pk with locktime and single refund key', async () => {
+		const wallet = new CashuWallet(mint);
+		const keys = await wallet.getKeys();
+		const data = OutputData.createP2PKData(
+			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
+			21,
+			keys
+		);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			expect(s[0] === 'P2PK');
+			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['refund', ['iamarefund']]);
+		});
+	});
+	test('Create BlindingData locked to pk with locktime and multiple refund keys', async () => {
+		const wallet = new CashuWallet(mint);
+		const keys = await wallet.getKeys();
+		const data = OutputData.createP2PKData(
+			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
+			21,
+			keys
+		);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			expect(s[0] === 'P2PK');
+			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['refund', ['iamarefund', 'asecondrefund']]);
+		});
+	});
+	test('Create BlindingData locked to pk without locktime and no refund keys', async () => {
+		const wallet = new CashuWallet(mint);
+		const keys = await wallet.getKeys();
+		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			expect(s[0] === 'P2PK');
+			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].tags).toEqual([]);
+		});
 	});
 });
