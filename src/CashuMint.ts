@@ -19,7 +19,7 @@ import type {
 	MeltQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
-import request from './request.js';
+import request, { setRequestVerbose } from './request.js';
 import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
 	MeltQuoteResponsePaidDeprecated,
@@ -35,13 +35,32 @@ import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
  */
 class CashuMint {
 	private ws?: WSConnection;
+	private _verbose = false;
+
+	/**
+	 * Internal method for logging messages when verbose mode is enabled
+	 * @param message Message to log
+	 * @param optionalParams Additional parameters to log
+	 */
+	private log(message: string, ...optionalParams: Array<any>): void {
+		if (this._verbose) {
+			console.log(message, ...optionalParams);
+		}
+	}
+
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
+	 * @param options.verbose Whether to enable verbose logging
 	 */
-	constructor(private _mintUrl: string, private _customRequest?: typeof request) {
+	constructor(private _mintUrl: string, private _customRequest?: typeof request, options?: { verbose?: boolean }) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
+		if (options?.verbose) {
+			this._verbose = options.verbose;
+			// Set verbose mode for request module
+			setRequestVerbose(options.verbose);
+		}
 	}
 
 	get mintUrl() {
@@ -445,25 +464,20 @@ class CashuMint {
 	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17
 	 */
 	async connectWebSocket() {
-		if (this.ws) {
-			await this.ws.ensureConnection();
-		} else {
+		if (!this.ws) {
 			const mintUrl = new URL(this._mintUrl);
-			const wsSegment = 'v1/ws';
-			if (mintUrl.pathname) {
-				if (mintUrl.pathname.endsWith('/')) {
-					mintUrl.pathname += wsSegment;
-				} else {
-					mintUrl.pathname += '/' + wsSegment;
-				}
+			// Set verbose mode on the ConnectionManager
+			const connectionManager = ConnectionManager.getInstance();
+			if (this._verbose) {
+				connectionManager.setVerbose(this._verbose);
 			}
-			this.ws = ConnectionManager.getInstance().getConnection(
+			this.ws = connectionManager.getConnection(
 				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`
 			);
 			try {
 				await this.ws.connect();
 			} catch (e) {
-				console.log(e);
+				this.log('Failed to connect to WebSocket:', e);
 				throw new Error('Failed to connect to WebSocket...');
 			}
 		}

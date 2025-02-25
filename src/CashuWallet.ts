@@ -87,8 +87,31 @@ class CashuWallet {
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
 	private _keepFactory: OutputDataFactory | undefined;
+	private _verbose = false;
 
 	mint: CashuMint;
+
+	/**
+	 * Internal method for logging messages when verbose mode is enabled
+	 * @param message Message to log
+	 * @param optionalParams Additional parameters to log
+	 */
+	private log(message: string, ...optionalParams: Array<any>): void {
+		if (this._verbose) {
+			console.log(message, ...optionalParams);
+		}
+	}
+
+	/**
+	 * Internal method for logging warnings when verbose mode is enabled
+	 * @param message Warning message to log
+	 * @param optionalParams Additional parameters to log
+	 */
+	private warn(message: string, ...optionalParams: Array<any>): void {
+		if (this._verbose) {
+			console.warn(message, ...optionalParams);
+		}
+	}
 
 	/**
 	 * @param mint Cashu mint instance is used to make api calls
@@ -111,6 +134,7 @@ class CashuWallet {
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;
 			keepFactory?: OutputDataFactory;
+			verbose?: boolean;
 		}
 	) {
 		this.mint = mint;
@@ -137,6 +161,9 @@ class CashuWallet {
 		}
 		if (options?.keepFactory) {
 			this._keepFactory = options.keepFactory;
+		}
+		if (options?.verbose) {
+			this._verbose = options.verbose;
 		}
 	}
 
@@ -547,7 +574,7 @@ class CashuWallet {
 		}
 
 		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
-			console.error(
+			this.warn(
 				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
 					proofsToSend
 				)} | length: ${proofsToSend.length}`
@@ -666,6 +693,7 @@ class CashuWallet {
 			amount: amount,
 			description: description
 		};
+		this.log(`Creating mint quote for amount: ${amount} with description: ${description}`);
 		return await this.mint.createMintQuote(mintQuotePayload);
 	}
 
@@ -1067,6 +1095,7 @@ class CashuWallet {
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+			this.log(`Cancelled subscription ${subId} for ${quoteIds.length} mint quotes`);
 		};
 	}
 
@@ -1139,6 +1168,7 @@ class CashuWallet {
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+			this.log(`Cancelled subscription ${subId} for ${quoteIds.length} melt quotes`);
 		};
 	}
 
@@ -1162,6 +1192,7 @@ class CashuWallet {
 		const proofMap: { [y: string]: Proof } = {};
 		for (let i = 0; i < proofs.length; i++) {
 			const y = hashToCurve(enc.encode(proofs[i].secret)).toHex(true);
+			this.log(`Mapping proof ${i+1}/${proofs.length} to Y point: ${y}`);
 			proofMap[y] = proofs[i];
 		}
 		const ys = Object.keys(proofMap);
@@ -1174,6 +1205,7 @@ class CashuWallet {
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
+			this.log(`Cancelled subscription ${subId} for ${ys.length} proofs`);
 		};
 	}
 

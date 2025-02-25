@@ -7,11 +7,11 @@ import {
 	RpcSubId
 } from './model/types';
 import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
-import { getWebSocketImpl } from './ws';
 
 export class ConnectionManager {
 	static instace: ConnectionManager;
 	private connectionMap: Map<string, WSConnection> = new Map();
+	private _verbose = false;
 
 	static getInstance() {
 		if (!ConnectionManager.instace) {
@@ -20,13 +20,19 @@ export class ConnectionManager {
 		return ConnectionManager.instace;
 	}
 
+	/**
+	 * Set verbose mode for WebSocket connections
+	 * @param isVerbose
+	 */
+	setVerbose(isVerbose: boolean): void {
+		this._verbose = isVerbose;
+	}
+
 	getConnection(url: string): WSConnection {
-		if (this.connectionMap.has(url)) {
-			return this.connectionMap.get(url) as WSConnection;
+		if (!this.connectionMap.has(url)) {
+			this.connectionMap.set(url, new WSConnection(url, { verbose: this._verbose }));
 		}
-		const newConn = new WSConnection(url);
-		this.connectionMap.set(url, newConn);
-		return newConn;
+		return this.connectionMap.get(url) as WSConnection;
 	}
 }
 
@@ -40,11 +46,37 @@ export class WSConnection {
 	private messageQueue: MessageQueue;
 	private handlingInterval?: number;
 	private rpcId = 0;
+	private _verbose = false;
 
-	constructor(url: string) {
-		this._WS = getWebSocketImpl();
+	constructor(url: string, options?: { verbose?: boolean }) {
 		this.url = new URL(url);
+		this._WS = typeof WebSocket !== 'undefined' ? WebSocket : require('ws');
 		this.messageQueue = new MessageQueue();
+		if (options?.verbose) {
+			this._verbose = options.verbose;
+		}
+	}
+
+	/**
+	 * Internal method for logging messages when verbose mode is enabled
+	 * @param message Message to log
+	 * @param optionalParams Additional parameters to log
+	 */
+	private log(message: string, ...optionalParams: Array<any>): void {
+		if (this._verbose) {
+			console.log(message, ...optionalParams);
+		}
+	}
+
+	/**
+	 * Internal method for logging errors when verbose mode is enabled
+	 * @param message Error message to log
+	 * @param optionalParams Additional parameters to log
+	 */
+	private error(message: string, ...optionalParams: Array<any>): void {
+		if (this._verbose) {
+			console.error(message, ...optionalParams);
+		}
 	}
 
 	connect() {
@@ -162,7 +194,7 @@ export class WSConnection {
 				}
 			}
 		} catch (e) {
-			console.error(e);
+			this.error('Error processing WebSocket message:', e);
 			return;
 		}
 	}

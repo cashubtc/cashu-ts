@@ -1,5 +1,6 @@
 import type { MintQuoteResponse } from '../model/types/index.js';
 import { MintQuoteState } from '../model/types/index.js';
+import { logWarning } from '../utils.js';
 
 export type MintQuoteResponsePaidDeprecated = {
 	paid?: boolean;
@@ -10,7 +11,7 @@ export function handleMintQuoteResponseDeprecated(
 ): MintQuoteResponse {
 	// if the response MeltQuoteResponse has a "paid" flag, we monkey patch it to the state enum
 	if (!response.state) {
-		console.warn(
+		logWarning(
 			"Field 'state' not found in MintQuoteResponse. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)"
 		);
 		if (typeof response.paid === 'boolean') {
