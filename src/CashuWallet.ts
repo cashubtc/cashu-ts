@@ -618,7 +618,7 @@ class CashuWallet {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
 		// create blank amounts for unknown restore amounts
-		const amounts = Array(count).fill(0);
+		const amounts = Array(count).fill(1);
 		const outputData = OutputData.createDeterministicData(
 			amounts.length,
 			this._seed,

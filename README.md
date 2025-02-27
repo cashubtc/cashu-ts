@@ -61,7 +61,7 @@ npm i @cashu/cashu-ts
 
 ```typescript
 import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
-const mintUrl = 'http://localhost:3338'; // the mint URL
+const mintUrl = 'http://localhost:3338';
 const mint = new CashuMint(mintUrl);
 const wallet = new CashuWallet(mint);
 await wallet.loadMint(); // persist wallet.keys and wallet.keysets to avoid calling loadMint() in the future
@@ -69,7 +69,7 @@ const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
 if (mintQuoteChecked.state == MintQuoteState.PAID) {
-	const { proofs } = await wallet.mintProofs(64, mintQuote.quote);
+	const proofs = await wallet.mintProofs(64, mintQuote.quote);
 }
 ```
 
