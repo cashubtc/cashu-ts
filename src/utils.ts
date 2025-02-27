@@ -24,6 +24,28 @@ import {
 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 
+// Global verbose flag for logging
+let verbose = false;
+
+/**
+ * Set verbose mode for logging
+ * @param isVerbose Whether to enable verbose logging
+ */
+export function setVerbose(isVerbose: boolean): void {
+	verbose = isVerbose;
+}
+
+/**
+ * Log a warning message if verbose mode is enabled
+ * @param message Warning message to log
+ * @param optionalParams Additional parameters to log
+ */
+export function logWarning(message: string, ...optionalParams: Array<any>): void {
+	if (verbose) {
+		console.warn(message, ...optionalParams);
+	}
+}
+
 /**
  * Splits the amount into denominations of the provided @param keyset
  * @param value amount to split

@@ -1,5 +1,8 @@
 import { HttpResponseError } from './model/Errors';
 
+let globalRequestOptions: Partial<RequestOptions> = {};
+let verbose = false;
+
 type RequestArgs = {
 	endpoint: string;
 	requestBody?: Record<string, unknown>;
@@ -8,14 +11,31 @@ type RequestArgs = {
 
 type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
 
-let globalRequestOptions: Partial<RequestOptions> = {};
-
 /**
- * An object containing any custom settings that you want to apply to the global fetch method.
- * @param options See possible options here: https://developer.mozilla.org/en-US/docs/Web/API/fetch#options
+ * Set global request options that will be used for all requests
+ * @param options
  */
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void {
 	globalRequestOptions = options;
+}
+
+/**
+ * Set verbose mode for request logging
+ * @param isVerbose Whether to enable verbose logging
+ */
+export function setRequestVerbose(isVerbose: boolean): void {
+	verbose = isVerbose;
+}
+
+/**
+ * Internal method for logging errors when verbose mode is enabled
+ * @param message Error message to log
+ * @param optionalParams Additional parameters to log
+ */
+function logError(message: string, ...optionalParams: Array<any>): void {
+	if (verbose) {
+		console.error(message, ...optionalParams);
+	}
 }
 
 async function _request({
@@ -24,26 +44,27 @@ async function _request({
 	headers: requestHeaders,
 	...options
 }: RequestOptions): Promise<unknown> {
-	const body = requestBody ? JSON.stringify(requestBody) : undefined;
 	const headers = {
-		...{ Accept: 'application/json, text/plain, */*' },
-		...(body ? { 'Content-Type': 'application/json' } : undefined),
+		'Content-Type': 'application/json',
 		...requestHeaders
 	};
 
-	const response = await fetch(endpoint, { body, headers, ...options });
+	const response = await fetch(endpoint, {
+		method: 'POST',
+		body: requestBody ? JSON.stringify(requestBody) : undefined,
+		headers,
+		...options
+	});
 
 	if (!response.ok) {
-		// expecting: { error: '', code: 0 }
-		// or: { detail: '' } (cashuBtc via pythonApi)
-		const { error, detail } = await response.json().catch(() => ({ error: 'bad response' }));
+		const { error, detail } = await response.json().catch(() => ({}));
 		throw new HttpResponseError(error || detail || 'bad response', response.status);
 	}
 
 	try {
 		return await response.json();
 	} catch (err) {
-		console.error('Failed to parse HTTP response', err);
+		logError('Failed to parse HTTP response', err);
 		throw new HttpResponseError('bad response', response.status);
 	}
 }
