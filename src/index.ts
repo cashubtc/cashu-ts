@@ -10,7 +10,8 @@ import {
 	deriveKeysetId,
 	decodePaymentRequest,
 	getDecodedTokenBinary,
-	getEncodedTokenBinary
+	getEncodedTokenBinary,
+	hasValidDleq
 } from './utils.js';
 
 export * from './model/types/index.js';
@@ -27,7 +28,8 @@ export {
 	deriveKeysetId,
 	setGlobalRequestOptions,
 	getDecodedTokenBinary,
-	getEncodedTokenBinary
+	getEncodedTokenBinary,
+	hasValidDleq
 };
 
 export { injectWebSocketImpl } from './ws.js';

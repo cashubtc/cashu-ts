@@ -478,11 +478,10 @@ export class MessageQueue {
  * Removes all traces of DLEQs from a list of proofs
  * @param proofs The list of proofs that dleq should be stripped from
  */
-export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq' | 'dleqValid'>> {
+export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
 	return proofs.map((p) => {
 		const newP = { ...p };
 		delete newP['dleq'];
-		delete newP['dleqValid'];
 		return newP;
 	});
 }
