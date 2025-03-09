@@ -943,9 +943,9 @@ class CashuWallet {
 				keepAmount,
 				keyset,
 				counter,
-				pubkey,
+				undefined,
 				outputAmounts?.keepAmounts,
-				p2pk,
+				undefined,
 				this._keepFactory
 			);
 		}
