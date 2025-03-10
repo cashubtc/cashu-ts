@@ -9,7 +9,8 @@ import {
 	MeltQuoteResponse,
 	MeltQuoteState,
 	MintQuoteResponse,
-	MintQuoteState
+	MintQuoteState,
+	Proof
 } from '../src/model/types/index.js';
 import { bytesToNumber, getDecodedToken } from '../src/utils.js';
 import { Server, WebSocket } from 'mock-socket';
@@ -395,6 +396,7 @@ describe('send', () => {
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 	});
+
 	test('test send over paying. Should return change', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
@@ -433,6 +435,43 @@ describe('send', () => {
 		expect(result.keep[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
 		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
+	});
+	test('test send overpaying with p2pk.', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '009a1f293253e41e',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+						},
+						{
+							id: '009a1f293253e41e',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+						}
+					]
+				});
+			})
+		);
+		const wallet = new CashuWallet(mint, { unit });
+
+		const result = await wallet.send(
+			1,
+			[
+				{
+					id: '009a1f293253e41e',
+					amount: 2,
+					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+				}
+			],
+			{ p2pk: { pubkey: 'pk' } }
+		);
+
+		expectNUT10SecretDataToEqual([result.send[0]], 'pk');
+		expect(result.keep[0].secret.length).toBe(64);
 	});
 
 	test('test send over paying2', async () => {
@@ -859,3 +898,10 @@ describe('P2PK BlindingData', () => {
 		});
 	});
 });
+
+function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
+	p.forEach((p) => {
+		const parsedSecret = JSON.parse(p.secret);
+		expect(parsedSecret[1].data).toBe(s);
+	});
+}
