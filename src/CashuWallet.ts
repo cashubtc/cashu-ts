@@ -601,6 +601,28 @@ class CashuWallet {
 		};
 	}
 
+	async batchRestore(
+		counter = 0,
+		currentGap = 0,
+		accProofs: Array<Proof> = [],
+		lastFoundCounter = 0
+	): Promise<{ proofs: Array<Proof>; lastCounter: number }> {
+		if (currentGap >= 300) {
+			return { proofs: accProofs, lastCounter: lastFoundCounter };
+		}
+
+		const { proofs } = await this.restore(counter, 100);
+		if (proofs.length === 0) {
+			return this.batchRestore(
+				counter + 100,
+				currentGap + 100,
+				[...accProofs, ...proofs],
+				lastFoundCounter
+			);
+		}
+		return this.batchRestore(counter + 100, 0, [...accProofs, ...proofs], counter);
+	}
+
 	/**
 	 * Regenerates
 	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
