@@ -55,6 +55,24 @@ Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usa
 npm i @cashu/cashu-ts
 ```
 
+### Logging
+
+By default, cashu-ts does not log to the console. If you want to enable logging for debugging purposes, you can set the `verbose` option when creating a wallet:
+
+```typescript
+import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
+const mintUrl = 'http://localhost:3338';
+const mint = new CashuMint(mintUrl, undefined, { verbose: true }); // Enable logging for the mint
+const wallet = new CashuWallet(mint, { verbose: true }); // Enable logging for the wallet
+```
+
+This will log various operations such as:
+- WebSocket connections and subscriptions
+- Mint and melt quote creation
+- Proof mapping and validation
+- Non-deterministic secret generation warnings
+- DLEQ validation failures
+
 ### Examples
 
 #### Mint tokens
