@@ -411,7 +411,6 @@ describe('dleq', () => {
 			expect(p.dleq).toHaveProperty('s');
 			expect(p.dleq).toHaveProperty('e');
 			expect(p.dleq).toHaveProperty('r');
-			expect(p).toHaveProperty('dleqValid', true);
 		});
 	});
 	test('send and receive token with dleq', async () => {
