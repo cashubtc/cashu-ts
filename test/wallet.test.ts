@@ -1,6 +1,6 @@
 import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
-import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect } from 'vitest';
+import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
 import { CashuMint } from '../src/CashuMint.js';
 import { CashuWallet } from '../src/CashuWallet.js';
@@ -896,6 +896,56 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toEqual([]);
 		});
+	});
+});
+
+describe('Restoring deterministic proofs', () => {
+	test('Batch restore', async () => {
+		const wallet = new CashuWallet(mint);
+		let rounds = 0;
+		const mockRestore = vi
+			.spyOn(wallet, 'restore')
+			.mockImplementation(async (start, count, options?): Promise<{ proofs: Array<Proof> }> => {
+				if (rounds === 0) {
+					rounds++;
+					return { proofs: Array(21).fill(1) as Array<Proof> };
+				}
+				rounds++;
+				return { proofs: [] };
+			});
+		const { proofs: restoredProofs } = await wallet.batchRestore();
+		expect(restoredProofs.length).toBe(21);
+		expect(mockRestore).toHaveBeenCalledTimes(4);
+		mockRestore.mockClear();
+	});
+	test('Batch restore with custom values', async () => {
+		const wallet = new CashuWallet(mint);
+		let rounds = 0;
+		const mockRestore = vi
+			.spyOn(wallet, 'restore')
+			.mockImplementation(
+				async (
+					start,
+					count,
+					options?
+				): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> => {
+					if (rounds === 0) {
+						rounds++;
+						return { proofs: Array(42).fill(1) as Array<Proof>, lastCounterWithSignature: 41 };
+					}
+					rounds++;
+					return { proofs: [] };
+				}
+			);
+		const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore(
+			100,
+			50,
+			0
+		);
+		expect(restoredProofs.length).toBe(42);
+		expect(mockRestore).toHaveBeenCalledTimes(3);
+		expect(lastCounterWithSignature).toBe(41);
+		mockRestore.mockClear();
 	});
 });
 

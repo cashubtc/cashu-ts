@@ -602,6 +602,39 @@ class CashuWallet {
 	}
 
 	/**
+	 * Restores batches of deterministic proofs until no more signatures are returned from the mint
+	 * @param [gapLimit=300] the amount of empty counters that should be returned before restoring ends (defaults to 300)
+	 * @param [batchSize=100] the amount of proofs that should be restored at a time (defaults to 100)
+	 * @param [counter=0] the counter that should be used as a starting point (defaults to 0)
+	 * @param [keysetId] which keysetId to use for the restoration. If none is passed the instance's default one will be used
+	 */
+	async batchRestore(
+		gapLimit = 300,
+		batchSize = 100,
+		counter = 0,
+		keysetId?: string
+	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
+		const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
+		const restoredProofs: Array<Proof> = [];
+
+		let lastCounterWithSignature: undefined | number;
+		let emptyBatchesFound = 0;
+
+		while (emptyBatchesFound < requiredEmptyBatches) {
+			const restoreRes = await this.restore(counter, batchSize, { keysetId });
+			if (restoreRes.proofs.length > 0) {
+				emptyBatchesFound = 0;
+				restoredProofs.push(...restoreRes.proofs);
+				lastCounterWithSignature = restoreRes.lastCounterWithSignature;
+			} else {
+				emptyBatchesFound++;
+			}
+			counter += batchSize;
+		}
+		return { proofs: restoredProofs, lastCounterWithSignature };
+	}
+
+	/**
 	 * Regenerates
 	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count set number of blinded messages that should be generated
@@ -611,7 +644,7 @@ class CashuWallet {
 		start: number,
 		count: number,
 		options?: RestoreOptions
-	): Promise<{ proofs: Array<Proof> }> {
+	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
@@ -631,25 +664,24 @@ class CashuWallet {
 			outputs: outputData.map((d) => d.blindedMessage)
 		});
 
-		const outputsWithSignatures: Array<{
-			signature: SerializedBlindedSignature;
-			data: OutputData;
-		}> = [];
+		const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
+		outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
 
-		for (let i = 0; i < outputs.length; i++) {
-			const data = outputData.find((d) => d.blindedMessage.B_ === outputs[i].B_);
-			if (!data) {
-				continue;
+		const restoredProofs: Array<Proof> = [];
+		let lastCounterWithSignature: number | undefined;
+
+		for (let i = 0; i < outputData.length; i++) {
+			const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
+			if (matchingSig) {
+				lastCounterWithSignature = start + i;
+				outputData[i].blindedMessage.amount = matchingSig.amount;
+				restoredProofs.push(outputData[i].toProof(matchingSig, keys));
 			}
-			outputsWithSignatures[i] = {
-				signature: signatures[i],
-				data
-			};
 		}
-		outputsWithSignatures.forEach((o) => (o.data.blindedMessage.amount = o.signature.amount));
 
 		return {
-			proofs: outputsWithSignatures.map((d) => d.data.toProof(d.signature, keys))
+			proofs: restoredProofs,
+			lastCounterWithSignature
 		};
 	}
 
