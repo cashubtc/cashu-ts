@@ -630,7 +630,7 @@ class CashuWallet {
 		start: number,
 		count: number,
 		options?: RestoreOptions
-	): Promise<{ proofs: Array<Proof> }> {
+	): Promise<{ proofs: Array<Proof>; lastFoundCounter?: number }> {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
@@ -650,25 +650,24 @@ class CashuWallet {
 			outputs: outputData.map((d) => d.blindedMessage)
 		});
 
-		const outputsWithSignatures: Array<{
-			signature: SerializedBlindedSignature;
-			data: OutputData;
-		}> = [];
+		const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
+		outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
 
-		for (let i = 0; i < outputs.length; i++) {
-			const data = outputData.find((d) => d.blindedMessage.B_ === outputs[i].B_);
-			if (!data) {
-				continue;
+		const restoredProofs: Array<Proof> = [];
+		let lastFoundCounter: number | undefined;
+
+		for (let i = 0; i < outputData.length; i++) {
+			const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
+			if (matchingSig) {
+				lastFoundCounter = i;
+				outputData[i].blindedMessage.amount = matchingSig.amount;
+				restoredProofs.push(outputData[i].toProof(matchingSig, keys));
 			}
-			outputsWithSignatures[i] = {
-				signature: signatures[i],
-				data
-			};
 		}
-		outputsWithSignatures.forEach((o) => (o.data.blindedMessage.amount = o.signature.amount));
 
 		return {
-			proofs: outputsWithSignatures.map((d) => d.data.toProof(d.signature, keys))
+			proofs: restoredProofs,
+			lastFoundCounter
 		};
 	}
 
