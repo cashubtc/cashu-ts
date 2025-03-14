@@ -601,42 +601,37 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Restores batches of deterministic proofs until no more signatures are returned from the mint
+	 * @param [gapLimit=300] the amount of empty counters that should be returned before restoring ends (defaults to 300)
+	 * @param [batchSize=100] the amount of proofs that should be restored at a time (defaults to 100)
+	 * @param [counter=0] the counter that should be used as a starting point (defaults to 0)
+	 * @param [keysetId] which keysetId to use for the restoration. If none is passed the instance's default one will be used
+	 */
 	async batchRestore(
 		gapLimit = 300,
 		batchSize = 100,
-		initialCounter = 0
-	): Promise<{ proofs: Array<Proof>; lastFoundCounter?: number }> {
-		const recursiveRestore = async (
-			counter: number,
-			currentGap = 0,
-			proofs: Array<Proof> = [],
-			lastFoundCounter = 0
-		) => {
-			if (currentGap >= gapLimit) {
-				return { proofs, lastFoundCounter };
-			}
+		counter = 0,
+		keysetId?: string
+	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
+		const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
+		const restoredProofs: Array<Proof> = [];
 
-			const { proofs: batchProofs, lastFoundCounter: lastFound } = await this.restore(
-				counter,
-				batchSize
-			);
-			if (batchProofs.length === 0) {
-				return recursiveRestore(
-					counter + batchSize,
-					currentGap + batchSize,
-					[...proofs, ...batchProofs],
-					lastFoundCounter
-				);
-			}
-			return recursiveRestore(
-				counter + batchSize,
-				0,
-				[...proofs, ...batchProofs],
-				counter + (lastFound || 0)
-			);
-		};
+		let lastCounterWithSignature: undefined | number;
+		let emptyBatchesFound = 0;
 
-		return recursiveRestore(initialCounter);
+		while (emptyBatchesFound < requiredEmptyBatches) {
+			const restoreRes = await this.restore(counter, batchSize, { keysetId });
+			if (restoreRes.proofs.length > 0) {
+				emptyBatchesFound = 0;
+				restoredProofs.push(...restoreRes.proofs);
+				lastCounterWithSignature = restoreRes.lastCounterWithSignature;
+			} else {
+				emptyBatchesFound++;
+			}
+			counter += batchSize;
+		}
+		return { proofs: restoredProofs, lastCounterWithSignature };
 	}
 
 	/**
@@ -649,7 +644,7 @@ class CashuWallet {
 		start: number,
 		count: number,
 		options?: RestoreOptions
-	): Promise<{ proofs: Array<Proof>; lastFoundCounter?: number }> {
+	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
@@ -673,12 +668,12 @@ class CashuWallet {
 		outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
 
 		const restoredProofs: Array<Proof> = [];
-		let lastFoundCounter: number | undefined;
+		let lastCounterWithSignature: number | undefined;
 
 		for (let i = 0; i < outputData.length; i++) {
 			const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
 			if (matchingSig) {
-				lastFoundCounter = i;
+				lastCounterWithSignature = start + i;
 				outputData[i].blindedMessage.amount = matchingSig.amount;
 				restoredProofs.push(outputData[i].toProof(matchingSig, keys));
 			}
@@ -686,7 +681,7 @@ class CashuWallet {
 
 		return {
 			proofs: restoredProofs,
-			lastFoundCounter
+			lastCounterWithSignature
 		};
 	}
 
