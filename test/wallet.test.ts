@@ -914,8 +914,7 @@ describe('Restoring deterministic proofs', () => {
 				return { proofs: [] };
 			});
 		const restoredProofs = await wallet.batchRestore();
-		expect(restoredProofs.proofs.length).toBe(21);
-		expect(restoredProofs.lastCounter).toBe(21);
+		expect(restoredProofs.length).toBe(21);
 		expect(mockRestore).toHaveBeenCalledTimes(4);
 		mockRestore.mockClear();
 	});
@@ -933,8 +932,7 @@ describe('Restoring deterministic proofs', () => {
 				return { proofs: [] };
 			});
 		const restoredProofs = await wallet.batchRestore(100, 50, 0);
-		expect(restoredProofs.proofs.length).toBe(42);
-		expect(restoredProofs.lastCounter).toBe(42);
+		expect(restoredProofs.length).toBe(42);
 		expect(mockRestore).toHaveBeenCalledTimes(3);
 		mockRestore.mockClear();
 	});

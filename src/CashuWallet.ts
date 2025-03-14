@@ -601,36 +601,20 @@ class CashuWallet {
 		};
 	}
 
-	async batchRestore(
-		gapLimit = 300,
-		batchSize = 100,
-		initialCounter = 0
-	): Promise<{ proofs: Array<Proof>; lastCounter: number }> {
-		const recursiveRestore = async (
-			counter: number,
-			currentGap = 0,
-			proofs: Array<Proof> = [],
-			lastFoundCounter = 0
-		) => {
+	async batchRestore(gapLimit = 300, batchSize = 100, initialCounter = 0): Promise<Array<Proof>> {
+		const recursiveRestore = async (counter: number, currentGap = 0, proofs: Array<Proof> = []) => {
 			if (currentGap >= gapLimit) {
-				return { proofs, lastCounter: lastFoundCounter };
+				return proofs;
 			}
 
 			const { proofs: batchProofs } = await this.restore(counter, batchSize);
 			if (batchProofs.length === 0) {
-				return recursiveRestore(
-					counter + batchSize,
-					currentGap + batchSize,
-					[...proofs, ...batchProofs],
-					lastFoundCounter
-				);
+				return recursiveRestore(counter + batchSize, currentGap + batchSize, [
+					...proofs,
+					...batchProofs
+				]);
 			}
-			return recursiveRestore(
-				counter + batchSize,
-				0,
-				[...proofs, ...batchProofs],
-				lastFoundCounter + batchProofs.length
-			);
+			return recursiveRestore(counter + batchSize, 0, [...proofs, ...batchProofs]);
 		};
 
 		return recursiveRestore(initialCounter);
