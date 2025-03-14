@@ -668,7 +668,9 @@ describe('Wallet Restore', () => {
 		await new Promise((r) => setTimeout(r, 1000));
 		const proofs = await wallet.mintProofs(70, mintQuote.quote, { counter: 5 });
 
-		const restoredProofs = await wallet.batchRestore();
+		const { proofs: restoredProofs, lastFoundCounter } = await wallet.batchRestore();
 		expect(restoredProofs).toEqual(proofs);
+		expect(sumProofs(restoredProofs)).toBe(70);
+		expect(lastFoundCounter).toBe(7);
 	});
 });

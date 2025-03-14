@@ -913,7 +913,7 @@ describe('Restoring deterministic proofs', () => {
 				rounds++;
 				return { proofs: [] };
 			});
-		const restoredProofs = await wallet.batchRestore();
+		const { proofs: restoredProofs } = await wallet.batchRestore();
 		expect(restoredProofs.length).toBe(21);
 		expect(mockRestore).toHaveBeenCalledTimes(4);
 		mockRestore.mockClear();
@@ -923,17 +923,24 @@ describe('Restoring deterministic proofs', () => {
 		let rounds = 0;
 		const mockRestore = vi
 			.spyOn(wallet, 'restore')
-			.mockImplementation(async (start, count, options?): Promise<{ proofs: Array<Proof> }> => {
-				if (rounds === 0) {
+			.mockImplementation(
+				async (
+					start,
+					count,
+					options?
+				): Promise<{ proofs: Array<Proof>; lastFoundCounter?: number }> => {
+					if (rounds === 0) {
+						rounds++;
+						return { proofs: Array(42).fill(1) as Array<Proof>, lastFoundCounter: 41 };
+					}
 					rounds++;
-					return { proofs: Array(42).fill(1) as Array<Proof> };
+					return { proofs: [] };
 				}
-				rounds++;
-				return { proofs: [] };
-			});
-		const restoredProofs = await wallet.batchRestore(100, 50, 0);
+			);
+		const { proofs: restoredProofs, lastFoundCounter } = await wallet.batchRestore(100, 50, 0);
 		expect(restoredProofs.length).toBe(42);
 		expect(mockRestore).toHaveBeenCalledTimes(3);
+		expect(lastFoundCounter).toBe(41);
 		mockRestore.mockClear();
 	});
 });
