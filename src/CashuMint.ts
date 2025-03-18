@@ -428,7 +428,7 @@ class CashuMint {
 			requestBody: restorePayload
 		});
 
-		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.promises)) {
+		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
 			throw new Error('bad response');
 		}
 

@@ -40,7 +40,10 @@ import {
 	type SerializedBlindedMessage,
 	type SwapPayload,
 	type Token,
-	SwapTransaction
+	MPPOption,
+	MeltQuoteOptions,
+	SwapTransaction,
+	LockedMintQuoteResponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -53,6 +56,7 @@ import {
 	stripDleq,
 	sumProofs
 } from './utils.js';
+import { signMintQuote } from './crypto/nut-20.js';
 import {
 	OutputData,
 	OutputDataFactory,
@@ -168,6 +172,17 @@ class CashuWallet {
 	async getMintInfo(): Promise<MintInfo> {
 		const infoRes = await this.mint.getInfo();
 		this._mintInfo = new MintInfo(infoRes);
+		return this._mintInfo;
+	}
+
+	/**
+	 * Get stored information about the mint or request it if not loaded.
+	 * @returns mint info
+	 */
+	async lazyGetMintInfo(): Promise<MintInfo> {
+		if (!this._mintInfo) {
+			return await this.getMintInfo();
+		}
 		return this._mintInfo;
 	}
 
@@ -587,6 +602,39 @@ class CashuWallet {
 	}
 
 	/**
+	 * Restores batches of deterministic proofs until no more signatures are returned from the mint
+	 * @param [gapLimit=300] the amount of empty counters that should be returned before restoring ends (defaults to 300)
+	 * @param [batchSize=100] the amount of proofs that should be restored at a time (defaults to 100)
+	 * @param [counter=0] the counter that should be used as a starting point (defaults to 0)
+	 * @param [keysetId] which keysetId to use for the restoration. If none is passed the instance's default one will be used
+	 */
+	async batchRestore(
+		gapLimit = 300,
+		batchSize = 100,
+		counter = 0,
+		keysetId?: string
+	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
+		const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
+		const restoredProofs: Array<Proof> = [];
+
+		let lastCounterWithSignature: undefined | number;
+		let emptyBatchesFound = 0;
+
+		while (emptyBatchesFound < requiredEmptyBatches) {
+			const restoreRes = await this.restore(counter, batchSize, { keysetId });
+			if (restoreRes.proofs.length > 0) {
+				emptyBatchesFound = 0;
+				restoredProofs.push(...restoreRes.proofs);
+				lastCounterWithSignature = restoreRes.lastCounterWithSignature;
+			} else {
+				emptyBatchesFound++;
+			}
+			counter += batchSize;
+		}
+		return { proofs: restoredProofs, lastCounterWithSignature };
+	}
+
+	/**
 	 * Regenerates
 	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count set number of blinded messages that should be generated
@@ -596,7 +644,7 @@ class CashuWallet {
 		start: number,
 		count: number,
 		options?: RestoreOptions
-	): Promise<{ proofs: Array<Proof> }> {
+	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
@@ -612,29 +660,28 @@ class CashuWallet {
 			amounts
 		);
 
-		const { outputs, promises } = await this.mint.restore({
+		const { outputs, signatures } = await this.mint.restore({
 			outputs: outputData.map((d) => d.blindedMessage)
 		});
 
-		const outputsWithSignatures: Array<{
-			signature: SerializedBlindedSignature;
-			data: OutputData;
-		}> = [];
+		const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
+		outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
 
-		for (let i = 0; i < outputs.length; i++) {
-			const data = outputData.find((d) => d.blindedMessage.B_ === outputs[i].B_);
-			if (!data) {
-				continue;
+		const restoredProofs: Array<Proof> = [];
+		let lastCounterWithSignature: number | undefined;
+
+		for (let i = 0; i < outputData.length; i++) {
+			const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
+			if (matchingSig) {
+				lastCounterWithSignature = start + i;
+				outputData[i].blindedMessage.amount = matchingSig.amount;
+				restoredProofs.push(outputData[i].toProof(matchingSig, keys));
 			}
-			outputsWithSignatures[i] = {
-				signature: promises[i],
-				data
-			};
 		}
-		outputsWithSignatures.forEach((o) => (o.data.blindedMessage.amount = o.signature.amount));
 
 		return {
-			proofs: outputsWithSignatures.map((d) => d.data.toProof(d.signature, keys))
+			proofs: restoredProofs,
+			lastCounterWithSignature
 		};
 	}
 
@@ -642,6 +689,7 @@ class CashuWallet {
 	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
 	 * @param amount Amount requesting for mint.
 	 * @param description optional description for the mint quote
+	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
 	async createMintQuote(amount: number, description?: string) {
@@ -651,6 +699,36 @@ class CashuWallet {
 			description: description
 		};
 		return await this.mint.createMintQuote(mintQuotePayload);
+	}
+
+	/**
+	 * Requests a mint quote from the mint that is locked to a public key.
+	 * @param amount Amount requesting for mint.
+	 * @param pubkey public key to lock the quote to
+	 * @param description optional description for the mint quote
+	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit.
+	 * The quote will be locked to the specified `pubkey`.
+	 */
+	async createLockedMintQuote(
+		amount: number,
+		pubkey: string,
+		description?: string
+	): Promise<LockedMintQuoteResponse> {
+		const { supported } = (await this.getMintInfo()).isSupported(20);
+		if (!supported) {
+			throw new Error('Mint does not support NUT-20');
+		}
+		const mintQuotePayload: MintQuotePayload = {
+			unit: this._unit,
+			amount: amount,
+			description: description,
+			pubkey: pubkey
+		};
+		const res = await this.mint.createMintQuote(mintQuotePayload);
+		if (!res.pubkey) {
+			throw new Error('Mint returned unlocked mint quote');
+		}
+		return res as LockedMintQuoteResponse;
 	}
 
 	/**
@@ -665,17 +743,28 @@ class CashuWallet {
 	/**
 	 * Mint proofs for a given mint quote
 	 * @param amount amount to request
-	 * @param quote ID of mint quote
+	 * @param {string} quote - ID of mint quote (when quote is a string)
+	 * @param {LockedMintQuote} quote - containing the quote ID and unlocking private key (when quote is a LockedMintQuote)
 	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
 	 * @returns proofs
 	 */
 	async mintProofs(
 		amount: number,
+		quote: MintQuoteResponse,
+		options: MintProofOptions & { privateKey: string }
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
 		quote: string,
 		options?: MintProofOptions
+	): Promise<Array<Proof>>;
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		options?: MintProofOptions & { privateKey?: string }
 	): Promise<Array<Proof>> {
 		let { outputAmounts } = options || {};
-		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData } = options || {};
+		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
 
 		const keyset = await this.getKeys(keysetId);
 		if (!outputAmounts && proofsWeHave) {
@@ -684,7 +773,6 @@ class CashuWallet {
 				sendAmounts: []
 			};
 		}
-
 		let newBlindingData: Array<OutputData> = [];
 		if (outputData) {
 			if (isOutputDataFactory(outputData)) {
@@ -710,10 +798,24 @@ class CashuWallet {
 				p2pk
 			);
 		}
-		const mintPayload: MintPayload = {
-			outputs: newBlindingData.map((d) => d.blindedMessage),
-			quote: quote
-		};
+		let mintPayload: MintPayload;
+		if (typeof quote !== 'string') {
+			if (!privateKey) {
+				throw new Error('Can not sign locked quote without private key');
+			}
+			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
+			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote.quote,
+				signature: mintQuoteSignature
+			};
+		} else {
+			mintPayload = {
+				outputs: newBlindingData.map((d) => d.blindedMessage),
+				quote: quote
+			};
+		}
 		const { signatures } = await this.mint.mint(mintPayload);
 		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
 	}
@@ -727,6 +829,38 @@ class CashuWallet {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
+		};
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		return meltQuote;
+	}
+
+	/**
+	 * Requests a multi path melt quote from the mint.
+	 * @param invoice LN invoice that needs to get a fee estimate
+	 * @param partialAmount the partial amount of the invoice's total to be paid by this instance
+	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
+	 */
+	async createMultiPathMeltQuote(
+		invoice: string,
+		millisatPartialAmount: number
+	): Promise<MeltQuoteResponse> {
+		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
+		if (!supported) {
+			throw new Error('Mint does not support NUT-15');
+		}
+		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this.unit)) {
+			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
+		}
+		const mppOption: MPPOption = {
+			amount: millisatPartialAmount
+		};
+		const meltOptions: MeltQuoteOptions = {
+			mpp: mppOption
+		};
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice,
+			options: meltOptions
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return meltQuote;

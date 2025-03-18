@@ -36,6 +36,7 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
 - [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
 - [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
+- [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md)
 
 Supported token formats:
 

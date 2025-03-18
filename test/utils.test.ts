@@ -432,11 +432,11 @@ describe('test raw tokens', () => {
 	};
 
 	test('bytes to token', () => {
-		const exptectedBytes = hexToBytes(
+		const expectedBytes = hexToBytes(
 			'6372617742a4617481a261694800ad268c4d1f5826617081a3616101617378403961366462623834376264323332626137366462306466313937323136623239643362386363313435353363643237383237666331636339343266656462346561635821038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d4721267926164695468616e6b20796f75616d75687474703a2f2f6c6f63616c686f73743a33333338617563736174'
 		);
 
-		const decodedToken = utils.getDecodedTokenBinary(exptectedBytes);
+		const decodedToken = utils.getDecodedTokenBinary(expectedBytes);
 		expect(decodedToken).toEqual(token);
 	});
 
