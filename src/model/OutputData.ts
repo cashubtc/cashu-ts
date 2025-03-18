@@ -64,9 +64,6 @@ export class OutputData implements OutputDataLike {
 		const serializedProof = {
 			...serializeProof(proof),
 			...(dleq && {
-				dleqValid: verifyDLEQProof_reblind(this.secret, dleq, proof.C, A)
-			}),
-			...(dleq && {
 				dleq: {
 					s: bytesToHex(dleq.s),
 					e: bytesToHex(dleq.e),
