@@ -1,4 +1,4 @@
-/** This error is thrown when a HTTP response is not 2XX or 400. */
+/** This error is thrown when a HTTP response is not 2XX nor a protocol error. */
 export class HttpResponseError extends Error {
 	status: number;
 	constructor(message: string, status: number) {
@@ -18,38 +18,14 @@ export class NetworkError extends Error {
 	}
 }
 
-/** This error is thrown when a mint operation returns a 400. */
-export class MintOperationError extends Error {
+/**
+ * This error is thrown when a [protocol error](https://github.com/cashubtc/nuts/blob/main/00.md#errors) occurs.
+ * See error codes [here](https://github.com/cashubtc/nuts/blob/main/error_codes.md).
+ */
+export class MintOperationError extends HttpResponseError {
 	code: number;
-
 	constructor(code: number, detail: string) {
-		const messages: Record<number, string> = {
-			10002: 'Blinded message of output already signed',
-			10003: 'Token could not be verified',
-			11001: 'Token is already spent',
-			11002: 'Transaction is not balanced (inputs != outputs)',
-			11005: 'Unit in request is not supported',
-			11006: 'Amount outside of limit range',
-			12001: 'Keyset is not known',
-			12002: 'Keyset is inactive, cannot sign messages',
-			20001: 'Quote request is not paid',
-			20002: 'Tokens have already been issued for quote',
-			20003: 'Minting is disabled',
-			20004: 'Lightning payment failed',
-			20005: 'Quote is pending',
-			20006: 'Invoice already paid',
-			20007: 'Quote is expired',
-			20008: 'Signature for mint request invalid',
-			20009: 'Pubkey required for mint quote',
-			30001: 'Endpoint requires clear auth',
-			30002: 'Clear authentication failed',
-			31001: 'Endpoint requires blind auth',
-			31002: 'Blind authentication failed',
-			31003: 'Maximum BAT mint amount exceeded',
-			31004: 'BAT mint rate limit exceeded'
-		};
-		// Use detail if returned by the mint, otherwise use fallback messages
-		super(detail || messages[code] || 'Unknown mint operation error');
+		super(detail || 'Unknown mint operation error', 400);
 		this.code = code;
 		this.name = 'MintOperationError';
 		Object.setPrototypeOf(this, MintOperationError.prototype);
