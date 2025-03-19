@@ -55,7 +55,7 @@ export class WalletKeyChain {
 		this.unit = unit;
 	}
 
-	addKeyset(k: Keyset) {
+	upsertKeyset(k: Keyset) {
 		this.keysets.set(k.id, k);
 	}
 
@@ -77,29 +77,23 @@ export class WalletKeyChain {
 	 * @param forceRefresh? if set to true, it will force refresh the keyset from the mint
 	 * @returns keyset
 	 */
-	async getKeys(keysetId?: string, forceRefresh?: boolean): Promise<Keyset> {
+	async getFullKeyset(keysetId?: string, forceRefresh?: boolean): Promise<Keyset> {
 		if (!(this.keysets.size > 0) || forceRefresh) {
-			await this.getKeySets();
+			await this.updateKeySets();
 		}
-		// no keyset id is chosen, let's choose one
-		if (!keysetId) {
-			const localKeyset = this._getActiveKeyset();
-			keysetId = localKeyset.id;
-		}
+		const activeKeysetId = keysetId ?? this._getActiveKeyset().id;
 
-		let keyset = this.getLocalKeyset(keysetId);
+		let keyset = this.getLocalKeyset(activeKeysetId);
 		if (!keyset) {
-			await this.getKeySets();
-			keyset = this.getLocalKeyset(keysetId);
+			await this.updateKeySets();
+			keyset = this.getLocalKeyset(activeKeysetId);
 		}
 		if (!keyset) {
 			throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
 		}
 
-		// make sure we have keys for this id
 		if (!keyset.hasKeyPairs) {
-			const keys = await this.mint.getKeys(keysetId);
-			keyset.keyPairs = keys.keysets[0];
+			await this.updateKeypairs(keyset);
 		}
 
 		return keyset;
@@ -132,10 +126,15 @@ export class WalletKeyChain {
 	 * Get keysets from the mint with the unit of the wallet
 	 * @returns keysets with wallet's unit
 	 */
-	async getKeySets(): Promise<Array<Keyset>> {
+	async updateKeySets(): Promise<Array<Keyset>> {
 		const allKeysets = await this.mint.getKeySets();
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this.unit);
-		unitKeysets.forEach((k) => this.addKeyset(new Keyset(k.id, k.unit, k.active)));
+		unitKeysets.forEach((k) => this.upsertKeyset(new Keyset(k.id, k.unit, k.active)));
 		return this.getKeysetList();
+	}
+
+	async updateKeypairs(keyset: Keyset) {
+		const keys = await this.mint.getKeys(keyset.id);
+		keyset.keyPairs = keys;
 	}
 }
