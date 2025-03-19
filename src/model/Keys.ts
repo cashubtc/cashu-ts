@@ -9,10 +9,11 @@ export class Keyset {
 	private _keyPairs?: Record<number, string>;
 	private _input_fee_ppk?: number;
 
-	constructor(id: string, unit: string, active: boolean) {
+	constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number) {
 		this._id = id;
 		this._unit = unit;
 		this._active = active;
+		this._input_fee_ppk = input_fee_ppk;
 	}
 
 	get isActive(): boolean {
