@@ -30,11 +30,12 @@ export type ProofState = {
 /**
  * Enum for the state of a proof
  */
-export enum CheckStateEnum {
-	UNSPENT = 'UNSPENT',
-	PENDING = 'PENDING',
-	SPENT = 'SPENT'
-}
+export const CheckStateEnum = {
+	UNSPENT: 'UNSPENT',
+	PENDING: 'PENDING',
+	SPENT: 'SPENT'
+} as const;
+export type CheckStateEnum = typeof CheckStateEnum[keyof typeof CheckStateEnum];
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
@@ -146,22 +147,24 @@ export type MeltQuoteResponse = {
 	change?: Array<SerializedBlindedSignature>;
 } & ApiError;
 
-export enum MeltQuoteState {
-	UNPAID = 'UNPAID',
-	PENDING = 'PENDING',
-	PAID = 'PAID'
-}
+export const MeltQuoteState = {
+	UNPAID: 'UNPAID',
+	PENDING: 'PENDING',
+	PAID: 'PAID'
+} as const;
+export type MeltQuoteState = typeof MeltQuoteState[keyof typeof MeltQuoteState];
 
 export type MintContactInfo = {
 	method: string;
 	info: string;
 };
 
-export enum MintQuoteState {
-	UNPAID = 'UNPAID',
-	PAID = 'PAID',
-	ISSUED = 'ISSUED'
-}
+export const MintQuoteState = {
+	UNPAID: 'UNPAID',
+	PAID: 'PAID',
+	ISSUED: 'ISSUED'
+} as const;
+export type MintQuoteState = typeof MintQuoteState[keyof typeof MintQuoteState];
 
 /**
  * Response from the mint after requesting a mint
