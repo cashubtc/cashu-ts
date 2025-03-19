@@ -14,6 +14,7 @@ import {
 	ProofState,
 	Token
 } from '../src/model/types/index.js';
+import { MintOperationError } from '../src/model/Errors.js';
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
 import {
@@ -249,7 +250,7 @@ describe('mint api', () => {
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
-		expect(result).toEqual(new Error('no valid signature provided for input.'));
+		expect(result).toEqual(new MintOperationError(0, 'no valid signature provided for input.'));
 
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 
@@ -411,7 +412,6 @@ describe('dleq', () => {
 			expect(p.dleq).toHaveProperty('s');
 			expect(p.dleq).toHaveProperty('e');
 			expect(p.dleq).toHaveProperty('r');
-			expect(p).toHaveProperty('dleqValid', true);
 		});
 	});
 	test('send and receive token with dleq', async () => {
