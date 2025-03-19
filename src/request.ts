@@ -1,4 +1,4 @@
-import { HttpResponseError } from './model/Errors';
+import { HttpResponseError, NetworkError, MintOperationError } from './model/Errors';
 
 type RequestArgs = {
 	endpoint: string;
@@ -31,13 +31,26 @@ async function _request({
 		...requestHeaders
 	};
 
-	const response = await fetch(endpoint, { body, headers, ...options });
+	let response: Response;
+	try {
+		response = await fetch(endpoint, { body, headers, ...options });
+	} catch (err) {
+		// A fetch() promise only rejects when the request fails,
+		// for example, because of a badly-formed request URL or a network error.
+		throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
+	}
 
 	if (!response.ok) {
-		// expecting: { error: '', code: 0 }
-		// or: { detail: '' } (cashuBtc via pythonApi)
-		const { error, detail } = await response.json().catch(() => ({ error: 'bad response' }));
-		throw new HttpResponseError(error || detail || 'bad response', response.status);
+		const errorData = await response.json().catch(() => ({ error: 'bad response' }));
+
+		if (response.status === 400 && 'code' in errorData && 'detail' in errorData) {
+			throw new MintOperationError(errorData.code, errorData.detail);
+		}
+
+		throw new HttpResponseError(
+			'error' in errorData ? errorData.error : errorData.detail || 'HTTP request failed',
+			response.status
+		);
 	}
 
 	try {
