@@ -102,7 +102,7 @@ const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 ```typescript
 // we assume that `wallet` already minted `proofs`, as above
 const { keep, send } = await wallet.send(32, proofs);
-const token = getEncodedTokenV4({ token: [{ mint: mintUrl, proofs: send }] });
+const token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
 console.log(token);
 
 const wallet2 = new CashuWallet(mint); // receiving wallet
