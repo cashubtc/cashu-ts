@@ -35,7 +35,7 @@ export const CheckStateEnum = {
 	PENDING: 'PENDING',
 	SPENT: 'SPENT'
 } as const;
-export type CheckStateEnum = typeof CheckStateEnum[keyof typeof CheckStateEnum];
+export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum];
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
@@ -152,7 +152,7 @@ export const MeltQuoteState = {
 	PENDING: 'PENDING',
 	PAID: 'PAID'
 } as const;
-export type MeltQuoteState = typeof MeltQuoteState[keyof typeof MeltQuoteState];
+export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
 
 export type MintContactInfo = {
 	method: string;
@@ -164,7 +164,7 @@ export const MintQuoteState = {
 	PAID: 'PAID',
 	ISSUED: 'ISSUED'
 } as const;
-export type MintQuoteState = typeof MintQuoteState[keyof typeof MintQuoteState];
+export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState];
 
 /**
  * Response from the mint after requesting a mint
