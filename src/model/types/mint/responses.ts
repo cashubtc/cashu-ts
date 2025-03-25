@@ -145,6 +145,14 @@ export type MeltQuoteResponse = {
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
 	change?: Array<SerializedBlindedSignature>;
+	/**
+	 *  Payment request for the melt quote.
+	 */
+	request?: string;
+	/**
+	 *  Unit of the melt quote.
+	 */
+	unit?: string;
 } & ApiError;
 
 export const MeltQuoteState = {
@@ -190,6 +198,14 @@ export type MintQuoteResponse = {
 	 * Public key the quote is locked to
 	 */
 	pubkey?: string;
+	/**
+	 * Unit of the quote
+	 */
+	unit?: string;
+	/**
+	 * Amount requested for mint quote
+	 */
+	amount?: number;
 } & ApiError;
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
