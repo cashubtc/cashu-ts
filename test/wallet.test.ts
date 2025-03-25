@@ -930,6 +930,15 @@ describe('CashuWallet instantiation properties', () => {
 		expect((satWallet as any)._keysets[0].unit).toEqual('sat');
 		expect((usdWallet as any)._keysets).toHaveLength(1);
 		expect((usdWallet as any)._keysets[0].unit).toEqual('usd');
+
+		expect(() => {
+			const _ = new CashuWallet(mint, {
+				unit: 'msat',
+				keysets
+			});
+		})
+		.toThrowError("None of the specified keyset is suitable for unit msat");
+
 	});
 });
 

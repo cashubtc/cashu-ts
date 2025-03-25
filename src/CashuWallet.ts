@@ -122,7 +122,13 @@ class CashuWallet {
 		}
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
 		if (options?.unit) this._unit = options?.unit;
-		if (options?.keysets) this._keysets = options.keysets.filter((k) => k.unit === this._unit);
+		if (options?.keysets) {
+			const filteredKeysets = options.keysets.filter((k) => k.unit === this._unit);
+			if (filteredKeysets.length === 0) {
+				throw new Error(`None of the specified keyset is suitable for unit ${this._unit}`)
+			}
+			this._keysets = filteredKeysets;
+		}
 		if (options?.mintInfo) this._mintInfo = new MintInfo(options.mintInfo);
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
