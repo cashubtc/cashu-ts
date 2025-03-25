@@ -918,7 +918,7 @@ describe('CashuWallet instantiation properties', () => {
 		] as MintKeyset[];
 		
 		const satWallet = new CashuWallet(mint, {
-			unit: 'sat',
+			//unit: 'sat',
 			keysets,
 		});
 		const usdWallet = new CashuWallet(mint, {
