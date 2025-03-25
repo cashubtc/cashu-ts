@@ -122,7 +122,7 @@ class CashuWallet {
 		}
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
 		if (options?.unit) this._unit = options?.unit;
-		if (options?.keysets) this._keysets = options.keysets;
+		if (options?.keysets) this._keysets = options.keysets.filter((k) => k.unit === this._unit);
 		if (options?.mintInfo) this._mintInfo = new MintInfo(options.mintInfo);
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
