@@ -936,9 +936,7 @@ describe('CashuWallet instantiation properties', () => {
 				unit: 'msat',
 				keysets
 			});
-		})
-		.toThrowError("None of the specified keyset is suitable for unit msat");
-
+		}).toThrowError('None of the specified keyset is suitable for unit msat');
 	});
 });
 
