@@ -77,11 +77,6 @@ class CashuAuthMint {
 		keysetId?: string,
 		customRequest?: typeof request
 	): Promise<MintActiveKeys> {
-		// backwards compatibility for base64 encoded keyset ids
-		if (keysetId) {
-			// make the keysetId url safe
-			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
-		}
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MintActiveKeys>({
 			endpoint: keysetId
