@@ -18,7 +18,6 @@ class CashuAuthWallet {
 	 * @param mint NUT-22 auth mint instance
 	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
 	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
-	 * This can lead to poor performance, in which case the seed should be directly provided
 	 */
 	constructor(
 		mint: CashuAuthMint,
