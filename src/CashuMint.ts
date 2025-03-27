@@ -42,6 +42,7 @@ class CashuMint {
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
+	 * @param [authTokenGetter] a function that is called by the CashuMint instance to obtain a NUT-22 BlindedAuthToken (e.g. from a database or localstorage)
 	 */
 	constructor(
 		private _mintUrl: string,
