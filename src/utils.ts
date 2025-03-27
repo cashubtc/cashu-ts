@@ -256,6 +256,9 @@ function templateFromToken(token: Token): TokenV4Template {
 								s: hexToBytes(p.dleq.s),
 								r: hexToBytes(p.dleq.r ?? '00')
 							} as V4DLEQTemplate
+						}),
+						...(p.witness && {
+							w: JSON.stringify(p.witness)
 						})
 					})
 				)
@@ -283,6 +286,9 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 						s: bytesToHex(p.d.s),
 						e: bytesToHex(p.d.e)
 					} as SerializedDLEQ
+				}),
+				...(p.w && {
+					witness: p.w
 				})
 			});
 		})
