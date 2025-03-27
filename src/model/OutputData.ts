@@ -5,17 +5,12 @@ import {
 	SerializedBlindedSignature,
 	SerializedDLEQ
 } from './types';
-import {
-	blindMessage,
-	constructProofFromPromise,
-	serializeProof
-} from '@cashu/crypto/modules/client';
+import { blindMessage, constructProofFromPromise, serializeProof } from '../crypto/client/index';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
-import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
+import { DLEQ, pointFromHex } from '../crypto/common/index.js';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
-import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
+import { deriveBlindingFactor, deriveSecret } from '../crypto/client/NUT09.js';
 
 export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;

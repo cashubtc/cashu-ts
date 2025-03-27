@@ -1,5 +1,5 @@
 import { schnorr } from '@noble/curves/secp256k1';
-import { SerializedBlindedMessage } from '../model/types';
+import { SerializedBlindedMessage } from '../../model/types';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
