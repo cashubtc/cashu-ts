@@ -1,4 +1,4 @@
-import { CashuMint, CashuWallet, getDecodedToken, getEncodedTokenV4 } from '@cashu/cashu-ts'; 
+import { CashuMint, CashuWallet, getDecodedToken, getEncodedTokenV4 } from '@cashu/cashu-ts';
 import { getFirestore } from "firebase-admin/firestore";
 import { onRequest } from "firebase-functions/v2/https";
 import admin from "firebase-admin";
@@ -81,7 +81,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 
   let receiveProofs;
   try {
-    receiveProofs = await wallet.receive(token);
+    receiveProofs = await wallet.receive(token, { p2pk: { pubkey: p2pkLock } });
   } catch (error) {
     if (error.code === 11001) {
       res.json({
@@ -100,8 +100,7 @@ export const ecashPayment = onRequest(async (req, res) => {
     return;
   }
 
-  const { keep, send } = await wallet.send(totalAmount, receiveProofs, { pubkey: p2pkLock });
-  const backToken = getEncodedTokenV4({ mint: mintUrl, proofs: send });
+  const backToken = getEncodedTokenV4({ mint: mintUrl, proofs: receiveProofs });
 
   const db = getFirestore();
   const collectionRef = db.collection("payments");
