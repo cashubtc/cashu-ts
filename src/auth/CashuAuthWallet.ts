@@ -1,5 +1,6 @@
 import { OutputData } from '../model/OutputData';
 import { BlindAuthMintPayload, MintKeys, MintKeyset, Proof } from '../model/types';
+import { hasValidDleq } from '../utils';
 import { CashuAuthMint } from './CashuAuthMint';
 
 /**
@@ -166,7 +167,7 @@ class CashuAuthWallet {
 		};
 		const { signatures } = await this.mint.mint(mintPayload, clearAuthToken);
 		const authProofs = outputData.map((d, i) => d.toProof(signatures[i], keyset));
-		if (authProofs.some((p) => !p.dleqValid)) {
+		if (authProofs.some((p) => !hasValidDleq(p, keyset))) {
 			throw new Error('Mint returned auth proofs with invalid DLEQ');
 		}
 		return authProofs;
