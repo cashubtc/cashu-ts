@@ -8,6 +8,7 @@ import {
 	CheckStateEnum,
 	MeltQuoteResponse,
 	MeltQuoteState,
+	MintKeyset,
 	MintQuoteResponse,
 	MintQuoteState,
 	Proof
@@ -896,6 +897,46 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toEqual([]);
 		});
+	});
+});
+
+describe('CashuWallet instantiation properties', () => {
+	test("Test constructor's unit-filtering of keysets", () => {
+		const keysets = [
+			{
+				id: '00ed0ddf25402eae',
+				unit: 'usd',
+				active: true,
+				input_fee_ppk: 0
+			},
+			{
+				id: '00bedc9ddf986021',
+				unit: 'sat',
+				active: true,
+				input_fee_ppk: 0
+			}
+		] as MintKeyset[];
+
+		const satWallet = new CashuWallet(mint, {
+			//unit: 'sat',
+			keysets
+		});
+		const usdWallet = new CashuWallet(mint, {
+			unit: 'usd',
+			keysets
+		});
+
+		expect((satWallet as any)._keysets).toHaveLength(1);
+		expect((satWallet as any)._keysets[0].unit).toEqual('sat');
+		expect((usdWallet as any)._keysets).toHaveLength(1);
+		expect((usdWallet as any)._keysets[0].unit).toEqual('usd');
+
+		expect(() => {
+			const _ = new CashuWallet(mint, {
+				unit: 'msat',
+				keysets
+			});
+		}).toThrowError('None of the specified keyset is suitable for unit msat');
 	});
 });
 
