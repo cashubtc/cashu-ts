@@ -33,7 +33,12 @@ export type ReceiveOptions = {
 	privkey?: string;
 	requireDleq?: boolean;
 	outputData?: Array<OutputDataLike> | OutputDataFactory;
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		nsig?: number;
+	};
 };
 
 /**
@@ -62,7 +67,12 @@ export type SendOptions = {
 		send?: Array<OutputDataLike> | OutputDataFactory;
 		keep?: Array<OutputDataLike> | OutputDataFactory;
 	};
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		nsig?: number;
+	};
 };
 
 /**
@@ -89,7 +99,12 @@ export type SwapOptions = {
 		send?: Array<OutputDataLike> | OutputDataFactory;
 		keep?: Array<OutputDataLike> | OutputDataFactory;
 	};
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		nsig?: number;
+	};
 };
 
 export type RestoreOptions = {
@@ -111,7 +126,12 @@ export type MintProofOptions = {
 	counter?: number;
 	pubkey?: string;
 	outputData?: Array<OutputDataLike> | OutputDataFactory;
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		nsig?: number;
+	};
 };
 
 /**
