@@ -70,7 +70,12 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createP2PKData(
-		p2pk: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		p2pk: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			nsig?: number;
+		},
 		amount: number,
 		keyset: MintKeys,
 		customSplit?: Array<number>
@@ -80,20 +85,33 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createSingleP2PKData(
-		p2pk: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		p2pk: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			nsig?: number;
+		},
 		amount: number,
 		keysetId: string
 	) {
+		// Standardize pubkey (backwards compat) and clamp n_sigs between 1 and total pubkeys
+		const pubkeys: Array<string> = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
+		const n_sigs: number = Math.max(1, Math.min(p2pk.nsig || 1, pubkeys.length));
 		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: p2pk.pubkey,
+				data: pubkeys[0], // Primary key
 				tags: []
 			}
 		];
 		if (p2pk.locktime) {
 			newSecret[1].tags.push(['locktime', p2pk.locktime]);
+		}
+		if (pubkeys.length > 1) {
+			// Mint will consider additional pubkeys if n_sigs tag is 1 or higher
+			newSecret[1].tags.push(['pubkeys', ...pubkeys.slice(1)]); // Additional keys
+			newSecret[1].tags.push(['n_sigs', n_sigs]);
 		}
 		if (p2pk.refundKeys) {
 			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
