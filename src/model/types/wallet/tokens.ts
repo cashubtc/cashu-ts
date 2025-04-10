@@ -57,6 +57,10 @@ export type V4ProofTemplate = {
 	 * DLEQ
 	 */
 	d?: V4DLEQTemplate;
+	/**
+	 * Witness
+	 */
+	w?: string;
 };
 
 /**
