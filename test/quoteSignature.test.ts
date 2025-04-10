@@ -2,7 +2,7 @@ import { test, describe, expect } from 'vitest';
 import { MintPayload } from '../src/model/types/wallet/payloads';
 import { signMintQuote, verifyMintQuoteSignature } from '../src/crypto/client/NUT20';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { schnorr } from '@noble/curves/secp256k1';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 
 describe('mint quote signatures', () => {
 	test('valid signature verification', () => {
@@ -116,7 +116,7 @@ describe('mint quote signatures', () => {
 		} as MintPayload;
 		const quote = mintRequest.quote;
 		const privkey = 'd56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
-		const pubkey = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(privkey)));
+		const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey)));
 		const blindedMessages = mintRequest.outputs;
 		const signature = signMintQuote(privkey, quote, blindedMessages);
 		expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, signature)).toBe(true);

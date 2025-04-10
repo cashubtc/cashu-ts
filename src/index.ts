@@ -14,6 +14,16 @@ import {
 	hasValidDleq
 } from './utils.js';
 import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
+import {
+	signP2PKProofs,
+	hasP2PKSignedProof,
+	getP2PKExpectedKWitnessPubkeys,
+	getP2PKLocktime,
+	getP2PKNSigs,
+	getP2PKSigFlag,
+	getP2PKWitnessSignatures
+} from './crypto/client/NUT11.js';
+import { parseP2PKSecret } from './crypto/common/NUT11.js';
 
 export * from './model/types/index.js';
 
@@ -34,7 +44,15 @@ export {
 	setGlobalRequestOptions,
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
-	hasValidDleq
+	hasValidDleq,
+	getP2PKExpectedKWitnessPubkeys,
+	getP2PKLocktime,
+	getP2PKNSigs,
+	getP2PKSigFlag,
+	getP2PKWitnessSignatures,
+	parseP2PKSecret,
+	signP2PKProofs,
+	hasP2PKSignedProof
 };
 
 export { injectWebSocketImpl } from './ws.js';

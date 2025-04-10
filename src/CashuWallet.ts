@@ -1,6 +1,6 @@
 import { serializeProof } from './crypto/client/index.js';
-import { getSignedProofs } from './crypto/client/NUT11.js';
-import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
+import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
+import { hashToCurve, pointFromHex } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import type {
@@ -903,17 +903,9 @@ class CashuWallet {
 			this._keepFactory
 		);
 		if (privkey != undefined) {
-			proofsToSend = getSignedProofs(
-				proofsToSend.map((p: Proof) => {
-					return {
-						amount: p.amount,
-						C: pointFromHex(p.C),
-						id: p.id,
-						secret: new TextEncoder().encode(p.secret)
-					};
-				}),
-				privkey
-			).map((p: NUT11Proof) => serializeProof(p));
+			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
+				return { ...p, witness: JSON.stringify(p.witness) };
+			});
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
@@ -952,7 +944,13 @@ class CashuWallet {
 			keep?: Array<OutputDataLike> | OutputDataFactory;
 			send?: Array<OutputDataLike> | OutputDataFactory;
 		},
-		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
+		p2pk?: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			nsig?: number;
+			rsig?: number;
+		}
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
@@ -1009,17 +1007,9 @@ class CashuWallet {
 		}
 
 		if (privkey) {
-			proofsToSend = getSignedProofs(
-				proofsToSend.map((p: Proof) => {
-					return {
-						amount: p.amount,
-						C: pointFromHex(p.C),
-						id: p.id,
-						secret: new TextEncoder().encode(p.secret)
-					};
-				}),
-				privkey
-			).map((p: NUT11Proof) => serializeProof(p));
+			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
+				return { ...p, witness: JSON.stringify(p.witness) };
+			});
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
@@ -1228,7 +1218,13 @@ class CashuWallet {
 		counter?: number,
 		pubkey?: string,
 		outputAmounts?: Array<number>,
-		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		p2pk?: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			nsig?: number;
+			rsig?: number;
+		},
 		factory?: OutputDataFactory
 	): Array<OutputDataLike> {
 		let outputData: Array<OutputDataLike>;
