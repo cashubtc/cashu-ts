@@ -865,7 +865,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toContainEqual(['locktime', 212]);
-			expect(s[1].tags).toContainEqual(['refund', ['iamarefund']]);
+			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
 		});
 	});
 	test('Create BlindingData locked to pk with locktime and multiple refund keys', async () => {
@@ -882,7 +882,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toContainEqual(['locktime', 212]);
-			expect(s[1].tags).toContainEqual(['refund', ['iamarefund', 'asecondrefund']]);
+			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
 		});
 	});
 	test('Create BlindingData locked to pk without locktime and no refund keys', async () => {

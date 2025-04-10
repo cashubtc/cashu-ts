@@ -101,7 +101,7 @@ export class OutputData implements OutputDataLike {
 			newSecret[1].tags.push(['locktime', p2pk.locktime]);
 		}
 		if (p2pk.refundKeys) {
-			newSecret[1].tags.push(['refund', p2pk.refundKeys]);
+			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
 		}
 		const parsed = JSON.stringify(newSecret);
 		const secretBytes = new TextEncoder().encode(parsed);
