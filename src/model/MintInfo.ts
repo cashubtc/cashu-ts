@@ -2,9 +2,24 @@ import { GetInfoResponse, MPPMethod, SwapMethod, WebSocketSupport } from './type
 
 export class MintInfo {
 	private readonly _mintInfo: GetInfoResponse;
+	private readonly _protectedEnpoints?: {
+		cache: {
+			[url: string]: boolean;
+		};
+		apiReturn: Array<{ method: 'GET' | 'POST'; regex: RegExp; cachedValue?: boolean }>;
+	};
 
 	constructor(info: GetInfoResponse) {
 		this._mintInfo = info;
+		if (info.nuts[22]) {
+			this._protectedEnpoints = {
+				cache: {},
+				apiReturn: info.nuts[22].protected_endpoints.map((o) => ({
+					method: o.method,
+					regex: new RegExp(o.path)
+				}))
+			};
+		}
 	}
 
 	isSupported(num: 4 | 5): { disabled: boolean; params: Array<SwapMethod> };
@@ -38,6 +53,19 @@ export class MintInfo {
 			}
 		}
 	}
+
+	requiresBlindAuthToken(path: string) {
+		if (!this._protectedEnpoints) {
+			return false;
+		}
+		if (typeof this._protectedEnpoints.cache[path] === 'boolean') {
+			return this._protectedEnpoints.cache[path];
+		}
+		const isProtectedEndpoint = this._protectedEnpoints.apiReturn.some((e) => e.regex.test(path));
+		this._protectedEnpoints.cache[path] = isProtectedEndpoint;
+		return isProtectedEndpoint;
+	}
+
 	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
 		if (this._mintInfo.nuts[num]?.supported) {
 			return { supported: true };

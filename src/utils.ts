@@ -527,6 +527,22 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	return true;
 }
 
+/**
+ * Helper function to encode a cashu auth token authA
+ * @param proof
+ */
+export function getEncodedAuthToken(proof: Proof): string {
+	const token = {
+		id: proof.id,
+		secret: proof.secret,
+		C: proof.C
+	};
+	const base64Data = encodeJsonToBase64(token);
+	const prefix = 'auth';
+	const version = 'A';
+	return prefix + version + base64Data;
+}
+
 function concatByteArrays(...arrays: Array<Uint8Array>): Uint8Array {
 	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
 	const byteArray = new Uint8Array(totalLength);

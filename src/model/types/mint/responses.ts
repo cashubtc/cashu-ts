@@ -109,6 +109,11 @@ export type GetInfoResponse = {
 			// Locked Mint Quote
 			supported: boolean;
 		};
+		'22'?: {
+			// Blind Authentication
+			bat_max_mint: number;
+			protected_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
+		};
 	};
 	motd?: string;
 };
@@ -277,3 +282,10 @@ export type WebSocketSupport = {
 	unit: string;
 	commands: Array<string>;
 };
+
+/**
+ * Response from the mint after blind auth minting
+ */
+export type BlindAuthMintResponse = {
+	signatures: Array<SerializedBlindedSignature>;
+} & ApiError;
