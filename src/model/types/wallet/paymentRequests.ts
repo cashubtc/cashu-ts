@@ -6,6 +6,12 @@ export type RawTransport = {
 	g?: Array<Array<string>>; // tags
 };
 
+export type RawNUT10Option = {
+	k: string; // kind
+	d: string; // data
+	t: Array<Array<string>>; // tags
+};
+
 export type RawPaymentRequest = {
 	i?: string; // id
 	a?: number; // amount
@@ -13,7 +19,8 @@ export type RawPaymentRequest = {
 	s?: boolean; // single use
 	m?: Array<string>; // mints
 	d?: string; // description
-	t: Array<RawTransport>; // transports
+	t?: Array<RawTransport>; // transports
+	nut10?: RawNUT10Option;
 };
 
 export type PaymentRequestTransport = {
@@ -33,4 +40,14 @@ export type PaymentRequestPayload = {
 	unit: string;
 	mint: string;
 	proofs: Array<Proof>;
+};
+
+/** Used to express a spending condition that proofs should be encumbered with */
+export type NUT10Option = {
+	/** The kind of spending condition */
+	kind: string;
+	/** Expresses the spending condition relative to the kind */
+	data: string;
+	/** Tags associated with the spending condition for additional data */
+	tags: Array<Array<string>>;
 };
