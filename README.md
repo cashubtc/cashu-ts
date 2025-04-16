@@ -116,7 +116,7 @@ try {
 	const decodedToken = getDecodedToken(token);
 	console.log(decodedToken); // { mint: "https://mint.0xchat.com", unit: "sat", proofs: [...] }
 } catch (_) {
-	console.log("Invalid token");
+	console.log('Invalid token');
 }
 ```
 
