@@ -7,7 +7,6 @@ import type {
 	MintActiveKeys,
 	MintAllKeysets,
 	PostRestoreResponse,
-	MintQuoteResponse,
 	SerializedBlindedMessage,
 	SwapPayload,
 	SwapResponse,
@@ -17,7 +16,8 @@ import type {
 	PostRestorePayload,
 	MeltQuotePayload,
 	MeltQuoteResponse,
-	PartialMintQuoteResponse
+	PartialMintQuoteResponse,
+	PartialMeltQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
@@ -214,9 +214,11 @@ class CashuMint {
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: typeof request
-	): Promise<MeltQuoteResponse> {
+	): Promise<PartialMeltQuoteResponse> {
 		const requestInstance = customRequest || request;
-		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
+		const response = await requestInstance<
+			PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+		>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
 			method: 'POST',
 			requestBody: meltQuotePayload
@@ -239,7 +241,7 @@ class CashuMint {
 	 * @param MeltQuotePayload
 	 * @returns
 	 */
-	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse> {
+	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse> {
 		return CashuMint.createMeltQuote(this._mintUrl, meltQuotePayload, this._customRequest);
 	}
 
@@ -253,7 +255,7 @@ class CashuMint {
 		mintUrl: string,
 		quote: string,
 		customRequest?: typeof request
-	): Promise<MeltQuoteResponse> {
+	): Promise<PartialMeltQuoteResponse> {
 		const requestInstance = customRequest || request;
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
@@ -280,7 +282,7 @@ class CashuMint {
 	 * @param quote Quote ID
 	 * @returns
 	 */
-	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
+	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse> {
 		return CashuMint.checkMeltQuote(this._mintUrl, quote, this._customRequest);
 	}
 
@@ -295,7 +297,7 @@ class CashuMint {
 		mintUrl: string,
 		meltPayload: MeltPayload,
 		customRequest?: typeof request
-	): Promise<MeltQuoteResponse> {
+	): Promise<PartialMeltQuoteResponse> {
 		const requestInstance = customRequest || request;
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
@@ -320,7 +322,7 @@ class CashuMint {
 	 * @param meltPayload
 	 * @returns
 	 */
-	async melt(meltPayload: MeltPayload): Promise<MeltQuoteResponse> {
+	async melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse> {
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest);
 	}
 	/**
