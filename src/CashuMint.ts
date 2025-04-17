@@ -16,7 +16,8 @@ import type {
 	MintResponse,
 	PostRestorePayload,
 	MeltQuotePayload,
-	MeltQuoteResponse
+	MeltQuoteResponse,
+	PartialMintQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request from './request.js';
@@ -116,9 +117,11 @@ class CashuMint {
 		mintUrl: string,
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request
-	): Promise<MintQuoteResponse> {
+	): Promise<PartialMintQuoteResponse> {
 		const requestInstance = customRequest || request;
-		const response = await requestInstance<MintQuoteResponse & MintQuoteResponsePaidDeprecated>({
+		const response = await requestInstance<
+			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+		>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
 			requestBody: mintQuotePayload
@@ -131,7 +134,7 @@ class CashuMint {
 	 * @param mintQuotePayload Payload for creating a new mint quote
 	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
 	 */
-	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse> {
+	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse> {
 		return CashuMint.createMintQuote(this._mintUrl, mintQuotePayload, this._customRequest);
 	}
 
@@ -146,9 +149,11 @@ class CashuMint {
 		mintUrl: string,
 		quote: string,
 		customRequest?: typeof request
-	): Promise<MintQuoteResponse> {
+	): Promise<PartialMintQuoteResponse> {
 		const requestInstance = customRequest || request;
-		const response = await requestInstance<MintQuoteResponse & MintQuoteResponsePaidDeprecated>({
+		const response = await requestInstance<
+			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+		>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
 			method: 'GET'
 		});
@@ -161,7 +166,7 @@ class CashuMint {
 	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async checkMintQuote(quote: string): Promise<MintQuoteResponse> {
+	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse> {
 		return CashuMint.checkMintQuote(this._mintUrl, quote, this._customRequest);
 	}
 
