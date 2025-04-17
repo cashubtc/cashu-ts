@@ -256,6 +256,9 @@ function templateFromToken(token: Token): TokenV4Template {
 								s: hexToBytes(p.dleq.s),
 								r: hexToBytes(p.dleq.r ?? '00')
 							} as V4DLEQTemplate
+						}),
+						...(p.witness && {
+							w: JSON.stringify(p.witness)
 						})
 					})
 				)
@@ -283,6 +286,9 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 						s: bytesToHex(p.d.s),
 						e: bytesToHex(p.d.e)
 					} as SerializedDLEQ
+				}),
+				...(p.w && {
+					witness: p.w
 				})
 			});
 		})
@@ -519,6 +525,22 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	}
 
 	return true;
+}
+
+/**
+ * Helper function to encode a cashu auth token authA
+ * @param proof
+ */
+export function getEncodedAuthToken(proof: Proof): string {
+	const token = {
+		id: proof.id,
+		secret: proof.secret,
+		C: proof.C
+	};
+	const base64Data = encodeJsonToBase64(token);
+	const prefix = 'auth';
+	const version = 'A';
+	return prefix + version + base64Data;
 }
 
 function concatByteArrays(...arrays: Array<Uint8Array>): Uint8Array {

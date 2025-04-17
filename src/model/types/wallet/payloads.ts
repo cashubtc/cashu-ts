@@ -124,6 +124,16 @@ export type SerializedBlindedMessage = {
 };
 
 /**
+ * Payload that needs to be sent to the mint when requesting blind auth tokens
+ */
+export type BlindAuthMintPayload = {
+	/**
+	 * Outputs (blinded messages) to be signed by the mint.
+	 */
+	outputs: Array<SerializedBlindedMessage>;
+};
+
+/**
  * includes all data required to swap inputs for outputs and construct proofs from them.
  */
 export type SwapTransaction = {

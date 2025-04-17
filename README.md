@@ -109,6 +109,17 @@ const wallet2 = new CashuWallet(mint); // receiving wallet
 const receiveProofs = await wallet2.receive(token);
 ```
 
+#### Get token data
+
+```typescript
+try {
+	const decodedToken = getDecodedToken(token);
+	console.log(decodedToken); // { mint: "https://mint.0xchat.com", unit: "sat", proofs: [...] }
+} catch (_) {
+	console.log('Invalid token');
+}
+```
+
 ## Contribute
 
 Contributions are very welcome.

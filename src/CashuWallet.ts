@@ -1298,7 +1298,15 @@ class CashuWallet {
 			count = 0;
 		}
 		const amounts = count ? Array(count).fill(1) : [];
-		return this.createOutputData(amount, keyset, counter, undefined, amounts, undefined, factory);
+		return this.createOutputData(
+			amounts.length,
+			keyset,
+			counter,
+			undefined,
+			amounts,
+			undefined,
+			factory
+		);
 	}
 }
 

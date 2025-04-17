@@ -29,6 +29,34 @@ export type Proof = {
 	 * DLEQ proof
 	 */
 	dleq?: SerializedDLEQ;
+	/**
+	 * The witness for this proof.
+	 */
+	witness?: string | P2PKWitness | HTLCWitness;
+};
+
+/**
+ * P2PK witness
+ */
+export type P2PKWitness = {
+	/**
+	 * An array of signatures in hex format
+	 */
+	signatures?: Array<string>;
+};
+
+/**
+ * HTLC witness
+ */
+export type HTLCWitness = {
+	/**
+	 * preimage
+	 */
+	preimage: string;
+	/**
+	 * An array of signatures in hex format
+	 */
+	signatures?: Array<string>;
 };
 
 /**
