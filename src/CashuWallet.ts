@@ -890,7 +890,8 @@ class CashuWallet {
 						amount: p.amount,
 						C: pointFromHex(p.C),
 						id: p.id,
-						secret: new TextEncoder().encode(p.secret)
+						secret: new TextEncoder().encode(p.secret),
+						witness: typeof p.witness === "string" ? JSON.parse(p.witness) : p.witness,
 					};
 				}),
 				privkey
@@ -933,7 +934,12 @@ class CashuWallet {
 			keep?: Array<OutputDataLike> | OutputDataFactory;
 			send?: Array<OutputDataLike> | OutputDataFactory;
 		},
-		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
+		p2pk?: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			nsig?: number;
+		}
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
@@ -996,7 +1002,8 @@ class CashuWallet {
 						amount: p.amount,
 						C: pointFromHex(p.C),
 						id: p.id,
-						secret: new TextEncoder().encode(p.secret)
+						secret: new TextEncoder().encode(p.secret),
+						witness: typeof p.witness === "string" ? JSON.parse(p.witness) : null,
 					};
 				}),
 				privkey
@@ -1209,7 +1216,12 @@ class CashuWallet {
 		counter?: number,
 		pubkey?: string,
 		outputAmounts?: Array<number>,
-		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		p2pk?: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			nsig?: number;
+		},
 		factory?: OutputDataFactory
 	): Array<OutputDataLike> {
 		let outputData: Array<OutputDataLike>;
