@@ -1,17 +1,13 @@
-import {
-	blindMessage,
-	constructProofFromPromise,
-	serializeProof
-} from '@cashu/crypto/modules/client';
+import { blindMessage, constructProofFromPromise, serializeProof } from '../src/crypto/client/';
 import { test, describe, expect } from 'vitest';
 import { Keys, Proof, Token } from '../src/model/types/index.js';
 import * as utils from '../src/utils.js';
 import { PUBKEYS } from './consts.js';
-import { createDLEQProof } from '@cashu/crypto/modules/mint/NUT12';
+import { createDLEQProof } from '../src/crypto/mint/NUT12';
 import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../src/utils.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { createBlindSignature, getPubKeyFromPrivKey } from '@cashu/crypto/modules/mint';
-import { pointFromBytes } from '@cashu/crypto/modules/common';
+import { createBlindSignature, getPubKeyFromPrivKey } from '../src/crypto/mint';
+import { pointFromBytes } from '../src/crypto/common';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {

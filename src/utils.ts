@@ -1,5 +1,5 @@
-import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
-import { DLEQ, pointFromHex } from '@cashu/crypto/modules/common';
+import { verifyDLEQProof_reblind } from './crypto/client/NUT12.js';
+import { DLEQ, pointFromHex } from './crypto/common/index.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import {

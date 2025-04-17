@@ -1,16 +1,7 @@
-import {
-	blindMessage,
-	constructProofFromPromise,
-	serializeProof
-} from '@cashu/crypto/modules/client';
-import { deriveBlindingFactor, deriveSecret } from '@cashu/crypto/modules/client/NUT09';
-import { createP2PKsecret, getSignedProofs } from '@cashu/crypto/modules/client/NUT11';
-import { verifyDLEQProof_reblind } from '@cashu/crypto/modules/client/NUT12';
-import { hashToCurve, pointFromHex } from '@cashu/crypto/modules/common';
-import { DLEQ, type Proof as NUT11Proof } from '@cashu/crypto/modules/common';
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { serializeProof } from './crypto/client/index.js';
+import { getSignedProofs } from './crypto/client/NUT11.js';
+import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
-import { BlindedMessage } from './model/BlindedMessage.js';
 import { MintInfo } from './model/MintInfo.js';
 import {
 	GetInfoResponse,
@@ -25,7 +16,6 @@ import {
 	RestoreOptions,
 	SendOptions,
 	SerializedBlindedSignature,
-	SerializedDLEQ,
 	SwapOptions,
 	type MeltPayload,
 	type MeltProofsResponse,
@@ -37,8 +27,6 @@ import {
 	type MintQuotePayload,
 	type Proof,
 	type SendResponse,
-	type SerializedBlindedMessage,
-	type SwapPayload,
 	type Token,
 	MPPOption,
 	MeltQuoteOptions,
@@ -47,16 +35,14 @@ import {
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
-	bytesToNumber,
 	getDecodedToken,
 	getKeepAmounts,
 	hasValidDleq,
-	numberToHexPadded64,
 	splitAmount,
 	stripDleq,
 	sumProofs
 } from './utils.js';
-import { signMintQuote } from './crypto/nut-20.js';
+import { signMintQuote } from './crypto/client/NUT20.js';
 import {
 	OutputData,
 	OutputDataFactory,
