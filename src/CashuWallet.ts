@@ -45,7 +45,8 @@ import {
 	SwapTransaction,
 	LockedMintQuoteResponse,
 	MintQuote,
-	PartialMintQuoteResponse
+	PartialMintQuoteResponse,
+	PartialMeltQuoteResponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -845,7 +846,11 @@ class CashuWallet {
 			request: invoice
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
-		return meltQuote;
+		return {
+			...meltQuote,
+			unit: meltQuote.unit || this.unit,
+			request: meltQuote.request || invoice
+		};
 	}
 
 	/**
@@ -877,7 +882,7 @@ class CashuWallet {
 			options: meltOptions
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
-		return meltQuote;
+		return { ...meltQuote, request: invoice, unit: this._unit };
 	}
 
 	/**
@@ -885,9 +890,17 @@ class CashuWallet {
 	 * @param quote ID of the melt quote
 	 * @returns the mint will return an existing melt quote
 	 */
-	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse> {
-		const meltQuote = await this.mint.checkMeltQuote(quote);
-		return meltQuote;
+	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
+	async checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
+	async checkMeltQuote(
+		quote: string | MeltQuoteResponse
+	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+		const quoteId = typeof quote === 'string' ? quote : quote.quote;
+		const meltQuote = await this.mint.checkMeltQuote(quoteId);
+		if (typeof quote === 'string') {
+			return meltQuote;
+		}
+		return { ...meltQuote, request: quote.request, unit: quote.unit };
 	}
 
 	/**
@@ -934,7 +947,7 @@ class CashuWallet {
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
 		return {
-			quote: meltResponse,
+			quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
 			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? []
 		};
 	}
