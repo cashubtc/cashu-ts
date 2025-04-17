@@ -1,4 +1,4 @@
-import type { MintQuoteResponse } from '../model/types/index.js';
+import type { PartialMintQuoteResponse } from '../model/types/index.js';
 import { MintQuoteState } from '../model/types/index.js';
 
 export type MintQuoteResponsePaidDeprecated = {
@@ -6,8 +6,8 @@ export type MintQuoteResponsePaidDeprecated = {
 };
 
 export function handleMintQuoteResponseDeprecated(
-	response: MintQuoteResponse & MintQuoteResponsePaidDeprecated
-): MintQuoteResponse {
+	response: PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+): PartialMintQuoteResponse {
 	// if the response MeltQuoteResponse has a "paid" flag, we monkey patch it to the state enum
 	if (!response.state) {
 		console.warn(

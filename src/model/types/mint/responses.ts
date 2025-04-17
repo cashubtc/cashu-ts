@@ -121,7 +121,7 @@ export type GetInfoResponse = {
 /**
  * Response from the mint after requesting a melt quote
  */
-export type MeltQuoteResponse = {
+export type PartialMeltQuoteResponse = {
 	/**
 	 * Quote ID
 	 */
@@ -150,7 +150,17 @@ export type MeltQuoteResponse = {
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
 	 */
 	change?: Array<SerializedBlindedSignature>;
+	/**
+	 *  Payment request for the melt quote.
+	 */
+	request?: string;
+	/**
+	 *  Unit of the melt quote.
+	 */
+	unit?: string;
 } & ApiError;
+
+export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
 
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
@@ -174,7 +184,7 @@ export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState
 /**
  * Response from the mint after requesting a mint
  */
-export type MintQuoteResponse = {
+export type PartialMintQuoteResponse = {
 	/**
 	 * Payment request
 	 */
@@ -195,7 +205,17 @@ export type MintQuoteResponse = {
 	 * Public key the quote is locked to
 	 */
 	pubkey?: string;
+	/**
+	 * Unit of the quote
+	 */
+	unit?: string;
+	/**
+	 * Amount requested for mint quote
+	 */
+	amount?: number;
 } & ApiError;
+
+export type MintQuoteResponse = PartialMintQuoteResponse & { amount: number; unit: string };
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 

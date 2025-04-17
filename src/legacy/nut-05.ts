@@ -1,4 +1,4 @@
-import type { MeltQuoteResponse } from '../model/types/index.js';
+import type { PartialMeltQuoteResponse } from '../model/types/index.js';
 import { MeltQuoteState } from '../model/types/index.js';
 
 export type MeltQuoteResponsePaidDeprecated = {
@@ -6,8 +6,8 @@ export type MeltQuoteResponsePaidDeprecated = {
 };
 
 export function handleMeltQuoteResponseDeprecated(
-	response: MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
-): MeltQuoteResponse {
+	response: PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+): PartialMeltQuoteResponse {
 	// if the response MeltQuoteResponse has a "paid" flag, we monkey patch it to the state enum
 	if (!response.state) {
 		console.warn(
