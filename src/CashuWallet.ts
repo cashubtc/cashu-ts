@@ -43,7 +43,9 @@ import {
 	MPPOption,
 	MeltQuoteOptions,
 	SwapTransaction,
-	LockedMintQuoteResponse
+	LockedMintQuoteResponse,
+	MintQuote,
+	PartialMintQuoteResponse
 } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
@@ -692,13 +694,14 @@ class CashuWallet {
 	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async createMintQuote(amount: number, description?: string) {
+	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
 			description: description
 		};
-		return await this.mint.createMintQuote(mintQuotePayload);
+		const res = await this.mint.createMintQuote(mintQuotePayload);
+		return { ...res, amount: res.amount || amount, unit: res.unit || this.unit };
 	}
 
 	/**
@@ -725,10 +728,12 @@ class CashuWallet {
 			pubkey: pubkey
 		};
 		const res = await this.mint.createMintQuote(mintQuotePayload);
-		if (!res.pubkey) {
+		if (typeof res.pubkey !== 'string') {
 			throw new Error('Mint returned unlocked mint quote');
+		} else {
+			const pubkey = res.pubkey;
+			return { ...res, pubkey, amount: res.amount || amount, unit: res.unit || this.unit };
 		}
-		return res as LockedMintQuoteResponse;
 	}
 
 	/**
@@ -736,8 +741,17 @@ class CashuWallet {
 	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async checkMintQuote(quote: string) {
-		return await this.mint.checkMintQuote(quote);
+	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
+	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
+	async checkMintQuote(
+		quote: string | MintQuoteResponse
+	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+		const quoteId = typeof quote === 'string' ? quote : quote.quote;
+		const baseRes = await this.mint.checkMintQuote(quoteId);
+		if (typeof quote === 'string') {
+			return baseRes;
+		}
+		return { ...baseRes, amount: baseRes.amount || quote.amount, unit: baseRes.unit || quote.unit };
 	}
 
 	/**
