@@ -3,7 +3,8 @@ import {
 	decodePaymentRequest,
 	PaymentRequest,
 	PaymentRequestTransport,
-	PaymentRequestTransportType
+	PaymentRequestTransportType,
+	NUT10Option
 } from '../src/index.js';
 
 describe('payment requests', () => {
@@ -21,7 +22,12 @@ describe('payment requests', () => {
 			'sat',
 			['https://mint.com'],
 			'test',
-			true // single use
+			true, // single use
+			{
+				kind: 'P2PK',
+				data: 'pubkey',
+				tags: [['tag', 'tag-value']]
+			} as NUT10Option
 		);
 		const pr = request.toEncodedRequest();
 		expect(pr).toBeDefined();
@@ -32,11 +38,16 @@ describe('payment requests', () => {
 		expect(decodedRequest.unit).toBe('sat');
 		expect(decodedRequest.mints).toStrictEqual(['https://mint.com']);
 		expect(decodedRequest.description).toBe('test');
-		expect(decodedRequest.transport).toHaveLength(1);
+		expect(decodedRequest.transport).toBeDefined();
+		expect(decodedRequest.transport?.length).toBe(1);
 		expect(decodedRequest.singleUse).toBe(true);
-		expect(decodedRequest.transport[0].type).toBe(PaymentRequestTransportType.NOSTR);
-		expect(decodedRequest.transport[0].target).toBe('asd');
-		expect(decodedRequest.transport[0].tags).toStrictEqual([['n', '17']]);
+		expect(decodedRequest.transport?.[0].type).toBe(PaymentRequestTransportType.NOSTR);
+		expect(decodedRequest.transport?.[0].target).toBe('asd');
+		expect(decodedRequest.transport?.[0].tags).toStrictEqual([['n', '17']]);
+		expect(decodedRequest.nut10).toBeDefined();
+		expect(decodedRequest.nut10?.kind).toBe('P2PK');
+		expect(decodedRequest.nut10?.data).toBe('pubkey');
+		expect(decodedRequest.nut10?.tags).toStrictEqual([['tag', 'tag-value']]);
 
 		const decodedRequestClassConstructor = PaymentRequest.fromEncodedRequest(pr);
 		expect(decodedRequestClassConstructor).toStrictEqual(decodedRequest);
@@ -51,9 +62,10 @@ describe('payment requests', () => {
 		expect(request.unit).toBe('sat');
 		expect(request.mints).toStrictEqual(['https://mint.com']);
 		expect(request.description).toBeUndefined();
-		expect(request.transport).toHaveLength(1);
-		expect(request.transport[0].type).toBe(PaymentRequestTransportType.NOSTR);
-		expect(request.transport[0].target).toBe(
+		expect(request.transport).toBeDefined();
+		expect(request.transport?.length).toBe(1);
+		expect(request.transport?.[0].type).toBe(PaymentRequestTransportType.NOSTR);
+		expect(request.transport?.[0].target).toBe(
 			'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgymdex3gvfsfujp3xyn7e7qrs8yyq9d8zsu2zqujxuxcapfqvzc8grqdkts'
 		);
 	});
