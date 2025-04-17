@@ -22,7 +22,9 @@
 		"lint": "eslint --ext .js,.ts . --fix",
 		"format": "prettier --write .",
 		"check-format": "prettier --check .",
-		"typedoc": "typedoc src/index.ts"
+		"typedoc": "typedoc src/index.ts",
+		"api:check": "api-extractor run",
+		"api:update": "api-extractor run --local"
 	},
 	"exports": {
 		".": {
@@ -42,6 +44,7 @@
 	"author": "gandlaf21",
 	"license": "MIT",
 	"devDependencies": {
+		"@microsoft/api-extractor": "^7.52.4",
 		"@types/node-fetch": "^2.6.4",
 		"@types/ws": "^8.5.10",
 		"@typescript-eslint/eslint-plugin": "^5.59.2",
