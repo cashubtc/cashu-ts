@@ -1029,7 +1029,7 @@ class CashuWallet {
 						C: pointFromHex(p.C),
 						id: p.id,
 						secret: new TextEncoder().encode(p.secret),
-						witness: typeof p.witness === 'string' ? JSON.parse(p.witness) : null
+						witness: typeof p.witness === 'string' ? JSON.parse(p.witness) : { signatures: [] }
 					};
 				}),
 				privkey

@@ -250,7 +250,7 @@ describe('mint api', () => {
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
-		expect(result).toEqual(new MintOperationError(0, 'no valid signature provided for input.'));
+		expect(result).toEqual(new MintOperationError(0, 'no signatures in proof.'));
 
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 
