@@ -30,38 +30,64 @@ export const signBlindedMessage = (B_: string, privateKey: PrivKey): Uint8Array 
 	return sig;
 };
 
+export const getP2PExpectedKWitnessPubkeys = (secret: Secret): Array<string> => {
+	try {
+		const now = Math.floor(Date.now() / 1000); // unix TS
+		const { data, tags } = secret[1];
+		const locktimeTag = tags && tags.find((tag) => tag[0] === 'locktime');
+		const locktime = locktimeTag ? parseInt(locktimeTag[1], 10) : Infinity; // Permanent lock if not set
+		const refundTag = tags && tags.find((tag) => tag[0] === 'refund');
+		const refundKeys = refundTag && refundTag.length > 1 ? refundTag.slice(1) : [];
+		const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
+		const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
+		const n_sigsTag = tags && tags.find((tag) => tag[0] === 'n_sigs');
+		const n_sigs = n_sigsTag ? parseInt(n_sigsTag[1], 10) : undefined;
+		// If locktime is in the future, return 'data'+'pubkeys' if multisig ('n_sigs')
+		// otherwise return the main locking key ('data')
+		if (locktime > now) {
+			if (n_sigs && n_sigs >= 1) {
+				return [data, ...pubkeys];
+			}
+			return [data]; // as array
+		}
+		// If locktime expired, return 'refund' keys
+		if (refundKeys) {
+			return refundKeys;
+		}
+	} catch {}
+	return []; // Token is not locked / secret is malformed
+};
+
 export const getSignedProofs = (
 	proofs: Array<Proof>,
-	privateKey: string | string[]
+	privateKey: string | Array<string>
 ): Array<Proof> => {
-	let keypairs: Array<{ priv: string; pub: string }> = [];
-	let pk = '';
-
-	if (privateKey instanceof Array) {
-		for (const k of privateKey) {
-			keypairs.push({ priv: k, pub: bytesToHex(schnorr.getPublicKey(k)) });
+	// Normalize keypairs
+	const keypairs: Array<{ priv: string; pub: string }> = [];
+	if (Array.isArray(privateKey)) {
+		for (const priv of privateKey) {
+			keypairs.push({ priv, pub: bytesToHex(schnorr.getPublicKey(priv)) });
 		}
 	} else {
-		pk = privateKey;
+		keypairs.push({ priv: privateKey, pub: bytesToHex(schnorr.getPublicKey(privateKey)) });
 	}
-
-	return proofs.map((p) => {
+	return proofs.map((proof) => {
 		try {
-			const parsed: Secret = parseSecret(p.secret);
+			const parsed: Secret = parseSecret(proof.secret);
 			if (parsed[0] !== 'P2PK') {
 				throw new Error('unknown secret type');
 			}
-			if (keypairs.length) {
-				const matchingKey = keypairs.find((pair) => parsed[1].data === pair.pub)?.priv;
-				if (!matchingKey) {
-					throw new Error('no matching key found');
-				} else {
-					pk = matchingKey;
+			// Sign proof for every required witness we have pk for
+			const witnesses = getP2PExpectedKWitnessPubkeys(parsed);
+			let signedProof = proof;
+			for (const { priv, pub } of keypairs) {
+				if (witnesses.includes(pub)) {
+					signedProof = getSignedProof(signedProof, hexToBytes(priv));
 				}
 			}
-			return getSignedProof(p, hexToBytes(pk));
-		} catch (error) {
-			return p;
+			return signedProof;
+		} catch {
+			return proof;
 		}
 	});
 };
@@ -81,10 +107,11 @@ export const getSignedOutputs = (
 };
 
 export const getSignedProof = (proof: Proof, privateKey: PrivKey): Proof => {
+	const signature = bytesToHex(signP2PKsecret(proof.secret, privateKey));
 	if (!proof.witness) {
-		proof.witness = {
-			signatures: [bytesToHex(signP2PKsecret(proof.secret, privateKey))]
-		};
+		proof.witness = { signatures: [signature] };
+	} else {
+		proof.witness.signatures = [...(proof.witness.signatures || []), signature];
 	}
 	return proof;
 };
