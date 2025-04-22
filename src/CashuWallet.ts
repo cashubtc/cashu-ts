@@ -32,7 +32,6 @@ import {
 	MeltQuoteOptions,
 	SwapTransaction,
 	LockedMintQuoteResponse,
-	MintQuote,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse
 } from './model/types/index.js';
