@@ -68,15 +68,11 @@ export function getP2PKExpectedKWitnessPubkeys(secret: Secret): Array<string> {
 		const n_sigsTag = tags && tags.find((tag) => tag[0] === 'n_sigs');
 		const n_sigs = n_sigsTag && n_sigsTag.length > 1 ? parseInt(n_sigsTag[1], 10) : null;
 		if (locktime > now) {
-			// NB: Am interpretting NUT-11 as intending the pubkeys tag is only used
-			// if n_sigs is a positive integer. Otherwise we can just return
-			// [data, ...pubkeys] when locktime > now
-			if (n_sigs && n_sigs >= 1) {
-				const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
-				const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
-				return [data, ...pubkeys];
-			}
-			return [data];
+			// Am interpretting NUT-11 as intending pubkeys to be usable for a
+			// 1-of-m multisig if provided, even if n_sigs is not
+			const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
+			const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
+			return [data, ...pubkeys];
 		}
 		const refundTag = tags && tags.find((tag) => tag[0] === 'refund');
 		const refundKeys = refundTag && refundTag.length > 1 ? refundTag.slice(1) : [];
