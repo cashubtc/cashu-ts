@@ -38,6 +38,7 @@ export type ReceiveOptions = {
 		locktime?: number;
 		refundKeys?: Array<string>;
 		nsig?: number;
+		rsig?: number;
 	};
 };
 
@@ -72,6 +73,7 @@ export type SendOptions = {
 		locktime?: number;
 		refundKeys?: Array<string>;
 		nsig?: number;
+		rsig?: number;
 	};
 };
 
@@ -104,6 +106,7 @@ export type SwapOptions = {
 		locktime?: number;
 		refundKeys?: Array<string>;
 		nsig?: number;
+		rsig?: number;
 	};
 };
 
@@ -131,6 +134,7 @@ export type MintProofOptions = {
 		locktime?: number;
 		refundKeys?: Array<string>;
 		nsig?: number;
+		rsig?: number;
 	};
 };
 

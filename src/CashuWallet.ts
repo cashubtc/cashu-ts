@@ -965,6 +965,7 @@ class CashuWallet {
 			locktime?: number;
 			refundKeys?: Array<string>;
 			nsig?: number;
+			rsig?: number;
 		}
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
@@ -1247,6 +1248,7 @@ class CashuWallet {
 			locktime?: number;
 			refundKeys?: Array<string>;
 			nsig?: number;
+			rsig?: number;
 		},
 		factory?: OutputDataFactory
 	): Array<OutputDataLike> {

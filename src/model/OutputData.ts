@@ -75,6 +75,7 @@ export class OutputData implements OutputDataLike {
 			locktime?: number;
 			refundKeys?: Array<string>;
 			nsig?: number;
+			rsig?: number;
 		},
 		amount: number,
 		keyset: MintKeys,
@@ -90,13 +91,19 @@ export class OutputData implements OutputDataLike {
 			locktime?: number;
 			refundKeys?: Array<string>;
 			nsig?: number;
+			rsig?: number;
 		},
 		amount: number,
 		keysetId: string
 	) {
-		// Standardize pubkey (backwards compat) and clamp n_sigs between 1 and total pubkeys
+		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
+		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
 		const pubkeys: Array<string> = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
 		const n_sigs: number = Math.max(1, Math.min(p2pk.nsig || 1, pubkeys.length));
+		const n_sigs_refund: number = Math.max(
+			1,
+			Math.min(p2pk.rsig || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1)
+		);
 		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
 			'P2PK',
 			{
@@ -109,12 +116,18 @@ export class OutputData implements OutputDataLike {
 			newSecret[1].tags.push(['locktime', p2pk.locktime]);
 		}
 		if (pubkeys.length > 1) {
-			// Mint will consider additional pubkeys if n_sigs tag is 1 or higher
 			newSecret[1].tags.push(['pubkeys', ...pubkeys.slice(1)]); // Additional keys
-			newSecret[1].tags.push(['n_sigs', n_sigs]);
+			if (n_sigs > 1) {
+				// 1 is the default, so we can save space if not multisig
+				newSecret[1].tags.push(['n_sigs', n_sigs]);
+			}
 		}
 		if (p2pk.refundKeys) {
 			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
+			if (n_sigs_refund > 1) {
+				// 1 is the default, so we can save space if not multisig
+				newSecret[1].tags.push(['n_sigs_refund', n_sigs_refund]);
+			}
 		}
 		const parsed = JSON.stringify(newSecret);
 		const secretBytes = new TextEncoder().encode(parsed);
