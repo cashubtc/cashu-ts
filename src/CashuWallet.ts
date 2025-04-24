@@ -1,5 +1,5 @@
 import { serializeProof } from './crypto/client/index.js';
-import { getSignedProofs, getSignatures } from './crypto/client/NUT11.js';
+import { getSignedProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
 import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
@@ -912,7 +912,7 @@ class CashuWallet {
 		if (privkey != undefined) {
 			proofsToSend = getSignedProofs(
 				proofsToSend.map((p: Proof) => {
-					const signatures = getSignatures(p.witness);
+					const signatures = getP2PKWitnessSignatures(p.witness);
 					return {
 						amount: p.amount,
 						C: pointFromHex(p.C),
@@ -1026,7 +1026,7 @@ class CashuWallet {
 		if (privkey) {
 			proofsToSend = getSignedProofs(
 				proofsToSend.map((p: Proof) => {
-					const signatures = getSignatures(p.witness);
+					const signatures = getP2PKWitnessSignatures(p.witness);
 					return {
 						amount: p.amount,
 						C: pointFromHex(p.C),

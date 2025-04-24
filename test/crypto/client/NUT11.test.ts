@@ -12,7 +12,7 @@ import {
 	getP2PKLocktime,
 	getP2PKNSigs,
 	getP2PKSigFlag,
-	getSignatures
+	getP2PKWitnessSignatures
 } from '../../../src/crypto/client/NUT11';
 import { Secret } from '../../../src/crypto/common/index.js';
 import { P2PKWitness } from '../../../src/model/types/index.js';
@@ -350,17 +350,17 @@ describe('test getSignedProof', () => {
 	});
 });
 
-describe('test getSignatures', () => {
+describe('test getP2PKWitnessSignatures', () => {
 	test('undefined witness', async () => {
 		const witness = undefined;
-		const result = getSignatures(witness);
+		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([]);
 	});
 	test('malformed witness', async () => {
 		// Spy on console.error and mock its implementation to do nothing
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const witness = 'malformed';
-		const result = getSignatures(witness);
+		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([]);
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'Failed to parse witness string:',
@@ -370,7 +370,7 @@ describe('test getSignatures', () => {
 	test('string witness', async () => {
 		const witness =
 			'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}';
-		const result = getSignatures(witness);
+		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([
 			'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383'
 		]);
@@ -382,7 +382,7 @@ describe('test getSignatures', () => {
 				'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383'
 			]
 		};
-		const result = getSignatures(witness);
+		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([
 			'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
 			'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383'

@@ -3,7 +3,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { parseSecret } from '../common/NUT11.js';
 import {
 	getP2PKExpectedKWitnessPubkeys,
-	getSignatures,
+	getP2PKWitnessSignatures,
 	getP2PKNSigs,
 	verifyP2PKSecretSignature
 } from '../client/NUT11.js';
@@ -21,7 +21,7 @@ export const verifyP2PKSig = (proof: Proof): boolean => {
 	}
 	let signatories = 0;
 	const requiredSigs = getP2PKNSigs(parsedSecret);
-	const signatures = getSignatures(proof.witness);
+	const signatures = getP2PKWitnessSignatures(proof.witness);
 	// Loop through witnesses to see if any of the signatures belong to them.
 	// We need to do this as Schnorr signatures are non-deterministic, so we
 	// count the number of valid witnesses, not the number of valid signatures

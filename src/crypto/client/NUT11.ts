@@ -147,7 +147,9 @@ export function getP2PKSigFlag(secret: Secret): string {
  * Gets witness signatures as an array
  * @type {array} of signatures
  */
-export const getSignatures = (witness: string | P2PKWitness | undefined): Array<string> => {
+export const getP2PKWitnessSignatures = (
+	witness: string | P2PKWitness | undefined
+): Array<string> => {
 	if (!witness) return [];
 	if (typeof witness === 'string') {
 		try {
@@ -203,7 +205,7 @@ export const getSignedProof = (proof: Proof, privateKey: string): Proof => {
 		return proof; // nothing to sign
 	}
 	// Check if this pubkey has already signed
-	const signatures = getSignatures(proof.witness);
+	const signatures = getP2PKWitnessSignatures(proof.witness);
 	const alreadySigned = signatures.some((sig) => {
 		try {
 			return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
