@@ -62,14 +62,16 @@ export const verifyP2PKSecretSignature = (
  */
 export function getP2PKExpectedKWitnessPubkeys(secret: Secret): Array<string> {
 	try {
-		const now = Math.floor(Date.now() / 1000);
+		// Validate secret format
+		if (secret[0] !== 'P2PK') {
+			throw new Error('Invalid P2PK secret: must start with "P2PK"');
+		}
 		const { data, tags } = secret[1];
+		const now = Math.floor(Date.now() / 1000);
 		const locktime = getP2PKLocktime(secret);
-		const n_sigsTag = tags && tags.find((tag) => tag[0] === 'n_sigs');
-		const n_sigs = n_sigsTag && n_sigsTag.length > 1 ? parseInt(n_sigsTag[1], 10) : null;
 		if (locktime > now) {
 			// Am interpretting NUT-11 as intending pubkeys to be usable for a
-			// 1-of-m multisig if provided, even if n_sigs is not
+			// 1-of-m multisig if provided, even if n_sigs is not set
 			const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
 			const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
 			return [data, ...pubkeys];
@@ -80,7 +82,7 @@ export function getP2PKExpectedKWitnessPubkeys(secret: Secret): Array<string> {
 			return refundKeys;
 		}
 	} catch {}
-	return []; // Unlocked or expired with no refund keys
+	return []; // Unlocked, malformed or expired with no refund keys
 }
 
 /**
@@ -108,21 +110,22 @@ export function getP2PKNSigs(secret: Secret): number {
 	if (secret[0] !== 'P2PK') {
 		throw new Error('Invalid P2PK secret: must start with "P2PK"');
 	}
-	const now = Math.floor(Date.now() / 1000);
+	// Check for witnesses
 	const witness = getP2PKExpectedKWitnessPubkeys(secret);
-	const locktime = getP2PKLocktime(secret);
-	const { tags } = secret[1];
-	// Check lock multisig
-	const n_sigsTag = tags && tags.find((tag) => tag[0] === 'n_sigs');
-	const n_sigs = n_sigsTag && n_sigsTag.length > 1 ? parseInt(n_sigsTag[1], 10) : 1; // Default: 1
-	if (locktime > now) {
-		return n_sigs; // locked
+	if (!witness.length) {
+		return 0; // unlocked if no witnesses needed
 	}
-	// Check refund multisig
+	// Check for Lock multisig
+	const { tags } = secret[1];
+	const now = Math.floor(Date.now() / 1000);
+	const locktime = getP2PKLocktime(secret);
+	if (locktime > now) {
+		const n_sigsTag = tags && tags.find((tag) => tag[0] === 'n_sigs');
+		return n_sigsTag && n_sigsTag.length > 1 ? parseInt(n_sigsTag[1], 10) : 1; // Default: 1
+	}
+	// Refund multisig
 	const n_sigs_refundTag = tags && tags.find((tag) => tag[0] === 'n_sigs_refund');
-	const n_sigs_refund =
-		n_sigs_refundTag && n_sigs_refundTag.length > 1 ? parseInt(n_sigs_refundTag[1], 10) : 1; // Default: 1
-	return witness.length > 0 ? n_sigs_refund : 0; // unlocked if no witnesses needed
+	return n_sigs_refundTag && n_sigs_refundTag.length > 1 ? parseInt(n_sigs_refundTag[1], 10) : 1; // Default: 1
 }
 
 /**
