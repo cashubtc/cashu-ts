@@ -113,20 +113,20 @@ export class OutputData implements OutputDataLike {
 			}
 		];
 		if (p2pk.locktime) {
-			newSecret[1].tags.push(['locktime', p2pk.locktime]);
+			newSecret[1].tags.push(['locktime', String(p2pk.locktime)]); // NUT-10 string
 		}
 		if (pubkeys.length > 1) {
 			newSecret[1].tags.push(['pubkeys', ...pubkeys.slice(1)]); // Additional keys
 			if (n_sigs > 1) {
 				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs', n_sigs]);
+				newSecret[1].tags.push(['n_sigs', String(n_sigs)]); // NUT-10 string
 			}
 		}
 		if (p2pk.refundKeys) {
 			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
 			if (n_sigs_refund > 1) {
 				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs_refund', n_sigs_refund]);
+				newSecret[1].tags.push(['n_sigs_refund', String(n_sigs_refund)]); // NUT-10 string
 			}
 		}
 		const parsed = JSON.stringify(newSecret);

@@ -864,7 +864,7 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
 		});
 	});
@@ -881,7 +881,7 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
 		});
 	});
@@ -923,7 +923,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
-			expect(s[1].tags).not.toContainEqual(['n_sigs', 1]);
+			expect(s[1].tags).not.toContainEqual(['n_sigs', '1']);
 		});
 	});
 	test('Create BlindingData locked to multiple pks with 2-of-3 nsig', async () => {
@@ -940,7 +940,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
-			expect(s[1].tags).toContainEqual(['n_sigs', 2]);
+			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
 		});
 	});
 	test('Create BlindingData locked to multiple pks with out of range nsig', async () => {
@@ -957,7 +957,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
 			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
-			expect(s[1].tags).toContainEqual(['n_sigs', 3]);
+			expect(s[1].tags).toContainEqual(['n_sigs', '3']);
 		});
 	});
 	test('Create BlindingData locked to single refund key with default rsig', async () => {
@@ -973,9 +973,9 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
-			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', 1]); // 1 is default
+			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
 	test('Create BlindingData locked to multiple refund keys with no rsig', async () => {
@@ -991,9 +991,9 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
-			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', 1]); // 1 is default
+			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
 	test('Create BlindingData locked to multiple refund keys with 2-of-3 rsig', async () => {
@@ -1014,9 +1014,9 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund', 'athirdrefund']);
-			expect(s[1].tags).toContainEqual(['n_sigs_refund', 2]);
+			expect(s[1].tags).toContainEqual(['n_sigs_refund', '2']);
 		});
 	});
 	test('Create BlindingData locked to multiple refund keys with out of range rsig', async () => {
@@ -1037,9 +1037,9 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund', 'athirdrefund']);
-			expect(s[1].tags).toContainEqual(['n_sigs_refund', 3]);
+			expect(s[1].tags).toContainEqual(['n_sigs_refund', '3']);
 		});
 	});
 	test('Create BlindingData locked to multiple refund keys with expired multisig', async () => {
@@ -1061,11 +1061,11 @@ describe('P2PK BlindingData', () => {
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
 			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['locktime', 212]);
+			expect(s[1].tags).toContainEqual(['locktime', '212']);
 			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
 			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
-			expect(s[1].tags).toContainEqual(['n_sigs', 2]);
-			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', 1]); // 1 is default
+			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
+			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
 });
