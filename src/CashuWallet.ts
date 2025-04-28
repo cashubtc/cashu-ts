@@ -1,6 +1,6 @@
 import { serializeProof } from './crypto/client/index.js';
-import { getSignedProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
-import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
+import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
+import { hashToCurve, pointFromHex } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import {
@@ -910,19 +910,9 @@ class CashuWallet {
 			this._keepFactory
 		);
 		if (privkey != undefined) {
-			proofsToSend = getSignedProofs(
-				proofsToSend.map((p: Proof) => {
-					const signatures = getP2PKWitnessSignatures(p.witness);
-					return {
-						amount: p.amount,
-						C: pointFromHex(p.C),
-						id: p.id,
-						secret: new TextEncoder().encode(p.secret),
-						witness: { signatures: signatures }
-					};
-				}),
-				privkey
-			).map((p: NUT11Proof) => serializeProof(p));
+			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
+				return { ...p, witness: JSON.stringify(p.witness) };
+			});
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
@@ -1024,19 +1014,9 @@ class CashuWallet {
 		}
 
 		if (privkey) {
-			proofsToSend = getSignedProofs(
-				proofsToSend.map((p: Proof) => {
-					const signatures = getP2PKWitnessSignatures(p.witness);
-					return {
-						amount: p.amount,
-						C: pointFromHex(p.C),
-						id: p.id,
-						secret: new TextEncoder().encode(p.secret),
-						witness: { signatures: signatures }
-					};
-				}),
-				privkey
-			).map((p: NUT11Proof) => serializeProof(p));
+			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
+				return { ...p, witness: JSON.stringify(p.witness) };
+			});
 		}
 
 		proofsToSend = stripDleq(proofsToSend);

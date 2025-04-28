@@ -1,20 +1,20 @@
 import { schnorr } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
-import { parseSecret } from '../common/NUT11.js';
+import { parseP2PKSecret } from '../common/NUT11.js';
 import {
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKWitnessSignatures,
 	getP2PKNSigs,
 	verifyP2PKSecretSignature
 } from '../client/NUT11.js';
-import { Proof } from '../common/index.js';
+import { type Proof } from '../../model/types/index.js';
 import { BlindedMessage } from '../client/index.js';
 
 export const verifyP2PKSig = (proof: Proof): boolean => {
 	if (!proof.witness) {
 		throw new Error('could not verify signature, no witness provided');
 	}
-	const parsedSecret = parseSecret(proof.secret);
+	const parsedSecret = parseP2PKSecret(proof.secret);
 	const witnesses = getP2PKExpectedKWitnessPubkeys(parsedSecret);
 	if (!witnesses.length) {
 		throw new Error('no signatures required, proof is unlocked');
