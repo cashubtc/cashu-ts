@@ -3,6 +3,7 @@ import { decodeCBOR, encodeCBOR } from '../cbor';
 import {
 	RawPaymentRequest,
 	RawTransport,
+	NUT10Option,
 	PaymentRequestTransport,
 	PaymentRequestTransportType
 } from './types';
@@ -10,19 +11,25 @@ import { Buffer } from 'buffer';
 
 export class PaymentRequest {
 	constructor(
-		public transport: Array<PaymentRequestTransport>,
+		public transport?: Array<PaymentRequestTransport>,
 		public id?: string,
 		public amount?: number,
 		public unit?: string,
 		public mints?: Array<string>,
 		public description?: string,
-		public singleUse: boolean = false
+		public singleUse: boolean = false,
+		public nut10?: NUT10Option
 	) {}
 
 	toRawRequest() {
-		const rawRequest: RawPaymentRequest = {
-			t: this.transport.map((t: PaymentRequestTransport) => ({ t: t.type, a: t.target, g: t.tags }))
-		};
+		const rawRequest: RawPaymentRequest = {};
+		if (this.transport) {
+			rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
+				t: t.type,
+				a: t.target,
+				g: t.tags
+			}));
+		}
 		if (this.id) {
 			rawRequest.i = this.id;
 		}
@@ -41,6 +48,13 @@ export class PaymentRequest {
 		if (this.singleUse) {
 			rawRequest.s = this.singleUse;
 		}
+		if (this.nut10) {
+			rawRequest.nut10 = {
+				k: this.nut10.kind,
+				d: this.nut10.data,
+				t: this.nut10.tags
+			};
+		}
 		return rawRequest;
 	}
 
@@ -52,15 +66,24 @@ export class PaymentRequest {
 	}
 
 	getTransport(type: PaymentRequestTransportType) {
-		return this.transport.find((t: PaymentRequestTransport) => t.type === type);
+		return this.transport?.find((t: PaymentRequestTransport) => t.type === type);
 	}
 
 	static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
-		const transports = rawPaymentRequest.t.map((t: RawTransport) => ({
-			type: t.t,
-			target: t.a,
-			tags: t.g
-		}));
+		const transports = rawPaymentRequest.t
+			? rawPaymentRequest.t.map((t: RawTransport) => ({
+					type: t.t,
+					target: t.a,
+					tags: t.g
+			  }))
+			: undefined;
+		const nut10 = rawPaymentRequest.nut10
+			? {
+					kind: rawPaymentRequest.nut10.k,
+					data: rawPaymentRequest.nut10.d,
+					tags: rawPaymentRequest.nut10.t
+			  }
+			: undefined;
 		return new PaymentRequest(
 			transports,
 			rawPaymentRequest.i,
@@ -68,7 +91,8 @@ export class PaymentRequest {
 			rawPaymentRequest.u,
 			rawPaymentRequest.m,
 			rawPaymentRequest.d,
-			rawPaymentRequest.s
+			rawPaymentRequest.s,
+			nut10
 		);
 	}
 
