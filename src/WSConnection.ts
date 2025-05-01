@@ -51,7 +51,7 @@ export class WSConnection {
 		if (!this.connectionPromise) {
 			this.connectionPromise = new Promise((res: OnOpenSuccess, rej: OnOpenError) => {
 				try {
-					this.ws = new this._WS(this.url);
+					this.ws = new this._WS(this.url.toString());
 				} catch (err) {
 					rej(err);
 					return;
