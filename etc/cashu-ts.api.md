@@ -67,15 +67,15 @@ export class CashuMint {
     constructor(_mintUrl: string, _customRequest?: typeof request | undefined, authTokenGetter?: () => Promise<string>);
     static check(mintUrl: string, checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
     check(checkPayload: CheckStatePayload): Promise<CheckStateResponse>;
-    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<MeltQuoteResponse>;
-    checkMeltQuote(quote: string): Promise<MeltQuoteResponse>;
-    static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<MintQuoteResponse>;
-    checkMintQuote(quote: string): Promise<MintQuoteResponse>;
+    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
+    checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
+    static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMintQuoteResponse>;
+    checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     connectWebSocket(): Promise<void>;
-    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MeltQuoteResponse>;
-    createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<MeltQuoteResponse>;
-    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintQuoteResponse>;
-    createMintQuote(mintQuotePayload: MintQuotePayload): Promise<MintQuoteResponse>;
+    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
+    createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
+    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMintQuoteResponse>;
+    createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
     disconnectWebSocket(): void;
     static getInfo(mintUrl: string, customRequest?: typeof request): Promise<GetInfoResponse>;
     getInfo(): Promise<GetInfoResponse>;
@@ -89,8 +89,8 @@ export class CashuMint {
     getLazyMintInfo(): Promise<MintInfo>;
     // (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
-    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MeltQuoteResponse>;
-    melt(meltPayload: MeltPayload): Promise<MeltQuoteResponse>;
+    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
+    melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
     static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
     mint(mintPayload: MintPayload): Promise<MintResponse>;
     // (undocumented)
@@ -124,8 +124,12 @@ export class CashuWallet {
         proofs: Array<Proof>;
         lastCounterWithSignature?: number;
     }>;
-    checkMeltQuote(quote: string): Promise<MeltQuoteResponse>;
-    checkMintQuote(quote: string): Promise<MintQuoteResponse>;
+    checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
+    // (undocumented)
+    checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
+    checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
+    // (undocumented)
+    checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
@@ -399,16 +403,11 @@ export type MeltQuotePayload = {
     options?: MeltQuoteOptions;
 };
 
-// @public
-export type MeltQuoteResponse = {
-    quote: string;
-    amount: number;
-    fee_reserve: number;
-    state: MeltQuoteState;
-    expiry: number;
-    payment_preimage: string | null;
-    change?: Array<SerializedBlindedSignature>;
-} & ApiError;
+// @public (undocumented)
+export type MeltQuoteResponse = PartialMeltQuoteResponse & {
+    request: string;
+    unit: string;
+};
 
 // @public (undocumented)
 export const MeltQuoteState: {
@@ -488,14 +487,11 @@ export type MintQuotePayload = {
     pubkey?: string;
 };
 
-// @public
-export type MintQuoteResponse = {
-    request: string;
-    quote: string;
-    state: MintQuoteState;
-    expiry: number;
-    pubkey?: string;
-} & ApiError;
+// @public (undocumented)
+export type MintQuoteResponse = PartialMintQuoteResponse & {
+    amount: number;
+    unit: string;
+};
 
 // @public (undocumented)
 export const MintQuoteState: {
@@ -528,16 +524,95 @@ export class NetworkError extends Error {
     constructor(message: string);
 }
 
+// @public
+export type NUT10Option = {
+    kind: string;
+    data: string;
+    tags: Array<Array<string>>;
+};
+
 // @public (undocumented)
 export type OutputAmounts = {
     sendAmounts: Array<number>;
     keepAmounts?: Array<number>;
 };
 
+// @public (undocumented)
+export class OutputData implements OutputDataLike {
+    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    // (undocumented)
+    blindedMessage: SerializedBlindedMessage;
+    // (undocumented)
+    blindingFactor: bigint;
+    // (undocumented)
+    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: Array<number>): Array<OutputData>;
+    // (undocumented)
+    static createP2PKData(p2pk: {
+        pubkey: string;
+        locktime?: number;
+        refundKeys?: Array<string>;
+    }, amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
+    // (undocumented)
+    static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
+    // (undocumented)
+    static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    // (undocumented)
+    static createSingleP2PKData(p2pk: {
+        pubkey: string;
+        locktime?: number;
+        refundKeys?: Array<string>;
+    }, amount: number, keysetId: string): OutputData;
+    // (undocumented)
+    static createSingleRandomData(amount: number, keysetId: string): OutputData;
+    // (undocumented)
+    secret: Uint8Array;
+    // (undocumented)
+    toProof(sig: SerializedBlindedSignature, keyset: MintKeys): Proof;
+}
+
+// @public (undocumented)
+export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
+
+// @public (undocumented)
+export interface OutputDataLike {
+    // (undocumented)
+    blindedMessage: SerializedBlindedMessage;
+    // (undocumented)
+    blindingFactor: bigint;
+    // (undocumented)
+    secret: Uint8Array;
+    // (undocumented)
+    toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
+}
+
 // @public
 export type P2PKWitness = {
     signatures?: Array<string>;
 };
+
+// @public
+export type PartialMeltQuoteResponse = {
+    quote: string;
+    amount: number;
+    fee_reserve: number;
+    state: MeltQuoteState;
+    expiry: number;
+    payment_preimage: string | null;
+    change?: Array<SerializedBlindedSignature>;
+    request?: string;
+    unit?: string;
+} & ApiError;
+
+// @public
+export type PartialMintQuoteResponse = {
+    request: string;
+    quote: string;
+    state: MintQuoteState;
+    expiry: number;
+    pubkey?: string;
+    unit?: string;
+    amount?: number;
+} & ApiError;
 
 // @public
 export type PaymentPayload = {
@@ -547,7 +622,7 @@ export type PaymentPayload = {
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport: Array<PaymentRequestTransport>, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: Array<string> | undefined, description?: string | undefined, singleUse?: boolean);
+    constructor(transport?: Array<PaymentRequestTransport> | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: Array<string> | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -563,13 +638,15 @@ class PaymentRequest_2 {
     // (undocumented)
     mints?: Array<string> | undefined;
     // (undocumented)
+    nut10?: NUT10Option | undefined;
+    // (undocumented)
     singleUse: boolean;
     // (undocumented)
     toEncodedRequest(): string;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
-    transport: Array<PaymentRequestTransport>;
+    transport?: Array<PaymentRequestTransport> | undefined;
     // (undocumented)
     unit?: string | undefined;
 }
@@ -628,6 +705,13 @@ export type ProofState = {
 };
 
 // @public (undocumented)
+export type RawNUT10Option = {
+    k: string;
+    d: string;
+    t: Array<Array<string>>;
+};
+
+// @public (undocumented)
 export type RawPaymentRequest = {
     i?: string;
     a?: number;
@@ -635,7 +719,8 @@ export type RawPaymentRequest = {
     s?: boolean;
     m?: Array<string>;
     d?: string;
-    t: Array<RawTransport>;
+    t?: Array<RawTransport>;
+    nut10?: RawNUT10Option;
 };
 
 // @public (undocumented)
@@ -843,11 +928,8 @@ export type WebSocketSupport = {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/CashuWallet.d.ts:38:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:117:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:148:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:176:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/wallet/payloads.d.ts:137:5 - (ae-forgotten-export) The symbol "OutputData" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
