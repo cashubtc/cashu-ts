@@ -21,4 +21,4 @@ jobs:
         run: npm run compile
 
       - name: Run API Extractor
-        run: npx run api:check
+        run: npm run api:check

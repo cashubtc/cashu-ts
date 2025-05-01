@@ -570,21 +570,6 @@ export class OutputData implements OutputDataLike {
     toProof(sig: SerializedBlindedSignature, keyset: MintKeys): Proof;
 }
 
-// @public (undocumented)
-export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
-
-// @public (undocumented)
-export interface OutputDataLike {
-    // (undocumented)
-    blindedMessage: SerializedBlindedMessage;
-    // (undocumented)
-    blindingFactor: bigint;
-    // (undocumented)
-    secret: Uint8Array;
-    // (undocumented)
-    toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
-}
-
 // @public
 export type P2PKWitness = {
     signatures?: Array<string>;
@@ -928,6 +913,8 @@ export type WebSocketSupport = {
 
 // Warnings were encountered during analysis:
 //
+// lib/types/CashuWallet.d.ts:38:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:117:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:148:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:176:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
