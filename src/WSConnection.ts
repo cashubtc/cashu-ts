@@ -114,6 +114,9 @@ export class WSConnection {
 	}
 
 	private removeListener(subId: string, callback: (payload: any) => any) {
+		if (!this.subListeners[subId]) {
+			return;
+		}
 		if (this.subListeners[subId].length === 1) {
 			delete this.subListeners[subId];
 			return;
@@ -191,6 +194,7 @@ export class WSConnection {
 	}
 
 	cancelSubscription(subId: string, callback: (payload: any) => any) {
+		this.removeRpcListener(subId);
 		this.removeListener(subId, callback);
 		this.rpcId++;
 		this.sendRequest('unsubscribe', { subId });
