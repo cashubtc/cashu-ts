@@ -1,6 +1,6 @@
 import { Secret } from './index.js';
 
-export const parseSecret = (secret: string | Uint8Array): Secret => {
+export const parseP2PKSecret = (secret: string | Uint8Array): Secret => {
 	try {
 		if (secret instanceof Uint8Array) {
 			secret = new TextDecoder().decode(secret);

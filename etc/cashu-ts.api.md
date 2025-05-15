@@ -297,6 +297,26 @@ export type GetInfoResponse = {
     motd?: string;
 };
 
+// Warning: (ae-forgotten-export) The symbol "Secret" needs to be exported by the entry point index.d.ts
+//
+// @public
+export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): Array<string>;
+
+// @public
+export function getP2PKLocktime(secretStr: string | Secret): number;
+
+// @public
+export function getP2PKNSigs(secretStr: string | Secret): number;
+
+// @public
+export function getP2PKSigFlag(secretStr: string | Secret): string;
+
+// @public
+export const getP2PKWitnessSignatures: (witness: string | P2PKWitness | undefined) => Array<string>;
+
+// @public
+export const hasP2PKSignedProof: (pubkey: string, proof: Proof) => boolean;
+
 // @public
 export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean;
 
@@ -473,9 +493,11 @@ export type MintProofOptions = {
     pubkey?: string;
     outputData?: Array<OutputDataLike> | OutputDataFactory;
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        nsig?: number;
+        rsig?: number;
     };
 };
 
@@ -548,9 +570,11 @@ export class OutputData implements OutputDataLike {
     static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: Array<number>): Array<OutputData>;
     // (undocumented)
     static createP2PKData(p2pk: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        nsig?: number;
+        rsig?: number;
     }, amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
     // (undocumented)
     static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
@@ -558,9 +582,11 @@ export class OutputData implements OutputDataLike {
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        nsig?: number;
+        rsig?: number;
     }, amount: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
@@ -574,6 +600,9 @@ export class OutputData implements OutputDataLike {
 export type P2PKWitness = {
     signatures?: Array<string>;
 };
+
+// @public (undocumented)
+export const parseP2PKSecret: (secret: string | Uint8Array) => Secret;
 
 // @public
 export type PartialMeltQuoteResponse = {
@@ -726,9 +755,11 @@ export type ReceiveOptions = {
     requireDleq?: boolean;
     outputData?: Array<OutputDataLike> | OutputDataFactory;
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        nsig?: number;
+        rsig?: number;
     };
 };
 
@@ -767,9 +798,11 @@ export type SendOptions = {
         keep?: Array<OutputDataLike> | OutputDataFactory;
     };
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        nsig?: number;
+        rsig?: number;
     };
 };
 
@@ -811,6 +844,9 @@ export type SerializedDLEQ = {
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
 // @public
+export const signP2PKProofs: (proofs: Array<Proof>, privateKey: string | Array<string>) => Array<Proof>;
+
+// @public
 export type SwapMethod = {
     method: string;
     unit: string;
@@ -832,9 +868,11 @@ export type SwapOptions = {
         keep?: Array<OutputDataLike> | OutputDataFactory;
     };
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        nsig?: number;
+        rsig?: number;
     };
 };
 
@@ -914,9 +952,9 @@ export type WebSocketSupport = {
 // Warnings were encountered during analysis:
 //
 // lib/types/CashuWallet.d.ts:38:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:117:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:148:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:176:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:123:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:156:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:184:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
