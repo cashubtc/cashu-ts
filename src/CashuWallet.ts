@@ -723,9 +723,17 @@ class CashuWallet {
 	}
 
 	/**
-	 * Gets an existing mint quote from the mint.
-	 * @param quote Quote ID
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * Gets information about an existing mint quote from the mint.
+	 * @overload
+	 * @param {string} quote The quote's Id
+	 * @returns {PartialMintQuoteResponse}
+	 *
+	 * @overload
+	 * @param {MintQuoteResponse} quote A full reponse object
+	 * @returns {MintQuoteResponse}
+	 *
+	 * @param {string | MintQuoteResponse} quote
+	 * @returns {MintQuoteResponse | PartialMintQuoteResponse}
 	 */
 	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
