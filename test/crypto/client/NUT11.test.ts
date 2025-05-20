@@ -4,6 +4,8 @@ import { describe, expect, test, vi } from 'vitest';
 import { createP2PKsecret, signP2PKProof, signP2PKProofs } from '../../../src/crypto/client/NUT11';
 import { parseP2PKSecret } from '../../../src/crypto/common/NUT11';
 import {
+	getP2PKWitnessPubkeys,
+	getP2PKWitnessRefundkeys,
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKLocktime,
 	getP2PKNSigs,
@@ -263,6 +265,66 @@ describe('test getP2PKLocktime', () => {
 	});
 });
 
+describe('test getP2PKWitnessPubkeys', () => {
+	test('data pubkey only', async () => {
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
+		const parsed: Secret = parseP2PKSecret(secretStr);
+		const result = getP2PKWitnessPubkeys(parsed);
+		expect(result).toEqual([PUBKEY]);
+		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY]);
+	});
+	test('data + one pubkey', async () => {
+		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
+		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
+		const parsed: Secret = parseP2PKSecret(secretStr);
+		const result = getP2PKWitnessPubkeys(parsed);
+		expect(result).toEqual([PUBKEY, PUBKEY2]);
+		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2]);
+	});
+	test('data + 2 pubkeys', async () => {
+		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
+		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+		const PRIVKEY3 = schnorr.utils.randomPrivateKey();
+		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}","${PUBKEY3}"]]}]`;
+		const parsed: Secret = parseP2PKSecret(secretStr);
+		const result = getP2PKWitnessPubkeys(parsed);
+		expect(result).toEqual([PUBKEY, PUBKEY2, PUBKEY3]);
+		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2, PUBKEY3]);
+	});
+});
+
+describe('test getP2PKWitnessRefundkeys', () => {
+	test('no refund keys', async () => {
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
+		const parsed: Secret = parseP2PKSecret(secretStr);
+		const result = getP2PKWitnessRefundkeys(parsed);
+		expect(result).toEqual([]);
+		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([]);
+	});
+	test('one refund pubkey', async () => {
+		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
+		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["refund","${PUBKEY2}"]]}]`;
+		const parsed: Secret = parseP2PKSecret(secretStr);
+		const result = getP2PKWitnessRefundkeys(parsed);
+		expect(result).toEqual([PUBKEY2]);
+		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([PUBKEY2]);
+	});
+	test('2 refund pubkeys', async () => {
+		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
+		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+		const PRIVKEY3 = schnorr.utils.randomPrivateKey();
+		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
+		const parsed: Secret = parseP2PKSecret(secretStr);
+		const result = getP2PKWitnessRefundkeys(parsed);
+		expect(result).toEqual([PUBKEY2, PUBKEY3]);
+		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([PUBKEY2, PUBKEY3]);
+	});
+});
+
 describe('test getP2PKExpectedKWitnessPubkeys', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
@@ -339,10 +401,9 @@ describe('test signP2PKProof', () => {
 		expect(verify).toBe(true);
 		expect(signedProof.witness.signatures).toHaveLength(2);
 		// try signing again
-		const signedProof2 = signP2PKProof(signedProof, PRIVKEY);
-		const verify2 = verifyP2PKSig(signedProof2);
-		expect(verify2).toBe(true);
-		expect(signedProof2.witness.signatures).toHaveLength(2);
+		expect(() => signP2PKProof(signedProof, PRIVKEY)).toThrow(
+			`Proof already signed by [02|03]${PUBKEY.slice(2)}`
+		);
 	});
 	test('not eligible to sign', async () => {
 		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
@@ -357,10 +418,9 @@ describe('test signP2PKProof', () => {
 			witness:
 				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}'
 		};
-		const signedProof = signP2PKProof(proof, PRIVKEY2);
-		const verify = verifyP2PKSig(signedProof);
-		expect(verify).toBe(false);
-		expect(signedProof).toBe(proof); // unchanged
+		expect(() => signP2PKProof(proof, PRIVKEY2)).toThrow(
+			`Signature not required from [02|03]${PUBKEY2.slice(2)}`
+		);
 	});
 	test('sign with 02-prepended Nostr key', async () => {
 		const PRIVKEY2 = '622320785910d6aac0d5406ce1b6ef1640ab97c2acdea6a246eb6859decd6230'; // produces an Odd Y-parity pubkey
