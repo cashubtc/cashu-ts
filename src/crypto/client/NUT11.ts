@@ -95,17 +95,46 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): Arra
 		if (locktime > now) {
 			// Am interpretting NUT-11 as intending pubkeys to be usable for a
 			// 1-of-m multisig if provided, even if n_sigs is not set
-			const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
-			const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
-			return [data, ...pubkeys];
+			return getP2PKWitnessPubkeys(secret);
 		}
-		const refundTag = tags && tags.find((tag) => tag[0] === 'refund');
-		const refundKeys = refundTag && refundTag.length > 1 ? refundTag.slice(1) : [];
-		if (refundKeys) {
-			return refundKeys;
-		}
+		return getP2PKWitnessRefundkeys(secret);
 	} catch {}
 	return []; // Unlocked, malformed or expired with no refund keys
+}
+
+/**
+ * Returns ALL locktime witnesses from a NUT-11 P2PK secret
+ * NB: Does not specify if they are expected to sign - see: getP2PKExpectedKWitnessPubkeys()
+ * @param secretStr - The NUT-11 P2PK secret.
+ * @returns {array} with the public key(s or empty array
+ */
+export function getP2PKWitnessPubkeys(secretStr: string | Secret): Array<string> {
+	// Validate secret
+	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	if (secret[0] !== 'P2PK') {
+		throw new Error('Invalid P2PK secret: must start with "P2PK"');
+	}
+	const { data, tags } = secret[1];
+	const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
+	const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
+	return [data, ...pubkeys];
+}
+
+/**
+ * Returns ALL refund witnesses from a NUT-11 P2PK secret
+ * NB: Does not specify if they are expected to sign - see: getP2PKExpectedKWitnessPubkeys()
+ * @param secretStr - The NUT-11 P2PK secret.
+ * @returns {array} with the public keys or empty array
+ */
+export function getP2PKWitnessRefundkeys(secretStr: string | Secret): Array<string> {
+	// Validate secret
+	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	if (secret[0] !== 'P2PK') {
+		throw new Error('Invalid P2PK secret: must start with "P2PK"');
+	}
+	const { tags } = secret[1];
+	const refundTag = tags && tags.find((tag) => tag[0] === 'refund');
+	return refundTag && refundTag.length > 1 ? refundTag.slice(1) : [];
 }
 
 /**
@@ -192,23 +221,29 @@ export const getP2PKWitnessSignatures = (
  * Signs proofs with provided private key(s) if required
  * NB: Will only sign if the proof requires a signature from the key
  * @param proofs - An array of proofs to sign
- * @param privateKey - a single private key, or array of private keys
+ * @param privateKey - A single private key or array of private keys
+ * @param beStrict - (Default: false) Throws Error if any signing attempt fails
  */
 export const signP2PKProofs = (
 	proofs: Array<Proof>,
-	privateKey: string | Array<string>
+	privateKey: string | Array<string>,
+	beStrict: boolean = false
 ): Array<Proof> => {
 	const privateKeys: Array<string> = Array.isArray(privateKey) ? privateKey : [privateKey];
-	return proofs.map((proof) => {
-		try {
-			let signedProof = proof;
-			for (const priv of privateKeys) {
+	return proofs.map((proof, index) => {
+		let signedProof = proof;
+		for (const priv of privateKeys) {
+			try {
 				signedProof = signP2PKProof(signedProof, priv);
+			} catch (error: unknown) {
+				const message = error instanceof Error ? error.message : 'Unknown error';
+				if (beStrict) {
+					throw new Error(`Failed signing proof #${index + 1}: ${message}`);
+				}
+				console.warn(`Proof #${index + 1}: ${message}`);
 			}
-			return signedProof;
-		} catch {
-			return proof;
 		}
+		return signedProof;
 	});
 };
 
@@ -217,6 +252,7 @@ export const signP2PKProofs = (
  * NB: Will only sign if the proof requires a signature from the key
  * @param proof - A proof to sign
  * @param privateKey - a single private key
+ * @throws Error if signature is not required or proof is already signed
  */
 export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 	// Check secret is P2PK
@@ -230,8 +266,7 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 	const pubkey = bytesToHex(schnorr.getPublicKey(privateKey)); // x-only
 	const witnesses = getP2PKExpectedKWitnessPubkeys(parsed);
 	if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
-		console.warn(`Signature not required from [02|03]${pubkey}`);
-		return proof; // nothing to sign
+		throw new Error(`Signature not required from [02|03]${pubkey}`);
 	}
 	// Check if the public key has already signed
 	const signatures = getP2PKWitnessSignatures(proof.witness);
@@ -243,8 +278,7 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 		}
 	});
 	if (alreadySigned) {
-		console.warn(`Proof already signed by [02|03]${pubkey}`);
-		return proof; // Skip signing if pubkey has a valid signature
+		throw new Error(`Proof already signed by [02|03]${pubkey}`);
 	}
 	// Add new signature
 	const signature = signP2PKSecret(proof.secret, privateKey);
