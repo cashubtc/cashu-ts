@@ -180,7 +180,10 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
  * @param token to encode
  * @returns encoded token
  */
-export function getEncodedTokenV3(token: Token): string {
+export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
+	if (removeDleq) {
+		token.proofs = stripDleq(token.proofs);
+	}
 	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
@@ -196,18 +199,24 @@ export function getEncodedTokenV3(token: Token): string {
  * @param token
  * @param [opts]
  */
-export function getEncodedToken(token: Token, opts?: { version: 3 | 4 }): string {
+export function getEncodedToken(
+	token: Token,
+	opts?: { version?: 3 | 4; removeDleq?: boolean }
+): string {
 	const nonHex = hasNonHexId(token.proofs);
 	if (nonHex || opts?.version === 3) {
 		if (opts?.version === 4) {
 			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 		}
-		return getEncodedTokenV3(token);
+		return getEncodedTokenV3(token, opts?.removeDleq);
 	}
-	return getEncodedTokenV4(token);
+	return getEncodedTokenV4(token, opts?.removeDleq);
 }
 
-export function getEncodedTokenV4(token: Token): string {
+export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
+	if (removeDleq) {
+		token.proofs = stripDleq(token.proofs);
+	}
 	// Make sure each DLEQ has its blinding factor
 	token.proofs.forEach((p) => {
 		if (p.dleq && p.dleq.r == undefined) {
