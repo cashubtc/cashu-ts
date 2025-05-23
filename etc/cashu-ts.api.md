@@ -4,8 +4,6 @@
 
 ```ts
 
-import { MintContactInfo as MintContactInfo_2 } from './types';
-
 // @public
 export type ApiError = {
     error?: string;
