@@ -329,6 +329,58 @@ describe('test v4 encoding', () => {
 		expect(decodedEncodedToken).toEqual(v3Token);
 		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
 	});
+	test('removing DLEQ', async () => {
+		const proofs = [
+			{
+				amount: 1,
+				C: '03ff2e729416437f9ea8d022c501ff5b309d607f98c9ab53d51cd24185b4d3e42b',
+				id: '00b4cd27d8861a44',
+				secret: '10216467bb33f6f079ae92349ba54fa34df99ba24572645b8b813688c74b582d',
+				witness: undefined,
+				dleq: {
+					s: '26f44e265699d95ae2171db58257aeffe03d325e0f69da4bc95b9749358380fc',
+					e: '8269767ac3f6ac368ad9ea8c05b13724ea8a58469677925aa948435685107b0d',
+					r: '40ce4dbe14a1f65ae74328b5f81d83cdb3977595d78ddf01665d9aca6d450233'
+				}
+			},
+			{
+				amount: 4,
+				C: '02b457f8e1e151cd71dd3246b56d0f479ac63786e71916b46d16369cb6f78024b9',
+				id: '00b4cd27d8861a44',
+				secret: '1b1bc7a099a63c808c17f8ca4ede03f30d3c243ca34ec4d10a1327b7cfb3ead7',
+				witness: undefined,
+				dleq: {
+					s: '2c23b772ce14f2d67415313e343a2a1f282edff8d5dd09f181a383b6cb6c2f7a',
+					e: 'c2312f2c61ba392c24434c9c9097f397cc856841bde5786db64a2ee2e1172770',
+					r: '08178fda3f9b80a5653dec563a27f79b4e697a2fcaa99d746d2b3a8d2f8d85f2'
+				}
+			},
+			{
+				amount: 16,
+				C: '03570cdf33bc832a60660b3e7d8ddb74d0dd3158e0fde5b0f607555bb7e8e9fb0f',
+				id: '00b4cd27d8861a44',
+				secret: '8425354533436ca7c29b34daae3aef85ab08925c810d1db4f005259d79d7f9f6',
+				witness: undefined,
+				dleq: {
+					s: 'bd3b4dd0eddddbb52eb3372a216c13b385561a8a549c66559ece8220959ccde6',
+					e: '2f03a5bdcfecfaabdf81875be3d78c14725bc960c780eac7b03c2b3c04eecdc3',
+					r: '52056ba2a2410d0aa4164ac618a9ed83e3170f818fbaa140d91a95dcbd2feb2e'
+				}
+			}
+		];
+		const encoded = utils.getEncodedToken(
+			{
+				mint: 'https://nofees.testnut.cashu.space',
+				proofs,
+				memo: 'Demo'
+			},
+			{ removeDleq: true }
+		);
+		expect(encoded).toBe(
+			'cashuBpGFteCJodHRwczovL25vZmVlcy50ZXN0bnV0LmNhc2h1LnNwYWNlYXVjc2F0YXSBomFpSAC0zSfYhhpEYXCDo2FhAWFzeEAxMDIxNjQ2N2JiMzNmNmYwNzlhZTkyMzQ5YmE1NGZhMzRkZjk5YmEyNDU3MjY0NWI4YjgxMzY4OGM3NGI1ODJkYWNYIQP_LnKUFkN_nqjQIsUB_1swnWB_mMmrU9Uc0kGFtNPkK6NhYQRhc3hAMWIxYmM3YTA5OWE2M2M4MDhjMTdmOGNhNGVkZTAzZjMwZDNjMjQzY2EzNGVjNGQxMGExMzI3YjdjZmIzZWFkN2FjWCECtFf44eFRzXHdMka1bQ9HmsY3hucZFrRtFjactveAJLmjYWEQYXN4QDg0MjUzNTQ1MzM0MzZjYTdjMjliMzRkYWFlM2FlZjg1YWIwODkyNWM4MTBkMWRiNGYwMDUyNTlkNzlkN2Y5ZjZhY1ghA1cM3zO8gypgZgs-fY3bdNDdMVjg_eWw9gdVW7fo6fsPYWRkRGVtbw'
+		);
+		expect(utils.getDecodedToken(encoded).proofs[0].dleq).toBeUndefined();
+	});
 });
 
 describe('test output selection', () => {
