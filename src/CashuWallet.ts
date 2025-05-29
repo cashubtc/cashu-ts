@@ -438,31 +438,25 @@ class CashuWallet {
 	 * calculates the fees based on inputs (proofs)
 	 * @param proofs input proofs to calculate fees for
 	 * @returns fee amount
+	 * @throws throws an error if the proofs keyset is unknown
 	 */
 	getFeesForProofs(proofs: Array<Proof>): number {
-		if (!this._keysets.length) {
-			throw new Error('Could not calculate fees. No keysets found');
-		}
-		const keysetIds = new Set(proofs.map((p: Proof) => p.id));
-		keysetIds.forEach((id: string) => {
-			if (!this._keysets.find((k: MintKeyset) => k.id === id)) {
-				throw new Error(`Could not calculate fees. No keyset found with id: ${id}`);
-			}
-		});
+		const sumPPK = proofs.reduce((a, c) => a + this.getProofsFeePPK(c), 0);
+		return Math.ceil(sumPPK / 1000);
+	}
 
-		const fees = Math.floor(
-			Math.max(
-				(proofs.reduce(
-					(total: number, curr: Proof) =>
-						total + (this._keysets.find((k: MintKeyset) => k.id === curr.id)?.input_fee_ppk || 0),
-					0
-				) +
-					999) /
-					1000,
-				0
-			)
-		);
-		return fees;
+	/**
+	 * Returns the current fee PPK for a proof according to the cached keyset
+	 * @param proof {Proof} A single proof
+	 * @returns feePPK {number} The feePPK for the selected proof
+	 * @throws throws an error if the proofs keyset is unknown
+	 */
+	private getProofsFeePPK(proof: Proof) {
+		const keyset = this._keysets.find((k) => k.id === proof.id);
+		if (!keyset) {
+			throw new Error(`Could not get fee. No keyset found for keyset id: ${proof.id}`);
+		}
+		return keyset?.input_fee_ppk || 0;
 	}
 
 	/**
