@@ -411,7 +411,7 @@ class CashuWallet {
 		let remainder = amountToSend;
 		let selectedProofs = [smallerProofs[0]];
 		const returnedProofs = [];
-		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
+		const feePPK = includeFees ? this.getProofFeePPK(selectedProofs[0]) : 0;
 		remainder -= selectedProofs[0].amount - feePPK / 1000;
 		if (remainder > 0) {
 			const { keep, send } = this.selectProofsToSend(
@@ -441,7 +441,7 @@ class CashuWallet {
 	 * @throws throws an error if the proofs keyset is unknown
 	 */
 	getFeesForProofs(proofs: Array<Proof>): number {
-		const sumPPK = proofs.reduce((a, c) => a + this.getProofsFeePPK(c), 0);
+		const sumPPK = proofs.reduce((a, c) => a + this.getProofFeePPK(c), 0);
 		return Math.ceil(sumPPK / 1000);
 	}
 
@@ -451,7 +451,7 @@ class CashuWallet {
 	 * @returns feePPK {number} The feePPK for the selected proof
 	 * @throws throws an error if the proofs keyset is unknown
 	 */
-	private getProofsFeePPK(proof: Proof) {
+	private getProofFeePPK(proof: Proof) {
 		const keyset = this._keysets.find((k) => k.id === proof.id);
 		if (!keyset) {
 			throw new Error(`Could not get fee. No keyset found for keyset id: ${proof.id}`);
