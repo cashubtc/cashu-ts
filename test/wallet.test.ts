@@ -1012,7 +1012,7 @@ describe('Test coinselection', () => {
 		const wallet = new CashuWallet(mint, { unit });
 		const targetAmount = 25;
 		const { send } = await wallet.send(targetAmount, notes, {
-			offline: true,
+			offline: true
 		});
 		expect(send).toHaveLength(3);
 		const amountSend = send.reduce((acc, p) => acc + p.amount, 0);
@@ -1022,7 +1022,7 @@ describe('Test coinselection', () => {
 		const wallet = new CashuWallet(mint, { unit });
 		const targetAmount = 23;
 		const { send } = await wallet.send(targetAmount, notes, {
-			offline: true,
+			offline: true
 		});
 		console.log(`send.length = ${send.length}`);
 		expect(send).toHaveLength(2);
@@ -1051,7 +1051,7 @@ describe('Test coinselection', () => {
 		const targetAmount = 31;
 		const { send } = await wallet.send(targetAmount, notes, {
 			offline: true,
-			includeFees: true,
+			includeFees: true
 		});
 		const amountSend = send.reduce((acc, p) => acc + p.amount, 0);
 
