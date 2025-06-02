@@ -126,3 +126,14 @@ Contributions are very welcome.
 
 If you want to contribute, please open an Issue or a PR.
 If you open a PR, please do so from the `development` branch as the base branch.
+
+## Release strategy
+
+Features and fixes should be implemented by branching off `development`. Hotfixes can be implemented by branching off a given `tag`. A new release can be created if at least one new feature or fix has been added to the `development` branch. If the release has breaking API changes, the major version must be incremented (X.0.0). If not, the release can increment the minor version (0.X.0). Patches and hotfixes increment the patch version (0.0.X). To create a new release, the following steps must be taken:
+
+1. `git checkout development && git pull` Checkout and pull latest changes from `development`
+2. `npm version <major | minor | patch>` create new release commit & tag
+3. `git push && git push --tags` push commit and tag
+4. Create a new release on github, targeting the newly created tag
+5. The CI will build and deploy to npm, with provenance
+6. `git checkout main && git pull && git merge <tag>` After creating a new version, merge the tag into `main`
