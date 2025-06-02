@@ -18,6 +18,7 @@ import { MintOperationError } from '../src/model/Errors.js';
 import ws from 'ws';
 import { injectWebSocketImpl } from '../src/ws.js';
 import {
+	getDecodedToken,
 	getEncodedToken,
 	getEncodedTokenV4,
 	hexToNumber,
@@ -451,14 +452,11 @@ describe('dleq', () => {
 		const mintRequest = await wallet.createMintQuote(8);
 		const proofs = await wallet.mintProofs(8, mintRequest.quote);
 
-		const { keep, send } = await wallet.send(4, proofs, { includeDleq: false });
-		send.forEach((p) => {
-			expect(p.dleq).toBeUndefined();
-		});
-		keep.forEach((p) => {
-			expect(p.dleq).toBeDefined();
-			expect(p.dleq?.r).toBeDefined();
-		});
+		const { send } = await wallet.send(4, proofs);
+		send.forEach((p) => expect(p.dleq).toBeDefined());
+		const encoded = getEncodedToken({ proofs: send, mint: mintUrl }, { removeDleq: true });
+		const decoded = getDecodedToken(encoded);
+		decoded.proofs.forEach((p) => expect(p.dleq).toBeUndefined());
 	});
 	test('send not enough proofs when dleq is required', async () => {
 		const mint = new CashuMint(mintUrl);

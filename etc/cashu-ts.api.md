@@ -229,14 +229,15 @@ export function getEncodedAuthToken(proof: Proof): string;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
-    version: 3 | 4;
+    version?: 3 | 4;
+    removeDleq?: boolean;
 }): string;
 
 // @public (undocumented)
 export function getEncodedTokenBinary(token: Token): Uint8Array;
 
 // @public (undocumented)
-export function getEncodedTokenV4(token: Token): string;
+export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
 export type GetInfoResponse = {
