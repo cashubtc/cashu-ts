@@ -32,7 +32,8 @@ import type {
 	SwapTransaction,
 	LockedMintQuoteResponse,
 	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
+	PartialMeltQuoteResponse,
+	SerializedBlindedMessage
 } from './model/types/index.js';
 import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
@@ -51,6 +52,9 @@ import {
 	OutputDataLike,
 	isOutputDataFactory
 } from './model/OutputData.js';
+import { GCSFilter } from './gcs.js';
+import { BlindedMessage } from './model/BlindedMessage.js';
+import { BlindedSignature } from './model/BlindedSignature.js';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -594,8 +598,18 @@ class CashuWallet {
 		let lastCounterWithSignature: undefined | number;
 		let emptyBatchesFound = 0;
 
+		if (!keysetId) {
+			keysetId = this.keysetId;
+		}
+
+		const mintInfo = await this.lazyGetMintInfo();
+		const issuedFilter = mintInfo.isSupported(25).supported
+			? await this.getIssuedFilter(keysetId)
+			: undefined;
+		console.debug(`issuedFilter.numItems: ${issuedFilter?.numItems}`);
+
 		while (emptyBatchesFound < requiredEmptyBatches) {
-			const restoreRes = await this.restore(counter, batchSize, { keysetId });
+			const restoreRes = await this.restore(counter, batchSize, { keysetId, issuedFilter });
 			if (restoreRes.proofs.length > 0) {
 				emptyBatchesFound = 0;
 				restoredProofs.push(...restoreRes.proofs);
@@ -619,7 +633,7 @@ class CashuWallet {
 		count: number,
 		options?: RestoreOptions
 	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
-		const { keysetId } = options || {};
+		const { keysetId, issuedFilter } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
@@ -634,9 +648,23 @@ class CashuWallet {
 			amounts
 		);
 
-		const { outputs, signatures } = await this.mint.restore({
-			outputs: outputData.map((d) => d.blindedMessage)
-		});
+		// If there is a `issuedFilter`, filter out any surely un-issued blinded message
+		let filteredOutputData = [...outputData];
+		if (issuedFilter) {
+			const bytesBlindedMessages = outputData.map((d) => Buffer.from(d.blindedMessage.B_, 'hex'));
+			const matchResults = issuedFilter.matchMany(bytesBlindedMessages);
+			filteredOutputData = filteredOutputData.filter((_, i) => matchResults[i]);
+		}
+
+		let outputs: Array<SerializedBlindedMessage> = [];
+		let signatures: Array<SerializedBlindedSignature> = [];
+		if (filteredOutputData.length > 0) {
+			const restoreResponse = await this.mint.restore({
+				outputs: filteredOutputData.map((d) => d.blindedMessage)
+			});
+			outputs = restoreResponse.outputs;
+			signatures = restoreResponse.signatures;
+		}
 
 		const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
 		outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
@@ -1207,6 +1235,36 @@ class CashuWallet {
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
 		};
+	}
+
+	/**
+	 * Get the spent ecash filter for a specific keyset
+	 * @param The keyset ID
+	 * @returns `GCSFilter`
+	 */
+	async getSpentFilter(keysetId: string): Promise<GCSFilter> {
+		const response = await this.mint.getSpentFilter(keysetId);
+		return new GCSFilter(
+			Buffer.from(response.content, 'base64'),
+			response.n,
+			response.m,
+			response.p
+		);
+	}
+
+	/**
+	 * Get the issued blind messages filter for a specific keyset
+	 * @param The keyset ID
+	 * @returns `GCSFilter`
+	 */
+	async getIssuedFilter(keysetId: string): Promise<GCSFilter> {
+		const response = await this.mint.getIssuedFilter(keysetId);
+		return new GCSFilter(
+			Buffer.from(response.content, 'base64'),
+			response.n,
+			response.m,
+			response.p
+		);
 	}
 
 	/**

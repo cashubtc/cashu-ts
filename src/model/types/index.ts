@@ -1,3 +1,4 @@
+import { GCSFilter } from '../../gcs';
 import { OutputDataFactory, OutputDataLike } from '../OutputData';
 import { Proof } from './wallet/index';
 
@@ -118,6 +119,8 @@ export type SwapOptions = {
 
 export type RestoreOptions = {
 	keysetId?: string;
+	issuedFilter?: GCSFilter;
+	spentFilter?: GCSFilter;
 };
 
 /**

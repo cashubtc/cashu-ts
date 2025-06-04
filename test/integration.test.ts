@@ -658,18 +658,26 @@ describe('Keep Vector and Reordering', () => {
 	});
 });
 describe('Wallet Restore', () => {
-	test('Using batch restore', async () => {
-		const seed = randomBytes(64);
-		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { bip39seed: seed });
+	test(
+		'Using batch restore',
+		async () => {
+			const seed = randomBytes(64);
+			const mint = new CashuMint(mintUrl);
+			const wallet = new CashuWallet(mint, { bip39seed: seed });
 
-		const mintQuote = await wallet.createMintQuote(70);
-		await new Promise((r) => setTimeout(r, 1000));
-		const proofs = await wallet.mintProofs(70, mintQuote.quote, { counter: 5 });
+			const mintQuote = await wallet.createMintQuote(70);
+			await new Promise((r) => setTimeout(r, 1000));
+			const proofs = await wallet.mintProofs(70, mintQuote.quote, { counter: 5 });
 
-		const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
-		expect(restoredProofs).toEqual(proofs);
-		expect(sumProofs(restoredProofs)).toBe(70);
-		expect(lastCounterWithSignature).toBe(7);
-	});
+			// Await the recomputation of the filter
+			const sleep = new Promise((resolve) => setTimeout(resolve, 5000));
+			await sleep;
+
+			const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
+			expect(restoredProofs).toEqual(proofs);
+			expect(sumProofs(restoredProofs)).toBe(70);
+			expect(lastCounterWithSignature).toBe(7);
+		},
+		{ timeout: 10000 }
+	);
 });

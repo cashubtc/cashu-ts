@@ -81,6 +81,9 @@ export class CashuMint {
     disconnectWebSocket(): void;
     static getInfo(mintUrl: string, customRequest?: typeof request, logger?: Logger): Promise<GetInfoResponse>;
     getInfo(): Promise<GetInfoResponse>;
+    // (undocumented)
+    static getIssuedFilter(mintUrl: string, keysetId: string, customRequest?: typeof request): Promise<GetFilterResponse>;
+    getIssuedFilter(keysetId: string): Promise<GetFilterResponse>;
     static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
     getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
     static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
@@ -89,6 +92,9 @@ export class CashuMint {
     //
     // (undocumented)
     getLazyMintInfo(): Promise<MintInfo>;
+    // (undocumented)
+    static getSpentFilter(mintUrl: string, keysetId: string, customRequest?: typeof request): Promise<GetFilterResponse>;
+    getSpentFilter(keysetId: string): Promise<GetFilterResponse>;
     // (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
     static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
@@ -142,9 +148,12 @@ export class CashuWallet {
     getAllKeys(): Promise<Array<MintKeys>>;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Array<Proof>): number;
+    getIssuedFilter(keysetId: string): Promise<GCSFilter>;
     getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
     getKeySets(): Promise<Array<MintKeyset>>;
     getMintInfo(): Promise<MintInfo>;
+    // Warning: (ae-forgotten-export) The symbol "GCSFilter" needs to be exported by the entry point index.d.ts
+    getSpentFilter(keysetId: string): Promise<GCSFilter>;
     // (undocumented)
     get keys(): Map<string, MintKeys>;
     // (undocumented)
@@ -264,6 +273,15 @@ export function getEncodedTokenBinary(token: Token): Uint8Array;
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
+export type GetFilterResponse = {
+    n: number;
+    p?: number;
+    m?: number;
+    content: string;
+    timestamp: number;
+} & ApiError;
+
+// @public
 export type GetInfoResponse = {
     name: string;
     pubkey: string;
@@ -317,6 +335,9 @@ export type GetInfoResponse = {
                 method: 'GET' | 'POST';
                 path: string;
             }>;
+        };
+        '25'?: {
+            supported: boolean;
         };
     };
     motd?: string;
@@ -810,6 +831,8 @@ export type ReceiveTokenEntryResponse = {
 // @public (undocumented)
 export type RestoreOptions = {
     keysetId?: string;
+    issuedFilter?: GCSFilter;
+    spentFilter?: GCSFilter;
 };
 
 // @public (undocumented)
@@ -981,10 +1004,10 @@ export type WebSocketSupport = {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/CashuWallet.d.ts:40:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:131:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:164:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:192:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/CashuWallet.d.ts:41:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:134:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:167:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:195:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

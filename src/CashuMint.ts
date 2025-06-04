@@ -17,7 +17,8 @@ import type {
 	MeltQuotePayload,
 	MeltQuoteResponse,
 	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
+	PartialMeltQuoteResponse,
+	GetFilterResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request, { setRequestLogger } from './request';
@@ -527,6 +528,60 @@ class CashuMint {
 		outputs: Array<SerializedBlindedMessage>;
 	}): Promise<PostRestoreResponse> {
 		return CashuMint.restore(this._mintUrl, restorePayload, this._customRequest);
+	}
+
+	public static async getSpentFilter(
+		mintUrl: string,
+		keysetId: string,
+		customRequest?: typeof request
+	): Promise<GetFilterResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<GetFilterResponse>({
+			endpoint: joinUrls(mintUrl, `/v1/filter/spent/${keysetId}`),
+			method: 'GET'
+		});
+
+		if (!isObj(data) || !data?.content) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	public static async getIssuedFilter(
+		mintUrl: string,
+		keysetId: string,
+		customRequest?: typeof request
+	): Promise<GetFilterResponse> {
+		const requestInstance = customRequest || request;
+		const data = await requestInstance<GetFilterResponse>({
+			endpoint: joinUrls(mintUrl, `/v1/filter/issued/${keysetId}`),
+			method: 'GET'
+		});
+
+		if (!isObj(data) || !data?.content) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	/**
+	 * Gets the GCS spent ecash filter for the specific keyset
+	 * @param keysetId the keyset ID
+	 * @returns response containing the compressed set and its parameters
+	 */
+	async getSpentFilter(keysetId: string): Promise<GetFilterResponse> {
+		return CashuMint.getSpentFilter(this._mintUrl, keysetId, this._customRequest);
+	}
+
+	/**
+	 * Gets the GCS issued blind messages for the specific keyset
+	 * @param keysetId the keyset ID
+	 * @returns response containing the compressed set and its parameters
+	 */
+	async getIssuedFilter(keysetId: string): Promise<GetFilterResponse> {
+		return CashuMint.getIssuedFilter(this._mintUrl, keysetId, this._customRequest);
 	}
 
 	/**
