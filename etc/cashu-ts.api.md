@@ -64,6 +64,9 @@ export class CashuMint {
     disconnectWebSocket(): void;
     static getInfo(mintUrl: string, customRequest?: typeof request, logger?: Logger): Promise<GetInfoResponse>;
     getInfo(): Promise<GetInfoResponse>;
+    // (undocumented)
+    static getIssuedFilter(mintUrl: string, keysetId: string, customRequest?: typeof request): Promise<GetFilterResponse>;
+    getIssuedFilter(keysetId: string): Promise<GetFilterResponse>;
     static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
     getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
     static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
@@ -72,6 +75,9 @@ export class CashuMint {
     //
     // (undocumented)
     getLazyMintInfo(): Promise<MintInfo>;
+    // (undocumented)
+    static getSpentFilter(mintUrl: string, keysetId: string, customRequest?: typeof request): Promise<GetFilterResponse>;
+    getSpentFilter(keysetId: string): Promise<GetFilterResponse>;
     // (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
     static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
@@ -117,6 +123,7 @@ export class CashuWallet {
     // (undocumented)
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
+    checkProofStateWithFilter(proofs: Proof[], keysetId?: string): Promise<ProofState[]>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
@@ -125,9 +132,12 @@ export class CashuWallet {
     getAllKeys(): Promise<MintKeys[]>;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
+    getIssuedFilter(keysetId: string): Promise<GCSFilter>;
     getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
     getKeySets(): Promise<MintKeyset[]>;
     getMintInfo(): Promise<MintInfo>;
+    // Warning: (ae-forgotten-export) The symbol "GCSFilter" needs to be exported by the entry point index.d.ts
+    getSpentFilter(keysetId: string): Promise<GCSFilter>;
     // (undocumented)
     get keys(): Map<string, MintKeys>;
     // (undocumented)
@@ -244,6 +254,15 @@ export function getEncodedTokenBinary(token: Token): Uint8Array;
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
+export type GetFilterResponse = {
+    n: number;
+    p?: number;
+    m?: number;
+    content: string;
+    timestamp: number;
+} & ApiError;
+
+// @public
 export type GetInfoResponse = {
     name: string;
     pubkey: string;
@@ -297,6 +316,9 @@ export type GetInfoResponse = {
                 method: 'GET' | 'POST';
                 path: string;
             }>;
+        };
+        '25'?: {
+            supported: boolean;
         };
     };
     motd?: string;
@@ -791,6 +813,8 @@ export type ReceiveTokenEntryResponse = {
 // @public (undocumented)
 export type RestoreOptions = {
     keysetId?: string;
+    issuedFilter?: GCSFilter;
+    spentFilter?: GCSFilter;
 };
 
 // @public (undocumented)

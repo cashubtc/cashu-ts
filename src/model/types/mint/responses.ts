@@ -112,6 +112,10 @@ export type GetInfoResponse = {
 			bat_max_mint: number;
 			protected_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
 		};
+		'25'?: {
+			// Compact Nut Filters
+			supported: boolean;
+		};
 	};
 	motd?: string;
 };
@@ -307,4 +311,15 @@ export type WebSocketSupport = {
  */
 export type BlindAuthMintResponse = {
 	signatures: SerializedBlindedSignature[];
+} & ApiError;
+
+/**
+ * Response to a get spent filter request
+ */
+export type GetFilterResponse = {
+	n: number;
+	p?: number;
+	m?: number;
+	content: string;
+	timestamp: number;
 } & ApiError;

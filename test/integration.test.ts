@@ -657,19 +657,79 @@ describe('Keep Vector and Reordering', () => {
 		send.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
 	});
 });
+
+describe('NUT-25 Proof State Filter', () => {
+	test(
+		'checkProofStateWithFilter for spent proofs',
+		async () => {
+			const mint = new CashuMint(mintUrl);
+			const wallet = new CashuWallet(mint);
+
+			// First check if mint supports NUT-25
+			const mintInfo = await wallet.getMintInfo();
+			if (!mintInfo.isSupported(25).supported) {
+				console.log('Skipping test: mint does not support NUT-25');
+				return;
+			}
+
+			// Mint some proofs
+			const mintQuote = await wallet.createMintQuote(3000);
+			const proofs = await wallet.mintProofs(3000, mintQuote.quote);
+			expect(proofs.length).toBeGreaterThan(0);
+
+			// Melt half of them
+			const meltQuote = await wallet.createMeltQuote(externalInvoice);
+
+			const { send: proofsToMelt, keep: proofsToKeep } = await wallet.send(2500, proofs, {
+				includeFees: true
+			});
+
+			await wallet.meltProofs(meltQuote, proofsToMelt);
+
+			// Wait for filter to be updated
+			await new Promise((resolve) => setTimeout(resolve, 5000));
+
+			// Check states using new filter method
+			const spentStates = await wallet.checkProofStateWithFilter(proofsToMelt);
+			const unspentStates = await wallet.checkProofStateWithFilter(proofsToKeep);
+
+			// Verify melted proofs are marked as spent
+			spentStates.forEach((state) => {
+				expect(state.state).toBe(CheckStateEnum.SPENT);
+				expect(state.witness).toBeNull();
+			});
+
+			// Verify kept proofs are marked as unspent
+			unspentStates.forEach((state) => {
+				expect(state.state).toBe(CheckStateEnum.UNSPENT);
+				expect(state.witness).toBeNull();
+			});
+		},
+		{ timeout: 10000 }
+	);
+});
+
 describe('Wallet Restore', () => {
-	test('Using batch restore', async () => {
-		const seed = randomBytes(64);
-		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { bip39seed: seed });
+	test(
+		'Using batch restore',
+		async () => {
+			const seed = randomBytes(64);
+			const mint = new CashuMint(mintUrl);
+			const wallet = new CashuWallet(mint, { bip39seed: seed });
 
-		const mintQuote = await wallet.createMintQuote(70);
-		await new Promise((r) => setTimeout(r, 1000));
-		const proofs = await wallet.mintProofs(70, mintQuote.quote, { counter: 5 });
+			const mintQuote = await wallet.createMintQuote(70);
+			await new Promise((r) => setTimeout(r, 1000));
+			const proofs = await wallet.mintProofs(70, mintQuote.quote, { counter: 5 });
 
-		const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
-		expect(restoredProofs).toEqual(proofs);
-		expect(sumProofs(restoredProofs)).toBe(70);
-		expect(lastCounterWithSignature).toBe(7);
-	});
+			// Await the recomputation of the filter
+			const sleep = new Promise((resolve) => setTimeout(resolve, 5000));
+			await sleep;
+
+			const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
+			expect(restoredProofs).toEqual(proofs);
+			expect(sumProofs(restoredProofs)).toBe(70);
+			expect(lastCounterWithSignature).toBe(7);
+		},
+		{ timeout: 10000 }
+	);
 });

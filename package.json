@@ -141,6 +141,8 @@
 		"@noble/curves": "^1.9.5",
 		"@noble/hashes": "^1.5.0",
 		"@scure/bip32": "^1.5.0",
-		"buffer": "^6.0.3"
+		"bitset": "^5.2.3",
+		"buffer": "^6.0.3",
+		"murmurhash": "^2.0.1"
 	}
 }
