@@ -1,6 +1,6 @@
 import { serializeProof } from './crypto/client/index.js';
 import { getSignedProofs } from './crypto/client/NUT11.js';
-import { BlindSignature, hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
+import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import {
