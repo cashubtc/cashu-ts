@@ -529,7 +529,12 @@ class CashuMint {
 		return data;
 	}
 
-	async getSpentFilter(keysetId: string): Promise<GetFilterResponse	> {
+	/**
+	 * Gets the GCS spent ecash filter for the specific keyset id
+	 * @param keysetId the keyset ID
+	 * @returns response containing the compressed set and its parameters
+	 */
+	async getSpentFilter(keysetId: string): Promise<GetFilterResponse> {
 		return CashuMint.getSpentFilter(this._mintUrl, keysetId, this._customRequest)
 	}
 

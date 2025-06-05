@@ -1,6 +1,6 @@
 import { serializeProof } from './crypto/client/index.js';
 import { getSignedProofs } from './crypto/client/NUT11.js';
-import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
+import { BlindSignature, hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import {
@@ -1213,6 +1213,15 @@ class CashuWallet {
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
 		};
+	}
+
+	/**
+	 * Get the spent ecash filter for a specific keyset
+	 * @param The keyset ID
+	 * @returns `GetFilterResponse`
+	 */
+	async getSpentFilter(keysetId: string) {
+		return this.mint.getSpentFilter(keysetId);
 	}
 
 	/**
