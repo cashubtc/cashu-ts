@@ -117,7 +117,7 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): Array<string>
 	const { data, tags } = secret[1];
 	const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
 	const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
-	return [data, ...pubkeys];
+	return [data, ...pubkeys].filter(Boolean);
 }
 
 /**
@@ -134,7 +134,7 @@ export function getP2PKWitnessRefundkeys(secretStr: string | Secret): Array<stri
 	}
 	const { tags } = secret[1];
 	const refundTag = tags && tags.find((tag) => tag[0] === 'refund');
-	return refundTag && refundTag.length > 1 ? refundTag.slice(1) : [];
+	return refundTag && refundTag.length > 1 ? refundTag.slice(1).filter(Boolean) : [];
 }
 
 /**
