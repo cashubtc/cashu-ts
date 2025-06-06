@@ -309,3 +309,14 @@ export type WebSocketSupport = {
 export type BlindAuthMintResponse = {
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
+
+/**
+ * Response to a get spent filter request
+ */
+export type GetFilterResponse = {
+	n: number,
+	p?: number,
+	m?: number,
+	content: string,
+	timestamp: number,
+} & ApiError;

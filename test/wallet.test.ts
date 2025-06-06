@@ -968,6 +968,103 @@ describe('Blind Authentication', () => {
 	});
 });
 
+describe('Test coinselection', () => {
+	const notes = [
+		{
+			id: '009a1f293253e41e',
+			amount: 2,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		},
+		{
+			id: '009a1f293253e41e',
+			amount: 8,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		},
+		{
+			id: '009a1f293253e41e',
+			amount: 16,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		},
+		{
+			id: '009a1f293253e41e',
+			amount: 16,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		},
+		{
+			id: '009a1f293253e41e',
+			amount: 1,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		},
+		{
+			id: '009a1f293253e41e',
+			amount: 1,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+		}
+	];
+
+	test('offline coinselection', async () => {
+		const wallet = new CashuWallet(mint, { unit });
+		const targetAmount = 25;
+		const { send } = await wallet.send(targetAmount, notes, {
+			offline: true
+		});
+		expect(send).toHaveLength(3);
+		const amountSend = send.reduce((acc, p) => acc + p.amount, 0);
+		expect(amountSend).toBe(25);
+	});
+	test('next best offline coinselection', async () => {
+		const wallet = new CashuWallet(mint, { unit });
+		const targetAmount = 23;
+		const { send } = await wallet.send(targetAmount, notes, {
+			offline: true
+		});
+		console.log(`send.length = ${send.length}`);
+		expect(send).toHaveLength(2);
+		const amountSend = send.reduce((acc, p) => acc + p.amount, 0);
+		console.log(`amountSend = ${amountSend}`);
+		expect(amountSend).toBe(24);
+	});
+	test('offline coinselection with large input fees', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [
+						{
+							id: '009a1f293253e41e',
+							unit: 'sat',
+							active: true,
+							input_fee_ppk: 1000
+						}
+					]
+				});
+			})
+		);
+		const mint = new CashuMint(mintUrl);
+		const keysets = await mint.getKeySets();
+		const wallet = new CashuWallet(mint, { unit, keysets: keysets.keysets });
+		const targetAmount = 31;
+		const { send } = await wallet.send(targetAmount, notes, {
+			offline: true,
+			includeFees: true
+		});
+		const amountSend = send.reduce((acc, p) => acc + p.amount, 0);
+
+		console.log(`send.length = ${send.length}`);
+		console.log(`amountSend = ${amountSend}`);
+		expect(send).toHaveLength(3);
+		// fee ppk is 1000:
+		// * 2 proofs (optimal) would have had fee = 2
+		// * next optimal solution is 3 proofs with fee 3.
+		expect(amountSend).toBe(34);
+	});
+});
+
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	p.forEach((p) => {
 		const parsedSecret = JSON.parse(p.secret);
