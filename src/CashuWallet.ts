@@ -3,13 +3,11 @@ import { getSignedProofs } from './crypto/client/NUT11.js';
 import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
-import {
+import type {
 	GetInfoResponse,
 	MeltProofOptions,
-	MeltQuoteState,
 	MintProofOptions,
 	MintQuoteResponse,
-	MintQuoteState,
 	OutputAmounts,
 	ProofState,
 	ReceiveOptions,
@@ -17,17 +15,17 @@ import {
 	SendOptions,
 	SerializedBlindedSignature,
 	SwapOptions,
-	type MeltPayload,
-	type MeltProofsResponse,
-	type MeltQuotePayload,
-	type MeltQuoteResponse,
-	type MintKeys,
-	type MintKeyset,
-	type MintPayload,
-	type MintQuotePayload,
-	type Proof,
-	type SendResponse,
-	type Token,
+	MeltPayload,
+	MeltProofsResponse,
+	MeltQuotePayload,
+	MeltQuoteResponse,
+	MintKeys,
+	MintKeyset,
+	MintPayload,
+	MintQuotePayload,
+	Proof,
+	SendResponse,
+	Token,
 	MPPOption,
 	MeltQuoteOptions,
 	SwapTransaction,
@@ -35,6 +33,7 @@ import {
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse
 } from './model/types/index.js';
+import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
 	getDecodedToken,
