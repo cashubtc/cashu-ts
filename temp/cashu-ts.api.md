@@ -17,22 +17,14 @@ import { getEncodedAuthToken } from './auth';
 import { getEncodedToken } from './utils.js';
 import { getEncodedTokenBinary } from './utils.js';
 import { getEncodedTokenV4 } from './utils.js';
-import { getP2PKExpectedKWitnessPubkeys } from './crypto/client/NUT11.js';
-import { getP2PKLocktime } from './crypto/client/NUT11.js';
-import { getP2PKNSigs } from './crypto/client/NUT11.js';
-import { getP2PKSigFlag } from './crypto/client/NUT11.js';
-import { getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
-import { hasP2PKSignedProof } from './crypto/client/NUT11.js';
 import { hasValidDleq } from './utils.js';
 import { HttpResponseError } from './model/Errors.js';
 import { injectWebSocketImpl } from './ws.js';
 import { MintOperationError } from './model/Errors.js';
 import { NetworkError } from './model/Errors.js';
 import { OutputData } from './model/OutputData.js';
-import { parseP2PKSecret } from './crypto/common/NUT11.js';
 import { PaymentRequest as PaymentRequest_2 } from './model/PaymentRequest.js';
 import { setGlobalRequestOptions } from './request.js';
-import { signP2PKProofs } from './crypto/client/NUT11.js';
 
 export { CashuAuthMint }
 
@@ -60,18 +52,6 @@ export { getEncodedTokenBinary }
 
 export { getEncodedTokenV4 }
 
-export { getP2PKExpectedKWitnessPubkeys }
-
-export { getP2PKLocktime }
-
-export { getP2PKNSigs }
-
-export { getP2PKSigFlag }
-
-export { getP2PKWitnessSignatures }
-
-export { hasP2PKSignedProof }
-
 export { hasValidDleq }
 
 export { HttpResponseError }
@@ -84,13 +64,9 @@ export { NetworkError }
 
 export { OutputData }
 
-export { parseP2PKSecret }
-
 export { PaymentRequest_2 as PaymentRequest }
 
 export { setGlobalRequestOptions }
-
-export { signP2PKProofs }
 
 
 export * from "./model/types/index.js";
