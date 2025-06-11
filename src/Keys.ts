@@ -1,7 +1,7 @@
 import { isValidHex } from './utils';
 
 type KeyGetters = {
-	keysetGetter: (id?: string) => Promise<KeysetReponse>;
+	keysetGetter: (id: string) => Promise<KeysetReponse>;
 	keysetEntriesGetter: () => Promise<KeysetEntriesReponse>;
 };
 
@@ -62,7 +62,7 @@ export class Keyset {
 }
 
 export class WalletKeyChain {
-	private _keysetGetter: (id?: string) => Promise<KeysetReponse>;
+	private _keysetGetter: (id: string) => Promise<KeysetReponse>;
 	private _keysetEntriesGetter: () => Promise<KeysetEntriesReponse>;
 	private unit: string;
 	private keysets: Map<string, Keyset> = new Map();
