@@ -904,7 +904,9 @@ class CashuWallet {
 		);
 		if (privkey != undefined) {
 			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
-				return { ...p, witness: JSON.stringify(p.witness) };
+				const witness =
+					p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+				return { ...p, witness };
 			});
 		}
 
@@ -1008,7 +1010,9 @@ class CashuWallet {
 
 		if (privkey) {
 			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
-				return { ...p, witness: JSON.stringify(p.witness) };
+				const witness =
+					p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+				return { ...p, witness };
 			});
 		}
 
