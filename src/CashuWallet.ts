@@ -903,14 +903,17 @@ class CashuWallet {
 			this._keepFactory
 		);
 		if (privkey != undefined) {
-			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
-				const witness =
-					p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
-				return { ...p, witness };
-			});
+			proofsToSend = signP2PKProofs(proofsToSend, privkey);
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
+
+		// Ensure witnesses are serialized before sending to mint
+		proofsToSend = proofsToSend.map((p: Proof) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			return { ...p, witness };
+		});
 
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
@@ -1009,14 +1012,17 @@ class CashuWallet {
 		}
 
 		if (privkey) {
-			proofsToSend = signP2PKProofs(proofsToSend, privkey).map((p: Proof) => {
-				const witness =
-					p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
-				return { ...p, witness };
-			});
+			proofsToSend = signP2PKProofs(proofsToSend, privkey);
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
+
+		// Ensure witnesses are serialized before sending to mint
+		proofsToSend = proofsToSend.map((p: Proof) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			return { ...p, witness };
+		});
 
 		const mergedBlindingData = [...keepOutputData, ...sendOutputData];
 		const indices = mergedBlindingData
