@@ -191,7 +191,7 @@ class CashuWallet {
 	 * @returns active keyset
 	 */
 	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
-		let activeKeysets = keysets.filter((k: MintKeyset) => k.active);
+		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
 
 		// we only consider keyset IDs that start with "00"
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
