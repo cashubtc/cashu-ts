@@ -1,11 +1,12 @@
 import { CashuMint } from './CashuMint';
 import { Keyset, WalletKeyChain } from './Keys';
 import { OutputData, OutputDataLike } from './model/OutputData';
-import { MintKeys, Proof, SwapTransaction, Token } from './model/types';
-import { hasValidDleq, stripDleq, sumProofs } from './utils';
+import { MintKeys, Proof, SendResponse, SwapTransaction, Token } from './model/types';
+import { hasValidDleq, reorderProofsAfterSwap, splitAmount, stripDleq, sumProofs } from './utils';
+import { getTotalInputFee } from './utils/fees';
 
 type OutputType =
-	| { type: 'random'; params: never }
+	| { type: 'random'; params?: never }
 	| { type: 'p2pk'; params: { publicKey: string } };
 
 export class Wallet {
@@ -28,6 +29,7 @@ export class Wallet {
 			}
 		});
 	}
+
 	/**
 	 * Receive a Token. This method will swap all proofs included in the passed Token
 	 * and return new proofs that match the specified output type.
@@ -53,21 +55,71 @@ export class Wallet {
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		const keepOutputs = this.createOutputData(amount, keyset, type);
-		const swapTransaction = this.createSwapTransaction(token.proofs, {
-			keep: keepOutputs,
-			send: []
+		const { send: proofs } = await this.swap(amount, token.proofs, { send: type });
+		return proofs;
+	}
+
+	/**
+	 * Swaps a list of proofs for new ones, creating a send and a keep list.
+	 *  @param {SwapOptions} [options] - Optional parameters for configuring the swap operation
+	 * @returns promise of the change- and send-proofs
+	 */
+	async swap(
+		amount: number,
+		inputProofs: Array<Proof>,
+		outputTypes?: { send?: OutputType; keep?: OutputType },
+		options?: { keysetId: string; includeFees: boolean }
+	): Promise<SendResponse> {
+		const keyset = await this._keychain.getFullKeyset(options?.keysetId);
+
+		const inputAmount = sumProofs(inputProofs);
+		const outputAmounts = { keep: 0, send: 0 };
+		outputAmounts.send = amount;
+		outputAmounts.keep = inputAmount - outputAmounts.send - this.getFeesForProofs(inputProofs);
+
+		let sendDenominations = splitAmount(outputAmounts.send, keyset.keyPairs);
+
+		if (options?.includeFees) {
+			let outputFee = getTotalInputFee(sendDenominations.length, keyset.fee);
+			let outputFeeDenominations = splitAmount(outputFee, keyset.keyPairs);
+			while (
+				getTotalInputFee([...sendDenominations, ...outputFeeDenominations].length, keyset.fee) >
+				outputFee
+			) {
+				outputFee++;
+				outputFeeDenominations = splitAmount(outputFee, keyset.keyPairs);
+			}
+			sendDenominations = [...sendDenominations, ...outputFeeDenominations];
+			outputAmounts.send += outputFee;
+			outputAmounts.keep -= outputFee;
+		}
+
+		if (outputAmounts.send + this.getFeesForProofs(inputProofs) > inputAmount) {
+			throw new Error(`Not enough funds available for swap`);
+		}
+
+		if (
+			outputAmounts.send + this.getFeesForProofs(inputProofs) + outputAmounts.keep !=
+			inputAmount
+		) {
+			throw new Error('Amounts do not match for swap');
+		}
+
+		const keepOutputData = this.createOutputData(amount, keyset, outputTypes?.keep);
+		const sendOutputData = this.createOutputData(amount, keyset, outputTypes?.send);
+
+		const swapTransaction = this.createSwapTransaction(inputProofs, {
+			keep: keepOutputData,
+			send: sendOutputData
 		});
 		const { signatures } = await this._mint.swap(swapTransaction.payload);
-		const proofs = swapTransaction.outputData.map((d, i) =>
+		const swapProofs = swapTransaction.outputData.map((d, i) =>
 			d.toProof(signatures[i], this.castBackwardsCompatibleKeyset(keyset))
 		);
-		const orderedProofs: Array<Proof> = [];
-		swapTransaction.sortedIndices.forEach((s, o) => {
-			orderedProofs[s] = proofs[o];
-		});
-		return orderedProofs;
+		const reorderedProofs = reorderProofsAfterSwap(swapTransaction, swapProofs);
+		return reorderedProofs;
 	}
+
 	/**
 	 * calculates the fees based on inputs (proofs)
 	 * @param proofs input proofs to calculate fees for
@@ -140,9 +192,9 @@ export class Wallet {
 			sortedIndices: indices
 		};
 	}
-	private createOutputData(amount: number, keyset: Keyset, type: OutputType) {
+	private createOutputData(amount: number, keyset: Keyset, type: OutputType = { type: 'random' }) {
 		const backwardsCompatibleKeyset = this.castBackwardsCompatibleKeyset(keyset);
-		switch (type.type) {
+		switch (type?.type) {
 			case 'random':
 				return OutputData.createRandomData(amount, backwardsCompatibleKeyset);
 			case 'p2pk':

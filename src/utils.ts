@@ -16,6 +16,7 @@ import {
 	MintKeys,
 	Proof,
 	SerializedDLEQ,
+	SwapTransaction,
 	Token,
 	TokenV4Template,
 	V4DLEQTemplate,
@@ -577,4 +578,29 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 
 function sumArray(arr: Array<number>) {
 	return arr.reduce((a, c) => a + c, 0);
+}
+
+export function reorderProofsAfterSwap(
+	swap: SwapTransaction,
+	proofs: Array<Proof>
+): { keep: Array<Proof>; send: Array<Proof> } {
+	const splitProofsToKeep: Array<Proof> = [];
+	const splitProofsToSend: Array<Proof> = [];
+	const reorderedKeepVector = Array(swap.keepVector.length);
+	const reorderedProofs = Array(proofs.length);
+	swap.sortedIndices.forEach((s, i) => {
+		reorderedKeepVector[s] = swap.keepVector[i];
+		reorderedProofs[s] = proofs[i];
+	});
+	reorderedProofs.forEach((p, i) => {
+		if (reorderedKeepVector[i]) {
+			splitProofsToKeep.push(p);
+		} else {
+			splitProofsToSend.push(p);
+		}
+	});
+	return {
+		keep: splitProofsToKeep,
+		send: splitProofsToSend
+	};
 }
