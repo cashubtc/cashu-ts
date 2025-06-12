@@ -37,8 +37,8 @@ export type ReceiveOptions = {
 		pubkey: string | Array<string>;
 		locktime?: number;
 		refundKeys?: Array<string>;
-		nsig?: number;
-		rsig?: number;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
 	};
 };
 
@@ -72,8 +72,8 @@ export type SendOptions = {
 		pubkey: string | Array<string>;
 		locktime?: number;
 		refundKeys?: Array<string>;
-		nsig?: number;
-		rsig?: number;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
 	};
 };
 
@@ -105,8 +105,8 @@ export type SwapOptions = {
 		pubkey: string | Array<string>;
 		locktime?: number;
 		refundKeys?: Array<string>;
-		nsig?: number;
-		rsig?: number;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
 	};
 };
 
@@ -133,8 +133,8 @@ export type MintProofOptions = {
 		pubkey: string | Array<string>;
 		locktime?: number;
 		refundKeys?: Array<string>;
-		nsig?: number;
-		rsig?: number;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
 	};
 };
 

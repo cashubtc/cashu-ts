@@ -74,8 +74,8 @@ export class OutputData implements OutputDataLike {
 			pubkey: string | Array<string>;
 			locktime?: number;
 			refundKeys?: Array<string>;
-			nsig?: number;
-			rsig?: number;
+			requiredSignatures?: number;
+			requiredRefundSignatures?: number;
 		},
 		amount: number,
 		keyset: MintKeys,
@@ -90,8 +90,8 @@ export class OutputData implements OutputDataLike {
 			pubkey: string | Array<string>;
 			locktime?: number;
 			refundKeys?: Array<string>;
-			nsig?: number;
-			rsig?: number;
+			requiredSignatures?: number;
+			requiredRefundSignatures?: number;
 		},
 		amount: number,
 		keysetId: string
@@ -99,10 +99,10 @@ export class OutputData implements OutputDataLike {
 		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
 		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
 		const pubkeys: Array<string> = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
-		const n_sigs: number = Math.max(1, Math.min(p2pk.nsig || 1, pubkeys.length));
+		const n_sigs: number = Math.max(1, Math.min(p2pk.requiredSignatures || 1, pubkeys.length));
 		const n_sigs_refund: number = Math.max(
 			1,
-			Math.min(p2pk.rsig || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1)
+			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1)
 		);
 		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
 			'P2PK',

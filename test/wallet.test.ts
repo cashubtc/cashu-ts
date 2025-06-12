@@ -897,10 +897,14 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).toEqual([]);
 		});
 	});
-	test('Create BlindingData locked to single pk with unexpected nsig', async () => {
+	test('Create BlindingData locked to single pk with unexpected requiredSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
-		const data = OutputData.createP2PKData({ pubkey: 'thisisatest', nsig: 5 }, 21, keys);
+		const data = OutputData.createP2PKData(
+			{ pubkey: 'thisisatest', requiredSignatures: 5 },
+			21,
+			keys
+		);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
@@ -909,7 +913,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).toEqual([]);
 		});
 	});
-	test('Create BlindingData locked to multiple pks with no nsig', async () => {
+	test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
@@ -926,11 +930,11 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).not.toContainEqual(['n_sigs', '1']);
 		});
 	});
-	test('Create BlindingData locked to multiple pks with 2-of-3 nsig', async () => {
+	test('Create BlindingData locked to multiple pks with 2-of-3 requiredSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], nsig: 2 },
+			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 2 },
 			21,
 			keys
 		);
@@ -943,11 +947,11 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
 		});
 	});
-	test('Create BlindingData locked to multiple pks with out of range nsig', async () => {
+	test('Create BlindingData locked to multiple pks with out of range requiredSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], nsig: 5 },
+			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 5 },
 			21,
 			keys
 		);
@@ -960,11 +964,16 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).toContainEqual(['n_sigs', '3']);
 		});
 	});
-	test('Create BlindingData locked to single refund key with default rsig', async () => {
+	test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'], rsig: 1 },
+			{
+				pubkey: 'thisisatest',
+				locktime: 212,
+				refundKeys: ['iamarefund'],
+				requiredRefundSignatures: 1
+			},
 			21,
 			keys
 		);
@@ -978,7 +987,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
-	test('Create BlindingData locked to multiple refund keys with no rsig', async () => {
+	test('Create BlindingData locked to multiple refund keys with no requiredRefundSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
@@ -996,7 +1005,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
-	test('Create BlindingData locked to multiple refund keys with 2-of-3 rsig', async () => {
+	test('Create BlindingData locked to multiple refund keys with 2-of-3 requiredRefundSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
@@ -1004,7 +1013,7 @@ describe('P2PK BlindingData', () => {
 				pubkey: 'thisisatest',
 				locktime: 212,
 				refundKeys: ['iamarefund', 'asecondrefund', 'athirdrefund'],
-				rsig: 2
+				requiredRefundSignatures: 2
 			},
 			21,
 			keys
@@ -1019,7 +1028,7 @@ describe('P2PK BlindingData', () => {
 			expect(s[1].tags).toContainEqual(['n_sigs_refund', '2']);
 		});
 	});
-	test('Create BlindingData locked to multiple refund keys with out of range rsig', async () => {
+	test('Create BlindingData locked to multiple refund keys with out of range requiredRefundSignatures', async () => {
 		const wallet = new CashuWallet(mint);
 		const keys = await wallet.getKeys();
 		const data = OutputData.createP2PKData(
@@ -1027,7 +1036,7 @@ describe('P2PK BlindingData', () => {
 				pubkey: 'thisisatest',
 				locktime: 212,
 				refundKeys: ['iamarefund', 'asecondrefund', 'athirdrefund'],
-				rsig: 5
+				requiredRefundSignatures: 5
 			},
 			21,
 			keys
@@ -1050,8 +1059,8 @@ describe('P2PK BlindingData', () => {
 				pubkey: ['thisisatest', 'asecondpk', 'athirdpk'],
 				locktime: 212,
 				refundKeys: ['iamarefund', 'asecondrefund'],
-				nsig: 2,
-				rsig: 1
+				requiredSignatures: 2,
+				requiredRefundSignatures: 1
 			},
 			21,
 			keys
