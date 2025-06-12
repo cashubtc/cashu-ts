@@ -32,10 +32,60 @@
 			"import": "./lib/cashu-ts.es.js",
 			"types": "./lib/types/index.d.ts"
 		},
+		"./crypto/client": {
+			"require": "./lib/crypto/client.cjs.js",
+			"import": "./lib/crypto/client.es.js",
+			"types": "./lib/types/crypto/client/index.d.ts"
+		},
+		"./crypto/common": {
+			"require": "./lib/crypto/common.cjs.js",
+			"import": "./lib/crypto/common.es.js",
+			"types": "./lib/types/crypto/common/index.d.ts"
+		},
+		"./crypto/mint": {
+			"require": "./lib/crypto/mint.cjs.js",
+			"import": "./lib/crypto/mint.es.js",
+			"types": "./lib/types/crypto/mint/index.d.ts"
+		},
 		"./crypto/util": {
-			"types": "./modules/util/index.d.ts",
-			"import": "./modules/esm/util/index.js",
-			"default": "./modules/util/index.js"
+			"require": "./lib/crypto/util.cjs.js",
+			"import": "./lib/crypto/util.es.js",
+			"types": "./lib/types/crypto/util/utils.d.ts"
+		},
+		"./crypto/client/NUT09": {
+			"require": "./lib/crypto/client/NUT09.cjs.js",
+			"import": "./lib/crypto/client/NUT09.es.js",
+			"types": "./lib/types/crypto/client/NUT09.d.ts"
+		},
+		"./crypto/client/NUT11": {
+			"require": "./lib/crypto/client/NUT11.cjs.js",
+			"import": "./lib/crypto/client/NUT11.es.js",
+			"types": "./lib/types/crypto/client/NUT11.d.ts"
+		},
+		"./crypto/client/NUT12": {
+			"require": "./lib/crypto/client/NUT12.cjs.js",
+			"import": "./lib/crypto/client/NUT12.es.js",
+			"types": "./lib/types/crypto/client/NUT12.d.ts"
+		},
+		"./crypto/client/NUT20": {
+			"require": "./lib/crypto/client/NUT20.cjs.js",
+			"import": "./lib/crypto/client/NUT20.es.js",
+			"types": "./lib/types/crypto/client/NUT20.d.ts"
+		},
+		"./crypto/common/NUT11": {
+			"require": "./lib/crypto/common/NUT11.cjs.js",
+			"import": "./lib/crypto/common/NUT11.es.js",
+			"types": "./lib/types/crypto/common/NUT11.d.ts"
+		},
+		"./crypto/mint/NUT11": {
+			"require": "./lib/crypto/mint/NUT11.cjs.js",
+			"import": "./lib/crypto/mint/NUT11.es.js",
+			"types": "./lib/types/crypto/mint/NUT11.d.ts"
+		},
+		"./crypto/mint/NUT12": {
+			"require": "./lib/crypto/mint/NUT12.cjs.js",
+			"import": "./lib/crypto/mint/NUT12.es.js",
+			"types": "./lib/types/crypto/mint/NUT12.d.ts"
 		}
 	},
 	"keywords": [

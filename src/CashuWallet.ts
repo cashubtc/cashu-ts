@@ -3,13 +3,11 @@ import { getSignedProofs } from './crypto/client/NUT11.js';
 import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
-import {
+import type {
 	GetInfoResponse,
 	MeltProofOptions,
-	MeltQuoteState,
 	MintProofOptions,
 	MintQuoteResponse,
-	MintQuoteState,
 	OutputAmounts,
 	ProofState,
 	ReceiveOptions,
@@ -17,17 +15,17 @@ import {
 	SendOptions,
 	SerializedBlindedSignature,
 	SwapOptions,
-	type MeltPayload,
-	type MeltProofsResponse,
-	type MeltQuotePayload,
-	type MeltQuoteResponse,
-	type MintKeys,
-	type MintKeyset,
-	type MintPayload,
-	type MintQuotePayload,
-	type Proof,
-	type SendResponse,
-	type Token,
+	MeltPayload,
+	MeltProofsResponse,
+	MeltQuotePayload,
+	MeltQuoteResponse,
+	MintKeys,
+	MintKeyset,
+	MintPayload,
+	MintQuotePayload,
+	Proof,
+	SendResponse,
+	Token,
 	MPPOption,
 	MeltQuoteOptions,
 	SwapTransaction,
@@ -35,6 +33,7 @@ import {
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse
 } from './model/types/index.js';
+import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
 	getDecodedToken,
@@ -340,7 +339,8 @@ class CashuWallet {
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
 			amount,
-			options?.includeFees
+			options?.includeFees,
+			true // exactMatch
 		);
 		const expectedFee = includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
@@ -357,7 +357,8 @@ class CashuWallet {
 			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
 				proofs,
 				amount,
-				true
+				true, // includeFees
+				false // not exactMatch
 			);
 			proofsWeHave?.push(...keepProofsSelect);
 
@@ -384,85 +385,243 @@ class CashuWallet {
 		return { keep: keepProofsOffline, send: sendProofOffline };
 	}
 
+	/**
+	 * Selects proofs to send based on amount, fee inclusion, and exact match requirement.
+	 * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm that
+	 * seeks to minimize fees and proof selections if required. For proofs arrays
+	 * over MAX_PROOFS in length, strict RGLI will apply for efficiency.
+	 * For close match the lower of MAX_OVRPCT and MAX_OVRAMT will apply.
+	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
+	 * @remarks RGLI has time complexity O(n log n) and space complexity O(n).
+	 * @param proofs Array of Proof objects available to select from
+	 * @param amountToSend The target amount to send
+	 * @param includeFees Optional boolean to include fees; Default: false
+	 * @param exactMatch Optional boolean to require exact match; Default: false
+	 * @returns SendResponse containing proofs to keep and proofs to send
+	 */
 	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees?: boolean
+		includeFees: boolean = false,
+		exactMatch: boolean = false
 	): SendResponse {
-		const sortedProofs = proofs.sort((a: Proof, b: Proof) => a.amount - b.amount);
-		const smallerProofs = sortedProofs
-			.filter((p: Proof) => p.amount <= amountToSend)
-			.sort((a: Proof, b: Proof) => b.amount - a.amount);
-		const biggerProofs = sortedProofs
-			.filter((p: Proof) => p.amount > amountToSend)
-			.sort((a: Proof, b: Proof) => a.amount - b.amount);
-		const nextBigger = biggerProofs[0];
-		if (!smallerProofs.length && nextBigger) {
-			return {
-				keep: proofs.filter((p: Proof) => p.secret !== nextBigger.secret),
-				send: [nextBigger]
-			};
+		// Init vars
+		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
+		const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
+		const MAX_OVRPCT = 0.1; // Acceptable close match overage (percent)
+		const MAX_OVRAMT = 1024; // Acceptable close match overage (absolute)
+		let bestSubset: Array<Proof> | null = null;
+		let bestCost = Infinity;
+
+		// Remove any proofs that are uneconomical to spend if fees are included.
+		// Otherwise we can leave them in, as fees will be the receiver's problem.
+		const eligibleProofs = includeFees
+			? proofs.filter((p) => p.amount > this.getProofFeePPK(p) / 1000)
+			: proofs;
+
+		// Precompute feePPK for each proof to avoid repeated calls
+		const proofToFeePPK = new Map<Proof, number>();
+		for (const p of eligibleProofs) {
+			proofToFeePPK.set(p, this.getProofFeePPK(p));
 		}
 
-		if (!smallerProofs.length && !nextBigger) {
+		/**
+		 * Helper functions
+		 */
+		const amountExFee = (p: Proof): number => {
+			return includeFees ? p.amount - (proofToFeePPK.get(p) ?? 0) / 1000 : p.amount;
+		};
+		const sumExFees = (amount: number, feePPK: number): number => {
+			return amount - (includeFees ? Math.ceil(feePPK / 1000) : 0);
+		};
+		// "Cost" is the excess over target, plus fees, plus a PPK "tiebreaker"
+		// to favour lower fee keysets in the case of same cost results
+		const calculateCost = (amount: number, feePPK: number, length: number): number => {
+			const netSum = sumExFees(amount, feePPK);
+			if (netSum < amountToSend) return Infinity; // no good
+			const excess = netSum - amountToSend;
+			const feeCost = includeFees ? Math.ceil(feePPK / 1000) : 0;
+			return excess + feeCost + feePPK / 1000;
+		};
+		const shuffleArray = <T>(array: T[]): T[] => {
+			const shuffled = [...array];
+			for (let i = shuffled.length - 1; i > 0; i--) {
+				const j = Math.floor(Math.random() * (i + 1));
+				[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+			}
+			return shuffled;
+		};
+		// Binary search: finds a proof index based on value and direction
+		const binarySearchIndex = (
+			arr: Array<Proof>,
+			value: number,
+			findLargest: boolean
+		): number | null => {
+			let left = 0,
+				right = arr.length - 1,
+				result: number | null = null;
+			while (left <= right) {
+				const mid = Math.floor((left + right) / 2);
+				const midValue = amountExFee(arr[mid]);
+				if (findLargest ? midValue <= value : midValue >= value) {
+					result = mid;
+					if (findLargest) left = mid + 1;
+					else right = mid - 1;
+				} else {
+					if (findLargest) right = mid - 1;
+					else left = mid + 1;
+				}
+			}
+			return findLargest ? result : left < arr.length ? left : null;
+		};
+		// Replaces a proof using binary logic
+		const insertSorted = (arr: Array<Proof>, p: Proof): void => {
+			const value = amountExFee(p);
+			let left = 0,
+				right = arr.length;
+			while (left < right) {
+				const mid = Math.floor((left + right) / 2);
+				if (amountExFee(arr[mid]) < value) left = mid + 1;
+				else right = mid;
+			}
+			arr.splice(left, 0, p);
+		};
+
+		// Handle invalid / impossible amountToSend
+		const totalAmount = eligibleProofs.reduce((acc, p) => acc + p.amount, 0);
+		const totalFeePPK = eligibleProofs.reduce((acc, p) => acc + (proofToFeePPK.get(p) ?? 0), 0);
+		if (amountToSend <= 0 || amountToSend > sumExFees(totalAmount, totalFeePPK)) {
 			return { keep: proofs, send: [] };
 		}
 
-		let remainder = amountToSend;
-		let selectedProofs = [smallerProofs[0]];
-		const returnedProofs = [];
-		const feePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
-		remainder -= selectedProofs[0].amount - feePPK / 1000;
-		if (remainder > 0) {
-			const { keep, send } = this.selectProofsToSend(
-				smallerProofs.slice(1),
-				remainder,
-				includeFees
-			);
-			selectedProofs.push(...send);
-			returnedProofs.push(...keep);
+		// Precompute max acceptable amount for non-exact matches
+		const maxOverAmount = Math.min(
+			Math.min(amountToSend * Math.ceil(1 + MAX_OVRPCT / 100), MAX_OVRAMT),
+			sumExFees(totalAmount, totalFeePPK)
+		);
+
+		/**
+		 * RGLI algorithm: Runs multiple trials (up to MAX_TRIALS)
+		 * Each trial starts with randomized greedy subset (S) and
+		 * then tries to improve that subset to get a valid solution.
+		 * NOTE: Fees are dynamic, based on number of proofs (PPK),
+		 * so we perform all calculations based on net amounts
+		 */
+		for (let trial = 0; trial < MAX_TRIALS; trial++) {
+			// PHASE 1: Randomized Greedy Selection
+			// Add proofs up to amountToSend (after adjusting for fees)
+			// for exact match or the first amount over target otherwise
+			let S: Array<Proof> = [];
+			let amount = 0;
+			let feePPK = 0;
+			for (const p of shuffleArray(eligibleProofs)) {
+				const pFeePPK = proofToFeePPK.get(p) ?? 0;
+				const newAmount = amount + p.amount;
+				const newFeePPK = feePPK + pFeePPK;
+				const netSum = sumExFees(newAmount, newFeePPK);
+				if (exactMatch && netSum > amountToSend) break;
+				S.push(p);
+				amount = newAmount;
+				feePPK = newFeePPK;
+				if (netSum >= amountToSend) break;
+			}
+
+			// PHASE 2: Local Improvement
+			// Examine all the amounts found in the first phase, and find the
+			// largest amount not in the current solution (others), which would get us
+			// closer to the amountToSend (exact match) or lowest cost otherwise
+
+			// Calculate the "others" array and sort it ASC
+			let others = eligibleProofs.filter((q) => !S.includes(q));
+			others.sort((a, b) => amountExFee(a) - amountExFee(b));
+
+			// Generate a random order for accessing the trial subset ('S')
+			const indices = shuffleArray(Array.from({ length: S.length }, (_, i) => i));
+			for (const i of indices) {
+				// Exact or "close enough" solution found?
+				// Exact can be found in phase 1, but "close enough" should be
+				// considered only after phase 2 has run at least once (trial>0)
+				const netSum = sumExFees(amount, feePPK);
+				if (netSum === amountToSend || (!exactMatch && netSum <= maxOverAmount)) {
+					break;
+				}
+
+				// Get details for proof being replaced (p), and temporarily
+				// calculate the subset amount/fee with that proof removed.
+				const p = S[i];
+				const pFeePPK = proofToFeePPK.get(p) ?? 0;
+				const tempAmount = amount - p.amount;
+				const tempFeePPK = feePPK - pFeePPK;
+
+				// Find a better replacement proof (q) and swap it in
+				const bound = amountToSend - netSum + amountExFee(p);
+				const qIndex = binarySearchIndex(others, bound, exactMatch);
+				if (qIndex !== null && (!exactMatch || amountExFee(others[qIndex]) > amountExFee(p))) {
+					const q = others[qIndex];
+					S[i] = q;
+					amount = tempAmount + q.amount;
+					feePPK = tempFeePPK + (proofToFeePPK.get(q) ?? 0);
+					others.splice(qIndex, 1);
+					insertSorted(others, p);
+				}
+			}
+
+			// Update best solution
+			const cost = calculateCost(amount, feePPK, S.length);
+			if (cost < bestCost) {
+				bestSubset = [...S];
+				bestCost = cost;
+			}
+
+			// If not minimizing costs (!includeFees) or proof set is large (>MAX_PROOFS)
+			// then accept the best solution already found (ie pure RGLI)
+			// Otherwise we continue to iterate a while longer to minimize costs
+			if (bestSubset && bestCost < Infinity) {
+				const bestAmount = bestSubset.reduce((acc, p) => acc + p.amount, 0);
+				const bestFeePPK = bestSubset.reduce((acc, p) => acc + (proofToFeePPK.get(p) ?? 0), 0);
+				const bestSum = sumExFees(bestAmount, bestFeePPK);
+				if (
+					(!includeFees || eligibleProofs.length > MAX_PROOFS) &&
+					(bestSum === amountToSend || (!exactMatch && bestSum <= maxOverAmount))
+				) {
+					break;
+				}
+			}
 		}
 
-		const selectedFeePPK = includeFees ? this.getFeesForProofs(selectedProofs) : 0;
-		if (sumProofs(selectedProofs) < amountToSend + selectedFeePPK && nextBigger) {
-			selectedProofs = [nextBigger];
+		// Return result
+		if (bestSubset && bestCost < Infinity) {
+			return {
+				keep: proofs.filter((p) => !bestSubset.includes(p)),
+				send: bestSubset
+			};
 		}
-
-		return {
-			keep: proofs.filter((p: Proof) => !selectedProofs.includes(p)),
-			send: selectedProofs
-		};
+		return { keep: proofs, send: [] };
 	}
 
 	/**
 	 * calculates the fees based on inputs (proofs)
 	 * @param proofs input proofs to calculate fees for
 	 * @returns fee amount
+	 * @throws throws an error if the proofs keyset is unknown
 	 */
 	getFeesForProofs(proofs: Array<Proof>): number {
-		if (!this._keysets.length) {
-			throw new Error('Could not calculate fees. No keysets found');
-		}
-		const keysetIds = new Set(proofs.map((p: Proof) => p.id));
-		keysetIds.forEach((id: string) => {
-			if (!this._keysets.find((k: MintKeyset) => k.id === id)) {
-				throw new Error(`Could not calculate fees. No keyset found with id: ${id}`);
-			}
-		});
+		const sumPPK = proofs.reduce((a, c) => a + this.getProofFeePPK(c), 0);
+		return Math.ceil(sumPPK / 1000);
+	}
 
-		const fees = Math.floor(
-			Math.max(
-				(proofs.reduce(
-					(total: number, curr: Proof) =>
-						total + (this._keysets.find((k: MintKeyset) => k.id === curr.id)?.input_fee_ppk || 0),
-					0
-				) +
-					999) /
-					1000,
-				0
-			)
-		);
-		return fees;
+	/**
+	 * Returns the current fee PPK for a proof according to the cached keyset
+	 * @param proof {Proof} A single proof
+	 * @returns feePPK {number} The feePPK for the selected proof
+	 * @throws throws an error if the proofs keyset is unknown
+	 */
+	private getProofFeePPK(proof: Proof) {
+		const keyset = this._keysets.find((k) => k.id === proof.id);
+		if (!keyset) {
+			throw new Error(`Could not get fee. No keyset found for keyset id: ${proof.id}`);
+		}
+		return keyset?.input_fee_ppk || 0;
 	}
 
 	/**
