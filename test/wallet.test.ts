@@ -1861,10 +1861,10 @@ describe('Test coinselection', () => {
 				});
 			})
 		);
-		let numProofs = 1000;
+		let numProofs = 10000;
 		let proofs: Array<Proof> = [];
 		for (let i = 0; i < numProofs; ++i) {
-			const amount = (new DataView(randomBytes(4).buffer).getUint32(0, false)) & ((1 << 19) - 1);
+			const amount = new DataView(randomBytes(4).buffer).getUint32(0, false) & ((1 << 19) - 1);
 			const proof = {
 				id: '009a1f293253e41e',
 				amount: amount,
@@ -1943,7 +1943,7 @@ describe('Test coinselection', () => {
 		let numProofs = 30;
 		let proofs: Array<Proof> = [];
 		for (let i = 0; i < numProofs; ++i) {
-			const amount = (new DataView(randomBytes(4).buffer).getUint32(0, false)) & ((1 << 19) - 1);
+			const amount = new DataView(randomBytes(4).buffer).getUint32(0, false) & ((1 << 19) - 1);
 			const proof = {
 				id: '009a1f293253e41e',
 				amount: amount,
@@ -1967,7 +1967,7 @@ describe('Test coinselection', () => {
 		const { send: sendDP } = wallet.selectProofsToSendV2(
 			proofs,
 			amountToSend,
-			true, // includeFees
+			true // includeFees
 		);
 		const feeDP = wallet.getFeesForProofs(sendDP);
 		const amountSendDP = sendDP.reduce((acc, p) => acc + p.amount, 0);
@@ -1980,7 +1980,7 @@ describe('Test coinselection', () => {
 			proofs,
 			amountToSend,
 			true, // includeFees
-			false, // close match
+			false // close match
 		);
 
 		const feeRGLI = wallet.getFeesForProofs(sendRGLI);
@@ -1989,8 +1989,10 @@ describe('Test coinselection', () => {
 		console.log(`selectProofs-RGLI: amountSend = ${amountSendRGLI}`);
 		expect(amountSendRGLI - feeRGLI).toBeGreaterThanOrEqual(amountToSend);
 
-		console.log(`\namountToSend-RGLI relative error: ${(1 - amountSendDP / amountSendRGLI).toExponential(8)}`);
-	})
+		console.log(
+			`\namountToSend-RGLI relative error: ${(1 - amountSendDP / amountSendRGLI).toExponential(8)}`
+		);
+	});
 });
 
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {

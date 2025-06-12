@@ -374,6 +374,7 @@ class CashuWallet {
 	 * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm that
 	 * seeks to minimize fees and proof selections if required. For proofs arrays
 	 * over MAX_PROOFS in length, strict RGLI will apply for efficiency.
+	 * For close match the lower of MAX_OVRPCT and MAX_OVRAMT will apply.
 	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
 	 * @remarks RGLI has time complexity O(n log n) and space complexity O(n).
 	 * @param proofs Array of Proof objects available to select from
@@ -389,10 +390,10 @@ class CashuWallet {
 		exactMatch: boolean = false
 	): SendResponse {
 		// Init vars
-		const MAX_TRIALS = 80; // 40-80 is optimal (per RGLI paper)
-		// ALWAYS APPLY STRICT RGLI
-		//const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
-		const MAX_OVRPCT = 0.5; // Acceptable close match overage (percent)
+		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
+		const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
+		const MAX_OVRPCT = 0.1; // Acceptable close match overage (percent)
+		const MAX_OVRAMT = 1024; // Acceptable close match overage (absolute)
 		let bestSubset: Array<Proof> | null = null;
 		let bestCost = Infinity;
 
@@ -417,13 +418,14 @@ class CashuWallet {
 		const sumExFees = (amount: number, feePPK: number): number => {
 			return amount - (includeFees ? Math.ceil(feePPK / 1000) : 0);
 		};
-		// "Cost" is the excess over target, plus a penalty for subset length and fees
+		// "Cost" is the excess over target, plus fees
+		// with tiebreaker to favour lower PPK keysets
 		const calculateCost = (amount: number, feePPK: number, length: number): number => {
 			const netSum = sumExFees(amount, feePPK);
-			if (netSum < amountToSend) return Infinity;
+			if (netSum < amountToSend) return Infinity; // no good
 			const excess = netSum - amountToSend;
 			const feeCost = includeFees ? Math.ceil(feePPK / 1000) : 0;
-			return excess + feeCost * length;
+			return excess + feeCost + feePPK / 1000;
 		};
 		const shuffleArray = <T>(array: T[]): T[] => {
 			const shuffled = [...array];
@@ -478,9 +480,10 @@ class CashuWallet {
 
 		// Precompute max acceptable amount for non-exact matches
 		const maxOverAmount = Math.min(
-			amountToSend * (1 + MAX_OVRPCT),
+			Math.min(amountToSend * Math.ceil(1 + MAX_OVRPCT / 100), MAX_OVRAMT),
 			sumExFees(totalAmount, totalFeePPK)
 		);
+		console.log('maxOverAmount:', maxOverAmount);
 
 		/**
 		 * RGLI algorithm: Runs multiple trials (up to MAX_TRIALS)
@@ -489,6 +492,7 @@ class CashuWallet {
 		 * NOTE: Fees are dynamic, based on number of proofs (PPK),
 		 * so we perform all calculations based on net amounts
 		 */
+		console.time('selectProofs-rgli-' + (exactMatch ? 'exactMatch' : 'closeMatch'));
 		for (let trial = 0; trial < MAX_TRIALS; trial++) {
 			// PHASE 1: Randomized Greedy Selection
 			// Add proofs up to amountToSend (after adjusting for fees)
@@ -524,16 +528,22 @@ class CashuWallet {
 			const indices = shuffleArray(Array.from({ length: S.length }, (_, i) => i));
 			for (const i of indices) {
 				// Exact or "close enough" solution found?
+				// Exact can be found in phase 1, but "close enough" should be
+				// considered only after phase 2 has run at least once (trial>0)
 				const netSum = sumExFees(amount, feePPK);
-				if (netSum === amountToSend || (!exactMatch && netSum <= maxOverAmount)) break;
+				if (netSum === amountToSend || (!exactMatch && netSum <= maxOverAmount)) {
+					console.log(`Trial #${trial}: Found solution:`, netSum, ' PPK: ', feePPK, ' = ', amount);
+					break;
+				}
 
-				// Get details for proof being replaced, and remaining amount
+				// Get details for proof being replaced (p), and temporarily
+				// calculate the subset amount/fee with that proof removed.
 				const p = S[i];
 				const pFeePPK = proofToFeePPK.get(p) ?? 0;
 				const tempAmount = amount - p.amount;
 				const tempFeePPK = feePPK - pFeePPK;
 
-				// Find a better replacement proof
+				// Find a better replacement proof (q) and swap it in
 				const bound = amountToSend - netSum + amountExFee(p);
 				const qIndex = binarySearchIndex(others, bound, exactMatch);
 				if (qIndex !== null && (!exactMatch || amountExFee(others[qIndex]) > amountExFee(p))) {
@@ -552,23 +562,31 @@ class CashuWallet {
 			if (cost < bestCost) {
 				bestSubset = [...S];
 				bestCost = cost;
+				console.log(
+					`Trial #${trial}: Best solution: `,
+					sumExFees(amount, feePPK),
+					' PPK: ',
+					feePPK,
+					' = ',
+					amount
+				);
 			}
 
-			/*
 			// If not minimizing costs (!includeFees) or proof set is large (>MAX_PROOFS)
 			// then accept the best solution already found (ie pure RGLI)
-			// Otherwise we continue to iterate a while longer to minimize cost or error
-			if (
-				(!includeFees || eligibleProofs.length > MAX_PROOFS) &&
-				bestSubset &&
-				bestCost < Infinity
-			) {
-				console.log(
-					`Trial #${trial}: Using the solution found:`,
-					S.reduce((acc, p) => acc + p.amount, 0)
-				);
-				break;
-			}*/
+			// Otherwise we continue to iterate a while longer to minimize costs
+			if (bestSubset && bestCost < Infinity) {
+				const bestAmount = bestSubset.reduce((acc, p) => acc + p.amount, 0);
+				const bestFeePPK = bestSubset.reduce((acc, p) => acc + (proofToFeePPK.get(p) ?? 0), 0);
+				const bestSum = sumExFees(bestAmount, bestFeePPK);
+				if (
+					(!includeFees || eligibleProofs.length > MAX_PROOFS) &&
+					(bestSum === amountToSend || (!exactMatch && bestSum <= maxOverAmount))
+				) {
+					console.log(`Trial #${trial}: Using the solution found:`, amount, 'PPK', feePPK);
+					break;
+				}
+			}
 		}
 		console.timeEnd('selectProofs-rgli-' + (exactMatch ? 'exactMatch' : 'closeMatch'));
 
@@ -594,14 +612,14 @@ class CashuWallet {
 	 * Selects proofs to send using a dynamic programming approach.
 	 * This method uses a variation of the subset-sum problem to find the optimal set of proofs
 	 * that sum up to the desired amount. It employs a dynamic programming table to track possible sums.
-	 * 
+	 *
 	 * Instead of using a classical 2D table, we use an Array<SumState> to save space, where each SumState
 	 * is a map that tracks whether a particular sum can be achieved with the current set of proofs.
-	 * 
+	 *
 	 * The sum series and reverse sum series are precomputed to quickly exclude unreachable states.
 	 * The sum series helps in determining the maximum sum achievable with the first i proofs, while
 	 * the reverse sum series helps in determining the maximum sum achievable with the last i proofs.
-	 * 
+	 *
 	 * @param proofs Array of proofs to consider for sending.
 	 * @param amountToSend The target amount to send.
 	 * @param includeFees Whether to include fees in the calculation.
@@ -627,7 +645,7 @@ class CashuWallet {
 
 		// Check if the total available balance is less than the amount to send
 		if (sumSeries[n - 1] < amountToSend) {
-			throw new Error("Not enough balance to cover this amount");
+			throw new Error('Not enough balance to cover this amount');
 		}
 
 		/**
@@ -640,7 +658,7 @@ class CashuWallet {
 			[key: number]: boolean;
 		};
 		const hashtables: Array<SumState> = new Array(n);
-		
+
 		// Initialize each element of the hashtables array
 		for (let i = 0; i < n; i++) {
 			hashtables[i] = {}; // Initialize as an empty object
@@ -724,7 +742,7 @@ class CashuWallet {
 				++i;
 				currentAmount += 1;
 				if (currentAmount > sumSeries[n - 1]) {
-					throw new Error("Not enough balance to cover this amount");
+					throw new Error('Not enough balance to cover this amount');
 				}
 				selectedProofs = computeTable(currentAmount, currentAmount);
 				//console.debug(`selectedProofs: ${JSON.stringify(selectedProofs)}`);
