@@ -405,8 +405,9 @@ class CashuWallet {
 		exactMatch: boolean = false
 	): SendResponse {
 		// Init vars
-		const MAX_TRIALS = 50; // 40-80 is optimal (per RGLI paper)
-		const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
+		const MAX_TRIALS = 80; // 40-80 is optimal (per RGLI paper)
+		// ALWAYS APPLY STRICT RGLI
+		//const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
 		const MAX_OVRPCT = 0.5; // Acceptable close match overage (percent)
 		let bestSubset: Array<Proof> | null = null;
 		let bestCost = Infinity;
@@ -569,6 +570,7 @@ class CashuWallet {
 				bestCost = cost;
 			}
 
+			/*
 			// If not minimizing costs (!includeFees) or proof set is large (>MAX_PROOFS)
 			// then accept the best solution already found (ie pure RGLI)
 			// Otherwise we continue to iterate a while longer to minimize cost or error
@@ -582,7 +584,7 @@ class CashuWallet {
 					S.reduce((acc, p) => acc + p.amount, 0)
 				);
 				break;
-			}
+			}*/
 		}
 		console.timeEnd('selectProofs-rgli-' + (exactMatch ? 'exactMatch' : 'closeMatch'));
 
@@ -605,255 +607,156 @@ class CashuWallet {
 	}
 
 	/**
-	 * Selects proofs to send based on amount, fee inclusion, and exact match requirement.
-	 * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm that
-	 * seeks to minimize fees and proof selections if required. For proofs arrays
-	 * over MAX_PROOFS in length, strict RGLI will apply for efficiency.
-	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
-	 * @remarks RGLI has time complexity O(n log n) and space complexity O(n).
-	 * @param proofs Array of Proof objects available to select from
-	 * @param amountToSend The target amount to send
-	 * @param includeFees Optional boolean to include fees; Default: false
-	 * @param exactMatch Optional boolean to require exact match; Default: false
-	 * @returns SendResponse containing proofs to keep and proofs to send
+	 * Selects proofs to send using a dynamic programming approach.
+	 * This method uses a variation of the subset-sum problem to find the optimal set of proofs
+	 * that sum up to the desired amount. It employs a dynamic programming table to track possible sums.
+	 * 
+	 * Instead of using a classical 2D table, we use an Array<SumState> to save space, where each SumState
+	 * is a map that tracks whether a particular sum can be achieved with the current set of proofs.
+	 * 
+	 * The sum series and reverse sum series are precomputed to quickly exclude unreachable states.
+	 * The sum series helps in determining the maximum sum achievable with the first i proofs, while
+	 * the reverse sum series helps in determining the maximum sum achievable with the last i proofs.
+	 * 
+	 * @param proofs Array of proofs to consider for sending.
+	 * @param amountToSend The target amount to send.
+	 * @param includeFees Whether to include fees in the calculation.
+	 * @returns An object containing proofs to keep and proofs to send.
 	 */
 	selectProofsToSendV2(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees = false,
-		exactMatch = false
+		includeFees?: boolean
 	): SendResponse {
-		// Init vars
-		const MAX_TRIALS = 50; // 40-80 is optimal (per RGLI paper)
-		const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
-		let bestSubset: Array<Proof> | null = null;
-		let bestCost = Infinity;
-		let bestError = Infinity;
+		// Sort proofs by amount for easier processing
+		const sortedProofs = [...proofs].sort((a: Proof, b: Proof) => a.amount - b.amount);
 
-		// Handle invalid amount
-		if (amountToSend <= 0) {
-			return { keep: proofs, send: [] };
+		const n = sortedProofs.length;
+
+		// Precompute sum series and reverse sum series
+		const sumSeries: Array<number> = [];
+		let cumulativeSum = 0;
+		for (let i = 0; i < n; ++i) {
+			cumulativeSum += sortedProofs[i].amount;
+			sumSeries.push(cumulativeSum);
 		}
 
-		// Remove any proofs that are uneconomical to spend if fees are included.
-		// Otherwise we can leave them in, as fees will be the receiver's problem.
-		const eligibleProofs = includeFees
-			? proofs.filter((p) => p.amount > this.getProofFeePPK(p) / 1000)
-			: proofs;
+		// Check if the total available balance is less than the amount to send
+		if (sumSeries[n - 1] < amountToSend) {
+			throw new Error("Not enough balance to cover this amount");
+		}
 
 		/**
-		 * Helper functions
+		 * SumState.
+		 * Maps a `sendValue` to an inclusion flag that indicates whether the current coin
+		 * has to be included in the solution.
+		 * NOTE: The absence of a map means "There is no solution for this sendValue".
 		 */
-		// time: O(n)
-		const sumExFees = (S: Array<Proof>): number => {
-			const totalAmount = S.reduce((acc, p) => acc + p.amount, 0);
-			const fees = includeFees ? this.getFeesForProofs(S) : 0;
-			return totalAmount - fees;
+		type SumState = {
+			[key: number]: boolean;
 		};
-		// time: O(1)
-		const amountExFee = (p: Proof): number => {
-			return includeFees ? p.amount - this.getProofFeePPK(p) / 1000 : p.amount;
-		};
-		// time: O(1)
-		const cost = (selectionLength: number, selectionSum: number, selectionFees: number): number => {
-			const adj = selectionSum - selectionFees;
-			if (adj < amountToSend) return Infinity; // Reject if below target
-			const excess = adj - amountToSend;
-			const feeCost = includeFees ? selectionFees : 0;
-			// "Cost" is the excess over target, plus a penalty for subset length and fees
-			return excess + feeCost * selectionLength;
-		};
-		// Find in sorted array with a simple bisection search
-		// time: O(log2 n)
-		const findBestReplacementIndex = (
-			selectionLength: number,
-			selectionSum: number,
-			selectionFees: number,
-			consideredProof: Proof,
-			sortedOthers: Array<Proof>,
-			amountToSend: number,
-			exactMatch: boolean
-		): number | null => {
-			const p = consideredProof;
-			const pExFee = amountExFee(p);
-			const currentSumExFees = selectionSum - selectionFees;
-			let left = 0;
-			let right = sortedOthers.length - 1;
-			let bestIndex: number | null = null;
-			while (left <= right) {
-				const middle = Math.floor((left + right) / 2);
-				const q = sortedOthers[middle];
-				const qExFee = amountExFee(q);
-				const newSumExFees = currentSumExFees - pExFee + qExFee;
-				if (exactMatch) {
-					if (newSumExFees <= amountToSend) {
-						if (newSumExFees > currentSumExFees) {
-							bestIndex = middle;
+		const hashtables: Array<SumState> = new Array(n);
+		
+		// Initialize each element of the hashtables array
+		for (let i = 0; i < n; i++) {
+			hashtables[i] = {}; // Initialize as an empty object
+		}
+
+		/**
+		 * Computes the table of possible sums using dynamic programming.
+		 * @param fromAmount The starting amount for the computation.
+		 * @param toAmount The target amount for the computation.
+		 * @returns An array of proofs that sum up to the target amount.
+		 */
+		function computeTable(fromAmount: number, toAmount: number): Array<Proof> {
+			//console.log(`### computeTable from ${fromAmount} to ${toAmount}.`);
+
+			for (let i = 0; i < n; ++i) {
+				const p = sortedProofs[i];
+
+				// If the proof amount is greater than the target amount, carry forward previous states
+				if (p.amount > toAmount && i > 0) {
+					for (const key in hashtables[i - 1]) {
+						hashtables[i][key] = false;
+					}
+				}
+
+				const cumulativeSum = sumSeries[i];
+				const stop = Math.min(toAmount, cumulativeSum);
+				let currentAmount = fromAmount;
+
+				for (; currentAmount <= stop; ++currentAmount) {
+					// Check if including the current proof can achieve the current amount
+					if (p.amount <= currentAmount) {
+						const remainingAmount = currentAmount - p.amount;
+						if (remainingAmount === 0 || (i > 0 && remainingAmount in hashtables[i - 1])) {
+							hashtables[i][currentAmount] = true;
+							continue;
 						}
-						left = middle + 1;
-					} else {
-						right = middle - 1;
 					}
-				} else {
-					if (newSumExFees >= amountToSend) {
-						bestIndex = middle;
-						right = middle - 1;
-					} else {
-						left = middle + 1;
+
+					// Check if the current amount can be achieved without including the current proof
+					if (i > 0 && currentAmount in hashtables[i - 1]) {
+						hashtables[i][currentAmount] = false;
 					}
 				}
 			}
-			return bestIndex;
-		};
-		// Replace a proof while keeping the invariant (sorted ascending)
-		// time: O(log2 n)
-		const replaceProofInSortedArray = (
-			sortedArr: Array<Proof>,
-			removeAtIndex: number,
-			proofToInsert: Proof
-		): Array<Proof> => {
-			const newArr = sortedArr.filter((_, i) => i !== removeAtIndex);
-			const insertExFee = amountExFee(proofToInsert);
-			let left = 0;
-			let right = newArr.length;
-			while (left < right) {
-				const middle = Math.floor((left + right) / 2);
-				const qExFee = amountExFee(newArr[middle]);
-				if (qExFee < insertExFee) {
-					left = middle + 1;
-				} else {
-					right = middle;
+
+			//console.debug(`iterations for amount ${toAmount}: ${iterations}`);
+			if (!(toAmount in hashtables[n - 1])) {
+				return [];
+			}
+
+			// Backtrack to find the subset of proofs that sum up to the target amount
+			const subSetProofs: Array<Proof> = [];
+			let i = n - 1;
+			while (i >= 0 && toAmount > 0) {
+				if (hashtables[i][toAmount] === true) {
+					subSetProofs.push(sortedProofs[i]);
+					toAmount -= sortedProofs[i].amount;
 				}
+				i--;
 			}
-			const insertionPoint = left;
-			return [...newArr.slice(0, insertionPoint), proofToInsert, ...newArr.slice(insertionPoint)];
-		};
-		const shuffleArray = <T>(array: Array<T>): Array<T> => {
-			const shuffled = [...array];
-			for (let i = shuffled.length - 1; i > 0; i--) {
-				const j = Math.floor(Math.random() * (i + 1));
-				[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-			}
-			return shuffled;
-		};
-		const shuffledArrayWithIndices = <T>(array: Array<T>): Array<[number, T]> => {
-			const shuffled: Array<[number, T]> = array.map((el, i) => [i, el]);
-			for (let i = shuffled.length - 1; i > 0; i--) {
-				const j = Math.floor(Math.random() * (i + 1));
-				[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-			}
-			return shuffled;
-		};
+			return subSetProofs;
+		}
 
-		/**
-		 * RGLI algorithm: Runs multiple trials (up to MAX_TRIALS)
-		 * Each trial starts with randomized greedy subset (S) and
-		 * then tries to improve that subset to get a valid solution.
-		 * NOTE: Fees are dynamic, based on number of proofs (PPK),
-		 * so we perform all calculations based on net amounts (sumExFees)
-		 */
-		console.time('selectProofs-rgli-' + (exactMatch ? 'exactMatch' : 'closeMatch'));
-		for (let trial = 0; trial < MAX_TRIALS; trial++) {
-			// PHASE 1: Randomized Greedy Selection
-			// Add proofs up to amountToSend (after adjusting for fees)
-			// for exact match or the first amount over target otherwise
-			// console.time('selectProofs-phase1-trial-' + trial);
-			let S: Array<Proof> = [];
-			let sumS = 0;
-			const shuffledProofs = shuffleArray(eligibleProofs);
-			for (const p of shuffledProofs) {
-				const newS = [...S, p];
-				const newSum = sumS + amountExFee(p); // Avoid O(n^2)
-				if (exactMatch && newSum > amountToSend) {
-					break;
+		// Attempt to find a solution for the exact amount to send
+		let currentAmount = amountToSend;
+		let selectedProofs: Array<Proof> = computeTable(1, currentAmount);
+
+		// If no solution is found, increment the target amount and try again
+		while (selectedProofs.length === 0) {
+			currentAmount += 1;
+			selectedProofs = computeTable(currentAmount, currentAmount);
+		}
+
+		// Adjust for fees if necessary
+		if (includeFees) {
+			let currentFees = currentAmount - amountToSend;
+			let expectedFees = this.getFeesForProofs(selectedProofs);
+			//console.debug(`expected fees: ${expectedFees}\ncurrent fees: ${currentFees}`);
+			let i = 0;
+			while (currentFees < expectedFees) {
+				++i;
+				currentAmount += 1;
+				if (currentAmount > sumSeries[n - 1]) {
+					throw new Error("Not enough balance to cover this amount");
 				}
-				S = newS;
-				sumS = newSum;
-				if (sumS >= amountToSend) break;
-			}
-			// console.timeEnd('selectProofs-phase1-trial-' + trial);
-			// PHASE 2: Local Improvement
-			// Examine all the amounts found in the first phase, and find the
-			// largest amount not in the current solution, which would get us
-			// closer to the amountToSend (exact match) or lowest cost otherwise
-			// console.time('selectProofs-phase2-trial-' + trial);
-			const shuffled_S = shuffledArrayWithIndices(S);
-
-			// Init vars
-			let sortedOthers = eligibleProofs.filter((q) => !S.includes(q));
-			sortedOthers.sort((a, b) => amountExFee(a) - amountExFee(b));
-
-			let selectionSumExFees = sumExFees(S);
-			let selectionFees = this.getFeesForProofs(S);
-			let selectionSum = selectionSumExFees + selectionFees;
-
-			for (const [indexP, p] of shuffled_S) {
-				// Exact solution found
-				if (selectionSumExFees === amountToSend) {
-					break;
+				selectedProofs = computeTable(currentAmount, currentAmount);
+				//console.debug(`selectedProofs: ${JSON.stringify(selectedProofs)}`);
+				if (selectedProofs.length === 0) {
+					continue;
 				}
-
-				const bestReplacementIndex = findBestReplacementIndex(
-					S.length,
-					selectionSum,
-					selectionFees,
-					p,
-					sortedOthers,
-					amountToSend,
-					exactMatch
-				);
-				if (bestReplacementIndex) {
-					// Swap in the best replacement for the currently considered proof
-					const q = sortedOthers[bestReplacementIndex];
-					S[indexP] = q;
-					sortedOthers = replaceProofInSortedArray(sortedOthers, bestReplacementIndex, p);
-					selectionSum = selectionSum - p.amount + q.amount;
-					selectionFees =
-						selectionFees - this.getProofFeePPK(p) / 1000 + this.getProofFeePPK(q) / 1000;
-					selectionSumExFees = selectionSum - selectionFees;
-				}
-			}
-			// console.timeEnd('selectProofs-phase2-trial-' + trial);
-
-			// Update best solution
-			const currentError = amountToSend - selectionSumExFees;
-			const currentCost = cost(S.length, selectionSum, selectionFees);
-			if (currentError < bestError) {
-				bestError = currentError;
-				bestSubset = [...S];
-			}
-			if (currentCost < bestCost) {
-				bestCost = currentCost;
-				bestSubset = [...S];
-			}
-
-			// If not minimizing costs (!includeFees) or proof set is large (>MAX_PROOFS)
-			// then accept the best solution already found (ie pure RGLI)
-			// Otherwise we continue to iterate a while longer to minimize cost or error
-			if (
-				(!includeFees || eligibleProofs.length > MAX_PROOFS) &&
-				bestSubset &&
-				bestCost < Infinity
-			) {
-				console.log(
-					'[RGLI] Stopping Early. Using the solution found:',
-					S.reduce((acc, p) => acc + p.amount, 0)
-				);
-				break;
+				currentFees = currentAmount - amountToSend;
+				expectedFees = this.getFeesForProofs(selectedProofs);
+				//console.debug(`expected fees: ${expectedFees}\ncurrent fees: ${currentFees}`);
 			}
 		}
-		console.timeEnd('selectProofs-rgli-' + (exactMatch ? 'exactMatch' : 'closeMatch'));
 
-		// Return result
-		if (bestSubset && bestCost < Infinity) {
-			console.log('amountToSend', amountToSend);
-			console.log('RESULT:>>', sumExFees(bestSubset), `(+fees = ${sumProofs(bestSubset)})`);
-			return {
-				keep: proofs.filter((p) => !bestSubset.includes(p)),
-				send: bestSubset
-			};
-		}
-		return { keep: proofs, send: [] };
+		return {
+			keep: sortedProofs.filter((p: Proof) => !selectedProofs.includes(p)),
+			send: selectedProofs
+		};
 	}
 
 	/**

@@ -1597,7 +1597,7 @@ describe('Test coinselection', () => {
 		const amountSend = send.reduce((acc, p) => acc + p.amount, 0);
 		expect(amountSend).toBe(33);
 	});
-	test('aggressive coinselection with huge proofsets and fees', async () => {
+	test('bench aggressive coinselection with huge proofsets and fees (with mixed amounts)', async () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
@@ -1615,8 +1615,7 @@ describe('Test coinselection', () => {
 		let numProofs = 1000;
 		let proofs: Array<Proof> = [];
 		for (let i = 0; i < numProofs; ++i) {
-			const bytes = randomBytes(1);
-			const amount = 1 << bytes[0] % 19;
+			const amount = (new DataView(randomBytes(4).buffer).getUint32(0, false)) & ((1 << 19) - 1);
 			const proof = {
 				id: '009a1f293253e41e',
 				amount: amount,
@@ -1676,42 +1675,73 @@ describe('Test coinselection', () => {
 			expect(amountKeep).toEqual(totalAmount);
 			expect(send).toHaveLength(0);
 		}
+	});
+	test('comparative coinselection DP optimal vs RGLI approximate (with mixed amounts)', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [
+						{
+							id: '009a1f293253e41e',
+							unit: 'sat',
+							active: true,
+							input_fee_ppk: 600
+						}
+					]
+				});
+			})
+		);
+		let numProofs = 30;
+		let proofs: Array<Proof> = [];
+		for (let i = 0; i < numProofs; ++i) {
+			const amount = (new DataView(randomBytes(4).buffer).getUint32(0, false)) & ((1 << 19) - 1);
+			const proof = {
+				id: '009a1f293253e41e',
+				amount: amount,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			};
+			proofs.push(proof);
+		}
+
+		const totalAmount = proofs.reduce((acc, p) => p.amount + acc, 0);
+
+		console.log(`totalAmount: ${totalAmount}`);
+		console.log(`N Proofs: ${numProofs}`);
+
+		const keysets = await mint.getKeySets();
+		const wallet = new CashuWallet(mint, { unit, keysets: keysets.keysets });
+		const amountToSend = Math.floor((Math.random() * totalAmount) / 2 + totalAmount / 2);
+		console.log(`target amount to send: ${amountToSend}`);
 
 		// Lollerfirst's DP version - selectProofsToSendV2:
+		const { send: sendDP } = wallet.selectProofsToSendV2(
+			proofs,
+			amountToSend,
+			true, // includeFees
+		);
+		const feeDP = wallet.getFeesForProofs(sendDP);
+		const amountSendDP = sendDP.reduce((acc, p) => acc + p.amount, 0);
+		expect(amountSendDP - feeDP).toBeGreaterThanOrEqual(amountToSend);
 
-		// Non-exact match test
-		console.time('selectProofsv2-fees-closest');
-		({ send } = wallet.selectProofsToSendV2(
+		console.log(`selectProofs-DP: send.length = ${sendDP.length}`);
+		console.log(`selectProofs-DP: amountSend = ${amountSendDP}`);
+
+		const { send: sendRGLI } = wallet.selectProofsToSend(
 			proofs,
 			amountToSend,
 			true, // includeFees
-			false // exact match
-		));
-		console.timeEnd('selectProofsv2-fees-closest');
-		fee = wallet.getFeesForProofs(send);
-		amountSend = send.reduce((acc, p) => acc + p.amount, 0);
-		expect(amountSend - fee).toBeGreaterThanOrEqual(amountToSend);
-		// Exact match test
-		console.time('selectProofsv2-fees-exact');
-		({ send, keep } = wallet.selectProofsToSendV2(
-			proofs,
-			amountToSend,
-			true, // includeFees
-			true // exact match
-		));
-		console.timeEnd('selectProofsv2-fees-exact');
-		amountKeep = keep.reduce((acc, p) => acc + p.amount, 0);
-		fee = wallet.getFeesForProofs(send);
-		amountSend = send.reduce((acc, p) => acc + p.amount, 0);
-		if (send.length > 0) {
-			// Exact match found
-			expect(amountSend - fee).toEqual(amountToSend);
-		} else {
-			// No exact match possible, all proofs kept
-			expect(amountKeep).toEqual(totalAmount);
-			expect(send).toHaveLength(0);
-		}
-	});
+			false, // close match
+		);
+
+		const feeRGLI = wallet.getFeesForProofs(sendRGLI);
+		const amountSendRGLI = sendRGLI.reduce((acc, p) => acc + p.amount, 0);
+		console.log(`selectProofs-RGLI: send.length = ${sendRGLI.length}`);
+		console.log(`selectProofs-RGLI: amountSend = ${amountSendRGLI}`);
+		expect(amountSendRGLI - feeRGLI).toBeGreaterThanOrEqual(amountToSend);
+
+		console.log(`\namountToSend-RGLI relative error: ${(1 - amountSendDP / amountSendRGLI).toExponential(8)}`);
+	})
 });
 
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
