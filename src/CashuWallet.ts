@@ -935,6 +935,8 @@ class CashuWallet {
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
+	 * @param customOutputData? optionally specify your own OutputData (blinded messages)
+	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
 	 * @returns
 	 */
 	private createSwapPayload(
@@ -1218,8 +1220,10 @@ class CashuWallet {
 	 * Creates blinded messages for a according to @param amounts
 	 * @param amount array of amounts to create blinded messages for
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
+	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
+	 * @param factory? optionally specify a custom function that produces OutputData (blinded messages)
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createOutputData(
