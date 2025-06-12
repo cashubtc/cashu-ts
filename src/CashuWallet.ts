@@ -365,19 +365,11 @@ class CashuWallet {
 			const serialized = sendRes.serialized;
 			keep = keepProofsSelect.concat(keep);
 
-			if (!includeDleq) {
-				send = stripDleq(send);
-			}
-
 			return { keep, send, serialized };
 		}
 
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
 			throw new Error('Not enough funds available to send');
-		}
-
-		if (!includeDleq) {
-			return { keep: keepProofsOffline, send: stripDleq(sendProofOffline) };
 		}
 
 		return { keep: keepProofsOffline, send: sendProofOffline };
