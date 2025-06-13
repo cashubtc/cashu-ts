@@ -392,10 +392,10 @@ class CashuWallet {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
 		const MAX_PROOFS = 100; // Strict RGLI will apply over this amount
-		const MAX_OVRPCT = 0.1; // Acceptable close match overage (percent)
+		const MAX_OVRPCT = 1; // Acceptable close match overage (percent)
 		const MAX_OVRAMT = 1024; // Acceptable close match overage (absolute)
 		let bestSubset: Array<Proof> | null = null;
-		let bestCost = Infinity;
+		let bestDelta = Infinity;
 
 		// Remove any proofs that are uneconomical to spend if fees are included.
 		// Otherwise we can leave them in, as fees will be the receiver's problem.
@@ -418,14 +418,13 @@ class CashuWallet {
 		const sumExFees = (amount: number, feePPK: number): number => {
 			return amount - (includeFees ? Math.ceil(feePPK / 1000) : 0);
 		};
-		// "Cost" is the excess over target, plus fees, plus a PPK "tiebreaker"
-		// to favour lower fee keysets in the case of same cost results
-		const calculateCost = (amount: number, feePPK: number, length: number): number => {
+		// "Delta" is the excess over amountToSend including fees
+		// plus a tiebreaker to favour lower PPK keysets
+		// NB: Solutions under amountToSend are invalid (delta: Infinity)
+		const calculateDelta = (amount: number, feePPK: number): number => {
 			const netSum = sumExFees(amount, feePPK);
 			if (netSum < amountToSend) return Infinity; // no good
-			const excess = netSum - amountToSend;
-			const feeCost = includeFees ? Math.ceil(feePPK / 1000) : 0;
-			return excess + feeCost + feePPK / 1000;
+			return amount + feePPK / 1000 - amountToSend;
 		};
 		const shuffleArray = <T>(array: T[]): T[] => {
 			const shuffled = [...array];
@@ -480,7 +479,8 @@ class CashuWallet {
 
 		// Precompute max acceptable amount for non-exact matches
 		const maxOverAmount = Math.min(
-			Math.min(amountToSend * Math.ceil(1 + MAX_OVRPCT / 100), MAX_OVRAMT),
+			Math.ceil(amountToSend * (1 + MAX_OVRPCT / 100)),
+			amountToSend + MAX_OVRAMT,
 			sumExFees(totalAmount, totalFeePPK)
 		);
 
@@ -512,8 +512,8 @@ class CashuWallet {
 
 			// PHASE 2: Local Improvement
 			// Examine all the amounts found in the first phase, and find the
-			// largest amount not in the current solution (others), which would get us
-			// closer to the amountToSend (exact match) or lowest cost otherwise
+			// amount not in the current solution (others), which would get us
+			// closest to the amountToSend.
 
 			// Calculate the "others" array and sort it ASC
 			let others = eligibleProofs.filter((q) => !S.includes(q));
@@ -522,11 +522,12 @@ class CashuWallet {
 			// Generate a random order for accessing the trial subset ('S')
 			const indices = shuffleArray(Array.from({ length: S.length }, (_, i) => i));
 			for (const i of indices) {
-				// Exact or "close enough" solution found?
-				// Exact can be found in phase 1, but "close enough" should be
-				// considered only after phase 2 has run at least once (trial>0)
+				// Exact or acceptable close match solution found?
 				const netSum = sumExFees(amount, feePPK);
-				if (netSum === amountToSend || (!exactMatch && netSum <= maxOverAmount)) {
+				if (
+					netSum === amountToSend ||
+					(!exactMatch && netSum >= amountToSend && netSum <= maxOverAmount)
+				) {
 					break;
 				}
 
@@ -536,10 +537,11 @@ class CashuWallet {
 				const pFeePPK = proofToFeePPK.get(p) ?? 0;
 				const tempAmount = amount - p.amount;
 				const tempFeePPK = feePPK - pFeePPK;
+				const tempNetSum = sumExFees(tempAmount, tempFeePPK);
 
 				// Find a better replacement proof (q) and swap it in
-				const bound = amountToSend - netSum + amountExFee(p);
-				const qIndex = binarySearchIndex(others, bound, exactMatch);
+				const target = amountToSend - tempNetSum;
+				const qIndex = binarySearchIndex(others, target, exactMatch);
 				if (qIndex !== null && (!exactMatch || amountExFee(others[qIndex]) > amountExFee(p))) {
 					const q = others[qIndex];
 					S[i] = q;
@@ -550,23 +552,24 @@ class CashuWallet {
 				}
 			}
 
-			// Update best solution
-			const cost = calculateCost(amount, feePPK, S.length);
-			if (cost < bestCost) {
+			// Update best solution?
+			const delta = calculateDelta(amount, feePPK);
+			if (delta < bestDelta) {
 				bestSubset = [...S];
-				bestCost = cost;
+				bestDelta = delta;
 			}
 
 			// If not minimizing costs (!includeFees) or proof set is large (>MAX_PROOFS)
 			// then accept the best solution already found (ie pure RGLI)
 			// Otherwise we continue to iterate a while longer to minimize costs
-			if (bestSubset && bestCost < Infinity) {
+			if (bestSubset && bestDelta < Infinity) {
 				const bestAmount = bestSubset.reduce((acc, p) => acc + p.amount, 0);
 				const bestFeePPK = bestSubset.reduce((acc, p) => acc + (proofToFeePPK.get(p) ?? 0), 0);
 				const bestSum = sumExFees(bestAmount, bestFeePPK);
 				if (
 					(!includeFees || eligibleProofs.length > MAX_PROOFS) &&
-					(bestSum === amountToSend || (!exactMatch && bestSum <= maxOverAmount))
+					(bestSum === amountToSend ||
+						(!exactMatch && bestSum >= amountToSend && bestSum <= maxOverAmount))
 				) {
 					break;
 				}
@@ -574,7 +577,7 @@ class CashuWallet {
 		}
 
 		// Return result
-		if (bestSubset && bestCost < Infinity) {
+		if (bestSubset && bestDelta < Infinity) {
 			return {
 				keep: proofs.filter((p) => !bestSubset.includes(p)),
 				send: bestSubset
