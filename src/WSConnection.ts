@@ -83,6 +83,9 @@ export class WSConnection {
 	sendRequest(method: 'unsubscribe', params: { subId: string }): void;
 	sendRequest(method: 'subscribe' | 'unsubscribe', params: Partial<JsonRpcReqParams>) {
 		if (this.ws?.readyState !== 1) {
+			if (method === 'unsubscribe') {
+				return;
+			}
 			throw new Error('Socket not open...');
 		}
 		const id = this.rpcId;
