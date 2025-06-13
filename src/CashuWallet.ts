@@ -540,15 +540,26 @@ class CashuWallet {
 				const tempNetSum = sumExFees(tempAmount, tempFeePPK);
 
 				// Find a better replacement proof (q) and swap it in
+				// Exact match can only replace larger to close on the target
+				// Close match can replace larger or smaller as needed, but will
+				// not replace larger unless it closes on the target
 				const target = amountToSend - tempNetSum;
 				const qIndex = binarySearchIndex(others, target, exactMatch);
-				if (qIndex !== null && (!exactMatch || amountExFee(others[qIndex]) > amountExFee(p))) {
+				if (qIndex !== null) {
 					const q = others[qIndex];
-					S[i] = q;
-					amount = tempAmount + q.amount;
-					feePPK = tempFeePPK + (proofToFeePPK.get(q) ?? 0);
-					others.splice(qIndex, 1);
-					insertSorted(others, p);
+					const qAmount = amountExFee(q);
+					const pAmount = amountExFee(p);
+					if (!exactMatch || qAmount > pAmount) {
+						// CM || larger (CM/EM)
+						if (target >= 0 || qAmount <= pAmount) {
+							// closes target (EM/CM) || smaller (CM)
+							S[i] = q;
+							amount = tempAmount + q.amount;
+							feePPK = tempFeePPK + (proofToFeePPK.get(q) ?? 0);
+							others.splice(qIndex, 1);
+							insertSorted(others, p);
+						}
+					}
 				}
 			}
 
