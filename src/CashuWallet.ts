@@ -391,7 +391,7 @@ class CashuWallet {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
 		const MAX_OVRPCT = 1; // Acceptable close match overage (percent)
-		const MAX_OVRAMT = 1024; // Acceptable close match overage (absolute)
+		const MAX_OVRAMT = 128; // Acceptable close match overage (absolute)
 		let bestSubset: Array<Proof> | null = null;
 		let bestDelta = Infinity;
 
@@ -567,16 +567,24 @@ class CashuWallet {
 				bestSubset = [...S].sort((a, b) => amountExFee(b) - amountExFee(a)); // copy and sort Desc
 				bestDelta = delta;
 
-				// Check we haven't overpaid fees
+				// "PHASE 3": Final check to make sure we haven't overpaid fees
+				// and see if we can improve the solution. This is an adaptation
+				// to the original RGLI, which helps us identify close match and
+				// optimal fee solutions more consistently
 				const tempS = [...bestSubset]; // copy
-				const p = tempS.pop(); // lowest contribution
-				const pFeePPK = proofToFeePPK.get(p) ?? 0;
-				const tempAmount = amount - p.amount;
-				const tempFeePPK = feePPK - pFeePPK;
-				const tempDelta = calculateDelta(tempAmount, tempFeePPK);
-				if (tempDelta < delta) {
-					bestSubset = [...tempS]; // copy
-					bestDelta = tempDelta;
+				while (tempS.length > 1 && bestDelta > 0) {
+					const p = tempS.pop(); // lowest contribution
+					const pFeePPK = proofToFeePPK.get(p) ?? 0;
+					const tempAmount = amount - p.amount;
+					const tempFeePPK = feePPK - pFeePPK;
+					const tempDelta = calculateDelta(tempAmount, tempFeePPK);
+					if (tempDelta == Infinity) break; // was already optimal
+					if (tempDelta < bestDelta) {
+						bestSubset = [...tempS]; // copy
+						bestDelta = tempDelta;
+						amount = tempAmount;
+						feePPK = tempFeePPK;
+					}
 				}
 			}
 
