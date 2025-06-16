@@ -561,31 +561,35 @@ class CashuWallet {
 				}
 			}
 
+			// See how far we are away from an exact solution so far
+			let delta = calculateDelta(amount, feePPK);
+
+			// PHASE 3: Fee / Close Match optimization
+			// Finally, we check to make sure we haven't overpaid fees
+			// and see if we can improve the solution. We do this by popping
+			// off the least contribution proofs until we can no longer make
+			// amountToSend. This is an adaptation to the original RGLI, which
+			// helps us quickly identify close match and optimal fee solutions.
+			const tempS = [...S].sort((a, b) => amountExFee(b) - amountExFee(a)); // copy and sort Desc
+			while (tempS.length > 1 && delta > 0) {
+				const p = tempS.pop(); // lowest contribution
+				const pFeePPK = proofToFeePPK.get(p) ?? 0;
+				const tempAmount = amount - p.amount;
+				const tempFeePPK = feePPK - pFeePPK;
+				const tempDelta = calculateDelta(tempAmount, tempFeePPK);
+				if (tempDelta == Infinity) break; // was already optimal
+				if (tempDelta < delta) {
+					S = [...tempS]; // copy
+					delta = tempDelta;
+					amount = tempAmount;
+					feePPK = tempFeePPK;
+				}
+			}
+
 			// Update best solution?
-			const delta = calculateDelta(amount, feePPK);
 			if (delta < bestDelta) {
 				bestSubset = [...S].sort((a, b) => amountExFee(b) - amountExFee(a)); // copy and sort Desc
 				bestDelta = delta;
-
-				// "PHASE 3": Final check to make sure we haven't overpaid fees
-				// and see if we can improve the solution. This is an adaptation
-				// to the original RGLI, which helps us identify close match and
-				// optimal fee solutions more consistently
-				const tempS = [...bestSubset]; // copy
-				while (tempS.length > 1 && bestDelta > 0) {
-					const p = tempS.pop(); // lowest contribution
-					const pFeePPK = proofToFeePPK.get(p) ?? 0;
-					const tempAmount = amount - p.amount;
-					const tempFeePPK = feePPK - pFeePPK;
-					const tempDelta = calculateDelta(tempAmount, tempFeePPK);
-					if (tempDelta == Infinity) break; // was already optimal
-					if (tempDelta < bestDelta) {
-						bestSubset = [...tempS]; // copy
-						bestDelta = tempDelta;
-						amount = tempAmount;
-						feePPK = tempFeePPK;
-					}
-				}
 			}
 
 			// Exact or acceptable close match solution found? If so, we are done
