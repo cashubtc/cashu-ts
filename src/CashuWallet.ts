@@ -470,8 +470,7 @@ class CashuWallet {
 			options || {};
 		const keyset = await this.getKeys(keysetId);
 
-		const proofsToSend = proofs;
-		const amountToSend = amount;
+		let amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
 		// send output selection
 		let sendAmounts = outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
@@ -486,13 +485,14 @@ class CashuWallet {
 				sendAmountsFee = splitAmount(outputFee, keyset.keys);
 			}
 			sendAmounts = sendAmounts.concat(sendAmountsFee);
+			amountToSend += outputFee;
 		}
 
 		// include the fees to spend the the outputs of the swap
 		// input selection, needs fees because of the swap
 		const { keep: keepProofs, send: sendProofs } = this.selectProofsToSend(
-			proofsToSend,
-			sendAmounts.reduce((acc, v) => acc + v, 0),
+			proofs,
+			amountToSend,
 			true
 		);
 
