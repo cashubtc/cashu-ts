@@ -355,7 +355,6 @@ class CashuWallet {
 			const sendRes = await this.swap(amount, proofs, options);
 			let { keep, send } = sendRes;
 			const serialized = sendRes.serialized;
-			keep = keepProofsSelect.concat(keep);
 
 			if (!includeDleq) {
 				send = stripDleq(send);
@@ -513,8 +512,7 @@ class CashuWallet {
 			true
 		);
 
-		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs)
-			- amountToSend;
+		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs) - amountToSend;
 
 		if (amountToKeep < 0) {
 			throw new Error('Not enough balance to send');
@@ -523,7 +521,7 @@ class CashuWallet {
 		// keep output selection
 		let keepAmounts;
 		if (!outputAmounts?.keepAmounts && !proofsWeHave) {
-			keepAmounts = splitAmount(amountToKeep, keyset.keys)
+			keepAmounts = splitAmount(amountToKeep, keyset.keys);
 		} else if (!outputAmounts?.keepAmounts && proofsWeHave) {
 			keepAmounts = getKeepAmounts(
 				proofsWeHave,
