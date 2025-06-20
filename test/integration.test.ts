@@ -207,6 +207,7 @@ describe('mint api', () => {
 		expect(sendResponse.send).toBeDefined();
 		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(2);
+		console.log(`sumProofs(sendResponse.keep) = ${sumProofs(sendResponse.keep)}`);
 		expect(sendResponse.keep.length).toBe(5);
 		expect(sumProofs(sendResponse.send)).toBe(10);
 		expect(sumProofs(sendResponse.keep)).toBe(89);
