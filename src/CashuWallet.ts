@@ -351,16 +351,7 @@ class CashuWallet {
 				keysetId ||
 				outputData) // these options require a swap
 		) {
-			// we need to swap
-			// input selection, needs fees because of the swap
-			const { keep: keepProofsSelect, send: sendProofs } = this.selectProofsToSend(
-				proofs,
-				amount,
-				true
-			);
-			proofsWeHave?.push(...keepProofsSelect);
-
-			const sendRes = await this.swap(amount, sendProofs, options);
+			const sendRes = await this.swap(amount, proofs, options);
 			let { keep, send } = sendRes;
 			const serialized = sendRes.serialized;
 			keep = keepProofsSelect.concat(keep);
@@ -482,13 +473,11 @@ class CashuWallet {
 		const keyset = await this.getKeys(keysetId);
 
 		const proofsToSend = proofs;
-		let amountToSend = amount;
+		const amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
-		let amountToKeep = amountAvailable - amountToSend - this.getFeesForProofs(proofsToSend);
 		// send output selection
 		let sendAmounts = outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
 
-		// include the fees to spend the the outputs of the swap
 		if (includeFees) {
 			let outputFee = this.getFeesForKeyset(sendAmounts.length, keyset.id);
 			let sendAmountsFee = splitAmount(outputFee, keyset.keys);
@@ -499,13 +488,28 @@ class CashuWallet {
 				sendAmountsFee = splitAmount(outputFee, keyset.keys);
 			}
 			sendAmounts = sendAmounts.concat(sendAmountsFee);
-			amountToSend += outputFee;
-			amountToKeep -= outputFee;
+		}
+
+		// include the fees to spend the the outputs of the swap
+		// input selection, needs fees because of the swap
+		const { send: sendProofs } = this.selectProofsToSend(
+			proofsToSend,
+			sendAmounts.reduce((acc, v) => acc + v, 0),
+			true
+		);
+
+		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs)
+			- amountToSend;
+
+		if (amountToKeep < 0) {
+			throw new Error('Not enough balance to send');
 		}
 
 		// keep output selection
 		let keepAmounts;
-		if (!outputAmounts?.keepAmounts && proofsWeHave) {
+		if (!outputAmounts?.keepAmounts && !proofsWeHave) {
+			keepAmounts = splitAmount(amountToKeep, keyset.keys)
+		} else if (!outputAmounts?.keepAmounts && proofsWeHave) {
 			keepAmounts = getKeepAmounts(
 				proofsWeHave,
 				amountToKeep,
@@ -519,17 +523,13 @@ class CashuWallet {
 			keepAmounts = outputAmounts.keepAmounts;
 		}
 
-		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
+		if (amountToSend + this.getFeesForProofs(sendProofs) > amountAvailable) {
 			console.error(
 				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
-					proofsToSend
-				)} | length: ${proofsToSend.length}`
+					sendProofs
+				)} | length: ${sendProofs.length}`
 			);
 			throw new Error(`Not enough funds available for swap`);
-		}
-
-		if (amountToSend + this.getFeesForProofs(proofsToSend) + amountToKeep != amountAvailable) {
-			throw new Error('Amounts do not match for swap');
 		}
 
 		outputAmounts = {
@@ -542,7 +542,7 @@ class CashuWallet {
 
 		const swapTransaction = this.createSwapPayload(
 			amountToSend,
-			proofsToSend,
+			sendProofs,
 			keyset,
 			outputAmounts,
 			counter,
