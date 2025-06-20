@@ -320,7 +320,6 @@ class CashuWallet {
 	 */
 	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
 		const {
-			proofsWeHave,
 			offline,
 			includeFees,
 			includeDleq,
