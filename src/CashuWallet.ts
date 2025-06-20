@@ -491,7 +491,7 @@ class CashuWallet {
 
 		// include the fees to spend the the outputs of the swap
 		// input selection, needs fees because of the swap
-		const { send: sendProofs } = this.selectProofsToSend(
+		const { keep: keepProofs, send: sendProofs } = this.selectProofsToSend(
 			proofsToSend,
 			sendAmounts.reduce((acc, v) => acc + v, 0),
 			true
@@ -567,7 +567,7 @@ class CashuWallet {
 			}
 		});
 		return {
-			keep: splitProofsToKeep,
+			keep: [...splitProofsToKeep, ...keepProofs],
 			send: splitProofsToSend
 		};
 	}
