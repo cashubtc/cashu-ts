@@ -28,35 +28,6 @@ export const NULL_LOGGER: Logger = {
 	log() {}
 };
 
-// Mapping of LogLevel numeric values to their string names
-const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
-	[LogLevel.FATAL]: 'FATAL',
-	[LogLevel.ERROR]: 'ERROR',
-	[LogLevel.WARN]: 'WARN',
-	[LogLevel.INFO]: 'INFO',
-	[LogLevel.DEBUG]: 'DEBUG',
-	[LogLevel.TRACE]: 'TRACE'
-};
-
-// Function to dynamically retrieve the console method based on log level
-const getConsoleMethod = (level: LogLevel): ((message: string, ...args: any[]) => void) => {
-	switch (level) {
-		case LogLevel.FATAL:
-		case LogLevel.ERROR:
-			return console.error;
-		case LogLevel.WARN:
-			return console.warn;
-		case LogLevel.INFO:
-			return console.info;
-		case LogLevel.DEBUG:
-			return console.debug;
-		case LogLevel.TRACE:
-			return console.trace;
-		default:
-			return console.log; // Fallback, though it shouldn't happen with valid LogLevel
-	}
-};
-
 /**
  * Outputs messages to the console based on the specified log level.
  *
@@ -72,6 +43,14 @@ const getConsoleMethod = (level: LogLevel): ((message: string, ...args: any[]) =
  */
 export class ConsoleLogger implements Logger {
 	private minLevel: LogLevel;
+	public static readonly LOG_LEVEL_NAMES: Record<LogLevel, string> = {
+		[LogLevel.FATAL]: 'FATAL',
+		[LogLevel.ERROR]: 'ERROR',
+		[LogLevel.WARN]: 'WARN',
+		[LogLevel.INFO]: 'INFO',
+		[LogLevel.DEBUG]: 'DEBUG',
+		[LogLevel.TRACE]: 'TRACE'
+	};
 
 	constructor(minLevel: LogLevel = LogLevel.INFO) {
 		this.minLevel = minLevel; // Store the LogLevel value directly
@@ -79,7 +58,7 @@ export class ConsoleLogger implements Logger {
 
 	private logToConsole(level: LogLevel, message: string, context?: Record<string, any>): void {
 		if (level > this.minLevel) return;
-		const levelPrefix = `[${LOG_LEVEL_NAMES[level]}] `;
+		const levelPrefix = `[${ConsoleLogger.LOG_LEVEL_NAMES[level]}] `;
 		let interpolatedMessage = message;
 		const usedKeys = new Set<string>();
 		if (context) {
@@ -99,14 +78,33 @@ export class ConsoleLogger implements Logger {
 			const filteredContext = Object.fromEntries(
 				Object.entries(processedContext).filter(([key]) => !usedKeys.has(key))
 			);
-			const consoleMethod = getConsoleMethod(level);
+			const consoleMethod = this.getConsoleMethod(level);
 			if (Object.keys(filteredContext).length > 0) {
 				consoleMethod(levelPrefix + interpolatedMessage, filteredContext);
 			} else {
 				consoleMethod(levelPrefix + interpolatedMessage);
 			}
 		} else {
-			getConsoleMethod(level)(levelPrefix + interpolatedMessage);
+			this.getConsoleMethod(level)(levelPrefix + interpolatedMessage);
+		}
+	}
+	// NB: NOT static to allow the test suite to spy on the output
+	private getConsoleMethod(level: LogLevel): (message: string, ...args: any[]) => void {
+		switch (level) {
+			case LogLevel.FATAL:
+			case LogLevel.ERROR:
+				return console.error;
+			case LogLevel.WARN:
+				return console.warn;
+			case LogLevel.INFO:
+				return console.info;
+			case LogLevel.DEBUG:
+				return console.debug;
+			case LogLevel.TRACE:
+				return console.trace;
+			default:
+				// We could throw, but that's a bit aggressive for a logging class
+				return console.error;
 		}
 	}
 	fatal(message: string, context?: Record<string, any>): void {
