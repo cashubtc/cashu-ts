@@ -1,4 +1,5 @@
 import { HttpResponseError, NetworkError, MintOperationError } from './model/Errors';
+import { type Logger, NULL_LOGGER } from './logger';
 
 type RequestArgs = {
 	endpoint: string;
@@ -9,6 +10,7 @@ type RequestArgs = {
 type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
 
 let globalRequestOptions: Partial<RequestOptions> = {};
+let requestLogger = NULL_LOGGER;
 
 /**
  * An object containing any custom settings that you want to apply to the global fetch method.
@@ -16,6 +18,14 @@ let globalRequestOptions: Partial<RequestOptions> = {};
  */
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void {
 	globalRequestOptions = options;
+}
+
+/**
+ * Allows a logger to be set
+ * @param {Logger} logger The logger instance to use
+ */
+export function setRequestLogger(logger: Logger): void {
+	requestLogger = logger;
 }
 
 async function _request({
@@ -56,7 +66,7 @@ async function _request({
 	try {
 		return await response.json();
 	} catch (err) {
-		console.error('Failed to parse HTTP response', err);
+		requestLogger.error('Failed to parse HTTP response', { err });
 		throw new HttpResponseError('bad response', response.status);
 	}
 }

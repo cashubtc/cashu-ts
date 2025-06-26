@@ -8,6 +8,7 @@ import {
 } from './model/types';
 import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
 import { getWebSocketImpl } from './ws';
+import { type Logger, NULL_LOGGER } from './logger';
 
 export class ConnectionManager {
 	static instace: ConnectionManager;
@@ -20,11 +21,11 @@ export class ConnectionManager {
 		return ConnectionManager.instace;
 	}
 
-	getConnection(url: string): WSConnection {
+	getConnection(url: string, logger?: Logger): WSConnection {
 		if (this.connectionMap.has(url)) {
 			return this.connectionMap.get(url) as WSConnection;
 		}
-		const newConn = new WSConnection(url);
+		const newConn = new WSConnection(url, logger);
 		this.connectionMap.set(url, newConn);
 		return newConn;
 	}
@@ -40,11 +41,13 @@ export class WSConnection {
 	private messageQueue: MessageQueue;
 	private handlingInterval?: number;
 	private rpcId = 0;
+	private _logger: Logger;
 
-	constructor(url: string) {
+	constructor(url: string, logger?: Logger) {
 		this._WS = getWebSocketImpl();
 		this.url = new URL(url);
 		this.messageQueue = new MessageQueue();
+		this._logger = logger ?? NULL_LOGGER;
 	}
 
 	connect() {
@@ -165,7 +168,7 @@ export class WSConnection {
 				}
 			}
 		} catch (e) {
-			console.error(e);
+			this._logger.error('Error doing handleNextMesage', { e });
 			return;
 		}
 	}
