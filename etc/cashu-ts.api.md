@@ -474,9 +474,11 @@ export type MintProofOptions = {
     pubkey?: string;
     outputData?: Array<OutputDataLike> | OutputDataFactory;
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
     };
 };
 
@@ -549,9 +551,11 @@ export class OutputData implements OutputDataLike {
     static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: Array<number>): Array<OutputData>;
     // (undocumented)
     static createP2PKData(p2pk: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
     }, amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
     // (undocumented)
     static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
@@ -559,9 +563,11 @@ export class OutputData implements OutputDataLike {
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
     }, amount: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
@@ -727,9 +733,11 @@ export type ReceiveOptions = {
     requireDleq?: boolean;
     outputData?: Array<OutputDataLike> | OutputDataFactory;
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
     };
 };
 
@@ -768,9 +776,11 @@ export type SendOptions = {
         keep?: Array<OutputDataLike> | OutputDataFactory;
     };
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
     };
 };
 
@@ -833,9 +843,11 @@ export type SwapOptions = {
         keep?: Array<OutputDataLike> | OutputDataFactory;
     };
     p2pk?: {
-        pubkey: string;
+        pubkey: string | Array<string>;
         locktime?: number;
         refundKeys?: Array<string>;
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
     };
 };
 
@@ -915,9 +927,9 @@ export type WebSocketSupport = {
 // Warnings were encountered during analysis:
 //
 // lib/types/CashuWallet.d.ts:38:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:117:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:148:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:176:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:131:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:164:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:192:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

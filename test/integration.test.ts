@@ -251,7 +251,7 @@ describe('mint api', () => {
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
-		expect(result).toEqual(new MintOperationError(0, 'no valid signature provided for input.'));
+		expect(result).toEqual(new MintOperationError(0, 'Witness is missing for p2pk signature'));
 
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 
@@ -387,7 +387,7 @@ describe('mint api', () => {
 		const wallet = new CashuWallet(mint);
 
 		const privkey = 'd56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
-		const pubkey = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(privkey)));
+		const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey)));
 
 		const quote = await wallet.createLockedMintQuote(63, pubkey);
 		const proofs = await wallet.mintProofs(63, quote, { privateKey: privkey });
@@ -508,9 +508,9 @@ describe('dleq', () => {
 });
 describe('Custom Outputs', () => {
 	const sk = randomBytes(32);
-	const pk = schnorr.getPublicKey(sk);
+	const pk = secp256k1.getPublicKey(sk);
 	const hexSk = bytesToHex(sk);
-	const hexPk = '02' + bytesToHex(pk);
+	const hexPk = bytesToHex(pk);
 	const invoice =
 		'lnbc10n1pn449a7pp5eh3jn9p8hlcq0c0ppcfem2hg9ehptqr9hjk5gst6c0c9qfmrrvgsdq4gdshx6r4ypqkgerjv4ehxcqzpuxqr8pqsp539s9559pdth06j37kexk9zq2pusl4yvy97ruf36jqgyskawlls3s9p4gqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpqysgqy00qa3xgn03jtwrtpu93rqrp806czmpftj8g97cm0r3d2x4rsvlhp5vzgjyzzazl9xf4gpgd35gmys998tlfu8j5zrk7sf3n2nh3t3gpyul75t';
 	test('Default keepFactory', async () => {

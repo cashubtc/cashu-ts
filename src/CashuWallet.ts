@@ -1,6 +1,6 @@
 import { serializeProof } from './crypto/client/index.js';
-import { getSignedProofs } from './crypto/client/NUT11.js';
-import { hashToCurve, pointFromHex, type Proof as NUT11Proof } from './crypto/common/index.js';
+import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
+import { hashToCurve, pointFromHex } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import type {
@@ -895,20 +895,17 @@ class CashuWallet {
 			this._keepFactory
 		);
 		if (privkey != undefined) {
-			proofsToSend = getSignedProofs(
-				proofsToSend.map((p: Proof) => {
-					return {
-						amount: p.amount,
-						C: pointFromHex(p.C),
-						id: p.id,
-						secret: new TextEncoder().encode(p.secret)
-					};
-				}),
-				privkey
-			).map((p: NUT11Proof) => serializeProof(p));
+			proofsToSend = signP2PKProofs(proofsToSend, privkey);
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
+
+		// Ensure witnesses are serialized before sending to mint
+		proofsToSend = proofsToSend.map((p: Proof) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			return { ...p, witness };
+		});
 
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
@@ -930,6 +927,8 @@ class CashuWallet {
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
 	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
+	 * @param customOutputData? optionally specify your own OutputData (blinded messages)
+	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
 	 * @returns
 	 */
 	private createSwapPayload(
@@ -944,7 +943,13 @@ class CashuWallet {
 			keep?: Array<OutputDataLike> | OutputDataFactory;
 			send?: Array<OutputDataLike> | OutputDataFactory;
 		},
-		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> }
+		p2pk?: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			requiredSignatures?: number;
+			requiredRefundSignatures?: number;
+		}
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
@@ -1001,20 +1006,17 @@ class CashuWallet {
 		}
 
 		if (privkey) {
-			proofsToSend = getSignedProofs(
-				proofsToSend.map((p: Proof) => {
-					return {
-						amount: p.amount,
-						C: pointFromHex(p.C),
-						id: p.id,
-						secret: new TextEncoder().encode(p.secret)
-					};
-				}),
-				privkey
-			).map((p: NUT11Proof) => serializeProof(p));
+			proofsToSend = signP2PKProofs(proofsToSend, privkey);
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
+
+		// Ensure witnesses are serialized before sending to mint
+		proofsToSend = proofsToSend.map((p: Proof) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			return { ...p, witness };
+		});
 
 		const mergedBlindingData = [...keepOutputData, ...sendOutputData];
 		const indices = mergedBlindingData
@@ -1210,8 +1212,10 @@ class CashuWallet {
 	 * Creates blinded messages for a according to @param amounts
 	 * @param amount array of amounts to create blinded messages for
 	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param keyksetId? override the keysetId derived from the current mintKeys with a custom one. This should be a keyset that was fetched from the `/keysets` endpoint
 	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
+	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
+	 * @param factory? optionally specify a custom function that produces OutputData (blinded messages)
 	 * @returns blinded messages, secrets, rs, and amounts
 	 */
 	private createOutputData(
@@ -1220,7 +1224,13 @@ class CashuWallet {
 		counter?: number,
 		pubkey?: string,
 		outputAmounts?: Array<number>,
-		p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> },
+		p2pk?: {
+			pubkey: string | Array<string>;
+			locktime?: number;
+			refundKeys?: Array<string>;
+			requiredSignatures?: number;
+			requiredRefundSignatures?: number;
+		},
 		factory?: OutputDataFactory
 	): Array<OutputDataLike> {
 		let outputData: Array<OutputDataLike>;

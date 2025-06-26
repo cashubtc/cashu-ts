@@ -23,6 +23,8 @@ export type LockedMintQuote = {
  *   - `pubkey`: Lock eCash to a public key (non-deterministic, even with a counter set).
  *   - `privkey`: Create a signature for token secrets.
  *   - `requireDleq`: Verify DLEQ proofs for all provided proofs; reject the token if any proof fails verification.
+ *   - `outputData` : Specify your own OutputData (blinded messages)
+ *   - `p2pk` : Specify options to lock the proofs according to NUT-11
  */
 export type ReceiveOptions = {
 	keysetId?: string;
@@ -33,7 +35,13 @@ export type ReceiveOptions = {
 	privkey?: string;
 	requireDleq?: boolean;
 	outputData?: Array<OutputDataLike> | OutputDataFactory;
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
+	};
 };
 
 /**
@@ -47,6 +55,8 @@ export type ReceiveOptions = {
  *   - `offline` (boolean): Send proofs offline, if enabled.
  *   - `includeFees` (boolean): Include fees in the response, if enabled.
  *   - `includeDleq` (boolean): Include DLEQ proofs in the proofs to be sent, if enabled.
+ *   - `outputData` : Specify your own OutputData (blinded messages)
+ *   - `p2pk` : Specify options to lock the proofs according to NUT-11
  */
 export type SendOptions = {
 	outputAmounts?: OutputAmounts;
@@ -62,7 +72,13 @@ export type SendOptions = {
 		send?: Array<OutputDataLike> | OutputDataFactory;
 		keep?: Array<OutputDataLike> | OutputDataFactory;
 	};
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
+	};
 };
 
 /**
@@ -76,6 +92,8 @@ export type SendOptions = {
  * - proofsWeHave? optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
  * - pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
  * - privkey? will create a signature on the  proofs secrets if set
+ * - `outputData` : Specify your own OutputData (blinded messages)
+ * - `p2pk` : Specify options to lock the proofs according to NUT-11
  */
 export type SwapOptions = {
 	outputAmounts?: OutputAmounts;
@@ -89,7 +107,13 @@ export type SwapOptions = {
 		send?: Array<OutputDataLike> | OutputDataFactory;
 		keep?: Array<OutputDataLike> | OutputDataFactory;
 	};
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
+	};
 };
 
 export type RestoreOptions = {
@@ -103,6 +127,8 @@ export type RestoreOptions = {
  * - `counter`: optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
  * - `proofsWeHave`: optionally provide all currently stored proofs of this mint. Cashu-ts will use them to derive the optimal output amounts
  * - `pubkey`: optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
+ * - `outputData` : Specify your own OutputData (blinded messages)
+ * - `p2pk` : Specify options to lock the proofs according to NUT-11
  */
 export type MintProofOptions = {
 	keysetId?: string;
@@ -111,7 +137,13 @@ export type MintProofOptions = {
 	counter?: number;
 	pubkey?: string;
 	outputData?: Array<OutputDataLike> | OutputDataFactory;
-	p2pk?: { pubkey: string; locktime?: number; refundKeys?: Array<string> };
+	p2pk?: {
+		pubkey: string | Array<string>;
+		locktime?: number;
+		refundKeys?: Array<string>;
+		requiredSignatures?: number;
+		requiredRefundSignatures?: number;
+	};
 };
 
 /**
