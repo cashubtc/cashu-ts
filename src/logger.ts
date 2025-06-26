@@ -53,7 +53,7 @@ export class ConsoleLogger implements Logger {
 	};
 
 	constructor(minLevel: LogLevel = LogLevel.INFO) {
-		this.minLevel = minLevel; // Store the LogLevel value directly
+		this.minLevel = minLevel;
 	}
 
 	private logToConsole(level: LogLevel, message: string, context?: Record<string, any>): void {
@@ -88,7 +88,7 @@ export class ConsoleLogger implements Logger {
 			this.getConsoleMethod(level)(levelPrefix + interpolatedMessage);
 		}
 	}
-	// NB: NOT static to allow the test suite to spy on the output
+	// Note: NOT static as test suite needs to spy on the output
 	private getConsoleMethod(level: LogLevel): (message: string, ...args: any[]) => void {
 		switch (level) {
 			case LogLevel.FATAL:
@@ -104,9 +104,11 @@ export class ConsoleLogger implements Logger {
 				return console.trace;
 			default:
 				// We could throw, but that's a bit aggressive for a logging class
-				return console.error;
+				// so just use a regular console.log()
+				return console.log;
 		}
 	}
+	// Interface methods
 	fatal(message: string, context?: Record<string, any>): void {
 		this.logToConsole(LogLevel.FATAL, message, context);
 	}
