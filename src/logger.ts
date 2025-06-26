@@ -17,29 +17,15 @@ export interface Logger {
 	log(level: LogLevel, message: string, context?: Record<string, any>): void;
 }
 
-/**
- * The default logger implementation - does nothing
- */
-class NullLogger implements Logger {
-	fatal(message: string, context?: Record<string, any>): void {}
-	error(message: string, context?: Record<string, any>): void {}
-	warn(message: string, context?: Record<string, any>): void {}
-	info(message: string, context?: Record<string, any>): void {}
-	debug(message: string, context?: Record<string, any>): void {}
-	trace(message: string, context?: Record<string, any>): void {}
-	log(level: LogLevel, message: string, context?: Record<string, any>): void {}
-}
-
-export const NULL_LOGGER = new NullLogger();
-
-// Mapping of log levels to console methods
-const CONSOLE_METHODS: Record<LogLevel, (message: string, ...args: any[]) => void> = {
-	[LogLevel.FATAL]: console.error,
-	[LogLevel.ERROR]: console.error,
-	[LogLevel.WARN]: console.warn,
-	[LogLevel.INFO]: console.info,
-	[LogLevel.DEBUG]: console.debug,
-	[LogLevel.TRACE]: console.trace
+// The default logger implementation - does nothing
+export const NULL_LOGGER: Logger = {
+	fatal() {},
+	error() {},
+	warn() {},
+	info() {},
+	debug() {},
+	trace() {},
+	log() {}
 };
 
 // Mapping of LogLevel numeric values to their string names
@@ -50,6 +36,25 @@ const LOG_LEVEL_NAMES: Record<LogLevel, string> = {
 	[LogLevel.INFO]: 'INFO',
 	[LogLevel.DEBUG]: 'DEBUG',
 	[LogLevel.TRACE]: 'TRACE'
+};
+
+// Function to dynamically retrieve the console method based on log level
+const getConsoleMethod = (level: LogLevel): ((message: string, ...args: any[]) => void) => {
+	switch (level) {
+		case LogLevel.FATAL:
+		case LogLevel.ERROR:
+			return console.error;
+		case LogLevel.WARN:
+			return console.warn;
+		case LogLevel.INFO:
+			return console.info;
+		case LogLevel.DEBUG:
+			return console.debug;
+		case LogLevel.TRACE:
+			return console.trace;
+		default:
+			return console.log; // Fallback, though it shouldn't happen with valid LogLevel
+	}
 };
 
 /**
@@ -94,14 +99,14 @@ export class ConsoleLogger implements Logger {
 			const filteredContext = Object.fromEntries(
 				Object.entries(processedContext).filter(([key]) => !usedKeys.has(key))
 			);
-			const consoleMethod = CONSOLE_METHODS[level];
+			const consoleMethod = getConsoleMethod(level);
 			if (Object.keys(filteredContext).length > 0) {
 				consoleMethod(levelPrefix + interpolatedMessage, filteredContext);
 			} else {
 				consoleMethod(levelPrefix + interpolatedMessage);
 			}
 		} else {
-			CONSOLE_METHODS[level](levelPrefix + interpolatedMessage);
+			getConsoleMethod(level)(levelPrefix + interpolatedMessage);
 		}
 	}
 	fatal(message: string, context?: Record<string, any>): void {
