@@ -64,20 +64,22 @@ export class CashuAuthWallet {
 
 // @public
 export class CashuMint {
-    constructor(_mintUrl: string, _customRequest?: typeof request | undefined, authTokenGetter?: () => Promise<string>);
+    constructor(_mintUrl: string, _customRequest?: typeof request | undefined, authTokenGetter?: () => Promise<string>, options?: {
+        logger?: Logger;
+    });
     static check(mintUrl: string, checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
     check(checkPayload: CheckStatePayload): Promise<CheckStateResponse>;
-    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
+    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-    static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMintQuoteResponse>;
+    static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     connectWebSocket(): Promise<void>;
-    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
+    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
-    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMintQuoteResponse>;
+    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
     disconnectWebSocket(): void;
-    static getInfo(mintUrl: string, customRequest?: typeof request): Promise<GetInfoResponse>;
+    static getInfo(mintUrl: string, customRequest?: typeof request, logger?: Logger): Promise<GetInfoResponse>;
     getInfo(): Promise<GetInfoResponse>;
     static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
     getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
@@ -89,7 +91,7 @@ export class CashuMint {
     getLazyMintInfo(): Promise<MintInfo>;
     // (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
-    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
+    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
     static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
     mint(mintPayload: MintPayload): Promise<MintResponse>;
@@ -119,6 +121,7 @@ export class CashuWallet {
         bip39seed?: Uint8Array;
         denominationTarget?: number;
         keepFactory?: OutputDataFactory;
+        logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
         proofs: Array<Proof>;
@@ -201,6 +204,27 @@ export type CheckStatePayload = {
 export type CheckStateResponse = {
     states: Array<ProofState>;
 } & ApiError;
+
+// @public
+export class ConsoleLogger implements Logger {
+    constructor(minLevel?: LogLevel);
+    // (undocumented)
+    debug(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    error(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    fatal(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    info(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    log(level: LogLevel, message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    static readonly LOG_LEVEL_NAMES: Record<LogLevel, string>;
+    // (undocumented)
+    trace(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    warn(message: string, context?: Record<string, any>): void;
+}
 
 // @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
@@ -371,6 +395,40 @@ export type LockedMintQuote = {
 export type LockedMintQuoteResponse = MintQuoteResponse & {
     pubkey: string;
 };
+
+// @public (undocumented)
+export interface Logger {
+    // (undocumented)
+    debug(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    error(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    fatal(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    info(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    log(level: LogLevel, message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    trace(message: string, context?: Record<string, any>): void;
+    // (undocumented)
+    warn(message: string, context?: Record<string, any>): void;
+}
+
+// @public (undocumented)
+export enum LogLevel {
+    // (undocumented)
+    DEBUG = 4,// Most severe
+    // (undocumented)
+    ERROR = 1,
+    // (undocumented)
+    FATAL = 0,
+    // (undocumented)
+    INFO = 3,
+    // (undocumented)
+    TRACE = 5,
+    // (undocumented)
+    WARN = 2
+}
 
 // @public
 export type MeltPayload = {
@@ -926,7 +984,7 @@ export type WebSocketSupport = {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/CashuWallet.d.ts:38:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
+// lib/types/CashuWallet.d.ts:40:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:131:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:164:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:192:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
