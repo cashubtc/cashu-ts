@@ -524,7 +524,7 @@ class CashuWallet {
 			keepAmounts = outputAmounts.keepAmounts;
 		}
 
-		if (amountToSend + this.getFeesForProofs(proofsToSend) > amountAvailable) {
+		if (amountToSend + this.getFeesForProofs(sendProofs) > amountAvailable) {
 			this._logger.error(
 				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
 					sendProofs
