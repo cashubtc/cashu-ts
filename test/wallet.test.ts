@@ -676,6 +676,75 @@ describe('send', () => {
 
 		expect(result).toEqual(new Error('bad response'));
 	});
+	test('test send preference with fees included', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '009a1f293253e41e', unit: 'sat', active: true, input_fee_ppk: 600 }]
+				});
+			})
+		);
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '009a1f293253e41e',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+						},
+						{
+							id: '009a1f293253e41e',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+						},
+						{
+							id: '009a1f293253e41e',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+						},
+						{
+							id: '009a1f293253e41e',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422'
+						}
+					]
+				});
+			})
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		await wallet.getKeys();
+
+		const overpayProofs = [
+			{
+				id: '009a1f293253e41e',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			},
+			{
+				id: '009a1f293253e41e',
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'
+			}
+		];
+		await wallet.getKeys();
+		const result = await wallet.send(3, overpayProofs, { includeFees: true });
+
+		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
+		// Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
+		// Total send = [1, 2, 2]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
+		expect(result.send).toHaveLength(3);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+		expect(result.send[1]).toMatchObject({ amount: 2, id: '009a1f293253e41e' });
+		expect(result.send[2]).toMatchObject({ amount: 2, id: '009a1f293253e41e' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(2);
+		expect(result.keep[0]).toMatchObject({ amount: 2, id: '009a1f293253e41e' });
+		expect(result.keep[1]).toMatchObject({ amount: 1, id: '009a1f293253e41e' });
+	});
 });
 
 describe('deterministic', () => {
