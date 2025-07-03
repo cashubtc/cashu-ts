@@ -146,7 +146,7 @@ export function measureTime() {
 	const start = performance.now();
 	return {
 		elapsed: () => {
-			performance.now() - start;
+			return Math.round((performance.now() - start) * 1000) / 1000;
 		}
 	};
 }
