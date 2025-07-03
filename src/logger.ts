@@ -131,3 +131,22 @@ export class ConsoleLogger implements Logger {
 		this.logToConsole(level, message, context);
 	}
 }
+
+/**
+ * Creates a timer to measure elapsed time in milliseconds using high-resolution timestamps.
+ * Returns an object with an `elapsed` method to retrieve the duration since the timer started.
+ *
+ * @returns An object containing an `elapsed` method to get the elapsed time in milliseconds.
+ * @example
+ * const timer = measureTime();
+ * // ... some code ...
+ * const duration = timer.elapsed();
+ */
+export function measureTime() {
+	const start = performance.now();
+	return {
+		elapsed: () => {
+			performance.now() - start;
+		}
+	};
+}
