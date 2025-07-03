@@ -607,7 +607,10 @@ class CashuWallet {
 			// Update best solution
 			const delta = calculateDelta(amount, feePPK);
 			if (delta < bestDelta) {
-				this._logger.debug('selectProofsToSend: best solution found in trial #{trial} - amount: {amount}, delta: {delta}', { trial, amount, delta });
+				this._logger.debug(
+					'selectProofsToSend: best solution found in trial #{trial} - amount: {amount}, delta: {delta}',
+					{ trial, amount, delta }
+				);
 				bestSubset = [...S].sort((a, b) => b.exFee - a.exFee); // copy & sort
 				bestDelta = delta;
 				bestAmount = amount;
