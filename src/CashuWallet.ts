@@ -3,7 +3,7 @@ import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.
 import { hashToCurve, pointFromHex } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
-import { type Logger, NULL_LOGGER } from './logger';
+import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
 	GetInfoResponse,
 	MeltProofOptions,
@@ -390,7 +390,7 @@ class CashuWallet {
 		const MAX_TIMEMS = 1000; // Halt new trials if over time (in ms)
 		const MAX_P2SWAP = 5000; // Max number of Phase 2 improvement swaps
 		const exactMatch = false; // Allows close match (> amountToSend + fee)
-		const start = performance.now(); // start the clock
+		const timer = measureTime(); // start the clock
 		let bestSubset: Array<ProofWithFee> | null = null;
 		let bestDelta = Infinity;
 		let bestAmount = 0;
@@ -607,6 +607,7 @@ class CashuWallet {
 			// Update best solution
 			const delta = calculateDelta(amount, feePPK);
 			if (delta < bestDelta) {
+				this._logger.debug('selectProofsToSend: best solution found in trial #{trial} - amount: {amount}, delta: {delta}', { trial, amount, delta });
 				bestSubset = [...S].sort((a, b) => b.exFee - a.exFee); // copy & sort
 				bestDelta = delta;
 				bestAmount = amount;
@@ -644,11 +645,11 @@ class CashuWallet {
 				}
 			}
 			// Time limit reached?
-			if (performance.now() - start > MAX_TIMEMS) {
+			if (timer.elapsed() > MAX_TIMEMS) {
 				if (exactMatch) {
 					throw new Error('Proof selection took too long. Try again with a smaller proof set.');
 				} else {
-					console.warn('Proof selection took too long. Returning best selection so far.');
+					this._logger.warn('Proof selection took too long. Returning best selection so far.');
 					break;
 				}
 			}
@@ -658,6 +659,7 @@ class CashuWallet {
 			const bestProofs = bestSubset.map((obj) => obj.proof);
 			const bestSubsetSet = new Set(bestProofs);
 			const keep = proofs.filter((p) => !bestSubsetSet.has(p));
+			this._logger.info('Proof selection took {time}ms', { time: timer.elapsed() });
 			return { keep, send: bestProofs };
 		}
 		return { keep: proofs, send: [] };
