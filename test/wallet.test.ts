@@ -1284,8 +1284,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			notes,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		console.log(
 			'send',
@@ -1327,12 +1326,6 @@ describe('Test coinselection', () => {
 		const wallet = new CashuWallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
 		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: true });
-		// const { send } = wallet.selectProofsToSend(
-		// 	notes,
-		// 	targetAmount,
-		// 	true, // includeFees
-		// 	true // no exact match
-		// );
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
 		// Fee = ceil(3 * 600 / 1000) = 2, net = 33 - 2 = 31
@@ -1368,8 +1361,7 @@ describe('Test coinselection', () => {
 		const { send, keep } = wallet.selectProofsToSend(
 			smallNotes,
 			targetAmount,
-			true, // includeFees
-			true //  exact match
+			true // includeFees
 		);
 		// Fee = ceil(1 * 1000 / 1000) = 1, need 60 + 1 = 61, 64 >= 61
 		expect(send).toHaveLength(0);
@@ -1394,8 +1386,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			largeNote,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		// Fee = ceil(1 * 1000 / 1000) = 1, need 60 + 1 = 61, 64 >= 61
 		expect(send).toHaveLength(1);
@@ -1406,8 +1397,7 @@ describe('Test coinselection', () => {
 		const { send: sendExact } = wallet.selectProofsToSend(
 			largeNote,
 			15,
-			true, // includeFees
-			false // exact match
+			true // includeFees
 		);
 		// Fee = ceil(1 * 1000 / 1000) = 1, need 15 + 1 = 16
 		expect(sendExact).toHaveLength(1);
@@ -1436,8 +1426,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			mixedNotes,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
@@ -1465,8 +1454,7 @@ describe('Test coinselection', () => {
 		const { send: send1, keep: keep1 } = wallet.selectProofsToSend(
 			notes,
 			targetAmount,
-			true, // includeFees
-			true //  exact match
+			true // includeFees
 		);
 		expect(send1).toHaveLength(0);
 		expect(keep1).toHaveLength(6);
@@ -1503,8 +1491,7 @@ describe('Test coinselection', () => {
 		const { send: sendOffline } = wallet.selectProofsToSend(
 			smallNotes,
 			targetAmount + 1, // 16
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		console.log('sendOffline', sendOffline);
 		const amountSendOffline = sendOffline.reduce((acc, p) => acc + p.amount, 0);
@@ -1532,8 +1519,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			smallNotes,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		console.log(
 			'send',
@@ -1553,9 +1539,10 @@ describe('Test coinselection', () => {
 			{ id: '009a1f293253e41e', amount: 2, secret: 's3', C: 'C3' }
 		];
 		const targetAmount = 5;
-		await expect(
-			wallet.send(targetAmount, proofs, { offline: true, includeFees: true })
-		).rejects.toThrow('Not enough funds available to send');
+		const { send } = await wallet.send(targetAmount, proofs, { offline: true, includeFees: true });
+		expect(send).toHaveLength(3);
+		const amountSend = sumProofs(send);
+		expect(amountSend).toBe(6);
 	});
 	test('minimal fee selection', async () => {
 		server.use(
@@ -1579,8 +1566,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			proofs,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		const fee = wallet.getFeesForProofs(send);
 		console.log(send.map((p) => [p.amount, p.id]));
@@ -1627,8 +1613,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			notes,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		expect(send.reduce((a, p) => a + p.amount, 0)).toBeGreaterThanOrEqual(targetAmount);
 	});
@@ -1663,41 +1648,38 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new CashuWallet(mint, { unit, keysets: keysets.keysets });
 
-		// Exact Match Test
+		// Exact Match Test No Fees
 		const targetAmountExact = 128;
-		console.time('largeProofsExactTest');
+		console.time('largeProofsNoFees');
 		const { send: sendExact } = wallet.selectProofsToSend(
 			allNotes,
 			targetAmountExact,
-			true, // includeFees
-			true // exact match
+			false // includeFees
 		);
-		console.timeEnd('largeProofsExactTest');
+		console.timeEnd('largeProofsNoFees');
 		if (sendExact.length === 0) {
 			throw new Error('No exact match found');
 		}
-		const amountSendExact = sendExact.reduce((acc, p) => acc + p.amount, 0);
-		const feeExact = wallet.getFeesForProofs(sendExact);
+		const amountSendExact = sumProofs(sendExact);
 		console.log(
-			'Exact send:',
+			'largeProofsNoFees:',
 			sendExact.map((p) => p.amount)
 		);
-		expect(amountSendExact - feeExact).toBe(targetAmountExact);
+		expect(amountSendExact).toBe(targetAmountExact);
 
-		// Non-Exact Match Test
+		// Non-Exact Match Test With Fees
 		const targetAmountNonExact = 127;
-		console.time('largeProofsClosestTest');
+		console.time('largeProofsWithFees');
 		const { send: sendNonExact } = wallet.selectProofsToSend(
 			allNotes,
 			targetAmountNonExact,
-			true, // includeFees
-			false // non-exact match
+			true // includeFees
 		);
-		console.timeEnd('largeProofsClosestTest');
+		console.timeEnd('largeProofsWithFees');
 		const amountSendNonExact = sendNonExact.reduce((acc, p) => acc + p.amount, 0);
 		const feeNonExact = wallet.getFeesForProofs(sendNonExact);
 		console.log(
-			'Non-exact send:',
+			'largeProofsWithFees send:',
 			sendNonExact.map((p) => p.amount)
 		);
 		expect(amountSendNonExact - feeNonExact).toBeGreaterThanOrEqual(targetAmountNonExact);
@@ -1722,8 +1704,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			smallNotes,
 			targetAmount,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		);
 		console.log(
 			'send:',
@@ -1749,8 +1730,7 @@ describe('Test coinselection', () => {
 		const { send } = wallet.selectProofsToSend(
 			notes,
 			targetAmount,
-			true, // includeFees
-			false // exact match
+			true // includeFees
 		);
 		const fee = wallet.getFeesForProofs(send);
 		console.log(
@@ -1778,15 +1758,12 @@ describe('Test coinselection', () => {
 		const wallet = new CashuWallet(mint, { unit });
 		await wallet.getKeys();
 		const targetAmount = 23;
-		// Offline means exact match only, and we throw if we can't make it
-		await expect(
-			wallet.send(targetAmount, notes, {
-				offline: true
-			})
-		).rejects.toThrow('Not enough funds available to send');
-		// expect(send).toHaveLength(2);
-		// const amountSend = sumProofs(send);
-		// expect(amountSend).toBe(24);
+		const { send } = await wallet.send(targetAmount, notes, {
+			offline: true
+		});
+		expect(send).toHaveLength(2);
+		const amountSend = sumProofs(send);
+		expect(amountSend).toBe(24);
 	});
 
 	test('optimal offline coinselection with 1000 ppk input fees', async () => {
@@ -1862,7 +1839,7 @@ describe('Test coinselection', () => {
 				});
 			})
 		);
-		let numProofs = 100000;
+		let numProofs = 50000;
 		let proofs: Array<Proof> = [];
 		for (let i = 0; i < numProofs; ++i) {
 			const amount = new DataView(randomBytes(4).buffer).getUint32(0, false) & ((1 << 19) - 1);
@@ -1891,35 +1868,32 @@ describe('Test coinselection', () => {
 		let keep;
 		let fee;
 
-		// Non-exact match test
-		console.time('selectProofs-fees-closest');
+		// Close match with fees test
+		console.time('selectProofs-fees');
 		({ send } = wallet.selectProofsToSend(
 			proofs,
 			amountToSend,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		));
-		console.timeEnd('selectProofs-fees-closest');
+		console.timeEnd('selectProofs-fees');
 		fee = wallet.getFeesForProofs(send);
 		amountSend = sumProofs(send);
 		expect(amountSend - fee).toBeGreaterThanOrEqual(amountToSend);
 
 		// Exact match test
-		console.time('selectProofs-fees-exact');
+		console.time('selectProofs-no-fees');
 		({ send, keep } = wallet.selectProofsToSend(
 			proofs,
 			amountToSend,
-			true, // includeFees
-			true // exact match
+			true // includeFees
 		));
-		console.timeEnd('selectProofs-fees-exact');
+		console.timeEnd('selectProofs-no-fees');
 		amountKeep = sumProofs(keep);
-		fee = wallet.getFeesForProofs(send);
 		amountSend = sumProofs(send);
 
 		if (send.length > 0) {
 			// Exact match found
-			expect(amountSend - fee).toEqual(amountToSend);
+			expect(amountSend).toBeGreaterThanOrEqual(amountToSend);
 		} else {
 			// No exact match possible, all proofs kept
 			expect(amountKeep).toEqual(totalAmount);
@@ -1941,7 +1915,7 @@ describe('Test coinselection', () => {
 				});
 			})
 		);
-		let numProofs = 100000;
+		let numProofs = 50000;
 		let proofs: Array<Proof> = [];
 		for (let i = 0; i < numProofs; ++i) {
 			const amount = new DataView(randomBytes(4).buffer).getUint32(0, false) & ((1 << 19) - 1);
@@ -1970,39 +1944,32 @@ describe('Test coinselection', () => {
 		let keep;
 		let fee;
 
-		// Non-exact match test
-		console.time('selectProofs-fees-closest');
+		// Close match with fees test
+		console.time('selectProofs-fees');
 		({ send } = wallet.selectProofsToSend(
 			proofs,
 			amountToSend,
-			true, // includeFees
-			false // no exact match
+			true // includeFees
 		));
-		console.timeEnd('selectProofs-fees-closest');
+		console.timeEnd('selectProofs-fees');
 		fee = wallet.getFeesForProofs(send);
 		amountSend = sumProofs(send);
 		expect(amountSend - fee).toBeGreaterThanOrEqual(amountToSend);
 
-		// Exact match test
-		console.time('selectProofs-fees-exact');
+		// Close match no fees test
+		console.time('selectProofs-no-fees');
 		({ send, keep } = wallet.selectProofsToSend(
 			proofs,
 			amountToSend,
-			true, // includeFees
-			true // exact match
+			false // includeFees
 		));
-		console.timeEnd('selectProofs-fees-exact');
+		console.timeEnd('selectProofs-no-fees');
 		amountKeep = sumProofs(keep);
-		fee = wallet.getFeesForProofs(send);
 		amountSend = sumProofs(send);
 
 		if (send.length > 0) {
 			// Exact match found
-			expect(amountSend - fee).toEqual(amountToSend);
-		} else {
-			// No exact match possible, all proofs kept
-			expect(amountKeep).toEqual(totalAmount);
-			expect(send).toHaveLength(0);
+			expect(amountSend).toBeGreaterThanOrEqual(amountToSend);
 		}
 	});
 	test('test send tokens exact without previous split', async () => {

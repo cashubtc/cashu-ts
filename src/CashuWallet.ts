@@ -342,8 +342,7 @@ class CashuWallet {
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
 			amount,
-			options?.includeFees,
-			true // exactMatch
+			options?.includeFees
 		);
 		const expectedFee = includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
@@ -370,30 +369,27 @@ class CashuWallet {
 	}
 
 	/**
-	 * Selects proofs to send based on amount, fee inclusion, and exact match requirement.
-	 * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm that
-	 * seeks to minimize fees and allows close match or exact match selections.
-	 * For close match the lower of MAX_OVRPCT and MAX_OVRAMT will apply.
+	 * Selects proofs to send based on amount and fee inclusion.
+	 * @remarks Uses an adapted Randomized Greedy with Local Improvement (RGLI)
+	 * algorithm, which has a time complexity O(n log n) and space complexity O(n).
 	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
-	 * @remarks RGLI has time complexity O(n log n) and space complexity O(n).
 	 * @param proofs Array of Proof objects available to select from
 	 * @param amountToSend The target amount to send
 	 * @param includeFees Optional boolean to include fees; Default: false
-	 * @param exactMatch Optional boolean to require exact match; Default: false
 	 * @returns SendResponse containing proofs to keep and proofs to send
 	 */
 	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees: boolean = false,
-		exactMatch: boolean = false
+		includeFees: boolean = false
 	): SendResponse {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
-		const MAX_OVRPCT = 1; // Acceptable close match overage (percent)
-		const MAX_OVRAMT = 128; // Acceptable close match overage (absolute)
+		const MAX_OVRPCT = 0; // Acceptable close match overage (percent)
+		const MAX_OVRAMT = 0; // Acceptable close match overage (absolute)
 		const MAX_TIMEMS = 1000; // Halt new trials if over time (in ms)
 		const MAX_P2SWAP = 5000; // Max number of Phase 2 improvement swaps
+		const exactMatch = false; // Allows close match (> amountToSend + fee)
 		const start = performance.now(); // start the clock
 		let bestSubset: Array<ProofWithFee> | null = null;
 		let bestDelta = Infinity;
@@ -746,7 +742,7 @@ class CashuWallet {
 		const { keep: keepProofs, send: sendProofs } = this.selectProofsToSend(
 			proofs,
 			amountToSend,
-			true
+			true // inc. fees
 		);
 
 		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs) - amountToSend;
