@@ -53,22 +53,21 @@ export const NULL_LOGGER: Logger = {
  */
 export class ConsoleLogger implements Logger {
 	private minLevel: LogLevel;
-	public static readonly LOG_LEVEL_NAMES: Record<LogLevel, string> = {
-		[LogLevel.FATAL]: 'FATAL',
-		[LogLevel.ERROR]: 'ERROR',
-		[LogLevel.WARN]: 'WARN',
-		[LogLevel.INFO]: 'INFO',
-		[LogLevel.DEBUG]: 'DEBUG',
-		[LogLevel.TRACE]: 'TRACE'
+	public static readonly SEVERITY: Record<LogLevel, number> = {
+		[LogLevel.FATAL]: 0,
+		[LogLevel.ERROR]: 1,
+		[LogLevel.WARN]: 2,
+		[LogLevel.INFO]: 3,
+		[LogLevel.DEBUG]: 4,
+		[LogLevel.TRACE]: 5
 	};
-
 	constructor(minLevel: LogLevel = LogLevel.INFO) {
 		this.minLevel = minLevel;
 	}
 
 	private logToConsole(level: LogLevel, message: string, context?: Record<string, any>): void {
-		if (level > this.minLevel) return;
-		const levelPrefix = `[${ConsoleLogger.LOG_LEVEL_NAMES[level]}] `;
+		if (ConsoleLogger.SEVERITY[level] > ConsoleLogger.SEVERITY[this.minLevel]) return;
+		const levelPrefix = `[${level}] `;
 		let interpolatedMessage = message;
 		const usedKeys = new Set<string>();
 		if (context) {
@@ -143,20 +142,18 @@ export class ConsoleLogger implements Logger {
 }
 
 /**
- * Creates a timer to measure elapsed time in milliseconds using high-resolution timestamps.
- * Returns an object with an `elapsed` method to retrieve the duration since the timer started.
- *
- * @returns An object containing an `elapsed` method to get the elapsed time in milliseconds.
+ * Creates a timer to measure elapsed time in milliseconds.
+ * @returns an object with an `elapsed` method to retrieve the duration since the timer started.
  * @example
  * const timer = measureTime();
  * // ... some code ...
  * const duration = timer.elapsed();
  */
 export function measureTime() {
-	const start = performance.now();
+	const start = Date.now();
 	return {
 		elapsed: () => {
-			return Math.round((performance.now() - start) * 1000) / 1000;
+			return Date.now() - start;
 		}
 	};
 }
