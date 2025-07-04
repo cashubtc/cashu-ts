@@ -219,7 +219,7 @@ export class ConsoleLogger implements Logger {
     // (undocumented)
     log(level: LogLevel, message: string, context?: Record<string, any>): void;
     // (undocumented)
-    static readonly LOG_LEVEL_NAMES: Record<LogLevel, string>;
+    static readonly SEVERITY: Record<LogLevel, number>;
     // (undocumented)
     trace(message: string, context?: Record<string, any>): void;
     // (undocumented)
