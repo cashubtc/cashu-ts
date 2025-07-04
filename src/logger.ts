@@ -1,11 +1,21 @@
-export enum LogLevel {
-	FATAL = 0, // Most severe
-	ERROR = 1,
-	WARN = 2,
-	INFO = 3,
-	DEBUG = 4,
-	TRACE = 5 // Least severe
-}
+/**
+ * Defines the available log levels for the logger.
+ * Log levels are ordered from most severe (FATAL) to least severe (TRACE).
+ */
+export const LogLevel = {
+	FATAL: 'FATAL',
+	ERROR: 'ERROR',
+	WARN: 'WARN',
+	INFO: 'INFO',
+	DEBUG: 'DEBUG',
+	TRACE: 'TRACE'
+} as const;
+
+/**
+ * Defines the available log levels for the logger.
+ * Log levels are ordered from most severe (FATAL) to least severe (TRACE).
+ */
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 export interface Logger {
 	fatal(message: string, context?: Record<string, any>): void;

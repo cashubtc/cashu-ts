@@ -414,21 +414,18 @@ export interface Logger {
     warn(message: string, context?: Record<string, any>): void;
 }
 
-// @public (undocumented)
-export enum LogLevel {
-    // (undocumented)
-    DEBUG = 4,// Most severe
-    // (undocumented)
-    ERROR = 1,
-    // (undocumented)
-    FATAL = 0,
-    // (undocumented)
-    INFO = 3,
-    // (undocumented)
-    TRACE = 5,
-    // (undocumented)
-    WARN = 2
-}
+// @public
+export const LogLevel: {
+    readonly FATAL: "FATAL";
+    readonly ERROR: "ERROR";
+    readonly WARN: "WARN";
+    readonly INFO: "INFO";
+    readonly DEBUG: "DEBUG";
+    readonly TRACE: "TRACE";
+};
+
+// @public
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 // @public
 export type MeltPayload = {
