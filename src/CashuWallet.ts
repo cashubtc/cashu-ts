@@ -3,6 +3,7 @@ import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.
 import { hashToCurve, pointFromHex } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
+import { type Logger, NULL_LOGGER } from './logger';
 import type {
 	GetInfoResponse,
 	MeltProofOptions,
@@ -74,6 +75,7 @@ class CashuWallet {
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
 	private _keepFactory: OutputDataFactory | undefined;
+	private _logger: Logger;
 
 	mint: CashuMint;
 
@@ -98,9 +100,11 @@ class CashuWallet {
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;
 			keepFactory?: OutputDataFactory;
+			logger?: Logger;
 		}
 	) {
 		this.mint = mint;
+		this._logger = options?.logger ?? NULL_LOGGER;
 		let keys: Array<MintKeys> = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
@@ -521,7 +525,7 @@ class CashuWallet {
 		}
 
 		if (amountToSend + this.getFeesForProofs(sendProofs) > amountAvailable) {
-			console.error(
+			this._logger.error(
 				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
 					sendProofs
 				)} | length: ${sendProofs.length}`

@@ -3,6 +3,7 @@ import { CashuWallet } from './CashuWallet.js';
 import { OutputData } from './model/OutputData.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
 import { setGlobalRequestOptions } from './request.js';
+import { LogLevel, ConsoleLogger, type Logger } from './logger';
 import {
 	getEncodedToken,
 	getEncodedTokenV4,
@@ -34,7 +35,10 @@ export {
 	setGlobalRequestOptions,
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
-	hasValidDleq
+	hasValidDleq,
+	LogLevel,
+	ConsoleLogger,
+	type Logger
 };
 
 export { injectWebSocketImpl } from './ws.js';

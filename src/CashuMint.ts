@@ -20,7 +20,7 @@ import type {
 	PartialMeltQuoteResponse
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
-import request from './request.js';
+import request, { setRequestLogger } from './request';
 import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
 	MeltQuoteResponsePaidDeprecated,
@@ -32,6 +32,7 @@ import {
 } from './legacy/nut-04.js';
 import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
 import { MintInfo } from './model/MintInfo.js';
+import { type Logger, NULL_LOGGER } from './logger';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
  */
@@ -40,6 +41,7 @@ class CashuMint {
 	private _mintInfo?: MintInfo;
 	private _authTokenGetter?: () => Promise<string>;
 	private _checkNut22 = false;
+	private _logger: Logger;
 	/**
 	 * @param _mintUrl requires mint URL to create this object
 	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
@@ -48,7 +50,10 @@ class CashuMint {
 	constructor(
 		private _mintUrl: string,
 		private _customRequest?: typeof request,
-		authTokenGetter?: () => Promise<string>
+		authTokenGetter?: () => Promise<string>,
+		options?: {
+			logger?: Logger;
+		}
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
@@ -56,6 +61,8 @@ class CashuMint {
 			this._checkNut22 = true;
 			this._authTokenGetter = authTokenGetter;
 		}
+		this._logger = options?.logger ?? NULL_LOGGER;
+		setRequestLogger(this._logger);
 	}
 
 	//TODO: v3 - refactor CashuMint to take two or less args.
@@ -71,20 +78,22 @@ class CashuMint {
 	 */
 	public static async getInfo(
 		mintUrl: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		logger?: Logger
 	): Promise<GetInfoResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/info')
 		});
-		const data = handleMintInfoContactFieldDeprecated(response);
+		const data = handleMintInfoContactFieldDeprecated(response, mintLogger);
 		return data;
 	}
 	/**
 	 * fetches mints info at the /info endpoint
 	 */
 	async getInfo(): Promise<GetInfoResponse> {
-		return CashuMint.getInfo(this._mintUrl, this._customRequest);
+		return CashuMint.getInfo(this._mintUrl, this._customRequest, this._logger);
 	}
 
 	async getLazyMintInfo(): Promise<MintInfo> {
@@ -145,8 +154,10 @@ class CashuMint {
 		mintUrl: string,
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger
 	): Promise<PartialMintQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<
@@ -157,7 +168,7 @@ class CashuMint {
 			requestBody: mintQuotePayload,
 			headers
 		});
-		const data = handleMintQuoteResponseDeprecated(response);
+		const data = handleMintQuoteResponseDeprecated(response, mintLogger);
 		return data;
 	}
 	/**
@@ -186,8 +197,10 @@ class CashuMint {
 		mintUrl: string,
 		quote: string,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger
 	): Promise<PartialMintQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<
@@ -198,7 +211,7 @@ class CashuMint {
 			headers
 		});
 
-		const data = handleMintQuoteResponseDeprecated(response);
+		const data = handleMintQuoteResponseDeprecated(response, mintLogger);
 		return data;
 	}
 	/**
@@ -259,8 +272,10 @@ class CashuMint {
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger
 	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<
@@ -272,7 +287,7 @@ class CashuMint {
 			headers
 		});
 
-		const data = handleMeltQuoteResponseDeprecated(response);
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
 
 		if (
 			!isObj(data) ||
@@ -309,8 +324,10 @@ class CashuMint {
 		mintUrl: string,
 		quote: string,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger
 	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
@@ -319,7 +336,7 @@ class CashuMint {
 			headers
 		});
 
-		const data = handleMeltQuoteResponseDeprecated(response);
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
 
 		if (
 			!isObj(data) ||
@@ -355,8 +372,10 @@ class CashuMint {
 		mintUrl: string,
 		meltPayload: MeltPayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger
 	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
@@ -366,7 +385,7 @@ class CashuMint {
 			headers
 		});
 
-		const data = handleMeltQuoteResponseDeprecated(response);
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
 
 		if (
 			!isObj(data) ||
@@ -532,7 +551,7 @@ class CashuMint {
 			try {
 				await this.ws.connect();
 			} catch (e) {
-				console.log(e);
+				this._logger.error('Failed to connect to WebSocket...', { e });
 				throw new Error('Failed to connect to WebSocket...');
 			}
 		}
