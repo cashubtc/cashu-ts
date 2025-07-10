@@ -121,7 +121,7 @@ export type GetInfoResponse = {
 /**
  * Response from the mint after requesting a melt quote
  */
-export type PartialMeltQuoteResponse = {
+export type MeltQuoteResponse = {
 	/**
 	 * Quote ID
 	 */
@@ -160,7 +160,7 @@ export type PartialMeltQuoteResponse = {
 	unit?: string;
 } & ApiError;
 
-export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
+export type FullMeltQuoteResponse = MeltQuoteResponse & { request: string; unit: string };
 
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',

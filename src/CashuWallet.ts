@@ -20,6 +20,7 @@ import type {
 	MeltProofsResponse,
 	MeltQuotePayload,
 	MeltQuoteResponse,
+	FullMeltQuoteResponse,
 	MintKeys,
 	MintKeyset,
 	MintPayload,
@@ -31,8 +32,7 @@ import type {
 	MeltQuoteOptions,
 	SwapTransaction,
 	LockedMintQuoteResponse,
-	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
+	PartialMintQuoteResponse
 } from './model/types/index.js';
 import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
@@ -811,7 +811,7 @@ class CashuWallet {
 	 * @param invoice LN invoice that needs to get a fee estimate
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string): Promise<FullMeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
@@ -833,7 +833,7 @@ class CashuWallet {
 	async createMultiPathMeltQuote(
 		invoice: string,
 		millisatPartialAmount: number
-	): Promise<MeltQuoteResponse> {
+	): Promise<FullMeltQuoteResponse> {
 		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-15');
@@ -861,11 +861,11 @@ class CashuWallet {
 	 * @param quote ID of the melt quote
 	 * @returns the mint will return an existing melt quote
 	 */
-	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-	async checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
+	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse>;
+	async checkMeltQuote(quote: FullMeltQuoteResponse): Promise<FullMeltQuoteResponse>;
 	async checkMeltQuote(
 		quote: string | MeltQuoteResponse
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteResponse | FullMeltQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const meltQuote = await this.mint.checkMeltQuote(quoteId);
 		if (typeof quote === 'string') {
