@@ -32,7 +32,7 @@ import type {
 	MeltQuoteOptions,
 	SwapTransaction,
 	LockedMintQuoteResponse,
-	PartialMintQuoteResponse
+	FullMintQuoteResponse
 } from './model/types/index.js';
 import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
@@ -666,7 +666,7 @@ class CashuWallet {
 	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuote(amount: number, description?: string): Promise<FullMintQuoteResponse> {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -688,7 +688,7 @@ class CashuWallet {
 		amount: number,
 		pubkey: string,
 		description?: string
-	): Promise<LockedMintQuoteResponse> {
+	): Promise<LockedMintQuoteResponse & { amount: number; unit: string }> {
 		const { supported } = (await this.getMintInfo()).isSupported(20);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-20');
@@ -713,11 +713,11 @@ class CashuWallet {
 	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
-	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
+	async checkMintQuote(quote: MintQuoteResponse): Promise<FullMintQuoteResponse>;
+	async checkMintQuote(quote: string): Promise<MintQuoteResponse>;
 	async checkMintQuote(
 		quote: string | MintQuoteResponse
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+	): Promise<MintQuoteResponse | FullMintQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const baseRes = await this.mint.checkMintQuote(quoteId);
 		if (typeof quote === 'string') {

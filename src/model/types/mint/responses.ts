@@ -184,7 +184,7 @@ export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState
 /**
  * Response from the mint after requesting a mint
  */
-export type PartialMintQuoteResponse = {
+export type MintQuoteResponse = {
 	/**
 	 * Payment request
 	 */
@@ -215,7 +215,7 @@ export type PartialMintQuoteResponse = {
 	amount?: number;
 } & ApiError;
 
-export type MintQuoteResponse = PartialMintQuoteResponse & { amount: number; unit: string };
+export type FullMintQuoteResponse = MintQuoteResponse & { amount: number; unit: string };
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 
