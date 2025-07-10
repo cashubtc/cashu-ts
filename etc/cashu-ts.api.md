@@ -177,7 +177,6 @@ export class CashuWallet {
         proofs: Array<Proof>;
         lastCounterWithSignature?: number;
     }>;
-    // (undocumented)
     selectProofsToSend(proofs: Array<Proof>, amountToSend: number, includeFees?: boolean): SendResponse;
     send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse>;
     swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse>;
