@@ -160,6 +160,9 @@ export type MeltQuoteResponse = {
 	unit?: string;
 } & ApiError;
 
+/**
+ * Represents a full melt quote response, extending MeltQuoteResponse with guaranteed request and unit.
+ */
 export type FullMeltQuoteResponse = MeltQuoteResponse & { request: string; unit: string };
 
 export const MeltQuoteState = {
@@ -215,6 +218,9 @@ export type MintQuoteResponse = {
 	amount?: number;
 } & ApiError;
 
+/**
+ * Represents a full mint quote response, extending MintQuoteResponse with guaranteed amount and unit.
+ */
 export type FullMintQuoteResponse = MintQuoteResponse & { amount: number; unit: string };
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };

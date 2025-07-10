@@ -242,13 +242,13 @@ export type DeprecatedToken = {
 // @public
 export function deriveKeysetId(keys: Keys): string;
 
-// @public (undocumented)
+// @public
 export type FullMeltQuoteResponse = MeltQuoteResponse & {
     request: string;
     unit: string;
 };
 
-// @public (undocumented)
+// @public
 export type FullMintQuoteResponse = MintQuoteResponse & {
     amount: number;
     unit: string;
