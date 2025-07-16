@@ -105,6 +105,10 @@ export type GetInfoResponse = {
 			// WebSockets
 			supported: Array<WebSocketSupport>;
 		};
+		'19'?: {
+			ttl: number|null,
+			cached_endpoints: Array<{method: 'GET' | 'POST', path: string}>
+		}
 		'20'?: {
 			// Locked Mint Quote
 			supported: boolean;
