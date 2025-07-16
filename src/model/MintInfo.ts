@@ -58,6 +58,9 @@ export class MintInfo {
 			case 15: {
 				return this.checkNut15();
 			}
+			case 19:{
+				return this.checkNut19();
+			}
 			default: {
 				throw new Error('nut is not supported by cashu-ts');
 			}
@@ -111,6 +114,13 @@ export class MintInfo {
 	private checkNut15() {
 		if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
 			return { supported: true, params: this._mintInfo.nuts[15].methods };
+		}
+		return { supported: false };
+	}
+
+	private checkNut19(){
+		if(this._mintInfo.nuts[19] && this._mintInfo.nuts[19]?.cached_endpoints.length > 0) {
+			return { supported: true, ttl: this._mintInfo.nuts[19].ttl, params: this._mintInfo.nuts[19].cached_endpoints  };
 		}
 		return { supported: false };
 	}
