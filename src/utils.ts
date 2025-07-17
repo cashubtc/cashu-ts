@@ -319,7 +319,7 @@ export function getDecodedToken(token: string) {
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
 		if (!token.startsWith(prefix)) {
-			return;
+			throw new Error('Not a valid encoded token');
 		}
 		token = token.slice(prefix.length);
 	});
