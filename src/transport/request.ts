@@ -1,6 +1,6 @@
 import { HttpResponseError, NetworkError, MintOperationError } from '../model/Errors';
 import { type Logger, NULL_LOGGER } from '../logger';
-import { type ApiError } from '../mint/types/responses';
+import { type Nut19Policy, type ApiError } from '../mint/types/responses';
 
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
@@ -12,7 +12,10 @@ export type RequestArgs = {
 	logger?: Logger;
 };
 
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+const MAX_CACHED_RETRIES = 10;
+
+
+type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Nut19Policy;
 
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;
@@ -36,12 +39,57 @@ export function setRequestLogger(logger: Logger): void {
 	requestLogger = logger;
 }
 
-async function _request({
-	endpoint,
-	requestBody,
-	headers: requestHeaders,
-	...options
-}: RequestOptions): Promise<unknown> {
+/**
+ * Internal function that handles retry logic for NUT-19 cached endpoints.
+ * Non-cached endpoints are executed directly without retries.
+ */
+async function requestWithRetry(options: RequestOptions): Promise<unknown> {
+	const { ttl, cached_endpoints, endpoint } = options;
+
+	const url = new URL(endpoint);
+
+	const isCachable = cached_endpoints?.some(
+		(cached_endpoint) =>
+			cached_endpoint.path === url.pathname && cached_endpoint.method === (options.method || 'GET')
+	);
+
+	if (!isCachable) {
+		return await _request(options);
+	}
+
+	let retries = 0;
+	const startTime = Date.now();
+
+	const retry = async (): Promise<unknown> => {
+		try {
+			return await _request(options);
+		} catch (e) {
+			if (e instanceof NetworkError) {
+				const totalElapsedTime = Date.now() - startTime;
+				const shouldRetry = retries < MAX_CACHED_RETRIES &&
+					(ttl === null || totalElapsedTime < ttl);
+
+				if (shouldRetry) {
+					retries++;
+					const delay = Math.max(Math.pow(2, retries) * 1000, 1000);
+
+					if (ttl !== null && totalElapsedTime + delay > ttl) {
+						throw e;
+					}
+
+					await new Promise((resolve) => setTimeout(resolve, delay));
+					return retry();
+				}
+			}
+			throw e;
+		}
+	};
+	return retry();
+}
+
+
+async function _request(options: RequestOptions): Promise<unknown> {
+	const { endpoint, requestBody, headers: requestHeaders, ...rest } = options;
 	const body = requestBody ? JSON.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
@@ -51,7 +99,7 @@ async function _request({
 
 	let response: Response;
 	try {
-		response = await fetch(endpoint, { body, headers, ...options });
+		response = await fetch(endpoint, { body, headers, ...rest });
 	} catch (err) {
 		// A fetch() promise only rejects when the request fails,
 		// for example, because of a badly-formed request URL or a network error.
@@ -94,7 +142,13 @@ async function _request({
 	}
 }
 
+/**
+ * Performs HTTP request with exponential backoff retry for NUT-19 cached endpoints.
+ * Retries only occur for network errors on endpoints specified in cached_endpoints.
+ * Nut19Policy for given endpoint should be provided as Nut19Policy object, fetched with MintInfo
+ * Regular requests are made for non-cached endpoints without retry logic.
+ */
 export default async function request<T>(options: RequestOptions): Promise<T> {
-	const data = await _request({ ...options, ...globalRequestOptions });
+	const data = await requestWithRetry({ ...options, ...globalRequestOptions });
 	return data as T;
 }
