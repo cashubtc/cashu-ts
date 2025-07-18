@@ -105,10 +105,7 @@ export type GetInfoResponse = {
 			// WebSockets
 			supported: Array<WebSocketSupport>;
 		};
-		'19'?: {
-			ttl: number|null,
-			cached_endpoints: Array<{method: 'GET' | 'POST', path: string}>
-		}
+		'19'?: Nut19Policy;
 		'20'?: {
 			// Locked Mint Quote
 			supported: boolean;
@@ -313,3 +310,11 @@ export type WebSocketSupport = {
 export type BlindAuthMintResponse = {
 	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
+
+/**
+ *  Caching policy of mint endpoints
+ */
+export type Nut19Policy = {
+	ttl: number|null;
+	cached_endpoints: Array<{method: 'GET' | 'POST', path: string}>;
+}|null;
