@@ -1074,9 +1074,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
+	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's).
+	 * This method checks if the proofs are spent using the mint's API.
 	 * @param proofs (only the `secret` field is required)
-	 * @returns
+	 * @returns Array of proof states
 	 */
 	async checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>> {
 		const enc = new TextEncoder();
@@ -1102,6 +1103,63 @@ class CashuWallet {
 			}
 		}
 		return states;
+	}
+
+	/**
+	 * Check proof states using the keyset's spent filter (NUT-25).
+	 * This method is more efficient than checkProofsStates when dealing with many proofs
+	 * from the same keyset, as it uses Golomb-Coded Set filter to identify spent proofs.
+	 * 
+	 * @param proofs Array of proofs to check (all proofs must be from the same keyset)
+	 * @param keysetId Optional keyset ID. If not provided, infers from the proofs.
+	 * @returns Array of proof states. Any proof not appearing in the spent filter is marked as UNSPENT.
+	 * @throws Error if proofs are from different keysets or if keyset ID is invalid
+	 */
+	async checkProofStateWithFilter(proofs: Array<Proof>, keysetId?: string): Promise<Array<ProofState>> {
+		if (proofs.length === 0) {
+			return [];
+		}
+
+		// Verify all proofs are from same keyset and get keysetId if not provided
+		const proofKeysetId = proofs[0].id;
+		if (!keysetId) {
+			keysetId = proofKeysetId;
+		}
+
+		// Check all proofs are from the same keyset
+		if (proofs.some(p => p.id !== proofKeysetId)) {
+			throw new Error('All proofs must be from the same keyset when using filter');
+		}
+
+		// Verify mint supports NUT-25 (spent filters)
+		const mintInfo = await this.lazyGetMintInfo();
+		if (!mintInfo.isSupported(25).supported) {
+			// Fallback to regular check if filter not supported
+			return this.checkProofsStates(proofs);
+		}
+
+		// Get the spent filter for this keyset
+		const spentFilter = await this.getSpentFilter(keysetId);
+
+		// Convert secrets to Y points and then to bytes for filter checking
+		const enc = new TextEncoder();
+		const proofBytes = proofs.map(p => {
+			const Y = hashToCurve(enc.encode(p.secret));
+			return Buffer.from(Y.toHex(true), 'hex');
+		});
+
+		// Check which proofs match the filter (are spent)
+		const matchResults = spentFilter.matchMany(proofBytes);
+
+		// Create the response array
+		return proofs.map((proof, i) => {
+			const Y = hashToCurve(enc.encode(proof.secret)).toHex(true);
+			return {
+				Y,
+				state: matchResults[i] ? 'SPENT' : 'UNSPENT',
+				witness: null
+			};
+		});
 	}
 
 	/**
