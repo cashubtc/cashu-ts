@@ -315,6 +315,6 @@ export type BlindAuthMintResponse = {
  *  Caching policy of mint endpoints
  */
 export type Nut19Policy = {
-	ttl: number|null;
-	cached_endpoints: Array<{method: 'GET' | 'POST', path: string}>;
-}|null;
+	ttl: number | null;
+	cached_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
+} | null;
