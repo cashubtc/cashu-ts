@@ -140,6 +140,7 @@ export class CashuWallet {
     // (undocumented)
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>>;
+    checkProofStateWithFilter(proofs: Array<Proof>, keysetId?: string): Promise<Array<ProofState>>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
