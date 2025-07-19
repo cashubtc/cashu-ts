@@ -11,7 +11,7 @@ type RequestArgs = {
 const MAX_CACHED_RETRIES = 10;
 
 
-type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Nut19Policy;
+type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;
@@ -60,13 +60,13 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 			if (e instanceof NetworkError) {
 				const totalElapsedTime = Date.now() - startTime;
 				const shouldRetry = retries < MAX_CACHED_RETRIES &&
-					(ttl === null || totalElapsedTime < ttl);
+					(!ttl || totalElapsedTime < ttl);
 
 				if (shouldRetry) {
 					retries++;
 					const delay = Math.max(Math.pow(2, retries) * 1000, 1000);
 
-					if (ttl !== null && totalElapsedTime + delay > ttl) {
+					if (ttl && totalElapsedTime + delay > ttl) {
 						throw e;
 					}
 
