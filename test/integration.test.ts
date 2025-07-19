@@ -659,52 +659,54 @@ describe('Keep Vector and Reordering', () => {
 });
 
 describe('NUT-25 Proof State Filter', () => {
-  test('checkProofStateWithFilter for spent proofs', async () => {
-    const mint = new CashuMint(mintUrl);
-    const wallet = new CashuWallet(mint);
+	test(
+		'checkProofStateWithFilter for spent proofs',
+		async () => {
+			const mint = new CashuMint(mintUrl);
+			const wallet = new CashuWallet(mint);
 
-    // First check if mint supports NUT-25
-    const mintInfo = await wallet.getMintInfo();
-    if (!mintInfo.isSupported(25).supported) {
-      console.log('Skipping test: mint does not support NUT-25');
-      return;
-    }
+			// First check if mint supports NUT-25
+			const mintInfo = await wallet.getMintInfo();
+			if (!mintInfo.isSupported(25).supported) {
+				console.log('Skipping test: mint does not support NUT-25');
+				return;
+			}
 
-    // Mint some proofs
-    const mintQuote = await wallet.createMintQuote(3000);
-    const proofs = await wallet.mintProofs(3000, mintQuote.quote);
-    expect(proofs.length).toBeGreaterThan(0);
-    
-    // Melt half of them
-    const meltQuote = await wallet.createMeltQuote(externalInvoice);
-    
-    const { send: proofsToMelt, keep: proofsToKeep } = await wallet.send(
-      2500, 
-      proofs,
-      { includeFees: true }
-    );
-    
-    await wallet.meltProofs(meltQuote, proofsToMelt);
+			// Mint some proofs
+			const mintQuote = await wallet.createMintQuote(3000);
+			const proofs = await wallet.mintProofs(3000, mintQuote.quote);
+			expect(proofs.length).toBeGreaterThan(0);
 
-    // Wait for filter to be updated
-    await new Promise(resolve => setTimeout(resolve, 5000));
+			// Melt half of them
+			const meltQuote = await wallet.createMeltQuote(externalInvoice);
 
-    // Check states using new filter method
-    const spentStates = await wallet.checkProofStateWithFilter(proofsToMelt);
-    const unspentStates = await wallet.checkProofStateWithFilter(proofsToKeep);
+			const { send: proofsToMelt, keep: proofsToKeep } = await wallet.send(2500, proofs, {
+				includeFees: true
+			});
 
-    // Verify melted proofs are marked as spent
-    spentStates.forEach(state => {
-      expect(state.state).toBe(CheckStateEnum.SPENT);
-      expect(state.witness).toBeNull();
-    });
+			await wallet.meltProofs(meltQuote, proofsToMelt);
 
-    // Verify kept proofs are marked as unspent
-    unspentStates.forEach(state => {
-      expect(state.state).toBe(CheckStateEnum.UNSPENT); 
-      expect(state.witness).toBeNull();
-    });
-  }, { timeout: 10000 });
+			// Wait for filter to be updated
+			await new Promise((resolve) => setTimeout(resolve, 5000));
+
+			// Check states using new filter method
+			const spentStates = await wallet.checkProofStateWithFilter(proofsToMelt);
+			const unspentStates = await wallet.checkProofStateWithFilter(proofsToKeep);
+
+			// Verify melted proofs are marked as spent
+			spentStates.forEach((state) => {
+				expect(state.state).toBe(CheckStateEnum.SPENT);
+				expect(state.witness).toBeNull();
+			});
+
+			// Verify kept proofs are marked as unspent
+			unspentStates.forEach((state) => {
+				expect(state.state).toBe(CheckStateEnum.UNSPENT);
+				expect(state.witness).toBeNull();
+			});
+		},
+		{ timeout: 10000 }
+	);
 });
 
 describe('Wallet Restore', () => {

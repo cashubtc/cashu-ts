@@ -1109,13 +1109,16 @@ class CashuWallet {
 	 * Check proof states using the keyset's spent filter (NUT-25).
 	 * This method is more efficient than checkProofsStates when dealing with many proofs
 	 * from the same keyset, as it uses Golomb-Coded Set filter to identify spent proofs.
-	 * 
+	 *
 	 * @param proofs Array of proofs to check (all proofs must be from the same keyset)
 	 * @param keysetId Optional keyset ID. If not provided, infers from the proofs.
 	 * @returns Array of proof states. Any proof not appearing in the spent filter is marked as UNSPENT.
 	 * @throws Error if proofs are from different keysets or if keyset ID is invalid
 	 */
-	async checkProofStateWithFilter(proofs: Array<Proof>, keysetId?: string): Promise<Array<ProofState>> {
+	async checkProofStateWithFilter(
+		proofs: Array<Proof>,
+		keysetId?: string
+	): Promise<Array<ProofState>> {
 		if (proofs.length === 0) {
 			return [];
 		}
@@ -1127,7 +1130,7 @@ class CashuWallet {
 		}
 
 		// Check all proofs are from the same keyset
-		if (proofs.some(p => p.id !== proofKeysetId)) {
+		if (proofs.some((p) => p.id !== proofKeysetId)) {
 			throw new Error('All proofs must be from the same keyset when using filter');
 		}
 
@@ -1143,7 +1146,7 @@ class CashuWallet {
 
 		// Convert secrets to Y points and then to bytes for filter checking
 		const enc = new TextEncoder();
-		const proofBytes = proofs.map(p => {
+		const proofBytes = proofs.map((p) => {
 			const Y = hashToCurve(enc.encode(p.secret));
 			return Buffer.from(Y.toHex(true), 'hex');
 		});
