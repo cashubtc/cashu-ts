@@ -58,7 +58,7 @@ export class MintInfo {
 			case 15: {
 				return this.checkNut15();
 			}
-			case 19:{
+			case 19: {
 				return this.checkNut19();
 			}
 			default: {
@@ -118,9 +118,13 @@ export class MintInfo {
 		return { supported: false };
 	}
 
-	private checkNut19(){
-		if(this._mintInfo.nuts[19] && this._mintInfo.nuts[19]?.cached_endpoints.length > 0) {
-			return { supported: true, ttl: this._mintInfo.nuts[19].ttl, params: this._mintInfo.nuts[19].cached_endpoints  };
+	private checkNut19() {
+		if (this._mintInfo.nuts[19] && this._mintInfo.nuts[19]?.cached_endpoints.length > 0) {
+			return {
+				supported: true,
+				ttl: this._mintInfo.nuts[19].ttl,
+				params: this._mintInfo.nuts[19].cached_endpoints
+			};
 		}
 		return { supported: false };
 	}
