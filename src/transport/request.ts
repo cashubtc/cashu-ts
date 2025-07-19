@@ -14,7 +14,6 @@ export type RequestArgs = {
 
 const MAX_CACHED_RETRIES = 10;
 
-
 type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 let globalRequestOptions: Partial<RequestOptions> = {};
@@ -66,8 +65,7 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 		} catch (e) {
 			if (e instanceof NetworkError) {
 				const totalElapsedTime = Date.now() - startTime;
-				const shouldRetry = retries < MAX_CACHED_RETRIES &&
-					(!ttl || totalElapsedTime < ttl);
+				const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
 				if (shouldRetry) {
 					retries++;
@@ -86,7 +84,6 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	};
 	return retry();
 }
-
 
 async function _request(options: RequestOptions): Promise<unknown> {
 	const { endpoint, requestBody, headers: requestHeaders, ...rest } = options;
