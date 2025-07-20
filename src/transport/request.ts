@@ -14,7 +14,7 @@ export type RequestArgs = {
 
 const MAX_CACHED_RETRIES = 10;
 
-type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;

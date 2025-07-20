@@ -329,6 +329,7 @@ export type GetInfoResponse = {
         '17'?: {
             supported: WebSocketSupport[];
         };
+        '19'?: Nut19Policy;
         '20'?: {
             supported: boolean;
         };
@@ -778,6 +779,7 @@ export class MintInfo {
         '17'?: {
             supported: WebSocketSupport[];
         };
+        '19'?: Nut19Policy;
         '20'?: {
             supported: boolean;
         };
@@ -901,6 +903,15 @@ export type NUT10Option = {
     data: string;
     tags: string[][];
 };
+
+// @public
+export type Nut19Policy = {
+    ttl: number | null;
+    cached_endpoints: Array<{
+        method: 'GET' | 'POST';
+        path: string;
+    }>;
+} | null;
 
 // @public (undocumented)
 export class OIDCAuth {
@@ -1269,7 +1280,7 @@ export type RequestArgs = {
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 // @public (undocumented)
 export type RestoreConfig = {
