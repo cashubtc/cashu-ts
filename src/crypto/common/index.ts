@@ -159,7 +159,7 @@ export function deriveKeysetId(keys: MintKeys): string {
 		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 	const hash = sha256(pubkeysConcat);
 	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
-	return '00' + hashHex;
+	return KEYSET_VERSION + hashHex;
 }
 
 function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {

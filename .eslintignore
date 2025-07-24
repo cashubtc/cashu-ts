@@ -4,3 +4,8 @@
 /coverage
 /.jest
 jest.config.ts
+/lib
+*.d.ts
+/examples
+vite.config.ts
+vitest.workspace.ts

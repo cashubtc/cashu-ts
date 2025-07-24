@@ -18,16 +18,17 @@ export const LogLevel = {
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 export interface Logger {
-	fatal(message: string, context?: Record<string, any>): void;
-	error(message: string, context?: Record<string, any>): void;
-	warn(message: string, context?: Record<string, any>): void;
-	info(message: string, context?: Record<string, any>): void;
-	debug(message: string, context?: Record<string, any>): void;
-	trace(message: string, context?: Record<string, any>): void;
-	log(level: LogLevel, message: string, context?: Record<string, any>): void;
+	fatal(message: string, context?: Record<string, unknown>): void;
+	error(message: string, context?: Record<string, unknown>): void;
+	warn(message: string, context?: Record<string, unknown>): void;
+	info(message: string, context?: Record<string, unknown>): void;
+	debug(message: string, context?: Record<string, unknown>): void;
+	trace(message: string, context?: Record<string, unknown>): void;
+	log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
 }
 
 // The default logger implementation - does nothing
+/* eslint-disable @typescript-eslint/no-empty-function */
 export const NULL_LOGGER: Logger = {
 	fatal() {},
 	error() {},
@@ -37,6 +38,7 @@ export const NULL_LOGGER: Logger = {
 	trace() {},
 	log() {}
 };
+/* eslint-enable @typescript-eslint/no-empty-function */
 
 /**
  * Outputs messages to the console based on the specified log level.
@@ -65,7 +67,7 @@ export class ConsoleLogger implements Logger {
 		this.minLevel = minLevel;
 	}
 
-	private logToConsole(level: LogLevel, message: string, context?: Record<string, any>): void {
+	private logToConsole(level: LogLevel, message: string, context?: Record<string, unknown>): void {
 		if (ConsoleLogger.SEVERITY[level] > ConsoleLogger.SEVERITY[this.minLevel]) return;
 		const levelPrefix = `[${level}] `;
 		let interpolatedMessage = message;
@@ -98,7 +100,7 @@ export class ConsoleLogger implements Logger {
 		}
 	}
 	// Note: NOT static as test suite needs to spy on the output
-	private getConsoleMethod(level: LogLevel): (message: string, ...args: any[]) => void {
+	private getConsoleMethod(level: LogLevel): (message: string, ...args: Array<unknown>) => void {
 		switch (level) {
 			case LogLevel.FATAL:
 			case LogLevel.ERROR:
@@ -118,25 +120,25 @@ export class ConsoleLogger implements Logger {
 		}
 	}
 	// Interface methods
-	fatal(message: string, context?: Record<string, any>): void {
+	fatal(message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(LogLevel.FATAL, message, context);
 	}
-	error(message: string, context?: Record<string, any>): void {
+	error(message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(LogLevel.ERROR, message, context);
 	}
-	warn(message: string, context?: Record<string, any>): void {
+	warn(message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(LogLevel.WARN, message, context);
 	}
-	info(message: string, context?: Record<string, any>): void {
+	info(message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(LogLevel.INFO, message, context);
 	}
-	debug(message: string, context?: Record<string, any>): void {
+	debug(message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(LogLevel.DEBUG, message, context);
 	}
-	trace(message: string, context?: Record<string, any>): void {
+	trace(message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(LogLevel.TRACE, message, context);
 	}
-	log(level: LogLevel, message: string, context?: Record<string, any>): void {
+	log(level: LogLevel, message: string, context?: Record<string, unknown>): void {
 		this.logToConsole(level, message, context);
 	}
 }

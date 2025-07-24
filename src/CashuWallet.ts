@@ -1,6 +1,5 @@
-import { serializeProof } from './crypto/client/index.js';
-import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
-import { hashToCurve, pointFromHex } from './crypto/common/index.js';
+import { signP2PKProofs } from './crypto/client/NUT11.js';
+import { hashToCurve } from './crypto/common/index.js';
 import { CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
@@ -355,7 +354,7 @@ class CashuWallet {
 				outputData) // these options require a swap
 		) {
 			const sendRes = await this.swap(amount, proofs, options);
-			let { keep, send } = sendRes;
+			const { keep, send } = sendRes;
 			const serialized = sendRes.serialized;
 
 			return { keep, send, serialized };
@@ -381,7 +380,7 @@ class CashuWallet {
 	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees: boolean = false
+		includeFees = false
 	): SendResponse {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
@@ -409,7 +408,7 @@ class CashuWallet {
 			return amount - (includeFees ? Math.ceil(feePPK / 1000) : 0);
 		};
 		// Shuffle array for randomization
-		const shuffleArray = <T>(array: T[]): T[] => {
+		const shuffleArray = <T>(array: Array<T>): Array<T> => {
 			const shuffled = [...array];
 			for (let i = shuffled.length - 1; i > 0; i--) {
 				const j = Math.floor(Math.random() * (i + 1));
@@ -501,7 +500,10 @@ class CashuWallet {
 				if (biggerIndex !== null) {
 					const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
 					const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
-					endIndex = rightIndex! + 1; // rightIndex guaranteed non-null due to biggerIndex
+					if (rightIndex === null) {
+						throw new Error('Unexpected null rightIndex in binary search');
+					}
+					endIndex = rightIndex + 1;
 				} else {
 					// Keep all proofs if all exFee < amountToSend
 					endIndex = spendableProofs.length;
@@ -539,7 +541,7 @@ class CashuWallet {
 			// PHASE 1: Randomized Greedy Selection
 			// Add proofs up to amountToSend (after adjusting for fees)
 			// for exact match or the first amount over target otherwise
-			let S: Array<ProofWithFee> = [];
+			const S: Array<ProofWithFee> = [];
 			let amount = 0;
 			let feePPK = 0;
 			for (const obj of shuffleArray(spendableProofs)) {
@@ -562,7 +564,7 @@ class CashuWallet {
 			// Using set.has() for filtering gives faster lookups: O(n+m)
 			// Using array.includes() would be way slower: O(n*m)
 			const SSet = new Set(S);
-			let others = spendableProofs.filter((obj) => !SSet.has(obj));
+			const others = spendableProofs.filter((obj) => !SSet.has(obj));
 			// Generate a random order for accessing the trial subset ('S')
 			const indices = shuffleArray(Array.from({ length: S.length }, (_, i) => i)).slice(
 				0,
@@ -620,7 +622,7 @@ class CashuWallet {
 				// and see if we can improve the solution. This is an adaptation
 				// to the original RGLI, which helps us identify close match and
 				// optimal fee solutions more consistently
-				let tempS = [...bestSubset]; // copy
+				const tempS = [...bestSubset]; // copy
 				while (tempS.length > 1 && bestDelta > 0) {
 					const objP = tempS.pop() as ProofWithFee;
 					const tempAmount = amount - objP.proof.amount;

@@ -15,7 +15,8 @@
 		"@typescript-eslint/require-await": "error",
 		"@typescript-eslint/await-thenable": "warn",
 		"@typescript-eslint/consistent-type-exports": "warn",
-		"no-else-return": "warn"
+		"no-else-return": "warn",
+		"no-mixed-spaces-and-tabs": "off"
 	},
 
 	"env": {

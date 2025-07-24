@@ -1,6 +1,6 @@
 import { PrivKey, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { schnorr } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
 import { parseP2PKSecret } from '../common/NUT11.js';
 import { Secret } from '../common/index.js';
@@ -89,7 +89,6 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): Arra
 		if (secret[0] !== 'P2PK') {
 			throw new Error('Invalid P2PK secret: must start with "P2PK"');
 		}
-		const { data, tags } = secret[1];
 		const now = Math.floor(Date.now() / 1000);
 		const locktime = getP2PKLocktime(secret);
 		if (locktime > now) {
@@ -98,7 +97,9 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): Arra
 			return getP2PKWitnessPubkeys(secret);
 		}
 		return getP2PKWitnessRefundkeys(secret);
-	} catch {}
+	} catch {
+		// do nothing
+	}
 	return []; // Unlocked, malformed or expired with no refund keys
 }
 
@@ -227,7 +228,7 @@ export const getP2PKWitnessSignatures = (
 export const signP2PKProofs = (
 	proofs: Array<Proof>,
 	privateKey: string | Array<string>,
-	beStrict: boolean = false
+	beStrict = false
 ): Array<Proof> => {
 	const privateKeys: Array<string> = Array.isArray(privateKey) ? privateKey : [privateKey];
 	return proofs.map((proof, index) => {
