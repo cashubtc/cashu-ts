@@ -208,21 +208,21 @@ export type CheckStateResponse = {
 export class ConsoleLogger implements Logger {
     constructor(minLevel?: LogLevel);
     // (undocumented)
-    debug(message: string, context?: Record<string, any>): void;
+    debug(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    error(message: string, context?: Record<string, any>): void;
+    error(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    fatal(message: string, context?: Record<string, any>): void;
+    fatal(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    info(message: string, context?: Record<string, any>): void;
+    info(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    log(level: LogLevel, message: string, context?: Record<string, any>): void;
+    log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
     // (undocumented)
     static readonly SEVERITY: Record<LogLevel, number>;
     // (undocumented)
-    trace(message: string, context?: Record<string, any>): void;
+    trace(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    warn(message: string, context?: Record<string, any>): void;
+    warn(message: string, context?: Record<string, unknown>): void;
 }
 
 // @public (undocumented)
@@ -398,19 +398,19 @@ export type LockedMintQuoteResponse = MintQuoteResponse & {
 // @public (undocumented)
 export interface Logger {
     // (undocumented)
-    debug(message: string, context?: Record<string, any>): void;
+    debug(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    error(message: string, context?: Record<string, any>): void;
+    error(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    fatal(message: string, context?: Record<string, any>): void;
+    fatal(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    info(message: string, context?: Record<string, any>): void;
+    info(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    log(level: LogLevel, message: string, context?: Record<string, any>): void;
+    log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    trace(message: string, context?: Record<string, any>): void;
+    trace(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    warn(message: string, context?: Record<string, any>): void;
+    warn(message: string, context?: Record<string, unknown>): void;
 }
 
 // @public
