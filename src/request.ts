@@ -54,7 +54,7 @@ async function _request({
 	if (!response.ok) {
 		let errorData: ApiError;
 		try {
-			errorData = await response.json() as ApiError;
+			errorData = (await response.json()) as ApiError;
 		} catch {
 			errorData = { error: 'bad response' };
 		}
