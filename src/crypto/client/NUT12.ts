@@ -4,7 +4,7 @@ import { bytesToHex } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToNumber } from '../util/utils.js';
 
-function arraysEqual(arr1: any, arr2: any) {
+function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
 	if (arr1.length !== arr2.length) return false;
 	for (let i = 0; i < arr1.length; i++) {
 		if (arr1[i] !== arr2[i]) return false;
