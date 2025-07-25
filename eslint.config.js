@@ -49,9 +49,7 @@ export default tseslint.config(
 			'@typescript-eslint/await-thenable': 'warn',
 			'@typescript-eslint/consistent-type-exports': 'warn',
 			'@typescript-eslint/no-empty-function': 'error',
-			'no-else-return': 'warn',
-			// Hopefully Temporary: if we move to space indentation
-			'no-mixed-spaces-and-tabs': 'off'
+			'no-else-return': 'warn'
 		}
 	}
 );
