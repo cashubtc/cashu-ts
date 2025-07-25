@@ -11,7 +11,7 @@ interface RpcListener {
 }
 
 export class ConnectionManager {
-	static instance: ConnectionManager;
+	private static instance: ConnectionManager;
 	private connectionMap: Map<string, WSConnection> = new Map();
 
 	static getInstance() {
@@ -93,7 +93,7 @@ export class WSConnection {
 				return;
 			}
 			this._logger.error('Attempted sendRequest, but socket was not open');
-			throw new Error('Socket not open...');
+			throw new Error('Socket not open');
 		}
 		const id = this.rpcId;
 		this.rpcId++;
@@ -101,6 +101,7 @@ export class WSConnection {
 		this.ws?.send(message);
 	}
 
+	/** @deprecated Use cancelSubscription for JSONRPC compliance. */
 	closeSubscription(subId: string) {
 		this.ws?.send(JSON.stringify(['CLOSE', subId]));
 	}
@@ -204,6 +205,12 @@ export class WSConnection {
 		return subId;
 	}
 
+	/**
+	 * Cancels a subscription, sending an unsubscribe request and handling responses.
+	 * @param subId The subscription ID to cancel.
+	 * @param callback The original payload callback to remove.
+	 * @param errorCallback Optional callback for unsubscribe errors (defaults to logging).
+	 */
 	cancelSubscription<TPayload = unknown>(
 		subId: string,
 		callback: (payload: TPayload) => void,

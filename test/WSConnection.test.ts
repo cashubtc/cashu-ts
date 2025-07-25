@@ -40,6 +40,19 @@ describe('testing WSConnection', () => {
 			params: { kind: 'bolt11_mint_quote', filters: ['12345'] }
 		});
 	});
+	test('throws if socket not open on createSubscription', async () => {
+		const conn = new WSConnection(fakeUrl); // No connect() called
+		const callback = vi.fn();
+		const errorCallback = vi.fn();
+		expect(() => {
+			conn.createSubscription(
+				{ kind: 'bolt11_mint_quote', filters: ['123'] },
+				callback,
+				errorCallback
+			);
+		}).toThrowError('Socket is not open');
+		expect(errorCallback).not.toHaveBeenCalled(); // No soft callback invocation
+	});
 	test('unsubscribing', async () => {
 		let wsSocket: Client;
 		let subId: string;
