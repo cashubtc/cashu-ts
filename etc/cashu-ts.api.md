@@ -338,7 +338,7 @@ export class HttpResponseError extends Error {
 }
 
 // @public (undocumented)
-export function injectWebSocketImpl(ws: any): void;
+export function injectWebSocketImpl(ws: typeof WebSocket): void;
 
 // @public (undocumented)
 export type InvoiceData = {
@@ -355,7 +355,7 @@ export type InvoiceData = {
 export type JsonRpcErrorObject = {
     code: number;
     message: string;
-    data?: any;
+    data?: unknown;
 };
 
 // Warning: (ae-forgotten-export) The symbol "JsonRpcRequest" needs to be exported by the entry point index.d.ts
@@ -982,8 +982,8 @@ export type WebSocketSupport = {
 //
 // lib/types/CashuWallet.d.ts:40:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:131:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:164:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:192:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:167:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:195:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
