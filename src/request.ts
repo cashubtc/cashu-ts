@@ -1,5 +1,6 @@
 import { HttpResponseError, NetworkError, MintOperationError } from './model/Errors';
 import { type Logger, NULL_LOGGER } from './logger';
+import { ApiError } from './model/types/mint/responses';
 
 type RequestArgs = {
 	endpoint: string;
@@ -51,16 +52,31 @@ async function _request({
 	}
 
 	if (!response.ok) {
-		const errorData = await response.json().catch(() => ({ error: 'bad response' }));
+		let errorData: ApiError;
+		try {
+			errorData = await response.json() as ApiError;
+		} catch {
+			errorData = { error: 'bad response' };
+		}
 
-		if (response.status === 400 && 'code' in errorData && 'detail' in errorData) {
+		if (
+			response.status === 400 &&
+			'code' in errorData &&
+			typeof errorData.code === 'number' &&
+			'detail' in errorData &&
+			typeof errorData.detail === 'string'
+		) {
 			throw new MintOperationError(errorData.code, errorData.detail);
 		}
 
-		throw new HttpResponseError(
-			'error' in errorData ? errorData.error : errorData.detail || 'HTTP request failed',
-			response.status
-		);
+		let errorMessage = 'HTTP request failed';
+		if ('error' in errorData && typeof errorData.error === 'string') {
+			errorMessage = errorData.error;
+		} else if ('detail' in errorData && typeof errorData.detail === 'string') {
+			errorMessage = errorData.detail;
+		}
+
+		throw new HttpResponseError(errorMessage, response.status);
 	}
 
 	try {

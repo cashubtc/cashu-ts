@@ -814,7 +814,7 @@ class CashuWallet {
 			reorderedKeepVector[s] = swapTransaction.keepVector[i];
 			reorderedProofs[s] = swapProofs[i];
 		});
-		reorderedProofs.forEach((p, i) => {
+		reorderedProofs.forEach((p: Proof, i) => {
 			if (reorderedKeepVector[i]) {
 				splitProofsToKeep.push(p);
 			} else {
@@ -1278,13 +1278,13 @@ class CashuWallet {
 				(a, b) =>
 					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount
 			);
-		const keepVector = [
-			...Array(keepOutputData.length).fill(true),
-			...Array(sendOutputData.length).fill(false)
+		const keepVector: Array<boolean> = [
+			...Array.from({ length: keepOutputData.length }, () => true),
+			...Array.from({ length: sendOutputData.length }, () => false)
 		];
 
-		const sortedOutputData = indices.map((i) => mergedBlindingData[i]);
-		const sortedKeepVector = indices.map((i) => keepVector[i]);
+		const sortedOutputData: Array<OutputDataLike> = indices.map((i) => mergedBlindingData[i]);
+		const sortedKeepVector: Array<boolean> = indices.map((i) => keepVector[i]);
 
 		return {
 			payload: {

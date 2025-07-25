@@ -1,5 +1,5 @@
 import { MessageQueue } from './utils';
-import { JsonRpcMessage, JsonRpcNotification, JsonRpcReqParams, RpcSubId } from './model/types';
+import { JsonRpcMessage, JsonRpcReqParams, RpcSubId } from './model/types';
 import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
 import { getWebSocketImpl } from './ws';
 import { type Logger, NULL_LOGGER } from './logger';
@@ -57,8 +57,8 @@ export class WSConnection {
 				try {
 					this.ws = new this._WS(this.url.toString());
 					this.onCloseCallbacks = [];
-				} catch (err) {
-					rej(err);
+				} catch (err: unknown) {
+					rej(err instanceof Error ? err : new Error(String(err)));
 					return;
 				}
 				this.ws.onopen = () => {
@@ -68,7 +68,7 @@ export class WSConnection {
 					rej(new Error('Failed to open WebSocket'));
 				};
 				this.ws.onmessage = (e: MessageEvent) => {
-					this.messageQueue.enqueue(e.data);
+					this.messageQueue.enqueue(e.data as string);
 					if (!this.handlingInterval) {
 						this.handlingInterval = setInterval(
 							this.handleNextMessage.bind(this),
@@ -172,7 +172,7 @@ export class WSConnection {
 						return;
 					}
 					if (this.subListeners[subId]?.length > 0) {
-						const notification = parsed as JsonRpcNotification;
+						const notification = parsed;
 						this.subListeners[subId].forEach((cb) => cb(notification.params?.payload));
 					}
 				}

@@ -79,10 +79,14 @@ export class ConsoleLogger implements Logger {
 					value instanceof Error ? { message: value.message, stack: value.stack } : value
 				])
 			);
-			interpolatedMessage = message.replace(/\{(\w+)\}/g, (match, key) => {
-				if (processedContext[key] !== undefined) {
+			interpolatedMessage = message.replace(/\{(\w+)\}/g, (match: string, key: string) => {
+				if (key in processedContext && processedContext[key] !== undefined) {
 					usedKeys.add(key);
-					return String(processedContext[key]);
+					const value: unknown = processedContext[key];
+					if (typeof value === 'string') return value;
+					if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
+					if (value == null) return '';
+					return JSON.stringify(value);
 				}
 				return match;
 			});

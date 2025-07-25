@@ -3,7 +3,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { schnorr } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
 import { parseP2PKSecret } from '../common/NUT11.js';
-import { Secret } from '../common/index.js';
+import { Secret, Witness } from '../common/index.js';
 import { type P2PKWitness, type Proof } from '../../model/types/index.js';
 import { BlindedMessage } from './index.js';
 
@@ -209,7 +209,8 @@ export const getP2PKWitnessSignatures = (
 	if (!witness) return [];
 	if (typeof witness === 'string') {
 		try {
-			return JSON.parse(witness).signatures || [];
+			const parsed = JSON.parse(witness) as Witness;
+			return parsed.signatures || [];
 		} catch (e) {
 			console.error('Failed to parse witness string:', e);
 			return [];

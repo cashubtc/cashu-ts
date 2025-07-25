@@ -94,7 +94,7 @@ export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 		const hash = sha256(Buffer.concat([msgToHash, counterBytes]));
 		try {
 			return pointFromHex(bytesToHex(Buffer.concat([new Uint8Array([0x02]), hash])));
-		} catch (error) {
+		} catch {
 			counter[0]++;
 		}
 	}

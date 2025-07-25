@@ -2,6 +2,5 @@
 	"useTabs": true,
 	"singleQuote": true,
 	"trailingComma": "none",
-	"printWidth": 100,
-	"pluginSearchDirs": ["."]
+	"printWidth": 100
 }

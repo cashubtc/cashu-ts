@@ -1,8 +1,8 @@
 import { SerializedDLEQ } from '../mint';
 
-export * from './payloads';
-export * from './responses';
-export * from './tokens';
+export type * from './payloads';
+export type * from './responses';
+export type * from './tokens';
 export * from './paymentRequests';
 
 /**
