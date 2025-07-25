@@ -104,7 +104,7 @@ export class OutputData implements OutputDataLike {
 			1,
 			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1)
 		);
-		const newSecret: [string, { nonce: string; data: string; tags: Array<any> }] = [
+		const newSecret: [string, { nonce: string; data: string; tags: Array<Array<string>> }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
