@@ -21,13 +21,13 @@ type DecodeResult<T extends ResultValue> = {
 	offset: number;
 };
 
-export function encodeCBOR(value: any) {
+export function encodeCBOR(value: unknown): Uint8Array {
 	const buffer: Array<number> = [];
 	encodeItem(value, buffer);
 	return new Uint8Array(buffer);
 }
 
-function encodeItem(value: any, buffer: Array<number>) {
+function encodeItem(value: unknown, buffer: Array<number>) {
 	if (value === null) {
 		buffer.push(0xf6);
 	} else if (value === undefined) {
@@ -42,8 +42,13 @@ function encodeItem(value: any, buffer: Array<number>) {
 		encodeArray(value, buffer);
 	} else if (value instanceof Uint8Array) {
 		encodeByteString(value, buffer);
-	} else if (typeof value === 'object') {
-		encodeObject(value, buffer);
+	} else if (
+		// Defensive: POJO only (null/array handled above)
+		typeof value === 'object' &&
+		value !== null &&
+		!Array.isArray(value)
+	) {
+		encodeObject(value as Record<string, unknown>, buffer);
 	} else {
 		throw new Error('Unsupported type');
 	}
@@ -116,7 +121,7 @@ function encodeString(value: string, buffer: Array<number>) {
 	}
 }
 
-function encodeArray(value: Array<any>, buffer: Array<number>) {
+function encodeArray(value: Array<unknown>, buffer: Array<number>) {
 	const length = value.length;
 	if (length < 24) {
 		buffer.push(0x80 | length);
@@ -133,7 +138,7 @@ function encodeArray(value: Array<any>, buffer: Array<number>) {
 	}
 }
 
-function encodeObject(value: { [key: string]: any }, buffer: Array<number>) {
+function encodeObject(value: Record<string, unknown>, buffer: Array<number>) {
 	const keys = Object.keys(value);
 	encodeUnsigned(keys.length, buffer);
 	buffer[buffer.length - 1] |= 0xa0;
