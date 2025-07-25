@@ -173,7 +173,10 @@ type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
 
 export type RpcSubId = string | number | null;
 
-type JsonRpcParams = any;
+type JsonRpcParams = {
+	subId?: string;
+	payload?: unknown;
+};
 
 export type JsonRpcReqParams = {
 	kind: RpcSubKinds;
@@ -181,7 +184,7 @@ export type JsonRpcReqParams = {
 	subId: string;
 };
 
-type JsonRpcSuccess<T = any> = {
+type JsonRpcSuccess<T = unknown> = {
 	jsonrpc: '2.0';
 	result: T;
 	id: RpcSubId;
@@ -190,7 +193,7 @@ type JsonRpcSuccess<T = any> = {
 export type JsonRpcErrorObject = {
 	code: number;
 	message: string;
-	data?: any;
+	data?: unknown;
 };
 
 type JsonRpcError = {

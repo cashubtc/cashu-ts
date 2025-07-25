@@ -167,13 +167,13 @@ export class WSConnection {
 				if ('id' in parsed) {
 					// Do nothing as mints should not send requests
 				} else {
-					const subId = parsed.params.subId;
+					const subId = parsed.params?.subId;
 					if (!subId) {
 						return;
 					}
 					if (this.subListeners[subId]?.length > 0) {
 						const notification = parsed as JsonRpcNotification;
-						this.subListeners[subId].forEach((cb) => cb(notification.params.payload));
+						this.subListeners[subId].forEach((cb) => cb(notification.params?.payload));
 					}
 				}
 			}
