@@ -1,6 +1,6 @@
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { Proof, pointFromHex } from '../../../src/crypto/common';
-import { verifyP2PKSig } from '../../../src/crypto/mint/NUT11.js';
+import { verifyP2PKSig } from '../../../src/crypto/mint/NUT11';
 import { describe, expect, test } from 'vitest';
 describe('test p2pk verify', () => {
 	test('test no witness', () => {

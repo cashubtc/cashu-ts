@@ -1,5 +1,5 @@
-import { verifyDLEQProof_reblind } from './crypto/client/NUT12.js';
-import { DLEQ, pointFromHex } from './crypto/common/index.js';
+import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
+import { DLEQ, pointFromHex } from './crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import {
@@ -7,9 +7,9 @@ import {
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64Url
-} from './base64.js';
-import { decodeCBOR, encodeCBOR } from './cbor.js';
-import { PaymentRequest } from './model/PaymentRequest.js';
+} from './base64';
+import { decodeCBOR, encodeCBOR } from './cbor';
+import { PaymentRequest } from './model/PaymentRequest';
 import {
 	DeprecatedToken,
 	Keys,
@@ -21,8 +21,8 @@ import {
 	V4DLEQTemplate,
 	V4InnerToken,
 	V4ProofTemplate
-} from './model/types/index.js';
-import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
+} from './model/types/index';
+import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
 
 /**
  * Splits the amount into denominations of the provided @param keyset

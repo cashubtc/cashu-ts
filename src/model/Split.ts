@@ -1,5 +1,5 @@
-import { BlindedMessage } from './BlindedMessage.js';
-import { Proof } from './types/index.js';
+import { BlindedMessage } from './BlindedMessage';
+import { Proof } from './types/index';
 
 class Split {
 	proofs: Array<Proof>;

@@ -1,5 +1,5 @@
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
+import { CashuMint } from '../src/CashuMint';
+import { CashuWallet } from '../src/CashuWallet';
 
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
@@ -13,10 +13,10 @@ import {
 	Proof,
 	ProofState,
 	Token
-} from '../src/model/types/index.js';
-import { MintOperationError } from '../src/model/Errors.js';
+} from '../src/model/types/index';
+import { MintOperationError } from '../src/model/Errors';
 import ws from 'ws';
-import { injectWebSocketImpl } from '../src/ws.js';
+import { injectWebSocketImpl } from '../src/ws';
 import {
 	getDecodedToken,
 	getEncodedToken,
@@ -25,8 +25,8 @@ import {
 	numberToHexPadded64,
 	splitAmount,
 	sumProofs
-} from '../src/utils.js';
-import { OutputData, OutputDataFactory } from '../src/model/OutputData.js';
+} from '../src/utils';
+import { OutputData, OutputDataFactory } from '../src/model/OutputData';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 

@@ -2,7 +2,7 @@ import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils.js';
+import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
 import { Buffer } from 'buffer';
 
 export type Enumerate<N extends number, Acc extends Array<number> = []> = Acc['length'] extends N

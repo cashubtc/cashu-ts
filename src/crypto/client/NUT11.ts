@@ -2,10 +2,10 @@ import { PrivKey, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
-import { parseP2PKSecret } from '../common/NUT11.js';
-import { Secret } from '../common/index.js';
-import { type P2PKWitness, type Proof } from '../../model/types/index.js';
-import { BlindedMessage } from './index.js';
+import { parseP2PKSecret } from '../common/NUT11';
+import { Secret } from '../common/index';
+import { type P2PKWitness, type Proof } from '../../model/types/index';
+import { BlindedMessage } from './index';
 
 export const createP2PKsecret = (pubkey: string): string => {
 	const newSecret: Secret = [
