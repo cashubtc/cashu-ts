@@ -24,10 +24,10 @@ export default tseslint.config(
 	eslint.configs.recommended,
 	...tseslint.configs.recommended,
 	...tseslint.configs.recommendedTypeChecked,
-	// Rules below are very strict, and highlight deprecations.
-	// We should try moving towards meeting these over time.
-	// ...tseslint.configs.strictTypeChecked,
 	prettierConfig,
+	// Config below adds strict rules, and highlights deprecations.
+	// We should try moving towards enabling this over time.
+	// ...tseslint.configs.strictTypeChecked,
 	{
 		plugins: {
 			prettier
