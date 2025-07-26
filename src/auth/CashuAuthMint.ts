@@ -8,12 +8,14 @@ import request from '../request';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 
 /**
- * Class represents Cashu Auth Mint API. This class contains Lower level functions that are implemented by CashuAuthWallet.
+ * Class represents Cashu Auth Mint API. This class contains Lower level functions that are
+ * implemented by CashuAuthWallet.
  */
 class CashuAuthMint {
 	/**
-	 * @param _mintUrl requires mint URL to create this object
-	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
+	 * @param _mintUrl Requires mint URL to create this object.
+	 * @param _customRequest If passed, use custom request implementation for network communication
+	 *   with the mint.
 	 */
 	constructor(
 		private _mintUrl: string,
@@ -29,11 +31,12 @@ class CashuAuthMint {
 
 	/**
 	 * Mints new Blinded Authentication tokens by requesting blind signatures on the provided outputs.
+	 *
 	 * @param mintUrl
-	 * @param mintPayload Payload containing the outputs to get blind signatures on
-	 * @param clearAuthToken A NUT-21 clear auth token
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @param clearAuthToken A NUT-21 clear auth token.
 	 * @param customRequest
-	 * @returns serialized blinded signatures
+	 * @returns Serialized blinded signatures.
 	 */
 	public static async mint(
 		mintUrl: string,
@@ -60,18 +63,21 @@ class CashuAuthMint {
 	}
 	/**
 	 * Mints new Blinded Authentication tokens by requesting blind signatures on the provided outputs.
-	 * @param mintPayload Payload containing the outputs to get blind signatures on
-	 * @param clearAuthToken A NUT-21 clear auth token
-	 * @returns serialized blinded signatures
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @param clearAuthToken A NUT-21 clear auth token.
+	 * @returns Serialized blinded signatures.
 	 */
 	async mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string) {
 		return CashuAuthMint.mint(this._mintUrl, mintPayload, clearAuthToken, this._customRequest);
 	}
 
 	/**
-	 * Get the mints public NUT-22 keys
+	 * Get the mints public NUT-22 keys.
+	 *
 	 * @param mintUrl
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
+	 * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
+	 *   keys from all active keysets are fetched.
 	 * @param customRequest
 	 * @returns
 	 */
@@ -94,9 +100,11 @@ class CashuAuthMint {
 		return data;
 	}
 	/**
-	 * Get the mints public NUT-22 keys
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
-	 * @returns the mints public keys
+	 * Get the mints public NUT-22 keys.
+	 *
+	 * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
+	 *   keys from all active keysets are fetched.
+	 * @returns The mints public keys.
 	 */
 	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys> {
 		const allKeys = await CashuAuthMint.getKeys(
@@ -107,10 +115,11 @@ class CashuAuthMint {
 		return allKeys;
 	}
 	/**
-	 * Get the mints NUT-22 keysets in no specific order
+	 * Get the mints NUT-22 keysets in no specific order.
+	 *
 	 * @param mintUrl
 	 * @param customRequest
-	 * @returns all the mints past and current keysets.
+	 * @returns All the mints past and current keysets.
 	 */
 	public static async getKeySets(
 		mintUrl: string,
@@ -123,8 +132,9 @@ class CashuAuthMint {
 	}
 
 	/**
-	 * Get the mints NUT-22 keysets in no specific order
-	 * @returns all the mints past and current keysets.
+	 * Get the mints NUT-22 keysets in no specific order.
+	 *
+	 * @returns All the mints past and current keysets.
 	 */
 	async getKeySets(): Promise<MintAllKeysets> {
 		return CashuAuthMint.getKeySets(this._mintUrl, this._customRequest);

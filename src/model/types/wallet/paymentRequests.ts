@@ -42,12 +42,20 @@ export type PaymentRequestPayload = {
 	proofs: Array<Proof>;
 };
 
-/** Used to express a spending condition that proofs should be encumbered with */
+/**
+ * Used to express a spending condition that proofs should be encumbered with.
+ */
 export type NUT10Option = {
-	/** The kind of spending condition */
+	/**
+	 * The kind of spending condition.
+	 */
 	kind: string;
-	/** Expresses the spending condition relative to the kind */
+	/**
+	 * Expresses the spending condition relative to the kind.
+	 */
 	data: string;
-	/** Tags associated with the spending condition for additional data */
+	/**
+	 * Tags associated with the spending condition for additional data.
+	 */
 	tags: Array<Array<string>>;
 };

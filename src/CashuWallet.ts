@@ -62,8 +62,7 @@ const DEFAULT_DENOMINATION_TARGET = 3;
 const DEFAULT_UNIT = 'sat';
 
 /**
- * Class that represents a Cashu wallet.
- * This class should act as the entry point for this library
+ * Class that represents a Cashu wallet. This class should act as the entry point for this library.
  */
 class CashuWallet {
 	private _keys: Map<string, MintKeys> = new Map();
@@ -79,15 +78,17 @@ class CashuWallet {
 	mint: CashuMint;
 
 	/**
-	 * @param mint Cashu mint instance is used to make api calls
-	 * @param options.unit optionally set unit (default is 'sat')
-	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
-	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
-	 * @param options.mintInfo mint info from the mint (will be fetched from mint if not provided)
-	 * @param options.denominationTarget target number proofs per denomination (default: see @constant DEFAULT_DENOMINATION_TARGET)
+	 * @param mint Cashu mint instance is used to make api calls.
+	 * @param options.unit Optionally set unit (default is 'sat')
+	 * @param options.keys Public keys from the mint (will be fetched from mint if not provided)
+	 * @param options.keysets Keysets from the mint (will be fetched from mint if not provided)
+	 * @param options.mintInfo Mint info from the mint (will be fetched from mint if not provided)
+	 * @param options.denominationTarget Target number proofs per denomination (default: see @constant
+	 *   DEFAULT_DENOMINATION_TARGET)
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
-	 * @param options.keepFactory A function that will be used by all parts of the library that produce proofs to be kept (change, etc.).
-	 * This can lead to poor performance, in which case the seed should be directly provided
+	 * @param options.keepFactory A function that will be used by all parts of the library that
+	 *   produce proofs to be kept (change, etc.). This can lead to poor performance, in which case
+	 *   the seed should be directly provided.
 	 */
 	constructor(
 		mint: CashuMint,
@@ -156,8 +157,9 @@ class CashuWallet {
 	}
 
 	/**
-	 * Get information about the mint
-	 * @returns mint info
+	 * Get information about the mint.
+	 *
+	 * @returns Mint info.
 	 */
 	async getMintInfo(): Promise<MintInfo> {
 		const infoRes = await this.mint.getInfo();
@@ -167,7 +169,8 @@ class CashuWallet {
 
 	/**
 	 * Get stored information about the mint or request it if not loaded.
-	 * @returns mint info
+	 *
+	 * @returns Mint info.
 	 */
 	async lazyGetMintInfo(): Promise<MintInfo> {
 		if (!this._mintInfo) {
@@ -177,7 +180,8 @@ class CashuWallet {
 	}
 
 	/**
-	 * Load mint information, keysets and keys. This function can be called if no keysets are passed in the constructor
+	 * Load mint information, keysets and keys. This function can be called if no keysets are passed
+	 * in the constructor.
 	 */
 	async loadMint() {
 		await this.getMintInfo();
@@ -186,12 +190,12 @@ class CashuWallet {
 	}
 
 	/**
-	 * Choose a keyset to activate based on the lowest input fee
+	 * Choose a keyset to activate based on the lowest input fee.
 	 *
-	 * Note: this function will filter out deprecated base64 keysets
+	 * Note: this function will filter out deprecated base64 keysets.
 	 *
-	 * @param keysets keysets to choose from
-	 * @returns active keyset
+	 * @param keysets Keysets to choose from.
+	 * @returns Active keyset.
 	 */
 	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
@@ -209,8 +213,9 @@ class CashuWallet {
 	}
 
 	/**
-	 * Get keysets from the mint with the unit of the wallet
-	 * @returns keysets with wallet's unit
+	 * Get keysets from the mint with the unit of the wallet.
+	 *
+	 * @returns Keysets with wallet's unit.
 	 */
 	async getKeySets(): Promise<Array<MintKeyset>> {
 		const allKeysets = await this.mint.getKeySets();
@@ -220,8 +225,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet keyset.
-	 * @returns keyset
+	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet
+	 * keyset.
+	 *
+	 * @returns Keyset.
 	 */
 	async getAllKeys(): Promise<Array<MintKeys>> {
 		const keysets = await this.mint.getKeys();
@@ -233,12 +240,12 @@ class CashuWallet {
 	/**
 	 * Get public keys from the mint. If keys were already fetched, it will return those.
 	 *
-	 * If `keysetId` is set, it will fetch and return that specific keyset.
-	 * Otherwise, we select an active keyset with the unit of the wallet.
+	 * If `keysetId` is set, it will fetch and return that specific keyset. Otherwise, we select an
+	 * active keyset with the unit of the wallet.
 	 *
-	 * @param keysetId optional keysetId to get keys for
-	 * @param forceRefresh? if set to true, it will force refresh the keyset from the mint
-	 * @returns keyset
+	 * @param keysetId Optional keysetId to get keys for.
+	 * @param forceRefresh? If set to true, it will force refresh the keyset from the mint.
+	 * @returns Keyset.
 	 */
 	async getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys> {
 		if (!(this._keysets.length > 0) || forceRefresh) {
@@ -269,10 +276,12 @@ class CashuWallet {
 	}
 
 	/**
-	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the first token in the token array)
-	 * @param {(string|Token)} token - Cashu token, either as string or decoded
-	 * @param {ReceiveOptions} [options] - Optional configuration for token processing
-	 * @returns New token with newly created proofs, token entries that had errors
+	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the
+	 * first token in the token array)
+	 *
+	 * @param {string | Token} token - Cashu token, either as string or decoded.
+	 * @param {ReceiveOptions} [options] - Optional configuration for token processing.
+	 * @returns New token with newly created proofs, token entries that had errors.
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
 		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
@@ -315,10 +324,11 @@ class CashuWallet {
 	}
 
 	/**
-	 * Send proofs of a given amount, by providing at least the required amount of proofs
-	 * @param amount amount to send
-	 * @param proofs array of proofs (accumulated amount of proofs must be >= than amount)
-	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation
+	 * Send proofs of a given amount, by providing at least the required amount of proofs.
+	 *
+	 * @param amount Amount to send.
+	 * @param proofs Array of proofs (accumulated amount of proofs must be >= than amount)
+	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation.
 	 * @returns {SendResponse}
 	 */
 	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
@@ -369,13 +379,15 @@ class CashuWallet {
 
 	/**
 	 * Selects proofs to send based on amount and fee inclusion.
-	 * @remarks Uses an adapted Randomized Greedy with Local Improvement (RGLI)
-	 * algorithm, which has a time complexity O(n log n) and space complexity O(n).
+	 *
+	 * @remarks
+	 * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm, which has a time
+	 * complexity O(n log n) and space complexity O(n).
+	 * @param proofs Array of Proof objects available to select from.
+	 * @param amountToSend The target amount to send.
+	 * @param includeFees Optional boolean to include fees; Default: false.
+	 * @returns SendResponse containing proofs to keep and proofs to send.
 	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
-	 * @param proofs Array of Proof objects available to select from
-	 * @param amountToSend The target amount to send
-	 * @param includeFees Optional boolean to include fees; Default: false
-	 * @returns SendResponse containing proofs to keep and proofs to send
 	 */
 	selectProofsToSend(
 		proofs: Array<Proof>,
@@ -396,7 +408,7 @@ class CashuWallet {
 		let bestFeePPK = 0;
 
 		/**
-		 * Helper Functions
+		 * Helper Functions.
 		 */
 		interface ProofWithFee {
 			proof: Proof;
@@ -463,7 +475,7 @@ class CashuWallet {
 		};
 
 		/**
-		 * Pre-processing
+		 * Pre-processing.
 		 */
 		let totalAmount = 0;
 		let totalFeePPK = 0;
@@ -531,11 +543,10 @@ class CashuWallet {
 		);
 
 		/**
-		 * RGLI algorithm: Runs multiple trials (up to MAX_TRIALS)
-		 * Each trial starts with randomized greedy subset (S) and
-		 * then tries to improve that subset to get a valid solution.
-		 * NOTE: Fees are dynamic, based on number of proofs (PPK),
-		 * so we perform all calculations based on net amounts
+		 * RGLI algorithm: Runs multiple trials (up to MAX_TRIALS) Each trial starts with randomized
+		 * greedy subset (S) and then tries to improve that subset to get a valid solution. NOTE: Fees
+		 * are dynamic, based on number of proofs (PPK), so we perform all calculations based on net
+		 * amounts.
 		 */
 		for (let trial = 0; trial < MAX_TRIALS; trial++) {
 			// PHASE 1: Randomized Greedy Selection
@@ -671,10 +682,11 @@ class CashuWallet {
 	}
 
 	/**
-	 * calculates the fees based on inputs (proofs)
-	 * @param proofs input proofs to calculate fees for
-	 * @returns fee amount
-	 * @throws throws an error if the proofs keyset is unknown
+	 * Calculates the fees based on inputs (proofs)
+	 *
+	 * @param proofs Input proofs to calculate fees for.
+	 * @returns Fee amount.
+	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
 	getFeesForProofs(proofs: Array<Proof>): number {
 		const sumPPK = proofs.reduce((a, c) => a + this.getProofFeePPK(c), 0);
@@ -682,10 +694,11 @@ class CashuWallet {
 	}
 
 	/**
-	 * Returns the current fee PPK for a proof according to the cached keyset
-	 * @param proof {Proof} A single proof
-	 * @returns feePPK {number} The feePPK for the selected proof
-	 * @throws throws an error if the proofs keyset is unknown
+	 * Returns the current fee PPK for a proof according to the cached keyset.
+	 *
+	 * @param proof {Proof} A single proof.
+	 * @returns FeePPK {number} The feePPK for the selected proof.
+	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
 	private getProofFeePPK(proof: Proof) {
 		const keyset = this._keysets.find((k) => k.id === proof.id);
@@ -696,10 +709,11 @@ class CashuWallet {
 	}
 
 	/**
-	 * calculates the fees based on inputs for a given keyset
-	 * @param nInputs number of inputs
-	 * @param keysetId keysetId used to lookup `input_fee_ppk`
-	 * @returns fee amount
+	 * Calculates the fees based on inputs for a given keyset.
+	 *
+	 * @param nInputs Number of inputs.
+	 * @param keysetId KeysetId used to lookup `input_fee_ppk`
+	 * @returns Fee amount.
 	 */
 	getFeesForKeyset(nInputs: number, keysetId: string): number {
 		const fees = Math.floor(
@@ -714,11 +728,12 @@ class CashuWallet {
 	}
 
 	/**
-	 * Splits and creates sendable tokens
-	 * if no amount is specified, the amount is implied by the cumulative amount of all proofs
-	 * if both amount and preference are set, but the preference cannot fulfill the amount, then we use the default split
-	 *  @param {SwapOptions} [options] - Optional parameters for configuring the swap operation
-	 * @returns promise of the change- and send-proofs
+	 * Splits and creates sendable tokens if no amount is specified, the amount is implied by the
+	 * cumulative amount of all proofs if both amount and preference are set, but the preference
+	 * cannot fulfill the amount, then we use the default split.
+	 *
+	 * @param {SwapOptions} [options] - Optional parameters for configuring the swap operation.
+	 * @returns Promise of the change- and send-proofs.
 	 */
 	async swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse> {
 		let { outputAmounts } = options || {};
@@ -828,11 +843,16 @@ class CashuWallet {
 	}
 
 	/**
-	 * Restores batches of deterministic proofs until no more signatures are returned from the mint
-	 * @param [gapLimit=300] the amount of empty counters that should be returned before restoring ends (defaults to 300)
-	 * @param [batchSize=100] the amount of proofs that should be restored at a time (defaults to 100)
-	 * @param [counter=0] the counter that should be used as a starting point (defaults to 0)
-	 * @param [keysetId] which keysetId to use for the restoration. If none is passed the instance's default one will be used
+	 * Restores batches of deterministic proofs until no more signatures are returned from the mint.
+	 *
+	 * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
+	 *   ends (defaults to 300). Default is `300`
+	 * @param [batchSize=100] The amount of proofs that should be restored at a time (defaults to
+	 *   100). Default is `100`
+	 * @param [counter=0] The counter that should be used as a starting point (defaults to 0). Default
+	 *   is `0`
+	 * @param [keysetId] Which keysetId to use for the restoration. If none is passed the instance's
+	 *   default one will be used.
 	 */
 	async batchRestore(
 		gapLimit = 300,
@@ -861,10 +881,12 @@ class CashuWallet {
 	}
 
 	/**
-	 * Regenerates
-	 * @param start set starting point for count (first cycle for each keyset should usually be 0)
-	 * @param count set number of blinded messages that should be generated
-	 * @param options.keysetId set a custom keysetId to restore from. keysetIds can be loaded with `CashuMint.getKeySets()`
+	 * Regenerates.
+	 *
+	 * @param start Set starting point for count (first cycle for each keyset should usually be 0)
+	 * @param count Set number of blinded messages that should be generated.
+	 * @param options.keysetId Set a custom keysetId to restore from. keysetIds can be loaded with
+	 *   `CashuMint.getKeySets()`
 	 */
 	async restore(
 		start: number,
@@ -912,11 +934,14 @@ class CashuWallet {
 	}
 
 	/**
-	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the requested given amount and unit.
+	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the
+	 * requested given amount and unit.
+	 *
 	 * @param amount Amount requesting for mint.
-	 * @param description optional description for the mint quote
-	 * @param pubkey optional public key to lock the quote to
-	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
+	 * @param description Optional description for the mint quote.
+	 * @param pubkey Optional public key to lock the quote to.
+	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
+	 *   specified amount and unit.
 	 */
 	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
 		const mintQuotePayload: MintQuotePayload = {
@@ -930,11 +955,12 @@ class CashuWallet {
 
 	/**
 	 * Requests a mint quote from the mint that is locked to a public key.
+	 *
 	 * @param amount Amount requesting for mint.
-	 * @param pubkey public key to lock the quote to
-	 * @param description optional description for the mint quote
-	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit.
-	 * The quote will be locked to the specified `pubkey`.
+	 * @param pubkey Public key to lock the quote to.
+	 * @param description Optional description for the mint quote.
+	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
+	 *   specified amount and unit. The quote will be locked to the specified `pubkey`.
 	 */
 	async createLockedMintQuote(
 		amount: number,
@@ -962,8 +988,9 @@ class CashuWallet {
 
 	/**
 	 * Gets an existing mint quote from the mint.
-	 * @param quote Quote ID
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 *
+	 * @param quote Quote ID.
+	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
@@ -979,12 +1006,15 @@ class CashuWallet {
 	}
 
 	/**
-	 * Mint proofs for a given mint quote
-	 * @param amount amount to request
+	 * Mint proofs for a given mint quote.
+	 *
+	 * @param amount Amount to request.
 	 * @param {string} quote - ID of mint quote (when quote is a string)
-	 * @param {LockedMintQuote} quote - containing the quote ID and unlocking private key (when quote is a LockedMintQuote)
-	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof operation
-	 * @returns proofs
+	 * @param {LockedMintQuote} quote - Containing the quote ID and unlocking private key (when quote
+	 *   is a LockedMintQuote)
+	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof
+	 *   operation.
+	 * @returns Proofs.
 	 */
 	async mintProofs(
 		amount: number,
@@ -1059,9 +1089,12 @@ class CashuWallet {
 	}
 
 	/**
-	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order to pay a Lightning invoice.
-	 * @param invoice LN invoice that needs to get a fee estimate
-	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
+	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
+	 * to pay a Lightning invoice.
+	 *
+	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
+	 *   reserve.
 	 */
 	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
@@ -1078,9 +1111,11 @@ class CashuWallet {
 
 	/**
 	 * Requests a multi path melt quote from the mint.
-	 * @param invoice LN invoice that needs to get a fee estimate
-	 * @param partialAmount the partial amount of the invoice's total to be paid by this instance
-	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
+	 *
+	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @param partialAmount The partial amount of the invoice's total to be paid by this instance.
+	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
+	 *   reserve.
 	 */
 	async createMultiPathMeltQuote(
 		invoice: string,
@@ -1110,8 +1145,9 @@ class CashuWallet {
 
 	/**
 	 * Return an existing melt quote from the mint.
-	 * @param quote ID of the melt quote
-	 * @returns the mint will return an existing melt quote
+	 *
+	 * @param quote ID of the melt quote.
+	 * @returns The mint will return an existing melt quote.
 	 */
 	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
 	async checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
@@ -1127,11 +1163,13 @@ class CashuWallet {
 	}
 
 	/**
-	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt quote. This function does not perform coin selection!.
-	 * Returns melt quote and change proofs
-	 * @param meltQuote ID of the melt quote
-	 * @param proofsToSend proofs to melt
-	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof operation
+	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt
+	 * quote. This function does not perform coin selection!. Returns melt quote and change proofs.
+	 *
+	 * @param meltQuote ID of the melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof
+	 *   operation.
 	 * @returns
 	 */
 	async meltProofs(
@@ -1173,15 +1211,18 @@ class CashuWallet {
 	}
 
 	/**
-	 * Creates a split payload
-	 * @param amount amount to send
-	 * @param proofsToSend proofs to split*
-	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param privkey? will create a signature on the @param proofsToSend secrets if set
-	 * @param customOutputData? optionally specify your own OutputData (blinded messages)
-	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
+	 * Creates a split payload.
+	 *
+	 * @param amount Amount to send.
+	 * @param proofsToSend Proofs to split*
+	 * @param outputAmounts? Optionally specify the output's amounts to keep and to send.
+	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
+	 *   must be initialized with seed phrase to take effect.
+	 * @param pubkey? Optionally locks ecash to pubkey. Will not be deterministic, even if counter is
+	 *   set!
+	 * @param privkey? Will create a signature on the @param proofsToSend secrets if set.
+	 * @param customOutputData? Optionally specify your own OutputData (blinded messages)
+	 * @param p2pk? Optionally specify options to lock the proofs according to NUT-11.
 	 * @returns
 	 */
 	private createSwapPayload(
@@ -1299,6 +1340,7 @@ class CashuWallet {
 
 	/**
 	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
+	 *
 	 * @param proofs (only the `secret` field is required)
 	 * @returns
 	 */
@@ -1329,9 +1371,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Register a callback to be called whenever a mint quote's state changes
-	 * @param quoteIds List of mint quote IDs that should be subscribed to
-	 * @param callback Callback function that will be called whenever a mint quote state changes
+	 * Register a callback to be called whenever a mint quote's state changes.
+	 *
+	 * @param quoteIds List of mint quote IDs that should be subscribed to.
+	 * @param callback Callback function that will be called whenever a mint quote state changes.
 	 * @param errorCallback
 	 * @returns
 	 */
@@ -1355,9 +1398,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Register a callback to be called whenever a melt quote's state changes
-	 * @param quoteIds List of melt quote IDs that should be subscribed to
-	 * @param callback Callback function that will be called whenever a melt quote state changes
+	 * Register a callback to be called whenever a melt quote's state changes.
+	 *
+	 * @param quoteIds List of melt quote IDs that should be subscribed to.
+	 * @param callback Callback function that will be called whenever a melt quote state changes.
 	 * @param errorCallback
 	 * @returns
 	 */
@@ -1378,9 +1422,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Register a callback to be called when a single mint quote gets paid
-	 * @param quoteId Mint quote id that should be subscribed to
-	 * @param callback Callback function that will be called when this mint quote gets paid
+	 * Register a callback to be called when a single mint quote gets paid.
+	 *
+	 * @param quoteId Mint quote id that should be subscribed to.
+	 * @param callback Callback function that will be called when this mint quote gets paid.
 	 * @param errorCallback
 	 * @returns
 	 */
@@ -1401,9 +1446,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Register a callback to be called when a single melt quote gets paid
-	 * @param quoteId Melt quote id that should be subscribed to
-	 * @param callback Callback function that will be called when this melt quote gets paid
+	 * Register a callback to be called when a single melt quote gets paid.
+	 *
+	 * @param quoteId Melt quote id that should be subscribed to.
+	 * @param callback Callback function that will be called when this melt quote gets paid.
 	 * @param errorCallback
 	 * @returns
 	 */
@@ -1427,9 +1473,10 @@ class CashuWallet {
 	}
 
 	/**
-	 * Register a callback to be called whenever a subscribed proof state changes
-	 * @param proofs List of proofs that should be subscribed to
-	 * @param callback Callback function that will be called whenever a proof's state changes
+	 * Register a callback to be called whenever a subscribed proof state changes.
+	 *
+	 * @param proofs List of proofs that should be subscribed to.
+	 * @param callback Callback function that will be called whenever a proof's state changes.
 	 * @param errorCallback
 	 * @returns
 	 */
@@ -1462,14 +1509,18 @@ class CashuWallet {
 	}
 
 	/**
-	 * Creates blinded messages for a according to @param amounts
-	 * @param amount array of amounts to create blinded messages for
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
-	 * @param factory? optionally specify a custom function that produces OutputData (blinded messages)
-	 * @returns blinded messages, secrets, rs, and amounts
+	 * Creates blinded messages for a according to @param amounts.
+	 *
+	 * @param amount Array of amounts to create blinded messages for.
+	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
+	 *   must be initialized with seed phrase to take effect.
+	 * @param pubkey? Optionally locks ecash to pubkey. Will not be deterministic, even if counter is
+	 *   set!
+	 * @param outputAmounts? Optionally specify the output's amounts to keep and to send.
+	 * @param p2pk? Optionally specify options to lock the proofs according to NUT-11.
+	 * @param factory? Optionally specify a custom function that produces OutputData (blinded
+	 *   messages)
+	 * @returns Blinded messages, secrets, rs, and amounts.
 	 */
 	private createOutputData(
 		amount: number,
@@ -1512,12 +1563,14 @@ class CashuWallet {
 	}
 
 	/**
-	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve
-	 * See: https://github.com/cashubtc/nuts/blob/main/08.md
-	 * @param amount amount to cover with blank outputs
-	 * @param keysetId mint keysetId
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @returns blinded messages, secrets, and rs
+	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve See:
+	 * https://github.com/cashubtc/nuts/blob/main/08.md.
+	 *
+	 * @param amount Amount to cover with blank outputs.
+	 * @param keysetId Mint keysetId.
+	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
+	 *   must be initialized with seed phrase to take effect.
+	 * @returns Blinded messages, secrets, and rs.
 	 */
 	private createBlankOutputs(
 		amount: number,

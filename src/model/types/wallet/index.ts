@@ -6,7 +6,7 @@ export type * from './tokens';
 export * from './paymentRequests';
 
 /**
- * represents a single Cashu proof.
+ * Represents a single Cashu proof.
  */
 export type Proof = {
 	/**
@@ -26,7 +26,7 @@ export type Proof = {
 	 */
 	C: string;
 	/**
-	 * DLEQ proof
+	 * DLEQ proof.
 	 */
 	dleq?: SerializedDLEQ;
 	/**
@@ -36,35 +36,35 @@ export type Proof = {
 };
 
 /**
- * P2PK witness
+ * P2PK witness.
  */
 export type P2PKWitness = {
 	/**
-	 * An array of signatures in hex format
+	 * An array of signatures in hex format.
 	 */
 	signatures?: Array<string>;
 };
 
 /**
- * HTLC witness
+ * HTLC witness.
  */
 export type HTLCWitness = {
 	/**
-	 * preimage
+	 * Preimage.
 	 */
 	preimage: string;
 	/**
-	 * An array of signatures in hex format
+	 * An array of signatures in hex format.
 	 */
 	signatures?: Array<string>;
 };
 
 /**
- * response when after receiving a single TokenEntry
+ * Response when after receiving a single TokenEntry.
  */
 export type ReceiveTokenEntryResponse = {
 	/**
-	 * Received proofs
+	 * Received proofs.
 	 */
 	proofs: Array<Proof>;
 };
@@ -84,8 +84,7 @@ export type PaymentPayload = {
 };
 
 /**
- * @deprecated Token V2
- * should no longer be used
+ * @deprecated Token V2 should no longer be used.
  */
 export type TokenV2 = {
 	proofs: Array<Proof>;

@@ -2,33 +2,33 @@ import { OutputData } from '../../OutputData';
 import { Proof } from './index';
 
 /**
- * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees
+ * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees.
  */
 export type MeltPayload = {
 	/**
-	 * ID of the melt quote
+	 * ID of the melt quote.
 	 */
 	quote: string;
 	/**
-	 * Inputs (Proofs) to be melted
+	 * Inputs (Proofs) to be melted.
 	 */
 	inputs: Array<Proof>;
 	/**
-	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees
+	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees.
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
 
 /**
- * Payload that needs to be send to the mint to request a melt quote
+ * Payload that needs to be send to the mint to request a melt quote.
  */
 export type MeltQuotePayload = {
 	/**
-	 * Unit to be melted
+	 * Unit to be melted.
 	 */
 	unit: string;
 	/**
-	 * Request to be melted to
+	 * Request to be melted to.
 	 */
 	request: string;
 	/**
@@ -38,21 +38,21 @@ export type MeltQuotePayload = {
 };
 
 /**
- * Melt quote specific options
+ * Melt quote specific options.
  */
 export type MeltQuoteOptions = {
 	mpp: MPPOption;
 };
 
 /**
- * Multi path payments option
+ * Multi path payments option.
  */
 export type MPPOption = {
 	amount: number;
 };
 
 /**
- * Payload that needs to be sent to the mint when requesting a mint
+ * Payload that needs to be sent to the mint when requesting a mint.
  */
 export type MintPayload = {
 	/**
@@ -64,67 +64,67 @@ export type MintPayload = {
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 	/**
-	 * Public key the quote is locked to
+	 * Public key the quote is locked to.
 	 */
 	signature?: string;
 };
 
 /**
- * Payload that needs to be sent to the mint when requesting a mint
+ * Payload that needs to be sent to the mint when requesting a mint.
  */
 export type MintQuotePayload = {
 	/**
-	 * Unit to be minted
+	 * Unit to be minted.
 	 */
 	unit: string;
 	/**
-	 * Amount to be minted
+	 * Amount to be minted.
 	 */
 	amount: number;
 	/**
-	 * Description for the invoice
+	 * Description for the invoice.
 	 */
 	description?: string;
 	/**
-	 * Public key to lock the quote to
+	 * Public key to lock the quote to.
 	 */
 	pubkey?: string;
 };
 
 /**
- * Payload that needs to be sent to the mint when performing a split action
+ * Payload that needs to be sent to the mint when performing a split action.
  */
 export type SwapPayload = {
 	/**
-	 * Inputs to the split operation
+	 * Inputs to the split operation.
 	 */
 	inputs: Array<Proof>;
 	/**
-	 * Outputs (blinded messages) to be signed by the mint
+	 * Outputs (blinded messages) to be signed by the mint.
 	 */
 	outputs: Array<SerializedBlindedMessage>;
 };
 
 /**
- * blinded message for sending to the mint
+ * Blinded message for sending to the mint.
  */
 export type SerializedBlindedMessage = {
 	/**
-	 * amount
+	 * Amount.
 	 */
 	amount: number;
 	/**
-	 * Blinded message
+	 * Blinded message.
 	 */
 	B_: string;
 	/**
-	 * Keyset id
+	 * Keyset id.
 	 */
 	id: string;
 };
 
 /**
- * Payload that needs to be sent to the mint when requesting blind auth tokens
+ * Payload that needs to be sent to the mint when requesting blind auth tokens.
  */
 export type BlindAuthMintPayload = {
 	/**
@@ -134,23 +134,23 @@ export type BlindAuthMintPayload = {
 };
 
 /**
- * includes all data required to swap inputs for outputs and construct proofs from them.
+ * Includes all data required to swap inputs for outputs and construct proofs from them.
  */
 export type SwapTransaction = {
 	/**
-	 * payload that will be sent to the mint for a swap
+	 * Payload that will be sent to the mint for a swap.
 	 */
 	payload: SwapPayload;
 	/**
-	 * blinding data required to construct proofs
+	 * Blinding data required to construct proofs.
 	 */
 	outputData: Array<OutputData>;
 	/**
-	 * list of booleans to determine which proofs to keep
+	 * List of booleans to determine which proofs to keep.
 	 */
 	keepVector: Array<boolean>;
 	/**
-	 * indices that can be used to restore original output data
+	 * Indices that can be used to restore original output data.
 	 */
 	sortedIndices: Array<number>;
 };

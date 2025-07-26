@@ -15,15 +15,18 @@ let requestLogger = NULL_LOGGER;
 
 /**
  * An object containing any custom settings that you want to apply to the global fetch method.
- * @param options See possible options here: https://developer.mozilla.org/en-US/docs/Web/API/fetch#options
+ *
+ * @param options See possible options here:
+ *   https://developer.mozilla.org/en-US/docs/Web/API/fetch#options.
  */
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void {
 	globalRequestOptions = options;
 }
 
 /**
- * Allows a logger to be set
- * @param {Logger} logger The logger instance to use
+ * Allows a logger to be set.
+ *
+ * @param {Logger} logger The logger instance to use.
  */
 export function setRequestLogger(logger: Logger): void {
 	requestLogger = logger;

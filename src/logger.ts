@@ -1,6 +1,6 @@
 /**
- * Defines the available log levels for the logger.
- * Log levels are ordered from most severe (FATAL) to least severe (TRACE).
+ * Defines the available log levels for the logger. Log levels are ordered from most severe (FATAL)
+ * to least severe (TRACE).
  */
 export const LogLevel = {
 	FATAL: 'FATAL',
@@ -12,8 +12,8 @@ export const LogLevel = {
 } as const;
 
 /**
- * Defines the available log levels for the logger.
- * Log levels are ordered from most severe (FATAL) to least severe (TRACE).
+ * Defines the available log levels for the logger. Log levels are ordered from most severe (FATAL)
+ * to least severe (TRACE).
  */
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
@@ -43,15 +43,13 @@ export const NULL_LOGGER: Logger = {
 /**
  * Outputs messages to the console based on the specified log level.
  *
- * Supports placeholder substitution in messages (e.g., `{key}`) using values
- * from the optional `context` object. Context keys not used in substitution are
- * appended to the output as additional data. Each log message is prefixed with
- * the log level in square brackets (e.g., `[INFO]`).
+ * Supports placeholder substitution in messages (e.g., `{key}`) using values from the optional
+ * `context` object. Context keys not used in substitution are appended to the output as additional
+ * data. Each log message is prefixed with the log level in square brackets (e.g., `[INFO]`).
  *
- * @example
- * const logger = new ConsoleLogger(LogLevel.DEBUG);
- * logger.info('User {username} logged in', { username: 'alice', ip: '127.0.0.1' });
- * // Output: [INFO] User alice logged in { ip: "127.0.0.1" }
+ * @example Const logger = new ConsoleLogger(LogLevel.DEBUG); logger.info('User {username} logged
+ * in', { username: 'alice', ip: '127.0.0.1' }); // Output: [INFO] User alice logged in { ip:
+ * "127.0.0.1" }
  */
 export class ConsoleLogger implements Logger {
 	private minLevel: LogLevel;
@@ -149,11 +147,10 @@ export class ConsoleLogger implements Logger {
 
 /**
  * Creates a timer to measure elapsed time in milliseconds.
- * @returns an object with an `elapsed` method to retrieve the duration since the timer started.
- * @example
- * const timer = measureTime();
- * // ... some code ...
- * const duration = timer.elapsed();
+ *
+ * @example Const timer = measureTime(); // ... some code ... const duration = timer.elapsed();
+ *
+ * @returns An object with an `elapsed` method to retrieve the duration since the timer started.
  */
 export function measureTime() {
 	const start = Date.now();

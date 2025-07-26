@@ -4,7 +4,8 @@ import { encodeJsonToBase64 } from '../base64';
 import { Proof } from '../model/types';
 
 /**
- * Helper function to encode a cashu auth token authA
+ * Helper function to encode a cashu auth token authA.
+ *
  * @param proof
  */
 export function getEncodedAuthToken(proof: Proof): string {

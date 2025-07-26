@@ -34,7 +34,8 @@ import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
 import { MintInfo } from './model/MintInfo.js';
 import { type Logger, NULL_LOGGER } from './logger';
 /**
- * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
+ * Class represents Cashu Mint API. This class contains Lower level functions that are implemented
+ * by CashuWallet.
  */
 class CashuMint {
 	private ws?: WSConnection;
@@ -43,9 +44,11 @@ class CashuMint {
 	private _checkNut22 = false;
 	private _logger: Logger;
 	/**
-	 * @param _mintUrl requires mint URL to create this object
-	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
-	 * @param [authTokenGetter] a function that is called by the CashuMint instance to obtain a NUT-22 BlindedAuthToken (e.g. from a database or localstorage)
+	 * @param _mintUrl Requires mint URL to create this object.
+	 * @param _customRequest If passed, use custom request implementation for network communication
+	 *   with the mint.
+	 * @param [authTokenGetter] A function that is called by the CashuMint instance to obtain a NUT-22
+	 *   BlindedAuthToken (e.g. from a database or localstorage)
 	 */
 	constructor(
 		private _mintUrl: string,
@@ -72,7 +75,8 @@ class CashuMint {
 	}
 
 	/**
-	 * fetches mints info at the /info endpoint
+	 * Fetches mints info at the /info endpoint.
+	 *
 	 * @param mintUrl
 	 * @param customRequest
 	 */
@@ -90,7 +94,7 @@ class CashuMint {
 		return data;
 	}
 	/**
-	 * fetches mints info at the /info endpoint
+	 * Fetches mints info at the /info endpoint.
 	 */
 	async getInfo(): Promise<GetInfoResponse> {
 		return CashuMint.getInfo(this._mintUrl, this._customRequest, this._logger);
@@ -107,10 +111,11 @@ class CashuMint {
 
 	/**
 	 * Performs a swap operation with ecash inputs and outputs.
+	 *
 	 * @param mintUrl
-	 * @param swapPayload payload containing inputs and outputs
+	 * @param swapPayload Payload containing inputs and outputs.
 	 * @param customRequest
-	 * @returns signed outputs
+	 * @returns Signed outputs.
 	 */
 	public static async swap(
 		mintUrl: string,
@@ -135,8 +140,9 @@ class CashuMint {
 	}
 	/**
 	 * Performs a swap operation with ecash inputs and outputs.
-	 * @param swapPayload payload containing inputs and outputs
-	 * @returns signed outputs
+	 *
+	 * @param swapPayload Payload containing inputs and outputs.
+	 * @returns Signed outputs.
 	 */
 	async swap(swapPayload: SwapPayload): Promise<SwapResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/swap');
@@ -145,10 +151,12 @@ class CashuMint {
 
 	/**
 	 * Requests a new mint quote from the mint.
+	 *
 	 * @param mintUrl
-	 * @param mintQuotePayload Payload for creating a new mint quote
+	 * @param mintQuotePayload Payload for creating a new mint quote.
 	 * @param customRequest
-	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
+	 * @returns The mint will create and return a new mint quote containing a payment request for the
+	 *   specified amount and unit.
 	 */
 	public static async createMintQuote(
 		mintUrl: string,
@@ -173,8 +181,10 @@ class CashuMint {
 	}
 	/**
 	 * Requests a new mint quote from the mint.
-	 * @param mintQuotePayload Payload for creating a new mint quote
-	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
+	 *
+	 * @param mintQuotePayload Payload for creating a new mint quote.
+	 * @returns The mint will create and return a new mint quote containing a payment request for the
+	 *   specified amount and unit.
 	 */
 	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt11');
@@ -188,10 +198,11 @@ class CashuMint {
 
 	/**
 	 * Gets an existing mint quote from the mint.
+	 *
 	 * @param mintUrl
-	 * @param quote Quote ID
+	 * @param quote Quote ID.
 	 * @param customRequest
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	public static async checkMintQuote(
 		mintUrl: string,
@@ -216,8 +227,9 @@ class CashuMint {
 	}
 	/**
 	 * Gets an existing mint quote from the mint.
-	 * @param quote Quote ID
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 *
+	 * @param quote Quote ID.
+	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt11/${quote}`);
@@ -226,10 +238,11 @@ class CashuMint {
 
 	/**
 	 * Mints new tokens by requesting blind signatures on the provided outputs.
+	 *
 	 * @param mintUrl
-	 * @param mintPayload Payload containing the outputs to get blind signatures on
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
 	 * @param customRequest
-	 * @returns serialized blinded signatures
+	 * @returns Serialized blinded signatures.
 	 */
 	public static async mint(
 		mintUrl: string,
@@ -254,8 +267,9 @@ class CashuMint {
 	}
 	/**
 	 * Mints new tokens by requesting blind signatures on the provided outputs.
-	 * @param mintPayload Payload containing the outputs to get blind signatures on
-	 * @returns serialized blinded signatures
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @returns Serialized blinded signatures.
 	 */
 	async mint(mintPayload: MintPayload) {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt11');
@@ -264,6 +278,7 @@ class CashuMint {
 
 	/**
 	 * Requests a new melt quote from the mint.
+	 *
 	 * @param mintUrl
 	 * @param MeltQuotePayload
 	 * @returns
@@ -301,6 +316,7 @@ class CashuMint {
 	}
 	/**
 	 * Requests a new melt quote from the mint.
+	 *
 	 * @param MeltQuotePayload
 	 * @returns
 	 */
@@ -316,8 +332,9 @@ class CashuMint {
 
 	/**
 	 * Gets an existing melt quote.
+	 *
 	 * @param mintUrl
-	 * @param quote Quote ID
+	 * @param quote Quote ID.
 	 * @returns
 	 */
 	public static async checkMeltQuote(
@@ -353,7 +370,8 @@ class CashuMint {
 	}
 	/**
 	 * Gets an existing melt quote.
-	 * @param quote Quote ID
+	 *
+	 * @param quote Quote ID.
 	 * @returns
 	 */
 	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse> {
@@ -362,7 +380,10 @@ class CashuMint {
 	}
 
 	/**
-	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent. The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can also contain blank outputs in order to receive back overpaid Lightning fees.
+	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
+	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
+	 * also contain blank outputs in order to receive back overpaid Lightning fees.
+	 *
 	 * @param mintUrl
 	 * @param meltPayload
 	 * @param customRequest
@@ -398,7 +419,9 @@ class CashuMint {
 		return data;
 	}
 	/**
-	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
+	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens
+	 * matching its amount + fees.
+	 *
 	 * @param meltPayload
 	 * @returns
 	 */
@@ -407,11 +430,12 @@ class CashuMint {
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
 	/**
-	 * Checks if specific proofs have already been redeemed
+	 * Checks if specific proofs have already been redeemed.
+	 *
 	 * @param mintUrl
 	 * @param checkPayload
 	 * @param customRequest
-	 * @returns redeemed and unredeemed ordered list of booleans
+	 * @returns Redeemed and unredeemed ordered list of booleans.
 	 */
 	public static async check(
 		mintUrl: string,
@@ -433,9 +457,11 @@ class CashuMint {
 	}
 
 	/**
-	 * Get the mints public keys
+	 * Get the mints public keys.
+	 *
 	 * @param mintUrl
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
+	 * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
+	 *   keys from all active keysets are fetched.
 	 * @param customRequest
 	 * @returns
 	 */
@@ -461,9 +487,11 @@ class CashuMint {
 		return data;
 	}
 	/**
-	 * Get the mints public keys
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
-	 * @returns the mints public keys
+	 * Get the mints public keys.
+	 *
+	 * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
+	 *   keys from all active keysets are fetched.
+	 * @returns The mints public keys.
 	 */
 	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys> {
 		const allKeys = await CashuMint.getKeys(
@@ -474,10 +502,11 @@ class CashuMint {
 		return allKeys;
 	}
 	/**
-	 * Get the mints keysets in no specific order
+	 * Get the mints keysets in no specific order.
+	 *
 	 * @param mintUrl
 	 * @param customRequest
-	 * @returns all the mints past and current keysets.
+	 * @returns All the mints past and current keysets.
 	 */
 	public static async getKeySets(
 		mintUrl: string,
@@ -488,17 +517,19 @@ class CashuMint {
 	}
 
 	/**
-	 * Get the mints keysets in no specific order
-	 * @returns all the mints past and current keysets.
+	 * Get the mints keysets in no specific order.
+	 *
+	 * @returns All the mints past and current keysets.
 	 */
 	async getKeySets(): Promise<MintAllKeysets> {
 		return CashuMint.getKeySets(this._mintUrl, this._customRequest);
 	}
 
 	/**
-	 * Checks if specific proofs have already been redeemed
+	 * Checks if specific proofs have already been redeemed.
+	 *
 	 * @param checkPayload
-	 * @returns redeemed and unredeemed ordered list of booleans
+	 * @returns Redeemed and unredeemed ordered list of booleans.
 	 */
 	async check(checkPayload: CheckStatePayload): Promise<CheckStateResponse> {
 		return CashuMint.check(this._mintUrl, checkPayload, this._customRequest);
@@ -530,7 +561,7 @@ class CashuMint {
 	}
 
 	/**
-	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17
+	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17.
 	 */
 	async connectWebSocket() {
 		if (this.ws) {
@@ -558,7 +589,7 @@ class CashuMint {
 	}
 
 	/**
-	 * Closes a websocket connection
+	 * Closes a websocket connection.
 	 */
 	disconnectWebSocket() {
 		if (this.ws) {

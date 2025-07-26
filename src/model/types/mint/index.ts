@@ -4,7 +4,7 @@ export * from './responses';
 export type * from './keys';
 
 /**
- * Payload that needs to be sent to the mint when checking for spendable proofs
+ * Payload that needs to be sent to the mint when checking for spendable proofs.
  */
 export type CheckStatePayload = {
 	/**
@@ -14,7 +14,7 @@ export type CheckStatePayload = {
 };
 
 /**
- * Request to mint at /v1/restore endpoint
+ * Request to mint at /v1/restore endpoint.
  */
 export type PostRestorePayload = {
 	outputs: Array<SerializedBlindedMessage>;

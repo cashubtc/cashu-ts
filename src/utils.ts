@@ -25,13 +25,14 @@ import {
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 
 /**
- * Splits the amount into denominations of the provided @param keyset
- * @param value amount to split
- * @param keyset keys to look up split amounts
- * @param split? optional custom split amounts
- * @param order? optional order for split amounts (default: "asc")
- * @returns Array of split amounts
- * @throws Error if @param split amount is greater than @param value amount
+ * Splits the amount into denominations of the provided @param keyset.
+ *
+ * @param value Amount to split.
+ * @param keyset Keys to look up split amounts.
+ * @param split? Optional custom split amounts.
+ * @param order? Optional order for split amounts (default: "asc")
+ * @returns Array of split amounts.
+ * @throws Error if @param split amount is greater than @param value amount.
  */
 export function splitAmount(
 	value: number,
@@ -62,11 +63,12 @@ export function splitAmount(
 
 /**
  * Creates a list of amounts to keep based on the proofs we have and the proofs we want to reach.
- * @param proofsWeHave complete set of proofs stored (from current mint)
- * @param amountToKeep amount to keep
- * @param keys keys of current keyset
- * @param targetCount the target number of proofs to reach
- * @returns an array of amounts to keep
+ *
+ * @param proofsWeHave Complete set of proofs stored (from current mint)
+ * @param amountToKeep Amount to keep.
+ * @param keys Keys of current keyset.
+ * @param targetCount The target number of proofs to reach.
+ * @returns An array of amounts to keep.
  */
 export function getKeepAmounts(
 	proofsWeHave: Array<Proof>,
@@ -101,10 +103,11 @@ export function getKeepAmounts(
 	return sortedAmountsWeWant;
 }
 /**
- * returns the amounts in the keyset sorted by the order specified
- * @param keyset to search in
- * @param order order to sort the amounts in
- * @returns the amounts in the keyset sorted by the order specified
+ * Returns the amounts in the keyset sorted by the order specified.
+ *
+ * @param keyset To search in.
+ * @param order Order to sort the amounts in.
+ * @returns The amounts in the keyset sorted by the order specified.
  */
 export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): Array<number> {
 	if (order == 'desc') {
@@ -119,9 +122,10 @@ export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): 
 
 /**
  * Checks if the provided amount is in the keyset.
- * @param amount amount to check
- * @param keyset to search in
- * @returns true if the amount is in the keyset, false otherwise
+ *
+ * @param amount Amount to check.
+ * @param keyset To search in.
+ * @returns True if the amount is in the keyset, false otherwise.
  */
 export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 	return amount in keyset;
@@ -129,8 +133,9 @@ export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 
 /**
  * Converts a bytes array to a number.
- * @param bytes to convert to number
- * @returns  number
+ *
+ * @param bytes To convert to number.
+ * @returns Number.
  */
 export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
@@ -138,8 +143,9 @@ export function bytesToNumber(bytes: Uint8Array): bigint {
 
 /**
  * Converts a hex string to a number.
- * @param hex to convert to number
- * @returns number
+ *
+ * @param hex To convert to number.
+ * @returns Number.
  */
 export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
@@ -147,8 +153,9 @@ export function hexToNumber(hex: string): bigint {
 
 /**
  * Converts a number to a hex string of 64 characters.
- * @param number (bigint) to conver to hex
- * @returns hex string start-padded to 64 characters
+ *
+ * @param number (bigint) to conver to hex.
+ * @returns Hex string start-padded to 64 characters.
  */
 export function numberToHexPadded64(number: bigint): string {
 	return number.toString(16).padStart(64, '0');
@@ -159,9 +166,10 @@ function isValidHex(str: string) {
 }
 
 /**
- * Checks wether a proof or a list of proofs contains a non-hex id
- * @param p Proof or list of proofs
- * @returns boolean
+ * Checks wether a proof or a list of proofs contains a non-hex id.
+ *
+ * @param p Proof or list of proofs.
+ * @returns Boolean.
  */
 export function hasNonHexId(p: Proof | Array<Proof>) {
 	if (Array.isArray(p)) {
@@ -176,9 +184,10 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
 }
 
 /**
- * Helper function to encode a v3 cashu token
- * @param token to encode
- * @returns encoded token
+ * Helper function to encode a v3 cashu token.
+ *
+ * @param token To encode.
+ * @returns Encoded token.
  */
 export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	if (removeDleq) {
@@ -196,6 +205,7 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 
 /**
  * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
+ *
  * @param token
  * @param [opts]
  */
@@ -310,9 +320,10 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 }
 
 /**
- * Helper function to decode cashu tokens into object
- * @param token an encoded cashu token (cashuAey...)
- * @returns cashu token object
+ * Helper function to decode cashu tokens into object.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Cashu token object.
  */
 export function getDecodedToken(token: string) {
 	// remove prefixes
@@ -327,9 +338,10 @@ export function getDecodedToken(token: string) {
 }
 
 /**
- * Helper function to decode different versions of cashu tokens into an object
- * @param token an encoded cashu token (cashuAey...)
- * @returns cashu Token object
+ * Helper function to decode different versions of cashu tokens into an object.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Cashu Token object.
  */
 export function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
@@ -358,8 +370,9 @@ export function handleTokens(token: string): Token {
 	throw new Error('Token version is not supported');
 }
 /**
- * Returns the keyset id of a set of keys
- * @param keys keys object to derive keyset id from
+ * Returns the keyset id of a set of keys.
+ *
+ * @param keys Keys object to derive keyset id from.
  * @returns
  */
 export function deriveKeysetId(keys: Keys) {
@@ -490,8 +503,9 @@ export class MessageQueue {
 	}
 }
 /**
- * Removes all traces of DLEQs from a list of proofs
- * @param proofs The list of proofs that dleq should be stripped from
+ * Removes all traces of DLEQs from a list of proofs.
+ *
+ * @param proofs The list of proofs that dleq should be stripped from.
  */
 export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
 	return proofs.map((p) => {
@@ -502,12 +516,12 @@ export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Checks that the proof has a valid DLEQ proof according to
- * keyset `keys`
- * @param proof The proof subject to verification
- * @param keyset The Mint's keyset to be used for verification
- * @returns true if verification succeeded, false otherwise
- * @throws Error if @param proof does not match any key in @param keyset
+ * Checks that the proof has a valid DLEQ proof according to keyset `keys`
+ *
+ * @param proof The proof subject to verification.
+ * @param keyset The Mint's keyset to be used for verification.
+ * @returns True if verification succeeded, false otherwise.
+ * @throws Error if @param proof does not match any key in @param keyset.
  */
 export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	if (proof.dleq == undefined) {
@@ -537,7 +551,8 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 }
 
 /**
- * Helper function to encode a cashu auth token authA
+ * Helper function to encode a cashu auth token authA.
+ *
  * @param proof
  */
 export function getEncodedAuthToken(proof: Proof): string {

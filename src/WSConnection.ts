@@ -101,7 +101,9 @@ export class WSConnection {
 		this.ws?.send(message);
 	}
 
-	/** @deprecated Use cancelSubscription for JSONRPC compliance. */
+	/**
+	 * @deprecated Use cancelSubscription for JSONRPC compliance.
+	 */
 	closeSubscription(subId: string) {
 		this.ws?.send(JSON.stringify(['CLOSE', subId]));
 	}
@@ -207,6 +209,7 @@ export class WSConnection {
 
 	/**
 	 * Cancels a subscription, sending an unsubscribe request and handling responses.
+	 *
 	 * @param subId The subscription ID to cancel.
 	 * @param callback The original payload callback to remove.
 	 * @param errorCallback Optional callback for unsubscribe errors (defaults to logging).

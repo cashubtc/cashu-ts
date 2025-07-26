@@ -1,4 +1,6 @@
-/** This error is thrown when a HTTP response is not 2XX nor a protocol error. */
+/**
+ * This error is thrown when a HTTP response is not 2XX nor a protocol error.
+ */
 export class HttpResponseError extends Error {
 	status: number;
 	constructor(message: string, status: number) {
@@ -9,7 +11,9 @@ export class HttpResponseError extends Error {
 	}
 }
 
-/** This error is thrown when a network request fails. */
+/**
+ * This error is thrown when a network request fails.
+ */
 export class NetworkError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -19,8 +23,9 @@ export class NetworkError extends Error {
 }
 
 /**
- * This error is thrown when a [protocol error](https://github.com/cashubtc/nuts/blob/main/00.md#errors) occurs.
- * See error codes [here](https://github.com/cashubtc/nuts/blob/main/error_codes.md).
+ * This error is thrown when a [protocol
+ * error](https://github.com/cashubtc/nuts/blob/main/00.md#errors) occurs. See error codes
+ * [here](https://github.com/cashubtc/nuts/blob/main/error_codes.md).
  */
 export class MintOperationError extends HttpResponseError {
 	code: number;

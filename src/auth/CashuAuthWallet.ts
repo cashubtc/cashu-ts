@@ -15,9 +15,9 @@ class CashuAuthWallet {
 	mint: CashuAuthMint;
 
 	/**
-	 * @param mint NUT-22 auth mint instance
-	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
-	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
+	 * @param mint NUT-22 auth mint instance.
+	 * @param options.keys Public keys from the mint (will be fetched from mint if not provided)
+	 * @param options.keysets Keysets from the mint (will be fetched from mint if not provided)
 	 */
 	constructor(
 		mint: CashuAuthMint,
@@ -54,7 +54,8 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Load mint information, keysets and keys. This function can be called if no keysets are passed in the constructor
+	 * Load mint information, keysets and keys. This function can be called if no keysets are passed
+	 * in the constructor.
 	 */
 	async loadMint() {
 		await this.getKeySets();
@@ -62,12 +63,12 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Choose a keyset to activate based on the lowest input fee
+	 * Choose a keyset to activate based on the lowest input fee.
 	 *
-	 * Note: this function will filter out deprecated base64 keysets
+	 * Note: this function will filter out deprecated base64 keysets.
 	 *
-	 * @param keysets keysets to choose from
-	 * @returns active keyset
+	 * @param keysets Keysets to choose from.
+	 * @returns Active keyset.
 	 */
 	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active);
@@ -85,8 +86,9 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Get keysets from the mint with the unit of the wallet
-	 * @returns keysets with wallet's unit
+	 * Get keysets from the mint with the unit of the wallet.
+	 *
+	 * @returns Keysets with wallet's unit.
 	 */
 	async getKeySets(): Promise<Array<MintKeyset>> {
 		const allKeysets = await this.mint.getKeySets();
@@ -96,8 +98,10 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet keyset.
-	 * @returns keyset
+	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet
+	 * keyset.
+	 *
+	 * @returns Keyset.
 	 */
 	async getAllKeys(): Promise<Array<MintKeys>> {
 		const keysets = await this.mint.getKeys();
@@ -109,12 +113,12 @@ class CashuAuthWallet {
 	/**
 	 * Get public keys from the mint. If keys were already fetched, it will return those.
 	 *
-	 * If `keysetId` is set, it will fetch and return that specific keyset.
-	 * Otherwise, we select an active keyset with the unit of the wallet.
+	 * If `keysetId` is set, it will fetch and return that specific keyset. Otherwise, we select an
+	 * active keyset with the unit of the wallet.
 	 *
-	 * @param keysetId optional keysetId to get keys for
-	 * @param forceRefresh? if set to true, it will force refresh the keyset from the mint
-	 * @returns keyset
+	 * @param keysetId Optional keysetId to get keys for.
+	 * @param forceRefresh? If set to true, it will force refresh the keyset from the mint.
+	 * @returns Keyset.
 	 */
 	async getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys> {
 		if (!(this._keysets.length > 0) || forceRefresh) {
@@ -145,11 +149,12 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Mint proofs for a given mint quote
-	 * @param amount amount to request
-	 * @param clearAuthToken clearAuthToken to mint
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @returns proofs
+	 * Mint proofs for a given mint quote.
+	 *
+	 * @param amount Amount to request.
+	 * @param clearAuthToken ClearAuthToken to mint.
+	 * @param options.keysetId? Optionally set keysetId for blank outputs for returned change.
+	 * @returns Proofs.
 	 */
 	async mintProofs(
 		amount: number,
