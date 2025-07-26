@@ -1,7 +1,6 @@
 import eslint from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
-import prettier from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
 
 export default tseslint.config(
@@ -24,14 +23,12 @@ export default tseslint.config(
 	eslint.configs.recommended,
 	...tseslint.configs.recommended,
 	...tseslint.configs.recommendedTypeChecked,
-	prettierConfig,
+	prettierConfig, // removes rules that conflict with prettier
 	// Config below adds strict rules, and highlights deprecations.
 	// We should try moving towards enabling this over time.
 	// ...tseslint.configs.strictTypeChecked,
 	{
-		plugins: {
-			prettier
-		},
+		plugins: {},
 		languageOptions: {
 			globals: {
 				...globals.browser,
@@ -44,7 +41,6 @@ export default tseslint.config(
 		},
 		rules: {
 			// Extra rules and overrides to recommended
-			'prettier/prettier': ['error', {}, { usePrettierrc: true }],
 			'@typescript-eslint/array-type': ['error', { default: 'generic' }],
 			'@typescript-eslint/await-thenable': 'warn',
 			'@typescript-eslint/consistent-type-exports': 'warn',
