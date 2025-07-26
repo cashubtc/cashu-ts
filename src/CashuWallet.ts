@@ -606,7 +606,7 @@ class CashuWallet {
 		const issuedFilter = mintInfo.isSupported(25).supported
 			? await this.getIssuedFilter(keysetId)
 			: undefined;
-		console.debug(`issuedFilter.numItems: ${issuedFilter?.numItems}`);
+		this._logger.debug(`issuedFilter.numItems: ${issuedFilter?.numItems}`);
 
 		while (emptyBatchesFound < requiredEmptyBatches) {
 			const restoreRes = await this.restore(counter, batchSize, { keysetId, issuedFilter });
