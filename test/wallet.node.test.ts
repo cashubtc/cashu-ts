@@ -12,7 +12,7 @@ import {
 	MintQuoteState,
 	Proof,
 } from '../src/model/types/index';
-import { bytesToNumber, getDecodedToken, sumProofs } from '../src/utils';
+import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
 import { MintInfo } from '../src/model/MintInfo';
@@ -34,6 +34,8 @@ const dummyKeysResp = {
 		},
 	],
 };
+const dummyKeysId = deriveKeysetId(dummyKeysResp.keysets[0].keys, dummyKeysResp.keysets[0].unit, 0);
+console.log(`dummyKeysId = ${dummyKeysId}`);
 const dummyKeysetResp = {
 	keysets: [
 		{
@@ -174,7 +176,7 @@ describe('test fees', () => {
 
 describe('receive', () => {
 	const tokenInput =
-		'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwYmQwMzM1NTlkZTI3ZDAiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICIwMWY5MTA2ZDE1YzAxYjk0MGM5OGVhN2U5NjhhMDZlM2FmNjk2MThlZGI4YmU4ZTUxYjUxMmQwOGU5MDc5MjE2IiwgIkMiOiAiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19=';
+		'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwYmQwMzM1NTlkZTI3ZDAiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICIwMWY5MTA2ZDE1YzAxYjk0MGM5OGVhN2U5NjhhMDZlM2FmNjk2MThlZGI4YmU4ZTUxYjUxMmQwOGU5MDc5MjE2IiwgIkMiOiAiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19';
 	test('test receive encoded token', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
@@ -261,7 +263,7 @@ describe('receive', () => {
 		expect(proofs).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 1, id: '00bd033559de27d0' },
-			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' }
 		]);
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -693,7 +695,7 @@ describe('send', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -783,19 +785,19 @@ describe('deterministic', () => {
 	test.each([
 		[
 			0,
-			'8e0ad268631046765b570f85fe0951710c6e0e13c81b3df50ddfee21d235d132',
-			'f63e13f15cfebe03e798acf3f738802c6da03bceb16e762b8169f8107316c0de',
+			'04e8c9b33f7d967cb8a37bbec73fca590cd064a1c73fffa978855bddd21a0e92',
+			'08af9517fb7ca4d2f8996b99e3788e87e3cb372f0a21200d4d5bd4b2650fbe13'
 		],
 		[
 			1,
-			'0b59dbc968effd7f5ab4649c0d91ab160cbd58e3aa3490d060701f44dd62e52c',
-			'c3db201daaaa59771c7e176ff761f44f37adde86a1e56cbc50627d24d1143f5a',
+			'89f48cd9ebd59693e725a6124664d4449b9bf5047e60fa1935646297dfa95fde',
+			'27016a2b51db5ab220017361a948214ee5f9ff881b63e5ab1629237d72c19406'
 		],
 		[
 			2,
-			'c756ae91cf316eaa4b845edcca35f04ee9d1732c10e7205b0ef30123bcbbc1b8',
-			'6d1e1424bc2c84df6a5ee6295683e152e002891c3c142513eee41d8f3307e8f0',
-		],
+			'ea2413595e3f26f816a7bb24da4ef9b12a0eecb4de1259329625dd5a1b23201f',
+			'2b5e8cd83ac5541f77f0c4624480413c50c63bded0f825c5d8e26e20fe3bc607'
+		]
 	])('deterministic OutputData: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
 		const hexSeed =
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
@@ -807,7 +809,7 @@ describe('deterministic', () => {
 			0,
 			hexToBytes(hexSeed),
 			counter,
-			'00bd033559de27d0',
+			'00bd033559de27d0'
 		);
 		expect(decoder.decode(data.secret)).toBe(secret);
 		expect(data.blindingFactor).toBe(numberR);
@@ -1306,7 +1308,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }]
 				});
 			}),
 		);
@@ -1326,7 +1328,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -1346,7 +1348,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -1355,7 +1357,7 @@ describe('Test coinselection', () => {
 		const smallNotes = [
 			{ id: '00bd033559de27d0', amount: 1, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 1, secret: 'secret2', C: 'C2' },
-			{ id: '00bd033559de27d0', amount: 2, secret: 'secret3', C: 'C3' },
+			{ id: '00bd033559de27d0', amount: 2, secret: 'secret3', C: 'C3' }
 		]; // Total = 4
 		const targetAmount = 5;
 		// Fee for 3 proofs = ceil(3 * 600 / 1000) = 2, need 5 + 2 = 7, but 4 < 7, so expect throw
@@ -1379,7 +1381,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }]
 				});
 			}),
 		);
@@ -1388,7 +1390,7 @@ describe('Test coinselection', () => {
 		const largeNote = [
 			{ id: '00bd033559de27d0', amount: 64, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 16, secret: 'secret2', C: 'C2' },
-			{ id: '00bd033559de27d0', amount: 4, secret: 'secret3', C: 'C3' },
+			{ id: '00bd033559de27d0', amount: 4, secret: 'secret3', C: 'C3' }
 		];
 		const targetAmount = 60;
 		const { send } = wallet.selectProofsToSend(
@@ -1447,7 +1449,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -1471,7 +1473,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -1481,7 +1483,7 @@ describe('Test coinselection', () => {
 			{ id: '00bd033559de27d0', amount: 8, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 8, secret: 'secret2', C: 'C2' },
 			{ id: '00bd033559de27d0', amount: 8, secret: 'secret3', C: 'C3' },
-			{ id: '00bd033559de27d0', amount: 1, secret: 'secret4', C: 'C4' },
+			{ id: '00bd033559de27d0', amount: 1, secret: 'secret4', C: 'C4' }
 		];
 		const targetAmount = 15;
 		// Exact match (offline)
@@ -1511,7 +1513,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -1520,7 +1522,7 @@ describe('Test coinselection', () => {
 		const smallNotes = [
 			{ id: '00bd033559de27d0', amount: 64, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 32, secret: 'secret2', C: 'C2' },
-			{ id: '00bd033559de27d0', amount: 4, secret: 'secret3', C: 'C3' },
+			{ id: '00bd033559de27d0', amount: 4, secret: 'secret3', C: 'C3' }
 		];
 		const targetAmount = 10;
 		// best match (online)
@@ -1544,7 +1546,7 @@ describe('Test coinselection', () => {
 		const proofs = [
 			{ id: '00bd033559de27d0', amount: 2, secret: 's1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 2, secret: 's2', C: 'C2' },
-			{ id: '00bd033559de27d0', amount: 2, secret: 's3', C: 'C3' },
+			{ id: '00bd033559de27d0', amount: 2, secret: 's3', C: 'C3' }
 		];
 		const targetAmount = 5;
 		const { send } = await wallet.send(targetAmount, proofs, { offline: true, includeFees: true });
@@ -1585,7 +1587,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }]
 				});
 			}),
 		);
@@ -1611,7 +1613,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }]
 				});
 			}),
 		);
@@ -1629,7 +1631,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 1000 }]
 				});
 			}),
 		);
@@ -1696,7 +1698,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }]
 				});
 			}),
 		);
@@ -1704,7 +1706,7 @@ describe('Test coinselection', () => {
 		const wallet = new CashuWallet(mint, { unit, keysets: keysets.keysets });
 		const smallNotes = [
 			...Array(50).fill({ id: '00bd033559de27d0', amount: 1, secret: 's1', C: 'C1' }),
-			...Array(50).fill({ id: '00bd033559de27d0', amount: 2, secret: 's2', C: 'C2' }),
+			...Array(50).fill({ id: '00bd033559de27d0', amount: 2, secret: 's2', C: 'C2' })
 		];
 		const targetAmount = 15;
 
@@ -1728,7 +1730,7 @@ describe('Test coinselection', () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
-					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 10000 }],
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 10000 }]
 				});
 			}),
 		);
