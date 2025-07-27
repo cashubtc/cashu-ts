@@ -53,19 +53,19 @@ export class WSConnection {
 
 	connect() {
 		if (!this.connectionPromise) {
-			this.connectionPromise = new Promise((res: OnOpenSuccess, rej: OnOpenError) => {
+			this.connectionPromise = new Promise((resolve: OnOpenSuccess, reject: OnOpenError) => {
 				try {
 					this.ws = new this._WS(this.url.toString());
 					this.onCloseCallbacks = [];
 				} catch (err: unknown) {
-					rej(err instanceof Error ? err : new Error(String(err)));
+					reject(err instanceof Error ? err : new Error(String(err)));
 					return;
 				}
 				this.ws.onopen = () => {
-					res();
+					resolve();
 				};
 				this.ws.onerror = () => {
-					rej(new Error('Failed to open WebSocket'));
+					reject(new Error('Failed to open WebSocket'));
 				};
 				this.ws.onmessage = (e: MessageEvent) => {
 					this.messageQueue.enqueue(e.data as string);
