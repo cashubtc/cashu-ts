@@ -42,7 +42,8 @@ import {
 	hasValidDleq,
 	splitAmount,
 	stripDleq,
-	sumProofs
+	sumProofs,
+	verifyKeysetId
 } from './utils.js';
 import { signMintQuote } from './crypto/client/NUT20.js';
 import {
@@ -261,6 +262,9 @@ class CashuWallet {
 		// make sure we have keys for this id
 		if (!this._keys.get(keysetId)) {
 			const keys = await this.mint.getKeys(keysetId);
+			if (!verifyKeysetId(keys.keysets[0])) {
+				throw new Error(`Couldn't verify keyset ID ${keysetId}`);
+			}
 			this._keys.set(keysetId, keys.keysets[0]);
 		}
 

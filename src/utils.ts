@@ -502,6 +502,41 @@ export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
+ * Check that the keyset hashes to the specified ID
+ * @param keys The keyset to be verified
+ * @returns true if the verification was successful, false otherwise
+ * @throws Error if the keyset ID version is unrecognized
+ */
+export function verifyKeysetId(keys: MintKeys): boolean {
+	const idBytes = hexToBytes(keys.id);
+	const pubkeysSorted = Object.entries(keys.keys).map(([k, v]) => [parseInt(k), v]).sort((a, b) => a[0] - b[0]);
+	let pubkeysConcat = "";
+	for (const key of pubkeysSorted) {
+		pubkeysConcat += key[1] as string;
+	}
+	const pubkeysConcatBytes = hexToBytes(pubkeysConcat);
+	let hashDigest;
+	let recomputedId;
+	switch (idBytes[0]) {
+		case 0x00:
+			hashDigest = sha256(pubkeysConcatBytes);
+			recomputedId = "00" + bytesToHex(hashDigest.slice(0, 7));
+			return recomputedId === keys.id;
+		case 0x01:
+			pubkeysConcat += `unit:${keys.unit}`;
+			if (keys.final_expiry) {
+				pubkeysConcat += `final_expiry:${keys.final_expiry.toString(10)}`;
+			}
+			hashDigest = sha256(pubkeysConcatBytes);
+			recomputedId = "01" + bytesToHex(hashDigest);
+			return recomputedId === keys.id;
+		default:
+			throw new Error(`Unrecognized keyset id version ${idBytes[0].toString()}`);
+	}
+	
+}
+
+/**
  * Checks that the proof has a valid DLEQ proof according to
  * keyset `keys`
  * @param proof The proof subject to verification
