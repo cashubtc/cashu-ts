@@ -67,11 +67,8 @@ export default tseslint.config(
 			'@typescript-eslint/no-empty-function': 'error',
 			// Promote flatter and cleaner control flows
 			'no-else-return': 'error',
-			// Ignore experimental features that we already use
-			'n/no-unsupported-features/node-builtins': [
-				'error',
-				{ ignores: ['fetch', 'WebSocket', 'Response', 'CloseEvent'] }
-			]
+			// Ignore experimental features (node: >22.4.0) that we use
+			'n/no-unsupported-features/node-builtins': ['error', { ignores: ['CloseEvent'] }]
 		},
 		settings: {
 			// Enhanced for import plugin (ensures TS paths resolve without extensions)
