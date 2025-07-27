@@ -1,5 +1,5 @@
-import { DLEQ, hash_e, hashToCurve } from '../common/index.js';
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type DLEQ, hash_e, hashToCurve } from '../common/index.js';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToNumber } from '../util/utils.js';

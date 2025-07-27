@@ -1,7 +1,12 @@
 import { OutputData } from '../model/OutputData';
-import { BlindAuthMintPayload, MintKeys, MintKeyset, Proof } from '../model/types';
+import {
+	type BlindAuthMintPayload,
+	type MintKeys,
+	type MintKeyset,
+	type Proof
+} from '../model/types';
 import { hasValidDleq } from '../utils';
-import { CashuAuthMint } from './CashuAuthMint';
+import { type CashuAuthMint } from './CashuAuthMint';
 
 /**
  * Class that represents a Cashu NUT-22 wallet.

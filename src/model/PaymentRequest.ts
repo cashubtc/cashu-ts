@@ -1,11 +1,11 @@
 import { encodeBase64toUint8 } from '../base64';
 import { decodeCBOR, encodeCBOR } from '../cbor';
 import {
-	RawPaymentRequest,
-	RawTransport,
-	NUT10Option,
-	PaymentRequestTransport,
-	PaymentRequestTransportType
+	type RawPaymentRequest,
+	type RawTransport,
+	type NUT10Option,
+	type PaymentRequestTransport,
+	type PaymentRequestTransportType
 } from './types';
 import { Buffer } from 'buffer';
 

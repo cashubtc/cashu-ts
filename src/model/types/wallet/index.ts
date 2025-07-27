@@ -1,4 +1,4 @@
-import { SerializedDLEQ } from '../mint';
+import { type SerializedDLEQ } from '../mint';
 
 export type * from './payloads';
 export type * from './responses';

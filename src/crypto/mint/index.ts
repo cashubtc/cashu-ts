@@ -1,8 +1,16 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToNumber } from '../util/utils.js';
-import { BlindSignature, IntRange, Keyset, MintKeys, Proof } from '../common/index.js';
-import { createRandomPrivateKey, deriveKeysetId, hashToCurve } from '../common/index.js';
+import {
+	type BlindSignature,
+	type IntRange,
+	type Keyset,
+	type MintKeys,
+	type Proof,
+	createRandomPrivateKey,
+	deriveKeysetId,
+	hashToCurve
+} from '../common/index.js';
 import { HDKey } from '@scure/bip32';
 
 const DERIVATION_PATH = "m/0'/0'/0'";

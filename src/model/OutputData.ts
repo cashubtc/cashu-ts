@@ -1,14 +1,14 @@
 import {
-	MintKeys,
-	Proof,
-	SerializedBlindedMessage,
-	SerializedBlindedSignature,
-	SerializedDLEQ
+	type MintKeys,
+	type Proof,
+	type SerializedBlindedMessage,
+	type SerializedBlindedSignature,
+	type SerializedDLEQ
 } from './types';
 import { blindMessage, constructProofFromPromise, serializeProof } from '../crypto/client/index';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { DLEQ, pointFromHex } from '../crypto/common/index.js';
+import { type DLEQ, pointFromHex } from '../crypto/common/index.js';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 import { deriveBlindingFactor, deriveSecret } from '../crypto/client/NUT09.js';
 

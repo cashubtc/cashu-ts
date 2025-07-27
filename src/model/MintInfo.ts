@@ -1,4 +1,9 @@
-import { GetInfoResponse, MPPMethod, SwapMethod, WebSocketSupport } from './types';
+import {
+	type GetInfoResponse,
+	type MPPMethod,
+	type SwapMethod,
+	type WebSocketSupport
+} from './types';
 
 export class MintInfo {
 	private readonly _mintInfo: GetInfoResponse;

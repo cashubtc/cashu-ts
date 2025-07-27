@@ -1,5 +1,5 @@
-import { hash_e, createRandomPrivateKey, DLEQ } from '../common/index.js';
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { hash_e, createRandomPrivateKey, type DLEQ } from '../common/index.js';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, numberToBytesBE } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToNumber, hexToNumber } from '../util/utils.js';

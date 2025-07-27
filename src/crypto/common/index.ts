@@ -1,4 +1,4 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';

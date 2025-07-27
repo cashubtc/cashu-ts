@@ -1,4 +1,4 @@
-import { SerializedBlindedMessage } from '../wallet';
+import { type SerializedBlindedMessage } from '../wallet';
 
 export * from './responses';
 export type * from './keys';

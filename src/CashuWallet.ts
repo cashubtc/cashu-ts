@@ -1,6 +1,6 @@
 import { signP2PKProofs } from './crypto/client/NUT11.js';
 import { hashToCurve } from './crypto/common/index.js';
-import { CashuMint } from './CashuMint.js';
+import { type CashuMint } from './CashuMint.js';
 import { MintInfo } from './model/MintInfo.js';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
@@ -34,7 +34,7 @@ import type {
 	PartialMeltQuoteResponse
 } from './model/types/index.js';
 import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
-import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
+import { type SubscriptionCanceller } from './model/types/wallet/websocket.js';
 import {
 	getDecodedToken,
 	getKeepAmounts,
@@ -46,8 +46,8 @@ import {
 import { signMintQuote } from './crypto/client/NUT20.js';
 import {
 	OutputData,
-	OutputDataFactory,
-	OutputDataLike,
+	type OutputDataFactory,
+	type OutputDataLike,
 	isOutputDataFactory
 } from './model/OutputData.js';
 

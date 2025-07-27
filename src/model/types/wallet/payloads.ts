@@ -1,5 +1,5 @@
-import { OutputData } from '../../OutputData';
-import { Proof } from './index';
+import { type OutputData } from '../../OutputData';
+import { type Proof } from './index';
 
 /**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees.

@@ -1,4 +1,4 @@
-import { ConnectionManager, WSConnection } from './WSConnection.js';
+import { ConnectionManager, type WSConnection } from './WSConnection.js';
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
@@ -23,11 +23,11 @@ import { MeltQuoteState } from './model/types/index.js';
 import request, { setRequestLogger } from './request';
 import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
-	MeltQuoteResponsePaidDeprecated,
+	type MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated
 } from './legacy/nut-05.js';
 import {
-	MintQuoteResponsePaidDeprecated,
+	type MintQuoteResponsePaidDeprecated,
 	handleMintQuoteResponseDeprecated
 } from './legacy/nut-04.js';
 import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';

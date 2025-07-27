@@ -1,4 +1,4 @@
-import { Proof } from './index';
+import { type Proof } from './index';
 
 /**
  * A Cashu token.

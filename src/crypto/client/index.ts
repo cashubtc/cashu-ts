@@ -1,16 +1,17 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
 import { bytesToNumber } from '../util/utils.js';
-import type {
-	BlindSignature,
-	Proof,
-	SerializedBlindedMessage,
-	SerializedProof
+import {
+	type BlindSignature,
+	type Proof,
+	type SerializedBlindedMessage,
+	type SerializedProof,
+	hashToCurve,
+	pointFromHex,
+	type Witness
 } from '../common/index.js';
-import { hashToCurve, pointFromHex } from '../common/index.js';
-import { Witness } from '../common/index';
-import { PrivKey } from '@noble/curves/abstract/utils';
+import { type PrivKey } from '@noble/curves/abstract/utils';
 import { getSignedOutput } from './NUT11.js';
 
 export type BlindedMessage = {

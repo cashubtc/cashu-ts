@@ -1,5 +1,5 @@
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12.js';
-import { DLEQ, pointFromHex } from './crypto/common/index.js';
+import { type DLEQ, pointFromHex } from './crypto/common/index.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import {
@@ -11,16 +11,16 @@ import {
 import { decodeCBOR, encodeCBOR } from './cbor.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
 import {
-	DeprecatedToken,
-	Keys,
-	MintKeys,
-	Proof,
-	SerializedDLEQ,
-	Token,
-	TokenV4Template,
-	V4DLEQTemplate,
-	V4InnerToken,
-	V4ProofTemplate
+	type DeprecatedToken,
+	type Keys,
+	type MintKeys,
+	type Proof,
+	type SerializedDLEQ,
+	type Token,
+	type TokenV4Template,
+	type V4DLEQTemplate,
+	type V4InnerToken,
+	type V4ProofTemplate
 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 

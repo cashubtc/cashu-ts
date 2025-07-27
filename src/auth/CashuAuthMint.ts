@@ -1,8 +1,8 @@
 import {
-	BlindAuthMintPayload,
-	BlindAuthMintResponse,
-	MintActiveKeys,
-	MintAllKeysets
+	type BlindAuthMintPayload,
+	type BlindAuthMintResponse,
+	type MintActiveKeys,
+	type MintAllKeysets
 } from '../model/types';
 import request from '../request';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';

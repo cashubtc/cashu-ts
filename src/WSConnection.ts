@@ -1,6 +1,6 @@
 import { MessageQueue } from './utils';
-import { JsonRpcMessage, JsonRpcReqParams, RpcSubId } from './model/types';
-import { OnOpenError, OnOpenSuccess } from './model/types/wallet/websocket';
+import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from './model/types';
+import { type OnOpenError, type OnOpenSuccess } from './model/types/wallet/websocket';
 import { getWebSocketImpl } from './ws';
 import { type Logger, NULL_LOGGER } from './logger';
 

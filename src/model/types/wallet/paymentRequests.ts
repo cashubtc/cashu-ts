@@ -1,4 +1,4 @@
-import { Proof } from './index';
+import { type Proof } from './index';
 
 export type RawTransport = {
 	t: PaymentRequestTransportType; // type

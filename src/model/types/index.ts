@@ -1,5 +1,5 @@
-import { OutputDataFactory, OutputDataLike } from '../OutputData';
-import { Proof } from './wallet/index';
+import { type OutputDataFactory, type OutputDataLike } from '../OutputData';
+import { type Proof } from './wallet/index';
 
 export * from './mint/index';
 export * from './wallet/index';
