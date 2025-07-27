@@ -13,7 +13,9 @@ import { PaymentRequest } from './model/PaymentRequest.js';
 import {
 	DeprecatedToken,
 	Keys,
+	MintAllKeysets,
 	MintKeys,
+	MintKeyset,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -314,16 +316,23 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @param token an encoded cashu token (cashuAey...)
  * @returns cashu token object
  */
-export function getDecodedToken(token: string) {
+export function getDecodedToken(tokenString: string, keysets?: Array<MintKeyset>) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
-		if (!token.startsWith(prefix)) {
+		if (!tokenString.startsWith(prefix)) {
 			return;
 		}
-		token = token.slice(prefix.length);
+		tokenString = tokenString.slice(prefix.length);
 	});
-	return handleTokens(token);
+	
+	if (keysets) {
+		const token = handleTokens(tokenString);
+		token.proofs = mapShortKeysetIds(token.proofs, keysets);
+		return token;
+	}
+
+	return handleTokens(tokenString);
 }
 
 /**
@@ -533,7 +542,32 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 		default:
 			throw new Error(`Unrecognized keyset id version ${idBytes[0].toString()}`);
 	}
-	
+}
+
+/**
+ * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the Mint
+ */
+export function mapShortKeysetIds(proofs: Array<Proof>, keysets: Array<MintKeyset>): Array<Proof> {
+	const newProofs = [];
+	for (const proof of proofs) {
+		const idBytes = hexToBytes(proof.id);
+		if (idBytes[0] === 0x00) {
+			newProofs.push(proof);
+		} else if (idBytes[0] == 0x01) {
+			for (const keyset of keysets) {
+				if (proof.id === keyset.id.slice(proof.id.length)) {
+					proof.id = keyset.id;
+					newProofs.push(proof);
+					break;
+				}
+			}
+			throw new Error(`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`);
+		} else {
+			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`)
+		}
+	}
+
+	return newProofs;
 }
 
 /**
