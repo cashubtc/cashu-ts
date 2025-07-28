@@ -553,15 +553,19 @@ export function mapShortKeysetIds(proofs: Array<Proof>, keysets: Array<MintKeyse
 		const idBytes = hexToBytes(proof.id);
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
-		} else if (idBytes[0] == 0x01) {
+		} else if (idBytes[0] === 0x01) {
+			let found = false;
 			for (const keyset of keysets) {
 				if (proof.id === keyset.id.slice(proof.id.length)) {
 					proof.id = keyset.id;
 					newProofs.push(proof);
+					found = true;
 					break;
 				}
 			}
-			throw new Error(`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`);
+			if (!found) {
+				throw new Error(`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`);
+			}
 		} else {
 			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`)
 		}
