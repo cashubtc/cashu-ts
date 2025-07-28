@@ -28,7 +28,7 @@ const derive = (
 	secretOrBlinding: DerivationType
 ): Uint8Array => {
 	const message = Buffer.concat([
-		Buffer.from("Cashu_KDF_HMAC_SHA512"),
+		Buffer.from('Cashu_KDF_HMAC_SHA512'),
 		Buffer.from(keysetId, 'utf-8'),
 		Buffer.from(counter.toString(), 'utf-8')
 	]);
@@ -39,8 +39,8 @@ const derive = (
 	const hmacDigest: Uint8Array = hmac.digest();
 
 	// Step 3: Derive secret and blinding factor
-	const secret = hmacDigest.slice(0, 32);  // First 32 bytes for secret
-	const r = hmacDigest.slice(32);          // Remaining bytes for blinding factor
+	const secret = hmacDigest.slice(0, 32); // First 32 bytes for secret
+	const r = hmacDigest.slice(32); // Remaining bytes for blinding factor
 
 	switch (secretOrBlinding) {
 		case DerivationType.SECRET:

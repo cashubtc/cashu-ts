@@ -204,7 +204,7 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
  */
 function convertToShortKeysetId(proofs: Array<Proof>) {
 	return proofs.map((p) => {
-		const newP = {...p};
+		const newP = { ...p };
 		newP.id = newP.id.slice(0, 16);
 		return newP;
 	});
@@ -246,7 +246,7 @@ export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 	}
 	// Map keyset IDs to short IDs
 	token.proofs = convertToShortKeysetId(token.proofs);
-	
+
 	const tokenTemplate = templateFromToken(token);
 
 	const encodedData = encodeCBOR(tokenTemplate);
@@ -407,18 +407,19 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 			if (!unit) {
 				throw new Error("Couldn't compute ID version 2: no unit was given.");
 			}
-			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from("unit:"+unit));
+			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from('unit:' + unit));
 			if (expiry) {
-				pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from("final_expiry:"+expiry.toString()))
+				pubkeysConcat = mergeUInt8Arrays(
+					pubkeysConcat,
+					Buffer.from('final_expiry:' + expiry.toString())
+				);
 			}
 			hash = sha256(pubkeysConcat);
 			hashHex = Buffer.from(hash).toString('hex');
 			return '01' + hashHex;
 		default:
-			throw new Error(`Unknown version byte ${versionByte}`)
+			throw new Error(`Unknown version byte ${versionByte}`);
 	}
-
-	
 }
 
 export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
@@ -575,12 +576,12 @@ function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): A
 			newProofs.push(proof);
 			continue;
 		}
-		
+
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
 		} else if (idBytes[0] === 0x01) {
 			if (!keysets) {
-				throw new Error("A short keyset ID v2 was encountered, but got no keysets to map it to.");
+				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
 			}
 			// Look for a match: prefix(keyset ID) == short ID
 			let found = false;
