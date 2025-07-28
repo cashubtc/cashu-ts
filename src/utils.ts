@@ -205,7 +205,7 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 function convertToShortKeysetId(proofs: Array<Proof>) {
 	return proofs.map((p) => {
 		const newP = {...p};
-		newP.id = newP.id.slice(0, 7);
+		newP.id = newP.id.slice(0, 8);
 		return newP;
 	});
 }
@@ -544,7 +544,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 	switch (idBytes[0]) {
 		case 0x00:
 			hashDigest = sha256(pubkeysConcatBytes);
-			recomputedId = '00' + bytesToHex(hashDigest.slice(0, 7));
+			recomputedId = '00' + bytesToHex(hashDigest.slice(0, 8));
 			return recomputedId === keys.id;
 		case 0x01:
 			pubkeysConcat += `unit:${keys.unit}`;
