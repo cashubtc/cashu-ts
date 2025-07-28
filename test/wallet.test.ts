@@ -777,18 +777,18 @@ describe('deterministic', () => {
 	test.each([
 		[
 			0,
-			'485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae',
-			'ad00d431add9c673e843d4c2bf9a778a5f402b985b8da2d5550bf39cda41d679'
+			'04e8c9b33f7d967cb8a37bbec73fca590cd064a1c73fffa978855bddd21a0e92',
+			'08af9517fb7ca4d2f8996b99e3788e87e3cb372f0a21200d4d5bd4b2650fbe13'
 		],
 		[
 			1,
-			'8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270',
-			'967d5232515e10b81ff226ecf5a9e2e2aff92d66ebc3edf0987eb56357fd6248'
+			'89f48cd9ebd59693e725a6124664d4449b9bf5047e60fa1935646297dfa95fde',
+			'27016a2b51db5ab220017361a948214ee5f9ff881b63e5ab1629237d72c19406'
 		],
 		[
 			2,
-			'bc628c79accd2364fd31511216a0fab62afd4a18ff77a20deded7b858c9860c8',
-			'b20f47bb6ae083659f3aa986bfa0435c55c6d93f687d51a01f26862d9b9a4899'
+			'ea2413595e3f26f816a7bb24da4ef9b12a0eecb4de1259329625dd5a1b23201f',
+			'2b5e8cd83ac5541f77f0c4624480413c50c63bded0f825c5d8e26e20fe3bc607'
 		]
 	])('deterministic OutputData: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
 		const hexSeed =
