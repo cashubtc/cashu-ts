@@ -549,7 +549,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 /**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the Mint
  */
-export function mapShortKeysetIds(proofs: Array<Proof>, keysets: Array<MintKeyset>): Array<Proof> {
+function mapShortKeysetIds(proofs: Array<Proof>, keysets: Array<MintKeyset>): Array<Proof> {
 	const newProofs = [];
 	for (const proof of proofs) {
 		const idBytes = hexToBytes(proof.id);
