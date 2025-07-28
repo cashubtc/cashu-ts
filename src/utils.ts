@@ -13,7 +13,6 @@ import { PaymentRequest } from './model/PaymentRequest.js';
 import {
 	DeprecatedToken,
 	Keys,
-	MintAllKeysets,
 	MintKeys,
 	MintKeyset,
 	Proof,
