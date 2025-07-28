@@ -183,6 +183,9 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns encoded token
  */
 export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
+	if (!hasNonHexId(token.proofs)) {
+		token.proofs = convertToShortKeysetId(token.proofs);
+	}
 	if (removeDleq) {
 		token.proofs = stripDleq(token.proofs);
 	}
@@ -218,10 +221,6 @@ export function getEncodedToken(
 ): string {
 	// Find out if it's a base64 keyset
 	const nonHex = hasNonHexId(token.proofs);
-	// Map keyset IDs to short IDs
-	if (!nonHex) {
-		token.proofs = convertToShortKeysetId(token.proofs);
-	}
 	if (nonHex || opts?.version === 3) {
 		if (opts?.version === 4) {
 			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
@@ -245,7 +244,9 @@ export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 	if (nonHex) {
 		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 	}
-
+	// Map keyset IDs to short IDs
+	token.proofs = convertToShortKeysetId(token.proofs);
+	
 	const tokenTemplate = templateFromToken(token);
 
 	const encodedData = encodeCBOR(tokenTemplate);
