@@ -325,7 +325,7 @@ export function getDecodedToken(tokenString: string, keysets?: Array<MintKeyset>
 		}
 		tokenString = tokenString.slice(prefix.length);
 	});
-	
+
 	if (keysets) {
 		const token = handleTokens(tokenString);
 		token.proofs = mapShortKeysetIds(token.proofs, keysets);
@@ -518,8 +518,10 @@ export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const idBytes = hexToBytes(keys.id);
-	const pubkeysSorted = Object.entries(keys.keys).map(([k, v]) => [parseInt(k), v]).sort((a, b) => a[0] - b[0]);
-	let pubkeysConcat = "";
+	const pubkeysSorted = Object.entries(keys.keys)
+		.map(([k, v]) => [parseInt(k), v])
+		.sort((a, b) => a[0] - b[0]);
+	let pubkeysConcat = '';
 	for (const key of pubkeysSorted) {
 		pubkeysConcat += key[1] as string;
 	}
@@ -529,7 +531,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 	switch (idBytes[0]) {
 		case 0x00:
 			hashDigest = sha256(pubkeysConcatBytes);
-			recomputedId = "00" + bytesToHex(hashDigest.slice(0, 7));
+			recomputedId = '00' + bytesToHex(hashDigest.slice(0, 7));
 			return recomputedId === keys.id;
 		case 0x01:
 			pubkeysConcat += `unit:${keys.unit}`;
@@ -537,7 +539,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 				pubkeysConcat += `final_expiry:${keys.final_expiry.toString(10)}`;
 			}
 			hashDigest = sha256(pubkeysConcatBytes);
-			recomputedId = "01" + bytesToHex(hashDigest);
+			recomputedId = '01' + bytesToHex(hashDigest);
 			return recomputedId === keys.id;
 		default:
 			throw new Error(`Unrecognized keyset id version ${idBytes[0].toString()}`);
@@ -564,10 +566,12 @@ export function mapShortKeysetIds(proofs: Array<Proof>, keysets: Array<MintKeyse
 				}
 			}
 			if (!found) {
-				throw new Error(`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`);
+				throw new Error(
+					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`
+				);
 			}
 		} else {
-			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`)
+			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`);
 		}
 	}
 
