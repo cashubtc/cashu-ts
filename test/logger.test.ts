@@ -73,7 +73,7 @@ describe('ConsoleLogger', () => {
 		logger.error('Error occurred', { error: err });
 
 		expect(errorSpy).toHaveBeenCalledWith('[ERROR] Error occurred', {
-			error: { message: 'Test error', stack: expect.any(String) }
+			error: { message: 'Test error', stack: expect.any(String) },
 		});
 	});
 

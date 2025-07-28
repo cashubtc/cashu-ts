@@ -31,7 +31,7 @@ export type PaymentRequestTransport = {
 
 export enum PaymentRequestTransportType {
 	POST = 'post',
-	NOSTR = 'nostr'
+	NOSTR = 'nostr',
 }
 
 export type PaymentRequestPayload = {

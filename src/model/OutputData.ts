@@ -3,7 +3,7 @@ import {
 	type Proof,
 	type SerializedBlindedMessage,
 	type SerializedBlindedSignature,
-	type SerializedDLEQ
+	type SerializedDLEQ,
 } from './types';
 import { blindMessage, constructProofFromPromise, serializeProof } from '../crypto/client/index';
 import { BlindedMessage } from './BlindedMessage';
@@ -23,7 +23,7 @@ export interface OutputDataLike {
 export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
 
 export function isOutputDataFactory(
-	value: Array<OutputData> | OutputDataFactory
+	value: Array<OutputData> | OutputDataFactory,
 ): value is OutputDataFactory {
 	return typeof value === 'function';
 }
@@ -45,14 +45,14 @@ export class OutputData implements OutputDataLike {
 			dleq = {
 				s: hexToBytes(sig.dleq.s),
 				e: hexToBytes(sig.dleq.e),
-				r: this.blindingFactor
+				r: this.blindingFactor,
 			};
 		}
 		const blindSignature = {
 			id: sig.id,
 			amount: sig.amount,
 			C_: pointFromHex(sig.C_),
-			dleq: dleq
+			dleq: dleq,
 		};
 		const A = pointFromHex(keyset.keys[sig.amount]);
 		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
@@ -62,9 +62,9 @@ export class OutputData implements OutputDataLike {
 				dleq: {
 					s: bytesToHex(dleq.s),
 					e: bytesToHex(dleq.e),
-					r: numberToHexPadded64(dleq.r ?? BigInt(0))
-				} as SerializedDLEQ
-			})
+					r: numberToHexPadded64(dleq.r ?? BigInt(0)),
+				} as SerializedDLEQ,
+			}),
 		} as Proof;
 		return serializedProof;
 	}
@@ -79,7 +79,7 @@ export class OutputData implements OutputDataLike {
 		},
 		amount: number,
 		keyset: MintKeys,
-		customSplit?: Array<number>
+		customSplit?: Array<number>,
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
@@ -94,7 +94,7 @@ export class OutputData implements OutputDataLike {
 			requiredRefundSignatures?: number;
 		},
 		amount: number,
-		keysetId: string
+		keysetId: string,
 	) {
 		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
 		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
@@ -102,15 +102,15 @@ export class OutputData implements OutputDataLike {
 		const n_sigs: number = Math.max(1, Math.min(p2pk.requiredSignatures || 1, pubkeys.length));
 		const n_sigs_refund: number = Math.max(
 			1,
-			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1)
+			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1),
 		);
 		const newSecret: [string, { nonce: string; data: string; tags: Array<Array<string>> }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
 				data: pubkeys[0], // Primary key
-				tags: []
-			}
+				tags: [],
+			},
 		];
 		if (p2pk.locktime) {
 			newSecret[1].tags.push(['locktime', String(p2pk.locktime)]); // NUT-10 string
@@ -135,7 +135,7 @@ export class OutputData implements OutputDataLike {
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
-			secretBytes
+			secretBytes,
 		);
 	}
 
@@ -151,7 +151,7 @@ export class OutputData implements OutputDataLike {
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
-			secretBytes
+			secretBytes,
 		);
 	}
 
@@ -160,11 +160,11 @@ export class OutputData implements OutputDataLike {
 		seed: Uint8Array,
 		counter: number,
 		keyset: MintKeys,
-		customSplit?: Array<number>
+		customSplit?: Array<number>,
 	): Array<OutputData> {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a, i) =>
-			this.createSingleDeterministicData(a, seed, counter + i, keyset.id)
+			this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
 		);
 	}
 
@@ -172,7 +172,7 @@ export class OutputData implements OutputDataLike {
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
-		keysetId: string
+		keysetId: string,
 	) {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
@@ -182,7 +182,7 @@ export class OutputData implements OutputDataLike {
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
-			utf8SecretBytes
+			utf8SecretBytes,
 		);
 	}
 }

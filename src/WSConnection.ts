@@ -72,7 +72,7 @@ export class WSConnection {
 					if (!this.handlingInterval) {
 						this.handlingInterval = setInterval(
 							this.handleNextMessage.bind(this),
-							0
+							0,
 						) as unknown as number;
 					}
 				};
@@ -110,14 +110,14 @@ export class WSConnection {
 
 	addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void) {
 		(this.subListeners[subId] = this.subListeners[subId] || []).push(
-			callback as (payload: unknown) => void
+			callback as (payload: unknown) => void,
 		);
 	}
 
 	private addRpcListener(
 		callback: () => void,
 		errorCallback: (e: Error) => void,
-		id: Exclude<RpcSubId, null>
+		id: Exclude<RpcSubId, null>,
 	) {
 		this.rpcListeners[id] = { callback, errorCallback };
 	}
@@ -135,7 +135,7 @@ export class WSConnection {
 			return;
 		}
 		this.subListeners[subId] = this.subListeners[subId].filter(
-			(fn) => fn !== (callback as (payload: unknown) => void)
+			(fn) => fn !== (callback as (payload: unknown) => void),
 		);
 	}
 
@@ -188,7 +188,7 @@ export class WSConnection {
 	createSubscription<TPayload = unknown>(
 		params: Omit<JsonRpcReqParams, 'subId'>,
 		callback: (payload: TPayload) => void,
-		errorCallback: (e: Error) => void
+		errorCallback: (e: Error) => void,
 	): string {
 		if (this.ws?.readyState !== 1) {
 			this._logger.error('Attempted createSubscription, but socket was not open');
@@ -200,7 +200,7 @@ export class WSConnection {
 				this.addSubListener(subId, callback);
 			},
 			errorCallback,
-			this.rpcId
+			this.rpcId,
 		);
 		this.sendRequest('subscribe', { ...params, subId });
 		this.rpcId++;
@@ -217,7 +217,7 @@ export class WSConnection {
 	cancelSubscription<TPayload = unknown>(
 		subId: string,
 		callback: (payload: TPayload) => void,
-		errorCallback?: (e: Error) => void
+		errorCallback?: (e: Error) => void,
 	) {
 		this.removeListener(subId, callback);
 		this.addRpcListener(
@@ -225,7 +225,7 @@ export class WSConnection {
 				this._logger.info('Unsubscribed {subId}', { subId });
 			},
 			errorCallback || ((e: Error) => this._logger.error('Unsubscribe failed', { e })),
-			this.rpcId
+			this.rpcId,
 		);
 		this.sendRequest('unsubscribe', { subId });
 	}

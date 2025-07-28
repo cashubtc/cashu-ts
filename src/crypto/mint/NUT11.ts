@@ -5,7 +5,7 @@ import {
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKWitnessSignatures,
 	getP2PKNSigs,
-	verifyP2PKSecretSignature
+	verifyP2PKSecretSignature,
 } from '../client/NUT11.js';
 import { type Proof } from '../../model/types/index.js';
 import { type BlindedMessage } from '../client/index.js';
@@ -50,6 +50,6 @@ export const verifyP2PKSigOutput = (output: BlindedMessage, publicKey: string): 
 	return schnorr.verify(
 		output.witness.signatures[0],
 		sha256(output.B_.toHex(true)),
-		publicKey.slice(2)
+		publicKey.slice(2),
 	);
 };

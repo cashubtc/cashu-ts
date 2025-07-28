@@ -13,7 +13,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		'https://mint.lnwallet.app',
 		'https://mint.coinos.io',
 		'https://mint.lnserver.com',
-		'https://mint.0xchat.com'
+		'https://mint.0xchat.com',
 	];
 
 	const uid = req.body.uid;
@@ -26,7 +26,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		res.json({
 			success: false,
 			error: 'uid_not_found',
-			message: 'Uid not found'
+			message: 'Uid not found',
 		});
 		return;
 	}
@@ -38,7 +38,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		res.json({
 			success: false,
 			error: 'invalid_token',
-			message: 'Invalid token'
+			message: 'Invalid token',
 		});
 		return;
 	}
@@ -48,7 +48,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		res.json({
 			success: false,
 			error: 'invalid_unit',
-			message: 'Token unit is not satoshi'
+			message: 'Token unit is not satoshi',
 		});
 		return;
 	}
@@ -59,7 +59,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		res.json({
 			success: false,
 			error: 'wrong_amount',
-			message: `Wrong amount, must be ${waitedAmount} satoshi`
+			message: `Wrong amount, must be ${waitedAmount} satoshi`,
 		});
 		return;
 	}
@@ -70,7 +70,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		res.json({
 			success: false,
 			error: 'untrusted_mint',
-			message: 'Untrusted mint'
+			message: 'Untrusted mint',
 		});
 		return;
 	}
@@ -87,7 +87,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 			res.json({
 				success: false,
 				error: 'token_spent',
-				message: 'Token already spent'
+				message: 'Token already spent',
 			});
 			return;
 		}
@@ -95,7 +95,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		res.json({
 			success: false,
 			error: 'cannot_receive_token',
-			message: `Cannot receive token: ${error.code}`
+			message: `Cannot receive token: ${error.code}`,
 		});
 		return;
 	}
@@ -106,16 +106,16 @@ export const ecashPayment = onRequest(async (req, res) => {
 	const collectionRef = db.collection('payments');
 	await collectionRef.add({
 		uid,
-		ecashToken: backToken
+		ecashToken: backToken,
 	});
 
 	await db.collection('users').doc(uid).update({
-		plan: 'Unlimited'
+		plan: 'Unlimited',
 	});
 
 	res.json({
 		success: true,
-		message: 'Payment accepted'
+		message: 'Payment accepted',
 	});
 	return;
 });

@@ -2,7 +2,7 @@ import {
 	type BlindAuthMintPayload,
 	type BlindAuthMintResponse,
 	type MintActiveKeys,
-	type MintAllKeysets
+	type MintAllKeysets,
 } from '../model/types';
 import request from '../request';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
@@ -19,7 +19,7 @@ class CashuAuthMint {
 	 */
 	constructor(
 		private _mintUrl: string,
-		private _customRequest?: typeof request
+		private _customRequest?: typeof request,
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
@@ -42,17 +42,17 @@ class CashuAuthMint {
 		mintUrl: string,
 		mintPayload: BlindAuthMintPayload,
 		clearAuthToken: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	) {
 		const requestInstance = customRequest || request;
 		const headers = {
-			'Clear-auth': `${clearAuthToken}`
+			'Clear-auth': `${clearAuthToken}`,
 		};
 		const data = await requestInstance<BlindAuthMintResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/auth/blind/mint'),
 			method: 'POST',
 			requestBody: mintPayload,
-			headers
+			headers,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -84,13 +84,13 @@ class CashuAuthMint {
 	public static async getKeys(
 		mintUrl: string,
 		keysetId?: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<MintActiveKeys> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MintActiveKeys>({
 			endpoint: keysetId
 				? joinUrls(mintUrl, '/v1/auth/blind/keys', keysetId)
-				: joinUrls(mintUrl, '/v1/auth/blind/keys')
+				: joinUrls(mintUrl, '/v1/auth/blind/keys'),
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
@@ -110,7 +110,7 @@ class CashuAuthMint {
 		const allKeys = await CashuAuthMint.getKeys(
 			mintUrl || this._mintUrl,
 			keysetId,
-			this._customRequest
+			this._customRequest,
 		);
 		return allKeys;
 	}
@@ -123,11 +123,11 @@ class CashuAuthMint {
 	 */
 	public static async getKeySets(
 		mintUrl: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<MintAllKeysets> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintAllKeysets>({
-			endpoint: joinUrls(mintUrl, '/v1/auth/blind/keysets')
+			endpoint: joinUrls(mintUrl, '/v1/auth/blind/keysets'),
 		});
 	}
 

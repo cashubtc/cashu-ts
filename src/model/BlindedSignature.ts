@@ -26,9 +26,9 @@ class BlindedSignature {
 				dleq: {
 					s: bytesToHex(this.dleq.s),
 					e: bytesToHex(this.dleq.e),
-					r: numberToHexPadded64(this.dleq.r ?? BigInt(0))
-				}
-			})
+					r: numberToHexPadded64(this.dleq.r ?? BigInt(0)),
+				},
+			}),
 		};
 	}
 }

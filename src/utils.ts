@@ -6,7 +6,7 @@ import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
-	encodeUint8toBase64Url
+	encodeUint8toBase64Url,
 } from './base64.js';
 import { decodeCBOR, encodeCBOR } from './cbor.js';
 import { PaymentRequest } from './model/PaymentRequest.js';
@@ -20,7 +20,7 @@ import {
 	type TokenV4Template,
 	type V4DLEQTemplate,
 	type V4InnerToken,
-	type V4ProofTemplate
+	type V4ProofTemplate,
 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 
@@ -38,7 +38,7 @@ export function splitAmount(
 	value: number,
 	keyset: Keys,
 	split?: Array<number>,
-	order?: 'desc' | 'asc'
+	order?: 'desc' | 'asc',
 ): Array<number> {
 	if (split) {
 		const totalSplitAmount = sumArray(split);
@@ -74,7 +74,7 @@ export function getKeepAmounts(
 	proofsWeHave: Array<Proof>,
 	amountToKeep: number,
 	keys: Keys,
-	targetCount: number
+	targetCount: number,
 ): Array<number> {
 	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
@@ -211,7 +211,7 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
  */
 export function getEncodedToken(
 	token: Token,
-	opts?: { version?: 3 | 4; removeDleq?: boolean }
+	opts?: { version?: 3 | 4; removeDleq?: boolean },
 ): string {
 	const nonHex = hasNonHexId(token.proofs);
 	if (nonHex || opts?.version === 3) {
@@ -273,16 +273,16 @@ function templateFromToken(token: Token): TokenV4Template {
 							d: {
 								e: hexToBytes(p.dleq.e),
 								s: hexToBytes(p.dleq.s),
-								r: hexToBytes(p.dleq.r ?? '00')
-							} as V4DLEQTemplate
+								r: hexToBytes(p.dleq.r ?? '00'),
+							} as V4DLEQTemplate,
 						}),
 						...(p.witness && {
-							w: JSON.stringify(p.witness)
-						})
-					})
-				)
-			})
-		)
+							w: JSON.stringify(p.witness),
+						}),
+					}),
+				),
+			}),
+		),
 	} as TokenV4Template;
 	if (token.memo) {
 		tokenTemplate.d = token.memo;
@@ -303,14 +303,14 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 					dleq: {
 						r: bytesToHex(p.d.r),
 						s: bytesToHex(p.d.s),
-						e: bytesToHex(p.d.e)
-					} as SerializedDLEQ
+						e: bytesToHex(p.d.e),
+					} as SerializedDLEQ,
 				}),
 				...(p.w && {
-					witness: p.w
-				})
+					witness: p.w,
+				}),
 			});
-		})
+		}),
 	);
 	const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
 	if (template.d) {
@@ -355,7 +355,7 @@ export function handleTokens(token: string): Token {
 		const tokenObj: Token = {
 			mint: entry.mint,
 			proofs: entry.proofs,
-			unit: parsedV3Token.unit || 'sat'
+			unit: parsedV3Token.unit || 'sat',
 		};
 		if (parsedV3Token.memo) {
 			tokenObj.memo = parsedV3Token.memo;
@@ -530,7 +530,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	const dleq = {
 		e: hexToBytes(proof.dleq.e),
 		s: hexToBytes(proof.dleq.s),
-		r: hexToNumber(proof.dleq.r ?? '00')
+		r: hexToNumber(proof.dleq.r ?? '00'),
 	} as DLEQ;
 	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
 		throw new Error(`undefined key for amount ${proof.amount}`);
@@ -541,7 +541,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 			new TextEncoder().encode(proof.secret),
 			dleq,
 			pointFromHex(proof.C),
-			pointFromHex(key)
+			pointFromHex(key),
 		)
 	) {
 		return false;
@@ -559,7 +559,7 @@ export function getEncodedAuthToken(proof: Proof): string {
 	const token = {
 		id: proof.id,
 		secret: proof.secret,
-		C: proof.C
+		C: proof.C,
 	};
 	const base64Data = encodeJsonToBase64(token);
 	const prefix = 'auth';

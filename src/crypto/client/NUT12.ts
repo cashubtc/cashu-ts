@@ -16,7 +16,7 @@ export const verifyDLEQProof = (
 	dleq: DLEQ,
 	B_: ProjPointType<bigint>,
 	C_: ProjPointType<bigint>,
-	A: ProjPointType<bigint>
+	A: ProjPointType<bigint>,
 ) => {
 	const sG = secp256k1.ProjectivePoint.fromPrivateKey(bytesToHex(dleq.s));
 	const eA = A.multiply(bytesToNumber(dleq.e));
@@ -32,7 +32,7 @@ export const verifyDLEQProof_reblind = (
 	secret: Uint8Array, // secret
 	dleq: DLEQ,
 	C: ProjPointType<bigint>, // unblinded e-cash signature point
-	A: ProjPointType<bigint> // mint public key point
+	A: ProjPointType<bigint>, // mint public key point
 ) => {
 	if (dleq.r === undefined) throw new Error('verifyDLEQProof_reblind: Undefined blinding factor');
 	const Y = hashToCurve(secret);

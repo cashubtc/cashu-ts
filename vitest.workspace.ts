@@ -5,8 +5,8 @@ export default defineWorkspace([
 		test: {
 			name: 'node',
 			globals: true,
-			environment: 'node'
-		}
+			environment: 'node',
+		},
 	},
 	{
 		test: {
@@ -14,8 +14,8 @@ export default defineWorkspace([
 			globals: true,
 			browser: {
 				provider: 'playwright',
-				name: 'chromium'
-			}
-		}
-	}
+				name: 'chromium',
+			},
+		},
+	},
 ]);

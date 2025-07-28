@@ -83,7 +83,7 @@ function encodeByteString(value: Uint8Array, buffer: Array<number>) {
 			(length >> 24) & 0xff,
 			(length >> 16) & 0xff,
 			(length >> 8) & 0xff,
-			length & 0xff
+			length & 0xff,
 		);
 	} else {
 		throw new Error('Byte string too long to encode');
@@ -110,7 +110,7 @@ function encodeString(value: string, buffer: Array<number>) {
 			(length >> 24) & 0xff,
 			(length >> 16) & 0xff,
 			(length >> 8) & 0xff,
-			length & 0xff
+			length & 0xff,
 		);
 	} else {
 		throw new Error('String too long to encode');
@@ -185,7 +185,7 @@ function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
 function decodeLength(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<number> {
 	if (additionalInfo < 24) return { value: additionalInfo, offset };
 	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
@@ -211,7 +211,7 @@ function decodeLength(
 function decodeUnsigned(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<number> {
 	const { value, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	return { value, offset: newOffset };
@@ -220,7 +220,7 @@ function decodeUnsigned(
 function decodeSigned(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<number> {
 	const { value, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	return { value: -1 - value, offset: newOffset };
@@ -229,7 +229,7 @@ function decodeSigned(
 function decodeByteString(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<Uint8Array> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	if (newOffset + length > view.byteLength) {
@@ -242,7 +242,7 @@ function decodeByteString(
 function decodeString(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<string> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	if (newOffset + length > view.byteLength) {
@@ -256,7 +256,7 @@ function decodeString(
 function decodeArray(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<Array<ResultValue>> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	const array = [];
@@ -272,7 +272,7 @@ function decodeArray(
 function decodeMap(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<Record<string, ResultValue>> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	const map: { [key: string]: ResultValue } = {};
@@ -305,7 +305,7 @@ function decodeFloat16(uint16: number): number {
 function decodeSimpleAndFloat(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<SimpleValue | number> {
 	if (additionalInfo < 24) {
 		switch (additionalInfo) {

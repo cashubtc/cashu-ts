@@ -12,7 +12,7 @@ import {
 	decodePaymentRequest,
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
-	hasValidDleq
+	hasValidDleq,
 } from './utils.js';
 import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
 
@@ -38,7 +38,7 @@ export {
 	hasValidDleq,
 	LogLevel,
 	ConsoleLogger,
-	type Logger
+	type Logger,
 };
 
 export { injectWebSocketImpl } from './ws.js';

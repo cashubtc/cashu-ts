@@ -31,13 +31,13 @@ describe('testing WSConnection', () => {
 			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['12345'] },
 				callback,
-				errorCallback
+				errorCallback,
 			);
 		})) as string;
 		expect(JSON.parse(message)).toMatchObject({
 			jsonrpc: '2.0',
 			method: 'subscribe',
-			params: { kind: 'bolt11_mint_quote', filters: ['12345'] }
+			params: { kind: 'bolt11_mint_quote', filters: ['12345'] },
 		});
 	});
 	test('throws if socket not open on createSubscription', async () => {
@@ -48,7 +48,7 @@ describe('testing WSConnection', () => {
 			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['123'] },
 				callback,
-				errorCallback
+				errorCallback,
 			);
 		}).toThrowError('Socket is not open');
 		expect(errorCallback).not.toHaveBeenCalled(); // No soft callback invocation
@@ -78,7 +78,7 @@ describe('testing WSConnection', () => {
 			subId = conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['123'] },
 				callback,
-				errorCallback
+				errorCallback,
 			);
 		});
 
@@ -120,7 +120,7 @@ describe('testing WSConnection', () => {
 			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['123'] },
 				callback,
-				errorCallback
+				errorCallback,
 			);
 		});
 		expect(payload).toMatchObject({ quote: '123', request: '456', paid: true, expiry: 123 });

@@ -8,7 +8,7 @@ export const LogLevel = {
 	WARN: 'WARN',
 	INFO: 'INFO',
 	DEBUG: 'DEBUG',
-	TRACE: 'TRACE'
+	TRACE: 'TRACE',
 } as const;
 
 /**
@@ -36,7 +36,7 @@ export const NULL_LOGGER: Logger = {
 	info() {},
 	debug() {},
 	trace() {},
-	log() {}
+	log() {},
 };
 /* eslint-enable @typescript-eslint/no-empty-function */
 
@@ -59,7 +59,7 @@ export class ConsoleLogger implements Logger {
 		[LogLevel.WARN]: 2,
 		[LogLevel.INFO]: 3,
 		[LogLevel.DEBUG]: 4,
-		[LogLevel.TRACE]: 5
+		[LogLevel.TRACE]: 5,
 	};
 	constructor(minLevel: LogLevel = LogLevel.INFO) {
 		this.minLevel = minLevel;
@@ -74,8 +74,8 @@ export class ConsoleLogger implements Logger {
 			const processedContext = Object.fromEntries(
 				Object.entries(context).map(([key, value]) => [
 					key,
-					value instanceof Error ? { message: value.message, stack: value.stack } : value
-				])
+					value instanceof Error ? { message: value.message, stack: value.stack } : value,
+				]),
 			);
 			interpolatedMessage = message.replace(/\{(\w+)\}/g, (match: string, key: string) => {
 				if (key in processedContext && processedContext[key] !== undefined) {
@@ -89,7 +89,7 @@ export class ConsoleLogger implements Logger {
 				return match;
 			});
 			const filteredContext = Object.fromEntries(
-				Object.entries(processedContext).filter(([key]) => !usedKeys.has(key))
+				Object.entries(processedContext).filter(([key]) => !usedKeys.has(key)),
 			);
 			const consoleMethod = this.getConsoleMethod(level);
 			if (Object.keys(filteredContext).length > 0) {
@@ -157,6 +157,6 @@ export function measureTime() {
 	return {
 		elapsed: () => {
 			return Date.now() - start;
-		}
+		},
 	};
 }

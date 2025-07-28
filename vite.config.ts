@@ -12,11 +12,11 @@ const config =
 						entry: resolve(__dirname, 'src/index.ts'),
 						name: 'cashuts',
 						formats: ['iife'],
-						fileName: (format) => `cashu-ts.${format}.js`
+						fileName: (format) => `cashu-ts.${format}.js`,
 					},
-					sourcemap: true
+					sourcemap: true,
 				},
-				plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' })]
+				plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' })],
 			})
 		: defineConfig({
 				build: {
@@ -42,21 +42,21 @@ const config =
 
 							// Individual mint files
 							'crypto/mint/NUT11': resolve(__dirname, 'src/crypto/mint/NUT11.ts'),
-							'crypto/mint/NUT12': resolve(__dirname, 'src/crypto/mint/NUT12.ts')
+							'crypto/mint/NUT12': resolve(__dirname, 'src/crypto/mint/NUT12.ts'),
 						},
 						name: 'cashuts',
 						formats: ['es', 'cjs'],
-						fileName: (format, entryName) => `${entryName}.${format}.js`
+						fileName: (format, entryName) => `${entryName}.${format}.js`,
 					},
 					rollupOptions: {
 						external: (id) =>
 							Object.keys(require('./package.json').dependencies || {}).some(
-								(dep) => id === dep || id.startsWith(`${dep}/`)
-							)
+								(dep) => id === dep || id.startsWith(`${dep}/`),
+							),
 					},
-					sourcemap: true
+					sourcemap: true,
 				},
-				plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' })]
+				plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' })],
 			});
 
 export default config;

@@ -12,7 +12,7 @@ export function getEncodedAuthToken(proof: Proof): string {
 	const token = {
 		id: proof.id,
 		secret: proof.secret,
-		C: proof.C
+		C: proof.C,
 	};
 	const base64Data = encodeJsonToBase64(token);
 	const prefix = 'auth';

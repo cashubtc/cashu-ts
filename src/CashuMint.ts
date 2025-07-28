@@ -17,18 +17,18 @@ import type {
 	MeltQuotePayload,
 	MeltQuoteResponse,
 	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
+	PartialMeltQuoteResponse,
 } from './model/types/index.js';
 import { MeltQuoteState } from './model/types/index.js';
 import request, { setRequestLogger } from './request';
 import { isObj, joinUrls, sanitizeUrl } from './utils.js';
 import {
 	type MeltQuoteResponsePaidDeprecated,
-	handleMeltQuoteResponseDeprecated
+	handleMeltQuoteResponseDeprecated,
 } from './legacy/nut-05.js';
 import {
 	type MintQuoteResponsePaidDeprecated,
-	handleMintQuoteResponseDeprecated
+	handleMintQuoteResponseDeprecated,
 } from './legacy/nut-04.js';
 import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
 import { MintInfo } from './model/MintInfo.js';
@@ -56,7 +56,7 @@ class CashuMint {
 		authTokenGetter?: () => Promise<string>,
 		options?: {
 			logger?: Logger;
-		}
+		},
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
@@ -83,12 +83,12 @@ class CashuMint {
 	public static async getInfo(
 		mintUrl: string,
 		customRequest?: typeof request,
-		logger?: Logger
+		logger?: Logger,
 	): Promise<GetInfoResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const response = await requestInstance<GetInfoResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/info')
+			endpoint: joinUrls(mintUrl, '/v1/info'),
 		});
 		const data = handleMintInfoContactFieldDeprecated(response, mintLogger);
 		return data;
@@ -121,7 +121,7 @@ class CashuMint {
 		mintUrl: string,
 		swapPayload: SwapPayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
 	): Promise<SwapResponse> {
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -129,7 +129,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/swap'),
 			method: 'POST',
 			requestBody: swapPayload,
-			headers
+			headers,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -163,7 +163,7 @@ class CashuMint {
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request,
 		blindAuthToken?: string,
-		logger?: Logger
+		logger?: Logger,
 	): Promise<PartialMintQuoteResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
@@ -174,7 +174,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
 			requestBody: mintQuotePayload,
-			headers
+			headers,
 		});
 		const data = handleMintQuoteResponseDeprecated(response, mintLogger);
 		return data;
@@ -192,7 +192,7 @@ class CashuMint {
 			this._mintUrl,
 			mintQuotePayload,
 			this._customRequest,
-			blindAuthToken
+			blindAuthToken,
 		);
 	}
 
@@ -209,7 +209,7 @@ class CashuMint {
 		quote: string,
 		customRequest?: typeof request,
 		blindAuthToken?: string,
-		logger?: Logger
+		logger?: Logger,
 	): Promise<PartialMintQuoteResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
@@ -219,7 +219,7 @@ class CashuMint {
 		>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
 			method: 'GET',
-			headers
+			headers,
 		});
 
 		const data = handleMintQuoteResponseDeprecated(response, mintLogger);
@@ -248,7 +248,7 @@ class CashuMint {
 		mintUrl: string,
 		mintPayload: MintPayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
 	) {
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -256,7 +256,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/mint/bolt11'),
 			method: 'POST',
 			requestBody: mintPayload,
-			headers
+			headers,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -288,7 +288,7 @@ class CashuMint {
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: typeof request,
 		blindAuthToken?: string,
-		logger?: Logger
+		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
@@ -299,7 +299,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
 			method: 'POST',
 			requestBody: meltQuotePayload,
-			headers
+			headers,
 		});
 
 		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
@@ -326,7 +326,7 @@ class CashuMint {
 			this._mintUrl,
 			meltQuotePayload,
 			this._customRequest,
-			blindAuthToken
+			blindAuthToken,
 		);
 	}
 
@@ -342,7 +342,7 @@ class CashuMint {
 		quote: string,
 		customRequest?: typeof request,
 		blindAuthToken?: string,
-		logger?: Logger
+		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
@@ -350,7 +350,7 @@ class CashuMint {
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
 			method: 'GET',
-			headers
+			headers,
 		});
 
 		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
@@ -394,7 +394,7 @@ class CashuMint {
 		meltPayload: MeltPayload,
 		customRequest?: typeof request,
 		blindAuthToken?: string,
-		logger?: Logger
+		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
@@ -403,7 +403,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
 			method: 'POST',
 			requestBody: meltPayload,
-			headers
+			headers,
 		});
 
 		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
@@ -440,13 +440,13 @@ class CashuMint {
 	public static async check(
 		mintUrl: string,
 		checkPayload: CheckStatePayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<CheckStateResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<CheckStateResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/checkstate'),
 			method: 'POST',
-			requestBody: checkPayload
+			requestBody: checkPayload,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
@@ -468,7 +468,7 @@ class CashuMint {
 	public static async getKeys(
 		mintUrl: string,
 		keysetId?: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<MintActiveKeys> {
 		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
@@ -477,7 +477,7 @@ class CashuMint {
 		}
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MintActiveKeys>({
-			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, '/v1/keys')
+			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, '/v1/keys'),
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
@@ -497,7 +497,7 @@ class CashuMint {
 		const allKeys = await CashuMint.getKeys(
 			mintUrl || this._mintUrl,
 			keysetId,
-			this._customRequest
+			this._customRequest,
 		);
 		return allKeys;
 	}
@@ -510,7 +510,7 @@ class CashuMint {
 	 */
 	public static async getKeySets(
 		mintUrl: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<MintAllKeysets> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(mintUrl, '/v1/keysets') });
@@ -538,13 +538,13 @@ class CashuMint {
 	public static async restore(
 		mintUrl: string,
 		restorePayload: PostRestorePayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<PostRestoreResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<PostRestoreResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/restore'),
 			method: 'POST',
-			requestBody: restorePayload
+			requestBody: restorePayload,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
@@ -577,7 +577,7 @@ class CashuMint {
 				}
 			}
 			this.ws = ConnectionManager.getInstance().getConnection(
-				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`
+				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`,
 			);
 			try {
 				await this.ws.connect();

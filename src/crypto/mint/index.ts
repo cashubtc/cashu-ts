@@ -9,7 +9,7 @@ import {
 	type Proof,
 	createRandomPrivateKey,
 	deriveKeysetId,
-	hashToCurve
+	hashToCurve,
 } from '../common/index.js';
 import { HDKey } from '@scure/bip32';
 
@@ -29,7 +29,7 @@ export function createBlindSignature(
 	B_: ProjPointType<bigint>,
 	privateKey: Uint8Array,
 	amount: number,
-	id: string
+	id: string,
 ): BlindSignature {
 	const C_: ProjPointType<bigint> = B_.multiply(bytesToNumber(privateKey));
 	return { C_, amount, id };

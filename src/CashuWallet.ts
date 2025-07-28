@@ -31,7 +31,7 @@ import type {
 	SwapTransaction,
 	LockedMintQuoteResponse,
 	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
+	PartialMeltQuoteResponse,
 } from './model/types/index.js';
 import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { type SubscriptionCanceller } from './model/types/wallet/websocket.js';
@@ -41,14 +41,14 @@ import {
 	hasValidDleq,
 	splitAmount,
 	stripDleq,
-	sumProofs
+	sumProofs,
 } from './utils.js';
 import { signMintQuote } from './crypto/client/NUT20.js';
 import {
 	OutputData,
 	type OutputDataFactory,
 	type OutputDataLike,
-	isOutputDataFactory
+	isOutputDataFactory,
 } from './model/OutputData.js';
 
 /**
@@ -101,7 +101,7 @@ class CashuWallet {
 			denominationTarget?: number;
 			keepFactory?: OutputDataFactory;
 			logger?: Logger;
-		}
+		},
 	) {
 		this.mint = mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
@@ -204,7 +204,7 @@ class CashuWallet {
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
 
 		const activeKeyset = activeKeysets.sort(
-			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0)
+			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
 		)[0];
 		if (!activeKeyset) {
 			throw new Error('No active keyset found');
@@ -312,7 +312,7 @@ class CashuWallet {
 			pubkey,
 			privkey,
 			newOutputData,
-			p2pk
+			p2pk,
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
@@ -340,7 +340,7 @@ class CashuWallet {
 			outputAmounts,
 			pubkey,
 			privkey,
-			outputData
+			outputData,
 		} = options || {};
 		if (includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
@@ -351,7 +351,7 @@ class CashuWallet {
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
 			amount,
-			options?.includeFees
+			options?.includeFees,
 		);
 		const expectedFee = includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
@@ -392,7 +392,7 @@ class CashuWallet {
 	selectProofsToSend(
 		proofs: Array<Proof>,
 		amountToSend: number,
-		includeFees = false
+		includeFees = false,
 	): SendResponse {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
@@ -434,7 +434,7 @@ class CashuWallet {
 		const binarySearchIndex = (
 			arr: Array<ProofWithFee>,
 			value: number,
-			lessOrEqual: boolean
+			lessOrEqual: boolean,
 		): number | null => {
 			let left = 0,
 				right = arr.length - 1,
@@ -539,7 +539,7 @@ class CashuWallet {
 		const maxOverAmount = Math.min(
 			Math.ceil(amountToSend * (1 + MAX_OVRPCT / 100)),
 			amountToSend + MAX_OVRAMT,
-			totalNetSum
+			totalNetSum,
 		);
 
 		/**
@@ -579,7 +579,7 @@ class CashuWallet {
 			// Generate a random order for accessing the trial subset ('S')
 			const indices = shuffleArray(Array.from({ length: S.length }, (_, i) => i)).slice(
 				0,
-				MAX_P2SWAP
+				MAX_P2SWAP,
 			);
 			for (const i of indices) {
 				// Exact or acceptable close match solution found?
@@ -622,7 +622,7 @@ class CashuWallet {
 			if (delta < bestDelta) {
 				this._logger.debug(
 					'selectProofsToSend: best solution found in trial #{trial} - amount: {amount}, delta: {delta}',
-					{ trial, amount, delta }
+					{ trial, amount, delta },
 				);
 				bestSubset = [...S].sort((a, b) => b.exFee - a.exFee); // copy & sort
 				bestDelta = delta;
@@ -721,8 +721,8 @@ class CashuWallet {
 				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
 					1000,
-				0
-			)
+				0,
+			),
 		);
 		return fees;
 	}
@@ -764,7 +764,7 @@ class CashuWallet {
 		const { keep: keepProofs, send: sendProofs } = this.selectProofsToSend(
 			proofs,
 			amountToSend,
-			true // inc. fees
+			true, // inc. fees
 		);
 
 		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs) - amountToSend;
@@ -782,7 +782,7 @@ class CashuWallet {
 				proofsWeHave,
 				amountToKeep,
 				keyset.keys,
-				this._denominationTarget
+				this._denominationTarget,
 			);
 		} else if (outputAmounts) {
 			if (outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) != amountToKeep) {
@@ -794,15 +794,15 @@ class CashuWallet {
 		if (amountToSend + this.getFeesForProofs(sendProofs) > amountAvailable) {
 			this._logger.error(
 				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
-					sendProofs
-				)} | length: ${sendProofs.length}`
+					sendProofs,
+				)} | length: ${sendProofs.length}`,
 			);
 			throw new Error(`Not enough funds available for swap`);
 		}
 
 		outputAmounts = {
 			keepAmounts: keepAmounts,
-			sendAmounts: sendAmounts
+			sendAmounts: sendAmounts,
 		};
 
 		const keepOutputData = outputData?.keep || this._keepFactory;
@@ -817,7 +817,7 @@ class CashuWallet {
 			pubkey,
 			privkey,
 			{ keep: keepOutputData, send: sendOutputData },
-			p2pk
+			p2pk,
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
@@ -838,7 +838,7 @@ class CashuWallet {
 		});
 		return {
 			keep: [...splitProofsToKeep, ...keepProofs],
-			send: splitProofsToSend
+			send: splitProofsToSend,
 		};
 	}
 
@@ -858,7 +858,7 @@ class CashuWallet {
 		gapLimit = 300,
 		batchSize = 100,
 		counter = 0,
-		keysetId?: string
+		keysetId?: string,
 	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
 		const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
 		const restoredProofs: Array<Proof> = [];
@@ -891,7 +891,7 @@ class CashuWallet {
 	async restore(
 		start: number,
 		count: number,
-		options?: RestoreOptions
+		options?: RestoreOptions,
 	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
@@ -905,11 +905,11 @@ class CashuWallet {
 			this._seed,
 			start,
 			keys,
-			amounts
+			amounts,
 		);
 
 		const { outputs, signatures } = await this.mint.restore({
-			outputs: outputData.map((d) => d.blindedMessage)
+			outputs: outputData.map((d) => d.blindedMessage),
 		});
 
 		const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
@@ -929,7 +929,7 @@ class CashuWallet {
 
 		return {
 			proofs: restoredProofs,
-			lastCounterWithSignature
+			lastCounterWithSignature,
 		};
 	}
 
@@ -947,7 +947,7 @@ class CashuWallet {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
-			description: description
+			description: description,
 		};
 		const res = await this.mint.createMintQuote(mintQuotePayload);
 		return { ...res, amount: res.amount || amount, unit: res.unit || this.unit };
@@ -965,7 +965,7 @@ class CashuWallet {
 	async createLockedMintQuote(
 		amount: number,
 		pubkey: string,
-		description?: string
+		description?: string,
 	): Promise<LockedMintQuoteResponse> {
 		const { supported } = (await this.getMintInfo()).isSupported(20);
 		if (!supported) {
@@ -975,7 +975,7 @@ class CashuWallet {
 			unit: this._unit,
 			amount: amount,
 			description: description,
-			pubkey: pubkey
+			pubkey: pubkey,
 		};
 		const res = await this.mint.createMintQuote(mintQuotePayload);
 		if (typeof res.pubkey !== 'string') {
@@ -995,7 +995,7 @@ class CashuWallet {
 	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
 	async checkMintQuote(
-		quote: string | MintQuoteResponse
+		quote: string | MintQuoteResponse,
 	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const baseRes = await this.mint.checkMintQuote(quoteId);
@@ -1019,17 +1019,17 @@ class CashuWallet {
 	async mintProofs(
 		amount: number,
 		quote: MintQuoteResponse,
-		options: MintProofOptions & { privateKey: string }
+		options: MintProofOptions & { privateKey: string },
 	): Promise<Array<Proof>>;
 	async mintProofs(
 		amount: number,
 		quote: string,
-		options?: MintProofOptions
+		options?: MintProofOptions,
 	): Promise<Array<Proof>>;
 	async mintProofs(
 		amount: number,
 		quote: string | MintQuoteResponse,
-		options?: MintProofOptions & { privateKey?: string }
+		options?: MintProofOptions & { privateKey?: string },
 	): Promise<Array<Proof>> {
 		let { outputAmounts } = options || {};
 		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
@@ -1038,7 +1038,7 @@ class CashuWallet {
 		if (!outputAmounts && proofsWeHave) {
 			outputAmounts = {
 				keepAmounts: getKeepAmounts(proofsWeHave, amount, keyset.keys, this._denominationTarget),
-				sendAmounts: []
+				sendAmounts: [],
 			};
 		}
 		let newBlindingData: Array<OutputData> = [];
@@ -1063,7 +1063,7 @@ class CashuWallet {
 				counter,
 				pubkey,
 				outputAmounts?.keepAmounts,
-				p2pk
+				p2pk,
 			);
 		}
 		let mintPayload: MintPayload;
@@ -1076,12 +1076,12 @@ class CashuWallet {
 			mintPayload = {
 				outputs: blindedMessages,
 				quote: quote.quote,
-				signature: mintQuoteSignature
+				signature: mintQuoteSignature,
 			};
 		} else {
 			mintPayload = {
 				outputs: newBlindingData.map((d) => d.blindedMessage),
-				quote: quote
+				quote: quote,
 			};
 		}
 		const { signatures } = await this.mint.mint(mintPayload);
@@ -1099,13 +1099,13 @@ class CashuWallet {
 	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
-			request: invoice
+			request: invoice,
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return {
 			...meltQuote,
 			unit: meltQuote.unit || this.unit,
-			request: meltQuote.request || invoice
+			request: meltQuote.request || invoice,
 		};
 	}
 
@@ -1119,7 +1119,7 @@ class CashuWallet {
 	 */
 	async createMultiPathMeltQuote(
 		invoice: string,
-		millisatPartialAmount: number
+		millisatPartialAmount: number,
 	): Promise<MeltQuoteResponse> {
 		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
@@ -1129,15 +1129,15 @@ class CashuWallet {
 			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
 		}
 		const mppOption: MPPOption = {
-			amount: millisatPartialAmount
+			amount: millisatPartialAmount,
 		};
 		const meltOptions: MeltQuoteOptions = {
-			mpp: mppOption
+			mpp: mppOption,
 		};
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice,
-			options: meltOptions
+			options: meltOptions,
 		};
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return { ...meltQuote, request: invoice, unit: this._unit };
@@ -1152,7 +1152,7 @@ class CashuWallet {
 	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
 	async checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
 	async checkMeltQuote(
-		quote: string | MeltQuoteResponse
+		quote: string | MeltQuoteResponse,
 	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const meltQuote = await this.mint.checkMeltQuote(quoteId);
@@ -1175,7 +1175,7 @@ class CashuWallet {
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Array<Proof>,
-		options?: MeltProofOptions
+		options?: MeltProofOptions,
 	): Promise<MeltProofsResponse> {
 		const { keysetId, counter, privkey } = options || {};
 		const keys = await this.getKeys(keysetId);
@@ -1183,7 +1183,7 @@ class CashuWallet {
 			sumProofs(proofsToSend) - meltQuote.amount,
 			keys,
 			counter,
-			this._keepFactory
+			this._keepFactory,
 		);
 		if (privkey != undefined) {
 			proofsToSend = signP2PKProofs(proofsToSend, privkey);
@@ -1201,12 +1201,12 @@ class CashuWallet {
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
 			inputs: proofsToSend,
-			outputs: outputData.map((d) => d.blindedMessage)
+			outputs: outputData.map((d) => d.blindedMessage),
 		};
 		const meltResponse = await this.mint.melt(meltPayload);
 		return {
 			quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
-			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? []
+			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
 		};
 	}
 
@@ -1243,13 +1243,13 @@ class CashuWallet {
 			refundKeys?: Array<string>;
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
-		}
+		},
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
 			outputAmounts.keepAmounts = splitAmount(
 				totalAmount - amount - this.getFeesForProofs(proofsToSend),
-				keyset.keys
+				keyset.keys,
 			);
 		}
 		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
@@ -1274,7 +1274,7 @@ class CashuWallet {
 				undefined,
 				outputAmounts?.keepAmounts,
 				undefined,
-				this._keepFactory
+				this._keepFactory,
 			);
 		}
 
@@ -1295,7 +1295,7 @@ class CashuWallet {
 				counter ? counter + keepOutputData.length : undefined,
 				pubkey,
 				outputAmounts?.sendAmounts,
-				p2pk
+				p2pk,
 			);
 		}
 
@@ -1317,11 +1317,11 @@ class CashuWallet {
 			.map((_, i) => i)
 			.sort(
 				(a, b) =>
-					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount
+					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
 			);
 		const keepVector: Array<boolean> = [
 			...Array.from({ length: keepOutputData.length }, () => true),
-			...Array.from({ length: sendOutputData.length }, () => false)
+			...Array.from({ length: sendOutputData.length }, () => false),
 		];
 
 		const sortedOutputData: Array<OutputDataLike> = indices.map((i) => mergedBlindingData[i]);
@@ -1330,11 +1330,11 @@ class CashuWallet {
 		return {
 			payload: {
 				inputs: proofsToSend,
-				outputs: sortedOutputData.map((d) => d.blindedMessage)
+				outputs: sortedOutputData.map((d) => d.blindedMessage),
 			},
 			outputData: sortedOutputData,
 			keepVector: sortedKeepVector,
-			sortedIndices: indices
+			sortedIndices: indices,
 		};
 	}
 
@@ -1353,7 +1353,7 @@ class CashuWallet {
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
 			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
 			const { states: batchStates } = await this.mint.check({
-				Ys: YsSlice
+				Ys: YsSlice,
 			});
 			const stateMap: { [y: string]: ProofState } = {};
 			batchStates.forEach((s) => {
@@ -1381,7 +1381,7 @@ class CashuWallet {
 	async onMintQuoteUpdates(
 		quoteIds: Array<string>,
 		callback: (payload: MintQuoteResponse) => void,
-		errorCallback: (e: Error) => void
+		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
@@ -1390,7 +1390,7 @@ class CashuWallet {
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: quoteIds },
 			callback,
-			errorCallback
+			errorCallback,
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
@@ -1408,7 +1408,7 @@ class CashuWallet {
 	async onMeltQuotePaid(
 		quoteId: string,
 		callback: (payload: MeltQuoteResponse) => void,
-		errorCallback: (e: Error) => void
+		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		return this.onMeltQuoteUpdates(
 			[quoteId],
@@ -1417,7 +1417,7 @@ class CashuWallet {
 					callback(p);
 				}
 			},
-			errorCallback
+			errorCallback,
 		);
 	}
 
@@ -1432,7 +1432,7 @@ class CashuWallet {
 	async onMintQuotePaid(
 		quoteId: string,
 		callback: (payload: MintQuoteResponse) => void,
-		errorCallback: (e: Error) => void
+		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		return this.onMintQuoteUpdates(
 			[quoteId],
@@ -1441,7 +1441,7 @@ class CashuWallet {
 					callback(p);
 				}
 			},
-			errorCallback
+			errorCallback,
 		);
 	}
 
@@ -1456,7 +1456,7 @@ class CashuWallet {
 	async onMeltQuoteUpdates(
 		quoteIds: Array<string>,
 		callback: (payload: MeltQuoteResponse) => void,
-		errorCallback: (e: Error) => void
+		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
@@ -1465,7 +1465,7 @@ class CashuWallet {
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_melt_quote', filters: quoteIds },
 			callback,
-			errorCallback
+			errorCallback,
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
@@ -1483,7 +1483,7 @@ class CashuWallet {
 	async onProofStateUpdates(
 		proofs: Array<Proof>,
 		callback: (payload: ProofState & { proof: Proof }) => void,
-		errorCallback: (e: Error) => void
+		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
@@ -1501,7 +1501,7 @@ class CashuWallet {
 			(p: ProofState) => {
 				callback({ ...p, proof: proofMap[p.Y] });
 			},
-			errorCallback
+			errorCallback,
 		);
 		return () => {
 			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
@@ -1535,7 +1535,7 @@ class CashuWallet {
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
-		factory?: OutputDataFactory
+		factory?: OutputDataFactory,
 	): Array<OutputDataLike> {
 		let outputData: Array<OutputDataLike>;
 		if (pubkey) {
@@ -1549,7 +1549,7 @@ class CashuWallet {
 				this._seed,
 				counter,
 				keyset,
-				outputAmounts
+				outputAmounts,
 			);
 		} else if (p2pk) {
 			outputData = OutputData.createP2PKData(p2pk, amount, keyset, outputAmounts);
@@ -1576,7 +1576,7 @@ class CashuWallet {
 		amount: number,
 		keyset: MintKeys,
 		counter?: number,
-		factory?: OutputDataFactory
+		factory?: OutputDataFactory,
 	): Array<OutputDataLike> {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
@@ -1591,7 +1591,7 @@ class CashuWallet {
 			undefined,
 			amounts,
 			undefined,
-			factory
+			factory,
 		);
 	}
 }

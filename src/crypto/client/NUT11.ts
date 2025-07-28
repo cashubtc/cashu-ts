@@ -12,8 +12,8 @@ export const createP2PKsecret = (pubkey: string): string => {
 		'P2PK',
 		{
 			nonce: bytesToHex(randomBytes(32)),
-			data: pubkey
-		}
+			data: pubkey,
+		},
 	];
 	return JSON.stringify(newSecret);
 };
@@ -41,7 +41,7 @@ export const signBlindedMessage = (B_: string, privateKey: PrivKey): string => {
 export const verifyP2PKSecretSignature = (
 	signature: string,
 	secret: string,
-	pubkey: string
+	pubkey: string,
 ): boolean => {
 	try {
 		const msghash = sha256(secret);
@@ -213,7 +213,7 @@ export function getP2PKSigFlag(secretStr: string | Secret): string {
  * @type {array} of Signatures.
  */
 export const getP2PKWitnessSignatures = (
-	witness: string | P2PKWitness | undefined
+	witness: string | P2PKWitness | undefined,
 ): Array<string> => {
 	if (!witness) return [];
 	if (typeof witness === 'string') {
@@ -239,7 +239,7 @@ export const getP2PKWitnessSignatures = (
 export const signP2PKProofs = (
 	proofs: Array<Proof>,
 	privateKey: string | Array<string>,
-	beStrict = false
+	beStrict = false,
 ): Array<Proof> => {
 	const privateKeys: Array<string> = Array.isArray(privateKey) ? privateKey : [privateKey];
 	return proofs.map((proof, index) => {
@@ -308,7 +308,7 @@ export const getSignedOutput = (output: BlindedMessage, privateKey: PrivKey): Bl
 
 export const getSignedOutputs = (
 	outputs: Array<BlindedMessage>,
-	privateKey: string
+	privateKey: string,
 ): Array<BlindedMessage> => {
 	return outputs.map((o) => getSignedOutput(o, privateKey));
 };

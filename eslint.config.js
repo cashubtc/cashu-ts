@@ -20,8 +20,8 @@ export default tseslint.config(
 			'examples/**',
 			'vite.config.ts',
 			'vitest.workspace.ts',
-			'eslint.config.js'
-		]
+			'eslint.config.js',
+		],
 	},
 	eslint.configs.recommended,
 	...tseslint.configs.recommended,
@@ -38,12 +38,12 @@ export default tseslint.config(
 		languageOptions: {
 			globals: {
 				...globals.browser,
-				...globals.es2021
+				...globals.es2021,
 			},
 			parserOptions: {
 				projectService: true,
-				tsconfigRootDir: import.meta.dirname
-			}
+				tsconfigRootDir: import.meta.dirname,
+			},
 		},
 		rules: {
 			// Extra rules and overrides to recommended
@@ -56,11 +56,11 @@ export default tseslint.config(
 			// preferring inline type specifiers when fixing
 			'@typescript-eslint/consistent-type-imports': [
 				'error',
-				{ prefer: 'type-imports', fixStyle: 'inline-type-imports' }
+				{ prefer: 'type-imports', fixStyle: 'inline-type-imports' },
 			],
 			'@typescript-eslint/consistent-type-exports': [
 				'error',
-				{ fixMixedExportsWithInlineTypeSpecifier: true }
+				{ fixMixedExportsWithInlineTypeSpecifier: true },
 			],
 			// Disallow empty functions (NB: must disable base rule for TS)
 			'no-empty-function': 'off',
@@ -68,14 +68,14 @@ export default tseslint.config(
 			// Promote flatter and cleaner control flows
 			'no-else-return': 'error',
 			// Ignore experimental features (node: >22.4.0) that we use
-			'n/no-unsupported-features/node-builtins': ['error', { ignores: ['CloseEvent'] }]
+			'n/no-unsupported-features/node-builtins': ['error', { ignores: ['CloseEvent'] }],
 		},
 		settings: {
 			// Enhanced for import plugin (ensures TS paths resolve without extensions)
 			'import/resolver': {
 				typescript: { project: './tsconfig.json' }, // Explicitly point to tsconfig for path mappings/aliases if any
-				node: true
-			}
-		}
-	}
+				node: true,
+			},
+		},
+	},
 );

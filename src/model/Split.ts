@@ -16,7 +16,7 @@ class Split {
 			amount: this.amount,
 			outputs: this.outputs.map((blindedMessage: BlindedMessage) => {
 				return { amount: blindedMessage.amount, B_: blindedMessage.B_.toHex(true) };
-			})
+			}),
 		};
 	}
 }

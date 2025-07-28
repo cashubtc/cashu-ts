@@ -33,7 +33,7 @@ export type ProofState = {
 export const CheckStateEnum = {
 	UNSPENT: 'UNSPENT',
 	PENDING: 'PENDING',
-	SPENT: 'SPENT'
+	SPENT: 'SPENT',
 } as const;
 export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum];
 
@@ -164,7 +164,7 @@ export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; un
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
 	PENDING: 'PENDING',
-	PAID: 'PAID'
+	PAID: 'PAID',
 } as const;
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
 
@@ -176,7 +176,7 @@ export type MintContactInfo = {
 export const MintQuoteState = {
 	UNPAID: 'UNPAID',
 	PAID: 'PAID',
-	ISSUED: 'ISSUED'
+	ISSUED: 'ISSUED',
 } as const;
 export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState];
 

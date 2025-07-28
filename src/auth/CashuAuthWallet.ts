@@ -3,7 +3,7 @@ import {
 	type BlindAuthMintPayload,
 	type MintKeys,
 	type MintKeyset,
-	type Proof
+	type Proof,
 } from '../model/types';
 import { hasValidDleq } from '../utils';
 import { type CashuAuthMint } from './CashuAuthMint';
@@ -29,7 +29,7 @@ class CashuAuthWallet {
 		options?: {
 			keys?: Array<MintKeys> | MintKeys;
 			keysets?: Array<MintKeyset>;
-		}
+		},
 	) {
 		this.mint = mint;
 		let keys: Array<MintKeys> = [];
@@ -82,7 +82,7 @@ class CashuAuthWallet {
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
 
 		const activeKeyset = activeKeysets.sort(
-			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0)
+			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
 		)[0];
 		if (!activeKeyset) {
 			throw new Error('No active keyset found');
@@ -166,13 +166,13 @@ class CashuAuthWallet {
 		clearAuthToken: string,
 		options?: {
 			keysetId?: string;
-		}
+		},
 	): Promise<Array<Proof>> {
 		const keyset = await this.getKeys(options?.keysetId);
 		const outputData = OutputData.createRandomData(amount, keyset);
 
 		const mintPayload: BlindAuthMintPayload = {
-			outputs: outputData.map((d) => d.blindedMessage)
+			outputs: outputData.map((d) => d.blindedMessage),
 		};
 		const { signatures } = await this.mint.mint(mintPayload, clearAuthToken);
 		const authProofs = outputData.map((d, i) => d.toProof(signatures[i], keyset));

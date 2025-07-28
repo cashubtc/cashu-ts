@@ -5,7 +5,7 @@ import {
 	type RawTransport,
 	type NUT10Option,
 	type PaymentRequestTransport,
-	type PaymentRequestTransportType
+	type PaymentRequestTransportType,
 } from './types';
 import { Buffer } from 'buffer';
 
@@ -18,7 +18,7 @@ export class PaymentRequest {
 		public mints?: Array<string>,
 		public description?: string,
 		public singleUse: boolean = false,
-		public nut10?: NUT10Option
+		public nut10?: NUT10Option,
 	) {}
 
 	toRawRequest() {
@@ -27,7 +27,7 @@ export class PaymentRequest {
 			rawRequest.t = this.transport.map((t: PaymentRequestTransport) => ({
 				t: t.type,
 				a: t.target,
-				g: t.tags
+				g: t.tags,
 			}));
 		}
 		if (this.id) {
@@ -52,7 +52,7 @@ export class PaymentRequest {
 			rawRequest.nut10 = {
 				k: this.nut10.kind,
 				d: this.nut10.data,
-				t: this.nut10.tags
+				t: this.nut10.tags,
 			};
 		}
 		return rawRequest;
@@ -74,14 +74,14 @@ export class PaymentRequest {
 			? rawPaymentRequest.t.map((t: RawTransport) => ({
 					type: t.t,
 					target: t.a,
-					tags: t.g
+					tags: t.g,
 				}))
 			: undefined;
 		const nut10 = rawPaymentRequest.nut10
 			? {
 					kind: rawPaymentRequest.nut10.k,
 					data: rawPaymentRequest.nut10.d,
-					tags: rawPaymentRequest.nut10.t
+					tags: rawPaymentRequest.nut10.t,
 				}
 			: undefined;
 		return new PaymentRequest(
@@ -92,7 +92,7 @@ export class PaymentRequest {
 			rawPaymentRequest.m,
 			rawPaymentRequest.d,
 			rawPaymentRequest.s,
-			nut10
+			nut10,
 		);
 	}
 

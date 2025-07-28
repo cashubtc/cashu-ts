@@ -10,7 +10,7 @@ import {
 	getP2PKLocktime,
 	getP2PKNSigs,
 	getP2PKSigFlag,
-	getP2PKWitnessSignatures
+	getP2PKWitnessSignatures,
 } from '../../../src/crypto/client/NUT11';
 import { Secret } from '../../../src/crypto/common/index.js';
 import { P2PKWitness } from '../../../src/model/types/index.js';
@@ -37,7 +37,7 @@ describe('test create p2pk secret', () => {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr)
+			secret: new TextEncoder().encode(secretStr),
 		};
 		const signedProof = signP2PKProof(proof, PRIVKEY);
 		const verify = verifyP2PKSig(signedProof);
@@ -50,14 +50,14 @@ describe('test create p2pk secret', () => {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr)
+			secret: new TextEncoder().encode(secretStr),
 		};
 
 		const proof2: Proof = {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr)
+			secret: new TextEncoder().encode(secretStr),
 		};
 
 		const proofs = [proof1, proof2];
@@ -79,14 +79,14 @@ describe('test create p2pk secret', () => {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr)
+			secret: new TextEncoder().encode(secretStr),
 		};
 
 		const proof2: Proof = {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr2)
+			secret: new TextEncoder().encode(secretStr2),
 		};
 
 		const proofs = [proof1, proof2];
@@ -108,14 +108,14 @@ describe('test create p2pk secret', () => {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr)
+			secret: new TextEncoder().encode(secretStr),
 		};
 
 		const proof2: Proof = {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr2)
+			secret: new TextEncoder().encode(secretStr2),
 		};
 
 		const proofs = [proof1, proof2];
@@ -381,7 +381,7 @@ describe('test signP2PKProof', () => {
 			amount: 1,
 			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
 			id: '00000000000',
-			secret: new TextEncoder().encode(secretStr)
+			secret: new TextEncoder().encode(secretStr),
 		};
 		expect(() => signP2PKProof(proof, PRIVKEY).toThrow('not a P2PK secret'));
 	});
@@ -393,7 +393,7 @@ describe('test signP2PKProof', () => {
 			id: '00000000000',
 			secret: new TextEncoder().encode(secretStr),
 			witness:
-				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}'
+				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}',
 		};
 		// first signing
 		const signedProof = signP2PKProof(proof, PRIVKEY);
@@ -402,7 +402,7 @@ describe('test signP2PKProof', () => {
 		expect(signedProof.witness.signatures).toHaveLength(2);
 		// try signing again
 		expect(() => signP2PKProof(signedProof, PRIVKEY)).toThrow(
-			`Proof already signed by [02|03]${PUBKEY.slice(2)}`
+			`Proof already signed by [02|03]${PUBKEY.slice(2)}`,
 		);
 	});
 	test('not eligible to sign', async () => {
@@ -416,10 +416,10 @@ describe('test signP2PKProof', () => {
 			id: '00000000000',
 			secret: new TextEncoder().encode(secretStr),
 			witness:
-				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}'
+				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}',
 		};
 		expect(() => signP2PKProof(proof, PRIVKEY2)).toThrow(
-			`Signature not required from [02|03]${PUBKEY2.slice(2)}`
+			`Signature not required from [02|03]${PUBKEY2.slice(2)}`,
 		);
 	});
 	test('sign with 02-prepended Nostr key', async () => {
@@ -434,7 +434,7 @@ describe('test signP2PKProof', () => {
 			id: '00000000000',
 			secret: new TextEncoder().encode(secretStr),
 			witness:
-				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}'
+				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}',
 		};
 		const signedProof = signP2PKProof(proof, PRIVKEY2);
 		const verify = verifyP2PKSig(signedProof);
@@ -457,7 +457,7 @@ describe('test getP2PKWitnessSignatures', () => {
 		expect(result).toStrictEqual([]);
 		expect(consoleErrorSpy).toHaveBeenCalledWith(
 			'Failed to parse witness string:',
-			expect.any(Error)
+			expect.any(Error),
 		); // Verify console.error was called
 	});
 	test('string witness', async () => {
@@ -465,20 +465,20 @@ describe('test getP2PKWitnessSignatures', () => {
 			'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}';
 		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([
-			'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383'
+			'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
 		]);
 	});
 	test('P2PKWitness witness', async () => {
 		const witness: P2PKWitness = {
 			signatures: [
 				'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
-				'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383'
-			]
+				'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
+			],
 		};
 		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([
 			'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
-			'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383'
+			'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
 		]);
 	});
 });

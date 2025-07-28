@@ -42,7 +42,7 @@ async function _request({
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
-		...requestHeaders
+		...requestHeaders,
 	};
 
 	let response: Response;

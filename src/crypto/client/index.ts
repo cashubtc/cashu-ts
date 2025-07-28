@@ -9,7 +9,7 @@ import {
 	type SerializedProof,
 	hashToCurve,
 	pointFromHex,
-	type Witness
+	type Witness,
 } from '../common/index.js';
 import { type PrivKey } from '@noble/curves/abstract/utils';
 import { getSignedOutput } from './NUT11.js';
@@ -25,7 +25,7 @@ export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage
 	return blindMessage(
 		randomBytes(32),
 		bytesToNumber(secp256k1.utils.randomPrivateKey()),
-		privateKey
+		privateKey,
 	);
 }
 
@@ -45,7 +45,7 @@ export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKe
 export function unblindSignature(
 	C_: ProjPointType<bigint>,
 	r: bigint,
-	A: ProjPointType<bigint>
+	A: ProjPointType<bigint>,
 ): ProjPointType<bigint> {
 	const C = C_.subtract(A.multiply(r));
 	return C;
@@ -55,7 +55,7 @@ export function constructProofFromPromise(
 	promise: BlindSignature,
 	r: bigint,
 	secret: Uint8Array,
-	key: ProjPointType<bigint>
+	key: ProjPointType<bigint>,
 ): Proof {
 	const A = key;
 	const C = unblindSignature(promise.C_, r, A);
@@ -63,7 +63,7 @@ export function constructProofFromPromise(
 		id: promise.id,
 		amount: promise.amount,
 		secret,
-		C
+		C,
 	};
 	return proof;
 }
@@ -74,7 +74,7 @@ export const serializeProof = (proof: Proof): SerializedProof => {
 		C: proof.C.toHex(true),
 		id: proof.id,
 		secret: new TextDecoder().decode(proof.secret),
-		witness: JSON.stringify(proof.witness)
+		witness: JSON.stringify(proof.witness),
 	};
 };
 
@@ -84,15 +84,15 @@ export const deserializeProof = (proof: SerializedProof): Proof => {
 		C: pointFromHex(proof.C),
 		id: proof.id,
 		secret: new TextEncoder().encode(proof.secret),
-		witness: proof.witness ? (JSON.parse(proof.witness) as Witness) : undefined
+		witness: proof.witness ? (JSON.parse(proof.witness) as Witness) : undefined,
 	};
 };
 export const serializeBlindedMessage = (
 	bm: BlindedMessage,
-	amount: number
+	amount: number,
 ): SerializedBlindedMessage => {
 	return {
 		B_: bm.B_.toHex(true),
-		amount: amount
+		amount: amount,
 	};
 };

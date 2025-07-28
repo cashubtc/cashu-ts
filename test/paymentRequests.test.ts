@@ -4,7 +4,7 @@ import {
 	PaymentRequest,
 	PaymentRequestTransport,
 	PaymentRequestTransportType,
-	NUT10Option
+	NUT10Option,
 } from '../src/index.js';
 
 describe('payment requests', () => {
@@ -14,8 +14,8 @@ describe('payment requests', () => {
 				{
 					type: PaymentRequestTransportType.NOSTR,
 					target: 'asd',
-					tags: [['n', '17']]
-				} as PaymentRequestTransport
+					tags: [['n', '17']],
+				} as PaymentRequestTransport,
 			],
 			'4840f51e',
 			1000,
@@ -26,8 +26,8 @@ describe('payment requests', () => {
 			{
 				kind: 'P2PK',
 				data: 'pubkey',
-				tags: [['tag', 'tag-value']]
-			} as NUT10Option
+				tags: [['tag', 'tag-value']],
+			} as NUT10Option,
 		);
 		const pr = request.toEncodedRequest();
 		expect(pr).toBeDefined();
@@ -66,7 +66,7 @@ describe('payment requests', () => {
 		expect(request.transport?.length).toBe(1);
 		expect(request.transport?.[0].type).toBe(PaymentRequestTransportType.NOSTR);
 		expect(request.transport?.[0].target).toBe(
-			'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgymdex3gvfsfujp3xyn7e7qrs8yyq9d8zsu2zqujxuxcapfqvzc8grqdkts'
+			'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgymdex3gvfsfujp3xyn7e7qrs8yyq9d8zsu2zqujxuxcapfqvzc8grqdkts',
 		);
 	});
 });

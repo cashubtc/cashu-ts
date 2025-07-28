@@ -2,7 +2,7 @@ import {
 	type GetInfoResponse,
 	type MPPMethod,
 	type SwapMethod,
-	type WebSocketSupport
+	type WebSocketSupport,
 } from './types';
 
 export class MintInfo {
@@ -21,8 +21,8 @@ export class MintInfo {
 				cache: {},
 				apiReturn: info.nuts[22].protected_endpoints.map((o) => ({
 					method: o.method,
-					regex: new RegExp(o.path)
-				}))
+					regex: new RegExp(o.path),
+				})),
 			};
 		}
 	}
