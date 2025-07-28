@@ -169,7 +169,7 @@ export function hasNonHexId(p: Proof | Array<Proof>) {
 	if (Array.isArray(p)) {
 		return p.some((proof) => !isValidHex(proof.id));
 	}
-	return isValidHex(p.id);
+	return !isValidHex(p.id);
 }
 
 //used for json serialization
@@ -205,7 +205,7 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 function convertToShortKeysetId(proofs: Array<Proof>) {
 	return proofs.map((p) => {
 		const newP = {...p};
-		newP.id = newP.id.slice(0, 8);
+		newP.id = newP.id.slice(0, 16);
 		return newP;
 	});
 }
@@ -382,16 +382,43 @@ export function handleTokens(token: string): Token {
 /**
  * Returns the keyset id of a set of keys
  * @param keys keys object to derive keyset id from
+ * @param unit (optional) the unit of the keyset
+ * @param expiry (optional) expiry of the keyset
+ * @param versionByte (optional) version of the keyset ID. Default is 0.
  * @returns
  */
-export function deriveKeysetId(keys: Keys) {
-	const pubkeysConcat = Object.entries(keys)
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: 0 | 1) {
+	let pubkeysConcat = Object.entries(keys)
 		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
 		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
 		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-	const hash = sha256(pubkeysConcat);
-	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
-	return '00' + hashHex;
+
+	if (!versionByte) {
+		versionByte = 0;
+	}
+	let hash;
+	let hashHex;
+	switch (versionByte) {
+		case 0:
+			hash = sha256(pubkeysConcat);
+			hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+			return '00' + hashHex;
+		case 1:
+			if (!unit) {
+				throw new Error("Couldn't compute ID version 2: no unit was given.");
+			}
+			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from("unit:"+unit));
+			if (expiry) {
+				pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from("final_expiry:"+expiry.toString()))
+			}
+			hash = sha256(pubkeysConcat);
+			hashHex = Buffer.from(hash).toString('hex');
+			return '01' + hashHex;
+		default:
+			throw new Error(`Unknown version byte ${versionByte}`)
+	}
+
+	
 }
 
 export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
@@ -530,33 +557,8 @@ export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
  * @throws Error if the keyset ID version is unrecognized
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
-	const idBytes = hexToBytes(keys.id);
-	const pubkeysSorted = Object.entries(keys.keys)
-		.map(([k, v]) => [parseInt(k), v])
-		.sort((a, b) => a[0] - b[0]);
-	let pubkeysConcat = '';
-	for (const key of pubkeysSorted) {
-		pubkeysConcat += key[1] as string;
-	}
-	const pubkeysConcatBytes = hexToBytes(pubkeysConcat);
-	let hashDigest;
-	let recomputedId;
-	switch (idBytes[0]) {
-		case 0x00:
-			hashDigest = sha256(pubkeysConcatBytes);
-			recomputedId = '00' + bytesToHex(hashDigest.slice(0, 8));
-			return recomputedId === keys.id;
-		case 0x01:
-			pubkeysConcat += `unit:${keys.unit}`;
-			if (keys.final_expiry) {
-				pubkeysConcat += `final_expiry:${keys.final_expiry.toString(10)}`;
-			}
-			hashDigest = sha256(pubkeysConcatBytes);
-			recomputedId = '01' + bytesToHex(hashDigest);
-			return recomputedId === keys.id;
-		default:
-			throw new Error(`Unrecognized keyset id version ${idBytes[0].toString()}`);
-	}
+	const versionByte = hexToBytes(keys.id)[0];
+	return deriveKeysetId(keys.keys, keys.unit, keys.final_expiry, versionByte) === keys.id;
 }
 
 /**
@@ -565,16 +567,25 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): Array<Proof> {
 	const newProofs = [];
 	for (const proof of proofs) {
-		const idBytes = hexToBytes(proof.id);
+		let idBytes;
+		try {
+			idBytes = hexToBytes(proof.id);
+		} catch (e) {
+			// Base64 keysets don't need conversion
+			newProofs.push(proof);
+			continue;
+		}
+		
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
 		} else if (idBytes[0] === 0x01) {
 			if (!keysets) {
 				throw new Error("A short keyset ID v2 was encountered, but got no keysets to map it to.");
 			}
+			// Look for a match: prefix(keyset ID) == short ID
 			let found = false;
 			for (const keyset of keysets) {
-				if (proof.id === keyset.id.slice(proof.id.length)) {
+				if (proof.id === keyset.id.slice(0, proof.id.length)) {
 					proof.id = keyset.id;
 					newProofs.push(proof);
 					found = true;
