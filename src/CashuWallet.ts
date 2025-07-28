@@ -67,7 +67,7 @@ const DEFAULT_UNIT = 'sat';
 class CashuWallet {
 	private _keys: Map<string, MintKeys> = new Map();
 	private _keysetId: string | undefined;
-	private _keysets: Array<MintKeyset> = [];
+	private _keysets: MintKeyset[] = [];
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = DEFAULT_UNIT;
 	private _mintInfo: MintInfo | undefined = undefined;
@@ -94,8 +94,8 @@ class CashuWallet {
 		mint: CashuMint,
 		options?: {
 			unit?: string;
-			keys?: Array<MintKeys> | MintKeys;
-			keysets?: Array<MintKeyset>;
+			keys?: MintKeys[] | MintKeys;
+			keysets?: MintKeyset[];
 			mintInfo?: GetInfoResponse;
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;
@@ -105,7 +105,7 @@ class CashuWallet {
 	) {
 		this.mint = mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
-		let keys: Array<MintKeys> = [];
+		let keys: MintKeys[] = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
 		} else if (options?.keys && Array.isArray(options?.keys)) {
@@ -146,7 +146,7 @@ class CashuWallet {
 	set keysetId(keysetId: string) {
 		this._keysetId = keysetId;
 	}
-	get keysets(): Array<MintKeyset> {
+	get keysets(): MintKeyset[] {
 		return this._keysets;
 	}
 	get mintInfo(): MintInfo {
@@ -197,7 +197,7 @@ class CashuWallet {
 	 * @param keysets Keysets to choose from.
 	 * @returns Active keyset.
 	 */
-	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
+	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
 
 		// we only consider keyset IDs that start with "00"
@@ -217,7 +217,7 @@ class CashuWallet {
 	 *
 	 * @returns Keysets with wallet's unit.
 	 */
-	async getKeySets(): Promise<Array<MintKeyset>> {
+	async getKeySets(): Promise<MintKeyset[]> {
 		const allKeysets = await this.mint.getKeySets();
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this._unit);
 		this._keysets = unitKeysets;
@@ -230,7 +230,7 @@ class CashuWallet {
 	 *
 	 * @returns Keyset.
 	 */
-	async getAllKeys(): Promise<Array<MintKeys>> {
+	async getAllKeys(): Promise<MintKeys[]> {
 		const keysets = await this.mint.getKeys();
 		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
 		this.keysetId = this.getActiveKeyset(this._keysets).id;
@@ -283,7 +283,7 @@ class CashuWallet {
 	 * @param {ReceiveOptions} [options] - Optional configuration for token processing.
 	 * @returns New token with newly created proofs, token entries that had errors.
 	 */
-	async receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>> {
+	async receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]> {
 		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
 			options || {};
 
@@ -297,7 +297,7 @@ class CashuWallet {
 			}
 		}
 		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		let newOutputData: { send: Array<OutputDataLike> | OutputDataFactory } | undefined = undefined;
+		let newOutputData: { send: OutputDataLike[] | OutputDataFactory } | undefined = undefined;
 		if (outputData) {
 			newOutputData = { send: outputData };
 		} else if (this._keepFactory) {
@@ -316,7 +316,7 @@ class CashuWallet {
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
-		const orderedProofs: Array<Proof> = [];
+		const orderedProofs: Proof[] = [];
 		swapTransaction.sortedIndices.forEach((s, o) => {
 			orderedProofs[s] = proofs[o];
 		});
@@ -331,7 +331,7 @@ class CashuWallet {
 	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation.
 	 * @returns {SendResponse}
 	 */
-	async send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse> {
+	async send(amount: number, proofs: Proof[], options?: SendOptions): Promise<SendResponse> {
 		const {
 			offline,
 			includeFees,
@@ -389,11 +389,7 @@ class CashuWallet {
 	 * @returns SendResponse containing proofs to keep and proofs to send.
 	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
 	 */
-	selectProofsToSend(
-		proofs: Array<Proof>,
-		amountToSend: number,
-		includeFees = false,
-	): SendResponse {
+	selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees = false): SendResponse {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
 		const MAX_OVRPCT = 0; // Acceptable close match overage (percent)
@@ -402,7 +398,7 @@ class CashuWallet {
 		const MAX_P2SWAP = 5000; // Max number of Phase 2 improvement swaps
 		const exactMatch = false; // Allows close match (> amountToSend + fee)
 		const timer = measureTime(); // start the clock
-		let bestSubset: Array<ProofWithFee> | null = null;
+		let bestSubset: ProofWithFee[] | null = null;
 		let bestDelta = Infinity;
 		let bestAmount = 0;
 		let bestFeePPK = 0;
@@ -420,7 +416,7 @@ class CashuWallet {
 			return amount - (includeFees ? Math.ceil(feePPK / 1000) : 0);
 		};
 		// Shuffle array for randomization
-		const shuffleArray = <T>(array: Array<T>): Array<T> => {
+		const shuffleArray = <T>(array: T[]): T[] => {
 			const shuffled = [...array];
 			for (let i = shuffled.length - 1; i > 0; i--) {
 				const j = Math.floor(Math.random() * (i + 1));
@@ -432,7 +428,7 @@ class CashuWallet {
 		// If lessOrEqual=true, returns the rightmost index where exFee <= value
 		// If lessOrEqual=false, returns the leftmost index where exFee >= value
 		const binarySearchIndex = (
-			arr: Array<ProofWithFee>,
+			arr: ProofWithFee[],
 			value: number,
 			lessOrEqual: boolean,
 		): number | null => {
@@ -454,7 +450,7 @@ class CashuWallet {
 			return lessOrEqual ? result : left < arr.length ? left : null;
 		};
 		// Insert into array of ProofWithFee objects sorted by exFee
-		const insertSorted = (arr: Array<ProofWithFee>, obj: ProofWithFee): void => {
+		const insertSorted = (arr: ProofWithFee[], obj: ProofWithFee): void => {
 			const value = obj.exFee;
 			let left = 0,
 				right = arr.length;
@@ -552,7 +548,7 @@ class CashuWallet {
 			// PHASE 1: Randomized Greedy Selection
 			// Add proofs up to amountToSend (after adjusting for fees)
 			// for exact match or the first amount over target otherwise
-			const S: Array<ProofWithFee> = [];
+			const S: ProofWithFee[] = [];
 			let amount = 0;
 			let feePPK = 0;
 			for (const obj of shuffleArray(spendableProofs)) {
@@ -688,7 +684,7 @@ class CashuWallet {
 	 * @returns Fee amount.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
-	getFeesForProofs(proofs: Array<Proof>): number {
+	getFeesForProofs(proofs: Proof[]): number {
 		const sumPPK = proofs.reduce((a, c) => a + this.getProofFeePPK(c), 0);
 		return Math.ceil(sumPPK / 1000);
 	}
@@ -735,7 +731,7 @@ class CashuWallet {
 	 * @param {SwapOptions} [options] - Optional parameters for configuring the swap operation.
 	 * @returns Promise of the change- and send-proofs.
 	 */
-	async swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse> {
+	async swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse> {
 		let { outputAmounts } = options || {};
 		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, outputData, p2pk } =
 			options || {};
@@ -821,8 +817,8 @@ class CashuWallet {
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
-		const splitProofsToKeep: Array<Proof> = [];
-		const splitProofsToSend: Array<Proof> = [];
+		const splitProofsToKeep: Proof[] = [];
+		const splitProofsToSend: Proof[] = [];
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
 		const reorderedProofs = Array(swapProofs.length);
 		swapTransaction.sortedIndices.forEach((s, i) => {
@@ -859,9 +855,9 @@ class CashuWallet {
 		batchSize = 100,
 		counter = 0,
 		keysetId?: string,
-	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
+	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const requiredEmptyBatches = Math.ceil(gapLimit / batchSize);
-		const restoredProofs: Array<Proof> = [];
+		const restoredProofs: Proof[] = [];
 
 		let lastCounterWithSignature: undefined | number;
 		let emptyBatchesFound = 0;
@@ -892,7 +888,7 @@ class CashuWallet {
 		start: number,
 		count: number,
 		options?: RestoreOptions,
-	): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> {
+	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
@@ -915,7 +911,7 @@ class CashuWallet {
 		const signatureMap: { [sig: string]: SerializedBlindedSignature } = {};
 		outputs.forEach((o, i) => (signatureMap[o.B_] = signatures[i]));
 
-		const restoredProofs: Array<Proof> = [];
+		const restoredProofs: Proof[] = [];
 		let lastCounterWithSignature: number | undefined;
 
 		for (let i = 0; i < outputData.length; i++) {
@@ -1020,17 +1016,13 @@ class CashuWallet {
 		amount: number,
 		quote: MintQuoteResponse,
 		options: MintProofOptions & { privateKey: string },
-	): Promise<Array<Proof>>;
-	async mintProofs(
-		amount: number,
-		quote: string,
-		options?: MintProofOptions,
-	): Promise<Array<Proof>>;
+	): Promise<Proof[]>;
+	async mintProofs(amount: number, quote: string, options?: MintProofOptions): Promise<Proof[]>;
 	async mintProofs(
 		amount: number,
 		quote: string | MintQuoteResponse,
 		options?: MintProofOptions & { privateKey?: string },
-	): Promise<Array<Proof>> {
+	): Promise<Proof[]> {
 		let { outputAmounts } = options || {};
 		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
 
@@ -1041,7 +1033,7 @@ class CashuWallet {
 				sendAmounts: [],
 			};
 		}
-		let newBlindingData: Array<OutputData> = [];
+		let newBlindingData: OutputData[] = [];
 		if (outputData) {
 			if (isOutputDataFactory(outputData)) {
 				const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
@@ -1174,7 +1166,7 @@ class CashuWallet {
 	 */
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
-		proofsToSend: Array<Proof>,
+		proofsToSend: Proof[],
 		options?: MeltProofOptions,
 	): Promise<MeltProofsResponse> {
 		const { keysetId, counter, privkey } = options || {};
@@ -1227,20 +1219,20 @@ class CashuWallet {
 	 */
 	private createSwapPayload(
 		amount: number,
-		proofsToSend: Array<Proof>,
+		proofsToSend: Proof[],
 		keyset: MintKeys,
 		outputAmounts?: OutputAmounts,
 		counter?: number,
 		pubkey?: string,
 		privkey?: string,
 		customOutputData?: {
-			keep?: Array<OutputDataLike> | OutputDataFactory;
-			send?: Array<OutputDataLike> | OutputDataFactory;
+			keep?: OutputDataLike[] | OutputDataFactory;
+			send?: OutputDataLike[] | OutputDataFactory;
 		},
 		p2pk?: {
-			pubkey: string | Array<string>;
+			pubkey: string | string[];
 			locktime?: number;
-			refundKeys?: Array<string>;
+			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
@@ -1253,8 +1245,8 @@ class CashuWallet {
 			);
 		}
 		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
-		let keepOutputData: Array<OutputDataLike> = [];
-		let sendOutputData: Array<OutputDataLike> = [];
+		let keepOutputData: OutputDataLike[] = [];
+		let sendOutputData: OutputDataLike[] = [];
 
 		if (customOutputData?.keep) {
 			if (isOutputDataFactory(customOutputData.keep)) {
@@ -1319,13 +1311,13 @@ class CashuWallet {
 				(a, b) =>
 					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
 			);
-		const keepVector: Array<boolean> = [
+		const keepVector: boolean[] = [
 			...Array.from({ length: keepOutputData.length }, () => true),
 			...Array.from({ length: sendOutputData.length }, () => false),
 		];
 
-		const sortedOutputData: Array<OutputDataLike> = indices.map((i) => mergedBlindingData[i]);
-		const sortedKeepVector: Array<boolean> = indices.map((i) => keepVector[i]);
+		const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
+		const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
 
 		return {
 			payload: {
@@ -1344,12 +1336,12 @@ class CashuWallet {
 	 * @param proofs (only the `secret` field is required)
 	 * @returns
 	 */
-	async checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>> {
+	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
 		const enc = new TextEncoder();
 		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
 		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
-		const states: Array<ProofState> = [];
+		const states: ProofState[] = [];
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
 			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
 			const { states: batchStates } = await this.mint.check({
@@ -1379,7 +1371,7 @@ class CashuWallet {
 	 * @returns
 	 */
 	async onMintQuoteUpdates(
-		quoteIds: Array<string>,
+		quoteIds: string[],
 		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
@@ -1454,7 +1446,7 @@ class CashuWallet {
 	 * @returns
 	 */
 	async onMeltQuoteUpdates(
-		quoteIds: Array<string>,
+		quoteIds: string[],
 		callback: (payload: MeltQuoteResponse) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
@@ -1481,7 +1473,7 @@ class CashuWallet {
 	 * @returns
 	 */
 	async onProofStateUpdates(
-		proofs: Array<Proof>,
+		proofs: Proof[],
 		callback: (payload: ProofState & { proof: Proof }) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
@@ -1527,17 +1519,17 @@ class CashuWallet {
 		keyset: MintKeys,
 		counter?: number,
 		pubkey?: string,
-		outputAmounts?: Array<number>,
+		outputAmounts?: number[],
 		p2pk?: {
-			pubkey: string | Array<string>;
+			pubkey: string | string[];
 			locktime?: number;
-			refundKeys?: Array<string>;
+			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
 		factory?: OutputDataFactory,
-	): Array<OutputDataLike> {
-		let outputData: Array<OutputDataLike>;
+	): OutputDataLike[] {
+		let outputData: OutputDataLike[];
 		if (pubkey) {
 			outputData = OutputData.createP2PKData({ pubkey }, amount, keyset, outputAmounts);
 		} else if (counter || counter === 0) {
@@ -1577,7 +1569,7 @@ class CashuWallet {
 		keyset: MintKeys,
 		counter?: number,
 		factory?: OutputDataFactory,
-	): Array<OutputDataLike> {
+	): OutputDataLike[] {
 		let count = Math.ceil(Math.log2(amount)) || 1;
 		//Prevent count from being -Infinity
 		if (count < 0) {

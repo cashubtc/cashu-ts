@@ -102,7 +102,7 @@ export class ConsoleLogger implements Logger {
 		}
 	}
 	// Note: NOT static as test suite needs to spy on the output
-	private getConsoleMethod(level: LogLevel): (message: string, ...args: Array<unknown>) => void {
+	private getConsoleMethod(level: LogLevel): (message: string, ...args: unknown[]) => void {
 		switch (level) {
 			case LogLevel.FATAL:
 			case LogLevel.ERROR:

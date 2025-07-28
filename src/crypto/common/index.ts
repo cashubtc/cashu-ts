@@ -5,7 +5,7 @@ import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils.js';
 import { Buffer } from 'buffer';
 
-export type Enumerate<N extends number, Acc extends Array<number> = []> = Acc['length'] extends N
+export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
 	? Acc[number]
 	: Enumerate<N, [...Acc, Acc['length']]>;
 
@@ -70,11 +70,11 @@ export type WellKnownSecret = 'P2PK';
 export type SecretData = {
 	nonce: string;
 	data: string;
-	tags?: Array<Array<string>>;
+	tags?: string[][];
 };
 
 export type Witness = {
-	signatures: Array<string>;
+	signatures: string[];
 };
 
 export type Tags = {

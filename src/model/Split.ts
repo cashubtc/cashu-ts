@@ -2,10 +2,10 @@ import { type BlindedMessage } from './BlindedMessage.js';
 import { type Proof } from './types/index.js';
 
 class Split {
-	proofs: Array<Proof>;
+	proofs: Proof[];
 	amount: number;
-	outputs: Array<BlindedMessage>;
-	constructor(proofs: Array<Proof>, amount: number, outputs: Array<BlindedMessage>) {
+	outputs: BlindedMessage[];
+	constructor(proofs: Proof[], amount: number, outputs: BlindedMessage[]) {
 		this.proofs = proofs;
 		this.amount = amount;
 		this.outputs = outputs;

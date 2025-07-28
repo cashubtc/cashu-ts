@@ -1,13 +1,7 @@
 type SimpleValue = boolean | null | undefined;
 
 export type ResultObject = { [key: string]: ResultValue };
-export type ResultValue =
-	| SimpleValue
-	| number
-	| string
-	| Uint8Array
-	| Array<ResultValue>
-	| ResultObject;
+export type ResultValue = SimpleValue | number | string | Uint8Array | ResultValue[] | ResultObject;
 
 type ResultKeyType = Extract<ResultValue, number | string>;
 export type ValidDecodedType = Extract<ResultValue, ResultObject>;
@@ -22,12 +16,12 @@ type DecodeResult<T extends ResultValue> = {
 };
 
 export function encodeCBOR(value: unknown): Uint8Array {
-	const buffer: Array<number> = [];
+	const buffer: number[] = [];
 	encodeItem(value, buffer);
 	return new Uint8Array(buffer);
 }
 
-function encodeItem(value: unknown, buffer: Array<number>) {
+function encodeItem(value: unknown, buffer: number[]) {
 	if (value === null) {
 		buffer.push(0xf6);
 	} else if (value === undefined) {
@@ -54,7 +48,7 @@ function encodeItem(value: unknown, buffer: Array<number>) {
 	}
 }
 
-function encodeUnsigned(value: number, buffer: Array<number>) {
+function encodeUnsigned(value: number, buffer: number[]) {
 	if (value < 24) {
 		buffer.push(value);
 	} else if (value < 256) {
@@ -68,7 +62,7 @@ function encodeUnsigned(value: number, buffer: Array<number>) {
 	}
 }
 
-function encodeByteString(value: Uint8Array, buffer: Array<number>) {
+function encodeByteString(value: Uint8Array, buffer: number[]) {
 	const length = value.length;
 
 	if (length < 24) {
@@ -94,7 +88,7 @@ function encodeByteString(value: Uint8Array, buffer: Array<number>) {
 	}
 }
 
-function encodeString(value: string, buffer: Array<number>) {
+function encodeString(value: string, buffer: number[]) {
 	const utf8 = new TextEncoder().encode(value);
 	const length = utf8.length;
 
@@ -121,7 +115,7 @@ function encodeString(value: string, buffer: Array<number>) {
 	}
 }
 
-function encodeArray(value: Array<unknown>, buffer: Array<number>) {
+function encodeArray(value: unknown[], buffer: number[]) {
 	const length = value.length;
 	if (length < 24) {
 		buffer.push(0x80 | length);
@@ -138,7 +132,7 @@ function encodeArray(value: Array<unknown>, buffer: Array<number>) {
 	}
 }
 
-function encodeObject(value: Record<string, unknown>, buffer: Array<number>) {
+function encodeObject(value: Record<string, unknown>, buffer: number[]) {
 	const keys = Object.keys(value);
 	encodeUnsigned(keys.length, buffer);
 	buffer[buffer.length - 1] |= 0xa0;
@@ -257,7 +251,7 @@ function decodeArray(
 	view: DataView,
 	offset: number,
 	additionalInfo: number,
-): DecodeResult<Array<ResultValue>> {
+): DecodeResult<ResultValue[]> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	const array = [];
 	let currentOffset = newOffset;

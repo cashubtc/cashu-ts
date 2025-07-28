@@ -12,11 +12,11 @@ export type MeltPayload = {
 	/**
 	 * Inputs (Proofs) to be melted.
 	 */
-	inputs: Array<Proof>;
+	inputs: Proof[];
 	/**
 	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees.
 	 */
-	outputs: Array<SerializedBlindedMessage>;
+	outputs: SerializedBlindedMessage[];
 };
 
 /**
@@ -62,7 +62,7 @@ export type MintPayload = {
 	/**
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */
-	outputs: Array<SerializedBlindedMessage>;
+	outputs: SerializedBlindedMessage[];
 	/**
 	 * Public key the quote is locked to.
 	 */
@@ -98,11 +98,11 @@ export type SwapPayload = {
 	/**
 	 * Inputs to the split operation.
 	 */
-	inputs: Array<Proof>;
+	inputs: Proof[];
 	/**
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */
-	outputs: Array<SerializedBlindedMessage>;
+	outputs: SerializedBlindedMessage[];
 };
 
 /**
@@ -130,7 +130,7 @@ export type BlindAuthMintPayload = {
 	/**
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */
-	outputs: Array<SerializedBlindedMessage>;
+	outputs: SerializedBlindedMessage[];
 };
 
 /**
@@ -144,13 +144,13 @@ export type SwapTransaction = {
 	/**
 	 * Blinding data required to construct proofs.
 	 */
-	outputData: Array<OutputData>;
+	outputData: OutputData[];
 	/**
 	 * List of booleans to determine which proofs to keep.
 	 */
-	keepVector: Array<boolean>;
+	keepVector: boolean[];
 	/**
 	 * Indices that can be used to restore original output data.
 	 */
-	sortedIndices: Array<number>;
+	sortedIndices: number[];
 };

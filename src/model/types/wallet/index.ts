@@ -42,7 +42,7 @@ export type P2PKWitness = {
 	/**
 	 * An array of signatures in hex format.
 	 */
-	signatures?: Array<string>;
+	signatures?: string[];
 };
 
 /**
@@ -56,7 +56,7 @@ export type HTLCWitness = {
 	/**
 	 * An array of signatures in hex format.
 	 */
-	signatures?: Array<string>;
+	signatures?: string[];
 };
 
 /**
@@ -66,7 +66,7 @@ export type ReceiveTokenEntryResponse = {
 	/**
 	 * Received proofs.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 };
 
 /**
@@ -80,13 +80,13 @@ export type PaymentPayload = {
 	/**
 	 * Proofs, matching Lightning invoices amount + fees.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 };
 
 /**
  * @deprecated Token V2 should no longer be used.
  */
 export type TokenV2 = {
-	proofs: Array<Proof>;
-	mints: Array<{ url: string; ids: Array<string> }>;
+	proofs: Proof[];
+	mints: Array<{ url: string; ids: string[] }>;
 };

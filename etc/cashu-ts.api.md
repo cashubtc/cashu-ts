@@ -15,12 +15,12 @@ export type ApiError = {
 
 // @public
 export type BlindAuthMintPayload = {
-    outputs: Array<SerializedBlindedMessage>;
+    outputs: SerializedBlindedMessage[];
 };
 
 // @public
 export type BlindAuthMintResponse = {
-    signatures: Array<SerializedBlindedSignature>;
+    signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 // @public
@@ -40,26 +40,26 @@ export class CashuAuthMint {
 // @public
 export class CashuAuthWallet {
     constructor(mint: CashuAuthMint, options?: {
-        keys?: Array<MintKeys> | MintKeys;
-        keysets?: Array<MintKeyset>;
+        keys?: MintKeys[] | MintKeys;
+        keysets?: MintKeyset[];
     });
-    getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset;
-    getAllKeys(): Promise<Array<MintKeys>>;
+    getActiveKeyset(keysets: MintKeyset[]): MintKeyset;
+    getAllKeys(): Promise<MintKeys[]>;
     getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
-    getKeySets(): Promise<Array<MintKeyset>>;
+    getKeySets(): Promise<MintKeyset[]>;
     // (undocumented)
     get keys(): Map<string, MintKeys>;
     // (undocumented)
     get keysetId(): string;
     set keysetId(keysetId: string);
     // (undocumented)
-    get keysets(): Array<MintKeyset>;
+    get keysets(): MintKeyset[];
     loadMint(): Promise<void>;
     // (undocumented)
     mint: CashuAuthMint;
     mintProofs(amount: number, clearAuthToken: string, options?: {
         keysetId?: string;
-    }): Promise<Array<Proof>>;
+    }): Promise<Proof[]>;
 }
 
 // @public
@@ -101,7 +101,7 @@ export class CashuMint {
     static restore(mintUrl: string, restorePayload: PostRestorePayload, customRequest?: typeof request): Promise<PostRestoreResponse>;
     // (undocumented)
     restore(restorePayload: {
-        outputs: Array<SerializedBlindedMessage>;
+        outputs: SerializedBlindedMessage[];
     }): Promise<PostRestoreResponse>;
     static swap(mintUrl: string, swapPayload: SwapPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<SwapResponse>;
     swap(swapPayload: SwapPayload): Promise<SwapResponse>;
@@ -115,8 +115,8 @@ export class CashuMint {
 export class CashuWallet {
     constructor(mint: CashuMint, options?: {
         unit?: string;
-        keys?: Array<MintKeys> | MintKeys;
-        keysets?: Array<MintKeyset>;
+        keys?: MintKeys[] | MintKeys;
+        keysets?: MintKeyset[];
         mintInfo?: GetInfoResponse;
         bip39seed?: Uint8Array;
         denominationTarget?: number;
@@ -124,7 +124,7 @@ export class CashuWallet {
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
-        proofs: Array<Proof>;
+        proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
     checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
@@ -133,17 +133,17 @@ export class CashuWallet {
     checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
     // (undocumented)
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
-    checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>>;
+    checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
-    getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset;
-    getAllKeys(): Promise<Array<MintKeys>>;
+    getActiveKeyset(keysets: MintKeyset[]): MintKeyset;
+    getAllKeys(): Promise<MintKeys[]>;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
-    getFeesForProofs(proofs: Array<Proof>): number;
+    getFeesForProofs(proofs: Proof[]): number;
     getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
-    getKeySets(): Promise<Array<MintKeyset>>;
+    getKeySets(): Promise<MintKeyset[]>;
     getMintInfo(): Promise<MintInfo>;
     // (undocumented)
     get keys(): Map<string, MintKeys>;
@@ -151,35 +151,35 @@ export class CashuWallet {
     get keysetId(): string;
     set keysetId(keysetId: string);
     // (undocumented)
-    get keysets(): Array<MintKeyset>;
+    get keysets(): MintKeyset[];
     lazyGetMintInfo(): Promise<MintInfo>;
     loadMint(): Promise<void>;
-    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Array<Proof>, options?: MeltProofOptions): Promise<MeltProofsResponse>;
+    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse>;
     // (undocumented)
     mint: CashuMint;
     // (undocumented)
     get mintInfo(): MintInfo;
     mintProofs(amount: number, quote: MintQuoteResponse, options: MintProofOptions & {
         privateKey: string;
-    }): Promise<Array<Proof>>;
+    }): Promise<Proof[]>;
     // (undocumented)
-    mintProofs(amount: number, quote: string, options?: MintProofOptions): Promise<Array<Proof>>;
+    mintProofs(amount: number, quote: string, options?: MintProofOptions): Promise<Proof[]>;
     onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onMeltQuoteUpdates(quoteIds: Array<string>, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     // Warning: (ae-forgotten-export) The symbol "SubscriptionCanceller" needs to be exported by the entry point index.d.ts
-    onMintQuoteUpdates(quoteIds: Array<string>, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onProofStateUpdates(proofs: Array<Proof>, callback: (payload: ProofState & {
+    onMintQuoteUpdates(quoteIds: string[], callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>>;
+    receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]>;
     restore(start: number, count: number, options?: RestoreOptions): Promise<{
-        proofs: Array<Proof>;
+        proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
-    selectProofsToSend(proofs: Array<Proof>, amountToSend: number, includeFees?: boolean): SendResponse;
-    send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse>;
-    swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse>;
+    selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean): SendResponse;
+    send(amount: number, proofs: Proof[], options?: SendOptions): Promise<SendResponse>;
+    swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse>;
     // (undocumented)
     get unit(): string;
 }
@@ -196,12 +196,12 @@ export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum
 
 // @public
 export type CheckStatePayload = {
-    Ys: Array<string>;
+    Ys: string[];
 };
 
 // @public
 export type CheckStateResponse = {
-    states: Array<ProofState>;
+    states: ProofState[];
 } & ApiError;
 
 // @public
@@ -230,7 +230,7 @@ export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
 export type DeprecatedToken = {
-    token: Array<TokenEntry>;
+    token: TokenEntry[];
     memo?: string;
     unit?: string;
 };
@@ -270,14 +270,14 @@ export type GetInfoResponse = {
     description?: string;
     description_long?: string;
     icon_url?: string;
-    contact: Array<MintContactInfo>;
+    contact: MintContactInfo[];
     nuts: {
         '4': {
-            methods: Array<SwapMethod>;
+            methods: SwapMethod[];
             disabled: boolean;
         };
         '5': {
-            methods: Array<SwapMethod>;
+            methods: SwapMethod[];
             disabled: boolean;
         };
         '7'?: {
@@ -302,10 +302,10 @@ export type GetInfoResponse = {
             supported: boolean;
         };
         '15'?: {
-            methods: Array<MPPMethod>;
+            methods: MPPMethod[];
         };
         '17'?: {
-            supported: Array<WebSocketSupport>;
+            supported: WebSocketSupport[];
         };
         '20'?: {
             supported: boolean;
@@ -327,7 +327,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean;
 // @public
 export type HTLCWitness = {
     preimage: string;
-    signatures?: Array<string>;
+    signatures?: string[];
 };
 
 // @public
@@ -375,7 +375,7 @@ export type JsonRpcNotification = {
 // @public (undocumented)
 export type JsonRpcReqParams = {
     kind: RpcSubKinds;
-    filters: Array<string>;
+    filters: string[];
     subId: string;
 };
 
@@ -429,8 +429,8 @@ export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 // @public
 export type MeltPayload = {
     quote: string;
-    inputs: Array<Proof>;
-    outputs: Array<SerializedBlindedMessage>;
+    inputs: Proof[];
+    outputs: SerializedBlindedMessage[];
 };
 
 // @public (undocumented)
@@ -443,7 +443,7 @@ export type MeltProofOptions = {
 // @public
 export type MeltProofsResponse = {
     quote: MeltQuoteResponse;
-    change: Array<Proof>;
+    change: Proof[];
 };
 
 // @public
@@ -476,12 +476,12 @@ export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState
 
 // @public
 export type MintActiveKeys = {
-    keysets: Array<MintKeys>;
+    keysets: MintKeys[];
 };
 
 // @public
 export type MintAllKeysets = {
-    keysets: Array<MintKeyset>;
+    keysets: MintKeyset[];
 };
 
 // @public (undocumented)
@@ -515,7 +515,7 @@ export class MintOperationError extends HttpResponseError {
 // @public
 export type MintPayload = {
     quote: string;
-    outputs: Array<SerializedBlindedMessage>;
+    outputs: SerializedBlindedMessage[];
     signature?: string;
 };
 
@@ -523,14 +523,14 @@ export type MintPayload = {
 export type MintProofOptions = {
     keysetId?: string;
     outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
+    proofsWeHave?: Proof[];
     counter?: number;
     pubkey?: string;
-    outputData?: Array<OutputDataLike> | OutputDataFactory;
+    outputData?: OutputDataLike[] | OutputDataFactory;
     p2pk?: {
-        pubkey: string | Array<string>;
+        pubkey: string | string[];
         locktime?: number;
-        refundKeys?: Array<string>;
+        refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     };
@@ -562,7 +562,7 @@ export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState
 
 // @public
 export type MintResponse = {
-    signatures: Array<SerializedBlindedSignature>;
+    signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 // @public
@@ -585,13 +585,13 @@ export class NetworkError extends Error {
 export type NUT10Option = {
     kind: string;
     data: string;
-    tags: Array<Array<string>>;
+    tags: string[][];
 };
 
 // @public (undocumented)
 export type OutputAmounts = {
-    sendAmounts: Array<number>;
-    keepAmounts?: Array<number>;
+    sendAmounts: number[];
+    keepAmounts?: number[];
 };
 
 // @public (undocumented)
@@ -602,24 +602,24 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: Array<number>): Array<OutputData>;
+    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createP2PKData(p2pk: {
-        pubkey: string | Array<string>;
+        pubkey: string | string[];
         locktime?: number;
-        refundKeys?: Array<string>;
+        refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
-    }, amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
+    }, amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
+    static createRandomData(amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: {
-        pubkey: string | Array<string>;
+        pubkey: string | string[];
         locktime?: number;
-        refundKeys?: Array<string>;
+        refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     }, amount: number, keysetId: string): OutputData;
@@ -633,7 +633,7 @@ export class OutputData implements OutputDataLike {
 
 // @public
 export type P2PKWitness = {
-    signatures?: Array<string>;
+    signatures?: string[];
 };
 
 // @public
@@ -644,7 +644,7 @@ export type PartialMeltQuoteResponse = {
     state: MeltQuoteState;
     expiry: number;
     payment_preimage: string | null;
-    change?: Array<SerializedBlindedSignature>;
+    change?: SerializedBlindedSignature[];
     request?: string;
     unit?: string;
 } & ApiError;
@@ -663,12 +663,12 @@ export type PartialMintQuoteResponse = {
 // @public
 export type PaymentPayload = {
     pr: string;
-    proofs: Array<Proof>;
+    proofs: Proof[];
 };
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: Array<PaymentRequestTransport> | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: Array<string> | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -682,7 +682,7 @@ class PaymentRequest_2 {
     // (undocumented)
     id?: string | undefined;
     // (undocumented)
-    mints?: Array<string> | undefined;
+    mints?: string[] | undefined;
     // (undocumented)
     nut10?: NUT10Option | undefined;
     // (undocumented)
@@ -692,7 +692,7 @@ class PaymentRequest_2 {
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
-    transport?: Array<PaymentRequestTransport> | undefined;
+    transport?: PaymentRequestTransport[] | undefined;
     // (undocumented)
     unit?: string | undefined;
 }
@@ -704,14 +704,14 @@ export type PaymentRequestPayload = {
     memo?: string;
     unit: string;
     mint: string;
-    proofs: Array<Proof>;
+    proofs: Proof[];
 };
 
 // @public (undocumented)
 export type PaymentRequestTransport = {
     type: PaymentRequestTransportType;
     target: string;
-    tags?: Array<Array<string>>;
+    tags?: string[][];
 };
 
 // @public (undocumented)
@@ -724,13 +724,13 @@ export enum PaymentRequestTransportType {
 
 // @public
 export type PostRestorePayload = {
-    outputs: Array<SerializedBlindedMessage>;
+    outputs: SerializedBlindedMessage[];
 };
 
 // @public
 export type PostRestoreResponse = {
-    outputs: Array<SerializedBlindedMessage>;
-    signatures: Array<SerializedBlindedSignature>;
+    outputs: SerializedBlindedMessage[];
+    signatures: SerializedBlindedSignature[];
 };
 
 // @public
@@ -754,7 +754,7 @@ export type ProofState = {
 export type RawNUT10Option = {
     k: string;
     d: string;
-    t: Array<Array<string>>;
+    t: string[][];
 };
 
 // @public (undocumented)
@@ -763,9 +763,9 @@ export type RawPaymentRequest = {
     a?: number;
     u?: string;
     s?: boolean;
-    m?: Array<string>;
+    m?: string[];
     d?: string;
-    t?: Array<RawTransport>;
+    t?: RawTransport[];
     nut10?: RawNUT10Option;
 };
 
@@ -773,23 +773,23 @@ export type RawPaymentRequest = {
 export type RawTransport = {
     t: PaymentRequestTransportType;
     a: string;
-    g?: Array<Array<string>>;
+    g?: string[][];
 };
 
 // @public (undocumented)
 export type ReceiveOptions = {
     keysetId?: string;
     outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
+    proofsWeHave?: Proof[];
     counter?: number;
     pubkey?: string;
     privkey?: string;
     requireDleq?: boolean;
-    outputData?: Array<OutputDataLike> | OutputDataFactory;
+    outputData?: OutputDataLike[] | OutputDataFactory;
     p2pk?: {
-        pubkey: string | Array<string>;
+        pubkey: string | string[];
         locktime?: number;
-        refundKeys?: Array<string>;
+        refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     };
@@ -803,7 +803,7 @@ export type ReceiveResponse = {
 
 // @public
 export type ReceiveTokenEntryResponse = {
-    proofs: Array<Proof>;
+    proofs: Proof[];
 };
 
 // @public (undocumented)
@@ -817,7 +817,7 @@ export type RpcSubId = string | number | null;
 // @public (undocumented)
 export type SendOptions = {
     outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
+    proofsWeHave?: Proof[];
     counter?: number;
     pubkey?: string;
     privkey?: string;
@@ -826,13 +826,13 @@ export type SendOptions = {
     includeFees?: boolean;
     includeDleq?: boolean;
     outputData?: {
-        send?: Array<OutputDataLike> | OutputDataFactory;
-        keep?: Array<OutputDataLike> | OutputDataFactory;
+        send?: OutputDataLike[] | OutputDataFactory;
+        keep?: OutputDataLike[] | OutputDataFactory;
     };
     p2pk?: {
-        pubkey: string | Array<string>;
+        pubkey: string | string[];
         locktime?: number;
-        refundKeys?: Array<string>;
+        refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     };
@@ -840,8 +840,8 @@ export type SendOptions = {
 
 // @public
 export type SendResponse = {
-    keep: Array<Proof>;
-    send: Array<Proof>;
+    keep: Proof[];
+    send: Proof[];
     serialized?: Array<{
         proof: Proof;
         keep: boolean;
@@ -886,20 +886,20 @@ export type SwapMethod = {
 // @public (undocumented)
 export type SwapOptions = {
     outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
+    proofsWeHave?: Proof[];
     counter?: number;
     pubkey?: string;
     privkey?: string;
     keysetId?: string;
     includeFees?: boolean;
     outputData?: {
-        send?: Array<OutputDataLike> | OutputDataFactory;
-        keep?: Array<OutputDataLike> | OutputDataFactory;
+        send?: OutputDataLike[] | OutputDataFactory;
+        keep?: OutputDataLike[] | OutputDataFactory;
     };
     p2pk?: {
-        pubkey: string | Array<string>;
+        pubkey: string | string[];
         locktime?: number;
-        refundKeys?: Array<string>;
+        refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     };
@@ -907,43 +907,43 @@ export type SwapOptions = {
 
 // @public
 export type SwapPayload = {
-    inputs: Array<Proof>;
-    outputs: Array<SerializedBlindedMessage>;
+    inputs: Proof[];
+    outputs: SerializedBlindedMessage[];
 };
 
 // @public
 export type SwapResponse = {
-    signatures: Array<SerializedBlindedSignature>;
+    signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 // @public
 export type SwapTransaction = {
     payload: SwapPayload;
-    outputData: Array<OutputData>;
-    keepVector: Array<boolean>;
-    sortedIndices: Array<number>;
+    outputData: OutputData[];
+    keepVector: boolean[];
+    sortedIndices: number[];
 };
 
 // @public
 export type Token = {
     mint: string;
-    proofs: Array<Proof>;
+    proofs: Proof[];
     memo?: string;
     unit?: string;
 };
 
 // @public @deprecated (undocumented)
 export type TokenV2 = {
-    proofs: Array<Proof>;
+    proofs: Proof[];
     mints: Array<{
         url: string;
-        ids: Array<string>;
+        ids: string[];
     }>;
 };
 
 // @public
 export type TokenV4Template = {
-    t: Array<V4InnerToken>;
+    t: V4InnerToken[];
     d: string;
     m: string;
     u: string;
@@ -959,7 +959,7 @@ export type V4DLEQTemplate = {
 // @public
 export type V4InnerToken = {
     i: Uint8Array;
-    p: Array<V4ProofTemplate>;
+    p: V4ProofTemplate[];
 };
 
 // @public
@@ -975,7 +975,7 @@ export type V4ProofTemplate = {
 export type WebSocketSupport = {
     method: string;
     unit: string;
-    commands: Array<string>;
+    commands: string[];
 };
 
 // Warnings were encountered during analysis:

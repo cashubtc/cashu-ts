@@ -11,7 +11,7 @@ export type Token = {
 	/**
 	 * A list of proofs.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 	/**
 	 * A message to send along with the token.
 	 */
@@ -74,7 +74,7 @@ export type V4InnerToken = {
 	/**
 	 * Proofs.
 	 */
-	p: Array<V4ProofTemplate>;
+	p: V4ProofTemplate[];
 };
 
 /**
@@ -84,7 +84,7 @@ export type TokenV4Template = {
 	/**
 	 * TokenEntries.
 	 */
-	t: Array<V4InnerToken>;
+	t: V4InnerToken[];
 	/**
 	 * Memo.
 	 */
@@ -106,7 +106,7 @@ export type DeprecatedToken = {
 	/**
 	 * Token entries.
 	 */
-	token: Array<TokenEntry>;
+	token: TokenEntry[];
 	/**
 	 * A message to send along with the token.
 	 */
@@ -123,7 +123,7 @@ type TokenEntry = {
 	/**
 	 * A list of proofs.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 	/**
 	 * The mints URL.
 	 */

@@ -5,8 +5,8 @@ export * from './mint/index';
 export * from './wallet/index';
 
 export type OutputAmounts = {
-	sendAmounts: Array<number>;
-	keepAmounts?: Array<number>;
+	sendAmounts: number[];
+	keepAmounts?: number[];
 };
 
 export type LockedMintQuote = {
@@ -33,16 +33,16 @@ export type LockedMintQuote = {
 export type ReceiveOptions = {
 	keysetId?: string;
 	outputAmounts?: OutputAmounts;
-	proofsWeHave?: Array<Proof>;
+	proofsWeHave?: Proof[];
 	counter?: number;
 	pubkey?: string;
 	privkey?: string;
 	requireDleq?: boolean;
-	outputData?: Array<OutputDataLike> | OutputDataFactory;
+	outputData?: OutputDataLike[] | OutputDataFactory;
 	p2pk?: {
-		pubkey: string | Array<string>;
+		pubkey: string | string[];
 		locktime?: number;
-		refundKeys?: Array<string>;
+		refundKeys?: string[];
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
 	};
@@ -69,7 +69,7 @@ export type ReceiveOptions = {
  */
 export type SendOptions = {
 	outputAmounts?: OutputAmounts;
-	proofsWeHave?: Array<Proof>;
+	proofsWeHave?: Proof[];
 	counter?: number;
 	pubkey?: string;
 	privkey?: string;
@@ -78,13 +78,13 @@ export type SendOptions = {
 	includeFees?: boolean;
 	includeDleq?: boolean;
 	outputData?: {
-		send?: Array<OutputDataLike> | OutputDataFactory;
-		keep?: Array<OutputDataLike> | OutputDataFactory;
+		send?: OutputDataLike[] | OutputDataFactory;
+		keep?: OutputDataLike[] | OutputDataFactory;
 	};
 	p2pk?: {
-		pubkey: string | Array<string>;
+		pubkey: string | string[];
 		locktime?: number;
-		refundKeys?: Array<string>;
+		refundKeys?: string[];
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
 	};
@@ -111,20 +111,20 @@ export type SendOptions = {
  */
 export type SwapOptions = {
 	outputAmounts?: OutputAmounts;
-	proofsWeHave?: Array<Proof>;
+	proofsWeHave?: Proof[];
 	counter?: number;
 	pubkey?: string;
 	privkey?: string;
 	keysetId?: string;
 	includeFees?: boolean;
 	outputData?: {
-		send?: Array<OutputDataLike> | OutputDataFactory;
-		keep?: Array<OutputDataLike> | OutputDataFactory;
+		send?: OutputDataLike[] | OutputDataFactory;
+		keep?: OutputDataLike[] | OutputDataFactory;
 	};
 	p2pk?: {
-		pubkey: string | Array<string>;
+		pubkey: string | string[];
 		locktime?: number;
-		refundKeys?: Array<string>;
+		refundKeys?: string[];
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
 	};
@@ -152,14 +152,14 @@ export type RestoreOptions = {
 export type MintProofOptions = {
 	keysetId?: string;
 	outputAmounts?: OutputAmounts;
-	proofsWeHave?: Array<Proof>;
+	proofsWeHave?: Proof[];
 	counter?: number;
 	pubkey?: string;
-	outputData?: Array<OutputDataLike> | OutputDataFactory;
+	outputData?: OutputDataLike[] | OutputDataFactory;
 	p2pk?: {
-		pubkey: string | Array<string>;
+		pubkey: string | string[];
 		locktime?: number;
-		refundKeys?: Array<string>;
+		refundKeys?: string[];
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
 	};
@@ -203,7 +203,7 @@ type JsonRpcParams = {
 
 export type JsonRpcReqParams = {
 	kind: RpcSubKinds;
-	filters: Array<string>;
+	filters: string[];
 	subId: string;
 };
 

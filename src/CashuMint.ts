@@ -555,7 +555,7 @@ class CashuMint {
 	}
 
 	async restore(restorePayload: {
-		outputs: Array<SerializedBlindedMessage>;
+		outputs: SerializedBlindedMessage[];
 	}): Promise<PostRestoreResponse> {
 		return CashuMint.restore(this._mintUrl, restorePayload, this._customRequest);
 	}

@@ -85,7 +85,7 @@ export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
  * @param secretStr - The NUT-11 P2PK secret.
  * @returns {array} With the public keys or empty array.
  */
-export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): Array<string> {
+export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[] {
 	try {
 		// Validate secret
 		const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
@@ -113,7 +113,7 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): Arra
  * @param secretStr - The NUT-11 P2PK secret.
  * @returns {array} With the public key(s or empty array.
  */
-export function getP2PKWitnessPubkeys(secretStr: string | Secret): Array<string> {
+export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
 	// Validate secret
 	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
@@ -132,7 +132,7 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): Array<string>
  * @param secretStr - The NUT-11 P2PK secret.
  * @returns {array} With the public keys or empty array.
  */
-export function getP2PKWitnessRefundkeys(secretStr: string | Secret): Array<string> {
+export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
 	// Validate secret
 	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
@@ -212,9 +212,7 @@ export function getP2PKSigFlag(secretStr: string | Secret): string {
  *
  * @type {array} of Signatures.
  */
-export const getP2PKWitnessSignatures = (
-	witness: string | P2PKWitness | undefined,
-): Array<string> => {
+export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefined): string[] => {
 	if (!witness) return [];
 	if (typeof witness === 'string') {
 		try {
@@ -237,11 +235,11 @@ export const getP2PKWitnessSignatures = (
  * @param beStrict - (Default: false) Throws Error if any signing attempt fails.
  */
 export const signP2PKProofs = (
-	proofs: Array<Proof>,
-	privateKey: string | Array<string>,
+	proofs: Proof[],
+	privateKey: string | string[],
 	beStrict = false,
-): Array<Proof> => {
-	const privateKeys: Array<string> = Array.isArray(privateKey) ? privateKey : [privateKey];
+): Proof[] => {
+	const privateKeys: string[] = Array.isArray(privateKey) ? privateKey : [privateKey];
 	return proofs.map((proof, index) => {
 		let signedProof = proof;
 		for (const priv of privateKeys) {
@@ -307,8 +305,8 @@ export const getSignedOutput = (output: BlindedMessage, privateKey: PrivKey): Bl
 };
 
 export const getSignedOutputs = (
-	outputs: Array<BlindedMessage>,
+	outputs: BlindedMessage[],
 	privateKey: string,
-): Array<BlindedMessage> => {
+): BlindedMessage[] => {
 	return outputs.map((o) => getSignedOutput(o, privateKey));
 };

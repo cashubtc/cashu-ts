@@ -3,10 +3,7 @@ import { type SerializedBlindedMessage } from '../../model/types';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
-function constructMessage(
-	quote: string,
-	blindedMessages: Array<SerializedBlindedMessage>,
-): Uint8Array {
+function constructMessage(quote: string, blindedMessages: SerializedBlindedMessage[]): Uint8Array {
 	let message = quote;
 	for (const blindedMessage of blindedMessages) {
 		message += blindedMessage.B_;
@@ -18,7 +15,7 @@ function constructMessage(
 export function signMintQuote(
 	privkey: string,
 	quote: string,
-	blindedMessages: Array<SerializedBlindedMessage>,
+	blindedMessages: SerializedBlindedMessage[],
 ): string {
 	const message = constructMessage(quote, blindedMessages);
 	const privkeyBytes = hexToBytes(privkey);
@@ -29,7 +26,7 @@ export function signMintQuote(
 export function verifyMintQuoteSignature(
 	pubkey: string,
 	quote: string,
-	blindedMessages: Array<SerializedBlindedMessage>,
+	blindedMessages: SerializedBlindedMessage[],
 	signature: string,
 ): boolean {
 	const sigbytes = hexToBytes(signature);

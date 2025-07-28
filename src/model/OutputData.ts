@@ -23,7 +23,7 @@ export interface OutputDataLike {
 export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
 
 export function isOutputDataFactory(
-	value: Array<OutputData> | OutputDataFactory,
+	value: OutputData[] | OutputDataFactory,
 ): value is OutputDataFactory {
 	return typeof value === 'function';
 }
@@ -71,15 +71,15 @@ export class OutputData implements OutputDataLike {
 
 	static createP2PKData(
 		p2pk: {
-			pubkey: string | Array<string>;
+			pubkey: string | string[];
 			locktime?: number;
-			refundKeys?: Array<string>;
+			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
 		amount: number,
 		keyset: MintKeys,
-		customSplit?: Array<number>,
+		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
@@ -87,9 +87,9 @@ export class OutputData implements OutputDataLike {
 
 	static createSingleP2PKData(
 		p2pk: {
-			pubkey: string | Array<string>;
+			pubkey: string | string[];
 			locktime?: number;
-			refundKeys?: Array<string>;
+			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
@@ -98,13 +98,13 @@ export class OutputData implements OutputDataLike {
 	) {
 		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
 		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
-		const pubkeys: Array<string> = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
+		const pubkeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
 		const n_sigs: number = Math.max(1, Math.min(p2pk.requiredSignatures || 1, pubkeys.length));
 		const n_sigs_refund: number = Math.max(
 			1,
 			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1),
 		);
-		const newSecret: [string, { nonce: string; data: string; tags: Array<Array<string>> }] = [
+		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
@@ -139,7 +139,7 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
-	static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>) {
+	static createRandomData(amount: number, keyset: MintKeys, customSplit?: number[]) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -160,8 +160,8 @@ export class OutputData implements OutputDataLike {
 		seed: Uint8Array,
 		counter: number,
 		keyset: MintKeys,
-		customSplit?: Array<number>,
-	): Array<OutputData> {
+		customSplit?: number[],
+	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a, i) =>
 			this.createSingleDeterministicData(a, seed, counter + i, keyset.id),

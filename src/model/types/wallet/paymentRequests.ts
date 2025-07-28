@@ -3,13 +3,13 @@ import { type Proof } from './index';
 export type RawTransport = {
 	t: PaymentRequestTransportType; // type
 	a: string; // target
-	g?: Array<Array<string>>; // tags
+	g?: string[][]; // tags
 };
 
 export type RawNUT10Option = {
 	k: string; // kind
 	d: string; // data
-	t: Array<Array<string>>; // tags
+	t: string[][]; // tags
 };
 
 export type RawPaymentRequest = {
@@ -17,16 +17,16 @@ export type RawPaymentRequest = {
 	a?: number; // amount
 	u?: string; // unit
 	s?: boolean; // single use
-	m?: Array<string>; // mints
+	m?: string[]; // mints
 	d?: string; // description
-	t?: Array<RawTransport>; // transports
+	t?: RawTransport[]; // transports
 	nut10?: RawNUT10Option;
 };
 
 export type PaymentRequestTransport = {
 	type: PaymentRequestTransportType;
 	target: string;
-	tags?: Array<Array<string>>;
+	tags?: string[][];
 };
 
 export enum PaymentRequestTransportType {
@@ -39,7 +39,7 @@ export type PaymentRequestPayload = {
 	memo?: string;
 	unit: string;
 	mint: string;
-	proofs: Array<Proof>;
+	proofs: Proof[];
 };
 
 /**
@@ -57,5 +57,5 @@ export type NUT10Option = {
 	/**
 	 * Tags associated with the spending condition for additional data.
 	 */
-	tags: Array<Array<string>>;
+	tags: string[][];
 };

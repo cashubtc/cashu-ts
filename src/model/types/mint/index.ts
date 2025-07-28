@@ -10,12 +10,12 @@ export type CheckStatePayload = {
 	/**
 	 * The Y = hash_to_curve(secret) of the proofs to be checked.
 	 */
-	Ys: Array<string>;
+	Ys: string[];
 };
 
 /**
  * Request to mint at /v1/restore endpoint.
  */
 export type PostRestorePayload = {
-	outputs: Array<SerializedBlindedMessage>;
+	outputs: SerializedBlindedMessage[];
 };

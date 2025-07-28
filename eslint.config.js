@@ -47,8 +47,8 @@ export default tseslint.config(
 		},
 		rules: {
 			// Extra rules and overrides to recommended
-			// Prefer long-form array types (eg: Array<Array<string>> vs string[][])
-			'@typescript-eslint/array-type': ['error', { default: 'generic' }],
+			// Prefer short-form (eg: string[][] vs Array<Array<string>>) for simple array types
+			'@typescript-eslint/array-type': ['error', { default: 'array-simple' }],
 			// Disable base import check as we use TS extensionless imports
 			// which are handled by importPlugin (import/no-unresolved)
 			'n/no-missing-import': 'off',

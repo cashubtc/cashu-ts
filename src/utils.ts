@@ -37,9 +37,9 @@ import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
 export function splitAmount(
 	value: number,
 	keyset: Keys,
-	split?: Array<number>,
+	split?: number[],
 	order?: 'desc' | 'asc',
-): Array<number> {
+): number[] {
 	if (split) {
 		const totalSplitAmount = sumArray(split);
 		if (totalSplitAmount > value) {
@@ -71,14 +71,14 @@ export function splitAmount(
  * @returns An array of amounts to keep.
  */
 export function getKeepAmounts(
-	proofsWeHave: Array<Proof>,
+	proofsWeHave: Proof[],
 	amountToKeep: number,
 	keys: Keys,
 	targetCount: number,
-): Array<number> {
+): number[] {
 	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
-	const amountsWeWant: Array<number> = [];
+	const amountsWeWant: number[] = [];
 	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
 	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
 	sortedKeyAmounts.forEach((amt) => {
@@ -109,7 +109,7 @@ export function getKeepAmounts(
  * @param order Order to sort the amounts in.
  * @returns The amounts in the keyset sorted by the order specified.
  */
-export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): Array<number> {
+export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): number[] {
 	if (order == 'desc') {
 		return Object.keys(keyset)
 			.map((k: string) => parseInt(k))
@@ -171,7 +171,7 @@ function isValidHex(str: string) {
  * @param p Proof or list of proofs.
  * @returns Boolean.
  */
-export function hasNonHexId(p: Proof | Array<Proof>) {
+export function hasNonHexId(p: Proof | Proof[]) {
 	if (Array.isArray(p)) {
 		return p.some((proof) => !isValidHex(proof.id));
 	}
@@ -248,7 +248,7 @@ export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 }
 
 function templateFromToken(token: Token): TokenV4Template {
-	const idMap: { [id: string]: Array<Proof> } = {};
+	const idMap: { [id: string]: Proof[] } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
 		const proof = token.proofs[i];
@@ -291,7 +291,7 @@ function templateFromToken(token: Token): TokenV4Template {
 }
 
 function tokenFromTemplate(template: TokenV4Template): Token {
-	const proofs: Array<Proof> = [];
+	const proofs: Proof[] = [];
 	template.t.forEach((t) =>
 		t.p.forEach((p) => {
 			proofs.push({
@@ -393,7 +393,7 @@ export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 	return mergedArray;
 }
 
-export function sortProofsById(proofs: Array<Proof>) {
+export function sortProofsById(proofs: Proof[]) {
 	return proofs.sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
 }
 
@@ -411,7 +411,7 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 	}
 }
 
-export function joinUrls(...parts: Array<string>): string {
+export function joinUrls(...parts: string[]): string {
 	return parts.map((part: string) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
@@ -419,7 +419,7 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
-export function sumProofs(proofs: Array<Proof>) {
+export function sumProofs(proofs: Proof[]) {
 	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
 }
 
@@ -507,7 +507,7 @@ export class MessageQueue {
  *
  * @param proofs The list of proofs that dleq should be stripped from.
  */
-export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
+export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 	return proofs.map((p) => {
 		const newP = { ...p };
 		delete newP['dleq'];
@@ -567,7 +567,7 @@ export function getEncodedAuthToken(proof: Proof): string {
 	return prefix + version + base64Data;
 }
 
-function concatByteArrays(...arrays: Array<Uint8Array>): Uint8Array {
+function concatByteArrays(...arrays: Uint8Array[]): Uint8Array {
 	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
 	const byteArray = new Uint8Array(totalLength);
 	let pointer = 0;
@@ -599,6 +599,6 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	return tokenFromTemplate(decoded);
 }
 
-function sumArray(arr: Array<number>) {
+function sumArray(arr: number[]) {
 	return arr.reduce((a, c) => a + c, 0);
 }

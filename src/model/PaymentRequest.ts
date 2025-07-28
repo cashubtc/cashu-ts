@@ -11,11 +11,11 @@ import { Buffer } from 'buffer';
 
 export class PaymentRequest {
 	constructor(
-		public transport?: Array<PaymentRequestTransport>,
+		public transport?: PaymentRequestTransport[],
 		public id?: string,
 		public amount?: number,
 		public unit?: string,
-		public mints?: Array<string>,
+		public mints?: string[],
 		public description?: string,
 		public singleUse: boolean = false,
 		public nut10?: NUT10Option,

@@ -11,7 +11,7 @@ export type MintActiveKeys = {
 	/**
 	 * Keysets.
 	 */
-	keysets: Array<MintKeys>;
+	keysets: MintKeys[];
 };
 
 /**
@@ -21,7 +21,7 @@ export type MintAllKeysets = {
 	/**
 	 * Keysets.
 	 */
-	keysets: Array<MintKeyset>;
+	keysets: MintKeyset[];
 };
 
 /**

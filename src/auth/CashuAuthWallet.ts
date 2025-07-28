@@ -14,7 +14,7 @@ import { type CashuAuthMint } from './CashuAuthMint';
 class CashuAuthWallet {
 	private _keys: Map<string, MintKeys> = new Map();
 	private _keysetId: string | undefined;
-	private _keysets: Array<MintKeyset> = [];
+	private _keysets: MintKeyset[] = [];
 	private _unit = 'auth';
 
 	mint: CashuAuthMint;
@@ -27,12 +27,12 @@ class CashuAuthWallet {
 	constructor(
 		mint: CashuAuthMint,
 		options?: {
-			keys?: Array<MintKeys> | MintKeys;
-			keysets?: Array<MintKeyset>;
+			keys?: MintKeys[] | MintKeys;
+			keysets?: MintKeyset[];
 		},
 	) {
 		this.mint = mint;
-		let keys: Array<MintKeys> = [];
+		let keys: MintKeys[] = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
 		} else if (options?.keys && Array.isArray(options?.keys)) {
@@ -54,7 +54,7 @@ class CashuAuthWallet {
 	set keysetId(keysetId: string) {
 		this._keysetId = keysetId;
 	}
-	get keysets(): Array<MintKeyset> {
+	get keysets(): MintKeyset[] {
 		return this._keysets;
 	}
 
@@ -75,7 +75,7 @@ class CashuAuthWallet {
 	 * @param keysets Keysets to choose from.
 	 * @returns Active keyset.
 	 */
-	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
+	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active);
 
 		// we only consider keyset IDs that start with "00"
@@ -95,7 +95,7 @@ class CashuAuthWallet {
 	 *
 	 * @returns Keysets with wallet's unit.
 	 */
-	async getKeySets(): Promise<Array<MintKeyset>> {
+	async getKeySets(): Promise<MintKeyset[]> {
 		const allKeysets = await this.mint.getKeySets();
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this._unit);
 		this._keysets = unitKeysets;
@@ -108,7 +108,7 @@ class CashuAuthWallet {
 	 *
 	 * @returns Keyset.
 	 */
-	async getAllKeys(): Promise<Array<MintKeys>> {
+	async getAllKeys(): Promise<MintKeys[]> {
 		const keysets = await this.mint.getKeys();
 		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
 		this.keysetId = this.getActiveKeyset(this._keysets).id;
@@ -167,7 +167,7 @@ class CashuAuthWallet {
 		options?: {
 			keysetId?: string;
 		},
-	): Promise<Array<Proof>> {
+	): Promise<Proof[]> {
 		const keyset = await this.getKeys(options?.keysetId);
 		const outputData = OutputData.createRandomData(amount, keyset);
 

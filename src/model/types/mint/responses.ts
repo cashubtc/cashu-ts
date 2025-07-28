@@ -42,7 +42,7 @@ export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum
  * it can be easily cheated.
  */
 export type CheckStateResponse = {
-	states: Array<ProofState>;
+	states: ProofState[];
 } & ApiError;
 
 /**
@@ -55,16 +55,16 @@ export type GetInfoResponse = {
 	description?: string;
 	description_long?: string;
 	icon_url?: string;
-	contact: Array<MintContactInfo>;
+	contact: MintContactInfo[];
 	nuts: {
 		'4': {
 			// Minting
-			methods: Array<SwapMethod>;
+			methods: SwapMethod[];
 			disabled: boolean;
 		};
 		'5': {
 			// Melting
-			methods: Array<SwapMethod>;
+			methods: SwapMethod[];
 			disabled: boolean;
 		};
 		'7'?: {
@@ -97,11 +97,11 @@ export type GetInfoResponse = {
 		};
 		'15'?: {
 			// MPP
-			methods: Array<MPPMethod>;
+			methods: MPPMethod[];
 		};
 		'17'?: {
 			// WebSockets
-			supported: Array<WebSocketSupport>;
+			supported: WebSocketSupport[];
 		};
 		'20'?: {
 			// Locked Mint Quote
@@ -148,7 +148,7 @@ export type PartialMeltQuoteResponse = {
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
 	 */
-	change?: Array<SerializedBlindedSignature>;
+	change?: SerializedBlindedSignature[];
 	/**
 	 * Payment request for the melt quote.
 	 */
@@ -222,15 +222,15 @@ export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
  * Response from the mint after requesting a mint.
  */
 export type MintResponse = {
-	signatures: Array<SerializedBlindedSignature>;
+	signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 /**
  * Response from mint at /v1/restore endpoint.
  */
 export type PostRestoreResponse = {
-	outputs: Array<SerializedBlindedMessage>;
-	signatures: Array<SerializedBlindedSignature>;
+	outputs: SerializedBlindedMessage[];
+	signatures: SerializedBlindedSignature[];
 };
 
 /*
@@ -282,7 +282,7 @@ export type SwapResponse = {
 	/**
 	 * Represents the outputs after the split.
 	 */
-	signatures: Array<SerializedBlindedSignature>;
+	signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 /**
@@ -299,12 +299,12 @@ export type MPPMethod = {
 export type WebSocketSupport = {
 	method: string;
 	unit: string;
-	commands: Array<string>;
+	commands: string[];
 };
 
 /**
  * Response from the mint after blind auth minting.
  */
 export type BlindAuthMintResponse = {
-	signatures: Array<SerializedBlindedSignature>;
+	signatures: SerializedBlindedSignature[];
 } & ApiError;

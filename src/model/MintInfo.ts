@@ -27,10 +27,10 @@ export class MintInfo {
 		}
 	}
 
-	isSupported(num: 4 | 5): { disabled: boolean; params: Array<SwapMethod> };
+	isSupported(num: 4 | 5): { disabled: boolean; params: SwapMethod[] };
 	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
-	isSupported(num: 17): { supported: boolean; params?: Array<WebSocketSupport> };
-	isSupported(num: 15): { supported: boolean; params?: Array<MPPMethod> };
+	isSupported(num: 17): { supported: boolean; params?: WebSocketSupport[] };
+	isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
 	isSupported(num: number) {
 		switch (num) {
 			case 4:

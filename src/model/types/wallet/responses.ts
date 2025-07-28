@@ -13,7 +13,7 @@ export type MeltProofsResponse = {
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
 	 */
-	change: Array<Proof>;
+	change: Proof[];
 };
 
 /**
@@ -38,10 +38,10 @@ export type SendResponse = {
 	/**
 	 * Proofs that exceeded the needed amount.
 	 */
-	keep: Array<Proof>;
+	keep: Proof[];
 	/**
 	 * Proofs to be sent, matching the chosen amount.
 	 */
-	send: Array<Proof>;
+	send: Proof[];
 	serialized?: Array<{ proof: Proof; keep: boolean }>;
 };
