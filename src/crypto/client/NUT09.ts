@@ -1,4 +1,5 @@
-import * as crypto from 'crypto';
+import { hmac } from '@noble/hashes/hmac';
+import { sha512 } from '@noble/hashes/sha512';
 import { getKeysetIdInt } from '../common/index.js';
 import { HDKey } from '@scure/bip32';
 
@@ -34,9 +35,7 @@ const derive = (
 	]);
 
 	// Step 2: Compute HMAC-SHA512
-	const hmac = crypto.createHmac('sha512', seed);
-	hmac.update(message);
-	const hmacDigest: Uint8Array = hmac.digest();
+	const hmacDigest = hmac(sha512, seed, message);
 
 	// Step 3: Derive secret and blinding factor
 	const secret = hmacDigest.slice(0, 32); // First 32 bytes for secret
