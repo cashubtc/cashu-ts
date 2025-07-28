@@ -121,7 +121,7 @@ export type GetInfoResponse = {
 /**
  * Response from the mint after requesting a melt quote
  */
-export type PartialMeltQuoteResponse = {
+export type MeltQuoteResponse = {
 	/**
 	 * Quote ID
 	 */
@@ -160,7 +160,10 @@ export type PartialMeltQuoteResponse = {
 	unit?: string;
 } & ApiError;
 
-export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
+/**
+ * Represents a full melt quote response, extending MeltQuoteResponse with guaranteed request and unit.
+ */
+export type FullMeltQuoteResponse = MeltQuoteResponse & { request: string; unit: string };
 
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
@@ -184,7 +187,7 @@ export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState
 /**
  * Response from the mint after requesting a mint
  */
-export type PartialMintQuoteResponse = {
+export type MintQuoteResponse = {
 	/**
 	 * Payment request
 	 */
@@ -215,7 +218,10 @@ export type PartialMintQuoteResponse = {
 	amount?: number;
 } & ApiError;
 
-export type MintQuoteResponse = PartialMintQuoteResponse & { amount: number; unit: string };
+/**
+ * Represents a full mint quote response, extending MintQuoteResponse with guaranteed amount and unit.
+ */
+export type FullMintQuoteResponse = MintQuoteResponse & { amount: number; unit: string };
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 

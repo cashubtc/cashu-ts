@@ -20,6 +20,7 @@ import type {
 	MeltProofsResponse,
 	MeltQuotePayload,
 	MeltQuoteResponse,
+	FullMeltQuoteResponse,
 	MintKeys,
 	MintKeyset,
 	MintPayload,
@@ -31,8 +32,7 @@ import type {
 	MeltQuoteOptions,
 	SwapTransaction,
 	LockedMintQuoteResponse,
-	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
+	FullMintQuoteResponse
 } from './model/types/index.js';
 import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
 import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
@@ -916,7 +916,7 @@ class CashuWallet {
 	 * @param pubkey optional public key to lock the quote to
 	 * @returns the mint will return a mint quote with a Lightning invoice for minting tokens of the specified amount and unit
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuote(amount: number, description?: string): Promise<FullMintQuoteResponse> {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -938,7 +938,7 @@ class CashuWallet {
 		amount: number,
 		pubkey: string,
 		description?: string
-	): Promise<LockedMintQuoteResponse> {
+	): Promise<LockedMintQuoteResponse & { amount: number; unit: string }> {
 		const { supported } = (await this.getMintInfo()).isSupported(20);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-20');
@@ -963,11 +963,11 @@ class CashuWallet {
 	 * @param quote Quote ID
 	 * @returns the mint will create and return a Lightning invoice for the specified amount
 	 */
-	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
-	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
+	async checkMintQuote(quote: MintQuoteResponse): Promise<FullMintQuoteResponse>;
+	async checkMintQuote(quote: string): Promise<MintQuoteResponse>;
 	async checkMintQuote(
 		quote: string | MintQuoteResponse
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+	): Promise<MintQuoteResponse | FullMintQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const baseRes = await this.mint.checkMintQuote(quoteId);
 		if (typeof quote === 'string') {
@@ -1061,7 +1061,7 @@ class CashuWallet {
 	 * @param invoice LN invoice that needs to get a fee estimate
 	 * @returns the mint will create and return a melt quote for the invoice with an amount and fee reserve
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string): Promise<FullMeltQuoteResponse> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice
@@ -1083,7 +1083,7 @@ class CashuWallet {
 	async createMultiPathMeltQuote(
 		invoice: string,
 		millisatPartialAmount: number
-	): Promise<MeltQuoteResponse> {
+	): Promise<FullMeltQuoteResponse> {
 		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-15');
@@ -1111,11 +1111,11 @@ class CashuWallet {
 	 * @param quote ID of the melt quote
 	 * @returns the mint will return an existing melt quote
 	 */
-	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-	async checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
+	async checkMeltQuote(quote: string): Promise<MeltQuoteResponse>;
+	async checkMeltQuote(quote: FullMeltQuoteResponse): Promise<FullMeltQuoteResponse>;
 	async checkMeltQuote(
 		quote: string | MeltQuoteResponse
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteResponse | FullMeltQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const meltQuote = await this.mint.checkMeltQuote(quoteId);
 		if (typeof quote === 'string') {
