@@ -1,5 +1,6 @@
-import { HDKey } from '@scure/bip32';
+import * as crypto from 'crypto';
 import { getKeysetIdInt } from '../common/index.js';
+import { HDKey } from '@scure/bip32';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -21,6 +22,37 @@ export const deriveBlindingFactor = (
 };
 
 const derive = (
+	seed: Uint8Array,
+	keysetId: string,
+	counter: number,
+	secretOrBlinding: DerivationType
+): Uint8Array => {
+	const message = Buffer.concat([
+		Buffer.from("Cashu_KDF_HMAC_SHA512"),
+		Buffer.from(keysetId, 'utf-8'),
+		Buffer.from(counter.toString(), 'utf-8')
+	]);
+
+	// Step 2: Compute HMAC-SHA512
+	const hmac = crypto.createHmac('sha512', seed);
+	hmac.update(message);
+	const hmacDigest: Uint8Array = hmac.digest();
+
+	// Step 3: Derive secret and blinding factor
+	const secret = hmacDigest.slice(0, 32);  // First 32 bytes for secret
+	const r = hmacDigest.slice(32);          // Remaining bytes for blinding factor
+
+	switch (secretOrBlinding) {
+		case DerivationType.SECRET:
+			return secret;
+		case DerivationType.BLINDING_FACTOR:
+			return r;
+		default:
+			throw new Error(`Unknown derivation type: ${secretOrBlinding}`);
+	}
+};
+
+const derive_deprecated = (
 	seed: Uint8Array,
 	keysetId: string,
 	counter: number,
