@@ -196,6 +196,17 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
 }
 
+/*
+ * Convert a keyset ID into short form
+ */
+function convertToShortKeysetId(proofs: Array<Proof>) {
+	return proofs.map((p) => {
+		const newP = {...p};
+		newP.id = newP.id.slice(0, 7);
+		return newP;
+	});
+}
+
 /**
  * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
  * @param token
@@ -205,7 +216,12 @@ export function getEncodedToken(
 	token: Token,
 	opts?: { version?: 3 | 4; removeDleq?: boolean }
 ): string {
+	// Find out if it's a base64 keyset
 	const nonHex = hasNonHexId(token.proofs);
+	// Map keyset IDs to short IDs
+	if (!nonHex) {
+		token.proofs = convertToShortKeysetId(token.proofs);
+	}
 	if (nonHex || opts?.version === 3) {
 		if (opts?.version === 4) {
 			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
@@ -326,13 +342,9 @@ export function getDecodedToken(tokenString: string, keysets?: Array<MintKeyset>
 		tokenString = tokenString.slice(prefix.length);
 	});
 
-	if (keysets) {
-		const token = handleTokens(tokenString);
-		token.proofs = mapShortKeysetIds(token.proofs, keysets);
-		return token;
-	}
-
-	return handleTokens(tokenString);
+	const token = handleTokens(tokenString);
+	token.proofs = mapShortKeysetIds(token.proofs, keysets);
+	return token;
 }
 
 /**
@@ -549,13 +561,16 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 /**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the Mint
  */
-function mapShortKeysetIds(proofs: Array<Proof>, keysets: Array<MintKeyset>): Array<Proof> {
+function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): Array<Proof> {
 	const newProofs = [];
 	for (const proof of proofs) {
 		const idBytes = hexToBytes(proof.id);
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
 		} else if (idBytes[0] === 0x01) {
+			if (!keysets) {
+				throw new Error("A short keyset ID v2 was encountered, but got no keysets to map it to.");
+			}
 			let found = false;
 			for (const keyset of keysets) {
 				if (proof.id === keyset.id.slice(proof.id.length)) {
