@@ -69,6 +69,8 @@ export default tseslint.config(
 			'no-else-return': 'error',
 			// Ignore experimental features (node: >22.4.0) that we use
 			'n/no-unsupported-features/node-builtins': ['error', { ignores: ['CloseEvent'] }],
+			// Ensure no node-only modules are used (as we support browsers too)
+			'import/no-nodejs-modules': ['error', { allow: ['buffer'] }],
 		},
 		settings: {
 			// Enhanced for import plugin (ensures TS paths resolve without extensions)

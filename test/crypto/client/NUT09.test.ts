@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';

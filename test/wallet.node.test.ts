@@ -275,7 +275,11 @@ describe('receive', () => {
 		);
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('tokens already spent. Secret: asdasdasd'));
+		expect(result).toMatchObject({
+			name: 'HttpResponseError',
+			message: 'tokens already spent. Secret: asdasdasd',
+			status: 400,
+		});
 	});
 
 	test('test receive could not verify proofs', async () => {
@@ -288,7 +292,11 @@ describe('receive', () => {
 		);
 		const wallet = new CashuWallet(mint, { unit });
 		const result = await wallet.receive(tokenInput).catch((e) => e);
-		expect(result).toEqual(new Error('could not verify proofs.'));
+		expect(result).toMatchObject({
+			name: 'HttpResponseError',
+			message: 'could not verify proofs.',
+			status: 400,
+		});
 	});
 });
 

@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { blindMessage, constructProofFromPromise, serializeProof } from '../src/crypto/client/';
 import { test, describe, expect } from 'vitest';
 import { Keys, Proof, Token } from '../src/model/types/index.js';

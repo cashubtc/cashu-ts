@@ -1,6 +1,23 @@
+import { Buffer } from 'buffer';
 import { decodeCBOR, encodeCBOR } from '../src/cbor';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { test, describe, expect } from 'vitest';
+
+// Test Polyfills for Node Buffer (which is not properly polyfilled in vite browser tests)
+// Instead of Buffer.from(encoded).toString('base64url')
+function base64urlEncode(buffer: Uint8Array): string {
+	return Buffer.from(buffer)
+		.toString('base64')
+		.replace(/\+/g, '-')
+		.replace(/\//g, '_')
+		.replace(/=+$/, '');
+}
+// Instead of Buffer.from(..., 'base64url')
+function base64urlDecode(str: string): Uint8Array {
+	str = str.replace(/-/g, '+').replace(/_/g, '/');
+	while (str.length % 4) str += '=';
+	return Buffer.from(str, 'base64');
+}
 
 const tests = [
 	{
@@ -239,11 +256,13 @@ describe('raw v4 token cbor en/decoding', () => {
 	};
 	test('encode v4 raw', () => {
 		const encoded = encodeCBOR(token);
-		const encodedString = Buffer.from(encoded).toString('base64url');
+		// const encodedString = Buffer.from(encoded).toString('base64url');
+		const encodedString = base64urlEncode(encoded);
 		expect(encodedString).toBe(expectedBase64.replace(/\=+$/, ''));
 	});
 	test('decode v4 raw', () => {
-		const decoded = decodeCBOR(Buffer.from(expectedBase64.replace(/\=+$/, ''), 'base64url'));
+		// const decoded = decodeCBOR(Buffer.from(expectedBase64.replace(/\=+$/, ''), 'base64url'));
+		const decoded = decodeCBOR(base64urlDecode(expectedBase64.replace(/\=+$/, '')));
 		expect(decoded).toEqual(token);
 	});
 });

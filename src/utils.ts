@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12.js';
 import { type DLEQ, pointFromHex } from './crypto/common/index.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
