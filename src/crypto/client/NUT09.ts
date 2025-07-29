@@ -2,6 +2,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { sha512 } from '@noble/hashes/sha512';
 import { getKeysetIdInt } from '../common/index.js';
 import { HDKey } from '@scure/bip32';
+import { Buffer } from 'buffer';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 

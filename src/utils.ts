@@ -24,6 +24,7 @@ import {
 	V4ProofTemplate
 } from './model/types/index.js';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants.js';
+import { Buffer } from 'buffer';
 
 /**
  * Splits the amount into denominations of the provided @param keyset
