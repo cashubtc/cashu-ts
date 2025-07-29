@@ -20,7 +20,7 @@
 		"compile": "vite build",
 		"compile:standalone": "BUILD_FORMAT=iife vite build",
 		"test": "vitest run --coverage --project node --project browser",
-		"test-integration": "vitest run --coverage --project integration --project integration-browser",
+		"test-integration": "vitest run --coverage --project integration",
 		"dev": "tsc --watch",
 		"lint": "eslint '**/*.{js,ts}' --fix",
 		"check-lint": "eslint '**/*.{js,ts}'",

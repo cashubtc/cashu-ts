@@ -91,28 +91,9 @@ export default defineConfig({
 			},
 			{
 				test: {
-					name: 'integration-node',
+					name: 'integration',
 					globals: true,
 					environment: 'node',
-					include: ['test/integration.test.ts'],
-					exclude: [...configDefaults.exclude],
-					coverage: {
-						provider: 'v8',
-						include: ['test/integration.test.ts'],
-						exclude: [...configDefaults.exclude],
-					},
-				},
-			},
-			{
-				test: {
-					name: 'integration-browser',
-					globals: true,
-					browser: {
-						provider: 'playwright',
-						enabled: true,
-						headless: true,
-						instances: [{ browser: 'chromium' }],
-					},
 					include: ['test/integration.test.ts'],
 					exclude: [...configDefaults.exclude],
 					coverage: {
