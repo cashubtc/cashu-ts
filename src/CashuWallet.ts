@@ -42,7 +42,8 @@ import {
 	hasValidDleq,
 	splitAmount,
 	stripDleq,
-	sumProofs
+	sumProofs,
+	verifyKeysetId
 } from './utils.js';
 import { signMintQuote } from './crypto/client/NUT20.js';
 import {
@@ -223,6 +224,11 @@ class CashuWallet {
 	 */
 	async getAllKeys(): Promise<Array<MintKeys>> {
 		const keysets = await this.mint.getKeys();
+		keysets.keysets.forEach((k) => {
+			if (!verifyKeysetId(k)) {
+				throw new Error(`Couldn't verify keyset ID ${k.id}`);
+			}
+		});
 		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
 		this.keysetId = this.getActiveKeyset(this._keysets).id;
 		return keysets.keysets;
@@ -258,6 +264,9 @@ class CashuWallet {
 		// make sure we have keys for this id
 		if (!this._keys.get(keysetId)) {
 			const keys = await this.mint.getKeys(keysetId);
+			if (!verifyKeysetId(keys.keysets[0])) {
+				throw new Error(`Couldn't verify keyset ID ${keys.keysets[0].id}`);
+			}
 			this._keys.set(keysetId, keys.keysets[0]);
 		}
 
