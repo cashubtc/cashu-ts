@@ -2,6 +2,7 @@ import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { configDefaults } from 'vitest/config';
 
 export default defineConfig({
 	build: {
@@ -53,7 +54,11 @@ export default defineConfig({
 					globals: true,
 					environment: 'node',
 					include: ['test/**/*.test.ts'],
-					exclude: ['test/{auth,integration}.test.ts', 'test/**.browser.test.ts'],
+					exclude: [
+						'test/{auth,integration}.test.ts',
+						'test/**.browser.test.ts',
+						...configDefaults.exclude,
+					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
@@ -69,18 +74,51 @@ export default defineConfig({
 						provider: 'playwright',
 						enabled: true,
 						headless: true,
-						instances: [
-							{
-								browser: 'chromium',
-							},
-						],
+						instances: [{ browser: 'chromium' }],
 					},
 					include: ['test/**/*.test.ts'],
-					exclude: ['test/{auth,integration}.test.ts', 'test/**.node.test.ts'],
+					exclude: [
+						'test/{auth,integration}.test.ts',
+						'test/**.node.test.ts',
+						...configDefaults.exclude,
+					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
 						exclude: ['test/{auth,integration}.test.ts', 'test/**.node.test.ts'],
+					},
+				},
+			},
+			{
+				test: {
+					name: 'integration-node',
+					globals: true,
+					environment: 'node',
+					include: ['test/integration.test.ts'],
+					exclude: [...configDefaults.exclude],
+					coverage: {
+						provider: 'v8',
+						include: ['test/integration.test.ts'],
+						exclude: [...configDefaults.exclude],
+					},
+				},
+			},
+			{
+				test: {
+					name: 'integration-browser',
+					globals: true,
+					browser: {
+						provider: 'playwright',
+						enabled: true,
+						headless: true,
+						instances: [{ browser: 'chromium' }],
+					},
+					include: ['test/integration.test.ts'],
+					exclude: [...configDefaults.exclude],
+					coverage: {
+						provider: 'v8',
+						include: ['test/integration.test.ts'],
+						exclude: [...configDefaults.exclude],
 					},
 				},
 			},
