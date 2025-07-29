@@ -8,102 +8,195 @@ import { MintContactInfo as MintContactInfo_2 } from './types';
 
 // @public
 export type ApiError = {
-    error?: string;
-    code?: number;
-    detail?: string;
+    	error?: string;
+    	code?: number;
+    	detail?: string;
 };
 
 // @public
 export type BlindAuthMintPayload = {
-    outputs: Array<SerializedBlindedMessage>;
+    	outputs: Array<SerializedBlindedMessage>;
 };
 
 // @public
 export type BlindAuthMintResponse = {
-    signatures: Array<SerializedBlindedSignature>;
+    	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 // @public
 export class CashuAuthMint {
-    // Warning: (ae-forgotten-export) The symbol "request" needs to be exported by the entry point index.d.ts
+    	// Warning: (ae-forgotten-export) The symbol "request" needs to be exported by the entry point index.d.ts
     constructor(_mintUrl: string, _customRequest?: typeof request | undefined);
-    static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
-    getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
-    static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
-    getKeySets(): Promise<MintAllKeysets>;
-    static mint(mintUrl: string, mintPayload: BlindAuthMintPayload, clearAuthToken: string, customRequest?: typeof request): Promise<BlindAuthMintResponse>;
-    mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string): Promise<BlindAuthMintResponse>;
-    // (undocumented)
+    	static getKeys(
+    		mintUrl: string,
+    		keysetId?: string,
+    		customRequest?: typeof request
+    	): Promise<MintActiveKeys>;
+    	getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
+    	static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
+    	getKeySets(): Promise<MintAllKeysets>;
+    	static mint(
+    		mintUrl: string,
+    		mintPayload: BlindAuthMintPayload,
+    		clearAuthToken: string,
+    		customRequest?: typeof request
+    	): Promise<BlindAuthMintResponse>;
+    	mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string): Promise<BlindAuthMintResponse>;
+    	// (undocumented)
     get mintUrl(): string;
 }
 
 // @public
 export class CashuAuthWallet {
-    constructor(mint: CashuAuthMint, options?: {
-        keys?: Array<MintKeys> | MintKeys;
-        keysets?: Array<MintKeyset>;
-    });
-    getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset;
-    getAllKeys(): Promise<Array<MintKeys>>;
-    getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
-    getKeySets(): Promise<Array<MintKeyset>>;
-    // (undocumented)
+    	constructor(
+    		mint: CashuAuthMint,
+    		options?: {
+        			keys?: Array<MintKeys> | MintKeys;
+        			keysets?: Array<MintKeyset>;
+        		}
+    	);
+    	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset;
+    	getAllKeys(): Promise<Array<MintKeys>>;
+    	getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
+    	getKeySets(): Promise<Array<MintKeyset>>;
+    	// (undocumented)
     get keys(): Map<string, MintKeys>;
-    // (undocumented)
+    	// (undocumented)
     get keysetId(): string;
-    set keysetId(keysetId: string);
-    // (undocumented)
+    	set keysetId(keysetId: string);
+    	// (undocumented)
     get keysets(): Array<MintKeyset>;
-    loadMint(): Promise<void>;
-    // (undocumented)
+    	loadMint(): Promise<void>;
+    	// (undocumented)
     mint: CashuAuthMint;
-    mintProofs(amount: number, clearAuthToken: string, options?: {
-        keysetId?: string;
-    }): Promise<Array<Proof>>;
+    	mintProofs(
+    		amount: number,
+    		clearAuthToken: string,
+    		options?: {
+        			keysetId?: string;
+        		}
+    	): Promise<Array<Proof>>;
 }
 
 // @public
 export class CashuMint {
-    constructor(_mintUrl: string, _customRequest?: typeof request | undefined, authTokenGetter?: () => Promise<string>);
-    static check(mintUrl: string, checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
-    check(checkPayload: CheckStatePayload): Promise<CheckStateResponse>;
-    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
-    checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-    static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMintQuoteResponse>;
-    checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
-    connectWebSocket(): Promise<void>;
-    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
-    createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
-    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMintQuoteResponse>;
-    createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
-    disconnectWebSocket(): void;
-    static getInfo(mintUrl: string, customRequest?: typeof request): Promise<GetInfoResponse>;
-    getInfo(): Promise<GetInfoResponse>;
-    static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
-    getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
-    static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
-    getKeySets(): Promise<MintAllKeysets>;
-    // Warning: (ae-forgotten-export) The symbol "MintInfo" needs to be exported by the entry point index.d.ts
+    	constructor(
+    		_mintUrl: string,
+    		_customRequest?: typeof request | undefined,
+    		authTokenGetter?: () => Promise<string>,
+    		options?: {
+        			logger?: Logger;
+        		}
+    	);
+    	static check(
+    		mintUrl: string,
+    		checkPayload: CheckStatePayload,
+    		customRequest?: typeof request
+    	): Promise<CheckStateResponse>;
+    	check(checkPayload: CheckStatePayload): Promise<CheckStateResponse>;
+    	static checkMeltQuote(
+    		mintUrl: string,
+    		quote: string,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string,
+    		logger?: Logger
+    	): Promise<PartialMeltQuoteResponse>;
+    	checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
+    	static checkMintQuote(
+    		mintUrl: string,
+    		quote: string,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string,
+    		logger?: Logger
+    	): Promise<PartialMintQuoteResponse>;
+    	checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
+    	connectWebSocket(): Promise<void>;
+    	static createMeltQuote(
+    		mintUrl: string,
+    		meltQuotePayload: MeltQuotePayload,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string,
+    		logger?: Logger
+    	): Promise<PartialMeltQuoteResponse>;
+    	createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
+    	static createMintQuote(
+    		mintUrl: string,
+    		mintQuotePayload: MintQuotePayload,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string,
+    		logger?: Logger
+    	): Promise<PartialMintQuoteResponse>;
+    	createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
+    	disconnectWebSocket(): void;
+    	static getInfo(
+    		mintUrl: string,
+    		customRequest?: typeof request,
+    		logger?: Logger
+    	): Promise<GetInfoResponse>;
+    	getInfo(): Promise<GetInfoResponse>;
+    	// (undocumented)
+    static getIssuedFilter(
+    		mintUrl: string,
+    		keysetId: string,
+    		customRequest?: typeof request
+    	): Promise<GetFilterResponse>;
+    	getIssuedFilter(keysetId: string): Promise<GetFilterResponse>;
+    	static getKeys(
+    		mintUrl: string,
+    		keysetId?: string,
+    		customRequest?: typeof request
+    	): Promise<MintActiveKeys>;
+    	getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
+    	static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
+    	getKeySets(): Promise<MintAllKeysets>;
+    	// Warning: (ae-forgotten-export) The symbol "MintInfo" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     getLazyMintInfo(): Promise<MintInfo>;
-    // (undocumented)
+    	// (undocumented)
+    static getSpentFilter(
+    		mintUrl: string,
+    		keysetId: string,
+    		customRequest?: typeof request
+    	): Promise<GetFilterResponse>;
+    	getSpentFilter(keysetId: string): Promise<GetFilterResponse>;
+    	// (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
-    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<PartialMeltQuoteResponse>;
-    melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
-    static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
-    mint(mintPayload: MintPayload): Promise<MintResponse>;
-    // (undocumented)
+    	static melt(
+    		mintUrl: string,
+    		meltPayload: MeltPayload,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string,
+    		logger?: Logger
+    	): Promise<PartialMeltQuoteResponse>;
+    	melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
+    	static mint(
+    		mintUrl: string,
+    		mintPayload: MintPayload,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string
+    	): Promise<MintResponse>;
+    	mint(mintPayload: MintPayload): Promise<MintResponse>;
+    	// (undocumented)
     get mintUrl(): string;
-    // (undocumented)
-    static restore(mintUrl: string, restorePayload: PostRestorePayload, customRequest?: typeof request): Promise<PostRestoreResponse>;
-    // (undocumented)
+    	// (undocumented)
+    static restore(
+    		mintUrl: string,
+    		restorePayload: PostRestorePayload,
+    		customRequest?: typeof request
+    	): Promise<PostRestoreResponse>;
+    	// (undocumented)
     restore(restorePayload: {
-        outputs: Array<SerializedBlindedMessage>;
-    }): Promise<PostRestoreResponse>;
-    static swap(mintUrl: string, swapPayload: SwapPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<SwapResponse>;
-    swap(swapPayload: SwapPayload): Promise<SwapResponse>;
-    // Warning: (ae-forgotten-export) The symbol "WSConnection" needs to be exported by the entry point index.d.ts
+        		outputs: Array<SerializedBlindedMessage>;
+        	}): Promise<PostRestoreResponse>;
+    	static swap(
+    		mintUrl: string,
+    		swapPayload: SwapPayload,
+    		customRequest?: typeof request,
+    		blindAuthToken?: string
+    	): Promise<SwapResponse>;
+    	swap(swapPayload: SwapPayload): Promise<SwapResponse>;
+    	// Warning: (ae-forgotten-export) The symbol "WSConnection" needs to be exported by the entry point index.d.ts
     //
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
@@ -111,82 +204,140 @@ export class CashuMint {
 
 // @public
 export class CashuWallet {
-    constructor(mint: CashuMint, options?: {
-        unit?: string;
-        keys?: Array<MintKeys> | MintKeys;
-        keysets?: Array<MintKeyset>;
-        mintInfo?: GetInfoResponse;
-        bip39seed?: Uint8Array;
-        denominationTarget?: number;
-        keepFactory?: OutputDataFactory;
-    });
-    batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
-        proofs: Array<Proof>;
-        lastCounterWithSignature?: number;
-    }>;
-    checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-    // (undocumented)
+    	constructor(
+    		mint: CashuMint,
+    		options?: {
+        			unit?: string;
+        			keys?: Array<MintKeys> | MintKeys;
+        			keysets?: Array<MintKeyset>;
+        			mintInfo?: GetInfoResponse;
+        			bip39seed?: Uint8Array;
+        			denominationTarget?: number;
+        			keepFactory?: OutputDataFactory;
+        			logger?: Logger;
+        		}
+    	);
+    	batchRestore(
+    		gapLimit?: number,
+    		batchSize?: number,
+    		counter?: number,
+    		keysetId?: string
+    	): Promise<{
+        		proofs: Array<Proof>;
+        		lastCounterWithSignature?: number;
+        	}>;
+    	checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
+    	// (undocumented)
     checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
-    checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
-    // (undocumented)
+    	checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
+    	// (undocumented)
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
-    checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>>;
-    createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
-    createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
-    createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
-    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
-    getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset;
-    getAllKeys(): Promise<Array<MintKeys>>;
-    getFeesForKeyset(nInputs: number, keysetId: string): number;
-    getFeesForProofs(proofs: Array<Proof>): number;
-    getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
-    getKeySets(): Promise<Array<MintKeyset>>;
-    getMintInfo(): Promise<MintInfo>;
-    // (undocumented)
+    	checkProofsStates(proofs: Array<Proof>): Promise<Array<ProofState>>;
+    	checkProofStateWithFilter(proofs: Array<Proof>, keysetId?: string): Promise<Array<ProofState>>;
+    	createLockedMintQuote(
+    		amount: number,
+    		pubkey: string,
+    		description?: string
+    	): Promise<LockedMintQuoteResponse>;
+    	createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
+    	createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
+    	createMultiPathMeltQuote(
+    		invoice: string,
+    		millisatPartialAmount: number
+    	): Promise<MeltQuoteResponse>;
+    	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset;
+    	getAllKeys(): Promise<Array<MintKeys>>;
+    	getFeesForKeyset(nInputs: number, keysetId: string): number;
+    	getFeesForProofs(proofs: Array<Proof>): number;
+    	getIssuedFilter(keysetId: string): Promise<GCSFilter>;
+    	getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
+    	getKeySets(): Promise<Array<MintKeyset>>;
+    	getMintInfo(): Promise<MintInfo>;
+    	// Warning: (ae-forgotten-export) The symbol "GCSFilter" needs to be exported by the entry point index.d.ts
+    getSpentFilter(keysetId: string): Promise<GCSFilter>;
+    	// (undocumented)
     get keys(): Map<string, MintKeys>;
-    // (undocumented)
+    	// (undocumented)
     get keysetId(): string;
-    set keysetId(keysetId: string);
-    // (undocumented)
+    	set keysetId(keysetId: string);
+    	// (undocumented)
     get keysets(): Array<MintKeyset>;
-    lazyGetMintInfo(): Promise<MintInfo>;
-    loadMint(): Promise<void>;
-    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Array<Proof>, options?: MeltProofOptions): Promise<MeltProofsResponse>;
-    // (undocumented)
+    	lazyGetMintInfo(): Promise<MintInfo>;
+    	loadMint(): Promise<void>;
+    	meltProofs(
+    		meltQuote: MeltQuoteResponse,
+    		proofsToSend: Array<Proof>,
+    		options?: MeltProofOptions
+    	): Promise<MeltProofsResponse>;
+    	// (undocumented)
     mint: CashuMint;
-    // (undocumented)
+    	// (undocumented)
     get mintInfo(): MintInfo;
-    mintProofs(amount: number, quote: MintQuoteResponse, options: MintProofOptions & {
-        privateKey: string;
-    }): Promise<Array<Proof>>;
-    // (undocumented)
+    	mintProofs(
+    		amount: number,
+    		quote: MintQuoteResponse,
+    		options: MintProofOptions & {
+        			privateKey: string;
+        		}
+    	): Promise<Array<Proof>>;
+    	// (undocumented)
     mintProofs(amount: number, quote: string, options?: MintProofOptions): Promise<Array<Proof>>;
-    onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onMeltQuoteUpdates(quoteIds: Array<string>, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // Warning: (ae-forgotten-export) The symbol "SubscriptionCanceller" needs to be exported by the entry point index.d.ts
-    onMintQuoteUpdates(quoteIds: Array<string>, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onProofStateUpdates(proofs: Array<Proof>, callback: (payload: ProofState & {
-        proof: Proof;
-    }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>>;
-    restore(start: number, count: number, options?: RestoreOptions): Promise<{
-        proofs: Array<Proof>;
-        lastCounterWithSignature?: number;
-    }>;
-    // (undocumented)
-    selectProofsToSend(proofs: Array<Proof>, amountToSend: number, includeFees?: boolean): SendResponse;
-    send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse>;
-    swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse>;
-    // (undocumented)
+    	onMeltQuotePaid(
+    		quoteId: string,
+    		callback: (payload: MeltQuoteResponse) => void,
+    		errorCallback: (e: Error) => void
+    	): Promise<SubscriptionCanceller>;
+    	onMeltQuoteUpdates(
+    		quoteIds: Array<string>,
+    		callback: (payload: MeltQuoteResponse) => void,
+    		errorCallback: (e: Error) => void
+    	): Promise<SubscriptionCanceller>;
+    	onMintQuotePaid(
+    		quoteId: string,
+    		callback: (payload: MintQuoteResponse) => void,
+    		errorCallback: (e: Error) => void
+    	): Promise<SubscriptionCanceller>;
+    	// Warning: (ae-forgotten-export) The symbol "SubscriptionCanceller" needs to be exported by the entry point index.d.ts
+    onMintQuoteUpdates(
+    		quoteIds: Array<string>,
+    		callback: (payload: MintQuoteResponse) => void,
+    		errorCallback: (e: Error) => void
+    	): Promise<SubscriptionCanceller>;
+    	onProofStateUpdates(
+    		proofs: Array<Proof>,
+    		callback: (
+    			payload: ProofState & {
+        				proof: Proof;
+        			}
+    		) => void,
+    		errorCallback: (e: Error) => void
+    	): Promise<SubscriptionCanceller>;
+    	receive(token: string | Token, options?: ReceiveOptions): Promise<Array<Proof>>;
+    	restore(
+    		start: number,
+    		count: number,
+    		options?: RestoreOptions
+    	): Promise<{
+        		proofs: Array<Proof>;
+        		lastCounterWithSignature?: number;
+        	}>;
+    	// (undocumented)
+    selectProofsToSend(
+    		proofs: Array<Proof>,
+    		amountToSend: number,
+    		includeFees?: boolean
+    	): SendResponse;
+    	send(amount: number, proofs: Array<Proof>, options?: SendOptions): Promise<SendResponse>;
+    	swap(amount: number, proofs: Array<Proof>, options?: SwapOptions): Promise<SendResponse>;
+    	// (undocumented)
     get unit(): string;
-}
+    	}
 
 // @public
 export const CheckStateEnum: {
-    readonly UNSPENT: "UNSPENT";
-    readonly PENDING: "PENDING";
-    readonly SPENT: "SPENT";
+    	readonly UNSPENT: 'UNSPENT';
+    	readonly PENDING: 'PENDING';
+    	readonly SPENT: 'SPENT';
 };
 
 // @public (undocumented)
@@ -194,29 +345,54 @@ export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum
 
 // @public
 export type CheckStatePayload = {
-    Ys: Array<string>;
+    	Ys: Array<string>;
 };
 
 // @public
 export type CheckStateResponse = {
-    states: Array<ProofState>;
+    	states: Array<ProofState>;
 } & ApiError;
+
+// @public
+export class ConsoleLogger implements Logger {
+    	constructor(minLevel?: LogLevel);
+    	// (undocumented)
+    debug(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    error(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    fatal(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    info(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    log(level: LogLevel, message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    static readonly SEVERITY: Record<LogLevel, number>;
+    	// (undocumented)
+    trace(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    warn(message: string, context?: Record<string, any>): void;
+}
 
 // @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
 export type DeprecatedToken = {
-    token: Array<TokenEntry>;
-    memo?: string;
-    unit?: string;
+    	token: Array<TokenEntry>;
+    	memo?: string;
+    	unit?: string;
 };
 
 // @public
 export function deriveKeysetId(keys: Keys): string;
 
 // @public (undocumented)
-export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
+export function getBlindedAuthToken(
+	amount: number,
+	url: string,
+	clearAuthToken: string
+): Promise<string[]>;
 
 // @public
 export function getDecodedToken(token: string): Token;
@@ -228,73 +404,89 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token;
 export function getEncodedAuthToken(proof: Proof): string;
 
 // @public
-export function getEncodedToken(token: Token, opts?: {
-    version: 3 | 4;
-}): string;
+export function getEncodedToken(
+	token: Token,
+	opts?: {
+    		version?: 3 | 4;
+    		removeDleq?: boolean;
+    	}
+): string;
 
 // @public (undocumented)
 export function getEncodedTokenBinary(token: Token): Uint8Array;
 
 // @public (undocumented)
-export function getEncodedTokenV4(token: Token): string;
+export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
+
+// @public
+export type GetFilterResponse = {
+    	n: number;
+    	p?: number;
+    	m?: number;
+    	content: string;
+    	timestamp: number;
+} & ApiError;
 
 // @public
 export type GetInfoResponse = {
-    name: string;
-    pubkey: string;
-    version: string;
-    description?: string;
-    description_long?: string;
-    icon_url?: string;
-    contact: Array<MintContactInfo>;
-    nuts: {
-        '4': {
-            methods: Array<SwapMethod>;
-            disabled: boolean;
-        };
-        '5': {
-            methods: Array<SwapMethod>;
-            disabled: boolean;
-        };
-        '7'?: {
-            supported: boolean;
-        };
-        '8'?: {
-            supported: boolean;
-        };
-        '9'?: {
-            supported: boolean;
-        };
-        '10'?: {
-            supported: boolean;
-        };
-        '11'?: {
-            supported: boolean;
-        };
-        '12'?: {
-            supported: boolean;
-        };
-        '14'?: {
-            supported: boolean;
-        };
-        '15'?: {
-            methods: Array<MPPMethod>;
-        };
-        '17'?: {
-            supported: Array<WebSocketSupport>;
-        };
-        '20'?: {
-            supported: boolean;
-        };
-        '22'?: {
-            bat_max_mint: number;
-            protected_endpoints: Array<{
-                method: 'GET' | 'POST';
-                path: string;
-            }>;
-        };
-    };
-    motd?: string;
+    	name: string;
+    	pubkey: string;
+    	version: string;
+    	description?: string;
+    	description_long?: string;
+    	icon_url?: string;
+    	contact: Array<MintContactInfo>;
+    	nuts: {
+        		'4': {
+            			methods: Array<SwapMethod>;
+            			disabled: boolean;
+            		};
+        		'5': {
+            			methods: Array<SwapMethod>;
+            			disabled: boolean;
+            		};
+        		'7'?: {
+            			supported: boolean;
+            		};
+        		'8'?: {
+            			supported: boolean;
+            		};
+        		'9'?: {
+            			supported: boolean;
+            		};
+        		'10'?: {
+            			supported: boolean;
+            		};
+        		'11'?: {
+            			supported: boolean;
+            		};
+        		'12'?: {
+            			supported: boolean;
+            		};
+        		'14'?: {
+            			supported: boolean;
+            		};
+        		'15'?: {
+            			methods: Array<MPPMethod>;
+            		};
+        		'17'?: {
+            			supported: Array<WebSocketSupport>;
+            		};
+        		'20'?: {
+            			supported: boolean;
+            		};
+        		'22'?: {
+            			bat_max_mint: number;
+            			protected_endpoints: Array<{
+                				method: 'GET' | 'POST';
+                				path: string;
+                			}>;
+            		};
+        		'25'?: {
+            			supported: boolean;
+            		};
+        	};
+    	motd?: string;
 };
 
 // @public
@@ -302,14 +494,14 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean;
 
 // @public
 export type HTLCWitness = {
-    preimage: string;
-    signatures?: Array<string>;
+    	preimage: string;
+    	signatures?: Array<string>;
 };
 
 // @public
 export class HttpResponseError extends Error {
-    constructor(message: string, status: number);
-    // (undocumented)
+    	constructor(message: string, status: number);
+    	// (undocumented)
     status: number;
 }
 
@@ -318,20 +510,20 @@ export function injectWebSocketImpl(ws: any): void;
 
 // @public (undocumented)
 export type InvoiceData = {
-    paymentRequest: string;
-    amountInSats?: number;
-    amountInMSats?: number;
-    timestamp?: number;
-    paymentHash?: string;
-    memo?: string;
-    expiry?: number;
+    	paymentRequest: string;
+    	amountInSats?: number;
+    	amountInMSats?: number;
+    	timestamp?: number;
+    	paymentHash?: string;
+    	memo?: string;
+    	expiry?: number;
 };
 
 // @public (undocumented)
 export type JsonRpcErrorObject = {
-    code: number;
-    message: string;
-    data?: any;
+    	code: number;
+    	message: string;
+    	data?: any;
 };
 
 // Warning: (ae-forgotten-export) The symbol "JsonRpcRequest" needs to be exported by the entry point index.d.ts
@@ -343,77 +535,108 @@ export type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcSucce
 
 // @public (undocumented)
 export type JsonRpcNotification = {
-    jsonrpc: '2.0';
-    method: string;
-    params?: JsonRpcParams;
+    	jsonrpc: '2.0';
+    	method: string;
+    	params?: JsonRpcParams;
 };
 
 // @public (undocumented)
 export type JsonRpcReqParams = {
-    kind: RpcSubKinds;
-    filters: Array<string>;
-    subId: string;
+    	kind: RpcSubKinds;
+    	filters: Array<string>;
+    	subId: string;
 };
 
 // @public
 export type Keys = {
-    [amount: number]: string;
+    	[amount: number]: string;
 };
 
 // @public (undocumented)
 export type LockedMintQuote = {
-    id: string;
-    privkey: string;
+    	id: string;
+    	privkey: string;
 };
 
 // @public (undocumented)
 export type LockedMintQuoteResponse = MintQuoteResponse & {
-    pubkey: string;
+    	pubkey: string;
+};
+
+// @public (undocumented)
+export interface Logger {
+    	// (undocumented)
+    debug(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    error(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    fatal(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    info(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    log(level: LogLevel, message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    trace(message: string, context?: Record<string, any>): void;
+    	// (undocumented)
+    warn(message: string, context?: Record<string, any>): void;
+}
+
+// @public
+export const LogLevel: {
+    	readonly FATAL: 'FATAL';
+    	readonly ERROR: 'ERROR';
+    	readonly WARN: 'WARN';
+    	readonly INFO: 'INFO';
+    	readonly DEBUG: 'DEBUG';
+    	readonly TRACE: 'TRACE';
 };
 
 // @public
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+
+// @public
 export type MeltPayload = {
-    quote: string;
-    inputs: Array<Proof>;
-    outputs: Array<SerializedBlindedMessage>;
+    	quote: string;
+    	inputs: Array<Proof>;
+    	outputs: Array<SerializedBlindedMessage>;
 };
 
 // @public (undocumented)
 export type MeltProofOptions = {
-    keysetId?: string;
-    counter?: number;
-    privkey?: string;
+    	keysetId?: string;
+    	counter?: number;
+    	privkey?: string;
 };
 
 // @public
 export type MeltProofsResponse = {
-    quote: MeltQuoteResponse;
-    change: Array<Proof>;
+    	quote: MeltQuoteResponse;
+    	change: Array<Proof>;
 };
 
 // @public
 export type MeltQuoteOptions = {
-    mpp: MPPOption;
+    	mpp: MPPOption;
 };
 
 // @public
 export type MeltQuotePayload = {
-    unit: string;
-    request: string;
-    options?: MeltQuoteOptions;
+    	unit: string;
+    	request: string;
+    	options?: MeltQuoteOptions;
 };
 
 // @public (undocumented)
 export type MeltQuoteResponse = PartialMeltQuoteResponse & {
-    request: string;
-    unit: string;
+    	request: string;
+    	unit: string;
 };
 
 // @public (undocumented)
 export const MeltQuoteState: {
-    readonly UNPAID: "UNPAID";
-    readonly PENDING: "PENDING";
-    readonly PAID: "PAID";
+    	readonly UNPAID: 'UNPAID';
+    	readonly PENDING: 'PENDING';
+    	readonly PAID: 'PAID';
 };
 
 // @public (undocumented)
@@ -421,83 +644,85 @@ export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState
 
 // @public
 export type MintActiveKeys = {
-    keysets: Array<MintKeys>;
+    	keysets: Array<MintKeys>;
 };
 
 // @public
 export type MintAllKeysets = {
-    keysets: Array<MintKeyset>;
+    	keysets: Array<MintKeyset>;
 };
 
 // @public (undocumented)
 export type MintContactInfo = {
-    method: string;
-    info: string;
+    	method: string;
+    	info: string;
 };
 
 // @public
 export type MintKeys = {
-    id: string;
-    unit: string;
-    keys: Keys;
+    	id: string;
+    	unit: string;
+    	keys: Keys;
 };
 
 // @public
 export type MintKeyset = {
-    id: string;
-    unit: string;
-    active: boolean;
-    input_fee_ppk?: number;
+    	id: string;
+    	unit: string;
+    	active: boolean;
+    	input_fee_ppk?: number;
 };
 
 // @public
 export class MintOperationError extends HttpResponseError {
-    constructor(code: number, detail: string);
-    // (undocumented)
+    	constructor(code: number, detail: string);
+    	// (undocumented)
     code: number;
 }
 
 // @public
 export type MintPayload = {
-    quote: string;
-    outputs: Array<SerializedBlindedMessage>;
-    signature?: string;
+    	quote: string;
+    	outputs: Array<SerializedBlindedMessage>;
+    	signature?: string;
 };
 
 // @public (undocumented)
 export type MintProofOptions = {
-    keysetId?: string;
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
-    counter?: number;
-    pubkey?: string;
-    outputData?: Array<OutputDataLike> | OutputDataFactory;
-    p2pk?: {
-        pubkey: string;
-        locktime?: number;
-        refundKeys?: Array<string>;
-    };
+    	keysetId?: string;
+    	outputAmounts?: OutputAmounts;
+    	proofsWeHave?: Array<Proof>;
+    	counter?: number;
+    	pubkey?: string;
+    	outputData?: Array<OutputDataLike> | OutputDataFactory;
+    	p2pk?: {
+        		pubkey: string | Array<string>;
+        		locktime?: number;
+        		refundKeys?: Array<string>;
+        		requiredSignatures?: number;
+        		requiredRefundSignatures?: number;
+        	};
 };
 
 // @public
 export type MintQuotePayload = {
-    unit: string;
-    amount: number;
-    description?: string;
-    pubkey?: string;
+    	unit: string;
+    	amount: number;
+    	description?: string;
+    	pubkey?: string;
 };
 
 // @public (undocumented)
 export type MintQuoteResponse = PartialMintQuoteResponse & {
-    amount: number;
-    unit: string;
+    	amount: number;
+    	unit: string;
 };
 
 // @public (undocumented)
 export const MintQuoteState: {
-    readonly UNPAID: "UNPAID";
-    readonly PAID: "PAID";
-    readonly ISSUED: "ISSUED";
+    	readonly UNPAID: 'UNPAID';
+    	readonly PAID: 'PAID';
+    	readonly ISSUED: 'ISSUED';
 };
 
 // @public (undocumented)
@@ -505,247 +730,288 @@ export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState
 
 // @public
 export type MintResponse = {
-    signatures: Array<SerializedBlindedSignature>;
+    	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 // @public
 export type MPPMethod = {
-    method: string;
-    unit: string;
+    	method: string;
+    	unit: string;
 };
 
 // @public
 export type MPPOption = {
-    amount: number;
+    	amount: number;
 };
 
 // @public
 export class NetworkError extends Error {
-    constructor(message: string);
+    	constructor(message: string);
 }
 
 // @public
 export type NUT10Option = {
-    kind: string;
-    data: string;
-    tags: Array<Array<string>>;
+    	kind: string;
+    	data: string;
+    	tags: Array<Array<string>>;
 };
 
 // @public (undocumented)
 export type OutputAmounts = {
-    sendAmounts: Array<number>;
-    keepAmounts?: Array<number>;
+    	sendAmounts: Array<number>;
+    	keepAmounts?: Array<number>;
 };
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
-    // (undocumented)
+    	constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    	// (undocumented)
     blindedMessage: SerializedBlindedMessage;
-    // (undocumented)
+    	// (undocumented)
     blindingFactor: bigint;
-    // (undocumented)
-    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: Array<number>): Array<OutputData>;
-    // (undocumented)
-    static createP2PKData(p2pk: {
-        pubkey: string;
-        locktime?: number;
-        refundKeys?: Array<string>;
-    }, amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
-    // (undocumented)
-    static createRandomData(amount: number, keyset: MintKeys, customSplit?: Array<number>): OutputData[];
-    // (undocumented)
-    static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
-    // (undocumented)
-    static createSingleP2PKData(p2pk: {
-        pubkey: string;
-        locktime?: number;
-        refundKeys?: Array<string>;
-    }, amount: number, keysetId: string): OutputData;
-    // (undocumented)
+    	// (undocumented)
+    static createDeterministicData(
+    		amount: number,
+    		seed: Uint8Array,
+    		counter: number,
+    		keyset: MintKeys,
+    		customSplit?: Array<number>
+    	): Array<OutputData>;
+    	// (undocumented)
+    static createP2PKData(
+    		p2pk: {
+        			pubkey: string | Array<string>;
+        			locktime?: number;
+        			refundKeys?: Array<string>;
+        			requiredSignatures?: number;
+        			requiredRefundSignatures?: number;
+        		},
+    		amount: number,
+    		keyset: MintKeys,
+    		customSplit?: Array<number>
+    	): OutputData[];
+    	// (undocumented)
+    static createRandomData(
+    		amount: number,
+    		keyset: MintKeys,
+    		customSplit?: Array<number>
+    	): OutputData[];
+    	// (undocumented)
+    static createSingleDeterministicData(
+    		amount: number,
+    		seed: Uint8Array,
+    		counter: number,
+    		keysetId: string
+    	): OutputData;
+    	// (undocumented)
+    static createSingleP2PKData(
+    		p2pk: {
+        			pubkey: string | Array<string>;
+        			locktime?: number;
+        			refundKeys?: Array<string>;
+        			requiredSignatures?: number;
+        			requiredRefundSignatures?: number;
+        		},
+    		amount: number,
+    		keysetId: string
+    	): OutputData;
+    	// (undocumented)
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
-    // (undocumented)
+    	// (undocumented)
     secret: Uint8Array;
-    // (undocumented)
+    	// (undocumented)
     toProof(sig: SerializedBlindedSignature, keyset: MintKeys): Proof;
 }
 
 // @public
 export type P2PKWitness = {
-    signatures?: Array<string>;
+    	signatures?: Array<string>;
 };
 
 // @public
 export type PartialMeltQuoteResponse = {
-    quote: string;
-    amount: number;
-    fee_reserve: number;
-    state: MeltQuoteState;
-    expiry: number;
-    payment_preimage: string | null;
-    change?: Array<SerializedBlindedSignature>;
-    request?: string;
-    unit?: string;
+    	quote: string;
+    	amount: number;
+    	fee_reserve: number;
+    	state: MeltQuoteState;
+    	expiry: number;
+    	payment_preimage: string | null;
+    	change?: Array<SerializedBlindedSignature>;
+    	request?: string;
+    	unit?: string;
 } & ApiError;
 
 // @public
 export type PartialMintQuoteResponse = {
-    request: string;
-    quote: string;
-    state: MintQuoteState;
-    expiry: number;
-    pubkey?: string;
-    unit?: string;
-    amount?: number;
+    	request: string;
+    	quote: string;
+    	state: MintQuoteState;
+    	expiry: number;
+    	pubkey?: string;
+    	unit?: string;
+    	amount?: number;
 } & ApiError;
 
 // @public
 export type PaymentPayload = {
-    pr: string;
-    proofs: Array<Proof>;
+    	pr: string;
+    	proofs: Array<Proof>;
 };
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: Array<PaymentRequestTransport> | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: Array<string> | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
-    // (undocumented)
+    	constructor(
+    		transport?: Array<PaymentRequestTransport> | undefined,
+    		id?: string | undefined,
+    		amount?: number | undefined,
+    		unit?: string | undefined,
+    		mints?: Array<string> | undefined,
+    		description?: string | undefined,
+    		singleUse?: boolean,
+    		nut10?: NUT10Option | undefined
+    	);
+    	// (undocumented)
     amount?: number | undefined;
-    // (undocumented)
+    	// (undocumented)
     description?: string | undefined;
-    // (undocumented)
+    	// (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
-    // (undocumented)
+    	// (undocumented)
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
-    // (undocumented)
+    	// (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
-    // (undocumented)
+    	// (undocumented)
     id?: string | undefined;
-    // (undocumented)
+    	// (undocumented)
     mints?: Array<string> | undefined;
-    // (undocumented)
+    	// (undocumented)
     nut10?: NUT10Option | undefined;
-    // (undocumented)
+    	// (undocumented)
     singleUse: boolean;
-    // (undocumented)
+    	// (undocumented)
     toEncodedRequest(): string;
-    // (undocumented)
+    	// (undocumented)
     toRawRequest(): RawPaymentRequest;
-    // (undocumented)
+    	// (undocumented)
     transport?: Array<PaymentRequestTransport> | undefined;
-    // (undocumented)
+    	// (undocumented)
     unit?: string | undefined;
 }
 export { PaymentRequest_2 as PaymentRequest }
 
 // @public (undocumented)
 export type PaymentRequestPayload = {
-    id?: string;
-    memo?: string;
-    unit: string;
-    mint: string;
-    proofs: Array<Proof>;
+    	id?: string;
+    	memo?: string;
+    	unit: string;
+    	mint: string;
+    	proofs: Array<Proof>;
 };
 
 // @public (undocumented)
 export type PaymentRequestTransport = {
-    type: PaymentRequestTransportType;
-    target: string;
-    tags?: Array<Array<string>>;
+    	type: PaymentRequestTransportType;
+    	target: string;
+    	tags?: Array<Array<string>>;
 };
 
 // @public (undocumented)
 export enum PaymentRequestTransportType {
-    // (undocumented)
-    NOSTR = "nostr",
-    // (undocumented)
-    POST = "post"
+    	// (undocumented)
+    NOSTR = 'nostr',
+    	// (undocumented)
+    POST = 'post'
 }
 
 // @public
 export type PostRestorePayload = {
-    outputs: Array<SerializedBlindedMessage>;
+    	outputs: Array<SerializedBlindedMessage>;
 };
 
 // @public
 export type PostRestoreResponse = {
-    outputs: Array<SerializedBlindedMessage>;
-    signatures: Array<SerializedBlindedSignature>;
+    	outputs: Array<SerializedBlindedMessage>;
+    	signatures: Array<SerializedBlindedSignature>;
 };
 
 // @public
 export type Proof = {
-    id: string;
-    amount: number;
-    secret: string;
-    C: string;
-    dleq?: SerializedDLEQ;
-    witness?: string | P2PKWitness | HTLCWitness;
+    	id: string;
+    	amount: number;
+    	secret: string;
+    	C: string;
+    	dleq?: SerializedDLEQ;
+    	witness?: string | P2PKWitness | HTLCWitness;
 };
 
 // @public
 export type ProofState = {
-    Y: string;
-    state: CheckStateEnum;
-    witness: string | null;
+    	Y: string;
+    	state: CheckStateEnum;
+    	witness: string | null;
 };
 
 // @public (undocumented)
 export type RawNUT10Option = {
-    k: string;
-    d: string;
-    t: Array<Array<string>>;
+    	k: string;
+    	d: string;
+    	t: Array<Array<string>>;
 };
 
 // @public (undocumented)
 export type RawPaymentRequest = {
-    i?: string;
-    a?: number;
-    u?: string;
-    s?: boolean;
-    m?: Array<string>;
-    d?: string;
-    t?: Array<RawTransport>;
-    nut10?: RawNUT10Option;
+    	i?: string;
+    	a?: number;
+    	u?: string;
+    	s?: boolean;
+    	m?: Array<string>;
+    	d?: string;
+    	t?: Array<RawTransport>;
+    	nut10?: RawNUT10Option;
 };
 
 // @public (undocumented)
 export type RawTransport = {
-    t: PaymentRequestTransportType;
-    a: string;
-    g?: Array<Array<string>>;
+    	t: PaymentRequestTransportType;
+    	a: string;
+    	g?: Array<Array<string>>;
 };
 
 // @public (undocumented)
 export type ReceiveOptions = {
-    keysetId?: string;
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
-    counter?: number;
-    pubkey?: string;
-    privkey?: string;
-    requireDleq?: boolean;
-    outputData?: Array<OutputDataLike> | OutputDataFactory;
-    p2pk?: {
-        pubkey: string;
-        locktime?: number;
-        refundKeys?: Array<string>;
-    };
+    	keysetId?: string;
+    	outputAmounts?: OutputAmounts;
+    	proofsWeHave?: Array<Proof>;
+    	counter?: number;
+    	pubkey?: string;
+    	privkey?: string;
+    	requireDleq?: boolean;
+    	outputData?: Array<OutputDataLike> | OutputDataFactory;
+    	p2pk?: {
+        		pubkey: string | Array<string>;
+        		locktime?: number;
+        		refundKeys?: Array<string>;
+        		requiredSignatures?: number;
+        		requiredRefundSignatures?: number;
+        	};
 };
 
 // @public
 export type ReceiveResponse = {
-    token: Token;
-    tokensWithErrors: Token | undefined;
+    	token: Token;
+    	tokensWithErrors: Token | undefined;
 };
 
 // @public
 export type ReceiveTokenEntryResponse = {
-    proofs: Array<Proof>;
+    	proofs: Array<Proof>;
 };
 
 // @public (undocumented)
 export type RestoreOptions = {
-    keysetId?: string;
+    	keysetId?: string;
+    	issuedFilter?: GCSFilter;
+    	spentFilter?: GCSFilter;
 };
 
 // @public (undocumented)
@@ -753,56 +1019,58 @@ export type RpcSubId = string | number | null;
 
 // @public (undocumented)
 export type SendOptions = {
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
-    counter?: number;
-    pubkey?: string;
-    privkey?: string;
-    keysetId?: string;
-    offline?: boolean;
-    includeFees?: boolean;
-    includeDleq?: boolean;
-    outputData?: {
-        send?: Array<OutputDataLike> | OutputDataFactory;
-        keep?: Array<OutputDataLike> | OutputDataFactory;
-    };
-    p2pk?: {
-        pubkey: string;
-        locktime?: number;
-        refundKeys?: Array<string>;
-    };
+    	outputAmounts?: OutputAmounts;
+    	proofsWeHave?: Array<Proof>;
+    	counter?: number;
+    	pubkey?: string;
+    	privkey?: string;
+    	keysetId?: string;
+    	offline?: boolean;
+    	includeFees?: boolean;
+    	includeDleq?: boolean;
+    	outputData?: {
+        		send?: Array<OutputDataLike> | OutputDataFactory;
+        		keep?: Array<OutputDataLike> | OutputDataFactory;
+        	};
+    	p2pk?: {
+        		pubkey: string | Array<string>;
+        		locktime?: number;
+        		refundKeys?: Array<string>;
+        		requiredSignatures?: number;
+        		requiredRefundSignatures?: number;
+        	};
 };
 
 // @public
 export type SendResponse = {
-    keep: Array<Proof>;
-    send: Array<Proof>;
-    serialized?: Array<{
-        proof: Proof;
-        keep: boolean;
-    }>;
+    	keep: Array<Proof>;
+    	send: Array<Proof>;
+    	serialized?: Array<{
+        		proof: Proof;
+        		keep: boolean;
+        	}>;
 };
 
 // @public
 export type SerializedBlindedMessage = {
-    amount: number;
-    B_: string;
-    id: string;
+    	amount: number;
+    	B_: string;
+    	id: string;
 };
 
 // @public
 export type SerializedBlindedSignature = {
-    id: string;
-    amount: number;
-    C_: string;
-    dleq?: SerializedDLEQ;
+    	id: string;
+    	amount: number;
+    	C_: string;
+    	dleq?: SerializedDLEQ;
 };
 
 // @public (undocumented)
 export type SerializedDLEQ = {
-    s: string;
-    e: string;
-    r?: string;
+    	s: string;
+    	e: string;
+    	r?: string;
 };
 
 // Warning: (ae-forgotten-export) The symbol "RequestOptions" needs to be exported by the entry point index.d.ts
@@ -812,112 +1080,114 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
 // @public
 export type SwapMethod = {
-    method: string;
-    unit: string;
-    min_amount: number;
-    max_amount: number;
+    	method: string;
+    	unit: string;
+    	min_amount: number;
+    	max_amount: number;
 };
 
 // @public (undocumented)
 export type SwapOptions = {
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Array<Proof>;
-    counter?: number;
-    pubkey?: string;
-    privkey?: string;
-    keysetId?: string;
-    includeFees?: boolean;
-    outputData?: {
-        send?: Array<OutputDataLike> | OutputDataFactory;
-        keep?: Array<OutputDataLike> | OutputDataFactory;
-    };
-    p2pk?: {
-        pubkey: string;
-        locktime?: number;
-        refundKeys?: Array<string>;
-    };
+    	outputAmounts?: OutputAmounts;
+    	proofsWeHave?: Array<Proof>;
+    	counter?: number;
+    	pubkey?: string;
+    	privkey?: string;
+    	keysetId?: string;
+    	includeFees?: boolean;
+    	outputData?: {
+        		send?: Array<OutputDataLike> | OutputDataFactory;
+        		keep?: Array<OutputDataLike> | OutputDataFactory;
+        	};
+    	p2pk?: {
+        		pubkey: string | Array<string>;
+        		locktime?: number;
+        		refundKeys?: Array<string>;
+        		requiredSignatures?: number;
+        		requiredRefundSignatures?: number;
+        	};
 };
 
 // @public
 export type SwapPayload = {
-    inputs: Array<Proof>;
-    outputs: Array<SerializedBlindedMessage>;
+    	inputs: Array<Proof>;
+    	outputs: Array<SerializedBlindedMessage>;
 };
 
 // @public
 export type SwapResponse = {
-    signatures: Array<SerializedBlindedSignature>;
+    	signatures: Array<SerializedBlindedSignature>;
 } & ApiError;
 
 // @public
 export type SwapTransaction = {
-    payload: SwapPayload;
-    outputData: Array<OutputData>;
-    keepVector: Array<boolean>;
-    sortedIndices: Array<number>;
+    	payload: SwapPayload;
+    	outputData: Array<OutputData>;
+    	keepVector: Array<boolean>;
+    	sortedIndices: Array<number>;
 };
 
 // @public
 export type Token = {
-    mint: string;
-    proofs: Array<Proof>;
-    memo?: string;
-    unit?: string;
+    	mint: string;
+    	proofs: Array<Proof>;
+    	memo?: string;
+    	unit?: string;
 };
 
 // @public @deprecated (undocumented)
 export type TokenV2 = {
-    proofs: Array<Proof>;
-    mints: Array<{
-        url: string;
-        ids: Array<string>;
-    }>;
+    	proofs: Array<Proof>;
+    	mints: Array<{
+        		url: string;
+        		ids: Array<string>;
+        	}>;
 };
 
 // @public
 export type TokenV4Template = {
-    t: Array<V4InnerToken>;
-    d: string;
-    m: string;
-    u: string;
+    	t: Array<V4InnerToken>;
+    	d: string;
+    	m: string;
+    	u: string;
 };
 
 // @public (undocumented)
 export type V4DLEQTemplate = {
-    e: Uint8Array;
-    s: Uint8Array;
-    r: Uint8Array;
+    	e: Uint8Array;
+    	s: Uint8Array;
+    	r: Uint8Array;
 };
 
 // @public
 export type V4InnerToken = {
-    i: Uint8Array;
-    p: Array<V4ProofTemplate>;
+    	i: Uint8Array;
+    	p: Array<V4ProofTemplate>;
 };
 
 // @public
 export type V4ProofTemplate = {
-    a: number;
-    s: string;
-    c: Uint8Array;
-    d?: V4DLEQTemplate;
-    w?: string;
+    	a: number;
+    	s: string;
+    	c: Uint8Array;
+    	d?: V4DLEQTemplate;
+    	w?: string;
 };
 
 // @public
 export type WebSocketSupport = {
-    method: string;
-    unit: string;
-    commands: Array<string>;
+    	method: string;
+    	unit: string;
+    	commands: Array<string>;
 };
 
 // Warnings were encountered during analysis:
 //
-// lib/types/CashuWallet.d.ts:38:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:117:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:148:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:176:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
+// lib/types/CashuWallet.d.ts:63:4 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:134:2 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:167:2 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:195:2 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/wallet/tokens.d.ts:103:2 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
