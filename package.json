@@ -19,6 +19,7 @@
 	"scripts": {
 		"compile": "vite build",
 		"compile:standalone": "BUILD_FORMAT=iife vite build",
+		"test:prepare": "npx playwright install chromium --with-deps",
 		"test": "vitest run --coverage --project node --project browser",
 		"test-integration": "vitest run --coverage --project integration",
 		"dev": "tsc --watch",
