@@ -36,6 +36,10 @@ export type MintKeys = {
 	 */
 	unit: string;
 	/**
+	 * Expiry of the keyset
+	 */
+	final_expiry?: number;
+	/**
 	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
 	 */
 	keys: Keys;
