@@ -29,10 +29,12 @@ const derive = (
 	counter: number,
 	secretOrBlinding: DerivationType
 ): Uint8Array => {
+	const counterBuffer = Buffer.alloc(8);
+	counterBuffer.writeBigUInt64BE(BigInt(counter));
 	const message = Buffer.concat([
 		Buffer.from('Cashu_KDF_HMAC_SHA512'),
-		Buffer.from(keysetId, 'utf-8'),
-		Buffer.from(counter.toString(), 'utf-8')
+		Buffer.from(keysetId, 'hex'),
+		counterBuffer,
 	]);
 
 	// Step 2: Compute HMAC-SHA512
