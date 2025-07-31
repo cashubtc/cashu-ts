@@ -2,7 +2,7 @@ import { Buffer } from 'buffer';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
-import { deriveSecret } from '../../../src/crypto/client/NUT09.js';
+import { deriveSecret } from '../../../src/crypto/client/NUT09';
 
 const seed = Uint8Array.from(
 	Buffer.from(

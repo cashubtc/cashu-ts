@@ -1,8 +1,8 @@
-import { hash_e, createRandomPrivateKey, type DLEQ } from '../common/index.js';
+import { hash_e, createRandomPrivateKey, type DLEQ } from '../common/index';
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, numberToBytesBE } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToNumber, hexToNumber } from '../util/utils.js';
+import { bytesToNumber, hexToNumber } from '../util/utils';
 
 /**
  * !!! WARNING !!! Not recommended for production use, due to non-constant time operations See:

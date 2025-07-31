@@ -1,5 +1,5 @@
 import { HDKey } from '@scure/bip32';
-import { getKeysetIdInt } from '../common/index.js';
+import { getKeysetIdInt } from '../common/index';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 

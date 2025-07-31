@@ -1,5 +1,5 @@
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
+import { CashuMint } from '../src/CashuMint';
+import { CashuWallet } from '../src/CashuWallet';
 
 import dns from 'node:dns';
 import {
@@ -9,8 +9,8 @@ import {
 	MintQuoteState,
 	Proof,
 	Token,
-} from '../src/model/types/index.js';
-import { getEncodedTokenV4, sumProofs } from '../src/utils.js';
+} from '../src/model/types/index';
+import { getEncodedTokenV4, sumProofs } from '../src/utils';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =

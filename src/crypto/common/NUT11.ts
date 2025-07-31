@@ -1,4 +1,4 @@
-import { type Secret } from './index.js';
+import { type Secret } from './index';
 
 export const parseP2PKSecret = (secret: string | Uint8Array): Secret => {
 	try {

@@ -1,14 +1,14 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/hashes/utils';
 import { describe, expect, test } from 'vitest';
-import { hash_e, pointFromBytes, pointFromHex } from '../../../src/crypto/common/index.js';
+import { hash_e, pointFromBytes, pointFromHex } from '../../../src/crypto/common/index';
 import {
 	constructProofFromPromise,
 	createRandomBlindedMessage,
-} from '../../../src/crypto/client/index.js';
-import { createBlindSignature } from '../../../src/crypto/mint/index.js';
-import { createDLEQProof } from '../../../src/crypto/mint/NUT12.js';
-import { verifyDLEQProof, verifyDLEQProof_reblind } from '../../../src/crypto/client/NUT12.js';
+} from '../../../src/crypto/client/index';
+import { createBlindSignature } from '../../../src/crypto/mint/index';
+import { createDLEQProof } from '../../../src/crypto/mint/NUT12';
+import { verifyDLEQProof, verifyDLEQProof_reblind } from '../../../src/crypto/client/NUT12';
 
 describe('test hash_e', () => {
 	test('test hash_e function', async () => {

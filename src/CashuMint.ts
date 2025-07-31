@@ -1,4 +1,4 @@
-import { ConnectionManager, type WSConnection } from './WSConnection.js';
+import { ConnectionManager, type WSConnection } from './WSConnection';
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
@@ -18,20 +18,20 @@ import type {
 	MeltQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse,
-} from './model/types/index.js';
-import { MeltQuoteState } from './model/types/index.js';
+} from './model/types/index';
+import { MeltQuoteState } from './model/types/index';
 import request, { setRequestLogger } from './request';
-import { isObj, joinUrls, sanitizeUrl } from './utils.js';
+import { isObj, joinUrls, sanitizeUrl } from './utils';
 import {
 	type MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated,
-} from './legacy/nut-05.js';
+} from './legacy/nut-05';
 import {
 	type MintQuoteResponsePaidDeprecated,
 	handleMintQuoteResponseDeprecated,
-} from './legacy/nut-04.js';
-import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
-import { MintInfo } from './model/MintInfo.js';
+} from './legacy/nut-04';
+import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06';
+import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER } from './logger';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented

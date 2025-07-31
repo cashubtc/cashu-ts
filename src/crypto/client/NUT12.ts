@@ -1,8 +1,8 @@
-import { type DLEQ, hash_e, hashToCurve } from '../common/index.js';
+import { type DLEQ, hash_e, hashToCurve } from '../common/index';
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToNumber } from '../util/utils.js';
+import { bytesToNumber } from '../util/utils';
 
 function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
 	if (arr1.length !== arr2.length) return false;

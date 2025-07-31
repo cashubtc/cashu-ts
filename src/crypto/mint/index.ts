@@ -1,6 +1,6 @@
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToNumber } from '../util/utils.js';
+import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
 	type IntRange,
@@ -10,7 +10,7 @@ import {
 	createRandomPrivateKey,
 	deriveKeysetId,
 	hashToCurve,
-} from '../common/index.js';
+} from '../common/index';
 import { HDKey } from '@scure/bip32';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
