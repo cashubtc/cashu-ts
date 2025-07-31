@@ -12,8 +12,8 @@ import {
 	getP2PKSigFlag,
 	getP2PKWitnessSignatures
 } from '../../../src/crypto/client/NUT11';
-import { Secret } from '../../../src/crypto/common/index.js';
-import { P2PKWitness } from '../../../src/model/types/index.js';
+import { Secret } from '../../../src/crypto/common/index';
+import { P2PKWitness } from '../../../src/model/types/index';
 import { pointFromHex, Proof } from '../../../src/crypto/common';
 import { verifyP2PKSig, verifyP2PKSigOutput } from '../../../src/crypto/mint/NUT11';
 import { getPubKeyFromPrivKey } from '../../../src/crypto/mint';

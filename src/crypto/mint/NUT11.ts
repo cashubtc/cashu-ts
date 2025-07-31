@@ -1,14 +1,14 @@
 import { schnorr } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
-import { parseP2PKSecret } from '../common/NUT11.js';
+import { parseP2PKSecret } from '../common/NUT11';
 import {
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKWitnessSignatures,
 	getP2PKNSigs,
 	verifyP2PKSecretSignature
-} from '../client/NUT11.js';
-import { type Proof } from '../../model/types/index.js';
-import { BlindedMessage } from '../client/index.js';
+} from '../client/NUT11';
+import { type Proof } from '../../model/types/index';
+import { BlindedMessage } from '../client/index';
 
 export const verifyP2PKSig = (proof: Proof): boolean => {
 	if (!proof.witness) {

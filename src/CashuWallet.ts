@@ -1,8 +1,8 @@
-import { serializeProof } from './crypto/client/index.js';
-import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11.js';
-import { hashToCurve, pointFromHex } from './crypto/common/index.js';
-import { CashuMint } from './CashuMint.js';
-import { MintInfo } from './model/MintInfo.js';
+import { serializeProof } from './crypto/client/index';
+import { signP2PKProofs, getP2PKWitnessSignatures } from './crypto/client/NUT11';
+import { hashToCurve, pointFromHex } from './crypto/common/index';
+import { CashuMint } from './CashuMint';
+import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
 	GetInfoResponse,
@@ -33,9 +33,9 @@ import type {
 	LockedMintQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse
-} from './model/types/index.js';
-import { MintQuoteState, MeltQuoteState } from './model/types/index.js';
-import { SubscriptionCanceller } from './model/types/wallet/websocket.js';
+} from './model/types/index';
+import { MintQuoteState, MeltQuoteState } from './model/types/index';
+import { SubscriptionCanceller } from './model/types/wallet/websocket';
 import {
 	getDecodedToken,
 	getKeepAmounts,
@@ -43,14 +43,14 @@ import {
 	splitAmount,
 	stripDleq,
 	sumProofs
-} from './utils.js';
-import { signMintQuote } from './crypto/client/NUT20.js';
+} from './utils';
+import { signMintQuote } from './crypto/client/NUT20';
 import {
 	OutputData,
 	OutputDataFactory,
 	OutputDataLike,
 	isOutputDataFactory
-} from './model/OutputData.js';
+} from './model/OutputData';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.

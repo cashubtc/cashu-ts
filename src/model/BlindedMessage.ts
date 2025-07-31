@@ -1,4 +1,4 @@
-import { SerializedBlindedMessage } from './types/index.js';
+import { SerializedBlindedMessage } from './types/index';
 import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 
 class BlindedMessage {

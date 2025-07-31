@@ -1,9 +1,9 @@
 import { beforeAll, test, describe, expect, afterAll, afterEach } from 'vitest';
-import { CashuMint } from '../src/CashuMint.js';
-import { CashuWallet } from '../src/CashuWallet.js';
+import { CashuMint } from '../src/CashuMint';
+import { CashuWallet } from '../src/CashuWallet';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { setGlobalRequestOptions } from '../src/request.js';
+import { setGlobalRequestOptions } from '../src/request';
 import { HttpResponseError, NetworkError, MintOperationError } from '../src/model/Errors';
 
 const mintUrl = 'https://localhost:3338';
