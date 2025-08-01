@@ -370,6 +370,17 @@ export function handleTokens(token: string): Token {
 	}
 	throw new Error('Token version is not supported');
 }
+
+/**
+ * Recomputes the ID for the provided keyset and verifies it matches the ID provided by the Mint.
+ *
+ * @param keys The keyset to be verified.
+ * @returns True if the verification succeeded, false otherwise.
+ */
+export function verifyKeysetId(keys: MintKeys): boolean {
+	return deriveKeysetId(keys.keys) === keys.id;
+}
+
 /**
  * Returns the keyset id of a set of keys.
  *
