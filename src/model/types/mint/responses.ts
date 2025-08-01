@@ -106,7 +106,7 @@ export type GetInfoResponse = {
 			supported: Array<WebSocketSupport>;
 		};
 		// Cached mint responses, tll is mapped null -> infinity later
-		'19'?: Omit<Nut19Policy, "ttl"> & { ttl: number | null };
+		'19'?: Omit<Nut19Policy, 'ttl'> & { ttl: number | null };
 		'20'?: {
 			// Locked Mint Quote
 			supported: boolean;

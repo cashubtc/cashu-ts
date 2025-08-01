@@ -5,7 +5,6 @@
 ```ts
 
 import { MintContactInfo as MintContactInfo_2 } from './types';
-import { Nut19Policy as Nut19Policy_2 } from './types';
 
 // @public
 export type ApiError = {
@@ -308,7 +307,9 @@ export type GetInfoResponse = {
         '17'?: {
             supported: Array<WebSocketSupport>;
         };
-        '19'?: Nut19Policy;
+        '19'?: Omit<Nut19Policy, "ttl"> & {
+            ttl: number | null;
+        };
         '20'?: {
             supported: boolean;
         };
@@ -592,12 +593,12 @@ export type NUT10Option = {
 
 // @public
 export type Nut19Policy = {
-    ttl: number | null;
+    ttl: number;
     cached_endpoints: Array<{
         method: 'GET' | 'POST';
         path: string;
     }>;
-} | null;
+};
 
 // @public (undocumented)
 export type OutputAmounts = {
