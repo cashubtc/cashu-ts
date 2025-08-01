@@ -1,8 +1,16 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToNumber } from '../util/utils';
-import { BlindSignature, IntRange, Keyset, MintKeys, Proof } from '../common/index';
-import { createRandomPrivateKey, deriveKeysetId, hashToCurve } from '../common/index';
+import {
+	type BlindSignature,
+	type IntRange,
+	type Keyset,
+	type MintKeys,
+	type Proof,
+	createRandomPrivateKey,
+	deriveKeysetId,
+	hashToCurve,
+} from '../common/index';
 import { HDKey } from '@scure/bip32';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
@@ -21,7 +29,7 @@ export function createBlindSignature(
 	B_: ProjPointType<bigint>,
 	privateKey: Uint8Array,
 	amount: number,
-	id: string
+	id: string,
 ): BlindSignature {
 	const C_: ProjPointType<bigint> = B_.multiply(bytesToNumber(privateKey));
 	return { C_, amount, id };

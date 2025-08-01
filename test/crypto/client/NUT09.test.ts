@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
@@ -6,8 +7,8 @@ import { deriveSecret } from '../../../src/crypto/client/NUT09';
 const seed = Uint8Array.from(
 	Buffer.from(
 		'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
-		'hex'
-	)
+		'hex',
+	),
 );
 
 describe('testing hdkey from seed', () => {
@@ -34,7 +35,7 @@ describe('testing deterministic secrets', () => {
 		'8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270',
 		'bc628c79accd2364fd31511216a0fab62afd4a18ff77a20deded7b858c9860c8',
 		'59284fd1650ea9fa17db2b3acf59ecd0f2d52ec3261dd4152785813ff27a33bf',
-		'576c23393a8b31cc8da6688d9c9a96394ec74b40fdaf1f693a6bb84284334ea0'
+		'576c23393a8b31cc8da6688d9c9a96394ec74b40fdaf1f693a6bb84284334ea0',
 	];
 	test('derive Secret', async () => {
 		const secret1 = deriveSecret(seed, '009a1f293253e41e', 0);

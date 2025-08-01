@@ -1,13 +1,7 @@
 type SimpleValue = boolean | null | undefined;
 
 export type ResultObject = { [key: string]: ResultValue };
-export type ResultValue =
-	| SimpleValue
-	| number
-	| string
-	| Uint8Array
-	| Array<ResultValue>
-	| ResultObject;
+export type ResultValue = SimpleValue | number | string | Uint8Array | ResultValue[] | ResultObject;
 
 type ResultKeyType = Extract<ResultValue, number | string>;
 export type ValidDecodedType = Extract<ResultValue, ResultObject>;
@@ -21,13 +15,13 @@ type DecodeResult<T extends ResultValue> = {
 	offset: number;
 };
 
-export function encodeCBOR(value: any) {
-	const buffer: Array<number> = [];
+export function encodeCBOR(value: unknown): Uint8Array {
+	const buffer: number[] = [];
 	encodeItem(value, buffer);
 	return new Uint8Array(buffer);
 }
 
-function encodeItem(value: any, buffer: Array<number>) {
+function encodeItem(value: unknown, buffer: number[]) {
 	if (value === null) {
 		buffer.push(0xf6);
 	} else if (value === undefined) {
@@ -42,14 +36,19 @@ function encodeItem(value: any, buffer: Array<number>) {
 		encodeArray(value, buffer);
 	} else if (value instanceof Uint8Array) {
 		encodeByteString(value, buffer);
-	} else if (typeof value === 'object') {
-		encodeObject(value, buffer);
+	} else if (
+		// Defensive: POJO only (null/array handled above)
+		typeof value === 'object' &&
+		value !== null &&
+		!Array.isArray(value)
+	) {
+		encodeObject(value as Record<string, unknown>, buffer);
 	} else {
 		throw new Error('Unsupported type');
 	}
 }
 
-function encodeUnsigned(value: number, buffer: Array<number>) {
+function encodeUnsigned(value: number, buffer: number[]) {
 	if (value < 24) {
 		buffer.push(value);
 	} else if (value < 256) {
@@ -63,7 +62,7 @@ function encodeUnsigned(value: number, buffer: Array<number>) {
 	}
 }
 
-function encodeByteString(value: Uint8Array, buffer: Array<number>) {
+function encodeByteString(value: Uint8Array, buffer: number[]) {
 	const length = value.length;
 
 	if (length < 24) {
@@ -78,7 +77,7 @@ function encodeByteString(value: Uint8Array, buffer: Array<number>) {
 			(length >> 24) & 0xff,
 			(length >> 16) & 0xff,
 			(length >> 8) & 0xff,
-			length & 0xff
+			length & 0xff,
 		);
 	} else {
 		throw new Error('Byte string too long to encode');
@@ -89,7 +88,7 @@ function encodeByteString(value: Uint8Array, buffer: Array<number>) {
 	}
 }
 
-function encodeString(value: string, buffer: Array<number>) {
+function encodeString(value: string, buffer: number[]) {
 	const utf8 = new TextEncoder().encode(value);
 	const length = utf8.length;
 
@@ -105,7 +104,7 @@ function encodeString(value: string, buffer: Array<number>) {
 			(length >> 24) & 0xff,
 			(length >> 16) & 0xff,
 			(length >> 8) & 0xff,
-			length & 0xff
+			length & 0xff,
 		);
 	} else {
 		throw new Error('String too long to encode');
@@ -116,7 +115,7 @@ function encodeString(value: string, buffer: Array<number>) {
 	}
 }
 
-function encodeArray(value: Array<any>, buffer: Array<number>) {
+function encodeArray(value: unknown[], buffer: number[]) {
 	const length = value.length;
 	if (length < 24) {
 		buffer.push(0x80 | length);
@@ -133,7 +132,7 @@ function encodeArray(value: Array<any>, buffer: Array<number>) {
 	}
 }
 
-function encodeObject(value: { [key: string]: any }, buffer: Array<number>) {
+function encodeObject(value: Record<string, unknown>, buffer: number[]) {
 	const keys = Object.keys(value);
 	encodeUnsigned(keys.length, buffer);
 	buffer[buffer.length - 1] |= 0xa0;
@@ -180,7 +179,7 @@ function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
 function decodeLength(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<number> {
 	if (additionalInfo < 24) return { value: additionalInfo, offset };
 	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
@@ -206,7 +205,7 @@ function decodeLength(
 function decodeUnsigned(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<number> {
 	const { value, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	return { value, offset: newOffset };
@@ -215,7 +214,7 @@ function decodeUnsigned(
 function decodeSigned(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<number> {
 	const { value, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	return { value: -1 - value, offset: newOffset };
@@ -224,7 +223,7 @@ function decodeSigned(
 function decodeByteString(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<Uint8Array> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	if (newOffset + length > view.byteLength) {
@@ -237,7 +236,7 @@ function decodeByteString(
 function decodeString(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<string> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	if (newOffset + length > view.byteLength) {
@@ -251,8 +250,8 @@ function decodeString(
 function decodeArray(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
-): DecodeResult<Array<ResultValue>> {
+	additionalInfo: number,
+): DecodeResult<ResultValue[]> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	const array = [];
 	let currentOffset = newOffset;
@@ -267,7 +266,7 @@ function decodeArray(
 function decodeMap(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<Record<string, ResultValue>> {
 	const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
 	const map: { [key: string]: ResultValue } = {};
@@ -300,7 +299,7 @@ function decodeFloat16(uint16: number): number {
 function decodeSimpleAndFloat(
 	view: DataView,
 	offset: number,
-	additionalInfo: number
+	additionalInfo: number,
 ): DecodeResult<SimpleValue | number> {
 	if (additionalInfo < 24) {
 		switch (additionalInfo) {

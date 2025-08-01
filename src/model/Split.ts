@@ -1,11 +1,11 @@
-import { BlindedMessage } from './BlindedMessage';
-import { Proof } from './types/index';
+import { type BlindedMessage } from './BlindedMessage';
+import { type Proof } from './types/index';
 
 class Split {
-	proofs: Array<Proof>;
+	proofs: Proof[];
 	amount: number;
-	outputs: Array<BlindedMessage>;
-	constructor(proofs: Array<Proof>, amount: number, outputs: Array<BlindedMessage>) {
+	outputs: BlindedMessage[];
+	constructor(proofs: Proof[], amount: number, outputs: BlindedMessage[]) {
 		this.proofs = proofs;
 		this.amount = amount;
 		this.outputs = outputs;
@@ -16,7 +16,7 @@ class Split {
 			amount: this.amount,
 			outputs: this.outputs.map((blindedMessage: BlindedMessage) => {
 				return { amount: blindedMessage.amount, B_: blindedMessage.B_.toHex(true) };
-			})
+			}),
 		};
 	}
 }

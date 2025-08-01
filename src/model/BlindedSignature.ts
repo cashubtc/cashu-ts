@@ -1,6 +1,6 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { SerializedBlindedSignature } from './types/index';
-import { DLEQ } from '../crypto/common/index';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type SerializedBlindedSignature } from './types/index';
+import { type DLEQ } from '../crypto/common/index';
 import { bytesToHex } from '@noble/hashes/utils';
 import { numberToHexPadded64 } from '../utils';
 
@@ -26,9 +26,9 @@ class BlindedSignature {
 				dleq: {
 					s: bytesToHex(this.dleq.s),
 					e: bytesToHex(this.dleq.e),
-					r: numberToHexPadded64(this.dleq.r ?? BigInt(0))
-				}
-			})
+					r: numberToHexPadded64(this.dleq.r ?? BigInt(0)),
+				},
+			}),
 		};
 	}
 }

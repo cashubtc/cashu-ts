@@ -8,7 +8,7 @@ import {
 	MintQuoteResponse,
 	MintQuoteState,
 	Proof,
-	Token
+	Token,
 } from '../src/model/types/index';
 import { getEncodedTokenV4, sumProofs } from '../src/utils';
 dns.setDefaultResultOrder('ipv4first');
@@ -119,8 +119,8 @@ const runWalletExample = async () => {
 			console.log(
 				`sending ${send.reduce((a, b) => a + b.amount, 0)} keeping ${keep.reduce(
 					(a, b) => a + b.amount,
-					0
-				)}`
+					0,
+				)}`,
 			);
 			// first, let's update our store with the new proofs
 			proofs = keep;
@@ -132,7 +132,7 @@ const runWalletExample = async () => {
 			// In there, we set the mint url, and proof we want to send
 			const token: Token = {
 				mint: mintUrl,
-				proofs: send
+				proofs: send,
 			};
 			// and finally, we can encode the token as a cashu string
 			const cashuString = getEncodedTokenV4(token);
@@ -212,7 +212,7 @@ const runWalletExample = async () => {
 					// if the request has succeeded, we should receive the preimage for the paid invoice.
 					console.log(
 						'success! here is the payment preimage (if its null, the mints lightning backend did not forward the preimage): ',
-						quote.payment_preimage
+						quote.payment_preimage,
 					);
 
 					console.log(`Ecash left: ${sumProofs(proofs)}`);

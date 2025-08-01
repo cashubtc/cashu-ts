@@ -1,25 +1,25 @@
-import { SerializedBlindedMessage } from '../wallet';
+import { type SerializedBlindedMessage } from '../wallet';
 
 /**
- * Cashu api error
+ * Cashu api error.
  */
 export type ApiError = {
 	/**
-	 * Error message
+	 * Error message.
 	 */
 	error?: string;
 	/**
-	 * HTTP error code
+	 * HTTP error code.
 	 */
 	code?: number;
 	/**
-	 * Detailed error message
+	 * Detailed error message.
 	 */
 	detail?: string;
 };
 
 /**
- * Entries of CheckStateResponse with state of the proof
+ * Entries of CheckStateResponse with state of the proof.
  */
 export type ProofState = {
 	Y: string;
@@ -28,27 +28,25 @@ export type ProofState = {
 };
 
 /**
- * Enum for the state of a proof
+ * Enum for the state of a proof.
  */
 export const CheckStateEnum = {
 	UNSPENT: 'UNSPENT',
 	PENDING: 'PENDING',
-	SPENT: 'SPENT'
+	SPENT: 'SPENT',
 } as const;
 export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum];
 
 /**
- * Response when checking proofs if they are spendable. Should not rely on this for receiving, since it can be easily cheated.
+ * Response when checking proofs if they are spendable. Should not rely on this for receiving, since
+ * it can be easily cheated.
  */
 export type CheckStateResponse = {
-	/**
-	 *
-	 */
-	states: Array<ProofState>;
+	states: ProofState[];
 } & ApiError;
 
 /**
- * Response from mint at /info endpoint
+ * Response from mint at /info endpoint.
  */
 export type GetInfoResponse = {
 	name: string;
@@ -57,16 +55,16 @@ export type GetInfoResponse = {
 	description?: string;
 	description_long?: string;
 	icon_url?: string;
-	contact: Array<MintContactInfo>;
+	contact: MintContactInfo[];
 	nuts: {
 		'4': {
 			// Minting
-			methods: Array<SwapMethod>;
+			methods: SwapMethod[];
 			disabled: boolean;
 		};
 		'5': {
 			// Melting
-			methods: Array<SwapMethod>;
+			methods: SwapMethod[];
 			disabled: boolean;
 		};
 		'7'?: {
@@ -99,11 +97,11 @@ export type GetInfoResponse = {
 		};
 		'15'?: {
 			// MPP
-			methods: Array<MPPMethod>;
+			methods: MPPMethod[];
 		};
 		'17'?: {
 			// WebSockets
-			supported: Array<WebSocketSupport>;
+			supported: WebSocketSupport[];
 		};
 		'20'?: {
 			// Locked Mint Quote
@@ -119,43 +117,44 @@ export type GetInfoResponse = {
 };
 
 /**
- * Response from the mint after requesting a melt quote
+ * Response from the mint after requesting a melt quote.
  */
 export type PartialMeltQuoteResponse = {
 	/**
-	 * Quote ID
+	 * Quote ID.
 	 */
 	quote: string;
 	/**
-	 * Amount to be melted
+	 * Amount to be melted.
 	 */
 	amount: number;
 	/**
-	 * Fee reserve to be added to the amount
+	 * Fee reserve to be added to the amount.
 	 */
 	fee_reserve: number;
 	/**
-	 * State of the melt quote
+	 * State of the melt quote.
 	 */
 	state: MeltQuoteState;
 	/**
-	 * Timestamp of when the quote expires
+	 * Timestamp of when the quote expires.
 	 */
 	expiry: number;
 	/**
-	 * preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null, depending on which LN-backend the mint uses
+	 * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
+	 * depending on which LN-backend the mint uses.
 	 */
 	payment_preimage: string | null;
 	/**
-	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate
+	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
 	 */
-	change?: Array<SerializedBlindedSignature>;
+	change?: SerializedBlindedSignature[];
 	/**
-	 *  Payment request for the melt quote.
+	 * Payment request for the melt quote.
 	 */
 	request?: string;
 	/**
-	 *  Unit of the melt quote.
+	 * Unit of the melt quote.
 	 */
 	unit?: string;
 } & ApiError;
@@ -165,7 +164,7 @@ export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; un
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
 	PENDING: 'PENDING',
-	PAID: 'PAID'
+	PAID: 'PAID',
 } as const;
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
 
@@ -177,40 +176,40 @@ export type MintContactInfo = {
 export const MintQuoteState = {
 	UNPAID: 'UNPAID',
 	PAID: 'PAID',
-	ISSUED: 'ISSUED'
+	ISSUED: 'ISSUED',
 } as const;
 export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState];
 
 /**
- * Response from the mint after requesting a mint
+ * Response from the mint after requesting a mint.
  */
 export type PartialMintQuoteResponse = {
 	/**
-	 * Payment request
+	 * Payment request.
 	 */
 	request: string;
 	/**
-	 * Quote ID
+	 * Quote ID.
 	 */
 	quote: string;
 	/**
-	 * State of the mint quote
+	 * State of the mint quote.
 	 */
 	state: MintQuoteState;
 	/**
-	 * Timestamp of when the quote expires
+	 * Timestamp of when the quote expires.
 	 */
 	expiry: number;
 	/**
-	 * Public key the quote is locked to
+	 * Public key the quote is locked to.
 	 */
 	pubkey?: string;
 	/**
-	 * Unit of the quote
+	 * Unit of the quote.
 	 */
 	unit?: string;
 	/**
-	 * Amount requested for mint quote
+	 * Amount requested for mint quote.
 	 */
 	amount?: number;
 } & ApiError;
@@ -220,18 +219,18 @@ export type MintQuoteResponse = PartialMintQuoteResponse & { amount: number; uni
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 
 /**
- * Response from the mint after requesting a mint
+ * Response from the mint after requesting a mint.
  */
 export type MintResponse = {
-	signatures: Array<SerializedBlindedSignature>;
+	signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 /**
- * Response from mint at /v1/restore endpoint
+ * Response from mint at /v1/restore endpoint.
  */
 export type PostRestoreResponse = {
-	outputs: Array<SerializedBlindedMessage>;
-	signatures: Array<SerializedBlindedSignature>;
+	outputs: SerializedBlindedMessage[];
+	signatures: SerializedBlindedSignature[];
 };
 
 /*
@@ -245,23 +244,23 @@ export type SerializedDLEQ = {
 };
 
 /**
- * Blinded signature as it is received from the mint
+ * Blinded signature as it is received from the mint.
  */
 export type SerializedBlindedSignature = {
 	/**
-	 * keyset id for indicating which public key was used to sign the blinded message
+	 * Keyset id for indicating which public key was used to sign the blinded message.
 	 */
 	id: string;
 	/**
-	 * Amount denominated in Satoshi
+	 * Amount denominated in Satoshi.
 	 */
 	amount: number;
 	/**
-	 * Blinded signature
+	 * Blinded signature.
 	 */
 	C_: string;
 	/**
-	 * DLEQ Proof
+	 * DLEQ Proof.
 	 */
 	dleq?: SerializedDLEQ;
 };
@@ -277,17 +276,17 @@ export type SwapMethod = {
 };
 
 /**
- * Response from the mint after performing a split action
+ * Response from the mint after performing a split action.
  */
 export type SwapResponse = {
 	/**
-	 * represents the outputs after the split
+	 * Represents the outputs after the split.
 	 */
-	signatures: Array<SerializedBlindedSignature>;
+	signatures: SerializedBlindedSignature[];
 } & ApiError;
 
 /**
- * MPP supported methods
+ * MPP supported methods.
  */
 export type MPPMethod = {
 	method: string;
@@ -295,17 +294,17 @@ export type MPPMethod = {
 };
 
 /**
- * WebSocket supported methods
+ * WebSocket supported methods.
  */
 export type WebSocketSupport = {
 	method: string;
 	unit: string;
-	commands: Array<string>;
+	commands: string[];
 };
 
 /**
- * Response from the mint after blind auth minting
+ * Response from the mint after blind auth minting.
  */
 export type BlindAuthMintResponse = {
-	signatures: Array<SerializedBlindedSignature>;
+	signatures: SerializedBlindedSignature[];
 } & ApiError;

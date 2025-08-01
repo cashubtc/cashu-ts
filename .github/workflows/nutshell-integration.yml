@@ -18,11 +18,12 @@ jobs:
       #     curl localhost:3338/v1/info
 
       - name: Checkout cashu-ts repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
+          node-version: '22.x'
           cache: 'npm'
 
       - run: npm ci

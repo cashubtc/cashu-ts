@@ -7,15 +7,15 @@ async function getClearAuthToken() {
 	const res = await fetch(process.env.OICD_TOKEN_ENDPOINT!, {
 		method: 'POST',
 		headers: {
-			'Content-Type': 'application/x-www-form-urlencoded'
+			'Content-Type': 'application/x-www-form-urlencoded',
 		},
 		body: new URLSearchParams({
 			username: process.env.OICD_USERNAME!,
 			password: process.env.OICD_PASSWORD!,
 			grant_type: 'password',
 			scope: 'openid',
-			client_id: 'cashu-client'
-		})
+			client_id: 'cashu-client',
+		}),
 	});
 	const data = await res.json();
 	return data.access_token;

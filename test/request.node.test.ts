@@ -36,9 +36,9 @@ describe('requests', () => {
 					amount: 2000,
 					fee_reserve: 20,
 					payment_preimage: null,
-					state: 'UNPAID'
+					state: 'UNPAID',
 				});
-			})
+			}),
 		);
 		const wallet = new CashuWallet(mint, { unit });
 		await wallet.checkMeltQuote('test');
@@ -59,9 +59,9 @@ describe('requests', () => {
 					amount: 2000,
 					fee_reserve: 20,
 					payment_preimage: null,
-					state: 'UNPAID'
+					state: 'UNPAID',
 				});
-			})
+			}),
 		);
 
 		const wallet = new CashuWallet(mint, { unit });
@@ -78,7 +78,7 @@ describe('requests', () => {
 		server.use(
 			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
 				return new HttpResponse(JSON.stringify({ error: 'Not Found' }), { status: 404 });
-			})
+			}),
 		);
 
 		const wallet = new CashuWallet(mint, { unit });
@@ -90,7 +90,7 @@ describe('requests', () => {
 			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
 				// This simulates a network failure at the fetch level
 				return Response.error();
-			})
+			}),
 		);
 
 		const wallet = new CashuWallet(mint, { unit });
@@ -102,9 +102,9 @@ describe('requests', () => {
 		server.use(
 			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
 				return new HttpResponse(JSON.stringify({ code: 20003, detail: 'Minting is disabled' }), {
-					status: 400
+					status: 400,
 				});
-			})
+			}),
 		);
 
 		const wallet = new CashuWallet(mint, { unit });

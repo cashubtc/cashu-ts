@@ -1,44 +1,46 @@
+import { Buffer } from 'buffer';
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
-import { DLEQ, pointFromHex } from './crypto/common/index';
+import { type DLEQ, pointFromHex } from './crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
-	encodeUint8toBase64Url
+	encodeUint8toBase64Url,
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from './model/PaymentRequest';
 import {
-	DeprecatedToken,
-	Keys,
-	MintKeys,
-	Proof,
-	SerializedDLEQ,
-	Token,
-	TokenV4Template,
-	V4DLEQTemplate,
-	V4InnerToken,
-	V4ProofTemplate
+	type DeprecatedToken,
+	type Keys,
+	type MintKeys,
+	type Proof,
+	type SerializedDLEQ,
+	type Token,
+	type TokenV4Template,
+	type V4DLEQTemplate,
+	type V4InnerToken,
+	type V4ProofTemplate,
 } from './model/types/index';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
 
 /**
- * Splits the amount into denominations of the provided @param keyset
- * @param value amount to split
- * @param keyset keys to look up split amounts
- * @param split? optional custom split amounts
- * @param order? optional order for split amounts (default: "asc")
- * @returns Array of split amounts
- * @throws Error if @param split amount is greater than @param value amount
+ * Splits the amount into denominations of the provided @param keyset.
+ *
+ * @param value Amount to split.
+ * @param keyset Keys to look up split amounts.
+ * @param split? Optional custom split amounts.
+ * @param order? Optional order for split amounts (default: "asc")
+ * @returns Array of split amounts.
+ * @throws Error if @param split amount is greater than @param value amount.
  */
 export function splitAmount(
 	value: number,
 	keyset: Keys,
-	split?: Array<number>,
-	order?: 'desc' | 'asc'
-): Array<number> {
+	split?: number[],
+	order?: 'desc' | 'asc',
+): number[] {
 	if (split) {
 		const totalSplitAmount = sumArray(split);
 		if (totalSplitAmount > value) {
@@ -62,21 +64,22 @@ export function splitAmount(
 
 /**
  * Creates a list of amounts to keep based on the proofs we have and the proofs we want to reach.
- * @param proofsWeHave complete set of proofs stored (from current mint)
- * @param amountToKeep amount to keep
- * @param keys keys of current keyset
- * @param targetCount the target number of proofs to reach
- * @returns an array of amounts to keep
+ *
+ * @param proofsWeHave Complete set of proofs stored (from current mint)
+ * @param amountToKeep Amount to keep.
+ * @param keys Keys of current keyset.
+ * @param targetCount The target number of proofs to reach.
+ * @returns An array of amounts to keep.
  */
 export function getKeepAmounts(
-	proofsWeHave: Array<Proof>,
+	proofsWeHave: Proof[],
 	amountToKeep: number,
 	keys: Keys,
-	targetCount: number
-): Array<number> {
+	targetCount: number,
+): number[] {
 	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
-	const amountsWeWant: Array<number> = [];
+	const amountsWeWant: number[] = [];
 	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
 	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
 	sortedKeyAmounts.forEach((amt) => {
@@ -101,12 +104,13 @@ export function getKeepAmounts(
 	return sortedAmountsWeWant;
 }
 /**
- * returns the amounts in the keyset sorted by the order specified
- * @param keyset to search in
- * @param order order to sort the amounts in
- * @returns the amounts in the keyset sorted by the order specified
+ * Returns the amounts in the keyset sorted by the order specified.
+ *
+ * @param keyset To search in.
+ * @param order Order to sort the amounts in.
+ * @returns The amounts in the keyset sorted by the order specified.
  */
-export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): Array<number> {
+export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): number[] {
 	if (order == 'desc') {
 		return Object.keys(keyset)
 			.map((k: string) => parseInt(k))
@@ -119,9 +123,10 @@ export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): 
 
 /**
  * Checks if the provided amount is in the keyset.
- * @param amount amount to check
- * @param keyset to search in
- * @returns true if the amount is in the keyset, false otherwise
+ *
+ * @param amount Amount to check.
+ * @param keyset To search in.
+ * @returns True if the amount is in the keyset, false otherwise.
  */
 export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 	return amount in keyset;
@@ -129,8 +134,9 @@ export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 
 /**
  * Converts a bytes array to a number.
- * @param bytes to convert to number
- * @returns  number
+ *
+ * @param bytes To convert to number.
+ * @returns Number.
  */
 export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));
@@ -138,8 +144,9 @@ export function bytesToNumber(bytes: Uint8Array): bigint {
 
 /**
  * Converts a hex string to a number.
- * @param hex to convert to number
- * @returns number
+ *
+ * @param hex To convert to number.
+ * @returns Number.
  */
 export function hexToNumber(hex: string): bigint {
 	return BigInt(`0x${hex}`);
@@ -147,8 +154,9 @@ export function hexToNumber(hex: string): bigint {
 
 /**
  * Converts a number to a hex string of 64 characters.
- * @param number (bigint) to conver to hex
- * @returns hex string start-padded to 64 characters
+ *
+ * @param number (bigint) to conver to hex.
+ * @returns Hex string start-padded to 64 characters.
  */
 export function numberToHexPadded64(number: bigint): string {
 	return number.toString(16).padStart(64, '0');
@@ -159,11 +167,12 @@ function isValidHex(str: string) {
 }
 
 /**
- * Checks wether a proof or a list of proofs contains a non-hex id
- * @param p Proof or list of proofs
- * @returns boolean
+ * Checks wether a proof or a list of proofs contains a non-hex id.
+ *
+ * @param p Proof or list of proofs.
+ * @returns Boolean.
  */
-export function hasNonHexId(p: Proof | Array<Proof>) {
+export function hasNonHexId(p: Proof | Proof[]) {
 	if (Array.isArray(p)) {
 		return p.some((proof) => !isValidHex(proof.id));
 	}
@@ -176,9 +185,10 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
 }
 
 /**
- * Helper function to encode a v3 cashu token
- * @param token to encode
- * @returns encoded token
+ * Helper function to encode a v3 cashu token.
+ *
+ * @param token To encode.
+ * @returns Encoded token.
  */
 export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	if (removeDleq) {
@@ -196,12 +206,13 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 
 /**
  * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
+ *
  * @param token
  * @param [opts]
  */
 export function getEncodedToken(
 	token: Token,
-	opts?: { version?: 3 | 4; removeDleq?: boolean }
+	opts?: { version?: 3 | 4; removeDleq?: boolean },
 ): string {
 	const nonHex = hasNonHexId(token.proofs);
 	if (nonHex || opts?.version === 3) {
@@ -238,7 +249,7 @@ export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 }
 
 function templateFromToken(token: Token): TokenV4Template {
-	const idMap: { [id: string]: Array<Proof> } = {};
+	const idMap: { [id: string]: Proof[] } = {};
 	const mint = token.mint;
 	for (let i = 0; i < token.proofs.length; i++) {
 		const proof = token.proofs[i];
@@ -263,16 +274,16 @@ function templateFromToken(token: Token): TokenV4Template {
 							d: {
 								e: hexToBytes(p.dleq.e),
 								s: hexToBytes(p.dleq.s),
-								r: hexToBytes(p.dleq.r ?? '00')
-							} as V4DLEQTemplate
+								r: hexToBytes(p.dleq.r ?? '00'),
+							} as V4DLEQTemplate,
 						}),
 						...(p.witness && {
-							w: JSON.stringify(p.witness)
-						})
-					})
-				)
-			})
-		)
+							w: JSON.stringify(p.witness),
+						}),
+					}),
+				),
+			}),
+		),
 	} as TokenV4Template;
 	if (token.memo) {
 		tokenTemplate.d = token.memo;
@@ -281,7 +292,7 @@ function templateFromToken(token: Token): TokenV4Template {
 }
 
 function tokenFromTemplate(template: TokenV4Template): Token {
-	const proofs: Array<Proof> = [];
+	const proofs: Proof[] = [];
 	template.t.forEach((t) =>
 		t.p.forEach((p) => {
 			proofs.push({
@@ -293,14 +304,14 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 					dleq: {
 						r: bytesToHex(p.d.r),
 						s: bytesToHex(p.d.s),
-						e: bytesToHex(p.d.e)
-					} as SerializedDLEQ
+						e: bytesToHex(p.d.e),
+					} as SerializedDLEQ,
 				}),
 				...(p.w && {
-					witness: p.w
-				})
+					witness: p.w,
+				}),
 			});
-		})
+		}),
 	);
 	const decodedToken: Token = { mint: template.m, proofs, unit: template.u || 'sat' };
 	if (template.d) {
@@ -310,9 +321,10 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 }
 
 /**
- * Helper function to decode cashu tokens into object
- * @param token an encoded cashu token (cashuAey...)
- * @returns cashu token object
+ * Helper function to decode cashu tokens into object.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Cashu token object.
  */
 export function getDecodedToken(token: string) {
 	// remove prefixes
@@ -327,9 +339,10 @@ export function getDecodedToken(token: string) {
 }
 
 /**
- * Helper function to decode different versions of cashu tokens into an object
- * @param token an encoded cashu token (cashuAey...)
- * @returns cashu Token object
+ * Helper function to decode different versions of cashu tokens into an object.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Cashu Token object.
  */
 export function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
@@ -343,7 +356,7 @@ export function handleTokens(token: string): Token {
 		const tokenObj: Token = {
 			mint: entry.mint,
 			proofs: entry.proofs,
-			unit: parsedV3Token.unit || 'sat'
+			unit: parsedV3Token.unit || 'sat',
 		};
 		if (parsedV3Token.memo) {
 			tokenObj.memo = parsedV3Token.memo;
@@ -358,8 +371,9 @@ export function handleTokens(token: string): Token {
 	throw new Error('Token version is not supported');
 }
 /**
- * Returns the keyset id of a set of keys
- * @param keys keys object to derive keyset id from
+ * Returns the keyset id of a set of keys.
+ *
+ * @param keys Keys object to derive keyset id from.
  * @returns
  */
 export function deriveKeysetId(keys: Keys) {
@@ -380,7 +394,7 @@ export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 	return mergedArray;
 }
 
-export function sortProofsById(proofs: Array<Proof>) {
+export function sortProofsById(proofs: Proof[]) {
 	return proofs.sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
 }
 
@@ -398,7 +412,7 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 	}
 }
 
-export function joinUrls(...parts: Array<string>): string {
+export function joinUrls(...parts: string[]): string {
 	return parts.map((part: string) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
@@ -406,7 +420,7 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
-export function sumProofs(proofs: Array<Proof>) {
+export function sumProofs(proofs: Proof[]) {
 	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
 }
 
@@ -490,10 +504,11 @@ export class MessageQueue {
 	}
 }
 /**
- * Removes all traces of DLEQs from a list of proofs
- * @param proofs The list of proofs that dleq should be stripped from
+ * Removes all traces of DLEQs from a list of proofs.
+ *
+ * @param proofs The list of proofs that dleq should be stripped from.
  */
-export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
+export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 	return proofs.map((p) => {
 		const newP = { ...p };
 		delete newP['dleq'];
@@ -502,12 +517,12 @@ export function stripDleq(proofs: Array<Proof>): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Checks that the proof has a valid DLEQ proof according to
- * keyset `keys`
- * @param proof The proof subject to verification
- * @param keyset The Mint's keyset to be used for verification
- * @returns true if verification succeeded, false otherwise
- * @throws Error if @param proof does not match any key in @param keyset
+ * Checks that the proof has a valid DLEQ proof according to keyset `keys`
+ *
+ * @param proof The proof subject to verification.
+ * @param keyset The Mint's keyset to be used for verification.
+ * @returns True if verification succeeded, false otherwise.
+ * @throws Error if @param proof does not match any key in @param keyset.
  */
 export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	if (proof.dleq == undefined) {
@@ -516,7 +531,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	const dleq = {
 		e: hexToBytes(proof.dleq.e),
 		s: hexToBytes(proof.dleq.s),
-		r: hexToNumber(proof.dleq.r ?? '00')
+		r: hexToNumber(proof.dleq.r ?? '00'),
 	} as DLEQ;
 	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
 		throw new Error(`undefined key for amount ${proof.amount}`);
@@ -527,7 +542,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 			new TextEncoder().encode(proof.secret),
 			dleq,
 			pointFromHex(proof.C),
-			pointFromHex(key)
+			pointFromHex(key),
 		)
 	) {
 		return false;
@@ -537,14 +552,15 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 }
 
 /**
- * Helper function to encode a cashu auth token authA
+ * Helper function to encode a cashu auth token authA.
+ *
  * @param proof
  */
 export function getEncodedAuthToken(proof: Proof): string {
 	const token = {
 		id: proof.id,
 		secret: proof.secret,
-		C: proof.C
+		C: proof.C,
 	};
 	const base64Data = encodeJsonToBase64(token);
 	const prefix = 'auth';
@@ -552,7 +568,7 @@ export function getEncodedAuthToken(proof: Proof): string {
 	return prefix + version + base64Data;
 }
 
-function concatByteArrays(...arrays: Array<Uint8Array>): Uint8Array {
+function concatByteArrays(...arrays: Uint8Array[]): Uint8Array {
 	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
 	const byteArray = new Uint8Array(totalLength);
 	let pointer = 0;
@@ -584,6 +600,6 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	return tokenFromTemplate(decoded);
 }
 
-function sumArray(arr: Array<number>) {
+function sumArray(arr: number[]) {
 	return arr.reduce((a, c) => a + c, 0);
 }

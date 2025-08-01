@@ -5,7 +5,7 @@ import {
 	pointFromHex,
 	deserializeMintKeys,
 	serializeMintKeys,
-	SerializedMintKeys
+	SerializedMintKeys,
 } from '../../../src/crypto/common';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { hexToBytes } from '@noble/hashes/utils';
@@ -29,7 +29,7 @@ describe('test crypto scheme', () => {
 			blindSignature,
 			blindedMessage.r,
 			blindedMessage.secret,
-			pointFromHex(bytesToHex(mintPubKey))
+			pointFromHex(bytesToHex(mintPubKey)),
 		);
 
 		//Mint
