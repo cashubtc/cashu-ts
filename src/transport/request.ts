@@ -12,6 +12,7 @@ export type RequestArgs = {
 };
 
 const MAX_CACHED_RETRIES = 10;
+const MAX_RETRY_DELAY = 60000;
 
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
@@ -59,10 +60,11 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 
 	const url = new URL(endpoint);
 
+	// there should be at least one cached_endpoint, also ttl is already mapped null->Infinity
 	const isCachable = cached_endpoints?.some(
 		(cached_endpoint) =>
-			cached_endpoint.path === url.pathname && cached_endpoint.method === (options.method || 'GET')
-	);
+			cached_endpoint.path === url.pathname && cached_endpoint.method === (options.method ?? 'GET')
+	) && !!ttl;
 
 	if (!isCachable) {
 		return await _request(options);
@@ -80,17 +82,21 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 				const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
 				if (shouldRetry) {
-					retries++;
-					const delay = Math.max(Math.pow(2, retries) * 1000, 1000);
+					const cappedDelay = Math.min(Math.pow(2, retries) * 1000, MAX_RETRY_DELAY);
+					const delay = Math.random() * cappedDelay;
 
-					if (ttl && totalElapsedTime + delay > ttl) {
+					if ( totalElapsedTime + delay > ttl) {
+						requestLogger.error('Network Error: request abandoned after #{retries} retries', { e, retries });
 						throw e;
 					}
+					retries++;
+					requestLogger.info('Network Error: attempting retry #{retries} in {delay}ms', { e, retries, delay });
 
 					await new Promise((resolve) => setTimeout(resolve, delay));
 					return retry();
 				}
 			}
+			requestLogger.error('Request failed and could not be retried', { e });
 			throw e;
 		}
 	};
