@@ -12,15 +12,25 @@ enum DerivationType {
 }
 
 export const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array => {
-	return derive(seed, keysetId, counter, DerivationType.SECRET);
-};
+	if (keysetId.startsWith("00")) {
+		return derive_deprecated(seed, keysetId, counter, DerivationType.SECRET);
+	} else if (keysetId.startsWith("01")) {
+		return derive(seed, keysetId, counter, DerivationType.SECRET);
+	}
+	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
+};	
 
 export const deriveBlindingFactor = (
 	seed: Uint8Array,
 	keysetId: string,
 	counter: number
 ): Uint8Array => {
-	return derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
+	if (keysetId.startsWith("00")) {
+		return derive_deprecated(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
+	} else if (keysetId.startsWith("01")) {
+		return derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
+	}
+	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
 };
 
 const derive = (
