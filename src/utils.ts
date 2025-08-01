@@ -372,9 +372,10 @@ export function handleTokens(token: string): Token {
 }
 
 /**
- * Recomputes the ID for the provided keyset and verifies it matches the ID provided by the Mint
- * @param keys the keyset to be verified
- * @returns true if the verification succeeded, false otherwise.
+ * Recomputes the ID for the provided keyset and verifies it matches the ID provided by the Mint.
+ *
+ * @param keys The keyset to be verified.
+ * @returns True if the verification succeeded, false otherwise.
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	return deriveKeysetId(keys.keys) === keys.id;
