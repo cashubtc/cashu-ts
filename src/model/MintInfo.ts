@@ -126,7 +126,10 @@ export class MintInfo {
 				supported: true,
 				params: {
 					// map null to infinity, if not null map seconds to milliseconds
-					ttl: typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl) ? Math.max(rawPolicy.ttl, 0) * 1000 : Infinity,
+					ttl:
+						typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl)
+							? Math.max(rawPolicy.ttl, 0) * 1000
+							: Infinity,
 					cached_endpoints: rawPolicy.cached_endpoints
 				} as Nut19Policy
 			};

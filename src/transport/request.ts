@@ -61,10 +61,12 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	const url = new URL(endpoint);
 
 	// there should be at least one cached_endpoint, also ttl is already mapped null->Infinity
-	const isCachable = cached_endpoints?.some(
-		(cached_endpoint) =>
-			cached_endpoint.path === url.pathname && cached_endpoint.method === (options.method ?? 'GET')
-	) && !!ttl;
+	const isCachable =
+		cached_endpoints?.some(
+			(cached_endpoint) =>
+				cached_endpoint.path === url.pathname &&
+				cached_endpoint.method === (options.method ?? 'GET')
+		) && !!ttl;
 
 	if (!isCachable) {
 		return await _request(options);
@@ -85,12 +87,19 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 					const cappedDelay = Math.min(Math.pow(2, retries) * 1000, MAX_RETRY_DELAY);
 					const delay = Math.random() * cappedDelay;
 
-					if ( totalElapsedTime + delay > ttl) {
-						requestLogger.error('Network Error: request abandoned after #{retries} retries', { e, retries });
+					if (totalElapsedTime + delay > ttl) {
+						requestLogger.error('Network Error: request abandoned after #{retries} retries', {
+							e,
+							retries
+						});
 						throw e;
 					}
 					retries++;
-					requestLogger.info('Network Error: attempting retry #{retries} in {delay}ms', { e, retries, delay });
+					requestLogger.info('Network Error: attempting retry #{retries} in {delay}ms', {
+						e,
+						retries,
+						delay
+					});
 
 					await new Promise((resolve) => setTimeout(resolve, delay));
 					return retry();
