@@ -36,6 +36,7 @@ export class MintInfo {
 	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
 	isSupported(num: 17): { supported: boolean; params?: WebSocketSupport[] };
 	isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
+	isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
 	isSupported(num: number) {
 		switch (num) {
 			case 4:
@@ -119,11 +120,15 @@ export class MintInfo {
 	}
 
 	private checkNut19() {
-		if (this._mintInfo.nuts[19] && this._mintInfo.nuts[19]?.cached_endpoints.length > 0) {
+		const rawPolicy = this._mintInfo.nuts[19];
+		if (rawPolicy && rawPolicy.cached_endpoints.length > 0) {
 			return {
 				supported: true,
-				ttl: this._mintInfo.nuts[19].ttl,
-				params: this._mintInfo.nuts[19].cached_endpoints
+				params: {
+					// map null to infinity, if not null map seconds to milliseconds
+					ttl: typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl) ? Math.max(rawPolicy.ttl, 0) * 1000 : Infinity,
+					cached_endpoints: rawPolicy.cached_endpoints
+				} as Nut19Policy
 			};
 		}
 		return { supported: false };
