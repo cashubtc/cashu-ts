@@ -307,6 +307,9 @@ export type GetInfoResponse = {
         '17'?: {
             supported: Array<WebSocketSupport>;
         };
+        '19'?: Omit<Nut19Policy, "ttl"> & {
+            ttl: number | null;
+        };
         '20'?: {
             supported: boolean;
         };
@@ -586,6 +589,15 @@ export type NUT10Option = {
     kind: string;
     data: string;
     tags: Array<Array<string>>;
+};
+
+// @public
+export type Nut19Policy = {
+    ttl: number;
+    cached_endpoints: Array<{
+        method: 'GET' | 'POST';
+        path: string;
+    }>;
 };
 
 // @public (undocumented)

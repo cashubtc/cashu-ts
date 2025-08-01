@@ -1,4 +1,4 @@
-import { GetInfoResponse, MPPMethod, SwapMethod, WebSocketSupport } from './types';
+import { GetInfoResponse, MPPMethod, Nut19Policy, SwapMethod, WebSocketSupport } from './types';
 
 export class MintInfo {
 	private readonly _mintInfo: GetInfoResponse;
@@ -26,6 +26,7 @@ export class MintInfo {
 	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
 	isSupported(num: 17): { supported: boolean; params?: Array<WebSocketSupport> };
 	isSupported(num: 15): { supported: boolean; params?: Array<MPPMethod> };
+	isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
 	isSupported(num: number) {
 		switch (num) {
 			case 4:
@@ -47,6 +48,9 @@ export class MintInfo {
 			}
 			case 15: {
 				return this.checkNut15();
+			}
+			case 19: {
+				return this.checkNut19();
 			}
 			default: {
 				throw new Error('nut is not supported by cashu-ts');
@@ -88,6 +92,24 @@ export class MintInfo {
 	private checkNut15() {
 		if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
 			return { supported: true, params: this._mintInfo.nuts[15].methods };
+		}
+		return { supported: false };
+	}
+
+	private checkNut19() {
+		const rawPolicy = this._mintInfo.nuts[19];
+		if (rawPolicy && rawPolicy.cached_endpoints.length > 0) {
+			return {
+				supported: true,
+				params: {
+					// map null to infinity, if not null map seconds to milliseconds
+					ttl:
+						typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl)
+							? Math.max(rawPolicy.ttl, 0) * 1000
+							: Infinity,
+					cached_endpoints: rawPolicy.cached_endpoints
+				} as Nut19Policy
+			};
 		}
 		return { supported: false };
 	}
