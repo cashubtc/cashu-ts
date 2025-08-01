@@ -11,11 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm i
+          cache: 'npm'
+      - run: npm ci
       - run: npm run compile
       - run: npm version prerelease --preid=rc --no-git-tag-version
       - run: git push

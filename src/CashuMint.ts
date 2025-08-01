@@ -1,4 +1,4 @@
-import { ConnectionManager, WSConnection } from './WSConnection.js';
+import { ConnectionManager, type WSConnection } from './WSConnection';
 import type {
 	CheckStatePayload,
 	CheckStateResponse,
@@ -17,38 +17,46 @@ import type {
 	MeltQuotePayload,
 	MeltQuoteResponse,
 	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse
-} from './model/types/index.js';
-import { MeltQuoteState } from './model/types/index.js';
-import request from './request.js';
-import { isObj, joinUrls, sanitizeUrl } from './utils.js';
+	PartialMeltQuoteResponse,
+} from './model/types/index';
+import { MeltQuoteState } from './model/types/index';
+import request, { setRequestLogger } from './request';
+import { isObj, joinUrls, sanitizeUrl } from './utils';
 import {
-	MeltQuoteResponsePaidDeprecated,
-	handleMeltQuoteResponseDeprecated
-} from './legacy/nut-05.js';
+	type MeltQuoteResponsePaidDeprecated,
+	handleMeltQuoteResponseDeprecated,
+} from './legacy/nut-05';
 import {
-	MintQuoteResponsePaidDeprecated,
-	handleMintQuoteResponseDeprecated
-} from './legacy/nut-04.js';
-import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06.js';
-import { MintInfo } from './model/MintInfo.js';
+	type MintQuoteResponsePaidDeprecated,
+	handleMintQuoteResponseDeprecated,
+} from './legacy/nut-04';
+import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06';
+import { MintInfo } from './model/MintInfo';
+import { type Logger, NULL_LOGGER } from './logger';
 /**
- * Class represents Cashu Mint API. This class contains Lower level functions that are implemented by CashuWallet.
+ * Class represents Cashu Mint API. This class contains Lower level functions that are implemented
+ * by CashuWallet.
  */
 class CashuMint {
 	private ws?: WSConnection;
 	private _mintInfo?: MintInfo;
 	private _authTokenGetter?: () => Promise<string>;
 	private _checkNut22 = false;
+	private _logger: Logger;
 	/**
-	 * @param _mintUrl requires mint URL to create this object
-	 * @param _customRequest if passed, use custom request implementation for network communication with the mint
-	 * @param [authTokenGetter] a function that is called by the CashuMint instance to obtain a NUT-22 BlindedAuthToken (e.g. from a database or localstorage)
+	 * @param _mintUrl Requires mint URL to create this object.
+	 * @param _customRequest If passed, use custom request implementation for network communication
+	 *   with the mint.
+	 * @param [authTokenGetter] A function that is called by the CashuMint instance to obtain a NUT-22
+	 *   BlindedAuthToken (e.g. from a database or localstorage)
 	 */
 	constructor(
 		private _mintUrl: string,
 		private _customRequest?: typeof request,
-		authTokenGetter?: () => Promise<string>
+		authTokenGetter?: () => Promise<string>,
+		options?: {
+			logger?: Logger;
+		},
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
@@ -56,6 +64,8 @@ class CashuMint {
 			this._checkNut22 = true;
 			this._authTokenGetter = authTokenGetter;
 		}
+		this._logger = options?.logger ?? NULL_LOGGER;
+		setRequestLogger(this._logger);
 	}
 
 	//TODO: v3 - refactor CashuMint to take two or less args.
@@ -65,26 +75,29 @@ class CashuMint {
 	}
 
 	/**
-	 * fetches mints info at the /info endpoint
+	 * Fetches mints info at the /info endpoint.
+	 *
 	 * @param mintUrl
 	 * @param customRequest
 	 */
 	public static async getInfo(
 		mintUrl: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
+		logger?: Logger,
 	): Promise<GetInfoResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const response = await requestInstance<GetInfoResponse>({
-			endpoint: joinUrls(mintUrl, '/v1/info')
+			endpoint: joinUrls(mintUrl, '/v1/info'),
 		});
-		const data = handleMintInfoContactFieldDeprecated(response);
+		const data = handleMintInfoContactFieldDeprecated(response, mintLogger);
 		return data;
 	}
 	/**
-	 * fetches mints info at the /info endpoint
+	 * Fetches mints info at the /info endpoint.
 	 */
 	async getInfo(): Promise<GetInfoResponse> {
-		return CashuMint.getInfo(this._mintUrl, this._customRequest);
+		return CashuMint.getInfo(this._mintUrl, this._customRequest, this._logger);
 	}
 
 	async getLazyMintInfo(): Promise<MintInfo> {
@@ -98,16 +111,17 @@ class CashuMint {
 
 	/**
 	 * Performs a swap operation with ecash inputs and outputs.
+	 *
 	 * @param mintUrl
-	 * @param swapPayload payload containing inputs and outputs
+	 * @param swapPayload Payload containing inputs and outputs.
 	 * @param customRequest
-	 * @returns signed outputs
+	 * @returns Signed outputs.
 	 */
 	public static async swap(
 		mintUrl: string,
 		swapPayload: SwapPayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
 	): Promise<SwapResponse> {
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -115,7 +129,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/swap'),
 			method: 'POST',
 			requestBody: swapPayload,
-			headers
+			headers,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -126,8 +140,9 @@ class CashuMint {
 	}
 	/**
 	 * Performs a swap operation with ecash inputs and outputs.
-	 * @param swapPayload payload containing inputs and outputs
-	 * @returns signed outputs
+	 *
+	 * @param swapPayload Payload containing inputs and outputs.
+	 * @returns Signed outputs.
 	 */
 	async swap(swapPayload: SwapPayload): Promise<SwapResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/swap');
@@ -136,17 +151,21 @@ class CashuMint {
 
 	/**
 	 * Requests a new mint quote from the mint.
+	 *
 	 * @param mintUrl
-	 * @param mintQuotePayload Payload for creating a new mint quote
+	 * @param mintQuotePayload Payload for creating a new mint quote.
 	 * @param customRequest
-	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
+	 * @returns The mint will create and return a new mint quote containing a payment request for the
+	 *   specified amount and unit.
 	 */
 	public static async createMintQuote(
 		mintUrl: string,
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger,
 	): Promise<PartialMintQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<
@@ -155,15 +174,17 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11'),
 			method: 'POST',
 			requestBody: mintQuotePayload,
-			headers
+			headers,
 		});
-		const data = handleMintQuoteResponseDeprecated(response);
+		const data = handleMintQuoteResponseDeprecated(response, mintLogger);
 		return data;
 	}
 	/**
 	 * Requests a new mint quote from the mint.
-	 * @param mintQuotePayload Payload for creating a new mint quote
-	 * @returns the mint will create and return a new mint quote containing a payment request for the specified amount and unit
+	 *
+	 * @param mintQuotePayload Payload for creating a new mint quote.
+	 * @returns The mint will create and return a new mint quote containing a payment request for the
+	 *   specified amount and unit.
 	 */
 	async createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt11');
@@ -171,23 +192,26 @@ class CashuMint {
 			this._mintUrl,
 			mintQuotePayload,
 			this._customRequest,
-			blindAuthToken
+			blindAuthToken,
 		);
 	}
 
 	/**
 	 * Gets an existing mint quote from the mint.
+	 *
 	 * @param mintUrl
-	 * @param quote Quote ID
+	 * @param quote Quote ID.
 	 * @param customRequest
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	public static async checkMintQuote(
 		mintUrl: string,
 		quote: string,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger,
 	): Promise<PartialMintQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<
@@ -195,16 +219,17 @@ class CashuMint {
 		>({
 			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt11', quote),
 			method: 'GET',
-			headers
+			headers,
 		});
 
-		const data = handleMintQuoteResponseDeprecated(response);
+		const data = handleMintQuoteResponseDeprecated(response, mintLogger);
 		return data;
 	}
 	/**
 	 * Gets an existing mint quote from the mint.
-	 * @param quote Quote ID
-	 * @returns the mint will create and return a Lightning invoice for the specified amount
+	 *
+	 * @param quote Quote ID.
+	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt11/${quote}`);
@@ -213,16 +238,17 @@ class CashuMint {
 
 	/**
 	 * Mints new tokens by requesting blind signatures on the provided outputs.
+	 *
 	 * @param mintUrl
-	 * @param mintPayload Payload containing the outputs to get blind signatures on
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
 	 * @param customRequest
-	 * @returns serialized blinded signatures
+	 * @returns Serialized blinded signatures.
 	 */
 	public static async mint(
 		mintUrl: string,
 		mintPayload: MintPayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
 	) {
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -230,7 +256,7 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/mint/bolt11'),
 			method: 'POST',
 			requestBody: mintPayload,
-			headers
+			headers,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
@@ -241,8 +267,9 @@ class CashuMint {
 	}
 	/**
 	 * Mints new tokens by requesting blind signatures on the provided outputs.
-	 * @param mintPayload Payload containing the outputs to get blind signatures on
-	 * @returns serialized blinded signatures
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @returns Serialized blinded signatures.
 	 */
 	async mint(mintPayload: MintPayload) {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt11');
@@ -251,6 +278,7 @@ class CashuMint {
 
 	/**
 	 * Requests a new melt quote from the mint.
+	 *
 	 * @param mintUrl
 	 * @param MeltQuotePayload
 	 * @returns
@@ -259,8 +287,10 @@ class CashuMint {
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<
@@ -269,10 +299,10 @@ class CashuMint {
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11'),
 			method: 'POST',
 			requestBody: meltQuotePayload,
-			headers
+			headers,
 		});
 
-		const data = handleMeltQuoteResponseDeprecated(response);
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
 
 		if (
 			!isObj(data) ||
@@ -286,6 +316,7 @@ class CashuMint {
 	}
 	/**
 	 * Requests a new melt quote from the mint.
+	 *
 	 * @param MeltQuotePayload
 	 * @returns
 	 */
@@ -295,31 +326,34 @@ class CashuMint {
 			this._mintUrl,
 			meltQuotePayload,
 			this._customRequest,
-			blindAuthToken
+			blindAuthToken,
 		);
 	}
 
 	/**
 	 * Gets an existing melt quote.
+	 *
 	 * @param mintUrl
-	 * @param quote Quote ID
+	 * @param quote Quote ID.
 	 * @returns
 	 */
 	public static async checkMeltQuote(
 		mintUrl: string,
 		quote: string,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt11', quote),
 			method: 'GET',
-			headers
+			headers,
 		});
 
-		const data = handleMeltQuoteResponseDeprecated(response);
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
 
 		if (
 			!isObj(data) ||
@@ -336,7 +370,8 @@ class CashuMint {
 	}
 	/**
 	 * Gets an existing melt quote.
-	 * @param quote Quote ID
+	 *
+	 * @param quote Quote ID.
 	 * @returns
 	 */
 	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse> {
@@ -345,7 +380,10 @@ class CashuMint {
 	}
 
 	/**
-	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent. The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can also contain blank outputs in order to receive back overpaid Lightning fees.
+	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
+	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
+	 * also contain blank outputs in order to receive back overpaid Lightning fees.
+	 *
 	 * @param mintUrl
 	 * @param meltPayload
 	 * @param customRequest
@@ -355,18 +393,20 @@ class CashuMint {
 		mintUrl: string,
 		meltPayload: MeltPayload,
 		customRequest?: typeof request,
-		blindAuthToken?: string
+		blindAuthToken?: string,
+		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
 		const requestInstance = customRequest || request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
 		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
 			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
 			method: 'POST',
 			requestBody: meltPayload,
-			headers
+			headers,
 		});
 
-		const data = handleMeltQuoteResponseDeprecated(response);
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
 
 		if (
 			!isObj(data) ||
@@ -379,7 +419,9 @@ class CashuMint {
 		return data;
 	}
 	/**
-	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens matching its amount + fees
+	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens
+	 * matching its amount + fees.
+	 *
 	 * @param meltPayload
 	 * @returns
 	 */
@@ -388,22 +430,23 @@ class CashuMint {
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
 	/**
-	 * Checks if specific proofs have already been redeemed
+	 * Checks if specific proofs have already been redeemed.
+	 *
 	 * @param mintUrl
 	 * @param checkPayload
 	 * @param customRequest
-	 * @returns redeemed and unredeemed ordered list of booleans
+	 * @returns Redeemed and unredeemed ordered list of booleans.
 	 */
 	public static async check(
 		mintUrl: string,
 		checkPayload: CheckStatePayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<CheckStateResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<CheckStateResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/checkstate'),
 			method: 'POST',
-			requestBody: checkPayload
+			requestBody: checkPayload,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
@@ -414,16 +457,18 @@ class CashuMint {
 	}
 
 	/**
-	 * Get the mints public keys
+	 * Get the mints public keys.
+	 *
 	 * @param mintUrl
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
+	 * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
+	 *   keys from all active keysets are fetched.
 	 * @param customRequest
 	 * @returns
 	 */
 	public static async getKeys(
 		mintUrl: string,
 		keysetId?: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<MintActiveKeys> {
 		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
@@ -432,7 +477,7 @@ class CashuMint {
 		}
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MintActiveKeys>({
-			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, '/v1/keys')
+			endpoint: keysetId ? joinUrls(mintUrl, '/v1/keys', keysetId) : joinUrls(mintUrl, '/v1/keys'),
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
@@ -442,44 +487,49 @@ class CashuMint {
 		return data;
 	}
 	/**
-	 * Get the mints public keys
-	 * @param keysetId optional param to get the keys for a specific keyset. If not specified, the keys from all active keysets are fetched
-	 * @returns the mints public keys
+	 * Get the mints public keys.
+	 *
+	 * @param keysetId Optional param to get the keys for a specific keyset. If not specified, the
+	 *   keys from all active keysets are fetched.
+	 * @returns The mints public keys.
 	 */
 	async getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys> {
 		const allKeys = await CashuMint.getKeys(
 			mintUrl || this._mintUrl,
 			keysetId,
-			this._customRequest
+			this._customRequest,
 		);
 		return allKeys;
 	}
 	/**
-	 * Get the mints keysets in no specific order
+	 * Get the mints keysets in no specific order.
+	 *
 	 * @param mintUrl
 	 * @param customRequest
-	 * @returns all the mints past and current keysets.
+	 * @returns All the mints past and current keysets.
 	 */
 	public static async getKeySets(
 		mintUrl: string,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<MintAllKeysets> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(mintUrl, '/v1/keysets') });
 	}
 
 	/**
-	 * Get the mints keysets in no specific order
-	 * @returns all the mints past and current keysets.
+	 * Get the mints keysets in no specific order.
+	 *
+	 * @returns All the mints past and current keysets.
 	 */
 	async getKeySets(): Promise<MintAllKeysets> {
 		return CashuMint.getKeySets(this._mintUrl, this._customRequest);
 	}
 
 	/**
-	 * Checks if specific proofs have already been redeemed
+	 * Checks if specific proofs have already been redeemed.
+	 *
 	 * @param checkPayload
-	 * @returns redeemed and unredeemed ordered list of booleans
+	 * @returns Redeemed and unredeemed ordered list of booleans.
 	 */
 	async check(checkPayload: CheckStatePayload): Promise<CheckStateResponse> {
 		return CashuMint.check(this._mintUrl, checkPayload, this._customRequest);
@@ -488,13 +538,13 @@ class CashuMint {
 	public static async restore(
 		mintUrl: string,
 		restorePayload: PostRestorePayload,
-		customRequest?: typeof request
+		customRequest?: typeof request,
 	): Promise<PostRestoreResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<PostRestoreResponse>({
 			endpoint: joinUrls(mintUrl, '/v1/restore'),
 			method: 'POST',
-			requestBody: restorePayload
+			requestBody: restorePayload,
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
@@ -505,13 +555,13 @@ class CashuMint {
 	}
 
 	async restore(restorePayload: {
-		outputs: Array<SerializedBlindedMessage>;
+		outputs: SerializedBlindedMessage[];
 	}): Promise<PostRestoreResponse> {
 		return CashuMint.restore(this._mintUrl, restorePayload, this._customRequest);
 	}
 
 	/**
-	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17
+	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17.
 	 */
 	async connectWebSocket() {
 		if (this.ws) {
@@ -527,19 +577,19 @@ class CashuMint {
 				}
 			}
 			this.ws = ConnectionManager.getInstance().getConnection(
-				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`
+				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`,
 			);
 			try {
 				await this.ws.connect();
 			} catch (e) {
-				console.log(e);
+				this._logger.error('Failed to connect to WebSocket...', { e });
 				throw new Error('Failed to connect to WebSocket...');
 			}
 		}
 	}
 
 	/**
-	 * Closes a websocket connection
+	 * Closes a websocket connection.
 	 */
 	disconnectWebSocket() {
 		if (this.ws) {

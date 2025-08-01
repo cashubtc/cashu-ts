@@ -1,7 +1,12 @@
 import { OutputData } from '../model/OutputData';
-import { BlindAuthMintPayload, MintKeys, MintKeyset, Proof } from '../model/types';
+import {
+	type BlindAuthMintPayload,
+	type MintKeys,
+	type MintKeyset,
+	type Proof,
+} from '../model/types';
 import { hasValidDleq } from '../utils';
-import { CashuAuthMint } from './CashuAuthMint';
+import { type CashuAuthMint } from './CashuAuthMint';
 
 /**
  * Class that represents a Cashu NUT-22 wallet.
@@ -9,25 +14,25 @@ import { CashuAuthMint } from './CashuAuthMint';
 class CashuAuthWallet {
 	private _keys: Map<string, MintKeys> = new Map();
 	private _keysetId: string | undefined;
-	private _keysets: Array<MintKeyset> = [];
+	private _keysets: MintKeyset[] = [];
 	private _unit = 'auth';
 
 	mint: CashuAuthMint;
 
 	/**
-	 * @param mint NUT-22 auth mint instance
-	 * @param options.keys public keys from the mint (will be fetched from mint if not provided)
-	 * @param options.keysets keysets from the mint (will be fetched from mint if not provided)
+	 * @param mint NUT-22 auth mint instance.
+	 * @param options.keys Public keys from the mint (will be fetched from mint if not provided)
+	 * @param options.keysets Keysets from the mint (will be fetched from mint if not provided)
 	 */
 	constructor(
 		mint: CashuAuthMint,
 		options?: {
-			keys?: Array<MintKeys> | MintKeys;
-			keysets?: Array<MintKeyset>;
-		}
+			keys?: MintKeys[] | MintKeys;
+			keysets?: MintKeyset[];
+		},
 	) {
 		this.mint = mint;
-		let keys: Array<MintKeys> = [];
+		let keys: MintKeys[] = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
 		} else if (options?.keys && Array.isArray(options?.keys)) {
@@ -49,12 +54,13 @@ class CashuAuthWallet {
 	set keysetId(keysetId: string) {
 		this._keysetId = keysetId;
 	}
-	get keysets(): Array<MintKeyset> {
+	get keysets(): MintKeyset[] {
 		return this._keysets;
 	}
 
 	/**
-	 * Load mint information, keysets and keys. This function can be called if no keysets are passed in the constructor
+	 * Load mint information, keysets and keys. This function can be called if no keysets are passed
+	 * in the constructor.
 	 */
 	async loadMint() {
 		await this.getKeySets();
@@ -62,21 +68,21 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Choose a keyset to activate based on the lowest input fee
+	 * Choose a keyset to activate based on the lowest input fee.
 	 *
-	 * Note: this function will filter out deprecated base64 keysets
+	 * Note: this function will filter out deprecated base64 keysets.
 	 *
-	 * @param keysets keysets to choose from
-	 * @returns active keyset
+	 * @param keysets Keysets to choose from.
+	 * @returns Active keyset.
 	 */
-	getActiveKeyset(keysets: Array<MintKeyset>): MintKeyset {
+	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active);
 
 		// we only consider keyset IDs that start with "00"
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
 
 		const activeKeyset = activeKeysets.sort(
-			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0)
+			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
 		)[0];
 		if (!activeKeyset) {
 			throw new Error('No active keyset found');
@@ -85,10 +91,11 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Get keysets from the mint with the unit of the wallet
-	 * @returns keysets with wallet's unit
+	 * Get keysets from the mint with the unit of the wallet.
+	 *
+	 * @returns Keysets with wallet's unit.
 	 */
-	async getKeySets(): Promise<Array<MintKeyset>> {
+	async getKeySets(): Promise<MintKeyset[]> {
 		const allKeysets = await this.mint.getKeySets();
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this._unit);
 		this._keysets = unitKeysets;
@@ -96,10 +103,12 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet keyset.
-	 * @returns keyset
+	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet
+	 * keyset.
+	 *
+	 * @returns Keyset.
 	 */
-	async getAllKeys(): Promise<Array<MintKeys>> {
+	async getAllKeys(): Promise<MintKeys[]> {
 		const keysets = await this.mint.getKeys();
 		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
 		this.keysetId = this.getActiveKeyset(this._keysets).id;
@@ -109,12 +118,12 @@ class CashuAuthWallet {
 	/**
 	 * Get public keys from the mint. If keys were already fetched, it will return those.
 	 *
-	 * If `keysetId` is set, it will fetch and return that specific keyset.
-	 * Otherwise, we select an active keyset with the unit of the wallet.
+	 * If `keysetId` is set, it will fetch and return that specific keyset. Otherwise, we select an
+	 * active keyset with the unit of the wallet.
 	 *
-	 * @param keysetId optional keysetId to get keys for
-	 * @param forceRefresh? if set to true, it will force refresh the keyset from the mint
-	 * @returns keyset
+	 * @param keysetId Optional keysetId to get keys for.
+	 * @param forceRefresh? If set to true, it will force refresh the keyset from the mint.
+	 * @returns Keyset.
 	 */
 	async getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys> {
 		if (!(this._keysets.length > 0) || forceRefresh) {
@@ -145,24 +154,25 @@ class CashuAuthWallet {
 	}
 
 	/**
-	 * Mint proofs for a given mint quote
-	 * @param amount amount to request
-	 * @param clearAuthToken clearAuthToken to mint
-	 * @param options.keysetId? optionally set keysetId for blank outputs for returned change.
-	 * @returns proofs
+	 * Mint proofs for a given mint quote.
+	 *
+	 * @param amount Amount to request.
+	 * @param clearAuthToken ClearAuthToken to mint.
+	 * @param options.keysetId? Optionally set keysetId for blank outputs for returned change.
+	 * @returns Proofs.
 	 */
 	async mintProofs(
 		amount: number,
 		clearAuthToken: string,
 		options?: {
 			keysetId?: string;
-		}
-	): Promise<Array<Proof>> {
+		},
+	): Promise<Proof[]> {
 		const keyset = await this.getKeys(options?.keysetId);
 		const outputData = OutputData.createRandomData(amount, keyset);
 
 		const mintPayload: BlindAuthMintPayload = {
-			outputs: outputData.map((d) => d.blindedMessage)
+			outputs: outputData.map((d) => d.blindedMessage),
 		};
 		const { signatures } = await this.mint.mint(mintPayload, clearAuthToken);
 		const authProofs = outputData.map((d, i) => d.toProof(signatures[i], keyset));

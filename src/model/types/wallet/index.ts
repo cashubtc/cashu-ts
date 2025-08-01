@@ -1,12 +1,12 @@
-import { SerializedDLEQ } from '../mint';
+import { type SerializedDLEQ } from '../mint';
 
-export * from './payloads';
-export * from './responses';
-export * from './tokens';
+export type * from './payloads';
+export type * from './responses';
+export type * from './tokens';
 export * from './paymentRequests';
 
 /**
- * represents a single Cashu proof.
+ * Represents a single Cashu proof.
  */
 export type Proof = {
 	/**
@@ -26,7 +26,7 @@ export type Proof = {
 	 */
 	C: string;
 	/**
-	 * DLEQ proof
+	 * DLEQ proof.
 	 */
 	dleq?: SerializedDLEQ;
 	/**
@@ -36,37 +36,37 @@ export type Proof = {
 };
 
 /**
- * P2PK witness
+ * P2PK witness.
  */
 export type P2PKWitness = {
 	/**
-	 * An array of signatures in hex format
+	 * An array of signatures in hex format.
 	 */
-	signatures?: Array<string>;
+	signatures?: string[];
 };
 
 /**
- * HTLC witness
+ * HTLC witness.
  */
 export type HTLCWitness = {
 	/**
-	 * preimage
+	 * Preimage.
 	 */
 	preimage: string;
 	/**
-	 * An array of signatures in hex format
+	 * An array of signatures in hex format.
 	 */
-	signatures?: Array<string>;
+	signatures?: string[];
 };
 
 /**
- * response when after receiving a single TokenEntry
+ * Response when after receiving a single TokenEntry.
  */
 export type ReceiveTokenEntryResponse = {
 	/**
-	 * Received proofs
+	 * Received proofs.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 };
 
 /**
@@ -80,14 +80,13 @@ export type PaymentPayload = {
 	/**
 	 * Proofs, matching Lightning invoices amount + fees.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 };
 
 /**
- * @deprecated Token V2
- * should no longer be used
+ * @deprecated Token V2 should no longer be used.
  */
 export type TokenV2 = {
-	proofs: Array<Proof>;
-	mints: Array<{ url: string; ids: Array<string> }>;
+	proofs: Proof[];
+	mints: Array<{ url: string; ids: string[] }>;
 };

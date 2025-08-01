@@ -2,8 +2,8 @@ import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
-	encodeUint8toBase64
-} from '../src/base64.js';
+	encodeUint8toBase64,
+} from '../src/base64';
 import { test, describe, expect } from 'vitest';
 describe('testing uint8 encoding', () => {
 	test('uint8 to base64', async () => {
@@ -22,23 +22,23 @@ describe('testing uint8 encoding', () => {
 				id: '0NI3TUAs1Sfy',
 				amount: 8,
 				C: '037695083226b9c63649d8068eb789a891e621e77dff4e7d75ac02479fe71c886b',
-				secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4='
+				secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4=',
 			},
 			{
 				id: '0NI3TUAs1Sfy',
 				amount: 64,
 				C: '03e58e37f3aa5719c5743811511a6e6459245f008269bd809b9b89cc2fd3683241',
-				secret: 'HV6S9GY9f9YsiZSY9V/T4uc239VwsfqDbUfqr+vd4w0='
+				secret: 'HV6S9GY9f9YsiZSY9V/T4uc239VwsfqDbUfqr+vd4w0=',
 			},
 			{
 				id: '0NI3TUAs1Sfy',
 				amount: 128,
 				C: '030715a873242f59fe3f67121f0a4afb22aaa24b10a9832929f61ab28cdf0d3630',
-				secret: 'GI85ytubezCEDgxecriX6eKOZJV9p831BlsMQeBzjvQ='
-			}
+				secret: 'GI85ytubezCEDgxecriX6eKOZJV9p831BlsMQeBzjvQ=',
+			},
 		];
 		expect(encodeJsonToBase64(obj)).toBe(
-			'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ'
+			'W3siaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjgsIkMiOiIwMzc2OTUwODMyMjZiOWM2MzY0OWQ4MDY4ZWI3ODlhODkxZTYyMWU3N2RmZjRlN2Q3NWFjMDI0NzlmZTcxYzg4NmIiLCJzZWNyZXQiOiJsRmN4YlBPODcwc3JzT0tiNGUrTXZSQW1XQkUyMDZiNkJNaTVuS3JxMXQ0PSJ9LHsiaWQiOiIwTkkzVFVBczFTZnkiLCJhbW91bnQiOjY0LCJDIjoiMDNlNThlMzdmM2FhNTcxOWM1NzQzODExNTExYTZlNjQ1OTI0NWYwMDgyNjliZDgwOWI5Yjg5Y2MyZmQzNjgzMjQxIiwic2VjcmV0IjoiSFY2UzlHWTlmOVlzaVpTWTlWL1Q0dWMyMzlWd3NmcURiVWZxcit2ZDR3MD0ifSx7ImlkIjoiME5JM1RVQXMxU2Z5IiwiYW1vdW50IjoxMjgsIkMiOiIwMzA3MTVhODczMjQyZjU5ZmUzZjY3MTIxZjBhNGFmYjIyYWFhMjRiMTBhOTgzMjkyOWY2MWFiMjhjZGYwZDM2MzAiLCJzZWNyZXQiOiJHSTg1eXR1YmV6Q0VEZ3hlY3JpWDZlS09aSlY5cDgzMUJsc01RZUJ6anZRPSJ9XQ',
 		);
 	});
 	const base64String =
@@ -49,20 +49,20 @@ describe('testing uint8 encoding', () => {
 				id: '0NI3TUAs1Sfy',
 				amount: 8,
 				C: '037695083226b9c63649d8068eb789a891e621e77dff4e7d75ac02479fe71c886b',
-				secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4='
+				secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4=',
 			},
 			{
 				id: '0NI3TUAs1Sfy',
 				amount: 64,
 				C: '03e58e37f3aa5719c5743811511a6e6459245f008269bd809b9b89cc2fd3683241',
-				secret: 'HV6S9GY9f9YsiZSY9V/T4uc239VwsfqDbUfqr+vd4w0='
+				secret: 'HV6S9GY9f9YsiZSY9V/T4uc239VwsfqDbUfqr+vd4w0=',
 			},
 			{
 				id: '0NI3TUAs1Sfy',
 				amount: 128,
 				C: '030715a873242f59fe3f67121f0a4afb22aaa24b10a9832929f61ab28cdf0d3630',
-				secret: 'GI85ytubezCEDgxecriX6eKOZJV9p831BlsMQeBzjvQ='
-			}
+				secret: 'GI85ytubezCEDgxecriX6eKOZJV9p831BlsMQeBzjvQ=',
+			},
 		]);
 	});
 	test('base64url: convert to/from base64', () => {
@@ -86,12 +86,12 @@ describe('testing uint8 encoding', () => {
 							amount: 1,
 							secret:
 								'["P2PK",{"nonce":"d56ac839c37bedb4c50b18719650267a61b310ef7acd9eac380fb1fdf6c5f916","data":"b38cac2f47d3eccb646e1babd0b41e36a1792def9a85984e5fbfede55f48b789"}]',
-							C: '038a72edf5df7c7fcb14a08cb8bd9c85e95dfc4368e59a9794dfb9901ea2d21729'
-						}
+							C: '038a72edf5df7c7fcb14a08cb8bd9c85e95dfc4368e59a9794dfb9901ea2d21729',
+						},
 					],
-					mint: 'https://testnut.cashu.space'
-				}
-			]
+					mint: 'https://testnut.cashu.space',
+				},
+			],
 		};
 
 		expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);

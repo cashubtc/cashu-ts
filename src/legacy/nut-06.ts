@@ -1,6 +1,7 @@
-import type { MintContactInfo, GetInfoResponse } from '../model/types/index.js';
+import type { MintContactInfo, GetInfoResponse } from '../model/types/index';
+import type { Logger } from '../logger';
 
-export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse) {
+export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse, logger: Logger) {
 	// Monkey patch old contact field ["email", "me@mail.com"] Array<[string, string]>; to new contact field [{method: "email", info: "me@mail.com"}] Array<MintContactInfo>
 	// This is to maintain backwards compatibility with older versions of the mint
 	if (Array.isArray(data?.contact) && data?.contact.length > 0) {
@@ -11,8 +12,8 @@ export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse) {
 				typeof contact[0] === 'string' &&
 				typeof contact[1] === 'string'
 			) {
-				console.warn(
-					`Mint returned deprecated 'contact' field: Update NUT-06: https://github.com/cashubtc/nuts/pull/117`
+				logger.warn(
+					`Mint returned deprecated 'contact' field: Update NUT-06: https://github.com/cashubtc/nuts/pull/117`,
 				);
 				return { method: contact[0], info: contact[1] } as MintContactInfo;
 			}

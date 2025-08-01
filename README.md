@@ -55,6 +55,19 @@ Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usa
 npm i @cashu/cashu-ts
 ```
 
+### Logging
+
+By default, cashu-ts does not log to the console. If you want to enable logging for debugging purposes, you can set the `logger` option when creating a wallet or mint. A `ConsoleLogger` is provided, or you can wrap your existing logger to conform to the `Logger` interface:
+
+```typescript
+import { CashuMint, CashuWallet, ConsoleLogger, LogLevel } from '@cashu/cashu-ts';
+const mintUrl = 'http://localhost:3338';
+const mintLogger = new ConsoleLogger(LogLevel.ERROR);
+const mint = new CashuMint(mintUrl, undefined, { logger: mintLogger }); // Enable logging for the mint
+const walletLogger = new ConsoleLogger(LogLevel.DEBUG);
+const wallet = new CashuWallet(mint, { logger: walletLogger }); // Enable logging for the wallet
+```
+
 ### Examples
 
 #### Mint tokens
@@ -89,7 +102,7 @@ const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 // if no appropriate amount can be selected offline. We must include potential
 // ecash fees that the mint might require to melt the resulting proofsToSend later.
 const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs, {
-	includeFees: true
+	includeFees: true,
 });
 // store proofsToKeep in wallet ..
 

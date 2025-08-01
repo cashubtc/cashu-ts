@@ -1,5 +1,5 @@
 export type OnOpenSuccess = () => void;
 
-export type OnOpenError = (err: unknown) => void;
+export type OnOpenError = (err: Error) => void;
 
 export type SubscriptionCanceller = () => void;

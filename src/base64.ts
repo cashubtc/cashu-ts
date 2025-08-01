@@ -42,5 +42,5 @@ export {
 	encodeUint8toBase64Url,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
-	encodeBase64ToJson
+	encodeBase64ToJson,
 };

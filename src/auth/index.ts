@@ -1,17 +1,18 @@
 import { CashuAuthMint } from './CashuAuthMint';
 import { CashuAuthWallet } from './CashuAuthWallet';
 import { encodeJsonToBase64 } from '../base64';
-import { Proof } from '../model/types';
+import { type Proof } from '../model/types';
 
 /**
- * Helper function to encode a cashu auth token authA
+ * Helper function to encode a cashu auth token authA.
+ *
  * @param proof
  */
 export function getEncodedAuthToken(proof: Proof): string {
 	const token = {
 		id: proof.id,
 		secret: proof.secret,
-		C: proof.C
+		C: proof.C,
 	};
 	const base64Data = encodeJsonToBase64(token);
 	const prefix = 'auth';

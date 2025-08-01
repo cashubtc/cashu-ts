@@ -1,14 +1,14 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/hashes/utils';
 import { describe, expect, test } from 'vitest';
-import { hash_e, pointFromBytes, pointFromHex } from '../../../src/crypto/common/index.js';
+import { hash_e, pointFromBytes, pointFromHex } from '../../../src/crypto/common/index';
 import {
 	constructProofFromPromise,
-	createRandomBlindedMessage
-} from '../../../src/crypto/client/index.js';
-import { createBlindSignature } from '../../../src/crypto/mint/index.js';
-import { createDLEQProof } from '../../../src/crypto/mint/NUT12.js';
-import { verifyDLEQProof, verifyDLEQProof_reblind } from '../../../src/crypto/client/NUT12.js';
+	createRandomBlindedMessage,
+} from '../../../src/crypto/client/index';
+import { createBlindSignature } from '../../../src/crypto/mint/index';
+import { createDLEQProof } from '../../../src/crypto/mint/NUT12';
+import { verifyDLEQProof, verifyDLEQProof_reblind } from '../../../src/crypto/client/NUT12';
 
 describe('test hash_e', () => {
 	test('test hash_e function', async () => {
@@ -19,7 +19,7 @@ describe('test hash_e', () => {
 		const e = hash_e([R1, R2, K, C_]);
 		console.log('e = ' + bytesToHex(e));
 		expect(bytesToHex(e)).toEqual(
-			'a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e'
+			'a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e',
 		);
 	});
 });
@@ -56,7 +56,7 @@ describe('test DLEQ scheme', () => {
 			blindSignature,
 			blindMessage.r,
 			blindMessage.secret,
-			mintPubKey
+			mintPubKey,
 		);
 		dleqProof.r = blindMessage.r;
 

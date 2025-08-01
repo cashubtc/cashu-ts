@@ -2,3 +2,5 @@ coverage
 lib
 docs
 node_modules
+temp
+test/__screenshots__

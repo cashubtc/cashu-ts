@@ -1,131 +1,131 @@
-import { Proof } from './index';
+import { type Proof } from './index';
 
 /**
- * A Cashu token
+ * A Cashu token.
  */
 export type Token = {
 	/**
-	 * the mints URL
+	 * The mints URL.
 	 */
 	mint: string;
 	/**
-	 * a list of proofs
+	 * A list of proofs.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 	/**
-	 * a message to send along with the token
+	 * A message to send along with the token.
 	 */
 	memo?: string;
 	/**
-	 * the unit of the token
+	 * The unit of the token.
 	 */
 	unit?: string;
 };
 
 export type V4DLEQTemplate = {
 	/**
-	 * challenge
+	 * Challenge.
 	 */
 	e: Uint8Array;
 	/**
-	 * response
+	 * Response.
 	 */
 	s: Uint8Array;
 	/**
-	 * blinding factor
+	 * Blinding factor.
 	 */
 	r: Uint8Array;
 };
 
 /**
- * Template for a Proof inside a V4 Token
+ * Template for a Proof inside a V4 Token.
  */
 export type V4ProofTemplate = {
 	/**
-	 * Amount
+	 * Amount.
 	 */
 	a: number;
 	/**
-	 * Secret
+	 * Secret.
 	 */
 	s: string;
 	/**
-	 * Signature
+	 * Signature.
 	 */
 	c: Uint8Array;
 	/**
-	 * DLEQ
+	 * DLEQ.
 	 */
 	d?: V4DLEQTemplate;
 	/**
-	 * Witness
+	 * Witness.
 	 */
 	w?: string;
 };
 
 /**
- * TokenEntry in a V4 Token
+ * TokenEntry in a V4 Token.
  */
 export type V4InnerToken = {
 	/**
-	 * ID
+	 * ID.
 	 */
 	i: Uint8Array;
 	/**
-	 * Proofs
+	 * Proofs.
 	 */
-	p: Array<V4ProofTemplate>;
+	p: V4ProofTemplate[];
 };
 
 /**
- * Template for a V4 Token
+ * Template for a V4 Token.
  */
 export type TokenV4Template = {
 	/**
-	 * TokenEntries
+	 * TokenEntries.
 	 */
-	t: Array<V4InnerToken>;
+	t: V4InnerToken[];
 	/**
-	 * Memo
+	 * Memo.
 	 */
 	d: string;
 	/**
-	 * Mint Url
+	 * Mint Url.
 	 */
 	m: string;
 	/**
-	 * Unit
+	 * Unit.
 	 */
 	u: string;
 };
 
 /**
- * A Cashu token
+ * A Cashu token.
  */
 export type DeprecatedToken = {
 	/**
-	 * token entries
+	 * Token entries.
 	 */
-	token: Array<TokenEntry>;
+	token: TokenEntry[];
 	/**
-	 * a message to send along with the token
+	 * A message to send along with the token.
 	 */
 	memo?: string;
 	/**
-	 * the unit of the token
+	 * The unit of the token.
 	 */
 	unit?: string;
 };
 /**
- * TokenEntry that stores proofs and mints
+ * TokenEntry that stores proofs and mints.
  */
 type TokenEntry = {
 	/**
-	 * a list of proofs
+	 * A list of proofs.
 	 */
-	proofs: Array<Proof>;
+	proofs: Proof[];
 	/**
-	 * the mints URL
+	 * The mints URL.
 	 */
 	mint: string;
 };

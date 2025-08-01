@@ -1,8 +1,8 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils.js';
+import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
 import { Buffer } from 'buffer';
 
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
@@ -70,11 +70,11 @@ export type WellKnownSecret = 'P2PK';
 export type SecretData = {
 	nonce: string;
 	data: string;
-	tags?: Array<Array<string>>;
+	tags?: string[][];
 };
 
 export type Witness = {
-	signatures: Array<string>;
+	signatures: string[];
 };
 
 export type Tags = {
@@ -94,7 +94,7 @@ export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 		const hash = sha256(Buffer.concat([msgToHash, counterBytes]));
 		try {
 			return pointFromHex(bytesToHex(Buffer.concat([new Uint8Array([0x02]), hash])));
-		} catch (error) {
+		} catch {
 			counter[0]++;
 		}
 	}
@@ -159,7 +159,7 @@ export function deriveKeysetId(keys: MintKeys): string {
 		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 	const hash = sha256(pubkeysConcat);
 	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
-	return '00' + hashHex;
+	return KEYSET_VERSION + hashHex;
 }
 
 function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {

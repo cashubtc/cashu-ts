@@ -1,16 +1,17 @@
 /**
- * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+ * Public keys are a dictionary of number and string. The number represents the amount that the key
+ * signs for.
  */
 export type Keys = { [amount: number]: string };
 
 /**
- * An array of mint keysets
+ * An array of mint keysets.
  */
 export type MintActiveKeys = {
 	/**
-	 * Keysets
+	 * Keysets.
 	 */
-	keysets: Array<MintKeys>;
+	keysets: MintKeys[];
 };
 
 /**
@@ -18,9 +19,9 @@ export type MintActiveKeys = {
  */
 export type MintAllKeysets = {
 	/**
-	 * Keysets
+	 * Keysets.
 	 */
-	keysets: Array<MintKeyset>;
+	keysets: MintKeyset[];
 };
 
 /**
@@ -28,7 +29,7 @@ export type MintAllKeysets = {
  */
 export type MintKeys = {
 	/**
-	 * Keyset ID
+	 * Keyset ID.
 	 */
 	id: string;
 	/**
@@ -36,7 +37,8 @@ export type MintKeys = {
 	 */
 	unit: string;
 	/**
-	 * Public keys are a dictionary of number and string. The number represents the amount that the key signs for.
+	 * Public keys are a dictionary of number and string. The number represents the amount that the
+	 * key signs for.
 	 */
 	keys: Keys;
 };
@@ -46,7 +48,7 @@ export type MintKeys = {
  */
 export type MintKeyset = {
 	/**
-	 * Keyset ID
+	 * Keyset ID.
 	 */
 	id: string;
 	/**

@@ -1,10 +1,10 @@
-import { DLEQ, hash_e, hashToCurve } from '../common/index.js';
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type DLEQ, hash_e, hashToCurve } from '../common/index';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToNumber } from '../util/utils.js';
+import { bytesToNumber } from '../util/utils';
 
-function arraysEqual(arr1: any, arr2: any) {
+function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
 	if (arr1.length !== arr2.length) return false;
 	for (let i = 0; i < arr1.length; i++) {
 		if (arr1[i] !== arr2[i]) return false;
@@ -16,7 +16,7 @@ export const verifyDLEQProof = (
 	dleq: DLEQ,
 	B_: ProjPointType<bigint>,
 	C_: ProjPointType<bigint>,
-	A: ProjPointType<bigint>
+	A: ProjPointType<bigint>,
 ) => {
 	const sG = secp256k1.ProjectivePoint.fromPrivateKey(bytesToHex(dleq.s));
 	const eA = A.multiply(bytesToNumber(dleq.e));
@@ -32,7 +32,7 @@ export const verifyDLEQProof_reblind = (
 	secret: Uint8Array, // secret
 	dleq: DLEQ,
 	C: ProjPointType<bigint>, // unblinded e-cash signature point
-	A: ProjPointType<bigint> // mint public key point
+	A: ProjPointType<bigint>, // mint public key point
 ) => {
 	if (dleq.r === undefined) throw new Error('verifyDLEQProof_reblind: Undefined blinding factor');
 	const Y = hashToCurve(secret);
