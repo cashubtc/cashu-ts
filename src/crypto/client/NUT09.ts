@@ -1,5 +1,5 @@
 import { hmac } from '@noble/hashes/hmac';
-import { sha512 } from '@noble/hashes/sha512';
+import { sha512 } from '@noble/hashes/sha2';
 import { getKeysetIdInt } from '../common/index';
 import { HDKey } from '@scure/bip32';
 import { Buffer } from 'buffer';
@@ -59,8 +59,6 @@ const derive = (
 			return secret;
 		case DerivationType.BLINDING_FACTOR:
 			return r;
-		default:
-			throw new Error(`Unknown derivation type: ${secretOrBlinding}`);
 	}
 };
 

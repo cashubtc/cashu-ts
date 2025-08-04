@@ -2,7 +2,7 @@ import { Buffer } from 'buffer';
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
 import { type DLEQ, pointFromHex } from './crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
@@ -211,7 +211,7 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 /*
  * Convert a keyset ID into short form
  */
-function convertToShortKeysetId(proofs: Array<Proof>) {
+function convertToShortKeysetId(proofs: Proof[]) {
 	return proofs.map((p) => {
 		const newP = { ...p };
 		newP.id = newP.id.slice(0, 16);
@@ -344,7 +344,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @param token An encoded cashu token (cashuAey...)
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysets?: Array<MintKeyset>) {
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
@@ -431,8 +431,6 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 			hash = sha256(pubkeysConcat);
 			hashHex = Buffer.from(hash).toString('hex');
 			return '01' + hashHex;
-		default:
-			throw new Error(`Unknown version byte ${versionByte}`);
 	}
 }
 
@@ -582,13 +580,13 @@ export function verifyKeysetId(keys: MintKeys): boolean {
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
  */
-function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): Array<Proof> {
+function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[]): Proof[] {
 	const newProofs = [];
 	for (const proof of proofs) {
 		let idBytes;
 		try {
 			idBytes = hexToBytes(proof.id);
-		} catch (e) {
+		} catch {
 			// Base64 keysets don't need conversion
 			newProofs.push(proof);
 			continue;
