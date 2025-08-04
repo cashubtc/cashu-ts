@@ -12,22 +12,22 @@ enum DerivationType {
 }
 
 export const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array => {
-	if (keysetId.startsWith("00")) {
+	if (keysetId.startsWith('00')) {
 		return derive_deprecated(seed, keysetId, counter, DerivationType.SECRET);
-	} else if (keysetId.startsWith("01")) {
+	} else if (keysetId.startsWith('01')) {
 		return derive(seed, keysetId, counter, DerivationType.SECRET);
 	}
 	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
-};	
+};
 
 export const deriveBlindingFactor = (
 	seed: Uint8Array,
 	keysetId: string,
 	counter: number,
 ): Uint8Array => {
-	if (keysetId.startsWith("00")) {
+	if (keysetId.startsWith('00')) {
 		return derive_deprecated(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
-	} else if (keysetId.startsWith("01")) {
+	} else if (keysetId.startsWith('01')) {
 		return derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
 	}
 	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
@@ -37,7 +37,7 @@ const derive = (
 	seed: Uint8Array,
 	keysetId: string,
 	counter: number,
-	secretOrBlinding: DerivationType
+	secretOrBlinding: DerivationType,
 ): Uint8Array => {
 	const counterBuffer = Buffer.alloc(8);
 	counterBuffer.writeBigUInt64BE(BigInt(counter));

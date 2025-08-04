@@ -37,7 +37,7 @@ export type MintKeys = {
 	 */
 	unit: string;
 	/**
-	 * Expiry of the keyset
+	 * Expiry of the keyset.
 	 */
 	final_expiry?: number;
 	/**

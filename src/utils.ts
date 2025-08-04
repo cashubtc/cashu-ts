@@ -396,8 +396,8 @@ export function handleTokens(token: string): Token {
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param unit (optional) the unit of the keyset
- * @param expiry (optional) expiry of the keyset
+ * @param unit (optional) the unit of the keyset.
+ * @param expiry (optional) expiry of the keyset.
  * @param versionByte (optional) version of the keyset ID. Default is 0.
  * @returns
  */
@@ -425,7 +425,7 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 			if (expiry) {
 				pubkeysConcat = mergeUInt8Arrays(
 					pubkeysConcat,
-					Buffer.from('final_expiry:' + expiry.toString())
+					Buffer.from('final_expiry:' + expiry.toString()),
 				);
 			}
 			hash = sha256(pubkeysConcat);
@@ -434,8 +434,6 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 		default:
 			throw new Error(`Unknown version byte ${versionByte}`);
 	}
-
-
 }
 
 export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
@@ -569,10 +567,11 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Check that the keyset hashes to the specified ID
- * @param keys The keyset to be verified
- * @returns true if the verification was successful, false otherwise
- * @throws Error if the keyset ID version is unrecognized
+ * Check that the keyset hashes to the specified ID.
+ *
+ * @param keys The keyset to be verified.
+ * @returns True if the verification was successful, false otherwise.
+ * @throws Error if the keyset ID version is unrecognized.
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const versionByte = hexToBytes(keys.id)[0];
@@ -580,7 +579,8 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 }
 
 /**
- * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the Mint
+ * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
+ * Mint.
  */
 function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): Array<Proof> {
 	const newProofs = [];
@@ -612,7 +612,7 @@ function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): A
 			}
 			if (!found) {
 				throw new Error(
-					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`
+					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`,
 				);
 			}
 		} else {
@@ -624,12 +624,12 @@ function mapShortKeysetIds(proofs: Array<Proof>, keysets?: Array<MintKeyset>): A
 }
 
 /**
- * Checks that the proof has a valid DLEQ proof according to
- * keyset `keys`
- * @param proof The proof subject to verification
- * @param keyset The Mint's keyset to be used for verification
- * @returns true if verification succeeded, false otherwise
- * @throws Error if @param proof does not match any key in @param keyset
+ * Checks that the proof has a valid DLEQ proof according to keyset `keys`
+ *
+ * @param proof The proof subject to verification.
+ * @param keyset The Mint's keyset to be used for verification.
+ * @returns True if verification succeeded, false otherwise.
+ * @throws Error if @param proof does not match any key in @param keyset.
  */
 export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 	if (proof.dleq == undefined) {
