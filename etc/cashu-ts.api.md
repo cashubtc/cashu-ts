@@ -242,7 +242,7 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
 
 // @public
-export function getDecodedToken(tokenString: string, keysets?: Array<MintKeyset>): Token;
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
