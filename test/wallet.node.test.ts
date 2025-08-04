@@ -35,7 +35,12 @@ const dummyKeysResp = {
 		},
 	],
 };
-const dummyKeysId = deriveKeysetId(dummyKeysResp.keysets[0].keys, dummyKeysResp.keysets[0].unit, 1754296607, 1);
+const dummyKeysId = deriveKeysetId(
+	dummyKeysResp.keysets[0].keys,
+	dummyKeysResp.keysets[0].unit,
+	1754296607,
+	1,
+);
 console.log(`dummyKeysId = ${dummyKeysId}`);
 const dummyKeysetResp = {
 	keysets: [
@@ -799,22 +804,25 @@ describe('deterministic', () => {
 			'c756ae91cf316eaa4b845edcca35f04ee9d1732c10e7205b0ef30123bcbbc1b8',
 			'6d1e1424bc2c84df6a5ee6295683e152e002891c3c142513eee41d8f3307e8f0',
 		],
-	])('deterministic OutputData -- Legacy Derivation: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
-		const hexSeed =
-			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
+	])(
+		'deterministic OutputData -- Legacy Derivation: counter %i -> secret: %s, r: %s',
+		async (counter, secret, r) => {
+			const hexSeed =
+				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-		const numberR = bytesToNumber(hexToBytes(r));
-		const decoder = new TextDecoder();
+			const numberR = bytesToNumber(hexToBytes(r));
+			const decoder = new TextDecoder();
 
-		const data = OutputData.createSingleDeterministicData(
-			0,
-			hexToBytes(hexSeed),
-			counter,
-			'00bd033559de27d0',
-		);
-		expect(decoder.decode(data.secret)).toBe(secret);
-		expect(data.blindingFactor).toBe(numberR);
-	});
+			const data = OutputData.createSingleDeterministicData(
+				0,
+				hexToBytes(hexSeed),
+				counter,
+				'00bd033559de27d0',
+			);
+			expect(decoder.decode(data.secret)).toBe(secret);
+			expect(data.blindingFactor).toBe(numberR);
+		},
+	);
 
 	test.each([
 		[
@@ -832,24 +840,25 @@ describe('deterministic', () => {
 			'e96f5e9c8c231b087451b568b0d9583ebaff8e170f10f4b1a173b49135c23cce',
 			'9baaf52031caee0dd6f69e0fe871fa55e46a213443542923911050887e69e2f2',
 		],
-	])('deterministic OutputData -- New Derivation: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
-		const hexSeed =
-			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
+	])(
+		'deterministic OutputData -- New Derivation: counter %i -> secret: %s, r: %s',
+		async (counter, secret, r) => {
+			const hexSeed =
+				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-		const numberR = bytesToNumber(hexToBytes(r));
-		const decoder = new TextDecoder();
+			const numberR = bytesToNumber(hexToBytes(r));
+			const decoder = new TextDecoder();
 
-		const data = OutputData.createSingleDeterministicData(
-			0,
-			hexToBytes(hexSeed),
-			counter,
-			'012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
-		);
-		expect(decoder.decode(data.secret)).toBe(secret);
-		expect(data.blindingFactor).toBe(numberR);
-	});
-
-
+			const data = OutputData.createSingleDeterministicData(
+				0,
+				hexToBytes(hexSeed),
+				counter,
+				'012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+			);
+			expect(decoder.decode(data.secret)).toBe(secret);
+			expect(data.blindingFactor).toBe(numberR);
+		},
+	);
 });
 
 describe('WebSocket Updates', () => {
