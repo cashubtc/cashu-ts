@@ -236,13 +236,13 @@ export type DeprecatedToken = {
 };
 
 // @public
-export function deriveKeysetId(keys: Keys): string;
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: 0 | 1): string;
 
 // @public (undocumented)
 export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
 
 // @public
-export function getDecodedToken(token: string): Token;
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
@@ -494,6 +494,7 @@ export type MintContactInfo = {
 export type MintKeys = {
     id: string;
     unit: string;
+    final_expiry?: number;
     keys: Keys;
 };
 

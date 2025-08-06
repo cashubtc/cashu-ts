@@ -296,8 +296,12 @@ class CashuWallet {
 		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
 			options || {};
 
+		// Fetch the keysets if we don't have them
+		if (this._keysets.length === 0) {
+			await this.getKeySets();
+		}
 		if (typeof token === 'string') {
-			token = getDecodedToken(token);
+			token = getDecodedToken(token, this._keysets);
 		}
 		const keys = await this.getKeys(keysetId);
 		if (requireDleq) {

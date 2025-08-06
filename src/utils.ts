@@ -2,7 +2,7 @@ import { Buffer } from 'buffer';
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
 import { type DLEQ, pointFromHex } from './crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
@@ -15,6 +15,7 @@ import {
 	type DeprecatedToken,
 	type Keys,
 	type MintKeys,
+	type MintKeyset,
 	type Proof,
 	type SerializedDLEQ,
 	type Token,
@@ -176,7 +177,7 @@ export function hasNonHexId(p: Proof | Proof[]) {
 	if (Array.isArray(p)) {
 		return p.some((proof) => !isValidHex(proof.id));
 	}
-	return isValidHex(p.id);
+	return !isValidHex(p.id);
 }
 
 //used for json serialization
@@ -191,6 +192,9 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns Encoded token.
  */
 export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
+	if (!hasNonHexId(token.proofs)) {
+		token.proofs = convertToShortKeysetId(token.proofs);
+	}
 	if (removeDleq) {
 		token.proofs = stripDleq(token.proofs);
 	}
@@ -204,6 +208,17 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
 }
 
+/*
+ * Convert a keyset ID into short form
+ */
+function convertToShortKeysetId(proofs: Proof[]) {
+	return proofs.map((p) => {
+		const newP = { ...p };
+		newP.id = newP.id.slice(0, 16);
+		return newP;
+	});
+}
+
 /**
  * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
  *
@@ -214,6 +229,7 @@ export function getEncodedToken(
 	token: Token,
 	opts?: { version?: 3 | 4; removeDleq?: boolean },
 ): string {
+	// Find out if it's a base64 keyset
 	const nonHex = hasNonHexId(token.proofs);
 	if (nonHex || opts?.version === 3) {
 		if (opts?.version === 4) {
@@ -238,6 +254,8 @@ export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 	if (nonHex) {
 		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 	}
+	// Map keyset IDs to short IDs
+	token.proofs = convertToShortKeysetId(token.proofs);
 
 	const tokenTemplate = templateFromToken(token);
 
@@ -326,16 +344,19 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @param token An encoded cashu token (cashuAey...)
  * @returns Cashu token object.
  */
-export function getDecodedToken(token: string) {
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
-		if (!token.startsWith(prefix)) {
+		if (!tokenString.startsWith(prefix)) {
 			return;
 		}
-		token = token.slice(prefix.length);
+		tokenString = tokenString.slice(prefix.length);
 	});
-	return handleTokens(token);
+
+	const token = handleTokens(tokenString);
+	token.proofs = mapShortKeysetIds(token.proofs, keysets);
+	return token;
 }
 
 /**
@@ -372,29 +393,45 @@ export function handleTokens(token: string): Token {
 }
 
 /**
- * Recomputes the ID for the provided keyset and verifies it matches the ID provided by the Mint.
- *
- * @param keys The keyset to be verified.
- * @returns True if the verification succeeded, false otherwise.
- */
-export function verifyKeysetId(keys: MintKeys): boolean {
-	return deriveKeysetId(keys.keys) === keys.id;
-}
-
-/**
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
+ * @param unit (optional) the unit of the keyset.
+ * @param expiry (optional) expiry of the keyset.
+ * @param versionByte (optional) version of the keyset ID. Default is 0.
  * @returns
  */
-export function deriveKeysetId(keys: Keys) {
-	const pubkeysConcat = Object.entries(keys)
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: 0 | 1) {
+	let pubkeysConcat = Object.entries(keys)
 		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
 		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
 		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-	const hash = sha256(pubkeysConcat);
-	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
-	return '00' + hashHex;
+
+	if (!versionByte) {
+		versionByte = 0;
+	}
+	let hash;
+	let hashHex;
+	switch (versionByte) {
+		case 0:
+			hash = sha256(pubkeysConcat);
+			hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+			return '00' + hashHex;
+		case 1:
+			if (!unit) {
+				throw new Error("Couldn't compute ID version 2: no unit was given.");
+			}
+			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from('unit:' + unit));
+			if (expiry) {
+				pubkeysConcat = mergeUInt8Arrays(
+					pubkeysConcat,
+					Buffer.from('final_expiry:' + expiry.toString()),
+				);
+			}
+			hash = sha256(pubkeysConcat);
+			hashHex = Buffer.from(hash).toString('hex');
+			return '01' + hashHex;
+	}
 }
 
 export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
@@ -525,6 +562,63 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 		delete newP['dleq'];
 		return newP;
 	});
+}
+
+/**
+ * Check that the keyset hashes to the specified ID.
+ *
+ * @param keys The keyset to be verified.
+ * @returns True if the verification was successful, false otherwise.
+ * @throws Error if the keyset ID version is unrecognized.
+ */
+export function verifyKeysetId(keys: MintKeys): boolean {
+	const versionByte = hexToBytes(keys.id)[0];
+	return deriveKeysetId(keys.keys, keys.unit, keys.final_expiry, versionByte) === keys.id;
+}
+
+/**
+ * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
+ * Mint.
+ */
+function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[]): Proof[] {
+	const newProofs = [];
+	for (const proof of proofs) {
+		let idBytes;
+		try {
+			idBytes = hexToBytes(proof.id);
+		} catch {
+			// Base64 keysets don't need conversion
+			newProofs.push(proof);
+			continue;
+		}
+
+		if (idBytes[0] === 0x00) {
+			newProofs.push(proof);
+		} else if (idBytes[0] === 0x01) {
+			if (!keysets) {
+				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
+			}
+			// Look for a match: prefix(keyset ID) == short ID
+			let found = false;
+			for (const keyset of keysets) {
+				if (proof.id === keyset.id.slice(0, proof.id.length)) {
+					proof.id = keyset.id;
+					newProofs.push(proof);
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				throw new Error(
+					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`,
+				);
+			}
+		} else {
+			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`);
+		}
+	}
+
+	return newProofs;
 }
 
 /**
