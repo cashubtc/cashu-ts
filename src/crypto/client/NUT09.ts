@@ -41,25 +41,25 @@ const derive = (
 ): Uint8Array => {
 	const counterBuffer = Buffer.alloc(8);
 	counterBuffer.writeBigUInt64BE(BigInt(counter));
-	const message = Buffer.concat([
+	let message = Buffer.concat([
 		Buffer.from('Cashu_KDF_HMAC_SHA512'),
 		Buffer.from(keysetId, 'hex'),
 		counterBuffer,
 	]);
 
+	switch (secretOrBlinding) {
+		case DerivationType.SECRET:
+			message = Buffer.concat([message, Buffer.from([0])]);
+			break;
+		case DerivationType.BLINDING_FACTOR:
+			message = Buffer.concat([message, Buffer.from([1])]);
+	}
+
 	// Step 2: Compute HMAC-SHA512
 	const hmacDigest = hmac(sha512, seed, message);
 
-	// Step 3: Derive secret and blinding factor
-	const secret = hmacDigest.slice(0, 32); // First 32 bytes for secret
-	const r = hmacDigest.slice(32); // Remaining bytes for blinding factor
-
-	switch (secretOrBlinding) {
-		case DerivationType.SECRET:
-			return secret;
-		case DerivationType.BLINDING_FACTOR:
-			return r;
-	}
+	// Step 3: Derive secret or blinding factor
+	return hmacDigest.slice(0, 32);
 };
 
 const derive_deprecated = (
