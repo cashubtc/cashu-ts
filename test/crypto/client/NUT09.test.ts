@@ -38,11 +38,11 @@ describe('testing deterministic secrets', () => {
 		'576c23393a8b31cc8da6688d9c9a96394ec74b40fdaf1f693a6bb84284334ea0',
 	];
 	const secrets1 = [
-		'aab7f4ee9ad7f839caeda091e0d014325ae579c360c1a77c5c1bb7e472c105dc',
-		'1403b74bc60371904113112b6ee9255eab9dff480b1af72c6c1bd613ba556f1a',
-		'e96f5e9c8c231b087451b568b0d9583ebaff8e170f10f4b1a173b49135c23cce',
-		'eb03fbb7761dde26042a097039e211285f4d428ccbc1df8b231e7673824533d7',
-		'cbcf41b5ab92287827c5edd1cd65c0bb7d9da5148c5a24c869571350521c722a',
+		'7614f34ff4ab0e9faa2e8c0a9ef4d50be8516c38349f33f9ee6ddb0305cb5296',
+		'6da184e4f071826922a89f9212f685109484275d385576338225229f0358e538',
+		'8ffe423197f49c3392605918267a31d1a604346b0c306ac18d90b7e6fdc098a5',
+		'5adc787c2d58b5d3d66f96476b8fda2c692a34304d68f83702cd2a4a91d69896',
+		'c6b5809f737da4a751a9cb0c72ab7e8227079078a11289661cfc30dbcb9e0aaa',
 	];
 	test('derive Secret -- deprecated', async () => {
 		const secret1 = deriveSecret(seed, '009a1f293253e41e', 0);
@@ -94,13 +94,13 @@ describe('testing deterministic secrets', () => {
 
 describe('testing deterministic blindedMessage', () => {
 	const secrets = ['485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae'];
-	const secrets1 = ['aab7f4ee9ad7f839caeda091e0d014325ae579c360c1a77c5c1bb7e472c105dc'];
+	const secrets1 = ['7614f34ff4ab0e9faa2e8c0a9ef4d50be8516c38349f33f9ee6ddb0305cb5296'];
 	test('derive blindedMessage -- deprecated', async () => {
 		const secret1 = deriveSecret(seed, '009a1f293253e41e', 0);
 
 		expect(bytesToHex(secret1)).toBe(secrets[0]);
 	});
-	test('derive blindedMessage -- deprecated', () => {
+	test('derive blindedMessage', () => {
 		const secret1 = deriveSecret(
 			seed,
 			'012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
