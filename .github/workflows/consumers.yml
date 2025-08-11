@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        test-type: [nodenext, bundler, commonjs, iife] # package.json scripts
+        test-type: [nodenext, bundler, commonjs, iife, reactnative] # see package.json scripts
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js 22.x

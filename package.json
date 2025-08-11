@@ -23,6 +23,7 @@
 		"test:commonjs": "node test/consumer-commonjs/run-test.js",
 		"test:iife": "node test/consumer-iife/run-test.js",
 		"test:nodenext": "node test/consumer-nodenext/run-test.js",
+		"test:reactnative": "node test/consumer-reactnative/run-test.js",
 		"test:prepare": "npx playwright install chromium --with-deps",
 		"test": "vitest run --coverage --project node --project browser",
 		"test-integration": "vitest run --coverage --project integration",

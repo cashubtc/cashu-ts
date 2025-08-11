@@ -62,12 +62,17 @@ export default defineConfig({
 					exclude: [
 						'test/{auth,integration}.test.ts',
 						'test/**.browser.test.ts',
+						'test/consumer-*/**/*.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
-						exclude: ['test/{auth,integration}.test.ts', 'test/**.browser.test.ts'],
+						exclude: [
+							'test/{auth,integration}.test.ts',
+							'test/consumer-*/**/*.test.ts',
+							'test/**.browser.test.ts',
+						],
 					},
 				},
 			},
@@ -84,13 +89,18 @@ export default defineConfig({
 					include: ['test/**/*.test.ts'],
 					exclude: [
 						'test/{auth,integration}.test.ts',
+						'test/consumer-*/**/*.test.ts',
 						'test/**.node.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
-						exclude: ['test/{auth,integration}.test.ts', 'test/**.node.test.ts'],
+						exclude: [
+							'test/{auth,integration}.test.ts',
+							'test/consumer-*/**/*.test.ts',
+							'test/**.node.test.ts',
+						],
 					},
 				},
 			},
