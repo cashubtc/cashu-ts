@@ -29,13 +29,18 @@ export default defineConfig({
 			name: 'cashuts',
 			formats: process.env.BUILD_FORMAT === 'iife' ? ['iife'] : ['es', 'cjs'],
 			fileName: (format, entryName) =>
-				process.env.BUILD_FORMAT === 'iife' ? `cashu-ts.${format}.js` : `${entryName}.${format}.js`,
+				process.env.BUILD_FORMAT === 'iife'
+					? `cashu-ts.${format}.js`
+					: `${entryName}.${format === 'es' ? 'es.js' : 'cjs'}`,
 		},
 		rollupOptions: {
-			external: (id) =>
-				Object.keys(require('./package.json').dependencies || {}).some(
-					(dep) => id === dep || id.startsWith(`${dep}/`),
-				),
+			external:
+				process.env.BUILD_FORMAT === 'iife'
+					? []
+					: (id) =>
+							Object.keys(require('./package.json').dependencies || {}).some(
+								(dep) => id === dep || id.startsWith(`${dep}/`),
+							),
 		},
 		sourcemap: true,
 	},
