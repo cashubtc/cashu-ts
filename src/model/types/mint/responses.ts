@@ -107,6 +107,12 @@ export type GetInfoResponse = {
 			// Locked Mint Quote
 			supported: boolean;
 		};
+		'21'?: {
+			// Clear Authentication
+			openid_discovery: string;
+			client_id: string;
+			protected_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
+		};
 		'22'?: {
 			// Blind Authentication
 			bat_max_mint: number;
