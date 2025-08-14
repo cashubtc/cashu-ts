@@ -161,6 +161,9 @@ export type PartialMeltQuoteResponse = {
 
 export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
 
+// TODO: is it okay we don't have partial response for bolt12? Any mint implementing BOLT12 should have already added request and unit to the response
+export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
+
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
 	PENDING: 'PENDING',
@@ -217,6 +220,17 @@ export type PartialMintQuoteResponse = {
 export type MintQuoteResponse = PartialMintQuoteResponse & { amount: number; unit: string };
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
+
+export type Bolt12MintQuoteResponse = {
+	quote: string;
+	request: string;
+	amount: number | null;
+	unit: string;
+	expiry: number | null;
+	pubkey: string;
+	amount_paid: number;
+	amount_issued: number;
+};
 
 /**
  * Response from the mint after requesting a mint.

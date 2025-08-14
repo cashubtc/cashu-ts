@@ -37,11 +37,14 @@ export type MeltQuotePayload = {
 	options?: MeltQuoteOptions;
 };
 
+export type Bolt12MeltQuotePayload = MeltQuotePayload;
+
 /**
  * Melt quote specific options.
  */
 export type MeltQuoteOptions = {
-	mpp: MPPOption;
+	mpp?: MPPOption;
+	amountless?: AmountlessOption;
 };
 
 /**
@@ -49,6 +52,13 @@ export type MeltQuoteOptions = {
  */
 export type MPPOption = {
 	amount: number;
+};
+
+/**
+ * Amountless option.
+ */
+export type AmountlessOption = {
+	amount_msat: number;
 };
 
 /**
@@ -89,6 +99,10 @@ export type MintQuotePayload = {
 	 * Public key to lock the quote to.
 	 */
 	pubkey?: string;
+};
+
+export type Bolt12MintQuotePayload = MintQuotePayload & {
+	pubkey: string;
 };
 
 /**

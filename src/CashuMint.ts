@@ -18,6 +18,9 @@ import type {
 	MeltQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse,
+	Bolt12MintQuotePayload,
+	Bolt12MintQuoteResponse,
+	Bolt12MeltQuoteResponse,
 } from './model/types/index';
 import { MeltQuoteState } from './model/types/index';
 import request, { setRequestLogger } from './request';
@@ -33,6 +36,7 @@ import {
 import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06';
 import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER } from './logger';
+
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented
  * by CashuWallet.
@@ -196,6 +200,35 @@ class CashuMint {
 		);
 	}
 
+	public static async createMintQuoteBolt12(
+		mintUrl: string,
+		mintQuotePayload: Bolt12MintQuotePayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt12'),
+			method: 'POST',
+			requestBody: mintQuotePayload,
+			headers,
+		});
+		return response;
+	}
+
+	async createMintQuoteBolt12(
+		mintQuotePayload: Bolt12MintQuotePayload,
+	): Promise<Bolt12MintQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt12');
+		return CashuMint.createMintQuoteBolt12(
+			this._mintUrl,
+			mintQuotePayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
 	/**
 	 * Gets an existing mint quote from the mint.
 	 *
@@ -234,6 +267,32 @@ class CashuMint {
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt11/${quote}`);
 		return CashuMint.checkMintQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
+	}
+
+	public static async checkMintQuoteBolt12(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt12', quote),
+			method: 'GET',
+			headers,
+		});
+		return response;
+	}
+
+	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt12/${quote}`);
+		return CashuMint.checkMintQuoteBolt12(
+			this._mintUrl,
+			quote,
+			this._customRequest,
+			blindAuthToken,
+		);
 	}
 
 	/**
@@ -276,6 +335,33 @@ class CashuMint {
 		return CashuMint.mint(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
 	}
 
+	public static async mintBolt12(
+		mintUrl: string,
+		mintPayload: MintPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<MintResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const data = await requestInstance<MintResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/bolt12'),
+			method: 'POST',
+			requestBody: mintPayload,
+			headers,
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	async mintBolt12(mintPayload: MintPayload): Promise<MintResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt12');
+		return CashuMint.mintBolt12(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
+	}
+
 	/**
 	 * Requests a new melt quote from the mint.
 	 *
@@ -314,6 +400,7 @@ class CashuMint {
 		}
 		return data;
 	}
+
 	/**
 	 * Requests a new melt quote from the mint.
 	 *
@@ -323,6 +410,35 @@ class CashuMint {
 	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt11');
 		return CashuMint.createMeltQuote(
+			this._mintUrl,
+			meltQuotePayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	public static async createMeltQuoteBolt12(
+		mintUrl: string,
+		meltQuotePayload: MeltQuotePayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt12'),
+			method: 'POST',
+			requestBody: meltQuotePayload,
+			headers,
+		});
+		return response;
+	}
+
+	async createMeltQuoteBolt12(
+		meltQuotePayload: MeltQuotePayload,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt12');
+		return CashuMint.createMeltQuoteBolt12(
 			this._mintUrl,
 			meltQuotePayload,
 			this._customRequest,
@@ -379,6 +495,32 @@ class CashuMint {
 		return CashuMint.checkMeltQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
 	}
 
+	public static async checkMeltQuoteBolt12(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt12', quote),
+			method: 'GET',
+			headers,
+		});
+		return response;
+	}
+
+	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt12/${quote}`);
+		return CashuMint.checkMeltQuoteBolt12(
+			this._mintUrl,
+			quote,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
 	/**
 	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
 	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
@@ -429,6 +571,29 @@ class CashuMint {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt11');
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
+
+	public static async meltBolt12(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const data = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/bolt12'),
+			method: 'POST',
+			requestBody: meltPayload,
+			headers,
+		});
+		return data;
+	}
+
+	async meltBolt12(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt12');
+		return CashuMint.meltBolt12(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
+	}
+
 	/**
 	 * Checks if specific proofs have already been redeemed.
 	 *

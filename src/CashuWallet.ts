@@ -32,6 +32,9 @@ import type {
 	LockedMintQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse,
+	Bolt12MintQuotePayload,
+	Bolt12MintQuoteResponse,
+	Bolt12MeltQuoteResponse,
 } from './model/types/index';
 import { MintQuoteState, MeltQuoteState } from './model/types/index';
 import { type SubscriptionCanceller } from './model/types/wallet/websocket';
@@ -995,6 +998,20 @@ class CashuWallet {
 		}
 	}
 
+	async createMintQuoteBolt12(
+		amount: number,
+		pubkey: string,
+		description?: string,
+	): Promise<Bolt12MintQuoteResponse> {
+		const mintQuotePayload: Bolt12MintQuotePayload = {
+			unit: this._unit,
+			amount: amount,
+			pubkey: pubkey,
+			description: description,
+		};
+		return this.mint.createMintQuoteBolt12(mintQuotePayload);
+	}
+
 	/**
 	 * Gets an existing mint quote from the mint.
 	 *
@@ -1012,6 +1029,10 @@ class CashuWallet {
 			return baseRes;
 		}
 		return { ...baseRes, amount: baseRes.amount || quote.amount, unit: baseRes.unit || quote.unit };
+	}
+
+	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
+		return this.mint.checkMintQuoteBolt12(quote);
 	}
 
 	/**
@@ -1036,61 +1057,15 @@ class CashuWallet {
 		quote: string | MintQuoteResponse,
 		options?: MintProofOptions & { privateKey?: string },
 	): Promise<Proof[]> {
-		let { outputAmounts } = options || {};
-		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
+		return this._mintProofs('bolt11', amount, quote, options);
+	}
 
-		const keyset = await this.getKeys(keysetId);
-		if (!outputAmounts && proofsWeHave) {
-			outputAmounts = {
-				keepAmounts: getKeepAmounts(proofsWeHave, amount, keyset.keys, this._denominationTarget),
-				sendAmounts: [],
-			};
-		}
-		let newBlindingData: OutputData[] = [];
-		if (outputData) {
-			if (isOutputDataFactory(outputData)) {
-				const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
-				for (let i = 0; i < amounts.length; i++) {
-					newBlindingData.push(outputData(amounts[i], keyset));
-				}
-			} else {
-				newBlindingData = outputData;
-			}
-		} else if (this._keepFactory) {
-			const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
-			for (let i = 0; i < amounts.length; i++) {
-				newBlindingData.push(this._keepFactory(amounts[i], keyset));
-			}
-		} else {
-			newBlindingData = this.createOutputData(
-				amount,
-				keyset,
-				counter,
-				pubkey,
-				outputAmounts?.keepAmounts,
-				p2pk,
-			);
-		}
-		let mintPayload: MintPayload;
-		if (typeof quote !== 'string') {
-			if (!privateKey) {
-				throw new Error('Can not sign locked quote without private key');
-			}
-			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
-			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
-			mintPayload = {
-				outputs: blindedMessages,
-				quote: quote.quote,
-				signature: mintQuoteSignature,
-			};
-		} else {
-			mintPayload = {
-				outputs: newBlindingData.map((d) => d.blindedMessage),
-				quote: quote,
-			};
-		}
-		const { signatures } = await this.mint.mint(mintPayload);
-		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
+	async mintProofsBolt12(
+		amount: number,
+		quote: Bolt12MintQuoteResponse,
+		options: MintProofOptions & { privateKey: string },
+	): Promise<Proof[]> {
+		return this._mintProofs('bolt12', amount, quote, options);
 	}
 
 	/**
@@ -1112,6 +1087,23 @@ class CashuWallet {
 			unit: meltQuote.unit || this.unit,
 			request: meltQuote.request || invoice,
 		};
+	}
+
+	async createMeltQuoteBolt12(
+		offer: string,
+		amountMsat?: number,
+	): Promise<Bolt12MeltQuoteResponse> {
+		return this.mint.createMeltQuoteBolt12({
+			unit: this._unit,
+			request: offer,
+			options: amountMsat
+				? {
+						amountless: {
+							amount_msat: amountMsat,
+						},
+					}
+				: undefined,
+		});
 	}
 
 	/**
@@ -1167,6 +1159,10 @@ class CashuWallet {
 		return { ...meltQuote, request: quote.request, unit: quote.unit };
 	}
 
+	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
+		return this.mint.checkMeltQuoteBolt12(quote);
+	}
+
 	/**
 	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt
 	 * quote. This function does not perform coin selection!. Returns melt quote and change proofs.
@@ -1182,37 +1178,18 @@ class CashuWallet {
 		proofsToSend: Proof[],
 		options?: MeltProofOptions,
 	): Promise<MeltProofsResponse> {
-		const { keysetId, counter, privkey } = options || {};
-		const keys = await this.getKeys(keysetId);
-		const outputData = this.createBlankOutputs(
-			sumProofs(proofsToSend) - meltQuote.amount,
-			keys,
-			counter,
-			this._keepFactory,
-		);
-		if (privkey != undefined) {
-			proofsToSend = signP2PKProofs(proofsToSend, privkey);
-		}
+		return this._meltProofs('bolt11', meltQuote, proofsToSend, options);
+	}
 
-		proofsToSend = stripDleq(proofsToSend);
-
-		// Ensure witnesses are serialized before sending to mint
-		proofsToSend = proofsToSend.map((p: Proof) => {
-			const witness =
-				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
-			return { ...p, witness };
-		});
-
-		const meltPayload: MeltPayload = {
-			quote: meltQuote.quote,
-			inputs: proofsToSend,
-			outputs: outputData.map((d) => d.blindedMessage),
-		};
-		const meltResponse = await this.mint.melt(meltPayload);
-		return {
-			quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
-			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
-		};
+	async meltProofsBolt12(
+		meltQuote: Bolt12MeltQuoteResponse,
+		proofsToSend: Proof[],
+		options?: MeltProofOptions,
+	): Promise<{
+		quote: Bolt12MeltQuoteResponse;
+		change: Proof[];
+	}> {
+		return this._meltProofs('bolt12', meltQuote, proofsToSend, options);
 	}
 
 	/**
@@ -1598,6 +1575,126 @@ class CashuWallet {
 			undefined,
 			factory,
 		);
+	}
+
+	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
+		method: T,
+		amount: number,
+		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
+		options?: MintProofOptions & { privateKey?: string },
+	): Promise<Proof[]> {
+		let { outputAmounts } = options || {};
+		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
+
+		const keyset = await this.getKeys(keysetId);
+		if (!outputAmounts && proofsWeHave) {
+			outputAmounts = {
+				keepAmounts: getKeepAmounts(proofsWeHave, amount, keyset.keys, this._denominationTarget),
+				sendAmounts: [],
+			};
+		}
+		let newBlindingData: OutputData[] = [];
+		if (outputData) {
+			if (isOutputDataFactory(outputData)) {
+				const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
+				for (let i = 0; i < amounts.length; i++) {
+					newBlindingData.push(outputData(amounts[i], keyset));
+				}
+			} else {
+				newBlindingData = outputData;
+			}
+		} else if (this._keepFactory) {
+			const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
+			for (let i = 0; i < amounts.length; i++) {
+				newBlindingData.push(this._keepFactory(amounts[i], keyset));
+			}
+		} else {
+			newBlindingData = this.createOutputData(
+				amount,
+				keyset,
+				counter,
+				pubkey,
+				outputAmounts?.keepAmounts,
+				p2pk,
+			);
+		}
+		let mintPayload: MintPayload;
+		if (typeof quote !== 'string') {
+			if (!privateKey) {
+				throw new Error('Can not sign locked quote without private key');
+			}
+			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
+			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote.quote,
+				signature: mintQuoteSignature,
+			};
+		} else {
+			mintPayload = {
+				outputs: newBlindingData.map((d) => d.blindedMessage),
+				quote: quote,
+			};
+		}
+		if (method === 'bolt12') {
+			const { signatures } = await this.mint.mintBolt12(mintPayload);
+			return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
+		}
+		const { signatures } = await this.mint.mint(mintPayload);
+		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
+	}
+
+	private async _meltProofs<T extends 'bolt11' | 'bolt12'>(
+		method: T,
+		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
+		proofsToSend: Proof[],
+		options?: MeltProofOptions,
+	): Promise<
+		T extends 'bolt11'
+			? MeltProofsResponse
+			: {
+					quote: Bolt12MeltQuoteResponse;
+					change: Proof[];
+				}
+	> {
+		const { keysetId, counter, privkey } = options || {};
+		const keys = await this.getKeys(keysetId);
+		const outputData = this.createBlankOutputs(
+			sumProofs(proofsToSend) - meltQuote.amount,
+			keys,
+			counter,
+			this._keepFactory,
+		);
+		if (privkey != undefined) {
+			proofsToSend = signP2PKProofs(proofsToSend, privkey);
+		}
+
+		proofsToSend = stripDleq(proofsToSend);
+
+		// Ensure witnesses are serialized before sending to mint
+		proofsToSend = proofsToSend.map((p: Proof) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			return { ...p, witness };
+		});
+
+		const meltPayload: MeltPayload = {
+			quote: meltQuote.quote,
+			inputs: proofsToSend,
+			outputs: outputData.map((d) => d.blindedMessage),
+		};
+		if (method === 'bolt12') {
+			const meltResponse = await this.mint.meltBolt12(meltPayload);
+			return {
+				quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
+				change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
+			};
+		}
+		const meltResponse = await this.mint.melt(meltPayload);
+		return {
+			quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
+			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
+		};
 	}
 }
 
