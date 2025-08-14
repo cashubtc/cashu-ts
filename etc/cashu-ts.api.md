@@ -4,7 +4,24 @@
 
 ```ts
 
+import { CashuAuthMint } from './auth.js';
+import { CashuAuthWallet } from './auth.js';
+import { getBlindedAuthToken } from './auth.js';
+import { getEncodedAuthToken } from './auth.js';
+import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
+import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
 import { MintContactInfo as MintContactInfo_2 } from './types';
+import { MintKeys as MintKeys_2 } from './types.js';
+import { MPPMethod as MPPMethod_2 } from './types.js';
+import { NUT10Option as NUT10Option_2 } from './types.js';
+import { PaymentRequestTransport as PaymentRequestTransport_2 } from './types.js';
+import { PaymentRequestTransportType as PaymentRequestTransportType_2 } from './types.js';
+import { Proof as Proof_2 } from './types.js';
+import { RawPaymentRequest as RawPaymentRequest_2 } from './types.js';
+import { SerializedBlindedMessage as SerializedBlindedMessage_2 } from './types.js';
+import { SerializedBlindedSignature as SerializedBlindedSignature_2 } from './types.js';
+import { SwapMethod as SwapMethod_2 } from './types.js';
+import { WebSocketSupport as WebSocketSupport_2 } from './types.js';
 
 // @public
 export type ApiError = {
@@ -23,47 +40,13 @@ export type BlindAuthMintResponse = {
     signatures: SerializedBlindedSignature[];
 } & ApiError;
 
-// @public
-export class CashuAuthMint {
-    // Warning: (ae-forgotten-export) The symbol "request" needs to be exported by the entry point index.d.ts
-    constructor(_mintUrl: string, _customRequest?: typeof request | undefined);
-    static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
-    getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
-    static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
-    getKeySets(): Promise<MintAllKeysets>;
-    static mint(mintUrl: string, mintPayload: BlindAuthMintPayload, clearAuthToken: string, customRequest?: typeof request): Promise<BlindAuthMintResponse>;
-    mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string): Promise<BlindAuthMintResponse>;
-    // (undocumented)
-    get mintUrl(): string;
-}
+export { CashuAuthMint }
 
-// @public
-export class CashuAuthWallet {
-    constructor(mint: CashuAuthMint, options?: {
-        keys?: MintKeys[] | MintKeys;
-        keysets?: MintKeyset[];
-    });
-    getActiveKeyset(keysets: MintKeyset[]): MintKeyset;
-    getAllKeys(): Promise<MintKeys[]>;
-    getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
-    getKeySets(): Promise<MintKeyset[]>;
-    // (undocumented)
-    get keys(): Map<string, MintKeys>;
-    // (undocumented)
-    get keysetId(): string;
-    set keysetId(keysetId: string);
-    // (undocumented)
-    get keysets(): MintKeyset[];
-    loadMint(): Promise<void>;
-    // (undocumented)
-    mint: CashuAuthMint;
-    mintProofs(amount: number, clearAuthToken: string, options?: {
-        keysetId?: string;
-    }): Promise<Proof[]>;
-}
+export { CashuAuthWallet }
 
 // @public
 export class CashuMint {
+    // Warning: (ae-forgotten-export) The symbol "request" needs to be exported by the entry point index.d.ts
     constructor(_mintUrl: string, _customRequest?: typeof request | undefined, authTokenGetter?: () => Promise<string>, options?: {
         logger?: Logger;
     });
@@ -238,8 +221,7 @@ export type DeprecatedToken = {
 // @public
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: 0 | 1): string;
 
-// @public (undocumented)
-export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
+export { getBlindedAuthToken }
 
 // @public
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]): Token;
@@ -247,8 +229,7 @@ export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]): To
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
 
-// @public
-export function getEncodedAuthToken(proof: Proof): string;
+export { getEncodedAuthToken }
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
@@ -597,13 +578,13 @@ export type OutputAmounts = {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    constructor(blindedMessage: SerializedBlindedMessage_2, blidingFactor: bigint, secret: Uint8Array);
     // (undocumented)
-    blindedMessage: SerializedBlindedMessage;
+    blindedMessage: SerializedBlindedMessage_2;
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
+    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createP2PKData(p2pk: {
         pubkey: string | string[];
@@ -611,9 +592,9 @@ export class OutputData implements OutputDataLike {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
-    }, amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
+    }, amount: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData(amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
+    static createRandomData(amount: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -629,7 +610,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     secret: Uint8Array;
     // (undocumented)
-    toProof(sig: SerializedBlindedSignature, keyset: MintKeys): Proof;
+    toProof(sig: SerializedBlindedSignature_2, keyset: MintKeys_2): Proof_2;
 }
 
 // @public
@@ -669,7 +650,7 @@ export type PaymentPayload = {
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport_2[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option_2 | undefined);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -677,23 +658,23 @@ class PaymentRequest_2 {
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
     // (undocumented)
-    static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
+    static fromRawRequest(rawPaymentRequest: RawPaymentRequest_2): PaymentRequest_2;
     // (undocumented)
-    getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
+    getTransport(type: PaymentRequestTransportType_2): PaymentRequestTransport_2 | undefined;
     // (undocumented)
     id?: string | undefined;
     // (undocumented)
     mints?: string[] | undefined;
     // (undocumented)
-    nut10?: NUT10Option | undefined;
+    nut10?: NUT10Option_2 | undefined;
     // (undocumented)
     singleUse: boolean;
     // (undocumented)
     toEncodedRequest(): string;
     // (undocumented)
-    toRawRequest(): RawPaymentRequest;
+    toRawRequest(): RawPaymentRequest_2;
     // (undocumented)
-    transport?: PaymentRequestTransport[] | undefined;
+    transport?: PaymentRequestTransport_2[] | undefined;
     // (undocumented)
     unit?: string | undefined;
 }

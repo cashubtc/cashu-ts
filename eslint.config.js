@@ -21,6 +21,7 @@ export default tseslint.config(
 			'vite.config.ts',
 			'vitest.workspace.ts',
 			'eslint.config.js',
+			'post-process-dts.js',
 		],
 	},
 	eslint.configs.recommended,

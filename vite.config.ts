@@ -29,13 +29,18 @@ export default defineConfig({
 			name: 'cashuts',
 			formats: process.env.BUILD_FORMAT === 'iife' ? ['iife'] : ['es', 'cjs'],
 			fileName: (format, entryName) =>
-				process.env.BUILD_FORMAT === 'iife' ? `cashu-ts.${format}.js` : `${entryName}.${format}.js`,
+				process.env.BUILD_FORMAT === 'iife'
+					? `cashu-ts.${format}.js`
+					: `${entryName}.${format === 'es' ? 'es.js' : 'cjs'}`,
 		},
 		rollupOptions: {
-			external: (id) =>
-				Object.keys(require('./package.json').dependencies || {}).some(
-					(dep) => id === dep || id.startsWith(`${dep}/`),
-				),
+			external:
+				process.env.BUILD_FORMAT === 'iife'
+					? []
+					: (id) =>
+							Object.keys(require('./package.json').dependencies || {}).some(
+								(dep) => id === dep || id.startsWith(`${dep}/`),
+							),
 		},
 		sourcemap: true,
 	},
@@ -57,12 +62,17 @@ export default defineConfig({
 					exclude: [
 						'test/{auth,integration}.test.ts',
 						'test/**.browser.test.ts',
+						'test/consumer-*/**/*.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
-						exclude: ['test/{auth,integration}.test.ts', 'test/**.browser.test.ts'],
+						exclude: [
+							'test/{auth,integration}.test.ts',
+							'test/consumer-*/**/*.test.ts',
+							'test/**.browser.test.ts',
+						],
 					},
 				},
 			},
@@ -79,13 +89,18 @@ export default defineConfig({
 					include: ['test/**/*.test.ts'],
 					exclude: [
 						'test/{auth,integration}.test.ts',
+						'test/consumer-*/**/*.test.ts',
 						'test/**.node.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
-						exclude: ['test/{auth,integration}.test.ts', 'test/**.node.test.ts'],
+						exclude: [
+							'test/{auth,integration}.test.ts',
+							'test/consumer-*/**/*.test.ts',
+							'test/**.node.test.ts',
+						],
 					},
 				},
 			},
