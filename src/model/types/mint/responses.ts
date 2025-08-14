@@ -161,7 +161,10 @@ export type PartialMeltQuoteResponse = {
 
 export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
 
-// TODO: is it okay we don't have partial response for bolt12? Any mint implementing BOLT12 should have already added request and unit to the response
+/**
+ * Response from the mint after requesting a BOLT12 melt quote. Contains payment details and state
+ * for paying Lightning Network offers.
+ */
 export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
 
 export const MeltQuoteState = {
@@ -221,14 +224,43 @@ export type MintQuoteResponse = PartialMintQuoteResponse & { amount: number; uni
 
 export type LockedMintQuoteResponse = MintQuoteResponse & { pubkey: string };
 
+/**
+ * Response from the mint after requesting a BOLT12 mint quote. Contains a Lightning Network offer
+ * and tracks payment/issuance amounts.
+ */
 export type Bolt12MintQuoteResponse = {
+	/**
+	 * Quote identifier.
+	 */
 	quote: string;
+	/**
+	 * BOLT12 offer that can be paid to mint tokens.
+	 */
 	request: string;
+	/**
+	 * Requested amount. This is null for amount-less offers.
+	 */
 	amount: number | null;
+	/**
+	 * Unit of the amount.
+	 */
 	unit: string;
+	/**
+	 * Unix timestamp when quote expires.
+	 */
 	expiry: number | null;
+	/**
+	 * Public key that locked this quote.
+	 */
 	pubkey: string;
+	/**
+	 * The amount that has been paid to the mint via the bolt12 offer. The difference between this and
+	 * `amount_issued` can be minted.
+	 */
 	amount_paid: number;
+	/**
+	 * The amount of ecash that has been issued for the given mint quote.
+	 */
 	amount_issued: number;
 };
 
@@ -287,6 +319,9 @@ export type SwapMethod = {
 	unit: string;
 	min_amount: number;
 	max_amount: number;
+	options?: {
+		description?: boolean;
+	};
 };
 
 /**

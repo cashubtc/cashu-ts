@@ -946,7 +946,7 @@ class CashuWallet {
 	}
 
 	/**
-	 * Requests a mint quote form the mint. Response returns a Lightning payment request for the
+	 * Requests a mint quote from the mint. Response returns a Lightning payment request for the
 	 * requested given amount and unit.
 	 *
 	 * @param amount Amount requesting for mint.
@@ -998,17 +998,37 @@ class CashuWallet {
 		}
 	}
 
+	/**
+	 * Requests a mint quote from the mint. Response returns a Lightning BOLT12 offer for the
+	 * requested given amount and unit.
+	 *
+	 * @param pubkey Public key to lock the quote to.
+	 * @param options.amount BOLT12 offer amount requesting for mint. If not specified, the offer will
+	 *   be amountless.
+	 * @param options.description Description for the mint quote.
+	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
+	 *   specified amount and unit.
+	 */
 	async createMintQuoteBolt12(
-		amount: number,
 		pubkey: string,
-		description?: string,
+		options?: {
+			amount?: number;
+			description?: string;
+		},
 	): Promise<Bolt12MintQuoteResponse> {
+		// Check if mint supports description for bolt12
+		const mintInfo = await this.lazyGetMintInfo();
+		if (options?.description && !mintInfo.supportsBolt12Description) {
+			throw new Error('Mint does not support description for bolt12');
+		}
+
 		const mintQuotePayload: Bolt12MintQuotePayload = {
-			unit: this._unit,
-			amount: amount,
 			pubkey: pubkey,
-			description: description,
+			unit: this._unit,
+			amount: options?.amount,
+			description: options?.description,
 		};
+
 		return this.mint.createMintQuoteBolt12(mintQuotePayload);
 	}
 
@@ -1031,6 +1051,12 @@ class CashuWallet {
 		return { ...baseRes, amount: baseRes.amount || quote.amount, unit: baseRes.unit || quote.unit };
 	}
 
+	/**
+	 * Gets an existing BOLT12 mint quote from the mint.
+	 *
+	 * @param quote Quote ID.
+	 * @returns The latest mint quote for the given quote ID.
+	 */
 	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
 		return this.mint.checkMintQuoteBolt12(quote);
 	}
@@ -1060,12 +1086,24 @@ class CashuWallet {
 		return this._mintProofs('bolt11', amount, quote, options);
 	}
 
+	/**
+	 * Mint proofs for a given mint quote.
+	 *
+	 * @param amount Amount to request. This must be less than or equal to the `quote.amountPaid -
+	 *   quote.amountIssued`
+	 * @param {string} quote - ID of mint quote.
+	 * @param {string} privateKey - Private key to unlock the quote.
+	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof
+	 *   operation.
+	 * @returns Proofs.
+	 */
 	async mintProofsBolt12(
 		amount: number,
 		quote: Bolt12MintQuoteResponse,
-		options: MintProofOptions & { privateKey: string },
+		privateKey: string,
+		options?: MintProofOptions,
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt12', amount, quote, options);
+		return this._mintProofs('bolt12', amount, quote, { ...options, privateKey });
 	}
 
 	/**
@@ -1089,6 +1127,16 @@ class CashuWallet {
 		};
 	}
 
+	/**
+	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
+	 * to pay a BOLT12 offer.
+	 *
+	 * @param offer BOLT12 offer that needs to get a fee estimate.
+	 * @param amountMsat Amount in millisatoshis for amount-less offers. If this is defined and the
+	 *   offer has an amount, they **MUST** be equal.
+	 * @returns The mint will create and return a melt quote for the offer with an amount and fee
+	 *   reserve.
+	 */
 	async createMeltQuoteBolt12(
 		offer: string,
 		amountMsat?: number,
@@ -1181,6 +1229,16 @@ class CashuWallet {
 		return this._meltProofs('bolt11', meltQuote, proofsToSend, options);
 	}
 
+	/**
+	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt
+	 * quote. This function does not perform coin selection!. Returns melt quote and change proofs.
+	 *
+	 * @param meltQuote ID of the melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof
+	 *   operation.
+	 * @returns
+	 */
 	async meltProofsBolt12(
 		meltQuote: Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
@@ -1577,6 +1635,15 @@ class CashuWallet {
 		);
 	}
 
+	/**
+	 * Mints proofs for a given mint quote created with the bolt11 or bolt12 method.
+	 *
+	 * @param method Payment method of the quote.
+	 * @param amount Amount to mint.
+	 * @param quote The bolt11 or bolt12 mint quote.
+	 * @param options Optional parameters for configuring the Mint Proof operation.
+	 * @returns Proofs.
+	 */
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		amount: number,
@@ -1644,19 +1711,21 @@ class CashuWallet {
 		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
 	}
 
+	/**
+	 * Melt proofs for a given melt quote created with the bolt11 or bolt12 method.
+	 *
+	 * @param method Payment method of the quote.
+	 * @param meltQuote The bolt11 or bolt12 melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param options Optional parameters for configuring the Melting Proof operation.
+	 * @returns Melt quote and change proofs.
+	 */
 	private async _meltProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
 		options?: MeltProofOptions,
-	): Promise<
-		T extends 'bolt11'
-			? MeltProofsResponse
-			: {
-					quote: Bolt12MeltQuoteResponse;
-					change: Proof[];
-				}
-	> {
+	): Promise<MeltProofsResponse> {
 		const { keysetId, counter, privkey } = options || {};
 		const keys = await this.getKeys(keysetId);
 		const outputData = this.createBlankOutputs(
