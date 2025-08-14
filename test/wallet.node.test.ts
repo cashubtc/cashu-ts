@@ -12,7 +12,7 @@ import {
 	MintQuoteState,
 	Proof,
 } from '../src/model/types/index';
-import { bytesToNumber, getDecodedToken, sumProofs } from '../src/utils';
+import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
 import { MintInfo } from '../src/model/MintInfo';
@@ -31,9 +31,17 @@ const dummyKeysResp = {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
 			},
+			expiry: 1754296607,
 		},
 	],
 };
+const dummyKeysId = deriveKeysetId(
+	dummyKeysResp.keysets[0].keys,
+	dummyKeysResp.keysets[0].unit,
+	1754296607,
+	1,
+);
+console.log(`dummyKeysId = ${dummyKeysId}`);
 const dummyKeysetResp = {
 	keysets: [
 		{
@@ -174,7 +182,7 @@ describe('test fees', () => {
 
 describe('receive', () => {
 	const tokenInput =
-		'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwYmQwMzM1NTlkZTI3ZDAiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICIwMWY5MTA2ZDE1YzAxYjk0MGM5OGVhN2U5NjhhMDZlM2FmNjk2MThlZGI4YmU4ZTUxYjUxMmQwOGU5MDc5MjE2IiwgIkMiOiAiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19=';
+		'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwYmQwMzM1NTlkZTI3ZDAiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICIwMWY5MTA2ZDE1YzAxYjk0MGM5OGVhN2U5NjhhMDZlM2FmNjk2MThlZGI4YmU4ZTUxYjUxMmQwOGU5MDc5MjE2IiwgIkMiOiAiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19';
 	test('test receive encoded token', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
@@ -796,22 +804,61 @@ describe('deterministic', () => {
 			'c756ae91cf316eaa4b845edcca35f04ee9d1732c10e7205b0ef30123bcbbc1b8',
 			'6d1e1424bc2c84df6a5ee6295683e152e002891c3c142513eee41d8f3307e8f0',
 		],
-	])('deterministic OutputData: counter %i -> secret: %s, r: %s', async (counter, secret, r) => {
-		const hexSeed =
-			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
+	])(
+		'deterministic OutputData -- Legacy Derivation: counter %i -> secret: %s, r: %s',
+		async (counter, secret, r) => {
+			const hexSeed =
+				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-		const numberR = bytesToNumber(hexToBytes(r));
-		const decoder = new TextDecoder();
+			const numberR = bytesToNumber(hexToBytes(r));
+			const decoder = new TextDecoder();
 
-		const data = OutputData.createSingleDeterministicData(
+			const data = OutputData.createSingleDeterministicData(
+				0,
+				hexToBytes(hexSeed),
+				counter,
+				'00bd033559de27d0',
+			);
+			expect(decoder.decode(data.secret)).toBe(secret);
+			expect(data.blindingFactor).toBe(numberR);
+		},
+	);
+
+	test.each([
+		[
 			0,
-			hexToBytes(hexSeed),
-			counter,
-			'00bd033559de27d0',
-		);
-		expect(decoder.decode(data.secret)).toBe(secret);
-		expect(data.blindingFactor).toBe(numberR);
-	});
+			'7614f34ff4ab0e9faa2e8c0a9ef4d50be8516c38349f33f9ee6ddb0305cb5296',
+			'6814cff964b8eea6515c7cfc055801ee882a136c269fb6d68775da853625c278',
+		],
+		[
+			1,
+			'6da184e4f071826922a89f9212f685109484275d385576338225229f0358e538',
+			'44f95897b18ef106afa62b85c047c785eeddb7b66121f96c26addc47e9758e90',
+		],
+		[
+			2,
+			'8ffe423197f49c3392605918267a31d1a604346b0c306ac18d90b7e6fdc098a5',
+			'159142a3dcb9da743454ff5a13f9992375104e8d46b2359099683039930f3bc9',
+		],
+	])(
+		'deterministic OutputData -- New Derivation: counter %i -> secret: %s, r: %s',
+		async (counter, secret, r) => {
+			const hexSeed =
+				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
+
+			const numberR = bytesToNumber(hexToBytes(r));
+			const decoder = new TextDecoder();
+
+			const data = OutputData.createSingleDeterministicData(
+				0,
+				hexToBytes(hexSeed),
+				counter,
+				'012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30',
+			);
+			expect(decoder.decode(data.secret)).toBe(secret);
+			expect(data.blindingFactor).toBe(numberR);
+		},
+	);
 });
 
 describe('WebSocket Updates', () => {
