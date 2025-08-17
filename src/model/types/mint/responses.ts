@@ -317,9 +317,24 @@ export type BlindAuthMintResponse = {
  * Response to a get spent filter request.
  */
 export type GetFilterResponse = {
+	/**
+	 * Number of items in the filter
+	 */
 	n: number;
+	/**
+	 * Bitlength of the remainder (Golomb-Rice encoding)
+	 */
 	p?: number;
+	/**
+	 * Inverse FPR (False Positive Rate)
+	 */
 	m?: number;
+	/**
+	 * Data of the filter
+	 */
 	content: string;
+	/**
+	 * Time at which this filter was computed
+	 */
 	timestamp: number;
 } & ApiError;
