@@ -32,7 +32,7 @@ import type {
 	LockedMintQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse,
-	SerializedBlindedMessage
+	SerializedBlindedMessage,
 } from './model/types/index';
 import { MintQuoteState, MeltQuoteState } from './model/types/index';
 import { type SubscriptionCanceller } from './model/types/wallet/websocket';
@@ -878,6 +878,7 @@ class CashuWallet {
 		let emptyBatchesFound = 0;
 
 		if (!keysetId) {
+			await this.getKeys();
 			keysetId = this.keysetId;
 		}
 
@@ -1370,11 +1371,11 @@ class CashuWallet {
 	}
 
 	/**
-	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's).
-	 * This method checks if the proofs are spent using the mint's API.
+	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's). This
+	 * method checks if the proofs are spent using the mint's API.
 	 *
 	 * @param proofs (only the `secret` field is required)
-	 * @returns Array of proof states
+	 * @returns Array of proof states.
 	 */
 	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
 		const enc = new TextEncoder();
@@ -1403,19 +1404,17 @@ class CashuWallet {
 	}
 
 	/**
-	 * Check proof states using the keyset's spent filter (NUT-25).
-	 * This method is more efficient than checkProofsStates when dealing with many proofs
-	 * from the same keyset, as it uses Golomb-Coded Set filter to identify spent proofs.
+	 * Check proof states using the keyset's spent filter (NUT-25). This method is more efficient than
+	 * checkProofsStates when dealing with many proofs from the same keyset, as it uses Golomb-Coded
+	 * Set filter to identify spent proofs.
 	 *
 	 * @param proofs Array of proofs to check (all proofs must be from the same keyset)
 	 * @param keysetId Optional keyset ID. If not provided, infers from the proofs.
-	 * @returns Array of proof states. Any proof not appearing in the spent filter is marked as UNSPENT.
-	 * @throws Error if proofs are from different keysets or if keyset ID is invalid
+	 * @returns Array of proof states. Any proof not appearing in the spent filter is marked as
+	 *   UNSPENT.
+	 * @throws Error if proofs are from different keysets or if keyset ID is invalid.
 	 */
-	async checkProofStateWithFilter(
-		proofs: Proof[],
-		keysetId?: string
-	): Promise<ProofState[]> {
+	async checkProofStateWithFilter(proofs: Proof[], keysetId?: string): Promise<ProofState[]> {
 		if (proofs.length === 0) {
 			return [];
 		}
@@ -1457,7 +1456,7 @@ class CashuWallet {
 			return {
 				Y,
 				state: matchResults[i] ? 'SPENT' : 'UNSPENT',
-				witness: null
+				witness: null,
 			};
 		});
 	}
@@ -1601,8 +1600,9 @@ class CashuWallet {
 	}
 
 	/**
-	 * Get the spent ecash filter for a specific keyset
-	 * @param The keyset ID
+	 * Get the spent ecash filter for a specific keyset.
+	 *
+	 * @param The Keyset ID.
 	 * @returns `GCSFilter`
 	 */
 	async getSpentFilter(keysetId: string): Promise<GCSFilter> {
@@ -1611,13 +1611,14 @@ class CashuWallet {
 			Buffer.from(response.content, 'base64'),
 			response.n,
 			response.m,
-			response.p
+			response.p,
 		);
 	}
 
 	/**
-	 * Get the issued blind messages filter for a specific keyset
-	 * @param The keyset ID
+	 * Get the issued blind messages filter for a specific keyset.
+	 *
+	 * @param The Keyset ID.
 	 * @returns `GCSFilter`
 	 */
 	async getIssuedFilter(keysetId: string): Promise<GCSFilter> {
@@ -1626,19 +1627,23 @@ class CashuWallet {
 			Buffer.from(response.content, 'base64'),
 			response.n,
 			response.m,
-			response.p
+			response.p,
 		);
 	}
 
 	/**
-	 * Creates blinded messages for a according to @param amounts
-	 * @param amount array of amounts to create blinded messages for
-	 * @param counter? optionally set counter to derive secret deterministically. CashuWallet class must be initialized with seed phrase to take effect
-	 * @param pubkey? optionally locks ecash to pubkey. Will not be deterministic, even if counter is set!
-	 * @param outputAmounts? optionally specify the output's amounts to keep and to send.
-	 * @param p2pk? optionally specify options to lock the proofs according to NUT-11
-	 * @param factory? optionally specify a custom function that produces OutputData (blinded messages)
-	 * @returns blinded messages, secrets, rs, and amounts
+	 * Creates blinded messages for a according to @param amounts.
+	 *
+	 * @param amount Array of amounts to create blinded messages for.
+	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
+	 *   must be initialized with seed phrase to take effect.
+	 * @param pubkey? Optionally locks ecash to pubkey. Will not be deterministic, even if counter is
+	 *   set!
+	 * @param outputAmounts? Optionally specify the output's amounts to keep and to send.
+	 * @param p2pk? Optionally specify options to lock the proofs according to NUT-11.
+	 * @param factory? Optionally specify a custom function that produces OutputData (blinded
+	 *   messages)
+	 * @returns Blinded messages, secrets, rs, and amounts.
 	 */
 	private createOutputData(
 		amount: number,

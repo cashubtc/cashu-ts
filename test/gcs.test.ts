@@ -17,7 +17,7 @@ describe('GCSFilter', () => {
 		'59b759ecda3c4d9027b9fe549fe6ae33b1bf573b9e9c2d0cdf17d20ea38794f1b7',
 		'cfcc8745503e9efb67e48b0bee006f6433dec534130707ac23ed4eae911d60eec2',
 		'f1d57d98f80e528af885e6174f7cd0ef39c31f8436c66b8f27c848a3497c9a7dfb',
-		'5a21aa11ccd643042f3fe3f0fcc02ccfb51c72419c5eab64a3565aa8499aa64cdf'
+		'5a21aa11ccd643042f3fe3f0fcc02ccfb51c72419c5eab64a3565aa8499aa64cdf',
 	].map((hex) => Buffer.from(hex, 'hex'));
 
 	const expectedFilterBase64 = '7sdQJ7OweaujLCqS7KDHzu/3pySZrDsatjQA';
@@ -47,7 +47,7 @@ describe('GCSFilter', () => {
 			'd4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6',
 			'00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff00',
 			'ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100ffee',
-			'1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c'
+			'1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c',
 		].map((hex) => Buffer.from(hex, 'hex'));
 
 		const filter = new GCSFilter(expectedFilterBuffer, itemsToEncode.length, m, p);
@@ -66,7 +66,7 @@ describe('GCSFilter', () => {
 		const filter = new GCSFilter(expectedFilterBuffer, itemsToEncode.length, m, p);
 		const duplicateTargets = [itemsToEncode[0], itemsToEncode[0]];
 		expect(() => filter.matchMany(duplicateTargets)).toThrow(
-			'GCS Error: match targets are not unique entries'
+			'GCS Error: match targets are not unique entries',
 		);
 	});
 });

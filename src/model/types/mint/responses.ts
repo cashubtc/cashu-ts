@@ -314,7 +314,7 @@ export type BlindAuthMintResponse = {
 } & ApiError;
 
 /**
- * Response to a get spent filter request
+ * Response to a get spent filter request.
  */
 export type GetFilterResponse = {
 	n: number;

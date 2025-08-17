@@ -1,4 +1,5 @@
 import * as mmh from 'murmurhash';
+import { Buffer } from 'buffer';
 
 class BitArray {
 	private buffer: Uint8Array;
@@ -53,7 +54,7 @@ export function hashToRange(item: Buffer, f: bigint): bigint {
 	return (f * h) >> 64n;
 }
 
-function createHashedSet(items: Array<Buffer>, m: number): Array<bigint> {
+function createHashedSet(items: Buffer[], m: number): bigint[] {
 	const n = items.length;
 	const f = n * m;
 
@@ -117,7 +118,7 @@ export class GCSFilter {
 		this.content = content;
 	}
 
-	static create(items: Array<Buffer>, p = 19, m = 784931): GCSFilter {
+	static create(items: Buffer[], p = 19, m = 784931): GCSFilter {
 		if (m > 2 ** 32) {
 			throw new Error('GCS Error: m parameter must be smaller than 2^32');
 		}
@@ -145,17 +146,17 @@ export class GCSFilter {
 			outputStream.toBuffer(), // Pads to the right with zero up to the byte boundary
 			sortedSetItems.length,
 			m,
-			p
+			p,
 		);
 	}
 
-	matchMany(targets: Array<Buffer>): Array<boolean> {
+	matchMany(targets: Buffer[]): boolean[] {
 		const f = BigInt(this.numItems) * BigInt(this.invFpr);
-		const result: Array<boolean> = new Array(targets.length);
+		const result = new Array(targets.length);
 		result.fill(false);
 
 		if (f === 0n) {
-			return result;
+			return result as boolean[];
 		}
 
 		if (new Set(targets).size !== targets.length) {
@@ -186,6 +187,6 @@ export class GCSFilter {
 			}
 		}
 
-		return result;
+		return result as boolean[];
 	}
 }

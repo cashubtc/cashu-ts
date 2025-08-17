@@ -681,7 +681,7 @@ describe('NUT-25 Proof State Filter', () => {
 			const meltQuote = await wallet.createMeltQuote(externalInvoice);
 
 			const { send: proofsToMelt, keep: proofsToKeep } = await wallet.send(2500, proofs, {
-				includeFees: true
+				includeFees: true,
 			});
 
 			await wallet.meltProofs(meltQuote, proofsToMelt);
@@ -705,7 +705,7 @@ describe('NUT-25 Proof State Filter', () => {
 				expect(state.witness).toBeNull();
 			});
 		},
-		{ timeout: 10000 }
+		{ timeout: 10000 },
 	);
 });
 
@@ -730,6 +730,6 @@ describe('Wallet Restore', () => {
 			expect(sumProofs(restoredProofs)).toBe(70);
 			expect(lastCounterWithSignature).toBe(7);
 		},
-		{ timeout: 10000 }
+		{ timeout: 10000 },
 	);
 });
