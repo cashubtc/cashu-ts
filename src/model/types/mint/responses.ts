@@ -318,7 +318,7 @@ export type BlindAuthMintResponse = {
  */
 export type GetFilterResponse = {
 	/**
-	 * Number of items in the filter
+	 * Number of items in the filter.
 	 */
 	n: number;
 	/**
@@ -330,11 +330,11 @@ export type GetFilterResponse = {
 	 */
 	m?: number;
 	/**
-	 * Data of the filter
+	 * Data of the filter.
 	 */
 	content: string;
 	/**
-	 * Time at which this filter was computed
+	 * Time at which this filter was computed.
 	 */
 	timestamp: number;
 } & ApiError;

@@ -6,6 +6,7 @@ import { CashuMint } from '../src/CashuMint';
 import { CashuWallet } from '../src/CashuWallet';
 import {
 	CheckStateEnum,
+	GetFilterResponse,
 	MeltQuoteResponse,
 	MeltQuoteState,
 	MintQuoteResponse,
@@ -1255,6 +1256,26 @@ describe('Restoring deterministic proofs', () => {
 		expect(mockRestore).toHaveBeenCalledTimes(3);
 		expect(lastCounterWithSignature).toBe(41);
 		mockRestore.mockClear();
+	});
+	test('Batch restore with Compact Nut Filters support', async () => {
+		const wallet = new CashuWallet(mint);
+		const mintInfo = JSON.parse(
+			'{"name":"Cashu mint","pubkey":"023ef9a3cda9945d5e784e478d3bd0c8d39726bcb3ca11098fe685a95d3f889d28","version":"Nutshell/0.16.4","contact":[],"time":1737973290,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"20":{"supported":true},"15":{"methods":[{"method":"bolt11","unit":"sat"}]},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]},"25":{"supported":true}}}',
+		);
+		server.use(
+			http.get(mintUrl + '/v1/filter/issued/00bd033559de27d0', () => {
+				return HttpResponse.json({
+					n: 10,
+					p: 19,
+					m: 784931,
+					content: '7sdQJ7OweaujLCqS7KDHzu/3pySZrDsatjQA',
+					timestamp: 1755469709,
+				} as GetFilterResponse);
+			}),
+			http.get(mintUrl + '/v1/info', () => {
+				return mintInfo;
+			}),
+		);
 	});
 });
 
