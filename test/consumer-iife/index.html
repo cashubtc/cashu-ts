@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+	<head>
+		<title>IIFE Test</title>
+	</head>
+	<body>
+		<script src="../../lib/cashu-ts.iife.js"></script>
+		<!-- Adjust path -->
+		<script>
+			const { CashuWallet, CashuMint } = window.cashuts; // Your global name
+			const mint = new CashuMint('http://localhost:3338');
+			const wallet = new CashuWallet(mint);
+			console.log(wallet);
+		</script>
+	</body>
+</html>

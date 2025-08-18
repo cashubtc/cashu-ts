@@ -128,4 +128,15 @@ export class MintInfo {
 	get motd() {
 		return this._mintInfo.motd;
 	}
+
+	/**
+	 * Checks if the mint supports creating BOLT12 offers with a description.
+	 *
+	 * @returns True if the mint supports offers with a description, false otherwise.
+	 */
+	get supportsBolt12Description() {
+		return this._mintInfo.nuts[4]?.methods.some(
+			(method) => method.method === 'bolt12' && method.options?.description === true,
+		);
+	}
 }

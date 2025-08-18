@@ -38,10 +38,16 @@ export type MeltQuotePayload = {
 };
 
 /**
+ * Payload for requesting a BOLT12 melt quote. Used to pay Lightning Network offers.
+ */
+export type Bolt12MeltQuotePayload = MeltQuotePayload;
+
+/**
  * Melt quote specific options.
  */
 export type MeltQuoteOptions = {
-	mpp: MPPOption;
+	mpp?: MPPOption;
+	amountless?: AmountlessOption;
 };
 
 /**
@@ -49,6 +55,13 @@ export type MeltQuoteOptions = {
  */
 export type MPPOption = {
 	amount: number;
+};
+
+/**
+ * Amountless option.
+ */
+export type AmountlessOption = {
+	amount_msat: number;
 };
 
 /**
@@ -89,6 +102,19 @@ export type MintQuotePayload = {
 	 * Public key to lock the quote to.
 	 */
 	pubkey?: string;
+};
+/**
+ * Payload for requesting a BOLT12 mint quote.
+ */
+export type Bolt12MintQuotePayload = Omit<MintQuotePayload, 'amount'> & {
+	/**
+	 * Optional amount for the offer. If not specified, then the offer must have an amount.
+	 */
+	amount?: number;
+	/**
+	 * Public key required to lock the quote.
+	 */
+	pubkey: string;
 };
 
 /**
