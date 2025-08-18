@@ -4,8 +4,10 @@
 
 ```ts
 
+import { Buffer as Buffer_2 } from 'buffer';
 import { CashuAuthMint } from './auth.js';
 import { CashuAuthWallet } from './auth.js';
+import { GCSFilter as GCSFilter_2 } from './gcs.js.js';
 import { getBlindedAuthToken } from './auth.js';
 import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
@@ -132,12 +134,11 @@ export class CashuWallet {
     getAllKeys(): Promise<MintKeys[]>;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
-    getIssuedFilter(keysetId: string): Promise<GCSFilter>;
+    getIssuedFilter(keysetId: string): Promise<GCSFilter_2>;
     getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
     getKeySets(): Promise<MintKeyset[]>;
     getMintInfo(): Promise<MintInfo>;
-    // Warning: (ae-forgotten-export) The symbol "GCSFilter" needs to be exported by the entry point index.d.ts
-    getSpentFilter(keysetId: string): Promise<GCSFilter>;
+    getSpentFilter(keysetId: string): Promise<GCSFilter_2>;
     // (undocumented)
     get keys(): Map<string, MintKeys>;
     // (undocumented)
@@ -986,10 +987,11 @@ export type WebSocketSupport = {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/CashuWallet.d.ts:41:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:150:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:190:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:218:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/CashuWallet.d.ts:42:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:129:5 - (ae-forgotten-export) The symbol "GCSFilter" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:153:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:193:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:221:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
