@@ -18,6 +18,9 @@ import type {
 	MeltQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse,
+	Bolt12MintQuotePayload,
+	Bolt12MintQuoteResponse,
+	Bolt12MeltQuoteResponse,
 } from './model/types/index';
 import { MeltQuoteState } from './model/types/index';
 import request, { setRequestLogger } from './request';
@@ -33,6 +36,7 @@ import {
 import { handleMintInfoContactFieldDeprecated } from './legacy/nut-06';
 import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER } from './logger';
+
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented
  * by CashuWallet.
@@ -197,6 +201,52 @@ class CashuMint {
 	}
 
 	/**
+	 * Requests a new BOLT12 mint quote from the mint using Lightning Network offers.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param mintQuotePayload Payload containing amount, unit, optional description, and required
+	 *   pubkey.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns A mint quote containing a BOLT12 offer.
+	 */
+	public static async createMintQuoteBolt12(
+		mintUrl: string,
+		mintQuotePayload: Bolt12MintQuotePayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt12'),
+			method: 'POST',
+			requestBody: mintQuotePayload,
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Requests a new BOLT12 mint quote from the mint using Lightning Network offers.
+	 *
+	 * @param mintQuotePayload Payload containing amount, unit, optional description, and required
+	 *   pubkey.
+	 * @returns A mint quote containing a BOLT12 offer.
+	 */
+	async createMintQuoteBolt12(
+		mintQuotePayload: Bolt12MintQuotePayload,
+	): Promise<Bolt12MintQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt12');
+		return CashuMint.createMintQuoteBolt12(
+			this._mintUrl,
+			mintQuotePayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
 	 * Gets an existing mint quote from the mint.
 	 *
 	 * @param mintUrl
@@ -234,6 +284,47 @@ class CashuMint {
 	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt11/${quote}`);
 		return CashuMint.checkMintQuote(this._mintUrl, quote, this._customRequest, blindAuthToken);
+	}
+
+	/**
+	 * Gets an existing BOLT12 mint quote from the mint.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param quote Quote ID to check.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Updated quote with current payment and issuance amounts.
+	 */
+	public static async checkMintQuoteBolt12(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/bolt12', quote),
+			method: 'GET',
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Gets an existing BOLT12 mint quote from the mint.
+	 *
+	 * @param quote Quote ID to check.
+	 * @returns Updated quote with current payment and issuance amounts.
+	 */
+	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt12/${quote}`);
+		return CashuMint.checkMintQuoteBolt12(
+			this._mintUrl,
+			quote,
+			this._customRequest,
+			blindAuthToken,
+		);
 	}
 
 	/**
@@ -277,6 +368,48 @@ class CashuMint {
 	}
 
 	/**
+	 * Mints new tokens using a BOLT12 quote by requesting blind signatures on the provided outputs.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Serialized blinded signatures for the requested outputs.
+	 */
+	public static async mintBolt12(
+		mintUrl: string,
+		mintPayload: MintPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<MintResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const data = await requestInstance<MintResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/bolt12'),
+			method: 'POST',
+			requestBody: mintPayload,
+			headers,
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	/**
+	 * Mints new tokens using a BOLT12 quote by requesting blind signatures on the provided outputs.
+	 *
+	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
+	 * @returns Serialized blinded signatures for the requested outputs.
+	 */
+	async mintBolt12(mintPayload: MintPayload): Promise<MintResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt12');
+		return CashuMint.mintBolt12(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
+	}
+
+	/**
 	 * Requests a new melt quote from the mint.
 	 *
 	 * @param mintUrl
@@ -314,6 +447,7 @@ class CashuMint {
 		}
 		return data;
 	}
+
 	/**
 	 * Requests a new melt quote from the mint.
 	 *
@@ -323,6 +457,52 @@ class CashuMint {
 	async createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt11');
 		return CashuMint.createMeltQuote(
+			this._mintUrl,
+			meltQuotePayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
+	 * Requests a new BOLT12 melt quote from the mint for paying a Lightning Network offer. For
+	 * amount-less offers, specify the amount in options.amountless.amount_msat.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param meltQuotePayload Payload containing the BOLT12 offer to pay and unit.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Melt quote with amount, fee reserve, and payment state.
+	 */
+	public static async createMeltQuoteBolt12(
+		mintUrl: string,
+		meltQuotePayload: MeltQuotePayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt12'),
+			method: 'POST',
+			requestBody: meltQuotePayload,
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Requests a new BOLT12 melt quote from the mint for paying a Lightning Network offer. For
+	 * amount-less offers, specify the amount in options.amountless.amount_msat.
+	 *
+	 * @param meltQuotePayload Payload containing the BOLT12 offer to pay and unit.
+	 * @returns Melt quote with amount, fee reserve, and payment state.
+	 */
+	async createMeltQuoteBolt12(
+		meltQuotePayload: MeltQuotePayload,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt12');
+		return CashuMint.createMeltQuoteBolt12(
 			this._mintUrl,
 			meltQuotePayload,
 			this._customRequest,
@@ -380,6 +560,49 @@ class CashuMint {
 	}
 
 	/**
+	 * Gets an existing BOLT12 melt quote from the mint. Returns current payment state (UNPAID,
+	 * PENDING, or PAID) and payment preimage if paid.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param quote Quote ID to check.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Updated quote with current payment state and preimage if available.
+	 */
+	public static async checkMeltQuoteBolt12(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/bolt12', quote),
+			method: 'GET',
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Gets an existing BOLT12 melt quote from the mint. Returns current payment state (UNPAID,
+	 * PENDING, or PAID) and payment preimage if paid.
+	 *
+	 * @param quote Quote ID to check.
+	 * @returns Updated quote with current payment state and preimage if available.
+	 */
+	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt12/${quote}`);
+		return CashuMint.checkMeltQuoteBolt12(
+			this._mintUrl,
+			quote,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
 	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
 	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
 	 * also contain blank outputs in order to receive back overpaid Lightning fees.
@@ -429,6 +652,48 @@ class CashuMint {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt11');
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
+
+	/**
+	 * Requests the mint to pay a BOLT12 offer by providing ecash inputs to be spent. The inputs must
+	 * cover the amount plus fee reserves. Optional outputs can be included to receive change for
+	 * overpaid Lightning fees.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	public static async meltBolt12(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const data = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/bolt12'),
+			method: 'POST',
+			requestBody: meltPayload,
+			headers,
+		});
+		return data;
+	}
+
+	/**
+	 * Requests the mint to pay a BOLT12 offer by providing ecash inputs to be spent. The inputs must
+	 * cover the amount plus fee reserves. Optional outputs can be included to receive change for
+	 * overpaid Lightning fees.
+	 *
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	async meltBolt12(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt12');
+		return CashuMint.meltBolt12(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
+	}
+
 	/**
 	 * Checks if specific proofs have already been redeemed.
 	 *
