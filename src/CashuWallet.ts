@@ -979,7 +979,7 @@ class CashuWallet {
 		pubkey: string,
 		description?: string,
 	): Promise<LockedMintQuoteResponse> {
-		const { supported } = (await this.getMintInfo()).isSupported(20);
+		const { supported } = (await this.lazyGetMintInfo()).isSupported(20);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-20');
 		}
