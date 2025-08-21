@@ -188,9 +188,7 @@ class CashuWallet {
 	 * in the constructor.
 	 */
 	async loadMint() {
-		await this.getMintInfo();
-		await this.getKeySets();
-		await this.getKeys();
+		await Promise.all([this.getMintInfo(), this.getKeySets(), this.getKeys()]);
 	}
 
 	/**
