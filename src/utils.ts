@@ -400,7 +400,7 @@ export function handleTokens(token: string): Token {
  * @param expiry (optional) expiry of the keyset.
  * @param versionByte (optional) version of the keyset ID. Default is 0.
  * @returns Keyset id of the keys.
- * @throws if keyset versionByte is not valid
+ * @throws If keyset versionByte is not valid.
  */
 export function deriveKeysetId(
 	keys: Keys,
