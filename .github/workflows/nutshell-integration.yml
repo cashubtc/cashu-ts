@@ -1,4 +1,4 @@
-name: Nutshell integration
+name: CDK integration
 
 on: [push, pull_request]
 
@@ -8,14 +8,22 @@ jobs:
     steps:
       - name: Pull and start mint
         run: |
-          docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_INPUT_FEE_PPK=100 -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.4 poetry run mint
+          docker run -d -p 3338:3338 \
+          --name cdk-mint \
+          -e CDK_MINTD_DATABASE=sqlite \
+          -e CDK_MINTD_LN_BACKEND=fakewallet \
+          -e CDK_MINTD_INPUT_FEE_PPK=100 \
+          -e CDK_MINTD_LISTEN_HOST=0.0.0.0 \
+          -e CDK_MINTD_LISTEN_PORT=3338 \
+          -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+          cashubtc/mintd:latest-amd64
       - name: Check running containers
         run: docker ps
 
-      # - name: Sleep 5 seconds and curl on localhost:3338/v1/info
-      #   run: |
-      #     sleep 5
-      #     curl localhost:3338/v1/info
+      - name: Sleep 5 seconds and curl on localhost:3338/v1/info
+        run: |
+          sleep 5
+          curl localhost:3338/v1/info
 
       - name: Checkout cashu-ts repository
         uses: actions/checkout@v4
