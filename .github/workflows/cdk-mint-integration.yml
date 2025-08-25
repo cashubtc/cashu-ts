@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   integration-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Pull and start mint
         run: |
@@ -15,15 +15,24 @@ jobs:
           -e CDK_MINTD_INPUT_FEE_PPK=100 \
           -e CDK_MINTD_LISTEN_HOST=0.0.0.0 \
           -e CDK_MINTD_LISTEN_PORT=3338 \
+          -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0 \
+          -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0 \
           -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-          cashubtc/mintd:latest-amd64
+          cashubtc/mintd:latest-amd64 \
+
       - name: Check running containers
         run: docker ps
 
-      - name: Sleep 5 seconds and curl on localhost:3338/v1/info
+      - name: Check container logs
+        run: docker logs cdk-mint
+
+      - name: Sleep 10 seconds and curl on localhost:3338/v1/info
         run: |
-          sleep 5
+          sleep 10
           curl localhost:3338/v1/info
+
+      - name: Check container logs again
+        run: docker logs cdk-mint
 
       - name: Checkout cashu-ts repository
         uses: actions/checkout@v4
