@@ -167,6 +167,49 @@ export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; un
  */
 export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
 
+/**
+ * Response from the mint after requesting an on-chain melt quote. Contains payment details and
+ * state for sending Bitcoin to on-chain addresses.
+ */
+export type OnchainMeltQuoteResponse = {
+	/**
+	 * Quote identifier.
+	 */
+	quote: string;
+	/**
+	 * The amount that needs to be provided.
+	 */
+	amount: number;
+	/**
+	 * Payment request.
+	 */
+	request: string;
+	/**
+	 * Unit of the quote.
+	 */
+	unit: string;
+	/**
+	 * The fee reserve that is required.
+	 */
+	fee_reserve: number;
+	/**
+	 * Quote state.
+	 */
+	state: MeltQuoteState;
+	/**
+	 * Unix timestamp when the quote expires.
+	 */
+	expiry: number;
+	/**
+	 * Onchain transaction ID.
+	 */
+	transaction_id?: string;
+	/**
+	 * Change from overpaid fees.
+	 */
+	change?: SerializedBlindedSignature[];
+};
+
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
 	PENDING: 'PENDING',
@@ -265,6 +308,55 @@ export type Bolt12MintQuoteResponse = {
 };
 
 /**
+ * Response from the mint after requesting an on-chain mint quote. Contains a Bitcoin address and
+ * tracks payment/issuance amounts for on-chain Bitcoin transactions.
+ */
+export type OnchainMintQuoteResponse = {
+	/**
+	 * Quote identifier.
+	 */
+	quote: string;
+	/**
+	 * Bitcoin address that can be paid to mint tokens.
+	 */
+	request: string;
+	/**
+	 * Requested amount. This is null for on-chain quotes as amount is determined by payment.
+	 */
+	amount: number | null;
+	/**
+	 * Unit of the amount (e.g., 'sat' for satoshis).
+	 */
+	unit: string;
+	/**
+	 * Unix timestamp when quote expires.
+	 */
+	expiry: number | null;
+	/**
+	 * Public key that locked this quote.
+	 */
+	pubkey: string;
+	/**
+	 * The amount that has been paid to the mint via the Bitcoin address. The difference between this
+	 * and `amount_issued` can be minted.
+	 */
+	amount_paid: number;
+	/**
+	 * The amount of ecash that has been issued for the given mint quote.
+	 */
+	amount_issued: number;
+	/**
+	 * The amount of Bitcoin that has been received but not yet confirmed on-chain.
+	 */
+	amount_unconfirmed: number;
+	/**
+	 * The next block height at which confirmations will be checked. Null if no confirmations are
+	 * pending.
+	 */
+	next_confirmation_height: number | null;
+};
+
+/**
  * Response from the mint after requesting a mint.
  */
 export type MintResponse = {
@@ -319,8 +411,22 @@ export type SwapMethod = {
 	unit: string;
 	min_amount: number;
 	max_amount: number;
+	/**
+	 * Method specific options.
+	 */
 	options?: {
+		/**
+		 * Whether a bolt11 or bolt12 offer can be created with a description when minting.
+		 */
 		description?: boolean;
+		/**
+		 * Whether the mint can pay amountless bolt11 invoices.
+		 */
+		amountless?: boolean;
+		/**
+		 * The number of blocks required for on-chain payments to be considered confirmed.
+		 */
+		confirmations?: number;
 	};
 };
 

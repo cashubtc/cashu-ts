@@ -40,6 +40,7 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md)
 - [x] [NUT-23](https://github.com/cashubtc/nuts/blob/main/23.md)
 - [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md)
+- [x] [NUT_26](https://github.com/cashubtc/nuts/blob/main/26.md)
 
 Supported token formats:
 
@@ -165,6 +166,59 @@ if (availableAmount > 0) {
 		bytesToHex(privateKey),
 	);
 }
+```
+
+### Onchain
+
+The onchain payment method enables minting and melting by making onchain transactions.
+
+#### Minting Onchain
+
+Minting to an onchain addess is similar in nature to minting with bolt12 in that onchain mint quotes are reusable. The difference is that the request is an onchain address and there is no option to provide an amount when creating the mint quote.
+
+> **Note:** The minimum number of blocks (specified by the mint's info) must be mined before a payment is considered confirmed and the `amount_paid` is incremented.
+
+```typescript
+// Create onchain mint quote (generates Bitcoin address for receiving)
+const onchainMintQuote = await wallet.createMintQuoteOnchain(bytesToHex(pubkey));
+
+// Check for received onchain payments
+const unconfirmedQuote = await wallet.checkMintQuoteOnchain(onchainMintQuote.quote);
+
+const amountUnconfirmed = unconfirmedQuote.amount_unconfirmed;
+
+// wait for onchain payment to be confirmed
+const confirmationsRequired = wallet.mintInfo.minimumOnchainConfirmations;
+
+const confirmedQuote = await wallet.checkMintQuoteOnchain(onchainMintQuote.quote);
+
+// Mint proofs from received onchain payments
+const availableToMint = confirmedQuote.amount_paid - confirmedQuote.amount_issued;
+if (availableToMint > 0) {
+	const newProofs = await wallet.mintProofsOnchain(
+		availableToMint,
+		confirmedQuote,
+		bytesToHex(privateKey),
+	);
+}
+```
+
+#### Melting Onchain
+
+Melting to an onchain address is similar to the bolt11 payment method, but the request will be an onchain address and once the quote is paid the payment proof will be in the form of a transaction ID
+
+```typescript
+const bitcoinAddress = 'bc1qexampleaddress123...'; // destination Bitcoin address
+
+const onchainMeltQuote = await wallet.createMeltQuoteOnchain(bitcoinAddress, meltAmount);
+
+// Melt proofs to send Bitcoin onchain
+const { quote, change } = await wallet.meltProofsOnchain(onchainMeltQuote, proofsToMelt);
+
+// Check melt quote status (optional, to verify payment)
+const updatedQuote = await wallet.checkMeltQuoteOnchain(onchainMeltQuote.quote);
+console.log('Payment status:', updatedQuote.state);
+console.log('Transaction ID:', updatedQuote.transaction_id);
 ```
 
 ## Contribute

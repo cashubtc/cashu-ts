@@ -139,4 +139,14 @@ export class MintInfo {
 			(method) => method.method === 'bolt12' && method.options?.description === true,
 		);
 	}
+
+	get minimumOnchainConfirmations() {
+		const onchain = this.isSupported(4);
+
+		if (onchain.disabled) {
+			throw new Error('Onchain minting is not supported by this mint');
+		}
+
+		return onchain.params.find((p) => p.method === 'onchain')?.options?.confirmations || 0;
+	}
 }

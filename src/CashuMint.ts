@@ -21,6 +21,10 @@ import type {
 	Bolt12MintQuotePayload,
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
+	OnchainMintQuoteRequest,
+	OnchainMintQuoteResponse,
+	OnchainMeltQuoteRequest,
+	OnchainMeltQuoteResponse,
 } from './model/types/index';
 import { MeltQuoteState } from './model/types/index';
 import request, { setRequestLogger } from './request';
@@ -247,6 +251,50 @@ class CashuMint {
 	}
 
 	/**
+	 * Requests a new on-chain mint quote from the mint using Bitcoin on-chain payments.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param mintQuotePayload Payload containing unit and required pubkey for the on-chain quote.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns A mint quote containing a Bitcoin address for on-chain payments.
+	 */
+	public static async createMintQuoteOnchain(
+		mintUrl: string,
+		mintQuotePayload: OnchainMintQuoteRequest,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<OnchainMintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<OnchainMintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/onchain'),
+			method: 'POST',
+			requestBody: mintQuotePayload,
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Requests a new on-chain mint quote from the mint using Bitcoin on-chain payments.
+	 *
+	 * @param mintQuotePayload Payload containing unit and required pubkey for the on-chain quote.
+	 * @returns A mint quote containing a Bitcoin address for on-chain payments.
+	 */
+	async createMintQuoteOnchain(
+		mintQuotePayload: OnchainMintQuoteRequest,
+	): Promise<OnchainMintQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/onchain');
+		return CashuMint.createMintQuoteOnchain(
+			this._mintUrl,
+			mintQuotePayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
 	 * Gets an existing mint quote from the mint.
 	 *
 	 * @param mintUrl
@@ -320,6 +368,47 @@ class CashuMint {
 	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt12/${quote}`);
 		return CashuMint.checkMintQuoteBolt12(
+			this._mintUrl,
+			quote,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
+	 * Gets an existing on-chain mint quote from the mint.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param quote Quote ID to check.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Updated on-chain quote with current payment and issuance amounts.
+	 */
+	public static async checkMintQuoteOnchain(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<OnchainMintQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<OnchainMintQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/quote/onchain', quote),
+			method: 'GET',
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Gets an existing on-chain mint quote from the mint.
+	 *
+	 * @param quote Quote ID to check.
+	 * @returns Updated on-chain quote with current payment and issuance amounts.
+	 */
+	async checkMintQuoteOnchain(quote: string): Promise<OnchainMintQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/onchain/${quote}`);
+		return CashuMint.checkMintQuoteOnchain(
 			this._mintUrl,
 			quote,
 			this._customRequest,
@@ -407,6 +496,50 @@ class CashuMint {
 	async mintBolt12(mintPayload: MintPayload): Promise<MintResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt12');
 		return CashuMint.mintBolt12(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
+	}
+
+	/**
+	 * Mints new tokens using an on-chain quote by requesting blind signatures on the provided
+	 * outputs.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Serialized blinded signatures for the requested outputs.
+	 */
+	public static async mintOnchain(
+		mintUrl: string,
+		mintPayload: MintPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<MintResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const data = await requestInstance<MintResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/mint/onchain'),
+			method: 'POST',
+			requestBody: mintPayload,
+			headers,
+		});
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	/**
+	 * Mints new tokens using an on-chain quote by requesting blind signatures on the provided
+	 * outputs.
+	 *
+	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
+	 * @returns Serialized blinded signatures for the requested outputs.
+	 */
+	async mintOnchain(mintPayload: MintPayload): Promise<MintResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/mint/onchain');
+		return CashuMint.mintOnchain(this._mintUrl, mintPayload, this._customRequest, blindAuthToken);
 	}
 
 	/**
@@ -511,6 +644,50 @@ class CashuMint {
 	}
 
 	/**
+	 * Requests a new on-chain melt quote from the mint for sending Bitcoin to an on-chain address.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param meltQuotePayload Payload containing the Bitcoin address to pay and amount.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Melt quote with amount, fee reserve, and payment state for on-chain transaction.
+	 */
+	public static async createMeltQuoteOnchain(
+		mintUrl: string,
+		meltQuotePayload: OnchainMeltQuoteRequest,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<OnchainMeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<OnchainMeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/onchain'),
+			method: 'POST',
+			requestBody: meltQuotePayload,
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Requests a new on-chain melt quote from the mint for sending Bitcoin to an on-chain address.
+	 *
+	 * @param meltQuotePayload Payload containing the Bitcoin address to pay and amount.
+	 * @returns Melt quote with amount, fee reserve, and payment state for on-chain transaction.
+	 */
+	async createMeltQuoteOnchain(
+		meltQuotePayload: OnchainMeltQuoteRequest,
+	): Promise<OnchainMeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/onchain');
+		return CashuMint.createMeltQuoteOnchain(
+			this._mintUrl,
+			meltQuotePayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
 	 * Gets an existing melt quote.
 	 *
 	 * @param mintUrl
@@ -595,6 +772,49 @@ class CashuMint {
 	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt12/${quote}`);
 		return CashuMint.checkMeltQuoteBolt12(
+			this._mintUrl,
+			quote,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
+	 * Gets an existing on-chain melt quote from the mint. Returns current payment state (UNPAID,
+	 * PENDING, or PAID) and transaction ID if paid.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param quote Quote ID to check.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Updated on-chain quote with current payment state and transaction ID if available.
+	 */
+	public static async checkMeltQuoteOnchain(
+		mintUrl: string,
+		quote: string,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<OnchainMeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const response = await requestInstance<OnchainMeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/quote/onchain', quote),
+			method: 'GET',
+			headers,
+		});
+		return response;
+	}
+
+	/**
+	 * Gets an existing on-chain melt quote from the mint. Returns current payment state (UNPAID,
+	 * PENDING, or PAID) and transaction ID if paid.
+	 *
+	 * @param quote Quote ID to check.
+	 * @returns Updated on-chain quote with current payment state and transaction ID if available.
+	 */
+	async checkMeltQuoteOnchain(quote: string): Promise<OnchainMeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/onchain/${quote}`);
+		return CashuMint.checkMeltQuoteOnchain(
 			this._mintUrl,
 			quote,
 			this._customRequest,
@@ -692,6 +912,47 @@ class CashuMint {
 	async meltBolt12(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt12');
 		return CashuMint.meltBolt12(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
+	}
+
+	/**
+	 * Requests the mint to send Bitcoin to an on-chain address by providing ecash inputs to be spent.
+	 * The inputs must cover the amount plus fee reserves. Optional outputs can be included to receive
+	 * change for overpaid transaction fees.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	public static async meltOnchain(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<OnchainMeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
+		const data = await requestInstance<OnchainMeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/onchain'),
+			method: 'POST',
+			requestBody: meltPayload,
+			headers,
+		});
+		return data;
+	}
+
+	/**
+	 * Requests the mint to send Bitcoin to an on-chain address by providing ecash inputs to be spent.
+	 * The inputs must cover the amount plus fee reserves. Optional outputs can be included to receive
+	 * change for overpaid transaction fees.
+	 *
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	async meltOnchain(meltPayload: MeltPayload): Promise<OnchainMeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/onchain');
+		return CashuMint.meltOnchain(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
 
 	/**

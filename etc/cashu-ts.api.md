@@ -85,19 +85,27 @@ export class CashuMint {
     checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
     static checkMeltQuoteBolt12(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse>;
+    static checkMeltQuoteOnchain(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<OnchainMeltQuoteResponse>;
+    checkMeltQuoteOnchain(quote: string): Promise<OnchainMeltQuoteResponse>;
     static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     static checkMintQuoteBolt12(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
+    static checkMintQuoteOnchain(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<OnchainMintQuoteResponse>;
+    checkMintQuoteOnchain(quote: string): Promise<OnchainMintQuoteResponse>;
     connectWebSocket(): Promise<void>;
     static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
     static createMeltQuoteBolt12(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload): Promise<Bolt12MeltQuoteResponse>;
+    static createMeltQuoteOnchain(mintUrl: string, meltQuotePayload: OnchainMeltQuoteRequest, customRequest?: typeof request, blindAuthToken?: string): Promise<OnchainMeltQuoteResponse>;
+    createMeltQuoteOnchain(meltQuotePayload: OnchainMeltQuoteRequest): Promise<OnchainMeltQuoteResponse>;
     static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
     static createMintQuoteBolt12(mintUrl: string, mintQuotePayload: Bolt12MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
     createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload): Promise<Bolt12MintQuoteResponse>;
+    static createMintQuoteOnchain(mintUrl: string, mintQuotePayload: OnchainMintQuoteRequest, customRequest?: typeof request, blindAuthToken?: string): Promise<OnchainMintQuoteResponse>;
+    createMintQuoteOnchain(mintQuotePayload: OnchainMintQuoteRequest): Promise<OnchainMintQuoteResponse>;
     disconnectWebSocket(): void;
     static getInfo(mintUrl: string, customRequest?: typeof request, logger?: Logger): Promise<GetInfoResponse>;
     getInfo(): Promise<GetInfoResponse>;
@@ -115,10 +123,14 @@ export class CashuMint {
     melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
     static meltBolt12(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     meltBolt12(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse>;
+    static meltOnchain(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<OnchainMeltQuoteResponse>;
+    meltOnchain(meltPayload: MeltPayload): Promise<OnchainMeltQuoteResponse>;
     static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
     mint(mintPayload: MintPayload): Promise<MintResponse>;
     static mintBolt12(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
     mintBolt12(mintPayload: MintPayload): Promise<MintResponse>;
+    static mintOnchain(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
+    mintOnchain(mintPayload: MintPayload): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
     // (undocumented)
@@ -156,19 +168,23 @@ export class CashuWallet {
     checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
     // (undocumented)
     checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse>;
+    checkMeltQuoteOnchain(quote: string): Promise<OnchainMeltQuoteResponse>;
     checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
     // (undocumented)
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
+    checkMintQuoteOnchain(quote: string): Promise<OnchainMintQuoteResponse>;
     checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
+    createMeltQuoteOnchain(address: string, amount: number): Promise<OnchainMeltQuoteResponse>;
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: number;
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
+    createMintQuoteOnchain(pubkey: string): Promise<OnchainMintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
     getActiveKeyset(keysets: MintKeyset[]): MintKeyset;
     getAllKeys(): Promise<MintKeys[]>;
@@ -186,11 +202,9 @@ export class CashuWallet {
     get keysets(): MintKeyset[];
     lazyGetMintInfo(): Promise<MintInfo>;
     loadMint(): Promise<void>;
-    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse>;
-    meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<{
-        quote: Bolt12MeltQuoteResponse;
-        change: Proof[];
-    }>;
+    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse<MeltQuoteResponse>>;
+    meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse<Bolt12MeltQuoteResponse>>;
+    meltProofsOnchain(meltQuote: OnchainMeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse<OnchainMeltQuoteResponse>>;
     // (undocumented)
     mint: CashuMint;
     // (undocumented)
@@ -201,6 +215,7 @@ export class CashuWallet {
     // (undocumented)
     mintProofs(amount: number, quote: string, options?: MintProofOptions): Promise<Proof[]>;
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privateKey: string, options?: MintProofOptions): Promise<Proof[]>;
+    mintProofsOnchain(amount: number, quote: OnchainMintQuoteResponse, privateKey: string, options?: MintProofOptions): Promise<Proof[]>;
     onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
@@ -476,8 +491,8 @@ export type MeltProofOptions = {
 };
 
 // @public
-export type MeltProofsResponse = {
-    quote: MeltQuoteResponse;
+export type MeltProofsResponse<T = MeltQuoteResponse | OnchainMeltQuoteResponse> = {
+    quote: T;
     change: Proof[];
 };
 
@@ -623,6 +638,46 @@ export type NUT10Option = {
     kind: string;
     data: string;
     tags: string[][];
+};
+
+// @public
+export type OnchainMeltQuoteRequest = {
+    request: string;
+    unit: string;
+    amount: number;
+};
+
+// @public
+export type OnchainMeltQuoteResponse = {
+    quote: string;
+    amount: number;
+    request: string;
+    unit: string;
+    fee_reserve: number;
+    state: MeltQuoteState;
+    expiry: number;
+    transaction_id?: string;
+    change?: SerializedBlindedSignature[];
+};
+
+// @public
+export type OnchainMintQuoteRequest = {
+    unit: string;
+    pubkey: string;
+};
+
+// @public
+export type OnchainMintQuoteResponse = {
+    quote: string;
+    request: string;
+    amount: number | null;
+    unit: string;
+    expiry: number | null;
+    pubkey: string;
+    amount_paid: number;
+    amount_issued: number;
+    amount_unconfirmed: number;
+    next_confirmation_height: number | null;
 };
 
 // @public (undocumented)
@@ -833,12 +888,6 @@ export type ReceiveOptions = {
 };
 
 // @public
-export type ReceiveResponse = {
-    token: Token;
-    tokensWithErrors: Token | undefined;
-};
-
-// @public
 export type ReceiveTokenEntryResponse = {
     proofs: Proof[];
 };
@@ -920,6 +969,8 @@ export type SwapMethod = {
     max_amount: number;
     options?: {
         description?: boolean;
+        amountless?: boolean;
+        confirmations?: number;
     };
 };
 

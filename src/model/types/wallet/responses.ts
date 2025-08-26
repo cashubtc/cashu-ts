@@ -1,34 +1,19 @@
-import { type MeltQuoteResponse } from '../mint';
-import { type Proof, type Token } from './index';
+import { type MeltQuoteResponse, type OnchainMeltQuoteResponse } from '../mint';
+import { type Proof } from './index';
 
 /**
  * Response after paying a Lightning invoice.
  */
-export type MeltProofsResponse = {
+export type MeltProofsResponse<T = MeltQuoteResponse | OnchainMeltQuoteResponse> = {
 	/**
 	 * If false, the proofs have not been invalidated and the payment can be tried later again with
 	 * the same proofs.
 	 */
-	quote: MeltQuoteResponse;
+	quote: T;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
 	 */
 	change: Proof[];
-};
-
-/**
- * Response when receiving a complete token.
- */
-export type ReceiveResponse = {
-	/**
-	 * Successfully received Cashu Token.
-	 */
-	token: Token;
-	/**
-	 * TokenEntries that had errors. No error will be thrown, but clients can choose to handle tokens
-	 * with errors accordingly.
-	 */
-	tokensWithErrors: Token | undefined;
 };
 
 /**
