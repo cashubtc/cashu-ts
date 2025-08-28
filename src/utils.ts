@@ -399,17 +399,20 @@ export function handleTokens(token: string): Token {
  * @param unit (optional) the unit of the keyset.
  * @param expiry (optional) expiry of the keyset.
  * @param versionByte (optional) version of the keyset ID. Default is 0.
- * @returns
+ * @returns Keyset id of the keys.
+ * @throws If keyset versionByte is not valid.
  */
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: 0 | 1) {
+export function deriveKeysetId(
+	keys: Keys,
+	unit?: string,
+	expiry?: number,
+	versionByte: number = 0,
+) {
 	let pubkeysConcat = Object.entries(keys)
 		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
 		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
 		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 
-	if (!versionByte) {
-		versionByte = 0;
-	}
 	let hash;
 	let hashHex;
 	switch (versionByte) {
@@ -419,7 +422,7 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 			return '00' + hashHex;
 		case 1:
 			if (!unit) {
-				throw new Error("Couldn't compute ID version 2: no unit was given.");
+				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
 			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from('unit:' + unit));
 			if (expiry) {
@@ -431,6 +434,8 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 			hash = sha256(pubkeysConcat);
 			hashHex = Buffer.from(hash).toString('hex');
 			return '01' + hashHex;
+		default:
+			throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
 	}
 }
 
