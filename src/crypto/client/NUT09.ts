@@ -1,5 +1,5 @@
 import { hmac } from '@noble/hashes/hmac';
-import { sha512 } from '@noble/hashes/sha2';
+import { sha256 } from '@noble/hashes/sha2';
 import { getKeysetIdInt } from '../common/index';
 import { HDKey } from '@scure/bip32';
 import { Buffer } from 'buffer';
@@ -42,7 +42,7 @@ const derive = (
 	const counterBuffer = Buffer.alloc(8);
 	counterBuffer.writeBigUInt64BE(BigInt(counter));
 	let message = Buffer.concat([
-		Buffer.from('Cashu_KDF_HMAC_SHA512'),
+		Buffer.from('Cashu_KDF_HMAC_SHA256'),
 		Buffer.from(keysetId, 'hex'),
 		counterBuffer,
 	]);
@@ -55,11 +55,8 @@ const derive = (
 			message = Buffer.concat([message, Buffer.from([1])]);
 	}
 
-	// Step 2: Compute HMAC-SHA512
-	const hmacDigest = hmac(sha512, seed, message);
-
-	// Step 3: Derive secret or blinding factor
-	return hmacDigest.slice(0, 32);
+	// Step 2: Compute HMAC-SHA256
+	return hmac(sha256, seed, message);
 };
 
 const derive_deprecated = (
