@@ -134,6 +134,7 @@
 		"@noble/curves": "^1.9.5",
 		"@noble/hashes": "^1.5.0",
 		"@scure/bip32": "^1.5.0",
-		"buffer": "^6.0.3"
+		"buffer": "^6.0.3",
+		"stwo-cairo": "^0.1.0"
 	}
 }

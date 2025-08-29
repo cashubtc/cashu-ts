@@ -1,6 +1,6 @@
 import { schnorr } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
-import { parseP2PKSecret } from '../common/NUT11';
+import { parseSecret } from '../common/NUT10';
 import {
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKWitnessSignatures,
@@ -14,7 +14,7 @@ export const verifyP2PKSig = (proof: Proof): boolean => {
 	if (!proof.witness) {
 		throw new Error('could not verify signature, no witness provided');
 	}
-	const parsedSecret = parseP2PKSecret(proof.secret);
+	const parsedSecret = parseSecret(proof.secret);
 	const witnesses = getP2PKExpectedKWitnessPubkeys(parsedSecret);
 	if (!witnesses.length) {
 		throw new Error('no signatures required, proof is unlocked');

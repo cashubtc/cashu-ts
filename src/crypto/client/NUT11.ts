@@ -2,7 +2,7 @@ import { type PrivKey, bytesToHex, hexToBytes } from '@noble/curves/abstract/uti
 import { sha256 } from '@noble/hashes/sha256';
 import { schnorr } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
-import { parseP2PKSecret } from '../common/NUT11';
+import { parseSecret } from '../common/NUT10';
 import { type Secret, type Witness } from '../common/index';
 import { type P2PKWitness, type Proof } from '../../model/types/index';
 import { type BlindedMessage } from './index';
@@ -88,7 +88,7 @@ export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[] {
 	try {
 		// Validate secret
-		const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+		const secret: Secret = typeof secretStr === 'string' ? parseSecret(secretStr) : secretStr;
 		if (secret[0] !== 'P2PK') {
 			throw new Error('Invalid P2PK secret: must start with "P2PK"');
 		}
@@ -115,7 +115,7 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): stri
  */
 export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
 	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	const secret: Secret = typeof secretStr === 'string' ? parseSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
 		throw new Error('Invalid P2PK secret: must start with "P2PK"');
 	}
@@ -134,7 +134,7 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
  */
 export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
 	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	const secret: Secret = typeof secretStr === 'string' ? parseSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
 		throw new Error('Invalid P2PK secret: must start with "P2PK"');
 	}
@@ -151,7 +151,7 @@ export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
  */
 export function getP2PKLocktime(secretStr: string | Secret): number {
 	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	const secret: Secret = typeof secretStr === 'string' ? parseSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
 		throw new Error('Invalid P2PK secret: must start with "P2PK"');
 	}
@@ -168,7 +168,7 @@ export function getP2PKLocktime(secretStr: string | Secret): number {
  */
 export function getP2PKNSigs(secretStr: string | Secret): number {
 	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	const secret: Secret = typeof secretStr === 'string' ? parseSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
 		throw new Error('Invalid P2PK secret: must start with "P2PK"');
 	}
@@ -198,7 +198,7 @@ export function getP2PKNSigs(secretStr: string | Secret): number {
  */
 export function getP2PKSigFlag(secretStr: string | Secret): string {
 	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	const secret: Secret = typeof secretStr === 'string' ? parseSecret(secretStr) : secretStr;
 	if (secret[0] !== 'P2PK') {
 		throw new Error('Invalid P2PK secret: must start with "P2PK"');
 	}
@@ -267,7 +267,7 @@ export const signP2PKProofs = (
  */
 export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 	// Check secret is P2PK
-	const parsed: Secret = parseP2PKSecret(proof.secret);
+	const parsed: Secret = parseSecret(proof.secret);
 	if (parsed[0] !== 'P2PK') {
 		throw new Error('not a P2PK secret');
 	}

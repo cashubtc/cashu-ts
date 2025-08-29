@@ -2,7 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { describe, expect, test, vi } from 'vitest';
 import { createP2PKsecret, signP2PKProof, signP2PKProofs } from '../../../src/crypto/client/NUT11';
-import { parseP2PKSecret } from '../../../src/crypto/common/NUT11';
+import { parseSecret } from '../../../src/crypto/common/NUT10';
 import {
 	getP2PKWitnessPubkeys,
 	getP2PKWitnessRefundkeys,
@@ -24,7 +24,7 @@ const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
 describe('test create p2pk secret', () => {
 	test('create from key', async () => {
 		const secret = createP2PKsecret(PUBKEY);
-		const decodedSecret = parseP2PKSecret(secret);
+		const decodedSecret = parseSecret(secret);
 
 		expect(decodedSecret[0]).toBe('P2PK');
 		// console.log(JSON.stringify(decodedSecret))
@@ -137,7 +137,7 @@ describe('test create p2pk secret', () => {
 describe('test getP2PKNSigs', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		expect(() => getP2PKNSigs(parsed)).toThrow('Invalid P2PK secret: must start with "P2PK"');
 		expect(() => getP2PKNSigs(secretStr)).toThrow('Invalid P2PK secret: must start with "P2PK"');
 	});
@@ -146,7 +146,7 @@ describe('test getP2PKNSigs', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKNSigs(parsed);
 		expect(result).toBe(1); // 1 is default
 		expect(getP2PKNSigs(secretStr)).toBe(1); // 1 is default
@@ -156,7 +156,7 @@ describe('test getP2PKNSigs', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKNSigs(parsed);
 		expect(result).toBe(2);
 		expect(getP2PKNSigs(secretStr)).toBe(2);
@@ -166,7 +166,7 @@ describe('test getP2PKNSigs', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKNSigs(parsed);
 		expect(result).toBe(0);
 		expect(getP2PKNSigs(secretStr)).toBe(0);
@@ -178,7 +178,7 @@ describe('test getP2PKNSigs', () => {
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKNSigs(parsed);
 		expect(result).toBe(1);
 		expect(getP2PKNSigs(secretStr)).toBe(1);
@@ -190,7 +190,7 @@ describe('test getP2PKNSigs', () => {
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","1"],["n_sigs_refund","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKNSigs(parsed);
 		expect(result).toBe(2);
 		expect(getP2PKNSigs(secretStr)).toBe(2);
@@ -200,7 +200,7 @@ describe('test getP2PKNSigs', () => {
 describe('test getP2PKSigFlag', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		expect(() => getP2PKSigFlag(parsed)).toThrow('Invalid P2PK secret: must start with "P2PK"');
 		expect(() => getP2PKSigFlag(secretStr)).toThrow('Invalid P2PK secret: must start with "P2PK"');
 	});
@@ -209,7 +209,7 @@ describe('test getP2PKSigFlag', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKSigFlag(parsed);
 		expect(result).toBe('SIG_INPUTS'); // default
 		expect(getP2PKSigFlag(secretStr)).toBe('SIG_INPUTS'); // default
@@ -219,7 +219,7 @@ describe('test getP2PKSigFlag', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["sigflag","SIG_INPUTS"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKSigFlag(parsed);
 		expect(result).toBe('SIG_INPUTS'); // default
 		expect(getP2PKSigFlag(secretStr)).toBe('SIG_INPUTS'); // default
@@ -229,7 +229,7 @@ describe('test getP2PKSigFlag', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["sigflag","SIG_ALL"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKSigFlag(parsed);
 		expect(result).toBe('SIG_ALL');
 		expect(getP2PKSigFlag(secretStr)).toBe('SIG_ALL');
@@ -239,7 +239,7 @@ describe('test getP2PKSigFlag', () => {
 describe('test getP2PKLocktime', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		expect(() => getP2PKLocktime(parsed)).toThrow('Invalid P2PK secret: must start with "P2PK"');
 		expect(() => getP2PKLocktime(secretStr)).toThrow('Invalid P2PK secret: must start with "P2PK"');
 	});
@@ -248,7 +248,7 @@ describe('test getP2PKLocktime', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKLocktime(parsed);
 		expect(result).toBe(Infinity); // default
 		expect(getP2PKLocktime(secretStr)).toBe(Infinity); // default
@@ -258,7 +258,7 @@ describe('test getP2PKLocktime', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["locktime","212"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKLocktime(parsed);
 		expect(result).toBe(212);
 		expect(getP2PKLocktime(secretStr)).toBe(212);
@@ -268,7 +268,7 @@ describe('test getP2PKLocktime', () => {
 describe('test getP2PKWitnessPubkeys', () => {
 	test('data pubkey only', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKWitnessPubkeys(parsed);
 		expect(result).toEqual([PUBKEY]);
 		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY]);
@@ -277,7 +277,7 @@ describe('test getP2PKWitnessPubkeys', () => {
 		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKWitnessPubkeys(parsed);
 		expect(result).toEqual([PUBKEY, PUBKEY2]);
 		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2]);
@@ -288,7 +288,7 @@ describe('test getP2PKWitnessPubkeys', () => {
 		const PRIVKEY3 = schnorr.utils.randomPrivateKey();
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKWitnessPubkeys(parsed);
 		expect(result).toEqual([PUBKEY, PUBKEY2, PUBKEY3]);
 		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2, PUBKEY3]);
@@ -298,7 +298,7 @@ describe('test getP2PKWitnessPubkeys', () => {
 describe('test getP2PKWitnessRefundkeys', () => {
 	test('no refund keys', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKWitnessRefundkeys(parsed);
 		expect(result).toEqual([]);
 		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([]);
@@ -307,7 +307,7 @@ describe('test getP2PKWitnessRefundkeys', () => {
 		const PRIVKEY2 = schnorr.utils.randomPrivateKey();
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["refund","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKWitnessRefundkeys(parsed);
 		expect(result).toEqual([PUBKEY2]);
 		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([PUBKEY2]);
@@ -318,7 +318,7 @@ describe('test getP2PKWitnessRefundkeys', () => {
 		const PRIVKEY3 = schnorr.utils.randomPrivateKey();
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKWitnessRefundkeys(parsed);
 		expect(result).toEqual([PUBKEY2, PUBKEY3]);
 		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([PUBKEY2, PUBKEY3]);
@@ -328,14 +328,14 @@ describe('test getP2PKWitnessRefundkeys', () => {
 describe('test getP2PKExpectedKWitnessPubkeys', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKExpectedKWitnessPubkeys(parsed);
 		expect(result).toEqual([]);
 		expect(getP2PKExpectedKWitnessPubkeys(secretStr)).toEqual([]);
 	});
 	test('permanent lock, 1 pubkey', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKExpectedKWitnessPubkeys(parsed);
 		expect(result).toStrictEqual([PUBKEY]);
 		expect(getP2PKExpectedKWitnessPubkeys(secretStr)).toEqual([PUBKEY]);
@@ -345,7 +345,7 @@ describe('test getP2PKExpectedKWitnessPubkeys', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKExpectedKWitnessPubkeys(parsed);
 		expect(result).toStrictEqual([PUBKEY, PUBKEY2]);
 		expect(getP2PKExpectedKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2]);
@@ -355,7 +355,7 @@ describe('test getP2PKExpectedKWitnessPubkeys', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKExpectedKWitnessPubkeys(parsed);
 		expect(result).toStrictEqual([]);
 		expect(getP2PKExpectedKWitnessPubkeys(secretStr)).toEqual([]);
@@ -367,7 +367,7 @@ describe('test getP2PKExpectedKWitnessPubkeys', () => {
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
+		const parsed: Secret = parseSecret(secretStr);
 		const result = getP2PKExpectedKWitnessPubkeys(parsed);
 		expect(result).toStrictEqual([PUBKEY2, PUBKEY3]);
 		expect(getP2PKExpectedKWitnessPubkeys(secretStr)).toEqual([PUBKEY2, PUBKEY3]);

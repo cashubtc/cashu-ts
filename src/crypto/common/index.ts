@@ -65,7 +65,7 @@ export type SerializedBlindedMessage = {
 
 export type Secret = [WellKnownSecret, SecretData];
 
-export type WellKnownSecret = 'P2PK';
+export type WellKnownSecret = 'P2PK' | 'Cairo';
 
 export type SecretData = {
 	nonce: string;

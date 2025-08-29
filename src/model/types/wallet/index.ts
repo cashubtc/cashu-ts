@@ -60,6 +60,26 @@ export type HTLCWitness = {
 };
 
 /**
+ * Cairo witness.
+ */
+export type CairoWitness = {
+	/**
+	 * Serialized Cairo proof.
+	 */
+	cairo_proof_json: string;
+
+	/**
+	 * Cairo proof using pedersen preprocessed variant.
+	 */
+	with_pedersen: boolean;
+
+	/**
+	 * Cairo proof using the bootloader.
+	 */
+	with_bootloader: boolean;
+};
+
+/**
  * Response when after receiving a single TokenEntry.
  */
 export type ReceiveTokenEntryResponse = {
