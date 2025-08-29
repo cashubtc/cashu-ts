@@ -8,11 +8,11 @@ import {
 	type MintKeys,
 	type Proof,
 	createRandomPrivateKey,
-	deriveKeysetId,
 	hashToCurve,
 	serializeMintKeys,
 } from '../common/index';
 import { HDKey } from '@scure/bip32';
+import { deriveKeysetId } from '../../utils';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 

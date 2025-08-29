@@ -1,6 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import {
-	deriveKeysetId,
 	hashToCurve,
 	pointFromHex,
 	deserializeMintKeys,
@@ -13,6 +12,7 @@ import { PUBKEYS } from '../consts';
 import { describe, expect, test } from 'vitest';
 import { constructProofFromPromise, createRandomBlindedMessage } from '../../../src/crypto/client';
 import { createBlindSignature, verifyProof } from '../../../src/crypto/mint';
+import { deriveKeysetId } from '../../../src/utils';
 describe('test crypto scheme', () => {
 	test('Test crypto scheme', async () => {
 		const mintPrivKey = secp256k1.utils.randomPrivateKey();

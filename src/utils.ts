@@ -603,7 +603,7 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
  * @throws Error if the keyset ID version is unrecognized.
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
-	const versionByte = hexToBytes(keys.id)[0] as 0 | 1 | undefined;
+	const versionByte = hexToBytes(keys.id)[0];
 	return deriveKeysetId(keys.keys, keys.unit, keys.final_expiry, versionByte) === keys.id;
 }
 
