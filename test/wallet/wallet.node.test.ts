@@ -383,6 +383,32 @@ describe('test info', () => {
 			{ method: 'nostr', info: 'npub1337' },
 		]);
 	});
+	test('supportsNut04Description respects per-unit description support', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfoResp);
+			}),
+		);
+		const wallet = new Wallet(mint, { unit: 'sat' });
+		const info = await wallet.getMintInfo();
+
+		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
+		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(true);
+		expect(info.supportsNut04Description('bolt12', 'sat')).toBe(false);
+
+		server.use(
+			http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+				HttpResponse.json({ quote: 'sat-quote', request: 'lnbc...' }),
+			),
+		);
+		await expect(wallet.createMintQuoteBolt11(1000, 'sat description')).resolves.toHaveProperty(
+			'quote',
+			'sat-quote',
+		);
+
+		const usdWallet = new Wallet(mint, { unit: 'usd' });
+		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
+	});
 });
 
 describe('test fees', () => {

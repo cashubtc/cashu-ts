@@ -278,6 +278,7 @@ export type SwapMethod = {
 	unit: string;
 	min_amount: number;
 	max_amount: number;
+	description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783
 	options?: {
 		description?: boolean;
 	};
