@@ -10,6 +10,7 @@ import {
 	createRandomPrivateKey,
 	deriveKeysetId,
 	hashToCurve,
+	serializeMintKeys,
 } from '../common/index';
 import { HDKey } from '@scure/bip32';
 
@@ -63,7 +64,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 		pubKeys[index] = getPubKeyFromPrivKey(privKeys[index]);
 		counter++;
 	}
-	const keysetId = deriveKeysetId(pubKeys);
+	const keysetId = deriveKeysetId(serializeMintKeys(pubKeys));
 	return { pubKeys, privKeys, keysetId };
 }
 

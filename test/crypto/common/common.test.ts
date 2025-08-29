@@ -65,10 +65,8 @@ describe('serialize mint keys', () => {
 
 describe('test keyset derivation', () => {
 	test('derive', () => {
-		const keys: SerializedMintKeys = PUBKEYS;
-		const deserializedKeys = deserializeMintKeys(keys);
-		const keysetId = deriveKeysetId(deserializedKeys);
-		console.log(keysetId);
+		const deserializedKeys = deserializeMintKeys(PUBKEYS);
+		const keysetId = deriveKeysetId(serializeMintKeys(deserializedKeys));
 		expect(keysetId).toBe('009a1f293253e41e');
 	});
 });
