@@ -30,3 +30,10 @@ describe('test hash executable bytecode', () => {
 		expect(programHash).toBe('b04a6409ba1d8ce2651c34759204f14de821928dd667ff38ecdc4ce2006668ba');
 	});
 });
+
+describe('test executable bytecode', () => {
+	test('hash executable bytecode for is_prime_executable.json', async () => {
+		let programHash = bytesToHex(hashExecutableBytecode(executable.program.bytecode));
+		expect(programHash).toBe('b04a6409ba1d8ce2651c34759204f14de821928dd667ff38ecdc4ce2006668ba');
+	});
+});

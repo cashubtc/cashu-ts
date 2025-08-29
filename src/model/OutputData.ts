@@ -85,6 +85,16 @@ export class OutputData implements OutputDataLike {
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 
+	static createCairoData(
+		cairo: { programHash: string; outputHash: string },
+		amount: number,
+		keyset: MintKeys,
+		customSplit?: number[],
+	) {
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		return amounts.map((a) => this.createSingleCairoData(cairo, a, keyset.id));
+	}
+
 	static createSingleP2PKData(
 		p2pk: {
 			pubkey: string | string[];
@@ -129,6 +139,29 @@ export class OutputData implements OutputDataLike {
 				newSecret[1].tags.push(['n_sigs_refund', String(n_sigs_refund)]); // NUT-10 string
 			}
 		}
+		const parsed = JSON.stringify(newSecret);
+		const secretBytes = new TextEncoder().encode(parsed);
+		const { r, B_ } = blindMessage(secretBytes);
+		return new OutputData(
+			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			r,
+			secretBytes,
+		);
+	}
+
+	static createSingleCairoData(
+		cairo: { programHash: string; outputHash: string },
+		amount: number,
+		keysetId: string,
+	) {
+		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
+			'Cairo',
+			{
+				nonce: bytesToHex(randomBytes(32)),
+				data: cairo.programHash,
+				tags: [['program_output', cairo.outputHash]],
+			},
+		];
 		const parsed = JSON.stringify(newSecret);
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);

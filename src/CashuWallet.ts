@@ -1245,6 +1245,10 @@ class CashuWallet {
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
+		cairo?: {
+			programHash: string;
+			outputHash: string;
+		},
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
@@ -1274,6 +1278,7 @@ class CashuWallet {
 				counter,
 				undefined,
 				outputAmounts?.keepAmounts,
+				undefined,
 				undefined,
 				this._keepFactory,
 			);
@@ -1536,6 +1541,10 @@ class CashuWallet {
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
+		cairo?: {
+			programHash: string;
+			outputHash: string;
+		},
 		factory?: OutputDataFactory,
 	): OutputDataLike[] {
 		let outputData: OutputDataLike[];
@@ -1554,6 +1563,8 @@ class CashuWallet {
 			);
 		} else if (p2pk) {
 			outputData = OutputData.createP2PKData(p2pk, amount, keyset, outputAmounts);
+		} else if (cairo) {
+			outputData = OutputData.createCairoData(cairo, amount, keyset, outputAmounts);
 		} else if (factory) {
 			const amounts = splitAmount(amount, keyset.keys);
 			outputData = amounts.map((a) => factory(a, keyset));
@@ -1591,6 +1602,7 @@ class CashuWallet {
 			counter,
 			undefined,
 			amounts,
+			undefined,
 			undefined,
 			factory,
 		);
