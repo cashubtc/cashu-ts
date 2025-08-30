@@ -1,22 +1,21 @@
 /**
  * Cashu Wallet "v3"
  *
+ * A Cashu wallet under active refactoring and development. This class is a work-in-progress
+ * redesign of the CashuWallet, aiming for improved separation of concerns, simplified options
+ * handling, and a cleaner API through the use of tagged unions and pipeline optimization. It is not
+ * yet stable or production-ready.
+ *
  * @remarks
  * Not for production use: Continue using the {@link CashuWallet} class, which provides the
  * established and tested implementation. This Wallet class is experimental and subject to breaking
  * changes during the v3 refactor process.
  * @example
  *
- * ```typescript
- * const wallet = new Wallet(mint, { unit: 'sat' });
- * // Usage will evolve as refactoring progresses
- * ```
+ *     const wallet = new Wallet(mint, { unit: 'sat' });
+ *     // Usage will evolve as refactoring progresses.
  *
- * @alpha
- * Class that represents a Cashu wallet under active refactoring and development. This class is a
- * work-in-progress redesign of the CashuWallet, aiming for improved separation of concerns,
- * simplified options handling, and a cleaner API through the use of tagged unions and pipeline
- * optimization. It is not yet stable or production-ready.
+ * @v3
  */
 
 import { signP2PKProofs } from './crypto/client/NUT11';
@@ -87,9 +86,77 @@ const DEFAULT_DENOMINATION_TARGET = 3;
 const DEFAULT_UNIT = 'sat';
 
 /**
+ * @v3
+ * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11. This type
+ * represents a stable data structure used in the original CashuWallet API.
+ */
+export type P2PKOptions = {
+	pubkey: string | string[];
+	locktime?: number;
+	refundKeys?: string[];
+	requiredSignatures?: number;
+	requiredRefundSignatures?: number;
+};
+
+/**
+ * @v3
+ * Defines the type and configuration for generating blinded message outputs.
+ * This type is experimental and may change in future releases. For production use,
+ * rely on CashuWallet's established API.
+ */
+export type OutputType =
+	| {
+			type: 'random';
+			/**
+			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 */
+			splitAmounts?: number[];
+	  }
+	| {
+			type: 'deterministic';
+			counter: number;
+			/**
+			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 */
+			splitAmounts?: number[];
+	  }
+	| {
+			type: 'p2pk';
+			options: P2PKOptions;
+			/**
+			 * If true, pre-calculates and adds receiver fee to target amount before splitting.
+			 */
+			includeReceiverFee?: boolean;
+			/**
+			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 */
+			splitAmounts?: number[];
+	  }
+	| {
+			type: 'custom-factory';
+			/**
+			 * Factory for generating OutputData; splitAmounts (or basic split) determines how many to
+			 * create.
+			 */
+			factory: OutputDataFactory;
+			/**
+			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 */
+			splitAmounts?: number[];
+	  }
+	| {
+			type: 'custom-array';
+			/**
+			 * Pre-created OutputData array; no splitting applied (amounts implied by array).
+			 */
+			data: OutputData[];
+	  };
+
+/**
+ * @v3
  * Class that represents a Cashu wallet. This class should act as the entry point for this library.
  */
-class CashuWallet {
+class Wallet {
 	private _keys: Map<string, MintKeys> = new Map();
 	private _keysetId: string | undefined;
 	private _keysets: MintKeyset[] = [];
@@ -1571,56 +1638,70 @@ class CashuWallet {
 	}
 
 	/**
-	 * Creates blinded messages for a according to @param amounts.
+	 * Creates blinded messages according to the specified output type.
 	 *
-	 * @param amount Array of amounts to create blinded messages for.
-	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
-	 *   must be initialized with seed phrase to take effect.
-	 * @param pubkey? Optionally locks ecash to pubkey. Will not be deterministic, even if counter is
-	 *   set!
-	 * @param outputAmounts? Optionally specify the output's amounts to keep and to send.
-	 * @param p2pk? Optionally specify options to lock the proofs according to NUT-11.
-	 * @param factory? Optionally specify a custom function that produces OutputData (blinded
-	 *   messages)
-	 * @returns Blinded messages, secrets, rs, and amounts.
+	 * @param amount The total amount to create blinded messages for.
+	 * @param keyset The mint's keyset to use for output creation.
+	 * @param outputType The type and configuration for generating outputs.
+	 * @returns An array of OutputDataLike objects containing blinded messages, secrets, and blinding
+	 *   factors.
+	 * @throws Error if deterministic outputs are requested without a seed, or if custom array total
+	 *   mismatches amount.
 	 */
 	private createOutputData(
 		amount: number,
 		keyset: MintKeys,
-		counter?: number,
-		pubkey?: string,
-		outputAmounts?: number[],
-		p2pk?: {
-			pubkey: string | string[];
-			locktime?: number;
-			refundKeys?: string[];
-			requiredSignatures?: number;
-			requiredRefundSignatures?: number;
-		},
-		factory?: OutputDataFactory,
+		outputType: OutputType,
 	): OutputDataLike[] {
 		let outputData: OutputDataLike[];
-		if (pubkey) {
-			outputData = OutputData.createP2PKData({ pubkey }, amount, keyset, outputAmounts);
-		} else if (counter || counter === 0) {
-			if (!this._seed) {
-				throw new Error('cannot create deterministic messages without seed');
-			}
-			outputData = OutputData.createDeterministicData(
-				amount,
-				this._seed,
-				counter,
-				keyset,
-				outputAmounts,
-			);
-		} else if (p2pk) {
-			outputData = OutputData.createP2PKData(p2pk, amount, keyset, outputAmounts);
-		} else if (factory) {
-			const amounts = splitAmount(amount, keyset.keys);
-			outputData = amounts.map((a) => factory(a, keyset));
-		} else {
-			outputData = OutputData.createRandomData(amount, keyset, outputAmounts);
+
+		switch (outputType.type) {
+			case 'random':
+				outputData = OutputData.createRandomData(amount, keyset, outputType.splitAmounts);
+				break;
+			case 'deterministic':
+				if (!this._seed) {
+					throw new Error('Deterministic outputs require a seed configured in the wallet');
+				}
+				outputData = OutputData.createDeterministicData(
+					amount,
+					this._seed,
+					outputType.counter,
+					keyset,
+					outputType.splitAmounts,
+				);
+				break;
+			case 'p2pk':
+				if (outputType.includeReceiverFee) {
+					const tempSplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
+					const tempProofs = tempSplit.map((a) => ({ amount: a }) as Proof);
+					const fee = this.getFeesForProofs(tempProofs); // Assumes getFeesForProofs is available
+					amount += fee;
+				}
+				outputData = OutputData.createP2PKData(
+					outputType.options,
+					amount,
+					keyset,
+					outputType.splitAmounts,
+				);
+				break;
+			case 'custom-factory':
+				const factorySplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
+				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
+				break;
+			case 'custom-array':
+				outputData = outputType.data;
+				const customTotal = outputData.reduce((sum, d) => sum + d.blindedMessage.amount, 0);
+				if (customTotal !== amount) {
+					throw new Error(
+						`Custom output data total (${customTotal}) does not match amount (${amount})`,
+					);
+				}
+				break;
+			default:
+				throw new Error('Unsupported output type');
 		}
+
 		return outputData;
 	}
 
