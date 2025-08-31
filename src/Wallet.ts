@@ -574,8 +574,7 @@ class Wallet {
 		if (this._keysets.length === 0) {
 			await this.getKeySets();
 		}
-
-		const decodedToken = typeof token === 'string' ? getDecodedToken(token this._keysets) : token;
+		const decodedToken = typeof token === 'string' ? getDecodedToken(token, this._keysets) : token;
 		if (decodedToken.mint !== this.mint.mintUrl) {
 			throw new Error('Token belongs to a different mint');
 		}
@@ -591,7 +590,7 @@ class Wallet {
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
 		const outputType = config?.outputType ?? { type: 'random' };
 		const outputs = this.configureOutputs(
-			totalAmount,
+			netAmount,
 			keys,
 			outputType,
 			false, // includeFees
@@ -605,10 +604,10 @@ class Wallet {
 		);
 		const swapTransaction = this.createSwapTransaction(inputs, outputs);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const proofsReceived = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
 		const orderedProofs: Proof[] = [];
 		swapTransaction.sortedIndices.forEach((s, o) => {
-			orderedProofs[s] = proofs[o];
+			orderedProofs[s] = proofsReceived[o];
 		});
 		return orderedProofs;
 	}
