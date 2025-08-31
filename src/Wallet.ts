@@ -55,6 +55,7 @@ import type {
 	Bolt12MintQuotePayload,
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
+	SwapPayload,
 } from './model/types/index';
 import { MintQuoteState, MeltQuoteState } from './model/types/index';
 import { type SubscriptionCanceller } from './model/types/wallet/websocket';
@@ -123,10 +124,6 @@ export type OutputType =
 	| {
 			type: 'p2pk';
 			options: P2PKOptions;
-			/**
-			 * If true, pre-calculates and adds receiver fee to target amount before splitting.
-			 */
-			includeReceiverFee?: boolean;
 			/**
 			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
 			 */
@@ -210,13 +207,11 @@ class Wallet {
 		if (options?.denominationTarget) {
 			this._denominationTarget = options.denominationTarget;
 		}
-
 		if (options?.bip39seed) {
-			if (options.bip39seed instanceof Uint8Array) {
-				this._seed = options.bip39seed;
-				return;
+			if (!(options.bip39seed instanceof Uint8Array)) {
+				throw new Error('bip39seed must be a valid UInt8Array');
 			}
-			throw new Error('bip39seed must be a valid UInt8Array');
+			this._seed = options.bip39seed;
 		}
 		if (options?.keepFactory) {
 			this._keepFactory = options.keepFactory;
@@ -377,55 +372,209 @@ class Wallet {
 	}
 
 	/**
-	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the
-	 * first token in the token array)
+	 * Generates blinded messages based on the specified output type.
 	 *
-	 * @param {string | Token} token - Cashu token, either as string or decoded.
-	 * @param {ReceiveOptions} [options] - Optional configuration for token processing.
-	 * @returns New token with newly created proofs, token entries that had errors.
+	 * @param amount The total amount for outputs.
+	 * @param keyset The mint keys.
+	 * @param outputType The output configuration.
+	 * @returns Prepared output data.
 	 */
-	async receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]> {
-		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
-			options || {};
+	private createOutputData(
+		amount: number,
+		keyset: MintKeys,
+		outputType: OutputType,
+	): OutputDataLike[] {
+		let outputData: OutputDataLike[];
 
-		// Fetch the keysets if we don't have them
-		if (this._keysets.length === 0) {
-			await this.getKeySets();
+		switch (outputType.type) {
+			case 'random':
+				outputData = OutputData.createRandomData(amount, keyset, outputType.splitAmounts);
+				break;
+			case 'deterministic':
+				if (!this._seed) {
+					throw new Error('Deterministic outputs require a seed configured in the wallet');
+				}
+				outputData = OutputData.createDeterministicData(
+					amount,
+					this._seed,
+					outputType.counter,
+					keyset,
+					outputType.splitAmounts,
+				);
+				break;
+			case 'p2pk':
+				outputData = OutputData.createP2PKData(
+					outputType.options,
+					amount,
+					keyset,
+					outputType.splitAmounts,
+				);
+				break;
+			case 'custom-factory':
+				const factorySplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
+				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
+				break;
+			case 'custom-array':
+				outputData = outputType.data;
+				const customTotal = outputData.reduce((sum, d) => sum + d.blindedMessage.amount, 0);
+				if (customTotal !== amount) {
+					throw new Error(
+						`Custom output data total (${customTotal}) does not match amount (${amount})`,
+					);
+				}
+				break;
+			default:
+				throw new Error('Unsupported output type');
 		}
-		if (typeof token === 'string') {
-			token = getDecodedToken(token, this._keysets);
-		}
-		const keys = await this.getKeys(keysetId);
-		if (requireDleq) {
-			if (token.proofs.some((p: Proof) => !hasValidDleq(p, keys))) {
-				throw new Error('Token contains proofs with invalid DLEQ');
+
+		return outputData;
+	}
+
+	/**
+	 * Configures outputs with fee adjustments and optimization.
+	 *
+	 * @param amount The total amount for outputs.
+	 * @param keys The mint keys.
+	 * @param outputType The output configuration.
+	 * @param includeFees Whether to include swap fees in the output amount.
+	 * @param proofsWeHave Optional proofs for denomination optimization.
+	 * @returns Prepared output data.
+	 */
+	private configureOutputs(
+		amount: number,
+		keys: MintKeys,
+		outputType: OutputType,
+		includeFees?: boolean,
+		proofsWeHave?: Proof[],
+	): OutputDataLike[] {
+		let adjustedAmount = amount;
+
+		if (outputType.type === 'custom-array') {
+			if (includeFees || (proofsWeHave && proofsWeHave.length > 0)) {
+				throw new Error('custom-array does not support fee inclusion or optimization');
 			}
+			return this.createOutputData(adjustedAmount, keys, outputType);
 		}
-		const amount = sumProofs(token.proofs) - this.getFeesForProofs(token.proofs);
-		let newOutputData: { send: OutputDataLike[] | OutputDataFactory } | undefined = undefined;
-		if (outputData) {
-			newOutputData = { send: outputData };
-		} else if (this._keepFactory) {
-			newOutputData = { send: this._keepFactory };
+
+		let splitAmounts = outputType.splitAmounts ?? [];
+
+		// Apply optimization if proofsWeHave provided
+		if (proofsWeHave && proofsWeHave.length > 0) {
+			splitAmounts = getKeepAmounts(
+				proofsWeHave,
+				adjustedAmount,
+				keys.keys,
+				this._denominationTarget,
+			);
 		}
-		const swapTransaction = this.createSwapPayload(
-			amount,
-			token.proofs,
+
+		if (includeFees) {
+			let outputFee = this.getFeesForKeyset(splitAmounts.length, keys.id);
+			let sendAmountsFee = splitAmount(outputFee, keys.keys);
+			while (
+				this.getFeesForKeyset(splitAmounts.length + sendAmountsFee.length, keys.id) > outputFee
+			) {
+				outputFee++;
+				sendAmountsFee = splitAmount(outputFee, keys.keys);
+			}
+			adjustedAmount += outputFee;
+			splitAmounts = [...splitAmounts, ...sendAmountsFee];
+		}
+
+		const effectiveOutputType: OutputType = { ...outputType, splitAmounts };
+		return this.createOutputData(adjustedAmount, keys, effectiveOutputType);
+	}
+
+	/**
+	 * Prepares inputs by filtering DLEQ, signing, and serializing witnesses.
+	 *
+	 * @param proofs The proofs to prepare.
+	 * @param privkey Optional private key for signing.
+	 * @param includeDleq Whether to filter for DLEQ proofs.
+	 * @param keysetId Optional keyset ID for validation.
+	 * @returns Prepared proofs.
+	 */
+	private async prepareInputs(
+		proofs: Proof[],
+		privkey?: string,
+		includeDleq?: boolean,
+		keysetId?: string,
+	): Promise<Proof[]> {
+		let inputs = proofs;
+		if (includeDleq) {
+			const keys = (await this.getKeys(keysetId)) as MintKeys; // Assume async handled externally
+			inputs = inputs.filter((p) => hasValidDleq(p, keys));
+		}
+		if (privkey) {
+			inputs = signP2PKProofs(inputs, privkey);
+		}
+		return stripDleq(inputs).map((p) => ({
+			...p,
+			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
+		}));
+	}
+
+	/**
+	 * Assembles a swap payload from prepared inputs and outputs.
+	 *
+	 * @param inputs The prepared inputs.
+	 * @param outputs The prepared outputs.
+	 * @returns The assembled swap payload.
+	 */
+	private assembleSwapPayload(inputs: Proof[], outputs: OutputDataLike[]): SwapPayload {
+		return {
+			inputs,
+			outputs: outputs.map((d) => d.blindedMessage),
+		};
+	}
+
+	/**
+	 * Receives a token and returns the associated proofs with optional reconfiguration.
+	 *
+	 * @param token The token to receive.
+	 * @param config Configuration for the receive operation.
+	 * @returns The received proofs.
+	 */
+	async receive(
+		token: Token | string,
+		config?: {
+			outputType?: OutputType;
+			keysetId?: string;
+			privkey?: string;
+			includeDleq?: boolean;
+			includeFees?: boolean;
+			proofsWeHave?: Proof[];
+		},
+	): Promise<Proof[]> {
+		const decodedToken = typeof token === 'string' ? getDecodedToken(token) : token;
+		let proofs = decodedToken.proofs;
+
+		const totalAmount = sumProofs(proofs);
+		if (totalAmount === 0) {
+			return [];
+		}
+
+		const keys = (await this.getKeys(config?.keysetId)) as MintKeys;
+		const outputType = config?.outputType ?? { type: 'random' };
+		const outputs = this.configureOutputs(
+			totalAmount,
 			keys,
-			outputAmounts,
-			counter,
-			pubkey,
-			privkey,
-			newOutputData,
-			p2pk,
+			outputType,
+			config?.includeFees,
+			config?.proofsWeHave,
 		);
-		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
-		const orderedProofs: Proof[] = [];
-		swapTransaction.sortedIndices.forEach((s, o) => {
-			orderedProofs[s] = proofs[o];
-		});
-		return orderedProofs;
+
+		const inputs = await this.prepareInputs(
+			proofs,
+			config?.privkey,
+			config?.includeDleq,
+			config?.keysetId,
+		);
+		const swapPayload = this.assembleSwapPayload(inputs, outputs);
+		const { signatures } = await this.mint.swap(swapPayload);
+
+		const keysUsed = (await this.getKeys(config?.keysetId)) as MintKeys; // Re-fetch if needed
+		return outputs.map((d, i) => d.toProof(signatures[i], keysUsed));
 	}
 
 	/**
@@ -1638,74 +1787,6 @@ class Wallet {
 	}
 
 	/**
-	 * Creates blinded messages according to the specified output type.
-	 *
-	 * @param amount The total amount to create blinded messages for.
-	 * @param keyset The mint's keyset to use for output creation.
-	 * @param outputType The type and configuration for generating outputs.
-	 * @returns An array of OutputDataLike objects containing blinded messages, secrets, and blinding
-	 *   factors.
-	 * @throws Error if deterministic outputs are requested without a seed, or if custom array total
-	 *   mismatches amount.
-	 */
-	private createOutputData(
-		amount: number,
-		keyset: MintKeys,
-		outputType: OutputType,
-	): OutputDataLike[] {
-		let outputData: OutputDataLike[];
-
-		switch (outputType.type) {
-			case 'random':
-				outputData = OutputData.createRandomData(amount, keyset, outputType.splitAmounts);
-				break;
-			case 'deterministic':
-				if (!this._seed) {
-					throw new Error('Deterministic outputs require a seed configured in the wallet');
-				}
-				outputData = OutputData.createDeterministicData(
-					amount,
-					this._seed,
-					outputType.counter,
-					keyset,
-					outputType.splitAmounts,
-				);
-				break;
-			case 'p2pk':
-				if (outputType.includeReceiverFee) {
-					const tempSplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
-					const tempProofs = tempSplit.map((a) => ({ amount: a }) as Proof);
-					const fee = this.getFeesForProofs(tempProofs); // Assumes getFeesForProofs is available
-					amount += fee;
-				}
-				outputData = OutputData.createP2PKData(
-					outputType.options,
-					amount,
-					keyset,
-					outputType.splitAmounts,
-				);
-				break;
-			case 'custom-factory':
-				const factorySplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
-				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
-				break;
-			case 'custom-array':
-				outputData = outputType.data;
-				const customTotal = outputData.reduce((sum, d) => sum + d.blindedMessage.amount, 0);
-				if (customTotal !== amount) {
-					throw new Error(
-						`Custom output data total (${customTotal}) does not match amount (${amount})`,
-					);
-				}
-				break;
-			default:
-				throw new Error('Unsupported output type');
-		}
-
-		return outputData;
-	}
-
-	/**
 	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve See:
 	 * https://github.com/cashubtc/nuts/blob/main/08.md.
 	 *
@@ -1870,4 +1951,4 @@ class Wallet {
 	}
 }
 
-export { CashuWallet };
+export { Wallet };
