@@ -515,25 +515,49 @@ class Wallet {
 	}
 
 	/**
-	 * Assembles a swap payload from prepared inputs and outputs.
+	 * Creates a swap transaction with sorted outputs for mint compatibility.
 	 *
-	 * @param inputs The prepared inputs.
-	 * @param outputs The prepared outputs.
-	 * @returns The assembled swap payload.
+	 * @param inputs Prepared input proofs.
+	 * @param keepOutputs Outputs to keep (change or receiver's proofs).
+	 * @param sendOutputs Outputs to send (optional, default empty for receive/mint).
+	 * @returns Swap transaction with payload and metadata for processing signatures.
 	 */
-	private assembleSwapPayload(inputs: Proof[], outputs: OutputDataLike[]): SwapPayload {
-		return {
+	private createSwapTransaction(
+		inputs: Proof[],
+		keepOutputs: OutputDataLike[],
+		sendOutputs: OutputDataLike[] = [],
+	): SwapTransaction {
+		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
+		const indices = mergedBlindingData
+			.map((_, i) => i)
+			.sort(
+				(a, b) =>
+					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
+			);
+		const keepVector: boolean[] = [
+			...Array.from({ length: keepOutputs.length }, () => true),
+			...Array.from({ length: sendOutputs.length }, () => false),
+		];
+		const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
+		const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
+		const payload: SwapPayload = {
 			inputs,
-			outputs: outputs.map((d) => d.blindedMessage),
+			outputs: sortedOutputData.map((d) => d.blindedMessage),
+		};
+		return {
+			payload,
+			outputData: sortedOutputData,
+			keepVector: sortedKeepVector,
+			sortedIndices: indices,
 		};
 	}
 
 	/**
-	 * Receives a token and returns the associated proofs with optional reconfiguration.
+	 * Receives a cashu token and returns proofs that sum up to the amount of the token minus fees.
 	 *
-	 * @param token The token to receive.
-	 * @param config Configuration for the receive operation.
-	 * @returns The received proofs.
+	 * @param token Cashu token.
+	 * @param config Optional parameters for configuring the Receive operation.
+	 * @returns The proofs received from the token.
 	 */
 	async receive(
 		token: Token | string,
@@ -542,39 +566,51 @@ class Wallet {
 			keysetId?: string;
 			privkey?: string;
 			includeDleq?: boolean;
-			includeFees?: boolean;
 			proofsWeHave?: Proof[];
+			requireDleq?: boolean;
 		},
 	): Promise<Proof[]> {
-		const decodedToken = typeof token === 'string' ? getDecodedToken(token) : token;
-		let proofs = decodedToken.proofs;
+		// Fetch the keysets if we don't have them
+		if (this._keysets.length === 0) {
+			await this.getKeySets();
+		}
 
+		const decodedToken = typeof token === 'string' ? getDecodedToken(token this._keysets) : token;
+		if (decodedToken.mint !== this.mint.mintUrl) {
+			throw new Error('Token belongs to a different mint');
+		}
+		const { proofs } = decodedToken;
 		const totalAmount = sumProofs(proofs);
 		if (totalAmount === 0) {
 			return [];
 		}
-
-		const keys = (await this.getKeys(config?.keysetId)) as MintKeys;
+		const keys = await this.getKeys(config?.keysetId);
+		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
+			throw new Error('Token contains proofs with invalid or missing DLEQ');
+		}
+		const netAmount = totalAmount - this.getFeesForProofs(proofs);
 		const outputType = config?.outputType ?? { type: 'random' };
 		const outputs = this.configureOutputs(
 			totalAmount,
 			keys,
 			outputType,
-			config?.includeFees,
+			false, // includeFees
 			config?.proofsWeHave,
 		);
-
 		const inputs = await this.prepareInputs(
 			proofs,
 			config?.privkey,
 			config?.includeDleq,
 			config?.keysetId,
 		);
-		const swapPayload = this.assembleSwapPayload(inputs, outputs);
-		const { signatures } = await this.mint.swap(swapPayload);
-
-		const keysUsed = (await this.getKeys(config?.keysetId)) as MintKeys; // Re-fetch if needed
-		return outputs.map((d, i) => d.toProof(signatures[i], keysUsed));
+		const swapTransaction = this.createSwapTransaction(inputs, outputs);
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const orderedProofs: Proof[] = [];
+		swapTransaction.sortedIndices.forEach((s, o) => {
+			orderedProofs[s] = proofs[o];
+		});
+		return orderedProofs;
 	}
 
 	/**
