@@ -57,6 +57,8 @@ const mint = new CashuMint(mintUrl);
 const unit = 'sat';
 const invoice =
 	'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
+const token3sat =
+	'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgqNhYQFhc3hAZTdjMWI3NmQxYjMxZTJiY2EyYjIyOWQxNjBiZGY2MDQ2ZjMzYmM0NTcwMjIyMzA0YjY1MTEwZDkyNmY3YWY4OWFjWCEDic2fT5iOOAp5idTUiKfJHFJ3-5MEfnoswe2OM5a4VP-jYWECYXN4QGRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjNhY1ghAt5AxZ2QODuIU8zzpLIIZKyDunWPzj2VnbuJNhAC6M5H';
 const server = setupServer();
 
 beforeAll(() => {
@@ -305,6 +307,287 @@ describe('receive', () => {
 			message: 'could not verify proofs.',
 			status: 400,
 		});
+	});
+
+	test('test receive deterministic', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+					],
+				});
+			}),
+		);
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+		const wallet = new CashuWallet(mint, { unit, bip39seed: seed });
+		const proofs = await wallet.receive(token3sat, { counter: 5 });
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(proofs[0].secret).toBe(
+			'c3cad2ac3da43f84995a7ea362bd5509a992ef3684c151f5f3945b1a1f026efd',
+		);
+		expect(proofs[1].secret).toBe(
+			'bd31ac247f79cc72c0c6ba2793a44d006c57fd98ff4a982e357e48c12cf47f02',
+		);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+	});
+	test('test receive p2pk', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const proofs = await wallet.receive(token3sat, {
+			p2pk: { pubkey: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4' },
+		});
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		const decoder = new TextDecoder();
+		const allSecrets = proofs.map((d) => JSON.parse(d.secret));
+		allSecrets.forEach((s) => {
+			expect(s[0] === 'P2PK');
+			expect(s[1].data).toBe('02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4');
+		});
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+	});
+
+	test('test receive custom-factory', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const customFactory = (amount: number, keyset: MintKeys): OutputData => {
+			return OutputData.createRandomData(amount, keyset)[0];
+		};
+		const proofs = await wallet.receive(token3sat, { outputData: customFactory });
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+	});
+
+	test('test receive custom-array', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		await wallet.getKeys(); // Ensure keys are loaded for OutputData creation
+		const customData = OutputData.createRandomData(
+			3,
+			wallet.keys.get('00bd033559de27d0')!,
+			[1, 1, 1],
+		);
+		const proofs = await wallet.receive(token3sat, { outputData: customData });
+		expect(proofs).toHaveLength(3);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
+		]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+	});
+
+	test('test receive requireDleq true throws', async () => {
+		const wallet = new CashuWallet(mint, { unit });
+		await expect(wallet.receive(token3sat, { requireDleq: true })).rejects.toThrow(
+			'Token contains proofs with invalid DLEQ',
+		);
+	});
+
+	test('test receive proofsWeHave optimization', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', async ({ request }) => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 4,
+							C_: '026a0773a5f2fbbb0c619b99c66d789847e6b1a33c3063e9a8e7d0f3a5d547a0e',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const existingProofs = [
+			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+		];
+		const tok = {
+			mint: 'http://localhost:3338',
+			proofs: [
+				{
+					id: '00bd033559de27d0',
+					amount: 1,
+					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+					C: '0389cd9f4f988e380a7989d4d488a7c91c5277fb93047e7a2cc1ed8e3396b854ff',
+				},
+				{
+					id: '00bd033559de27d0',
+					amount: 1,
+					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
+					C: '0389cd9f4f988e380a7989d4d488a7c91c5277fb93047e7a2cc1ed8e3396b854ff',
+				},
+				{
+					id: '00bd033559de27d0',
+					amount: 2,
+					secret: 'de55c15faefded7f9c999c3d4c62f81b0c6fe21a752fdeff6b084cf2df2f5cf3',
+					C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+				},
+			],
+			unit: 'sat',
+		};
+		const proofs = await wallet.receive(tok, { proofsWeHave: existingProofs });
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+	});
+
+	test('test receive privkey signing', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', async ({ request }) => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const proofs = await wallet.receive(token3sat, {
+			privkey: '5d41402abc4b2a76b9719d911017c592',
+		});
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+	});
+
+	test('test receive keysetId', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const proofs = await wallet.receive(token3sat, { keysetId: '00bd033559de27d0' });
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 });
 
