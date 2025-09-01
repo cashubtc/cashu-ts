@@ -462,6 +462,10 @@ describe('receive', () => {
 		await expect(wallet.receive(token3sat, DEFAULT_OUTPUT, { requireDleq: true })).rejects.toThrow(
 			'Token contains proofs with invalid or missing DLEQ',
 		);
+		// Try using a receive helper too
+		await expect(wallet.receiveAsDefault(token3sat, { requireDleq: true })).rejects.toThrow(
+			'Token contains proofs with invalid or missing DLEQ',
+		);
 	});
 
 	test('test receive proofsWeHave optimization', async () => {
