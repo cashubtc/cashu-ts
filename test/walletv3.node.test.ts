@@ -503,7 +503,7 @@ describe('receive', () => {
 				});
 			}),
 		);
-		const wallet = new Wallet(mint, { unit });
+		const wallet = new Wallet(mint, { unit, logger });
 		const existingProofs = [
 			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
 			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
@@ -533,7 +533,9 @@ describe('receive', () => {
 			],
 			unit: 'sat',
 		};
-		const proofs = await wallet.receive(tok, { proofsWeHave: existingProofs });
+		const proofs = await wallet.receive(tok, {
+			outputType: { type: 'random', proofsWeHave: existingProofs },
+		});
 		// receiving 5 with a target count of 3, we expect three 1s, and one 2
 		// as we already have the target amount of 2s
 		expect(proofs).toHaveLength(4);

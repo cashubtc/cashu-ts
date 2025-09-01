@@ -473,13 +473,13 @@ class Wallet {
 		keys: MintKeys,
 		outputType: OutputType,
 		includeFees?: boolean,
-		proofsWeHave?: Proof[],
 	): OutputDataLike[] {
 		let adjustedAmount = amount;
 
+		// Custom outputs don't have automatic optimizations or fee inclusion)
 		if (outputType.type === 'custom') {
-			if (includeFees || (proofsWeHave && proofsWeHave.length > 0)) {
-				const message = 'custom does not support fee inclusion or optimization';
+			if (includeFees) {
+				const message = 'The custom OutputType does not support automatic fee inclusion';
 				this._logger.error(message);
 				throw new Error(message);
 			}
@@ -487,9 +487,11 @@ class Wallet {
 		}
 
 		let splitAmounts = outputType.splitAmounts ?? [];
+		const proofsWeHave = outputType.proofsWeHave ?? [];
 
-		// Apply optimization if proofsWeHave provided
-		if (proofsWeHave && proofsWeHave.length > 0) {
+		// If proofsWeHave was provided - we will try to optimize the outputs so
+		// that we only keep around _denominationTarget proofs of each amount.
+		if (proofsWeHave.length > 0) {
 			splitAmounts = getKeepAmounts(
 				proofsWeHave,
 				adjustedAmount,
@@ -498,6 +500,8 @@ class Wallet {
 			);
 		}
 
+		// With includeFees, we create additional output amounts to cover the
+		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
 		if (includeFees) {
 			let outputFee = this.getFeesForKeyset(splitAmounts.length, keys.id);
 			let sendAmountsFee = splitAmount(outputFee, keys.keys);
@@ -596,7 +600,6 @@ class Wallet {
 			keysetId?: string;
 			privkey?: string;
 			includeDleq?: boolean;
-			proofsWeHave?: Proof[];
 			requireDleq?: boolean;
 		},
 	): Promise<Proof[]> {
@@ -628,7 +631,6 @@ class Wallet {
 			keys,
 			outputType,
 			false, // includeFees
-			config?.proofsWeHave,
 		);
 		const inputs = await this.prepareInputs(
 			proofs,
