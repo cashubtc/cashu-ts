@@ -99,58 +99,113 @@ export type P2PKOptions = {
 };
 
 /**
+ * Defines the configuration for generating blinded message outputs in CashuWallet. This is a tagged
+ * union where the `type` field determines the variant and its behavior.
+ *
+ * @remarks
+ * This type is experimental and may change in future releases. For production use, rely on
+ * CashuWallet's established API.
+ * @example
+ *
+ * ```typescript
+ * // Random output type
+ * const randomOutput: OutputType = { type: 'random', splitAmounts: [1, 2, 4] };
+ * // Deterministic output type
+ * const deterministicOutput: OutputType = { type: 'deterministic', counter: 0 };
+ * ```
+ *
  * @v3
- * Defines the type and configuration for generating blinded message outputs.
- * This type is experimental and may change in future releases. For production use,
- * rely on CashuWallet's established API.
  */
 export type OutputType =
-	| {
-			type: 'random';
+	| ({
 			/**
-			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 * Generates outputs with random blinding factors.
+			 *
+			 * @remarks
+			 * The default type: Used for standard, non-deterministic output generation.
 			 */
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-	  }
-	| {
+			type: 'random';
+	  } & SharedOutputTypeProps)
+	| ({
+			/**
+			 * Generates outputs deterministically based on a counter.
+			 *
+			 * @remarks
+			 * Useful for reproducible output sequences.
+			 */
 			type: 'deterministic';
 			counter: number;
+	  } & SharedOutputTypeProps)
+	| ({
 			/**
-			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 * Generates pay-to-public-key (P2PK) outputs with specific options.
+			 *
+			 * @see P2PKOptions for configuration options.
 			 */
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-	  }
-	| {
 			type: 'p2pk';
 			options: P2PKOptions;
+	  } & SharedOutputTypeProps)
+	| ({
 			/**
-			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
+			 * Uses a factory to generate OutputData instances.
+			 *
+			 * @remarks
+			 * The number of outputs is determined by splitAmounts or basic split.
+			 * @see OutputDataFactory for factory details.
 			 */
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-	  }
-	| {
 			type: 'factory';
-			/**
-			 * Factory for generating OutputData; splitAmounts (or basic split) determines how many to
-			 * create.
-			 */
 			factory: OutputDataFactory;
-			/**
-			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
-			 */
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-	  }
+	  } & SharedOutputTypeProps)
 	| {
-			type: 'custom';
 			/**
-			 * Pre-created OutputData array; no splitting applied (amounts implied by array).
+			 * Provides pre-created OutputData instances, bypassing automatic splitting.
+			 *
+			 * @remarks
+			 * Use this when you have specific OutputData pre-prepared.
 			 */
+			type: 'custom';
 			data: OutputData[];
 	  };
+
+/**
+ * Shared properties for OutputType variants, except 'custom'.
+ *
+ * @v3
+ */
+interface SharedOutputTypeProps {
+	/**
+	 * Optional custom amounts for splitting outputs.
+	 *
+	 * @default Uses basic splitAmount if omitted.
+	 */
+	splitAmounts?: number[];
+	/**
+	 * Optional proofs to include in the output generation.
+	 *
+	 * @remarks
+	 * Used to optimize denomination splitting based on the wallet's denomination target.
+	 * @see Wallet constructor's `denominationTarget` option for configuration details.
+	 */
+	proofsWeHave?: Proof[];
+}
+
+/**
+ * Default configuration for `OutputType`, equivalent to `{ type: 'random' }`.
+ *
+ * @remarks
+ * Use this constant to specify the default, non-deterministic output generation behavior for
+ * methods like `wallet.receive`.
+ * @example
+ *
+ * ```typescript
+ * const token = 'cashuB...';
+ * // Uses random blinding factors for output generation
+ * const proofs = await wallet.receive(token, DEFAULT_OUTPUT, { requireDleq: true });
+ * ```
+ *
+ * @v3
+ */
+export const DEFAULT_OUTPUT: OutputType = { type: 'random' };
 
 /**
  * @v3
@@ -524,18 +579,18 @@ class Wallet {
 	 *
 	 * @param proofs The proofs to prepare.
 	 * @param privkey Optional private key for signing.
-	 * @param includeDleq Whether to filter for DLEQ proofs.
+	 * @param requireDleq Optional boolean to use proofs with valid DLEQ only.
 	 * @param keysetId Optional keyset ID for validation.
 	 * @returns Prepared proofs.
 	 */
 	private async prepareInputs(
 		proofs: Proof[],
 		privkey?: string,
-		includeDleq?: boolean,
+		requireDleq?: boolean,
 		keysetId?: string,
 	): Promise<Proof[]> {
 		let inputs = proofs;
-		if (includeDleq) {
+		if (requireDleq) {
 			const keys = await this.getKeys(keysetId);
 			inputs = inputs.filter((p) => hasValidDleq(p, keys));
 		}
@@ -595,11 +650,10 @@ class Wallet {
 	 */
 	async receive(
 		token: Token | string,
+		outputType?: OutputType = { type: 'random' },
 		config?: {
-			outputType?: OutputType;
 			keysetId?: string;
 			privkey?: string;
-			includeDleq?: boolean;
 			requireDleq?: boolean;
 		},
 	): Promise<Proof[]> {
@@ -625,7 +679,6 @@ class Wallet {
 			throw new Error(message);
 		}
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
-		const outputType = config?.outputType ?? { type: 'random' };
 		const outputs = this.configureOutputs(
 			netAmount,
 			keys,
@@ -635,7 +688,7 @@ class Wallet {
 		const inputs = await this.prepareInputs(
 			proofs,
 			config?.privkey,
-			config?.includeDleq,
+			config?.requireDleq,
 			config?.keysetId,
 		);
 		const swapTransaction = this.createSwapTransaction(inputs, outputs);
