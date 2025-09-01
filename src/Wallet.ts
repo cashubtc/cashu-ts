@@ -111,6 +111,7 @@ export type OutputType =
 			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
 			 */
 			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
 	  }
 	| {
 			type: 'deterministic';
@@ -119,6 +120,7 @@ export type OutputType =
 			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
 			 */
 			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
 	  }
 	| {
 			type: 'p2pk';
@@ -127,9 +129,10 @@ export type OutputType =
 			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
 			 */
 			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
 	  }
 	| {
-			type: 'custom-factory';
+			type: 'factory';
 			/**
 			 * Factory for generating OutputData; splitAmounts (or basic split) determines how many to
 			 * create.
@@ -139,9 +142,10 @@ export type OutputType =
 			 * Optional custom amounts for splitting; if omitted, uses basic splitAmount.
 			 */
 			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
 	  }
 	| {
-			type: 'custom-array';
+			type: 'custom';
 			/**
 			 * Pre-created OutputData array; no splitting applied (amounts implied by array).
 			 */
@@ -473,7 +477,7 @@ class Wallet {
 	): OutputDataLike[] {
 		let adjustedAmount = amount;
 
-		if (outputType.type === 'custom-array') {
+		if (outputType.type === 'custom') {
 			if (includeFees || (proofsWeHave && proofsWeHave.length > 0)) {
 				const message = 'custom does not support fee inclusion or optimization';
 				this._logger.error(message);

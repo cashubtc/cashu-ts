@@ -418,7 +418,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 
-	test('test receive custom-array', async () => {
+	test('test receive custom', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
 				return HttpResponse.json({

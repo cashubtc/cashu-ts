@@ -388,7 +388,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 
-	test('test receive custom-factory', async () => {
+	test('test receive factory', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
 				return HttpResponse.json({
@@ -412,7 +412,7 @@ describe('receive', () => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
 		const proofs = await wallet.receive(token3sat, {
-			outputType: { type: 'custom-factory', factory: customFactory },
+			outputType: { type: 'factory', factory: customFactory },
 		});
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
@@ -423,7 +423,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
 
-	test('test receive custom-array', async () => {
+	test('test receive custom', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
 				return HttpResponse.json({
@@ -455,7 +455,7 @@ describe('receive', () => {
 			[1, 1, 1],
 		);
 		const proofs = await wallet.receive(token3sat, {
-			outputType: { type: 'custom-array', data: customData },
+			outputType: { type: 'custom', data: customData },
 		});
 		expect(proofs).toHaveLength(3);
 		expect(proofs).toMatchObject([
