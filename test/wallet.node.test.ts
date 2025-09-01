@@ -13,6 +13,7 @@ import {
 	Proof,
 } from '../src/model/types/index';
 import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
+import { type Logger, ConsoleLogger } from '../src/logger';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
 import { MintInfo } from '../src/model/MintInfo';
@@ -464,68 +465,6 @@ describe('receive', () => {
 		await expect(wallet.receive(token3sat, { requireDleq: true })).rejects.toThrow(
 			'Token contains proofs with invalid DLEQ',
 		);
-	});
-
-	test('test receive proofsWeHave optimization', async () => {
-		server.use(
-			http.post(mintUrl + '/v1/swap', async ({ request }) => {
-				return HttpResponse.json({
-					signatures: [
-						{
-							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 4,
-							C_: '026a0773a5f2fbbb0c619b99c66d789847e6b1a33c3063e9a8e7d0f3a5d547a0e',
-						},
-					],
-				});
-			}),
-		);
-		const wallet = new CashuWallet(mint, { unit });
-		const existingProofs = [
-			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-		];
-		const tok = {
-			mint: 'http://localhost:3338',
-			proofs: [
-				{
-					id: '00bd033559de27d0',
-					amount: 1,
-					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
-					C: '0389cd9f4f988e380a7989d4d488a7c91c5277fb93047e7a2cc1ed8e3396b854ff',
-				},
-				{
-					id: '00bd033559de27d0',
-					amount: 1,
-					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
-					C: '0389cd9f4f988e380a7989d4d488a7c91c5277fb93047e7a2cc1ed8e3396b854ff',
-				},
-				{
-					id: '00bd033559de27d0',
-					amount: 2,
-					secret: 'de55c15faefded7f9c999c3d4c62f81b0c6fe21a752fdeff6b084cf2df2f5cf3',
-					C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
-				},
-			],
-			unit: 'sat',
-		};
-		const proofs = await wallet.receive(tok, { proofsWeHave: existingProofs });
-		expect(proofs).toHaveLength(2);
-		expect(proofs).toMatchObject([
-			{ amount: 2, id: '00bd033559de27d0' },
-			{ amount: 2, id: '00bd033559de27d0' },
-		]);
 	});
 
 	test('test receive privkey signing', async () => {

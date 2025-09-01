@@ -30,7 +30,6 @@ import type {
 	MintQuoteResponse,
 	OutputAmounts,
 	ProofState,
-	ReceiveOptions,
 	RestoreOptions,
 	SendOptions,
 	SerializedBlindedSignature,
@@ -410,11 +409,12 @@ class Wallet {
 					outputType.splitAmounts,
 				);
 				break;
-			case 'custom-factory':
+			case 'custom-factory': {
 				const factorySplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
 				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
 				break;
-			case 'custom-array':
+			}
+			case 'custom-array': {
 				outputData = outputType.data;
 				const customTotal = outputData.reduce((sum, d) => sum + d.blindedMessage.amount, 0);
 				if (customTotal !== amount) {
@@ -423,6 +423,7 @@ class Wallet {
 					);
 				}
 				break;
+			}
 			default:
 				throw new Error('Unsupported output type');
 		}
@@ -502,7 +503,7 @@ class Wallet {
 	): Promise<Proof[]> {
 		let inputs = proofs;
 		if (includeDleq) {
-			const keys = (await this.getKeys(keysetId)) as MintKeys; // Assume async handled externally
+			const keys = await this.getKeys(keysetId);
 			inputs = inputs.filter((p) => hasValidDleq(p, keys));
 		}
 		if (privkey) {
@@ -603,6 +604,7 @@ class Wallet {
 			config?.keysetId,
 		);
 		const swapTransaction = this.createSwapTransaction(inputs, outputs);
+		this._logger.debug('SWAP PAYLOAD', swapTransaction.payload);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const proofsReceived = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
 		const orderedProofs: Proof[] = [];

@@ -13,6 +13,7 @@ import {
 	Proof,
 } from '../src/model/types/index';
 import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
+import { type Logger, ConsoleLogger } from '../src/logger';
 import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
 import { MintInfo } from '../src/model/MintInfo';
@@ -60,6 +61,7 @@ const invoice =
 const token3sat =
 	'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgqNhYQFhc3hAZTdjMWI3NmQxYjMxZTJiY2EyYjIyOWQxNjBiZGY2MDQ2ZjMzYmM0NTcwMjIyMzA0YjY1MTEwZDkyNmY3YWY4OWFjWCEDic2fT5iOOAp5idTUiKfJHFJ3-5MEfnoswe2OM5a4VP-jYWECYXN4QGRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjNhY1ghAt5AxZ2QODuIU8zzpLIIZKyDunWPzj2VnbuJNhAC6M5H';
 const server = setupServer();
+const logger = new ConsoleLogger('DEBUG');
 
 beforeAll(() => {
 	server.listen({ onUnhandledRequest: 'error' });
@@ -479,18 +481,23 @@ describe('receive', () => {
 					signatures: [
 						{
 							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+							amount: 1,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
 						},
 						{
 							id: '00bd033559de27d0',
 							amount: 2,
 							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 4,
-							C_: '026a0773a5f2fbbb0c619b99c66d789847e6b1a33c3063e9a8e7d0f3a5d547a0e',
 						},
 					],
 				});
@@ -498,9 +505,9 @@ describe('receive', () => {
 		);
 		const wallet = new Wallet(mint, { unit });
 		const existingProofs = [
-			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-			{ amount: 1, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
 		];
 		const tok = {
 			mint: 'http://localhost:3338',
@@ -509,13 +516,13 @@ describe('receive', () => {
 					id: '00bd033559de27d0',
 					amount: 1,
 					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
-					C: '0389cd9f4f988e380a7989d4d488a7c91c5277fb93047e7a2cc1ed8e3396b854ff',
+					C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
 				},
 				{
 					id: '00bd033559de27d0',
-					amount: 1,
+					amount: 2,
 					secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
-					C: '0389cd9f4f988e380a7989d4d488a7c91c5277fb93047e7a2cc1ed8e3396b854ff',
+					C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
 				},
 				{
 					id: '00bd033559de27d0',
@@ -527,9 +534,13 @@ describe('receive', () => {
 			unit: 'sat',
 		};
 		const proofs = await wallet.receive(tok, { proofsWeHave: existingProofs });
-		expect(proofs).toHaveLength(2);
+		// receiving 5 with a target count of 3, we expect three 1s, and one 2
+		// as we already have the target amount of 2s
+		expect(proofs).toHaveLength(4);
 		expect(proofs).toMatchObject([
-			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
 		]);
 	});
