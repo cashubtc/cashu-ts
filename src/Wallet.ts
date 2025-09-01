@@ -208,7 +208,9 @@ class Wallet {
 		}
 		if (options?.bip39seed) {
 			if (!(options.bip39seed instanceof Uint8Array)) {
-				throw new Error('bip39seed must be a valid UInt8Array');
+				const message = 'bip39seed must be a valid Uint8Array';
+				this._logger.error(message, { bip39seed: options.bip39seed });
+				throw new Error(message);
 			}
 			this._seed = options.bip39seed;
 		}
@@ -225,7 +227,9 @@ class Wallet {
 	}
 	get keysetId(): string {
 		if (!this._keysetId) {
-			throw new Error('No keysetId set');
+			const message = 'No keysetId set';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		return this._keysetId;
 	}
@@ -237,7 +241,9 @@ class Wallet {
 	}
 	get mintInfo(): MintInfo {
 		if (!this._mintInfo) {
-			throw new Error('Mint info not loaded');
+			const message = 'Mint info not loaded';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		return this._mintInfo;
 	}
@@ -294,7 +300,9 @@ class Wallet {
 			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
 		)[0];
 		if (!activeKeyset) {
-			throw new Error('No active keyset found');
+			const message = 'No active keyset found';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		return activeKeyset;
 	}
@@ -321,7 +329,9 @@ class Wallet {
 		const keysets = await this.mint.getKeys();
 		keysets.keysets.forEach((k) => {
 			if (!verifyKeysetId(k)) {
-				throw new Error(`Couldn't verify keyset ID ${k.id}`);
+				const message = `Couldn't verify keyset ID ${k.id}`;
+				this._logger.error(message);
+				throw new Error(message);
 			}
 		});
 		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
@@ -352,7 +362,9 @@ class Wallet {
 		if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
 			await this.getKeySets();
 			if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
-				throw new Error(`could not initialize keys. No keyset with id '${keysetId}' found`);
+				const message = `could not initialize keys. No keyset with id '${keysetId}' found`;
+				this._logger.error(message);
+				throw new Error(message);
 			}
 		}
 
@@ -360,7 +372,9 @@ class Wallet {
 		if (!this._keys.get(keysetId)) {
 			const keys = await this.mint.getKeys(keysetId);
 			if (!verifyKeysetId(keys.keysets[0])) {
-				throw new Error(`Couldn't verify keyset ID ${keys.keysets[0].id}`);
+				const message = `Couldn't verify keyset ID ${keys.keysets[0].id}`;
+				this._logger.error(message);
+				throw new Error(message);
 			}
 			this._keys.set(keysetId, keys.keysets[0]);
 		}
@@ -383,15 +397,21 @@ class Wallet {
 		keyset: MintKeys,
 		outputType: OutputType,
 	): OutputDataLike[] {
-		let outputData: OutputDataLike[];
+		if (amount <= 0) {
+			this._logger.warn('Amount was invalid (zero or negative)');
+			return [];
+		}
 
+		let outputData: OutputDataLike[];
 		switch (outputType.type) {
 			case 'random':
 				outputData = OutputData.createRandomData(amount, keyset, outputType.splitAmounts);
 				break;
 			case 'deterministic':
 				if (!this._seed) {
-					throw new Error('Deterministic outputs require a seed configured in the wallet');
+					const message = 'Deterministic outputs require a seed configured in the wallet';
+					this._logger.error(message);
+					throw new Error(message);
 				}
 				outputData = OutputData.createDeterministicData(
 					amount,
@@ -409,23 +429,26 @@ class Wallet {
 					outputType.splitAmounts,
 				);
 				break;
-			case 'custom-factory': {
+			case 'factory': {
 				const factorySplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
 				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
 				break;
 			}
-			case 'custom-array': {
+			case 'custom': {
 				outputData = outputType.data;
 				const customTotal = outputData.reduce((sum, d) => sum + d.blindedMessage.amount, 0);
 				if (customTotal !== amount) {
-					throw new Error(
-						`Custom output data total (${customTotal}) does not match amount (${amount})`,
-					);
+					const message = `Custom output data total (${customTotal}) does not match amount (${amount})`;
+					this._logger.error(message);
+					throw new Error(message);
 				}
 				break;
 			}
-			default:
-				throw new Error('Unsupported output type');
+			default: {
+				const message = `Invalid OutputType: ${outputType.type}`;
+				this._logger.error(message);
+				throw new Error(message);
+			}
 		}
 
 		return outputData;
@@ -452,7 +475,9 @@ class Wallet {
 
 		if (outputType.type === 'custom-array') {
 			if (includeFees || (proofsWeHave && proofsWeHave.length > 0)) {
-				throw new Error('custom-array does not support fee inclusion or optimization');
+				const message = 'custom does not support fee inclusion or optimization';
+				this._logger.error(message);
+				throw new Error(message);
 			}
 			return this.createOutputData(adjustedAmount, keys, outputType);
 		}
@@ -577,7 +602,9 @@ class Wallet {
 		}
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, this._keysets) : token;
 		if (decodedToken.mint !== this.mint.mintUrl) {
-			throw new Error('Token belongs to a different mint');
+			const message = 'Token belongs to a different mint';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const { proofs } = decodedToken;
 		const totalAmount = sumProofs(proofs);
@@ -586,7 +613,9 @@ class Wallet {
 		}
 		const keys = await this.getKeys(config?.keysetId);
 		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
-			throw new Error('Token contains proofs with invalid or missing DLEQ');
+			const message = 'Token contains proofs with invalid or missing DLEQ';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
 		const outputType = config?.outputType ?? { type: 'random' };
@@ -637,7 +666,9 @@ class Wallet {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
 		if (sumProofs(proofs) < amount) {
-			throw new Error('Not enough funds available to send');
+			const message = 'Not enough funds available to send';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
 			proofs,
@@ -662,7 +693,9 @@ class Wallet {
 		}
 
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
-			throw new Error('Not enough funds available to send');
+			const message = 'Not enough funds available to send';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 
 		return { keep: keepProofsOffline, send: sendProofOffline };
@@ -800,7 +833,9 @@ class Wallet {
 					const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
 					const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
 					if (rightIndex === null) {
-						throw new Error('Unexpected null rightIndex in binary search');
+						const message = 'Unexpected null rightIndex in binary search';
+						this._logger.error(message);
+						throw new Error(message);
 					}
 					endIndex = rightIndex + 1;
 				} else {
@@ -950,7 +985,9 @@ class Wallet {
 			// Time limit reached?
 			if (timer.elapsed() > MAX_TIMEMS) {
 				if (exactMatch) {
-					throw new Error('Proof selection took too long. Try again with a smaller proof set.');
+					const message = 'Proof selection took too long. Try again with a smaller proof set.';
+					this._logger.error(message);
+					throw new Error(message);
 				} else {
 					this._logger.warn('Proof selection took too long. Returning best selection so far.');
 					break;
@@ -990,7 +1027,9 @@ class Wallet {
 	private getProofFeePPK(proof: Proof) {
 		const keyset = this._keysets.find((k) => k.id === proof.id);
 		if (!keyset) {
-			throw new Error(`Could not get fee. No keyset found for keyset id: ${proof.id}`);
+			const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		return keyset?.input_fee_ppk || 0;
 	}
@@ -1057,7 +1096,9 @@ class Wallet {
 		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs) - amountToSend;
 
 		if (amountToKeep < 0) {
-			throw new Error('Not enough balance to send');
+			const message = 'Not enough balance to send';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 
 		// keep output selection
@@ -1073,7 +1114,9 @@ class Wallet {
 			);
 		} else if (outputAmounts) {
 			if (outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) != amountToKeep) {
-				throw new Error('Keep amounts do not match amount to keep');
+				const message = 'Keep amounts do not match amount to keep';
+				this._logger.error(message);
+				throw new Error(message);
 			}
 			keepAmounts = outputAmounts.keepAmounts;
 		}
@@ -1084,7 +1127,9 @@ class Wallet {
 					sendProofs,
 				)} | length: ${sendProofs.length}`,
 			);
-			throw new Error(`Not enough funds available for swap`);
+			const message = `Not enough funds available for swap`;
+			this._logger.error(message);
+			throw new Error(message);
 		}
 
 		outputAmounts = {
@@ -1183,7 +1228,9 @@ class Wallet {
 		const { keysetId } = options || {};
 		const keys = await this.getKeys(keysetId);
 		if (!this._seed) {
-			throw new Error('CashuWallet must be initialized with a seed to use restore');
+			const message = 'CashuWallet must be initialized with a seed to use restore';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		// create blank amounts for unknown restore amounts
 		const amounts = Array(count).fill(1);
@@ -1256,7 +1303,9 @@ class Wallet {
 	): Promise<LockedMintQuoteResponse> {
 		const { supported } = (await this.lazyGetMintInfo()).isSupported(20);
 		if (!supported) {
-			throw new Error('Mint does not support NUT-20');
+			const message = 'Mint does not support NUT-20';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
@@ -1266,7 +1315,9 @@ class Wallet {
 		};
 		const res = await this.mint.createMintQuote(mintQuotePayload);
 		if (typeof res.pubkey !== 'string') {
-			throw new Error('Mint returned unlocked mint quote');
+			const message = 'Mint returned unlocked mint quote';
+			this._logger.error(message);
+			throw new Error(message);
 		} else {
 			const pubkey = res.pubkey;
 			return { ...res, pubkey, amount: res.amount || amount, unit: res.unit || this.unit };
@@ -1294,7 +1345,9 @@ class Wallet {
 		// Check if mint supports description for bolt12
 		const mintInfo = await this.lazyGetMintInfo();
 		if (options?.description && !mintInfo.supportsBolt12Description) {
-			throw new Error('Mint does not support description for bolt12');
+			const message = 'Mint does not support description for bolt12';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 
 		const mintQuotePayload: Bolt12MintQuotePayload = {
@@ -1443,10 +1496,14 @@ class Wallet {
 	): Promise<MeltQuoteResponse> {
 		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
-			throw new Error('Mint does not support NUT-15');
+			const message = 'Mint does not support NUT-15';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this.unit)) {
-			throw new Error(`Mint does not support MPP for bolt11 and ${this.unit}`);
+			const message = `Mint does not support MPP for bolt11 and ${this.unit}`;
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const mppOption: MPPOption = {
 			amount: millisatPartialAmount,
@@ -1677,7 +1734,9 @@ class Wallet {
 			for (let j = 0; j < YsSlice.length; j++) {
 				const state = stateMap[YsSlice[j]];
 				if (!state) {
-					throw new Error('Could not find state for proof with Y: ' + YsSlice[j]);
+					const message = 'Could not find state for proof with Y: ' + YsSlice[j];
+					this._logger.error(message);
+					throw new Error(message);
 				}
 				states.push(state);
 			}
@@ -1700,7 +1759,9 @@ class Wallet {
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
+			const message = 'failed to establish WebSocket connection.';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: quoteIds },
@@ -1775,7 +1836,9 @@ class Wallet {
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
+			const message = 'failed to establish WebSocket connection.';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_melt_quote', filters: quoteIds },
@@ -1802,7 +1865,9 @@ class Wallet {
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
 		if (!this.mint.webSocketConnection) {
-			throw new Error('failed to establish WebSocket connection.');
+			const message = 'failed to establish WebSocket connection.';
+			this._logger.error(message);
+			throw new Error(message);
 		}
 		const enc = new TextEncoder();
 		const proofMap: { [y: string]: Proof } = {};
@@ -1909,7 +1974,9 @@ class Wallet {
 		let mintPayload: MintPayload;
 		if (typeof quote !== 'string') {
 			if (!privateKey) {
-				throw new Error('Can not sign locked quote without private key');
+				const message = 'Can not sign locked quote without private key';
+				this._logger.error(message);
+				throw new Error(message);
 			}
 			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
 			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
