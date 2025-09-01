@@ -769,11 +769,11 @@ class Wallet {
 
 	/**
 	 * Receives a cashu token and returns proofs using custom secrets This is a convenience method -
-	 * @see receive()
 	 *
 	 * @param token Cashu token.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using custom secrets.
+	 * @see receive()
 	 */
 	async receiveAsCustom(
 		token: Token | string,
@@ -853,61 +853,125 @@ class Wallet {
 	}
 
 	/**
-	 * Send proofs of a given amount, by providing at least the required amount of proofs.
+	 * Splits and creates sendable tokens. If no amount is specified, the amount is implied by the
+	 * cumulative amount of all proofs. If both amount and preference are set, but the preference
+	 * cannot fulfill the amount, then we use the default split.
+	 *
+	 * @param amount Amount to send (optional; if omitted, sends all after fees).
+	 * @param proofs Array of proofs to split.
+	 * @param outputConfig Configuration for keep and send outputs.
+	 * @param config Optional parameters for the swap.
+	 * @returns Promise of the change- and send-proofs.
+	 */
+	async swap(
+		amount?: number,
+		proofs: Proof[],
+		outputConfig?: {
+			keep?: OutputType;
+			send: OutputType;
+		},
+		config?: {
+			keysetId?: string;
+			privkey?: string;
+			includeFees?: boolean;
+			requireDleq?: boolean;
+		},
+	): Promise<SendResponse> {
+		const { keysetId, privkey, includeFees = false, requireDleq } = config || {};
+		const keys = await this.getKeys(keysetId);
+		if (requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
+			throw new Error('Proofs have invalid or missing DLEQ');
+		}
+		const totalAmount = sumProofs(proofs);
+		const sendAmount = amount ?? totalAmount - this.getFeesForProofs(proofs);
+		if (sendAmount <= 0) {
+			return { keep: proofs, send: [] };
+		}
+		const keepType = outputConfig?.keep ?? { type: 'random' };
+		const sendType = outputConfig?.send ?? { type: 'random' };
+		const keepOutputs = this.configureOutputs(
+			totalAmount - sendAmount - this.getFeesForProofs(proofs),
+			keys,
+			keepType,
+			includeFees,
+		);
+		const sendOutputs = this.configureOutputs(sendAmount, keys, sendType, includeFees);
+		const inputs = await this.prepareInputs(proofs, privkey, false, keysetId); // No includeDleq; strip if invalid
+		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const reorderedProofs = Array(swapProofs.length);
+		swapTransaction.sortedIndices.forEach((s, i) => {
+			reorderedProofs[s] = swapProofs[i];
+		});
+		const keep: Proof[] = [];
+		const send: Proof[] = [];
+		reorderedProofs.forEach((p, i) => {
+			if (swapTransaction.keepVector[i]) keep.push(p);
+			else send.push(p);
+		});
+		return { keep, send };
+	}
+
+	/**
+	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @param amount Amount to send.
-	 * @param proofs Array of proofs (accumulated amount of proofs must be >= than amount)
-	 * @param {SendOptions} [options] - Optional parameters for configuring the send operation.
-	 * @returns {SendResponse}
+	 * @param proofs Array of proofs (must sum >= amount).
+	 * @param outputConfig Configuration for keep and send outputs.
+	 * @param config Optional parameters for the send.
+	 * @returns SendResponse with keep/send proofs.
 	 */
-	async send(amount: number, proofs: Proof[], options?: SendOptions): Promise<SendResponse> {
-		const {
-			offline,
-			includeFees,
-			includeDleq,
-			keysetId,
-			outputAmounts,
-			pubkey,
-			privkey,
-			outputData,
-		} = options || {};
-		if (includeDleq) {
-			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
+	async send(
+		amount: number,
+		proofs: Proof[],
+		outputConfig?: {
+			keep?: OutputType;
+			send: OutputType;
+		},
+		config?: {
+			keysetId?: string;
+			privkey?: string;
+			offline?: boolean;
+			includeFees?: boolean;
+			requireDleq?: boolean;
+		},
+	): Promise<SendResponse> {
+		const { offline = false, includeFees = !offline, requireDleq } = config || {};
+		if (requireDleq && proofs.some((p) => !hasValidDleq(p, await this.getKeys(config?.keysetId)))) {
+			throw new Error('Proofs have invalid or missing DLEQ');
 		}
-		if (sumProofs(proofs) < amount) {
-			const message = 'Not enough funds available to send';
-			this._logger.error(message);
-			throw new Error(message);
+		const total = sumProofs(proofs);
+		if (total < amount) throw new Error('Not enough funds');
+		if (offline || total === amount) {
+			const { keep, send } = this.selectProofsToSend(proofs, amount, includeFees);
+			return { keep, send };
 		}
-		const { keep: keepProofsOffline, send: sendProofOffline } = this.selectProofsToSend(
-			proofs,
-			amount,
-			options?.includeFees,
-		);
-		const expectedFee = includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
-		if (
-			!offline &&
-			(sumProofs(sendProofOffline) != amount + expectedFee || // if the exact amount cannot be selected
-				outputAmounts ||
-				pubkey ||
-				privkey ||
-				keysetId ||
-				outputData) // these options require a swap
-		) {
-			const sendRes = await this.swap(amount, proofs, options);
-			const { keep, send } = sendRes;
-			const serialized = sendRes.serialized;
+		return this.swap(amount, proofs, outputConfig, config);
+	}
 
-			return { keep, send, serialized };
-		}
-
-		if (sumProofs(sendProofOffline) < amount + expectedFee) {
-			const message = 'Not enough funds available to send';
-			this._logger.error(message);
-			throw new Error(message);
-		}
-
-		return { keep: keepProofsOffline, send: sendProofOffline };
+	// Helpers (example for deterministic send; add for others as needed)
+	async sendAsDeterministic(
+		amount: number,
+		proofs: Proof[],
+		counter: number,
+		splitAmounts?: number[],
+		config?: {
+			keysetId?: string;
+			privkey?: string;
+			offline?: boolean;
+			includeFees?: boolean;
+			requireDleq?: boolean;
+			proofsWeHave?: Proof[];
+		},
+	): Promise<SendResponse> {
+		const sendType: OutputType = {
+			type: 'deterministic',
+			counter,
+			splitAmounts,
+			proofsWeHave: config?.proofsWeHave,
+		};
+		return this.send(amount, proofs, { send: sendType }, { ...config, proofsWeHave: undefined });
 	}
 
 	/**
@@ -1260,127 +1324,6 @@ class Wallet {
 			),
 		);
 		return fees;
-	}
-
-	/**
-	 * Splits and creates sendable tokens if no amount is specified, the amount is implied by the
-	 * cumulative amount of all proofs if both amount and preference are set, but the preference
-	 * cannot fulfill the amount, then we use the default split.
-	 *
-	 * @param {SwapOptions} [options] - Optional parameters for configuring the swap operation.
-	 * @returns Promise of the change- and send-proofs.
-	 */
-	async swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse> {
-		let { outputAmounts } = options || {};
-		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, outputData, p2pk } =
-			options || {};
-		const keyset = await this.getKeys(keysetId);
-
-		let amountToSend = amount;
-		const amountAvailable = sumProofs(proofs);
-		// send output selection
-		let sendAmounts = outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
-
-		if (includeFees) {
-			let outputFee = this.getFeesForKeyset(sendAmounts.length, keyset.id);
-			let sendAmountsFee = splitAmount(outputFee, keyset.keys);
-			while (
-				this.getFeesForKeyset(sendAmounts.concat(sendAmountsFee).length, keyset.id) > outputFee
-			) {
-				outputFee++;
-				sendAmountsFee = splitAmount(outputFee, keyset.keys);
-			}
-			sendAmounts = sendAmounts.concat(sendAmountsFee);
-			amountToSend += outputFee;
-		}
-
-		// include the fees to spend the the outputs of the swap
-		// input selection, needs fees because of the swap
-		const { keep: keepProofs, send: sendProofs } = this.selectProofsToSend(
-			proofs,
-			amountToSend,
-			true, // inc. fees
-		);
-
-		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs) - amountToSend;
-
-		if (amountToKeep < 0) {
-			const message = 'Not enough balance to send';
-			this._logger.error(message);
-			throw new Error(message);
-		}
-
-		// keep output selection
-		let keepAmounts;
-		if (!outputAmounts?.keepAmounts && !proofsWeHave) {
-			keepAmounts = splitAmount(amountToKeep, keyset.keys);
-		} else if (!outputAmounts?.keepAmounts && proofsWeHave) {
-			keepAmounts = getKeepAmounts(
-				proofsWeHave,
-				amountToKeep,
-				keyset.keys,
-				this._denominationTarget,
-			);
-		} else if (outputAmounts) {
-			if (outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) != amountToKeep) {
-				const message = 'Keep amounts do not match amount to keep';
-				this._logger.error(message);
-				throw new Error(message);
-			}
-			keepAmounts = outputAmounts.keepAmounts;
-		}
-
-		if (amountToSend + this.getFeesForProofs(sendProofs) > amountAvailable) {
-			this._logger.error(
-				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
-					sendProofs,
-				)} | length: ${sendProofs.length}`,
-			);
-			const message = `Not enough funds available for swap`;
-			this._logger.error(message);
-			throw new Error(message);
-		}
-
-		outputAmounts = {
-			keepAmounts: keepAmounts,
-			sendAmounts: sendAmounts,
-		};
-
-		const keepOutputData = outputData?.keep || this._keepFactory;
-		const sendOutputData = outputData?.send;
-
-		const swapTransaction = this.createSwapPayload(
-			amountToSend,
-			sendProofs,
-			keyset,
-			outputAmounts,
-			counter,
-			pubkey,
-			privkey,
-			{ keep: keepOutputData, send: sendOutputData },
-			p2pk,
-		);
-		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
-		const splitProofsToKeep: Proof[] = [];
-		const splitProofsToSend: Proof[] = [];
-		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
-		const reorderedProofs = Array(swapProofs.length);
-		swapTransaction.sortedIndices.forEach((s, i) => {
-			reorderedKeepVector[s] = swapTransaction.keepVector[i];
-			reorderedProofs[s] = swapProofs[i];
-		});
-		reorderedProofs.forEach((p: Proof, i) => {
-			if (reorderedKeepVector[i]) {
-				splitProofsToKeep.push(p);
-			} else {
-				splitProofsToSend.push(p);
-			}
-		});
-		return {
-			keep: [...splitProofsToKeep, ...keepProofs],
-			send: splitProofsToSend,
-		};
 	}
 
 	/**
