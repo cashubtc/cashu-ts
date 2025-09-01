@@ -28,12 +28,9 @@ import type {
 	MeltProofOptions,
 	MintProofOptions,
 	MintQuoteResponse,
-	OutputAmounts,
 	ProofState,
 	RestoreOptions,
-	SendOptions,
 	SerializedBlindedSignature,
-	SwapOptions,
 	MeltPayload,
 	MeltProofsResponse,
 	MeltQuotePayload,
@@ -652,9 +649,9 @@ class Wallet {
 	async receiveAsDefault(
 		token: Token | string,
 		config?: {
-			keysetId?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
 		},
@@ -683,9 +680,9 @@ class Wallet {
 		token: Token | string,
 		counter: number,
 		config?: {
-			keysetId?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
 		},
@@ -715,9 +712,9 @@ class Wallet {
 		token: Token | string,
 		options: P2PKOptions,
 		config?: {
-			keysetId?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
 		},
@@ -747,9 +744,9 @@ class Wallet {
 		token: Token | string,
 		factory: OutputDataFactory,
 		config?: {
-			keysetId?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
 		},
@@ -779,9 +776,9 @@ class Wallet {
 		token: Token | string,
 		data: OutputData[],
 		config?: {
-			keysetId?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			keysetId?: string;
 		},
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
@@ -802,9 +799,9 @@ class Wallet {
 		token: Token | string,
 		outputType?: OutputType = { type: 'random' },
 		config?: {
-			keysetId?: string;
 			privkey?: string;
 			requireDleq?: boolean;
+			keysetId?: string;
 		},
 	): Promise<Proof[]> {
 		// Fetch the keysets if we don't have them
@@ -853,75 +850,48 @@ class Wallet {
 	}
 
 	/**
-	 * Splits and creates sendable tokens. If no amount is specified, the amount is implied by the
-	 * cumulative amount of all proofs. If both amount and preference are set, but the preference
-	 * cannot fulfill the amount, then we use the default split.
-	 *
-	 * @param amount Amount to send (optional; if omitted, sends all after fees).
-	 * @param proofs Array of proofs to split.
-	 * @param outputConfig Configuration for keep and send outputs.
-	 * @param config Optional parameters for the swap.
-	 * @returns Promise of the change- and send-proofs.
-	 */
-	async swap(
-		amount?: number,
-		proofs: Proof[],
-		outputConfig?: {
-			keep?: OutputType;
-			send: OutputType;
-		},
-		config?: {
-			keysetId?: string;
-			privkey?: string;
-			includeFees?: boolean;
-			requireDleq?: boolean;
-		},
-	): Promise<SendResponse> {
-		const { keysetId, privkey, includeFees = false, requireDleq } = config || {};
-		const keys = await this.getKeys(keysetId);
-		if (requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
-			throw new Error('Proofs have invalid or missing DLEQ');
-		}
-		const totalAmount = sumProofs(proofs);
-		const sendAmount = amount ?? totalAmount - this.getFeesForProofs(proofs);
-		if (sendAmount <= 0) {
-			return { keep: proofs, send: [] };
-		}
-		const keepType = outputConfig?.keep ?? { type: 'random' };
-		const sendType = outputConfig?.send ?? { type: 'random' };
-		const keepOutputs = this.configureOutputs(
-			totalAmount - sendAmount - this.getFeesForProofs(proofs),
-			keys,
-			keepType,
-			includeFees,
-		);
-		const sendOutputs = this.configureOutputs(sendAmount, keys, sendType, includeFees);
-		const inputs = await this.prepareInputs(proofs, privkey, false, keysetId); // No includeDleq; strip if invalid
-		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
-		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
-		const reorderedProofs = Array(swapProofs.length);
-		swapTransaction.sortedIndices.forEach((s, i) => {
-			reorderedProofs[s] = swapProofs[i];
-		});
-		const keep: Proof[] = [];
-		const send: Proof[] = [];
-		reorderedProofs.forEach((p, i) => {
-			if (swapTransaction.keepVector[i]) keep.push(p);
-			else send.push(p);
-		});
-		return { keep, send };
-	}
-
-	/**
 	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @param amount Amount to send.
 	 * @param proofs Array of proofs (must sum >= amount).
-	 * @param outputConfig Configuration for keep and send outputs.
+	 * @param outputConfig Configuration for keep (change) and send outputs.
 	 * @param config Optional parameters for the send.
 	 * @returns SendResponse with keep/send proofs.
+	 * @throws Throws if the send cannot be completed offline.
 	 */
+	sendOffline(
+		amount: number,
+		proofs: Proof[],
+		config?: {
+			requireDleq?: boolean;
+			includeFees?: boolean;
+			exactMatch?: boolean;
+		},
+	): SendResponse {
+		const { requireDleq, includeFees, exactMatch } = config || {};
+		let inputs = proofs;
+		if (requireDleq) {
+			// Only use proofs that have a DLEQ
+			inputs = inputs.filter((p: Proof) => p.dleq != undefined);
+		}
+		if (sumProofs(inputs) < amount) {
+			const message = 'Not enough funds available to send';
+			this._logger.error(message);
+			throw new Error(message);
+		}
+		return this.selectProofsToSend(inputs, amount, includeFees, exactMatch);
+	}
+
+	/**
+	 * Splits and creates sendable tokens. If no amount is specified, sends all after fees.
+	 *
+	 * @param proofs Array of proofs to split.
+	 * @param amount Amount to send (optional; defaults to all after fees).
+	 * @param outputConfig Configuration for keep (change) and send outputs.
+	 * @param config Optional parameters for the swap.
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	public readonly swap = this.send.bind(this); // Swap is an alias of send
 	async send(
 		amount: number,
 		proofs: Proof[],
@@ -930,49 +900,107 @@ class Wallet {
 			send: OutputType;
 		},
 		config?: {
-			keysetId?: string;
-			privkey?: string;
-			offline?: boolean;
+			privkey?: string; // for swap
+			requireDleq?: boolean; // for swap
+			keysetId?: string; // for swap
 			includeFees?: boolean;
-			requireDleq?: boolean;
 		},
 	): Promise<SendResponse> {
-		const { offline = false, includeFees = !offline, requireDleq } = config || {};
-		if (requireDleq && proofs.some((p) => !hasValidDleq(p, await this.getKeys(config?.keysetId)))) {
-			throw new Error('Proofs have invalid or missing DLEQ');
+		const { privkey, requireDleq, keysetId, includeFees } = config || {};
+
+		// Can we avoid doing a swap?
+		try {
+			if (!outputConfig && !privkey && !keysetId) {
+				const { keep, send } = this.sendOffline(amount, proofs, {
+					includeFees,
+					exactMatch: true,
+				});
+				const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
+				if (sumProofs(send) == amount + expectedFee) {
+					this._logger.info('Successful exactMatch offline selection!');
+					return { keep, send };
+				}
+			}
+		} catch (e) {
+			this._logger.debug('ExactMatch offline selection failed.', { e });
+			// oh well, was worth a try...
 		}
-		const total = sumProofs(proofs);
-		if (total < amount) throw new Error('Not enough funds');
-		if (offline || total === amount) {
-			const { keep, send } = this.selectProofsToSend(proofs, amount, includeFees);
-			return { keep, send };
+
+		const keys = await this.getKeys(keysetId);
+		const totalAmount = sumProofs(proofs);
+		const inputFee = this.getFeesForProofs(proofs);
+		const sendAmount = amount - inputFee;
+		if (sendAmount <= 0) return { keep: proofs, send: [] };
+		const changeAmount = totalAmount - inputFee - sendAmount;
+		if (changeAmount < 0) {
+			const message = 'Not enough funds available to send';
+			this._logger.error(message);
+			throw new Error(message);
 		}
-		return this.swap(amount, proofs, outputConfig, config);
+		const keepType = outputConfig?.keep ?? { type: 'random' };
+		const sendType = outputConfig?.send ?? { type: 'random' };
+		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, includeFees);
+		const sendOutputs = this.configureOutputs(sendAmount, keys, sendType, includeFees);
+		const inputs = await this.prepareInputs(proofs, privkey, requireDleq, keysetId);
+		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
+		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const reorderedProofs = Array(swapProofs.length);
+		swapTransaction.sortedIndices.forEach((s, i) => (reorderedProofs[s] = swapProofs[i]));
+		const keep: Proof[] = [];
+		const send: Proof[] = [];
+		reorderedProofs.forEach((p: Proof, i) => {
+			if (swapTransaction.keepVector[i]) keep.push(p);
+			else send.push(p);
+		});
+		return { keep, send };
 	}
 
-	// Helpers (example for deterministic send; add for others as needed)
-	async sendAsDeterministic(
-		amount: number,
-		proofs: Proof[],
-		counter: number,
-		splitAmounts?: number[],
-		config?: {
-			keysetId?: string;
-			privkey?: string;
-			offline?: boolean;
-			includeFees?: boolean;
-			requireDleq?: boolean;
-			proofsWeHave?: Proof[];
-		},
-	): Promise<SendResponse> {
-		const sendType: OutputType = {
-			type: 'deterministic',
-			counter,
-			splitAmounts,
-			proofsWeHave: config?.proofsWeHave,
-		};
-		return this.send(amount, proofs, { send: sendType }, { ...config, proofsWeHave: undefined });
-	}
+	// Helpers (extend for other types as needed)
+	// async swapAsDeterministic(
+	// 	amount: number,
+	// 	proofs: Proof[],
+	// 	counter: number,
+	// 	splitAmounts?: number[],
+	// 	config?: {
+	// 		privkey?: string;
+	// 		requireDleq?: boolean;
+	// 		keysetId?: string;
+	// 		includeFees?: boolean;
+	// 		proofsWeHave?: Proof[];
+	// 	},
+	// ): Promise<SendResponse> {
+	// 	const send: OutputType = {
+	// 		type: 'deterministic',
+	// 		counter,
+	// 		splitAmounts,
+	// 		proofsWeHave: config?.proofsWeHave,
+	// 	};
+	// 	return this.swap(proofs, amount, { send }, { ...config, proofsWeHave: undefined });
+	// }
+
+	// async sendAsP2PK(
+	// 	amount: number,
+	// 	proofs: Proof[],
+	// 	options: P2PKOptions,
+	// 	splitAmounts?: number[],
+	// 	config?: {
+	// 		privkey?: string;
+	// 		requireDleq?: boolean;
+	// 		keysetId?: string;
+	// 		offline?: boolean;
+	// 		includeFees?: boolean;
+	// 		proofsWeHave?: Proof[];
+	// 	},
+	// ): Promise<SendResponse> {
+	// 	const sendType: OutputType = {
+	// 		type: 'p2pk',
+	// 		options,
+	// 		splitAmounts,
+	// 		proofsWeHave: config?.proofsWeHave,
+	// 	};
+	// 	return this.send(amount, proofs, { send: sendType }, { ...config, proofsWeHave: undefined });
+	// }
 
 	/**
 	 * Selects proofs to send based on amount and fee inclusion.
@@ -983,17 +1011,23 @@ class Wallet {
 	 * @param proofs Array of Proof objects available to select from.
 	 * @param amountToSend The target amount to send.
 	 * @param includeFees Optional boolean to include fees; Default: false.
+	 * @param exactMatch Optional boolean to require exact match; Default: false.
 	 * @returns SendResponse containing proofs to keep and proofs to send.
+	 * @throws Throws an error if an exact match cannot be found within MAX_TIMEMS.
 	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
 	 */
-	selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees = false): SendResponse {
+	selectProofsToSend(
+		proofs: Proof[],
+		amountToSend: number,
+		includeFees = false,
+		exactMatch = false,
+	): SendResponse {
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
 		const MAX_OVRPCT = 0; // Acceptable close match overage (percent)
 		const MAX_OVRAMT = 0; // Acceptable close match overage (absolute)
 		const MAX_TIMEMS = 1000; // Halt new trials if over time (in ms)
 		const MAX_P2SWAP = 5000; // Max number of Phase 2 improvement swaps
-		const exactMatch = false; // Allows close match (> amountToSend + fee)
 		const timer = measureTime(); // start the clock
 		let bestSubset: ProofWithFee[] | null = null;
 		let bestDelta = Infinity;
@@ -1732,134 +1766,6 @@ class Wallet {
 		change: Proof[];
 	}> {
 		return this._meltProofs('bolt12', meltQuote, proofsToSend, options);
-	}
-
-	/**
-	 * Creates a split payload.
-	 *
-	 * @param amount Amount to send.
-	 * @param proofsToSend Proofs to split*
-	 * @param outputAmounts? Optionally specify the output's amounts to keep and to send.
-	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
-	 *   must be initialized with seed phrase to take effect.
-	 * @param pubkey? Optionally locks ecash to pubkey. Will not be deterministic, even if counter is
-	 *   set!
-	 * @param privkey? Will create a signature on the @param proofsToSend secrets if set.
-	 * @param customOutputData? Optionally specify your own OutputData (blinded messages)
-	 * @param p2pk? Optionally specify options to lock the proofs according to NUT-11.
-	 * @returns
-	 */
-	private createSwapPayload(
-		amount: number,
-		proofsToSend: Proof[],
-		keyset: MintKeys,
-		outputAmounts?: OutputAmounts,
-		counter?: number,
-		pubkey?: string,
-		privkey?: string,
-		customOutputData?: {
-			keep?: OutputDataLike[] | OutputDataFactory;
-			send?: OutputDataLike[] | OutputDataFactory;
-		},
-		p2pk?: {
-			pubkey: string | string[];
-			locktime?: number;
-			refundKeys?: string[];
-			requiredSignatures?: number;
-			requiredRefundSignatures?: number;
-		},
-	): SwapTransaction {
-		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
-		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
-			outputAmounts.keepAmounts = splitAmount(
-				totalAmount - amount - this.getFeesForProofs(proofsToSend),
-				keyset.keys,
-			);
-		}
-		const keepAmount = totalAmount - amount - this.getFeesForProofs(proofsToSend);
-		let keepOutputData: OutputDataLike[] = [];
-		let sendOutputData: OutputDataLike[] = [];
-
-		if (customOutputData?.keep) {
-			if (isOutputDataFactory(customOutputData.keep)) {
-				const factory = customOutputData.keep;
-				const amounts = splitAmount(keepAmount, keyset.keys);
-				amounts.forEach((a) => {
-					keepOutputData.push(factory(a, keyset));
-				});
-			} else {
-				keepOutputData = customOutputData.keep;
-			}
-		} else {
-			keepOutputData = this.createOutputData(
-				keepAmount,
-				keyset,
-				counter,
-				undefined,
-				outputAmounts?.keepAmounts,
-				undefined,
-				this._keepFactory,
-			);
-		}
-
-		if (customOutputData?.send) {
-			if (isOutputDataFactory(customOutputData.send)) {
-				const factory = customOutputData.send;
-				const amounts = splitAmount(amount, keyset.keys);
-				amounts.forEach((a) => {
-					sendOutputData.push(factory(a, keyset));
-				});
-			} else {
-				sendOutputData = customOutputData.send;
-			}
-		} else {
-			sendOutputData = this.createOutputData(
-				amount,
-				keyset,
-				counter ? counter + keepOutputData.length : undefined,
-				pubkey,
-				outputAmounts?.sendAmounts,
-				p2pk,
-			);
-		}
-
-		if (privkey) {
-			proofsToSend = signP2PKProofs(proofsToSend, privkey);
-		}
-
-		proofsToSend = stripDleq(proofsToSend);
-
-		// Ensure witnesses are serialized before sending to mint
-		proofsToSend = proofsToSend.map((p: Proof) => {
-			const witness =
-				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
-			return { ...p, witness };
-		});
-
-		const mergedBlindingData = [...keepOutputData, ...sendOutputData];
-		const indices = mergedBlindingData
-			.map((_, i) => i)
-			.sort(
-				(a, b) =>
-					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
-			);
-		const keepVector: boolean[] = [
-			...Array.from({ length: keepOutputData.length }, () => true),
-			...Array.from({ length: sendOutputData.length }, () => false),
-		];
-
-		const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
-		const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
-
-		return {
-			payload: {
-				inputs: proofsToSend,
-				outputs: sortedOutputData.map((d) => d.blindedMessage),
-			},
-			outputData: sortedOutputData,
-			keepVector: sortedKeepVector,
-			sortedIndices: indices,
-		};
 	}
 
 	/**

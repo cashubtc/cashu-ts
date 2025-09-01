@@ -675,394 +675,394 @@ describe('checkProofsStates', () => {
 //  });
 // });
 
-// describe('send', () => {
-//  const proofs = [
-//      {
-//          id: '00bd033559de27d0',
-//          amount: 1,
-//          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//          C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//      },
-//  ];
-//  test('test send base case', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
-//      await wallet.getKeys();
+describe('send', () => {
+	const proofs = [
+		{
+			id: '00bd033559de27d0',
+			amount: 1,
+			secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+		},
+	];
+	test('test send base case', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.getKeys();
 
-//      const result = await wallet.send(1, proofs);
+		const result = await wallet.send(1, proofs);
 
-//      expect(result.keep).toHaveLength(0);
-//      expect(result.send).toHaveLength(1);
-//      expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-//  });
+		expect(result.keep).toHaveLength(0);
+		expect(result.send).toHaveLength(1);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+	});
 
-//  test('test send over paying. Should return change', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const keysets = await mint.getKeySets();
-//      const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+	test('test send over paying. Should return change', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const keysets = await mint.getKeySets();
+		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 
-//      const result = await wallet.send(1, [
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 2,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//      ]);
+		const result = await wallet.send(1, [
+			{
+				id: '00bd033559de27d0',
+				amount: 2,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		]);
 
-//      expect(result.send).toHaveLength(1);
-//      expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-//      expect(result.keep).toHaveLength(1);
-//      expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
-//  });
-//  test('test send overpaying with p2pk.', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const keysets = await mint.getKeySets();
-//      const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		expect(result.send).toHaveLength(1);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
+	});
+	test('test send overpaying with p2pk.', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const keysets = await mint.getKeySets();
+		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 
-//      const result = await wallet.send(
-//          1,
-//          [
-//              {
-//                  id: '00bd033559de27d0',
-//                  amount: 2,
-//                  secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//                  C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//              },
-//          ],
-//          { p2pk: { pubkey: 'pk' } },
-//      );
+		const result = await wallet.send(
+			1,
+			[
+				{
+					id: '00bd033559de27d0',
+					amount: 2,
+					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				},
+			],
+			{ p2pk: { pubkey: 'pk' } },
+		);
 
-//      expectNUT10SecretDataToEqual([result.send[0]], 'pk');
-//      expect(result.keep[0].secret.length).toBe(64);
-//  });
+		expectNUT10SecretDataToEqual([result.send[0]], 'pk');
+		expect(result.keep[0].secret.length).toBe(64);
+	});
 
-//  test('test send over paying2', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const keysets = await mint.getKeySets();
-//      const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+	test('test send over paying2', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const keysets = await mint.getKeySets();
+		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 
-//      const overpayProofs = [
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 2,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//      ];
-//      const result = await wallet.send(1, overpayProofs);
+		const overpayProofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 2,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+		const result = await wallet.send(1, overpayProofs);
 
-//      expect(result.send).toHaveLength(1);
-//      expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-//      expect(result.keep).toHaveLength(1);
-//      expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
-//  });
-//  test('test send preference', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
+		expect(result.send).toHaveLength(1);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
+	});
+	test('test send preference', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
 
-//      const overpayProofs = [
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 2,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 2,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//      ];
-//      await wallet.getKeys();
-//      const result = await wallet.send(4, overpayProofs, {
-//          // preference: { sendPreference: [{ amount: 1, count: 4 }] }
-//          outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] },
-//      });
+		const overpayProofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 2,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 2,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+		await wallet.getKeys();
+		const result = await wallet.send(4, overpayProofs, {
+			// preference: { sendPreference: [{ amount: 1, count: 4 }] }
+			outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] },
+		});
 
-//      expect(result.send).toHaveLength(4);
-//      expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(result.send[2]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(result.send[3]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-//      expect(result.keep).toHaveLength(0);
-//  });
+		expect(result.send).toHaveLength(4);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[2]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[3]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(0);
+	});
 
-//  test('test send preference overpay', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
+	test('test send preference overpay', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
 
-//      const overpayProofs = [
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 2,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 2,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//      ];
-//      await wallet.getKeys();
-//      const result = await wallet.send(3, overpayProofs, {
-//          outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [1] },
-//      });
+		const overpayProofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 2,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 2,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+		await wallet.getKeys();
+		const result = await wallet.send(3, overpayProofs, {
+			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [1] },
+		});
 
-//      expect(result.send).toHaveLength(3);
-//      expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(result.send[2]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-//      expect(result.keep).toHaveLength(1);
-//      expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//  });
+		expect(result.send).toHaveLength(3);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[2]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(1);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
 
-//  test('test send not enough funds', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
+	test('test send not enough funds', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
 
-//      const result = await wallet.send(2, proofs).catch((e) => e);
+		const result = await wallet.send(2, proofs).catch((e) => e);
 
-//      expect(result).toEqual(new Error('Not enough funds available to send'));
-//  });
-//  test('test send bad response', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({});
-//          }),
-//      );
-//      const keysets = await mint.getKeySets();
-//      const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		expect(result).toEqual(new Error('Not enough funds available to send'));
+	});
+	test('test send bad response', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({});
+			}),
+		);
+		const keysets = await mint.getKeySets();
+		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 
-//      const result = await wallet
-//          .send(1, [
-//              {
-//                  id: '00bd033559de27d0',
-//                  amount: 2,
-//                  secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//                  C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//              },
-//          ])
-//          .catch((e) => e);
+		const result = await wallet
+			.send(1, [
+				{
+					id: '00bd033559de27d0',
+					amount: 2,
+					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				},
+			])
+			.catch((e) => e);
 
-//      expect(result).toEqual(new Error('bad response'));
-//  });
-//  test('test send preference with fees included', async () => {
-//      server.use(
-//          http.get(mintUrl + '/v1/keysets', () => {
-//              return HttpResponse.json({
-//                  keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
-//              });
-//          }),
-//      );
-//      server.use(
-//          http.post(mintUrl + '/v1/swap', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 2,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 2,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 2,
-//                          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
-//      await wallet.getKeys();
+		expect(result).toEqual(new Error('bad response'));
+	});
+	test('test send preference with fees included', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.getKeys();
 
-//      const overpayProofs = [
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 1,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//          {
-//              id: '00bd033559de27d0',
-//              amount: 8,
-//              secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-//              C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-//          },
-//      ];
-//      await wallet.getKeys();
-//      const result = await wallet.send(3, overpayProofs, { includeFees: true });
+		const overpayProofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+		await wallet.getKeys();
+		const result = await wallet.send(3, overpayProofs, { includeFees: true });
 
-//      // Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
-//      // Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
-//      // Total send = [1, 2, 2]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
-//      expect(result.send).toHaveLength(3);
-//      expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(result.send[1]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
-//      expect(result.send[2]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-//      expect(result.keep).toHaveLength(2);
-//      expect(result.keep[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
-//      expect(result.keep[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//  });
-// });
+		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
+		// Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
+		// Total send = [1, 2, 2]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
+		expect(result.send).toHaveLength(3);
+		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[1]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.send[2]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(2);
+		expect(result.keep[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.keep[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
+});
 
 describe('deterministic', () => {
 	// test('no seed', async () => {
@@ -1616,12 +1616,11 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 25;
-		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: false });
+		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: false });
 		expect(send).toHaveLength(3);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(25);
-		const { send: sendFeesInc } = await wallet.send(targetAmount, notes, {
-			offline: true,
+		const { send: sendFeesInc } = await wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
 		});
 		expect(sendFeesInc).toHaveLength(3);
@@ -1656,7 +1655,7 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
-		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: true });
+		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
 		// Fee = ceil(3 * 1000 / 1000) = 3, net = 34 - 3 = 31
@@ -1676,7 +1675,7 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
-		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: true });
+		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
 		// Fee = ceil(3 * 600 / 1000) = 2, net = 33 - 2 = 31
@@ -1702,12 +1701,11 @@ describe('Test coinselection', () => {
 		]; // Total = 4
 		const targetAmount = 5;
 		// Fee for 3 proofs = ceil(3 * 600 / 1000) = 2, need 5 + 2 = 7, but 4 < 7, so expect throw
-		await expect(
-			wallet.send(targetAmount, smallNotes, {
-				offline: true,
+		expect(() =>
+			wallet.sendOffline(targetAmount, smallNotes, {
 				includeFees: true,
 			}),
-		).rejects.toThrow('Not enough funds available to send');
+		).toThrow('Not enough funds available to send');
 		// try using selectProofsToSend directly
 		const { send, keep } = wallet.selectProofsToSend(
 			smallNotes,
@@ -1798,7 +1796,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 0;
 		// Exact match (offline)
-		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: true });
+		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		// No proofs needed, fee = 0, net = 0 >= 0
 		expect(send).toHaveLength(0);
 		// try using selectProofsToSend directly
@@ -1828,8 +1826,7 @@ describe('Test coinselection', () => {
 		];
 		const targetAmount = 15;
 		// Exact match (offline)
-		const { send } = await wallet.send(targetAmount, smallNotes, {
-			offline: true,
+		const { send } = await wallet.sendOffline(targetAmount, smallNotes, {
 			includeFees: true,
 		});
 		const amountSend = sumProofs(send);
@@ -1890,7 +1887,7 @@ describe('Test coinselection', () => {
 			{ id: '00bd033559de27d0', amount: 2, secret: 's3', C: 'C3' },
 		];
 		const targetAmount = 5;
-		const { send } = await wallet.send(targetAmount, proofs, { offline: true, includeFees: true });
+		const { send } = await wallet.sendOffline(targetAmount, proofs, { includeFees: true });
 		expect(send).toHaveLength(3);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(6);
@@ -1935,7 +1932,7 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 25;
-		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: true });
+		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(25); // No fee adjustment
 	});
@@ -1944,8 +1941,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const dupNotes = Array(10).fill({ id: '00bd033559de27d0', amount: 8, secret: 's', C: 'C' });
 		const targetAmount = 24;
-		const { send } = await wallet.send(targetAmount, dupNotes, {
-			offline: true,
+		const { send } = await wallet.sendOffline(targetAmount, dupNotes, {
 			includeFees: false,
 		});
 		expect(send).toHaveLength(3); // 3 * 8 = 24
@@ -2098,9 +2094,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.getKeys();
 		const targetAmount = 25;
-		const { send } = await wallet.send(targetAmount, notes, {
-			offline: true,
-		});
+		const { send } = await wallet.sendOffline(targetAmount, notes);
 		expect(send).toHaveLength(3);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(25);
@@ -2109,9 +2103,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.getKeys();
 		const targetAmount = 23;
-		const { send } = await wallet.send(targetAmount, notes, {
-			offline: true,
-		});
+		const { send } = await wallet.sendOffline(targetAmount, notes);
 		expect(send).toHaveLength(2);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(24);
@@ -2136,8 +2128,7 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
-		const { send } = await wallet.send(targetAmount, notes, {
-			offline: true,
+		const { send } = await wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
 		});
 		expect(send).toHaveLength(3);
@@ -2166,8 +2157,7 @@ describe('Test coinselection', () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
-		const { send } = await wallet.send(targetAmount, notes, {
-			offline: true,
+		const { send } = await wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
 		});
 		console.log(send.map((p) => p.amount));
@@ -2325,7 +2315,7 @@ describe('Test coinselection', () => {
 	});
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new Wallet(mint, { unit });
+		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.getKeys();
 
 		const sendResponse = await wallet.send(64, [
