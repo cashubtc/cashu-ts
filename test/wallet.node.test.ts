@@ -61,6 +61,7 @@ const invoice =
 const token3sat =
 	'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgqNhYQFhc3hAZTdjMWI3NmQxYjMxZTJiY2EyYjIyOWQxNjBiZGY2MDQ2ZjMzYmM0NTcwMjIyMzA0YjY1MTEwZDkyNmY3YWY4OWFjWCEDic2fT5iOOAp5idTUiKfJHFJ3-5MEfnoswe2OM5a4VP-jYWECYXN4QGRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjNhY1ghAt5AxZ2QODuIU8zzpLIIZKyDunWPzj2VnbuJNhAC6M5H';
 const server = setupServer();
+const logger = new ConsoleLogger('DEBUG');
 
 beforeAll(() => {
 	server.listen({ onUnhandledRequest: 'error' });
@@ -955,7 +956,7 @@ describe('send', () => {
 				});
 			}),
 		);
-		const wallet = new CashuWallet(mint, { unit });
+		const wallet = new CashuWallet(mint, { unit, logger });
 		await wallet.getKeys();
 
 		const overpayProofs = [

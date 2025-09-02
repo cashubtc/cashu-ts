@@ -497,7 +497,7 @@ describe('receive', () => {
 				});
 			}),
 		);
-		const wallet = new Wallet(mint, { unit, logger });
+		const wallet = new Wallet(mint, { unit });
 		const existingProofs = [
 			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
 			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
@@ -782,7 +782,12 @@ describe('send', () => {
 					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 				},
 			],
-			{ p2pk: { pubkey: 'pk' } },
+			{
+				send: { type: 'p2pk', options: { pubkey: 'pk' } },
+			},
+			{
+				// p2pk: { pubkey: 'pk' }
+			},
 		);
 
 		expectNUT10SecretDataToEqual([result.send[0]], 'pk');
@@ -876,10 +881,18 @@ describe('send', () => {
 			},
 		];
 		await wallet.getKeys();
-		const result = await wallet.send(4, overpayProofs, {
-			// preference: { sendPreference: [{ amount: 1, count: 4 }] }
-			outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] },
-		});
+		const result = await wallet.send(
+			4,
+			overpayProofs,
+			{
+				send: { type: 'random', splitAmounts: [1, 1, 1, 1] },
+				keep: { type: 'random', splitAmounts: [] },
+			},
+			{
+				// preference: { sendPreference: [{ amount: 1, count: 4 }] }
+				// outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] },
+			},
+		);
 
 		expect(result.send).toHaveLength(4);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
@@ -937,9 +950,15 @@ describe('send', () => {
 			},
 		];
 		await wallet.getKeys();
-		const result = await wallet.send(3, overpayProofs, {
-			outputAmounts: { sendAmounts: [1, 1, 1], keepAmounts: [1] },
-		});
+		const result = await wallet.send(
+			3,
+			overpayProofs,
+			{
+				send: { type: 'random', splitAmounts: [1, 1, 1] },
+				keep: { type: 'random', splitAmounts: [1] },
+			},
+			{},
+		);
 
 		expect(result.send).toHaveLength(3);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
@@ -1047,7 +1066,7 @@ describe('send', () => {
 			},
 		];
 		await wallet.getKeys();
-		const result = await wallet.send(3, overpayProofs, { includeFees: true });
+		const result = await wallet.send(3, overpayProofs, undefined, { includeFees: true });
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
 		// Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
@@ -1887,7 +1906,10 @@ describe('Test coinselection', () => {
 			{ id: '00bd033559de27d0', amount: 2, secret: 's3', C: 'C3' },
 		];
 		const targetAmount = 5;
-		const { send } = await wallet.sendOffline(targetAmount, proofs, { includeFees: true });
+		const { send } = await wallet.sendOffline(targetAmount, proofs, {
+			includeFees: true,
+			exactMatch: false,
+		});
 		expect(send).toHaveLength(3);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(6);
@@ -2103,7 +2125,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.getKeys();
 		const targetAmount = 23;
-		const { send } = await wallet.sendOffline(targetAmount, notes);
+		const { send } = await wallet.sendOffline(targetAmount, notes, { exactMatch: false });
 		expect(send).toHaveLength(2);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(24);

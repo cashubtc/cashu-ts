@@ -63,6 +63,7 @@ import {
 	stripDleq,
 	sumProofs,
 	verifyKeysetId,
+	deepEqual,
 } from './utils';
 import { signMintQuote } from './crypto/client/NUT20';
 import {
@@ -187,6 +188,34 @@ interface SharedOutputTypeProps {
 }
 
 /**
+ * Output configuration for send/swap operations.
+ *
+ * @remarks
+ * Defines the output types for proofs to be sent and kept during a send or swap operation.
+ *
+ * - `send`: Specifies the output type for proofs to be sent to the recipient. Required to ensure
+ *   valid output generation.
+ * - `keep`: Specifies the output type for change proofs to be retained by the wallet. Optional, as it
+ *   defaults to random output generation if not provided.
+ *
+ * @example
+ *
+ * ```typescript
+ * const config: OutputConfig = {
+ * 	send: { type: 'random', splitAmounts: [1, 2] },
+ * 	keep: { type: 'deterministic', counter: 0 },
+ * };
+ * const result = await wallet.send(3, proofs, config, { includeFees: true });
+ * ```
+ *
+ * @v3
+ */
+export interface OutputConfig {
+	send: OutputType;
+	keep?: OutputType;
+}
+
+/**
  * Default configuration for `OutputType`, equivalent to `{ type: 'random' }`.
  *
  * @remarks
@@ -203,6 +232,32 @@ interface SharedOutputTypeProps {
  * @v3
  */
 export const DEFAULT_OUTPUT: OutputType = { type: 'random' };
+
+/**
+ * Default output configuration for send/swap operations.
+ *
+ * @remarks
+ * Provides a default configuration where both `send` and `keep` outputs use random blinding
+ * factors. Useful for simplifying calls to `send` or `swap` when no custom output types are needed,
+ * but options are. Can also be spread as an entry point for customization.
+ * @example
+ *
+ * ```typescript
+ * const result = await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
+ *
+ * const deterministicKeep = {
+ * 	...DEFAULT_OUTPUT_CONFIG,
+ * 	keep: { type: 'deterministic', counter: 0 },
+ * };
+ * const result = await wallet.send(5, proofs, deterministicKeep, { includeFees: true });
+ * ```
+ *
+ * @v3
+ */
+export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
+	send: DEFAULT_OUTPUT,
+	keep: DEFAULT_OUTPUT,
+};
 
 /**
  * @v3
@@ -457,6 +512,13 @@ class Wallet {
 			this._logger.warn('Amount was invalid (zero or negative)');
 			return [];
 		}
+		if ('custom' !== outputType.type && outputType.splitAmounts.length > 0) {
+			const splitSum = outputType.splitAmounts.reduce((sum, a) => sum + a, 0);
+			if (splitSum !== amount) {
+				this._logger.error('Custom splitAmounts sum mismatch', { splitSum, expected: amount });
+				throw new Error(`Custom splitAmounts sum to ${splitSum}, expected ${amount}`);
+			}
+		}
 
 		let outputData: OutputDataLike[];
 		switch (outputType.type) {
@@ -492,7 +554,7 @@ class Wallet {
 			}
 			case 'custom': {
 				outputData = outputType.data;
-				const customTotal = outputData.reduce((sum, d) => sum + d.blindedMessage.amount, 0);
+				const customTotal = OutputData.sumOutputAmounts(outputData);
 				if (customTotal !== amount) {
 					const message = `Custom output data total (${customTotal}) does not match amount (${amount})`;
 					this._logger.error(message);
@@ -506,7 +568,6 @@ class Wallet {
 				throw new Error(message);
 			}
 		}
-
 		return outputData;
 	}
 
@@ -517,7 +578,6 @@ class Wallet {
 	 * @param keys The mint keys.
 	 * @param outputType The output configuration.
 	 * @param includeFees Whether to include swap fees in the output amount.
-	 * @param proofsWeHave Optional proofs for denomination optimization.
 	 * @returns Prepared output data.
 	 */
 	private configureOutputs(
@@ -552,6 +612,12 @@ class Wallet {
 			);
 		}
 
+		// If no splitAmounts were provided or optimized, compute the default split
+		// before calculating fees to ensure accurate output count.
+		if (splitAmounts.length === 0) {
+			splitAmounts = splitAmount(adjustedAmount, keys.keys);
+		}
+
 		// With includeFees, we create additional output amounts to cover the
 		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
 		if (includeFees) {
@@ -582,14 +648,13 @@ class Wallet {
 	 * @returns Prepared proofs.
 	 */
 	private prepareInputs(proofs: Proof[], privkey?: string, keepDleq?: boolean): Proof[] {
-		let inputs = proofs;
 		if (!keepDleq) {
-			inputs = stripDleq(inputs);
+			proofs = stripDleq(proofs);
 		}
 		if (privkey) {
-			inputs = signP2PKProofs(inputs, privkey);
+			proofs = signP2PKProofs(proofs, privkey);
 		}
-		return inputs.map((p) => ({
+		return proofs.map((p) => ({
 			...p,
 			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
 		}));
@@ -607,7 +672,11 @@ class Wallet {
 		inputs: Proof[],
 		keepOutputs: OutputDataLike[],
 		sendOutputs: OutputDataLike[] = [],
+		privkey?: string,
 	): SwapTransaction {
+		// Sign P2PK proofs and prepare inputs for mint
+		inputs = this.prepareInputs(inputs, privkey);
+
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
 		const indices = mergedBlindingData
 			.map((_, i) => i)
@@ -619,8 +688,13 @@ class Wallet {
 			...Array.from({ length: keepOutputs.length }, () => true),
 			...Array.from({ length: sendOutputs.length }, () => false),
 		];
-		const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
 		const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
+		const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
+		this._logger.debug('createSwapTransaction:', {
+			indices,
+			sortedKeepVector,
+			outputs: sortedOutputData.map((d) => d.blindedMessage),
+		});
 		const payload: SwapPayload = {
 			inputs,
 			outputs: sortedOutputData.map((d) => d.blindedMessage),
@@ -827,15 +901,14 @@ class Wallet {
 			outputType,
 			false, // includeFees is not applicable for receive
 		);
-		const inputs = this.prepareInputs(proofs, config?.privkey, config?.requireDleq);
-		const swapTransaction = this.createSwapTransaction(inputs, outputs);
-		this._logger.debug('SWAP PAYLOAD', swapTransaction.payload);
+		const swapTransaction = this.createSwapTransaction(proofs, outputs, [], config?.privkey);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const proofsReceived = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
 		const orderedProofs: Proof[] = [];
 		swapTransaction.sortedIndices.forEach((s, o) => {
 			orderedProofs[s] = proofsReceived[o];
 		});
+		this._logger.debug('RECEIVED', orderedProofs);
 		return orderedProofs;
 	}
 
@@ -843,7 +916,9 @@ class Wallet {
 	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @remarks
-	 * The default config uses exact match selection and keeps DLEQ.
+	 * The default config uses exact match selection, and does not includeFees or requireDleq. P2PK
+	 * locked proofs can be signed (witnessed) with the privkey option. Because the send is offline,
+	 * the user will unlock the signed proofs when they they receive them online.
 	 * @param amount Amount to send.
 	 * @param proofs Array of proofs (must sum >= amount).
 	 * @param config Optional parameters for the send.
@@ -860,19 +935,19 @@ class Wallet {
 			exactMatch?: boolean;
 		},
 	): SendResponse {
-		const { privkey, requireDleq = true, includeFees = false, exactMatch = true } = config || {};
-		let inputs = proofs;
+		const { privkey, requireDleq = false, includeFees = false, exactMatch = true } = config || {};
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
-			inputs = inputs.filter((p: Proof) => p.dleq != undefined);
+			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
-		if (sumProofs(inputs) < amount) {
+		if (sumProofs(proofs) < amount) {
 			const message = 'Not enough funds available to send';
 			this._logger.error(message);
 			throw new Error(message);
 		}
-		const { keep, send } = this.selectProofsToSend(inputs, amount, includeFees, exactMatch);
-		const sendSigned = this.prepareInputs(send, privkey, true); // keep DLEQ
+		const { keep, send } = this.selectProofsToSend(proofs, amount, includeFees, exactMatch);
+		// Sign P2PK proofs if needed and ensure witnesses are serialized
+		const sendSigned = this.prepareInputs(send, privkey);
 		return { keep, send: sendSigned };
 	}
 
@@ -880,21 +955,41 @@ class Wallet {
 	 * Splits and creates sendable tokens.
 	 *
 	 * @remarks
-	 * This method performs an online swap if necessary.
+	 * This method performs an online swap if necessary. The `outputConfig` defaults to
+	 * `DEFAULT_OUTPUT_CONFIG`, which uses random blinding factors for both `send` and `keep`
+	 * outputs.
+	 * @example
+	 *
+	 * ```typescript
+	 * // Simple send (uses DEFAULT_OUTPUT_CONFIG)
+	 * const result = await wallet.send(5, proofs);
+	 *
+	 * // Use default output configuration
+	 * const result = await wallet.send(5, proofs, undefined, { includeFees: true });
+	 *
+	 * // Or explicitly use DEFAULT_OUTPUT_CONFIG
+	 * const result = await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
+	 *
+	 * // Custom output configuration
+	 * const customConfig: OutputConfig = {
+	 * 	send: { type: 'p2pk', options: { pubkey: '...' } },
+	 * 	keep: { type: 'deterministic', counter: 0 },
+	 * };
+	 * const customResult = await wallet.send(5, proofs, customConfig);
+	 * ```
+	 *
 	 * @param amount Amount to send (receiver gets this net amount).
 	 * @param proofs Array of proofs to split.
-	 * @param outputConfig Configuration for keep (change) and send outputs.
+	 * @param outputConfig Configuration for send and keep (change) outputs.
 	 * @param config Optional parameters for the swap.
 	 * @returns SendResponse with keep/send proofs.
+	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
 	public readonly swap = this.send.bind(this); // Swap is an alias of send
 	async send(
 		amount: number,
 		proofs: Proof[],
-		outputConfig?: {
-			keep?: OutputType;
-			send: OutputType;
-		},
+		outputConfig: OutputConfig = DEFAULT_OUTPUT_CONFIG,
 		config?: {
 			privkey?: string;
 			keysetId?: string;
@@ -907,10 +1002,16 @@ class Wallet {
 		// by trying an exact match offline selection, including fees if
 		// we are giving the receiver the amount + their fee to receive
 		try {
-			if (outputConfig?.keep || outputConfig?.send || keysetId) {
+			if (
+				!deepEqual<OutputType>(outputConfig.send, DEFAULT_OUTPUT) ||
+				!deepEqual<OutputType>(outputConfig.keep, DEFAULT_OUTPUT) ||
+				keysetId
+			) {
 				const issues = [
-					outputConfig?.keep && 'keep outputConfig',
-					outputConfig?.send && 'send outputConfig',
+					!deepEqual<OutputType>(outputConfig.send, DEFAULT_OUTPUT) &&
+						'non-default send outputConfig',
+					!deepEqual<OutputType>(outputConfig.keep, DEFAULT_OUTPUT) &&
+						'non-default keep outputConfig',
 					keysetId && 'keysetId',
 				]
 					.filter(Boolean)
@@ -921,6 +1022,7 @@ class Wallet {
 				privkey,
 				includeFees,
 				exactMatch: true,
+				requireDleq: false, // safety
 			});
 			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
 			if (sumProofs(send) === amount + expectedFee) {
@@ -936,7 +1038,7 @@ class Wallet {
 
 		// Shape SEND output type and create outputs
 		// Note: proofsWeHave is not valid for send outputs (optimization is for keep only)
-		let sendType = outputConfig?.send ?? DEFAULT_OUTPUT;
+		let sendType = outputConfig.send ?? DEFAULT_OUTPUT;
 		if (sendType.proofsWeHave) {
 			sendType = { ...sendType, proofsWeHave: undefined };
 		}
@@ -950,7 +1052,7 @@ class Wallet {
 			true, // Include fees to cover swap fee
 		);
 		if (selectedProofs.length === 0) {
-			throw new Error('No suitable proofs selected');
+			throw new Error('Not enough funds available to send');
 		}
 
 		// Calculate our expected change from the swap (and sanity check!)
@@ -973,29 +1075,41 @@ class Wallet {
 		const keepType = outputConfig?.keep ?? DEFAULT_OUTPUT;
 		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, false);
 
-		// Prepare inputs
-		const inputs = this.prepareInputs(selectedProofs, privkey, false);
-
 		// Execute swap
-		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
+		const swapTransaction = this.createSwapTransaction(
+			selectedProofs,
+			keepOutputs,
+			sendOutputs,
+			privkey,
+		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const splitProofsToKeep: Proof[] = [];
+		const splitProofsToSend: Proof[] = [];
+		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
 		const reorderedProofs = Array(swapProofs.length);
-		swapTransaction.sortedIndices.forEach((s, i) => (reorderedProofs[s] = swapProofs[i]));
-
-		const changeProofs: Proof[] = [];
-		const sendProofs: Proof[] = [];
+		swapTransaction.sortedIndices.forEach((s, i) => {
+			reorderedKeepVector[s] = swapTransaction.keepVector[i];
+			reorderedProofs[s] = swapProofs[i];
+		});
 		reorderedProofs.forEach((p: Proof, i) => {
-			if (swapTransaction.keepVector[i]) {
-				changeProofs.push(p);
+			if (reorderedKeepVector[i]) {
+				splitProofsToKeep.push(p);
 			} else {
-				sendProofs.push(p);
+				splitProofsToSend.push(p);
 			}
 		});
-
-		return { keep: [...unselectedProofs, ...changeProofs], send: sendProofs };
+		this._logger.debug('SEND PROOFS v3', {
+			unselectedProofs,
+			splitProofsToKeep,
+			splitProofsToSend,
+		});
+		return {
+			keep: [...splitProofsToKeep, ...unselectedProofs],
+			send: splitProofsToSend,
+		};
 	}
 
 	// Helpers (extend for other types as needed)
@@ -2122,18 +2236,9 @@ class Wallet {
 			counter,
 			this._keepFactory,
 		);
-		if (privkey != undefined) {
-			proofsToSend = signP2PKProofs(proofsToSend, privkey);
-		}
 
-		proofsToSend = stripDleq(proofsToSend);
-
-		// Ensure witnesses are serialized before sending to mint
-		proofsToSend = proofsToSend.map((p: Proof) => {
-			const witness =
-				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
-			return { ...p, witness };
-		});
+		// Sign P2PK proofs and prepare proofs for mint
+		proofsToSend = this.prepareInputs(proofsToSend, privkey);
 
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
