@@ -581,7 +581,7 @@ class Wallet {
 	 * @param keepDleq Optional boolean to keep DLEQ.
 	 * @returns Prepared proofs.
 	 */
-	private prepareInputs(proofs: Proof[], privkey?: string, keepDleq?: boolean): Promise<Proof[]> {
+	private prepareInputs(proofs: Proof[], privkey?: string, keepDleq?: boolean): Proof[] {
 		let inputs = proofs;
 		if (!keepDleq) {
 			inputs = stripDleq(inputs);
