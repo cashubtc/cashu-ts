@@ -581,11 +581,7 @@ class Wallet {
 	 * @param keepDleq Optional boolean to keep DLEQ.
 	 * @returns Prepared proofs.
 	 */
-	private prepareInputs(
-		proofs: Proof[],
-		privkey?: string,
-		keepDleq?: boolean,
-	): Promise<Proof[]> {
+	private prepareInputs(proofs: Proof[], privkey?: string, keepDleq?: boolean): Promise<Proof[]> {
 		let inputs = proofs;
 		if (!keepDleq) {
 			inputs = stripDleq(inputs);
@@ -847,7 +843,7 @@ class Wallet {
 	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @remarks
-	 * The default config uses exact match selection and DLEQ proofs.
+	 * The default config uses exact match selection and keeps DLEQ.
 	 * @param amount Amount to send.
 	 * @param proofs Array of proofs (must sum >= amount).
 	 * @param config Optional parameters for the send.
@@ -875,9 +871,9 @@ class Wallet {
 			this._logger.error(message);
 			throw new Error(message);
 		}
-		const { send, keep } = this.selectProofsToSend(inputs, amount, includeFees, exactMatch);
-		const sendSigned = this.prepareInputs(send, privkey, true); // keep DLEQ offline
-		return { send: sendSigned, keep };
+		const { keep, send } = this.selectProofsToSend(inputs, amount, includeFees, exactMatch);
+		const sendSigned = this.prepareInputs(send, privkey, true); // keep DLEQ
+		return { keep, send: sendSigned };
 	}
 
 	/**
@@ -911,7 +907,7 @@ class Wallet {
 		// by trying an exact match offline selection, including fees if
 		// we are giving the receiver the amount + their fee to receive
 		try {
-			if (outputConfig?.keep || outputConfig?.send || privkey || keysetId) {
+			if (outputConfig?.keep || outputConfig?.send || keysetId) {
 				const issues = [
 					outputConfig?.keep && 'keep outputConfig',
 					outputConfig?.send && 'send outputConfig',
@@ -953,31 +949,32 @@ class Wallet {
 			sendTarget,
 			true, // Include fees to cover swap fee
 		);
-
-		// Prepare swap inputs
-		const inputs = this.prepareInputs(selectedProofs, privkey, false); // remove DLEQ
-		if (inputs.length === 0) {
+		if (selectedProofs.length === 0) {
 			throw new Error('No suitable proofs selected');
 		}
 
 		// Calculate our expected change from the swap (and sanity check!)
-		const selectedSum = sumProofs(inputs);
-		const swapFee = this.getFeesForProofs(inputs);
+		const selectedSum = sumProofs(selectedProofs);
+		const swapFee = this.getFeesForProofs(selectedProofs);
 		const changeAmount = selectedSum - swapFee - sendTarget;
 		if (changeAmount < 0) {
-			this._logger.error('Not enough funds available for swap', {
+			const message = 'Not enough funds available for swap';
+			this._logger.error(message, {
 				selectedSum,
 				swapFee,
 				sendTarget,
 				changeAmount,
 			});
-			throw new Error('Not enough funds available for swap');
+			throw new Error(message);
 		}
 
 		// Shape KEEP (change) output type and create outputs.
 		// Note: no includeFees, as we are the receiver
 		const keepType = outputConfig?.keep ?? DEFAULT_OUTPUT;
 		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, false);
+
+		// Prepare inputs
+		const inputs = await this.prepareInputs(selectedProofs, privkey, false);
 
 		// Execute swap
 		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
