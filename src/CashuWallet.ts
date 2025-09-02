@@ -359,6 +359,7 @@ class CashuWallet {
 			privkey,
 			outputData,
 		} = options || {};
+		// Try an offline selection first - using DLEQ proofs only if required
 		if (includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
@@ -370,6 +371,9 @@ class CashuWallet {
 			amount,
 			options?.includeFees,
 		);
+
+		// Check if we were successful offline, or if we are using options that require a swap
+		// If so, lets' fall back to doing a swap
 		const expectedFee = includeFees ? this.getFeesForProofs(sendProofOffline) : 0;
 		if (
 			!offline &&
@@ -387,6 +391,7 @@ class CashuWallet {
 			return { keep, send, serialized };
 		}
 
+		// Still here? Let's check the offline selection was ok and return it
 		if (sumProofs(sendProofOffline) < amount + expectedFee) {
 			throw new Error('Not enough funds available to send');
 		}
@@ -749,6 +754,7 @@ class CashuWallet {
 	 * @returns Promise of the change- and send-proofs.
 	 */
 	async swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse> {
+		// Init
 		let { outputAmounts } = options || {};
 		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, outputData, p2pk } =
 			options || {};
@@ -756,9 +762,11 @@ class CashuWallet {
 
 		let amountToSend = amount;
 		const amountAvailable = sumProofs(proofs);
-		// send output selection
-		let sendAmounts = outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
 
+		// Create SEND output splits.
+		// If includeFees, create extra outputs to cover the onward cost of receiving the token
+		// This ensures the receiver ends up with the full amount when they receive the proofs
+		let sendAmounts = outputAmounts?.sendAmounts || splitAmount(amountToSend, keyset.keys);
 		if (includeFees) {
 			let outputFee = this.getFeesForKeyset(sendAmounts.length, keyset.id);
 			let sendAmountsFee = splitAmount(outputFee, keyset.keys);
@@ -772,25 +780,28 @@ class CashuWallet {
 			amountToSend += outputFee;
 		}
 
-		// include the fees to spend the the outputs of the swap
-		// input selection, needs fees because of the swap
+		// Now, let's select the subset of proofs we need to for the swap
+		// Note: we must aways include fees to ensure we cover the swap fee
 		const { keep: keepProofs, send: sendProofs } = this.selectProofsToSend(
 			proofs,
 			amountToSend,
 			true, // inc. fees
 		);
 
+		// Sanity check - will the selected proofs cover the swap?
 		const amountToKeep = sumProofs(sendProofs) - this.getFeesForProofs(sendProofs) - amountToSend;
-
 		if (amountToKeep < 0) {
 			throw new Error('Not enough balance to send');
 		}
 
-		// keep output selection
+		// Create KEEP output splits.
+		// These outputs are the "change" from the swap if we selected more proofs than needed
 		let keepAmounts;
 		if (!outputAmounts?.keepAmounts && !proofsWeHave) {
+			// Default split
 			keepAmounts = splitAmount(amountToKeep, keyset.keys);
 		} else if (!outputAmounts?.keepAmounts && proofsWeHave) {
+			// Optimize change based on target denominations
 			keepAmounts = getKeepAmounts(
 				proofsWeHave,
 				amountToKeep,
@@ -798,12 +809,14 @@ class CashuWallet {
 				this._denominationTarget,
 			);
 		} else if (outputAmounts) {
+			// Custom split
 			if (outputAmounts.keepAmounts?.reduce((a: number, b: number) => a + b, 0) != amountToKeep) {
 				throw new Error('Keep amounts do not match amount to keep');
 			}
 			keepAmounts = outputAmounts.keepAmounts;
 		}
 
+		// Sanity check (is this redundant vs sanity check above?)
 		if (amountToSend + this.getFeesForProofs(sendProofs) > amountAvailable) {
 			this._logger.error(
 				`Not enough funds available (${amountAvailable}) for swap amountToSend: ${amountToSend} + fee: ${this.getFeesForProofs(
@@ -813,6 +826,8 @@ class CashuWallet {
 			throw new Error(`Not enough funds available for swap`);
 		}
 
+		// Create the outputData using the keep/send splits
+		// and create the swap payload
 		outputAmounts = {
 			keepAmounts: keepAmounts,
 			sendAmounts: sendAmounts,
@@ -832,6 +847,8 @@ class CashuWallet {
 			{ keep: keepOutputData, send: sendOutputData },
 			p2pk,
 		);
+
+		// Do the swap and create the new proofs
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const splitProofsToKeep: Proof[] = [];
