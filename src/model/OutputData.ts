@@ -185,4 +185,14 @@ export class OutputData implements OutputDataLike {
 			utf8SecretBytes,
 		);
 	}
+
+	/**
+	 * Calculates the sum of amounts in an array of OutputDataLike objects.
+	 *
+	 * @param outputs Array of OutputDataLike objects.
+	 * @returns The total sum of amounts.
+	 */
+	static sumOutputAmounts(outputs: OutputDataLike[]): number {
+		return outputs.reduce((sum, output) => sum + output.blindedMessage.amount, 0);
+	}
 }
