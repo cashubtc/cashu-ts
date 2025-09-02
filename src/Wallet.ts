@@ -974,7 +974,7 @@ class Wallet {
 		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, false);
 
 		// Prepare inputs
-		const inputs = await this.prepareInputs(selectedProofs, privkey, false);
+		const inputs = this.prepareInputs(selectedProofs, privkey, false);
 
 		// Execute swap
 		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
