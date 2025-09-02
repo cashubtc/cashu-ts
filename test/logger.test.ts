@@ -59,7 +59,14 @@ describe('ConsoleLogger', () => {
 
 		const logger = new ConsoleLogger(LogLevel.INFO);
 
+		// Context in object
 		logger.info('User {username} logged in', { username: 'alice', ip: '127.0.0.1' });
+
+		expect(infoSpy).toHaveBeenCalledWith('[INFO] User alice logged in', { ip: '127.0.0.1' });
+
+		// Context as variable
+		const ip = '127.0.0.1';
+		logger.info('User {username} logged in', { username: 'alice', ip });
 
 		expect(infoSpy).toHaveBeenCalledWith('[INFO] User alice logged in', { ip: '127.0.0.1' });
 	});

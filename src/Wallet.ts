@@ -555,16 +555,16 @@ class Wallet {
 		// With includeFees, we create additional output amounts to cover the
 		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
 		if (includeFees) {
-			let outputFee = this.getFeesForKeyset(splitAmounts.length, keys.id);
-			let sendAmountsFee = splitAmount(outputFee, keys.keys);
+			let receiveFee = this.getFeesForKeyset(splitAmounts.length, keys.id);
+			let receiveFeeAmounts = splitAmount(receiveFee, keys.keys);
 			while (
-				this.getFeesForKeyset(splitAmounts.length + sendAmountsFee.length, keys.id) > outputFee
+				this.getFeesForKeyset(splitAmounts.length + receiveFeeAmounts.length, keys.id) > receiveFee
 			) {
-				outputFee++;
-				sendAmountsFee = splitAmount(outputFee, keys.keys);
+				receiveFee++;
+				receiveFeeAmounts = splitAmount(receiveFee, keys.keys);
 			}
-			adjustedAmount += outputFee;
-			splitAmounts = [...splitAmounts, ...sendAmountsFee];
+			adjustedAmount += receiveFee;
+			splitAmounts = [...splitAmounts, ...receiveFeeAmounts];
 		}
 
 		const effectiveOutputType: OutputType = { ...outputType, splitAmounts };
@@ -572,29 +572,28 @@ class Wallet {
 	}
 
 	/**
-	 * Prepares inputs by filtering DLEQ, signing, and serializing witnesses.
+	 * Prepares inputs for a mint operation, with optional P2PK signing and DLEQ stripping.
 	 *
+	 * @remarks
+	 * Recommended to use this method before any mint operation. Strips DLEQ by default.
 	 * @param proofs The proofs to prepare.
 	 * @param privkey Optional private key for signing.
-	 * @param requireDleq Optional boolean to use proofs with valid DLEQ only.
-	 * @param keysetId Optional keyset ID for validation.
+	 * @param keepDleq Optional boolean to keep DLEQ.
 	 * @returns Prepared proofs.
 	 */
-	private async prepareInputs(
+	private prepareInputs(
 		proofs: Proof[],
 		privkey?: string,
-		requireDleq?: boolean,
-		keysetId?: string,
+		keepDleq?: boolean,
 	): Promise<Proof[]> {
 		let inputs = proofs;
-		if (requireDleq) {
-			const keys = await this.getKeys(keysetId);
-			inputs = inputs.filter((p) => hasValidDleq(p, keys));
+		if (!keepDleq) {
+			inputs = stripDleq(inputs);
 		}
 		if (privkey) {
 			inputs = signP2PKProofs(inputs, privkey);
 		}
-		return stripDleq(inputs).map((p) => ({
+		return inputs.map((p) => ({
 			...p,
 			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
 		}));
@@ -832,12 +831,7 @@ class Wallet {
 			outputType,
 			false, // includeFees is not applicable for receive
 		);
-		const inputs = await this.prepareInputs(
-			proofs,
-			config?.privkey,
-			config?.requireDleq,
-			config?.keysetId,
-		);
+		const inputs = this.prepareInputs(proofs, config?.privkey, config?.requireDleq);
 		const swapTransaction = this.createSwapTransaction(inputs, outputs);
 		this._logger.debug('SWAP PAYLOAD', swapTransaction.payload);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
@@ -852,9 +846,10 @@ class Wallet {
 	/**
 	 * Sends proofs of a given amount from provided proofs.
 	 *
+	 * @remarks
+	 * The default config uses exact match selection and DLEQ proofs.
 	 * @param amount Amount to send.
 	 * @param proofs Array of proofs (must sum >= amount).
-	 * @param outputConfig Configuration for keep (change) and send outputs.
 	 * @param config Optional parameters for the send.
 	 * @returns SendResponse with keep/send proofs.
 	 * @throws Throws if the send cannot be completed offline.
@@ -863,12 +858,13 @@ class Wallet {
 		amount: number,
 		proofs: Proof[],
 		config?: {
+			privkey?: string;
 			requireDleq?: boolean;
 			includeFees?: boolean;
 			exactMatch?: boolean;
 		},
 	): SendResponse {
-		const { requireDleq, includeFees, exactMatch } = config || {};
+		const { privkey, requireDleq = true, includeFees = false, exactMatch = true } = config || {};
 		let inputs = proofs;
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
@@ -879,14 +875,18 @@ class Wallet {
 			this._logger.error(message);
 			throw new Error(message);
 		}
-		return this.selectProofsToSend(inputs, amount, includeFees, exactMatch);
+		const { send, keep } = this.selectProofsToSend(inputs, amount, includeFees, exactMatch);
+		const sendSigned = this.prepareInputs(send, privkey, true); // keep DLEQ offline
+		return { send: sendSigned, keep };
 	}
 
 	/**
-	 * Splits and creates sendable tokens. If no amount is specified, sends all after fees.
+	 * Splits and creates sendable tokens.
 	 *
+	 * @remarks
+	 * This method performs an online swap if necessary.
+	 * @param amount Amount to send (receiver gets this net amount).
 	 * @param proofs Array of proofs to split.
-	 * @param amount Amount to send (optional; defaults to all after fees).
 	 * @param outputConfig Configuration for keep (change) and send outputs.
 	 * @param config Optional parameters for the swap.
 	 * @returns SendResponse with keep/send proofs.
@@ -900,60 +900,105 @@ class Wallet {
 			send: OutputType;
 		},
 		config?: {
-			privkey?: string; // for swap
-			requireDleq?: boolean; // for swap
-			keysetId?: string; // for swap
+			privkey?: string;
+			keysetId?: string;
 			includeFees?: boolean;
 		},
 	): Promise<SendResponse> {
-		const { privkey, requireDleq, keysetId, includeFees } = config || {};
+		const { privkey, keysetId, includeFees = false } = config || {};
 
-		// Can we avoid doing a swap?
+		// First, let's see if we can avoid a swap (and fees)
+		// by trying an exact match offline selection, including fees if
+		// we are giving the receiver the amount + their fee to receive
 		try {
-			if (!outputConfig && !privkey && !keysetId) {
-				const { keep, send } = this.sendOffline(amount, proofs, {
-					includeFees,
-					exactMatch: true,
-				});
-				const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
-				if (sumProofs(send) == amount + expectedFee) {
-					this._logger.info('Successful exactMatch offline selection!');
-					return { keep, send };
-				}
+			if (outputConfig?.keep || outputConfig?.send || privkey || keysetId) {
+				const issues = [
+					outputConfig?.keep && 'keep outputConfig',
+					outputConfig?.send && 'send outputConfig',
+					keysetId && 'keysetId',
+				]
+					.filter(Boolean)
+					.join(', ');
+				throw new Error(`Options require a swap: ${issues}`);
+			}
+			const { keep, send } = this.sendOffline(amount, proofs, {
+				privkey,
+				includeFees,
+				exactMatch: true,
+			});
+			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
+			if (sumProofs(send) === amount + expectedFee) {
+				this._logger.info('Successful exactMatch offline selection!');
+				return { keep, send };
 			}
 		} catch (e) {
 			this._logger.debug('ExactMatch offline selection failed.', { e });
-			// oh well, was worth a try...
 		}
 
+		// Fetch keys
 		const keys = await this.getKeys(keysetId);
-		const totalAmount = sumProofs(proofs);
-		const inputFee = this.getFeesForProofs(proofs);
-		const sendAmount = amount - inputFee;
-		if (sendAmount <= 0) return { keep: proofs, send: [] };
-		const changeAmount = totalAmount - inputFee - sendAmount;
-		if (changeAmount < 0) {
-			const message = 'Not enough funds available to send';
-			this._logger.error(message);
-			throw new Error(message);
+
+		// Shape SEND output type and create outputs
+		// Note: proofsWeHave is not valid for send outputs (optimization is for keep only)
+		let sendType = outputConfig?.send ?? DEFAULT_OUTPUT;
+		if (sendType.proofsWeHave) {
+			sendType = { ...sendType, proofsWeHave: undefined };
 		}
-		const keepType = outputConfig?.keep ?? { type: 'random' };
-		const sendType = outputConfig?.send ?? { type: 'random' };
-		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, includeFees);
-		const sendOutputs = this.configureOutputs(sendAmount, keys, sendType, includeFees);
-		const inputs = await this.prepareInputs(proofs, privkey, requireDleq, keysetId);
+		const sendOutputs = this.configureOutputs(amount, keys, sendType, includeFees);
+		const sendTarget = OutputData.sumOutputAmounts(sendOutputs);
+
+		// Select the subset of proofs needed to cover the swap (sendTarget + swap fee)
+		const { keep: unselectedProofs, send: selectedProofs } = this.selectProofsToSend(
+			proofs,
+			sendTarget,
+			true, // Include fees to cover swap fee
+		);
+
+		// Prepare swap inputs
+		const inputs = this.prepareInputs(selectedProofs, privkey, false); // remove DLEQ
+		if (inputs.length === 0) {
+			throw new Error('No suitable proofs selected');
+		}
+
+		// Calculate our expected change from the swap (and sanity check!)
+		const selectedSum = sumProofs(inputs);
+		const swapFee = this.getFeesForProofs(inputs);
+		const changeAmount = selectedSum - swapFee - sendTarget;
+		if (changeAmount < 0) {
+			this._logger.error('Not enough funds available for swap', {
+				selectedSum,
+				swapFee,
+				sendTarget,
+				changeAmount,
+			});
+			throw new Error('Not enough funds available for swap');
+		}
+
+		// Shape KEEP (change) output type and create outputs.
+		// Note: no includeFees, as we are the receiver
+		const keepType = outputConfig?.keep ?? DEFAULT_OUTPUT;
+		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, false);
+
+		// Execute swap
 		const swapTransaction = this.createSwapTransaction(inputs, keepOutputs, sendOutputs);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
+
+		// Construct proofs
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
 		const reorderedProofs = Array(swapProofs.length);
 		swapTransaction.sortedIndices.forEach((s, i) => (reorderedProofs[s] = swapProofs[i]));
-		const keep: Proof[] = [];
-		const send: Proof[] = [];
+
+		const changeProofs: Proof[] = [];
+		const sendProofs: Proof[] = [];
 		reorderedProofs.forEach((p: Proof, i) => {
-			if (swapTransaction.keepVector[i]) keep.push(p);
-			else send.push(p);
+			if (swapTransaction.keepVector[i]) {
+				changeProofs.push(p);
+			} else {
+				sendProofs.push(p);
+			}
 		});
-		return { keep, send };
+
+		return { keep: [...unselectedProofs, ...changeProofs], send: sendProofs };
 	}
 
 	// Helpers (extend for other types as needed)
