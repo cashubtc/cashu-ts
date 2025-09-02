@@ -512,7 +512,7 @@ class Wallet {
 			this._logger.warn('Amount was invalid (zero or negative)');
 			return [];
 		}
-		if ('custom' !== outputType.type && outputType.splitAmounts.length > 0) {
+		if ('custom' !== outputType.type && (outputType.splitAmounts?.length ?? 0) > 0) {
 			const splitSum = outputType.splitAmounts.reduce((sum, a) => sum + a, 0);
 			if (splitSum !== amount) {
 				this._logger.error('Custom splitAmounts sum mismatch', { splitSum, expected: amount });
@@ -866,7 +866,7 @@ class Wallet {
 	 */
 	async receive(
 		token: Token | string,
-		outputType?: OutputType = { type: 'random' },
+		outputType?: OutputType = DEFAULT_OUTPUT,
 		config?: {
 			privkey?: string;
 			requireDleq?: boolean;
@@ -1003,8 +1003,8 @@ class Wallet {
 		// we are giving the receiver the amount + their fee to receive
 		try {
 			if (
-				!deepEqual<OutputType>(outputConfig.send, DEFAULT_OUTPUT) ||
-				!deepEqual<OutputType>(outputConfig.keep, DEFAULT_OUTPUT) ||
+				!deepEqual(outputConfig.send, DEFAULT_OUTPUT) ||
+				(outputConfig.keep && !deepEqual(outputConfig.keep, DEFAULT_OUTPUT)) ||
 				keysetId
 			) {
 				const issues = [
