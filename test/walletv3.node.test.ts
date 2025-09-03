@@ -637,43 +637,43 @@ describe('checkProofsStates', () => {
 	});
 });
 
-// describe('requestTokens', () => {
-//  test('test requestTokens', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/mint/bolt11', () => {
-//              return HttpResponse.json({
-//                  signatures: [
-//                      {
-//                          id: '00bd033559de27d0',
-//                          amount: 1,
-//                          C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
-//                      },
-//                  ],
-//              });
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
+describe('requestTokens', () => {
+	test('test requestTokens', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/mint/bolt11', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit, logger });
 
-//      const proofs = await wallet.mintProofs(1, '');
+		const proofs = await wallet.mintProofs(1, '');
 
-//      expect(proofs).toHaveLength(1);
-//      expect(proofs[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-//      expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
-//      expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
-//  });
-//  test('test requestTokens bad resonse', async () => {
-//      server.use(
-//          http.post(mintUrl + '/v1/mint/bolt11', () => {
-//              return HttpResponse.json({});
-//          }),
-//      );
-//      const wallet = new Wallet(mint, { unit });
+		expect(proofs).toHaveLength(1);
+		expect(proofs[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+	});
+	test('test requestTokens bad response', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/mint/bolt11', () => {
+				return HttpResponse.json({});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
 
-//      const result = await wallet.mintProofs(1, '').catch((e) => e);
+		const result = await wallet.mintProofs(1, '').catch((e) => e);
 
-//      expect(result).toEqual(new Error('bad response'));
-//  });
-// });
+		expect(result).toEqual(new Error('bad response'));
+	});
+});
 
 describe('send', () => {
 	const proofs = [

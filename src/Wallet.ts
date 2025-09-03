@@ -26,7 +26,6 @@ import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
 	GetInfoResponse,
 	MeltProofOptions,
-	MintProofOptions,
 	MintQuoteResponse,
 	ProofState,
 	RestoreOptions,
@@ -66,12 +65,7 @@ import {
 	deepEqual,
 } from './utils';
 import { signMintQuote } from './crypto/client/NUT20';
-import {
-	OutputData,
-	type OutputDataFactory,
-	type OutputDataLike,
-	isOutputDataFactory,
-} from './model/OutputData';
+import { OutputData, type OutputDataFactory, type OutputDataLike } from './model/OutputData';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -1005,11 +999,11 @@ class Wallet {
 	 * Sends P2PK-locked proofs.
 	 *
 	 * @remarks
-	 * Beginner-friendly for secure sends (e.g., locked to pubkey). Uses NUT-11 options for locking.
+	 * Beginner-friendly for secure sends (e.g. locked to pubkey). Uses NUT-11 options for locking.
 	 * Change proofs will be deterministic if a counter is provided, random otherwise.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
-	 * @param p2pkOptions P2PK locking options (e.g., pubkey, locktime).
+	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
 	 * @param config Optional parameters (e.g. includeFees).
 	 * @returns SendResponse with keep/send proofs.
 	 */
@@ -1805,46 +1799,145 @@ class Wallet {
 	/**
 	 * Mint proofs for a given mint quote.
 	 *
-	 * @param amount Amount to request.
-	 * @param {string} quote - ID of mint quote (when quote is a string)
-	 * @param {LockedMintQuote} quote - Containing the quote ID and unlocking private key (when quote
-	 *   is a LockedMintQuote)
-	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof
-	 *   operation.
-	 * @returns Proofs.
+	 * @remarks
+	 * For common cases, use `mintProofsAs...` helpers (eg mintProofsAsDefault, mintProofsAsP2PK etc).
+	 * @param amount Amount to mint.
+	 * @param quote Mint quote ID or object (bolt11/bolt12).
+	 * @param outputType Configuration for proof generation. Defaults to 'random'.
+	 * @param config Optional parameters (e.g. privateKey for locked quotes).
+	 * @returns Minted proofs.
 	 */
 	async mintProofs(
 		amount: number,
-		quote: MintQuoteResponse,
-		options: MintProofOptions & { privateKey: string },
-	): Promise<Proof[]>;
-	async mintProofs(amount: number, quote: string, options?: MintProofOptions): Promise<Proof[]>;
-	async mintProofs(
-		amount: number,
 		quote: string | MintQuoteResponse,
-		options?: MintProofOptions & { privateKey?: string },
+		outputType: OutputType = DEFAULT_OUTPUT,
+		config?: {
+			privateKey?: string;
+			keysetId?: string;
+		},
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt11', amount, quote, options);
+		return this._mintProofs('bolt11', amount, quote, outputType, config);
 	}
 
 	/**
-	 * Mint proofs for a given mint quote.
+	 * Mints proofs using random secrets.
 	 *
-	 * @param amount Amount to request. This must be less than or equal to the `quote.amountPaid -
-	 *   quote.amountIssued`
-	 * @param {string} quote - ID of mint quote.
-	 * @param {string} privateKey - Private key to unlock the quote.
-	 * @param {MintProofOptions} [options] - Optional parameters for configuring the Mint Proof
-	 *   operation.
-	 * @returns Proofs.
+	 * @remarks
+	 * Beginner-friendly default for privacy-focused minting.
+	 * @param amount Amount to mint.
+	 * @param quote Mint quote ID or object.
+	 * @param config Optional parameters (e.g. privateKey, splitAmounts, proofsWeHave).
+	 * @returns Minted proofs.
+	 */
+	async mintProofsAsDefault(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		config?: {
+			privateKey?: string;
+			keysetId?: string;
+			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
+		},
+	): Promise<Proof[]> {
+		const { splitAmounts, proofsWeHave } = config ?? {};
+		const effectiveOutputType: OutputType = { ...DEFAULT_OUTPUT, splitAmounts, proofsWeHave };
+		return this.mintProofs(amount, quote, effectiveOutputType, {
+			...config,
+			splitAmounts: undefined,
+			proofsWeHave: undefined,
+		});
+	}
+
+	/**
+	 * Mints proofs using deterministic secrets.
+	 *
+	 * @remarks
+	 * Beginner-friendly for recoverable minting. Requires wallet seed.
+	 * @param amount Amount to mint.
+	 * @param quote Mint quote ID or object.
+	 * @param counter Starting counter for deterministic secrets.
+	 * @param config Optional parameters (e.g. privateKey, splitAmounts, proofsWeHave).
+	 * @returns Minted proofs.
+	 */
+	async mintProofsAsDeterministic(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		counter: number,
+		config?: {
+			privateKey?: string;
+			keysetId?: string;
+			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
+		},
+	): Promise<Proof[]> {
+		const { splitAmounts, proofsWeHave } = config ?? {};
+		const effectiveOutputType: OutputType = {
+			type: 'deterministic',
+			counter,
+			splitAmounts,
+			proofsWeHave,
+		};
+		return this.mintProofs(amount, quote, effectiveOutputType, {
+			...config,
+			splitAmounts: undefined,
+			proofsWeHave: undefined,
+		});
+	}
+
+	/**
+	 * Mints proofs using P2PK-locked secrets.
+	 *
+	 * @remarks
+	 * Beginner-friendly for secure minting (e.g. locked to pubkey).
+	 * @param amount Amount to mint.
+	 * @param quote Mint quote ID or object.
+	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
+	 * @param config Optional parameters (e.g. privateKey, splitAmounts, proofsWeHave).
+	 * @returns Minted proofs.
+	 */
+	async mintProofsAsP2PK(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		p2pkOptions: P2PKOptions,
+		config?: {
+			privateKey?: string;
+			keysetId?: string;
+			splitAmounts?: number[];
+			proofsWeHave?: Proof[];
+		},
+	): Promise<Proof[]> {
+		const { splitAmounts, proofsWeHave } = config ?? {};
+		const effectiveOutputType: OutputType = {
+			type: 'p2pk',
+			options: p2pkOptions,
+			splitAmounts,
+			proofsWeHave,
+		};
+		return this.mintProofs(amount, quote, effectiveOutputType, {
+			...config,
+			splitAmounts: undefined,
+			proofsWeHave: undefined,
+		});
+	}
+
+	/**
+	 * Mints proofs for a bolt12 quote using specified output configuration.
+	 *
+	 * @param amount Amount to mint.
+	 * @param quote Bolt12 mint quote.
+	 * @param privateKey Private key to unlock the quote.
+	 * @param outputType Configuration for proof generation. Defaults to random.
+	 * @param config Optional parameters (e.g. keysetId).
+	 * @returns Minted proofs.
 	 */
 	async mintProofsBolt12(
 		amount: number,
 		quote: Bolt12MintQuoteResponse,
 		privateKey: string,
-		options?: MintProofOptions,
+		outputType: OutputType = DEFAULT_OUTPUT,
+		config?: { keysetId?: string },
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt12', amount, quote, { ...options, privateKey });
+		return this._mintProofs('bolt12', amount, quote, outputType, { ...config, privateKey });
 	}
 
 	/**
@@ -2207,81 +2300,66 @@ class Wallet {
 	}
 
 	/**
-	 * Mints proofs for a given mint quote created with the bolt11 or bolt12 method.
+	 * Internal helper for minting proofs with bolt11 or bolt12.
 	 *
-	 * @param method Payment method of the quote.
-	 * @param amount Amount to mint.
-	 * @param quote The bolt11 or bolt12 mint quote.
-	 * @param options Optional parameters for configuring the Mint Proof operation.
-	 * @returns Proofs.
+	 * @remarks
+	 * Handles blinded messages, signatures, and proof construction. Use public methods like
+	 * mintProofs or helpers for API access.
+	 * @param method 'bolt11' or 'bolt12'.
+	 * @param amount Amount to mint (must be positive).
+	 * @param quote Quote ID or object.
+	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
+	 * @param config Optional (privateKey, keysetId).
+	 * @returns Minted proofs.
+	 * @throws If params are invalid or mint returns errors.
 	 */
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		amount: number,
 		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
-		options?: MintProofOptions & { privateKey?: string },
+		outputType: OutputType = DEFAULT_OUTPUT,
+		config?: { privateKey?: string; keysetId?: string },
 	): Promise<Proof[]> {
-		let { outputAmounts } = options || {};
-		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
-
+		const { privateKey, keysetId } = config ?? {};
+		if (amount <= 0) {
+			this._logger.warn('Invalid mint amount: must be positive', { amount });
+			throw new Error('Amount must be positive');
+		}
 		const keyset = await this.getKeys(keysetId);
-		if (!outputAmounts && proofsWeHave) {
-			outputAmounts = {
-				keepAmounts: getKeepAmounts(proofsWeHave, amount, keyset.keys, this._denominationTarget),
-				sendAmounts: [],
-			};
-		}
-		let newBlindingData: OutputData[] = [];
-		if (outputData) {
-			if (isOutputDataFactory(outputData)) {
-				const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
-				for (let i = 0; i < amounts.length; i++) {
-					newBlindingData.push(outputData(amounts[i], keyset));
-				}
-			} else {
-				newBlindingData = outputData;
-			}
-		} else if (this._keepFactory) {
-			const amounts = splitAmount(amount, keyset.keys, outputAmounts?.keepAmounts);
-			for (let i = 0; i < amounts.length; i++) {
-				newBlindingData.push(this._keepFactory(amounts[i], keyset));
-			}
-		} else {
-			newBlindingData = this.createOutputData(
-				amount,
-				keyset,
-				counter,
-				pubkey,
-				outputAmounts?.keepAmounts,
-				p2pk,
-			);
-		}
+		const outputs = this.configureOutputs(amount, keyset, outputType, false); // No includeFees for mint
+		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
-		if (typeof quote !== 'string') {
+		if (typeof quote === 'string') {
+			mintPayload = {
+				outputs: blindedMessages,
+				quote: quote,
+			};
+		} else {
 			if (!privateKey) {
 				const message = 'Can not sign locked quote without private key';
 				this._logger.error(message);
 				throw new Error(message);
 			}
-			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
 			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
 			mintPayload = {
 				outputs: blindedMessages,
 				quote: quote.quote,
 				signature: mintQuoteSignature,
 			};
-		} else {
-			mintPayload = {
-				outputs: newBlindingData.map((d) => d.blindedMessage),
-				quote: quote,
-			};
 		}
+		let signatures;
 		if (method === 'bolt12') {
-			const { signatures } = await this.mint.mintBolt12(mintPayload);
-			return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
+			({ signatures } = await this.mint.mintBolt12(mintPayload));
+		} else {
+			({ signatures } = await this.mint.mint(mintPayload));
 		}
-		const { signatures } = await this.mint.mint(mintPayload);
-		return newBlindingData.map((d, i) => d.toProof(signatures[i], keyset));
+		if (signatures.length !== outputs.length) {
+			const message = `Mint returned ${signatures.length} signatures, expected ${outputs.length}`;
+			this._logger.error(message);
+			throw new Error(message);
+		}
+		this._logger.debug('MINT COMPLETED', { amounts: outputs.map((o) => o.blindedMessage.amount) });
+		return outputs.map((d, i) => d.toProof(signatures[i], keyset));
 	}
 
 	/**
