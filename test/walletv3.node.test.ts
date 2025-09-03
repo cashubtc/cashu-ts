@@ -1148,25 +1148,27 @@ describe('send', () => {
 });
 
 describe('deterministic', () => {
-	// test('no seed', async () => {
-	//  const wallet = new Wallet(mint);
-	//  await wallet.getKeys();
-	//  const result = await wallet
-	//      .send(
-	//          1,
-	//          [
-	//              {
-	//                  id: '00bd033559de27d0',
-	//                  amount: 2,
-	//                  secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-	//                  C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-	//              },
-	//          ],
-	//          { counter: 1 },
-	//      )
-	//      .catch((e) => e);
-	//  expect(result).toEqual(new Error('cannot create deterministic messages without seed'));
-	// });
+	test('no seed', async () => {
+		const wallet = new Wallet(mint, logger);
+		await wallet.getKeys();
+		const result = await wallet
+			.send(
+				1,
+				[
+					{
+						id: '00bd033559de27d0',
+						amount: 2,
+						secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+						C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+					},
+				],
+				{ send: { type: 'deterministic', counter: 1 } },
+			)
+			.catch((e) => e);
+		expect(result).toEqual(
+			new Error('Deterministic outputs require a seed configured in the wallet'),
+		);
+	});
 	test.each([
 		[
 			0,

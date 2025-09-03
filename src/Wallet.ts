@@ -860,6 +860,8 @@ class Wallet {
 	/**
 	 * Receives a cashu token and returns proofs that sum up to the amount of the token minus fees.
 	 *
+	 * @remarks
+	 * For common cases, use `receiveAs...` helpers (eg receiveAsDefault, receiveAsP2PK etc).
 	 * @param token Cashu token.
 	 * @param config Optional parameters for configuring the Receive operation.
 	 * @returns The proofs received from the token.
@@ -908,7 +910,7 @@ class Wallet {
 		swapTransaction.sortedIndices.forEach((s, o) => {
 			orderedProofs[s] = proofsReceived[o];
 		});
-		this._logger.debug('RECEIVE COMPLETED', {amounts: orderedProofs.map(p=>p?.amount)});
+		this._logger.debug('RECEIVE COMPLETED', { amounts: orderedProofs.map((p) => p.amount) });
 		return orderedProofs;
 	}
 
@@ -952,12 +954,113 @@ class Wallet {
 	}
 
 	/**
+	 * Sends proofs using Default (random) secrets for both send and keep outputs.
+	 *
+	 * @remarks
+	 * Beginner-friendly default for privacy-focused sends. Uses random blinding to avoid linkability.
+	 * @param amount Amount to send.
+	 * @param proofs Proofs to split (sum >= amount).
+	 * @param config Optional parameters (e.g. includeFees).
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async sendAsDefault(
+		amount: number,
+		proofs: Proof[],
+		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+	): Promise<SendResponse> {
+		return this.send(amount, proofs, { send: DEFAULT_OUTPUT }, config);
+	}
+
+	/**
+	 * Sends proofs using deterministic secrets for both send and keep outputs, with auto-offset
+	 * counters.
+	 *
+	 * @remarks
+	 * Beginner-friendly for recoverable sends. Requires wallet seed. The keep counter is
+	 * automatically offset to account for send outputs, so a single counter can be used.
+	 * @param amount Amount to send.
+	 * @param proofs Proofs to split (sum >= amount).
+	 * @param counter Starting counter for deterministic secrets.
+	 * @param config Optional parameters (e.g. includeFees).
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async sendAsDeterministic(
+		amount: number,
+		proofs: Proof[],
+		counter: number,
+		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+	): Promise<SendResponse> {
+		return this.send(
+			amount,
+			proofs,
+			{
+				send: { type: 'deterministic', counter },
+				keep: { type: 'deterministic', counter },
+			},
+			config,
+		);
+	}
+
+	/**
+	 * Sends P2PK-locked proofs.
+	 *
+	 * @remarks
+	 * Beginner-friendly for secure sends (e.g., locked to pubkey). Uses NUT-11 options for locking.
+	 * Change proofs will be deterministic if a counter is provided, random otherwise.
+	 * @param amount Amount to send.
+	 * @param proofs Proofs to split (sum >= amount).
+	 * @param p2pkOptions P2PK locking options (e.g., pubkey, locktime).
+	 * @param config Optional parameters (e.g. includeFees).
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async sendAsP2PK(
+		amount: number,
+		proofs: Proof[],
+		p2pkOptions: P2PKOptions,
+		counter?: number,
+		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+	): Promise<SendResponse> {
+		const keepOutput = counter ? { type: 'deterministic', counter } : DEFAULT_OUTPUT;
+		return this.send(
+			amount,
+			proofs,
+			{ send: { type: 'p2pk', options: p2pkOptions }, keep: keepOutput },
+			config,
+		);
+	}
+
+	/**
+	 * Sends proofs with P2PK-locked change (keep) outputs (random for send).
+	 *
+	 * @remarks
+	 * For secure storage of change proofs. Uses NUT-11 options for keep locking.
+	 * @param amount Amount to send.
+	 * @param proofs Proofs to split (sum >= amount).
+	 * @param p2pkOptions P2PK locking options for keep.
+	 * @param config Optional parameters (e.g. includeFees).
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async sendWithP2PKChange(
+		amount: number,
+		proofs: Proof[],
+		p2pkOptions: P2PKOptions,
+		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+	): Promise<SendResponse> {
+		return this.send(
+			amount,
+			proofs,
+			{ send: DEFAULT_OUTPUT, keep: { type: 'p2pk', options: p2pkOptions } },
+			config,
+		);
+	}
+
+	/**
 	 * Splits and creates sendable tokens.
 	 *
 	 * @remarks
 	 * This method performs an online swap if necessary. The `outputConfig` defaults to
-	 * `DEFAULT_OUTPUT_CONFIG`, which uses random blinding factors for both `send` and `keep`
-	 * outputs.
+	 * `DEFAULT_OUTPUT_CONFIG`, which uses random blinding factors for both `send` and `keep` outputs.
+	 * For common cases, use `sendAs...` helpers (eg sendAsDefault, sendAsP2PK etc).
 	 * @example
 	 *
 	 * ```typescript
@@ -1003,11 +1106,16 @@ class Wallet {
 		try {
 			if (
 				!deepEqual(outputConfig.send, DEFAULT_OUTPUT) ||
+				(outputConfig.keep && !deepEqual(outputConfig.keep, DEFAULT_OUTPUT)) ||
 				keysetId
 			) {
+				// Trigger swap only if non-default configs or custom keyset are used
 				const issues = [
 					!deepEqual<OutputType>(outputConfig.send, DEFAULT_OUTPUT) &&
 						'non-default send outputConfig',
+					outputConfig.keep &&
+						!deepEqual(outputConfig.keep, DEFAULT_OUTPUT) &&
+						'non-default keep outputConfig',
 					keysetId && 'keysetId',
 				]
 					.filter(Boolean)
@@ -1111,61 +1219,15 @@ class Wallet {
 			}
 		});
 		this._logger.debug('SEND COMPLETED', {
-			unselectedProofs: unselectedProofs.map(p=>p?.amount),
-			keepProofs: keepProofs.map(p=>p?.amount),
-			sendProofs: sendProofs.map(p=>p?.amount),
+			unselectedProofs: unselectedProofs.map((p) => p.amount),
+			keepProofs: keepProofs.map((p) => p.amount),
+			sendProofs: sendProofs.map((p) => p.amount),
 		});
 		return {
 			keep: [...keepProofs, ...unselectedProofs],
 			send: sendProofs,
 		};
 	}
-
-	// Helpers (extend for other types as needed)
-	// async swapAsDeterministic(
-	// 	amount: number,
-	// 	proofs: Proof[],
-	// 	counter: number,
-	// 	splitAmounts?: number[],
-	// 	config?: {
-	// 		privkey?: string;
-	// 		requireDleq?: boolean;
-	// 		keysetId?: string;
-	// 		includeFees?: boolean;
-	// 		proofsWeHave?: Proof[];
-	// 	},
-	// ): Promise<SendResponse> {
-	// 	const send: OutputType = {
-	// 		type: 'deterministic',
-	// 		counter,
-	// 		splitAmounts,
-	// 		proofsWeHave: config?.proofsWeHave,
-	// 	};
-	// 	return this.swap(proofs, amount, { send }, { ...config, proofsWeHave: undefined });
-	// }
-
-	// async sendAsP2PK(
-	// 	amount: number,
-	// 	proofs: Proof[],
-	// 	options: P2PKOptions,
-	// 	splitAmounts?: number[],
-	// 	config?: {
-	// 		privkey?: string;
-	// 		requireDleq?: boolean;
-	// 		keysetId?: string;
-	// 		offline?: boolean;
-	// 		includeFees?: boolean;
-	// 		proofsWeHave?: Proof[];
-	// 	},
-	// ): Promise<SendResponse> {
-	// 	const sendType: OutputType = {
-	// 		type: 'p2pk',
-	// 		options,
-	// 		splitAmounts,
-	// 		proofsWeHave: config?.proofsWeHave,
-	// 	};
-	// 	return this.send(amount, proofs, { send: sendType }, { ...config, proofsWeHave: undefined });
-	// }
 
 	/**
 	 * Selects proofs to send based on amount and fee inclusion.
