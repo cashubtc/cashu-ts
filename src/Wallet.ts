@@ -13,11 +13,12 @@
  * @example
  *
  *     import { CashuMint, Wallet } from '@cashu/cashu-ts';
- *
- * Const mintUrl = 'http://localhost:3338'; const mint = new CashuMint(mintUrl); const wallet = new
- * Wallet(mint, { unit: 'sat' }); await wallet.loadMint(); // Initialize mint info, keysets, and
- * keys // Wallet is now ready to use, eg: const proofs = [...]; // your array of unspent proofs
- * const { keep, send } = await wallet.send(32, proofs);
+ *     const mintUrl = 'http://localhost:3338';
+ *     const mint = new CashuMint(mintUrl); const wallet = new Wallet(mint, { unit: 'sat' });
+ *     await wallet.loadMint(); // Initialize mint info, keysets, and keys
+ *     // Wallet is now ready to use, eg:
+ *     const proofs = [...]; // your array of unspent proofs
+ *     const { keep, send } = await wallet.send(32, proofs);
  *
  * @v3
  */
