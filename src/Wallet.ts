@@ -316,6 +316,11 @@ class Wallet {
 	) {
 		this.mint = mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
+		this._unit = options?.unit ?? this._unit;
+		this._keysets = options?.keysets ?? this._keysets;
+		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
+		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
+		// Normalize keys to array and populate _keys Map
 		let keys: MintKeys[] = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
@@ -323,12 +328,7 @@ class Wallet {
 			keys = options?.keys;
 		}
 		if (keys) keys.forEach((key: MintKeys) => this._keys.set(key.id, key));
-		if (options?.unit) this._unit = options?.unit;
-		if (options?.keysets) this._keysets = options.keysets;
-		if (options?.mintInfo) this._mintInfo = new MintInfo(options.mintInfo);
-		if (options?.denominationTarget) {
-			this._denominationTarget = options.denominationTarget;
-		}
+		// Validate and set seed
 		if (options?.bip39seed) {
 			if (!(options.bip39seed instanceof Uint8Array)) {
 				const message = 'bip39seed must be a valid Uint8Array';
@@ -337,9 +337,7 @@ class Wallet {
 			}
 			this._seed = options.bip39seed;
 		}
-		if (options?.keepFactory) {
-			this._keepFactory = options.keepFactory;
-		}
+		this._keepFactory = options?.keepFactory ?? this._keepFactory;
 	}
 
 	/**
@@ -592,7 +590,7 @@ class Wallet {
 				break;
 			}
 			default: {
-				const message = `Invalid OutputType: ${outputType.type}`;
+				const message = `Invalid OutputType`;
 				this._logger.error(message);
 				throw new Error(message);
 			}
@@ -897,7 +895,7 @@ class Wallet {
 	 */
 	async receive(
 		token: Token | string,
-		outputType?: OutputType = DEFAULT_OUTPUT,
+		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: {
 			privkey?: string;
 			requireDleq?: boolean;
@@ -1606,8 +1604,7 @@ class Wallet {
 		const keysets = this.getKeySets();
 		const fees = Math.floor(
 			Math.max(
-				(nInputs * (keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
-					999) /
+				(nInputs * (keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) + 999) /
 					1000,
 				0,
 			),
