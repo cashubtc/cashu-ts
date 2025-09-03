@@ -956,7 +956,7 @@ describe('send', () => {
 				});
 			}),
 		);
-		const wallet = new CashuWallet(mint, { unit, logger });
+		const wallet = new CashuWallet(mint, { unit });
 		await wallet.getKeys();
 
 		const overpayProofs = [

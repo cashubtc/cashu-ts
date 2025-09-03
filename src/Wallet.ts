@@ -997,21 +997,17 @@ class Wallet {
 		},
 	): Promise<SendResponse> {
 		const { privkey, keysetId, includeFees = false } = config || {};
-
 		// First, let's see if we can avoid a swap (and fees)
 		// by trying an exact match offline selection, including fees if
 		// we are giving the receiver the amount + their fee to receive
 		try {
 			if (
 				!deepEqual(outputConfig.send, DEFAULT_OUTPUT) ||
-				(outputConfig.keep && !deepEqual(outputConfig.keep, DEFAULT_OUTPUT)) ||
 				keysetId
 			) {
 				const issues = [
 					!deepEqual<OutputType>(outputConfig.send, DEFAULT_OUTPUT) &&
 						'non-default send outputConfig',
-					!deepEqual<OutputType>(outputConfig.keep, DEFAULT_OUTPUT) &&
-						'non-default keep outputConfig',
 					keysetId && 'keysetId',
 				]
 					.filter(Boolean)
@@ -1076,7 +1072,16 @@ class Wallet {
 
 		// Shape KEEP (change) output type and create outputs.
 		// Note: no includeFees, as we are the receiver
-		const keepType = outputConfig?.keep ?? DEFAULT_OUTPUT;
+		let keepType = outputConfig.keep ?? DEFAULT_OUTPUT;
+		if (keepType.type === 'deterministic' && sendType.type === 'deterministic') {
+			const oldKeepCounter = keepType.counter;
+			keepType = { ...keepType, counter: keepType.counter + sendOutputs.length };
+			this._logger.info('Auto-offsetting keep counter by send outputs length to avoid overlap', {
+				oldKeepCounter: oldKeepCounter,
+				sendLength: sendOutputs.length,
+				newKeepCounter: keepType.counter,
+			});
+		}
 		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, false);
 
 		// Execute swap

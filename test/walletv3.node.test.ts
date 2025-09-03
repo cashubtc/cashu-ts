@@ -261,7 +261,7 @@ describe('receive', () => {
 			}),
 		);
 
-		const wallet = new Wallet(mint, { unit });
+		const wallet = new Wallet(mint, { unit, logger });
 		const proofs = await wallet.receive(token3sat, { type: 'random', splitAmounts: [1, 1, 1] });
 
 		expect(proofs).toHaveLength(3);
@@ -1065,7 +1065,6 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			},
 		];
-		await wallet.getKeys();
 		const result = await wallet.send(3, overpayProofs, undefined, { includeFees: true });
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
@@ -1080,6 +1079,71 @@ describe('send', () => {
 		expect(result.keep).toHaveLength(2);
 		expect(result.keep[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
 		expect(result.keep[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
+	test('send with deterministic keep/send auto-offsets counters and fees', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		await wallet.getKeys();
+
+		const overpayProofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+		const outputConfig: OutputConfig = {
+			send: { type: 'deterministic', counter: 0 },
+			keep: { type: 'deterministic', counter: 0 }, // Should auto-offset to send.length
+		};
+		const result = await wallet.send(3, overpayProofs, outputConfig, { includeFees: true });
+		// Assert no overlap (e.g., secrets are unique)
+		const allSecrets = [...result.keep, ...result.send].map((p) => p.secret);
+		expect(new Set(allSecrets).size).toBe(allSecrets.length); // No duplicates
 	});
 });
 
@@ -2337,7 +2401,7 @@ describe('Test coinselection', () => {
 	});
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
-		const wallet = new Wallet(mint, { unit, logger });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.getKeys();
 
 		const sendResponse = await wallet.send(64, [
