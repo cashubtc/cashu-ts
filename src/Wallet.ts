@@ -378,6 +378,7 @@ class Wallet {
 			promises.push(
 				this.mint.getInfo().then((info) => {
 					this._mintInfo = new MintInfo(info);
+					return null; // promise should return
 				}),
 			);
 		}
@@ -387,6 +388,7 @@ class Wallet {
 			promises.push(
 				this.mint.getKeySets().then((allKeysets) => {
 					this._keysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this._unit);
+					return null; // promise should return
 				}),
 			);
 		}
@@ -406,6 +408,7 @@ class Wallet {
 					if (this._keysets.length) {
 						this._keysetId = this.getActiveKeyset(this._keysets).id;
 					}
+					return null; // promise should return
 				}),
 			);
 		}
@@ -539,14 +542,17 @@ class Wallet {
 			this._logger.warn('Amount was invalid (zero or negative)');
 			return [];
 		}
-		if ('custom' !== outputType.type && (outputType.splitAmounts?.length ?? 0) > 0) {
+		if (
+			'custom' != outputType.type &&
+			outputType.splitAmounts &&
+			outputType.splitAmounts.length > 0
+		) {
 			const splitSum = outputType.splitAmounts.reduce((sum, a) => sum + a, 0);
 			if (splitSum !== amount) {
 				this._logger.error('Custom splitAmounts sum mismatch', { splitSum, expected: amount });
 				throw new Error(`Custom splitAmounts sum to ${splitSum}, expected ${amount}`);
 			}
 		}
-
 		let outputData: OutputDataLike[];
 		switch (outputType.type) {
 			case 'random':
@@ -758,9 +764,9 @@ class Wallet {
 			proofsWeHave: config?.proofsWeHave,
 		};
 		return this.receive(token, outputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			requireDleq: config?.requireDleq,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -790,9 +796,9 @@ class Wallet {
 			proofsWeHave: config?.proofsWeHave,
 		};
 		return this.receive(token, outputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			requireDleq: config?.requireDleq,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -822,9 +828,9 @@ class Wallet {
 			proofsWeHave: config?.proofsWeHave,
 		};
 		return this.receive(token, outputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			requireDleq: config?.requireDleq,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -854,9 +860,9 @@ class Wallet {
 			proofsWeHave: config?.proofsWeHave,
 		};
 		return this.receive(token, outputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			requireDleq: config?.requireDleq,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -1044,7 +1050,7 @@ class Wallet {
 		counter?: number,
 		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
 	): Promise<SendResponse> {
-		const keepOutput = counter ? { type: 'deterministic', counter } : DEFAULT_OUTPUT;
+		const keepOutput: OutputType = counter ? { type: 'deterministic', counter } : DEFAULT_OUTPUT;
 		return this.send(
 			amount,
 			proofs,
@@ -1157,8 +1163,9 @@ class Wallet {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
 			}
-		} catch (e) {
-			this._logger.debug('ExactMatch offline selection failed.', { e: e.message });
+		} catch (e: unknown) {
+			const message = e instanceof Error ? e.message : 'Unknown error';
+			this._logger.debug('ExactMatch offline selection failed.', { e: message });
 		}
 
 		// Fetch keys
@@ -1166,8 +1173,8 @@ class Wallet {
 
 		// Shape SEND output type and create outputs
 		// Note: proofsWeHave is not valid for send outputs (optimization is for keep only)
-		let sendType = outputConfig.send ?? DEFAULT_OUTPUT;
-		if (sendType.proofsWeHave) {
+		let sendType: OutputType = outputConfig.send ?? DEFAULT_OUTPUT;
+		if ('custom' != sendType.type && sendType.proofsWeHave) {
 			sendType = { ...sendType, proofsWeHave: undefined };
 		}
 		const sendOutputs = this.configureOutputs(amount, keys, sendType, includeFees);
@@ -1835,7 +1842,7 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object (bolt11/bolt12).
 	 * @param outputType Configuration for proof generation. Defaults to 'random'.
-	 * @param config Optional parameters (e.g. privateKey for locked quotes).
+	 * @param config Optional parameters (e.g. privkey for locked quotes).
 	 * @returns Minted proofs.
 	 */
 	async mintProofs(
@@ -1843,7 +1850,7 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: {
-			privateKey?: string;
+			privkey?: string;
 			keysetId?: string;
 		},
 	): Promise<Proof[]> {
@@ -1857,25 +1864,24 @@ class Wallet {
 	 * Beginner-friendly default for privacy-focused minting.
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
-	 * @param config Optional parameters (e.g. privateKey, splitAmounts, proofsWeHave).
+	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
 	async mintProofsAsDefault(
 		amount: number,
 		quote: string | MintQuoteResponse,
 		config?: {
-			privateKey?: string;
+			privkey?: string;
 			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
 		},
 	): Promise<Proof[]> {
 		const { splitAmounts, proofsWeHave } = config ?? {};
-		const effectiveOutputType: OutputType = { ...DEFAULT_OUTPUT, splitAmounts, proofsWeHave };
+		const effectiveOutputType: OutputType = { type: 'random', splitAmounts, proofsWeHave };
 		return this.mintProofs(amount, quote, effectiveOutputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -1887,7 +1893,7 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param counter Starting counter for deterministic secrets.
-	 * @param config Optional parameters (e.g. privateKey, splitAmounts, proofsWeHave).
+	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
 	async mintProofsAsDeterministic(
@@ -1895,7 +1901,7 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 		counter: number,
 		config?: {
-			privateKey?: string;
+			privkey?: string;
 			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
@@ -1909,9 +1915,8 @@ class Wallet {
 			proofsWeHave,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -1923,7 +1928,7 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
-	 * @param config Optional parameters (e.g. privateKey, splitAmounts, proofsWeHave).
+	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
 	async mintProofsAsP2PK(
@@ -1931,7 +1936,7 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 		p2pkOptions: P2PKOptions,
 		config?: {
-			privateKey?: string;
+			privkey?: string;
 			keysetId?: string;
 			splitAmounts?: number[];
 			proofsWeHave?: Proof[];
@@ -1945,9 +1950,8 @@ class Wallet {
 			proofsWeHave,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, {
-			...config,
-			splitAmounts: undefined,
-			proofsWeHave: undefined,
+			privkey: config?.privkey,
+			keysetId: config?.keysetId,
 		});
 	}
 
@@ -1956,7 +1960,7 @@ class Wallet {
 	 *
 	 * @param amount Amount to mint.
 	 * @param quote Bolt12 mint quote.
-	 * @param privateKey Private key to unlock the quote.
+	 * @param privkey Private key to unlock the quote.
 	 * @param outputType Configuration for proof generation. Defaults to random.
 	 * @param config Optional parameters (e.g. keysetId).
 	 * @returns Minted proofs.
@@ -1964,11 +1968,11 @@ class Wallet {
 	async mintProofsBolt12(
 		amount: number,
 		quote: Bolt12MintQuoteResponse,
-		privateKey: string,
+		privkey: string,
 		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: { keysetId?: string },
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt12', amount, quote, outputType, { ...config, privateKey });
+		return this._mintProofs('bolt12', amount, quote, outputType, { ...config, privkey });
 	}
 
 	/**
@@ -2314,20 +2318,12 @@ class Wallet {
 		factory?: OutputDataFactory,
 	): OutputDataLike[] {
 		let count = Math.ceil(Math.log2(amount)) || 1;
-		//Prevent count from being -Infinity
-		if (count < 0) {
-			count = 0;
-		}
+		if (count < 0) count = 0;
 		const amounts = count ? Array(count).fill(1) : [];
-		return this.createOutputData(
-			amounts.length,
-			keyset,
-			counter,
-			undefined,
-			amounts,
-			undefined,
-			factory,
-		);
+		const outputType: OutputType = factory
+			? { type: 'factory', factory, splitAmounts: amounts }
+			: { type: 'deterministic', counter: counter ?? 0, splitAmounts: amounts };
+		return this.createOutputData(amounts.length, keyset, outputType);
 	}
 
 	/**
@@ -2340,7 +2336,7 @@ class Wallet {
 	 * @param amount Amount to mint (must be positive).
 	 * @param quote Quote ID or object.
 	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
-	 * @param config Optional (privateKey, keysetId).
+	 * @param config Optional (privkey, keysetId).
 	 * @returns Minted proofs.
 	 * @throws If params are invalid or mint returns errors.
 	 */
@@ -2349,9 +2345,9 @@ class Wallet {
 		amount: number,
 		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
 		outputType: OutputType = DEFAULT_OUTPUT,
-		config?: { privateKey?: string; keysetId?: string },
+		config?: { privkey?: string; keysetId?: string },
 	): Promise<Proof[]> {
-		const { privateKey, keysetId } = config ?? {};
+		const { privkey, keysetId } = config ?? {};
 		if (amount <= 0) {
 			this._logger.warn('Invalid mint amount: must be positive', { amount });
 			throw new Error('Amount must be positive');
@@ -2366,12 +2362,12 @@ class Wallet {
 				quote: quote,
 			};
 		} else {
-			if (!privateKey) {
+			if (!privkey) {
 				const message = 'Can not sign locked quote without private key';
 				this._logger.error(message);
 				throw new Error(message);
 			}
-			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
+			const mintQuoteSignature = signMintQuote(privkey, quote.quote, blindedMessages);
 			mintPayload = {
 				outputs: blindedMessages,
 				quote: quote.quote,
