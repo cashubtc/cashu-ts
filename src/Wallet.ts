@@ -908,7 +908,7 @@ class Wallet {
 		swapTransaction.sortedIndices.forEach((s, o) => {
 			orderedProofs[s] = proofsReceived[o];
 		});
-		this._logger.debug('RECEIVED', orderedProofs);
+		this._logger.debug('RECEIVE COMPLETED', {amounts: orderedProofs.map(p=>p?.amount)});
 		return orderedProofs;
 	}
 
@@ -1030,7 +1030,7 @@ class Wallet {
 				return { keep, send };
 			}
 		} catch (e) {
-			this._logger.debug('ExactMatch offline selection failed.', { e });
+			this._logger.debug('ExactMatch offline selection failed.', { e: e.message });
 		}
 
 		// Fetch keys
@@ -1051,6 +1051,10 @@ class Wallet {
 			sendTarget,
 			true, // Include fees to cover swap fee
 		);
+		// this._logger.debug('PROOFS SELECTED', {
+		// 	unselectedProofs: unselectedProofs.map(p=>p.amount),
+		// 	selectedProofs: selectedProofs.map(p=>p.amount),
+		// });
 		if (selectedProofs.length === 0) {
 			throw new Error('Not enough funds available to send');
 		}
@@ -1086,29 +1090,29 @@ class Wallet {
 
 		// Construct proofs
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
-		const splitProofsToKeep: Proof[] = [];
-		const splitProofsToSend: Proof[] = [];
-		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
 		const reorderedProofs = Array(swapProofs.length);
+		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
 		swapTransaction.sortedIndices.forEach((s, i) => {
 			reorderedKeepVector[s] = swapTransaction.keepVector[i];
 			reorderedProofs[s] = swapProofs[i];
 		});
+		const keepProofs: Proof[] = [];
+		const sendProofs: Proof[] = [];
 		reorderedProofs.forEach((p: Proof, i) => {
 			if (reorderedKeepVector[i]) {
-				splitProofsToKeep.push(p);
+				keepProofs.push(p);
 			} else {
-				splitProofsToSend.push(p);
+				sendProofs.push(p);
 			}
 		});
-		this._logger.debug('SEND PROOFS v3', {
-			unselectedProofs,
-			splitProofsToKeep,
-			splitProofsToSend,
+		this._logger.debug('SEND COMPLETED', {
+			unselectedProofs: unselectedProofs.map(p=>p?.amount),
+			keepProofs: keepProofs.map(p=>p?.amount),
+			sendProofs: sendProofs.map(p=>p?.amount),
 		});
 		return {
-			keep: [...splitProofsToKeep, ...unselectedProofs],
-			send: splitProofsToSend,
+			keep: [...keepProofs, ...unselectedProofs],
+			send: sendProofs,
 		};
 	}
 
