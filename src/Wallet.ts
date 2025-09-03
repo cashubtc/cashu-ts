@@ -12,8 +12,12 @@
  * changes during the v3 refactor process.
  * @example
  *
- *     const wallet = new Wallet(mint, { unit: 'sat' });
- *     // Usage will evolve as refactoring progresses.
+ *     import { CashuMint, Wallet } from '@cashu/cashu-ts';
+ *
+ * Const mintUrl = 'http://localhost:3338'; const mint = new CashuMint(mintUrl); const wallet = new
+ * Wallet(mint, { unit: 'sat' }); await wallet.loadMint(); // Initialize mint info, keysets, and
+ * keys // Wallet is now ready to use, eg: const proofs = [...]; // your array of unspent proofs
+ * const { keep, send } = await wallet.send(32, proofs);
  *
  * @v3
  */
@@ -254,8 +258,22 @@ export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
 };
 
 /**
- * @v3
  * Class that represents a Cashu wallet. This class should act as the entry point for this library.
+ *
+ * @example
+ *
+ * ```typescript
+ * import { CashuMint, Wallet } from '@cashu/cashu-ts';
+ * const mintUrl = 'http://localhost:3338';
+ * const mint = new CashuMint(mintUrl);
+ * const wallet = new Wallet(mint, { unit: 'sat' });
+ * await wallet.loadMint(); // Initialize mint info, keysets, and keys
+ * // Wallet is now ready to use, eg:
+ * const proofs = [...]; // your array of unspent proofs
+ * const { keep, send } = await wallet.send(32, proofs);
+ * ```
+ *
+ * @v3
  */
 class Wallet {
 	private _keys: Map<string, MintKeys> = new Map();
@@ -324,29 +342,95 @@ class Wallet {
 		}
 	}
 
+	/**
+	 * Get the wallet's unit.
+	 *
+	 * @returns The unit (e.g., 'sat').
+	 */
 	get unit(): string {
 		return this._unit;
 	}
-	get keys(): Map<string, MintKeys> {
-		return this._keys;
-	}
+
+	/**
+	 * Get the active keyset ID.
+	 *
+	 * @returns The active keyset ID.
+	 * @throws If no keyset ID is set.
+	 */
 	get keysetId(): string {
 		if (!this._keysetId) {
-			const message = 'No keysetId set';
+			const message = 'No keyset ID set; call loadMint first';
 			this._logger.error(message);
 			throw new Error(message);
 		}
 		return this._keysetId;
 	}
-	set keysetId(keysetId: string) {
-		this._keysetId = keysetId;
+
+	/**
+	 * Load mint information, keysets, and keys. Must be called before using other methods.
+	 *
+	 * @param forceRefresh If true, re-fetches data even if cached.
+	 * @throws If fetching mint info, keysets, or keys fails.
+	 */
+	async loadMint(forceRefresh?: boolean): Promise<void> {
+		const promises = [];
+
+		// Load mint info
+		if (!this._mintInfo || forceRefresh) {
+			promises.push(
+				this.mint.getInfo().then((info) => {
+					this._mintInfo = new MintInfo(info);
+				}),
+			);
+		}
+
+		// Load keysets (same unit as wallet)
+		if (!this._keysets.length || forceRefresh) {
+			promises.push(
+				this.mint.getKeySets().then((allKeysets) => {
+					this._keysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this._unit);
+				}),
+			);
+		}
+
+		// Load keys and set active keyset
+		if (!this._keys.size || forceRefresh) {
+			promises.push(
+				this.mint.getKeys().then((keysets) => {
+					keysets.keysets.forEach((k: MintKeys) => {
+						if (!verifyKeysetId(k)) {
+							const message = `Couldn't verify keyset ID ${k.id}`;
+							this._logger.error(message);
+							throw new Error(message);
+						}
+					});
+					this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
+					if (this._keysets.length) {
+						this._keysetId = this.getActiveKeyset(this._keysets).id;
+					}
+				}),
+			);
+		}
+
+		await Promise.all(promises);
+
+		// Ensure keysetId is set if keysets are available
+		if (this._keysets.length && !this._keysetId) {
+			this._keysetId = this.getActiveKeyset(this._keysets).id;
+		}
 	}
-	get keysets(): MintKeyset[] {
-		return this._keysets;
-	}
-	get mintInfo(): MintInfo {
+
+	/**
+	 * Get information about the mint.
+	 *
+	 * @remarks
+	 * Returns cached mint info. Call `loadMint` first to initialize the wallet.
+	 * @returns Mint info.
+	 * @throws If mint info is not initialized.
+	 */
+	getMintInfo(): MintInfo {
 		if (!this._mintInfo) {
-			const message = 'Mint info not loaded';
+			const message = 'Mint info not initialized; call loadMint first';
 			this._logger.error(message);
 			throw new Error(message);
 		}
@@ -354,53 +438,81 @@ class Wallet {
 	}
 
 	/**
-	 * Get information about the mint.
+	 * Get keysets for the wallet's unit.
 	 *
-	 * @returns Mint info.
+	 * @remarks
+	 * Returns cached keysets. Call `loadMint` first to initialize the wallet.
+	 * @returns Keysets with wallet's unit.
+	 * @throws If keysets are not initialized.
 	 */
-	async getMintInfo(): Promise<MintInfo> {
-		const infoRes = await this.mint.getInfo();
-		this._mintInfo = new MintInfo(infoRes);
-		return this._mintInfo;
-	}
-
-	/**
-	 * Get stored information about the mint or request it if not loaded.
-	 *
-	 * @returns Mint info.
-	 */
-	async lazyGetMintInfo(): Promise<MintInfo> {
-		if (!this._mintInfo) {
-			return await this.getMintInfo();
+	getKeySets(): MintKeyset[] {
+		if (!this._keysets.length) {
+			const message = 'Keysets not initialized; call loadMint first';
+			this._logger.error(message);
+			throw new Error(message);
 		}
-		return this._mintInfo;
+		return this._keysets;
 	}
 
 	/**
-	 * Load mint information, keysets and keys. This function can be called if no keysets are passed
-	 * in the constructor.
+	 * Get all active keys from the mint.
+	 *
+	 * @remarks
+	 * Returns cached keys as an array. Call `loadMint` first to initialize the wallet.
+	 * @returns Array of mint keys.
+	 * @throws If keys are not initialized.
 	 */
-	async loadMint() {
-		await Promise.all([
-			this.getMintInfo(),
-			this.getKeys(), // NB: also runs getKeySets()
-		]);
+	getAllKeys(): MintKeys[] {
+		if (!this._keys.size) {
+			const message = 'Keys not initialized; call loadMint first';
+			this._logger.error(message);
+			throw new Error(message);
+		}
+		return Array.from(this._keys.values());
+	}
+
+	/**
+	 * Get public keys for a specific keyset or the active keyset.
+	 *
+	 * @remarks
+	 * Returns cached keys. Call `loadMint` first to initialize the wallet.
+	 * @param keysetId Optional keyset ID to get keys for; defaults to the active keyset.
+	 * @returns Mint keys for the specified or active keyset.
+	 * @throws If keys or keysets are not initialized or if the keyset ID is invalid.
+	 */
+	getKeys(keysetId?: string): MintKeys {
+		const keysets = this.getKeySets();
+		if (!keysetId) {
+			keysetId = this.getActiveKeyset(keysets).id;
+		}
+		if (!keysets.find((k: MintKeyset) => k.id === keysetId)) {
+			const message = `No keyset found with ID ${keysetId}`;
+			this._logger.error(message);
+			throw new Error(message);
+		}
+		const keys = this._keys.get(keysetId);
+		if (!keys) {
+			const message = `No keys found for keyset ID ${keysetId}; call loadMint with forceRefresh`;
+			this._logger.error(message);
+			throw new Error(message);
+		}
+		this._keysetId = keysetId;
+		return keys;
 	}
 
 	/**
 	 * Choose a keyset to activate based on the lowest input fee.
 	 *
-	 * Note: this function will filter out deprecated base64 keysets.
-	 *
+	 * @remarks
+	 * Filters out deprecated base64 keysets and selects the active keyset with the lowest input fee.
 	 * @param keysets Keysets to choose from.
 	 * @returns Active keyset.
+	 * @throws If no active keyset is found.
 	 */
 	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
-
 		// we only consider keyset IDs that start with "00"
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
-
 		const activeKeyset = activeKeysets.sort(
 			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
 		)[0];
@@ -410,83 +522,6 @@ class Wallet {
 			throw new Error(message);
 		}
 		return activeKeyset;
-	}
-
-	/**
-	 * Get keysets from the mint with the unit of the wallet.
-	 *
-	 * @returns Keysets with wallet's unit.
-	 */
-	async getKeySets(): Promise<MintKeyset[]> {
-		const allKeysets = await this.mint.getKeySets();
-		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this._unit);
-		this._keysets = unitKeysets;
-		return this._keysets;
-	}
-
-	/**
-	 * Get all active keys from the mint and set the keyset with the lowest fees as the active wallet
-	 * keyset.
-	 *
-	 * @returns Keyset.
-	 */
-	async getAllKeys(): Promise<MintKeys[]> {
-		const keysets = await this.mint.getKeys();
-		keysets.keysets.forEach((k) => {
-			if (!verifyKeysetId(k)) {
-				const message = `Couldn't verify keyset ID ${k.id}`;
-				this._logger.error(message);
-				throw new Error(message);
-			}
-		});
-		this._keys = new Map(keysets.keysets.map((k: MintKeys) => [k.id, k]));
-		this.keysetId = this.getActiveKeyset(this._keysets).id;
-		return keysets.keysets;
-	}
-
-	/**
-	 * Get public keys from the mint. If keys were already fetched, it will return those.
-	 *
-	 * If `keysetId` is set, it will fetch and return that specific keyset. Otherwise, we select an
-	 * active keyset with the unit of the wallet.
-	 *
-	 * @param keysetId Optional keysetId to get keys for.
-	 * @param forceRefresh? If set to true, it will force refresh the keyset from the mint.
-	 * @returns Keyset.
-	 */
-	async getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys> {
-		if (!(this._keysets.length > 0) || forceRefresh) {
-			await this.getKeySets();
-		}
-		// no keyset id is chosen, let's choose one
-		if (!keysetId) {
-			const localKeyset = this.getActiveKeyset(this._keysets);
-			keysetId = localKeyset.id;
-		}
-		// make sure we have keyset for this id
-		if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
-			await this.getKeySets();
-			if (!this._keysets.find((k: MintKeyset) => k.id === keysetId)) {
-				const message = `could not initialize keys. No keyset with id '${keysetId}' found`;
-				this._logger.error(message);
-				throw new Error(message);
-			}
-		}
-
-		// make sure we have keys for this id
-		if (!this._keys.get(keysetId)) {
-			const keys = await this.mint.getKeys(keysetId);
-			if (!verifyKeysetId(keys.keysets[0])) {
-				const message = `Couldn't verify keyset ID ${keys.keysets[0].id}`;
-				this._logger.error(message);
-				throw new Error(message);
-			}
-			this._keys.set(keysetId, keys.keysets[0]);
-		}
-
-		// set and return
-		this.keysetId = keysetId;
-		return this._keys.get(keysetId) as MintKeys;
 	}
 
 	/**
@@ -869,11 +904,8 @@ class Wallet {
 			keysetId?: string;
 		},
 	): Promise<Proof[]> {
-		// Fetch the keysets if we don't have them
-		if (this._keysets.length === 0) {
-			await this.getKeySets();
-		}
-		const decodedToken = typeof token === 'string' ? getDecodedToken(token, this._keysets) : token;
+		const keysets = this.getKeySets();
+		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
 		if (decodedToken.mint !== this.mint.mintUrl) {
 			const message = 'Token belongs to a different mint';
 			this._logger.error(message);
@@ -884,7 +916,7 @@ class Wallet {
 		if (totalAmount === 0) {
 			return [];
 		}
-		const keys = await this.getKeys(config?.keysetId);
+		const keys = this.getKeys(config?.keysetId);
 		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
 			const message = 'Token contains proofs with invalid or missing DLEQ';
 			this._logger.error(message);
@@ -1132,7 +1164,7 @@ class Wallet {
 		}
 
 		// Fetch keys
-		const keys = await this.getKeys(keysetId);
+		const keys = this.getKeys(keysetId);
 
 		// Shape SEND output type and create outputs
 		// Note: proofsWeHave is not valid for send outputs (optimization is for keep only)
@@ -1553,7 +1585,8 @@ class Wallet {
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
 	private getProofFeePPK(proof: Proof) {
-		const keyset = this._keysets.find((k) => k.id === proof.id);
+		const keysets = this.getKeySets();
+		const keyset = keysets.find((k) => k.id === proof.id);
 		if (!keyset) {
 			const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
 			this._logger.error(message);
@@ -1570,9 +1603,10 @@ class Wallet {
 	 * @returns Fee amount.
 	 */
 	getFeesForKeyset(nInputs: number, keysetId: string): number {
+		const keysets = this.getKeySets();
 		const fees = Math.floor(
 			Math.max(
-				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
+				(nInputs * (keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
 					1000,
 				0,
@@ -1633,7 +1667,7 @@ class Wallet {
 		options?: RestoreOptions,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
-		const keys = await this.getKeys(keysetId);
+		const keys = this.getKeys(keysetId);
 		if (!this._seed) {
 			const message = 'CashuWallet must be initialized with a seed to use restore';
 			this._logger.error(message);
@@ -1708,7 +1742,7 @@ class Wallet {
 		pubkey: string,
 		description?: string,
 	): Promise<LockedMintQuoteResponse> {
-		const { supported } = (await this.lazyGetMintInfo()).isSupported(20);
+		const { supported } = this.getMintInfo().isSupported(20);
 		if (!supported) {
 			const message = 'Mint does not support NUT-20';
 			this._logger.error(message);
@@ -1750,7 +1784,7 @@ class Wallet {
 		},
 	): Promise<Bolt12MintQuoteResponse> {
 		// Check if mint supports description for bolt12
-		const mintInfo = await this.lazyGetMintInfo();
+		const mintInfo = this.getMintInfo();
 		if (options?.description && !mintInfo.supportsBolt12Description) {
 			const message = 'Mint does not support description for bolt12';
 			this._logger.error(message);
@@ -2000,7 +2034,7 @@ class Wallet {
 		invoice: string,
 		millisatPartialAmount: number,
 	): Promise<MeltQuoteResponse> {
-		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
+		const { supported, params } = this.getMintInfo().isSupported(15);
 		if (!supported) {
 			const message = 'Mint does not support NUT-15';
 			this._logger.error(message);
@@ -2325,7 +2359,7 @@ class Wallet {
 			this._logger.warn('Invalid mint amount: must be positive', { amount });
 			throw new Error('Amount must be positive');
 		}
-		const keyset = await this.getKeys(keysetId);
+		const keyset = this.getKeys(keysetId);
 		const outputs = this.configureOutputs(amount, keyset, outputType, false); // No includeFees for mint
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
@@ -2378,7 +2412,7 @@ class Wallet {
 		options?: MeltProofOptions,
 	): Promise<MeltProofsResponse> {
 		const { keysetId, counter, privkey } = options || {};
-		const keys = await this.getKeys(keysetId);
+		const keys = this.getKeys(keysetId);
 		const outputData = this.createBlankOutputs(
 			sumProofs(proofsToSend) - meltQuote.amount,
 			keys,

@@ -23,6 +23,9 @@ import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 
 injectWebSocketImpl(WebSocket);
 
+const mintInfoResp = JSON.parse(
+	'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. It uses a FakeWallet, all your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[{"method":"email","info":"contact@me.com"},{"method":"twitter","info":"@me"},{"method":"nostr","info":"npub1337"}],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","icon_url":"https://image.nostr.build/46ee47763c345d2cfa3317f042d332003f498ee281fb42808d47a7d3b9585911.png","time":1731684933,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true},{"method":"bolt11","unit":"usd","description":true},{"method":"bolt11","unit":"eur","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"},{"method":"bolt11","unit":"eur"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"eur","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}',
+);
 const dummyKeysResp = {
 	keysets: [
 		{
@@ -69,6 +72,11 @@ beforeAll(() => {
 
 beforeEach(() => {
 	server.use(
+		http.get(mintUrl + '/v1/info', () => {
+			return HttpResponse.json(mintInfoResp);
+		}),
+	);
+	server.use(
 		http.get(mintUrl + '/v1/keys', () => {
 			return HttpResponse.json(dummyKeysResp);
 		}),
@@ -94,18 +102,10 @@ afterAll(() => {
 });
 
 describe('test info', () => {
-	const mintInfoResp = JSON.parse(
-		'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. It uses a FakeWallet, all your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[{"method":"email","info":"contact@me.com"},{"method":"twitter","info":"@me"},{"method":"nostr","info":"npub1337"}],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","icon_url":"https://image.nostr.build/46ee47763c345d2cfa3317f042d332003f498ee281fb42808d47a7d3b9585911.png","time":1731684933,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true},{"method":"bolt11","unit":"usd","description":true},{"method":"bolt11","unit":"eur","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"},{"method":"bolt11","unit":"eur"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"eur","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}',
-	);
 	test('test info', async () => {
-		server.use(
-			http.get(mintUrl + '/v1/info', () => {
-				return HttpResponse.json(mintInfoResp);
-			}),
-		);
 		const wallet = new Wallet(mint, { unit });
-
-		const info = await wallet.getMintInfo();
+		await wallet.loadMint();
+		const info = wallet.getMintInfo();
 		expect(info.contact).toEqual([
 			{ method: 'email', info: 'contact@me.com' },
 			{ method: 'twitter', info: '@me' },
@@ -153,7 +153,8 @@ describe('test info', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
-		const info = await wallet.getMintInfo();
+		await wallet.loadMint();
+		const info = wallet.getMintInfo();
 		expect(info.contact).toEqual([
 			{ method: 'email', info: 'contact@me.com' },
 			{ method: 'twitter', info: '@me' },
@@ -176,6 +177,7 @@ describe('test fees', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const fee = await wallet.checkMeltQuote('test');
 		const amount = 2000;
@@ -202,6 +204,7 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const proofs = await wallet.receive(tokenInput);
 
@@ -228,6 +231,7 @@ describe('receive', () => {
 		);
 
 		const wallet = new Wallet(mint);
+		await wallet.loadMint();
 
 		const proofs = await wallet.receive(decodedInput);
 
@@ -262,6 +266,8 @@ describe('receive', () => {
 		);
 
 		const wallet = new Wallet(mint, { unit, logger });
+		await wallet.loadMint();
+
 		const proofs = await wallet.receive(token3sat, { type: 'random', splitAmounts: [1, 1, 1] });
 
 		expect(proofs).toHaveLength(3);
@@ -281,6 +287,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const result = await wallet.receive(tokenInput).catch((e) => e);
 		expect(result).toMatchObject({
 			name: 'HttpResponseError',
@@ -298,6 +306,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const result = await wallet.receive(tokenInput).catch((e) => e);
 		expect(result).toMatchObject({
 			name: 'HttpResponseError',
@@ -328,6 +338,8 @@ describe('receive', () => {
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 		);
 		const wallet = new Wallet(mint, { unit, bip39seed: seed });
+		await wallet.loadMint();
+
 		const proofs = await wallet.receive(token3sat, { type: 'deterministic', counter: 5 });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
@@ -363,6 +375,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const proofs = await wallet.receive(token3sat, {
 			type: 'p2pk',
 			options: { pubkey: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4' },
@@ -402,6 +416,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const customFactory = (amount: number, keyset: MintKeys): OutputData => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
@@ -440,10 +456,11 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
-		await wallet.getKeys(); // Ensure keys are loaded for OutputData creation
+		await wallet.loadMint();
+
 		const customData = OutputData.createRandomData(
 			3,
-			wallet.keys.get('00bd033559de27d0')!,
+			wallet.getKeys('00bd033559de27d0')!,
 			[1, 1, 1],
 		);
 		const proofs = await wallet.receive(token3sat, { type: 'custom', data: customData });
@@ -459,6 +476,8 @@ describe('receive', () => {
 
 	test('test receive requireDleq true throws', async () => {
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		await expect(wallet.receive(token3sat, DEFAULT_OUTPUT, { requireDleq: true })).rejects.toThrow(
 			'Token contains proofs with invalid or missing DLEQ',
 		);
@@ -498,6 +517,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const existingProofs = [
 			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
 			{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
@@ -559,6 +580,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const proofs = await wallet.receive(token3sat, DEFAULT_OUTPUT, {
 			privkey: '5d41402abc4b2a76b9719d911017c592',
 		});
@@ -591,6 +614,8 @@ describe('receive', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
 		const proofs = await wallet.receive(token3sat, DEFAULT_OUTPUT, {
 			keysetId: '00bd033559de27d0',
 		});
@@ -628,6 +653,7 @@ describe('checkProofsStates', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const result = await wallet.checkProofsStates(proofs);
 		result.forEach((r) => {
@@ -652,7 +678,8 @@ describe('requestTokens', () => {
 				});
 			}),
 		);
-		const wallet = new Wallet(mint, { unit, logger });
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const proofs = await wallet.mintProofs(1, '');
 
@@ -668,6 +695,7 @@ describe('requestTokens', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const result = await wallet.mintProofs(1, '').catch((e) => e);
 
@@ -699,7 +727,7 @@ describe('send', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
-		await wallet.getKeys();
+		await wallet.loadMint();
 
 		const result = await wallet.send(1, proofs);
 
@@ -731,6 +759,7 @@ describe('send', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 
 		const result = await wallet.send(1, [
 			{
@@ -771,6 +800,7 @@ describe('send', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 
 		const result = await wallet.send(
 			1,
@@ -815,6 +845,7 @@ describe('send', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 
 		const overpayProofs = [
 			{
@@ -865,6 +896,7 @@ describe('send', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const overpayProofs = [
 			{
@@ -880,7 +912,6 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			},
 		];
-		await wallet.getKeys();
 		const result = await wallet.send(
 			4,
 			overpayProofs,
@@ -934,6 +965,7 @@ describe('send', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const overpayProofs = [
 			{
@@ -949,7 +981,6 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			},
 		];
-		await wallet.getKeys();
 		const result = await wallet.send(
 			3,
 			overpayProofs,
@@ -985,6 +1016,7 @@ describe('send', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 
 		const result = await wallet.send(2, proofs).catch((e) => e);
 
@@ -998,6 +1030,7 @@ describe('send', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 
 		const result = await wallet
 			.send(1, [
@@ -1049,7 +1082,7 @@ describe('send', () => {
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
-		await wallet.getKeys();
+		await wallet.loadMint();
 
 		const overpayProofs = [
 			{
@@ -1120,7 +1153,7 @@ describe('send', () => {
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 		);
 		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
-		await wallet.getKeys();
+		await wallet.loadMint();
 
 		const overpayProofs = [
 			{
@@ -1150,7 +1183,7 @@ describe('send', () => {
 describe('deterministic', () => {
 	test('no seed', async () => {
 		const wallet = new Wallet(mint, logger);
-		await wallet.getKeys();
+		await wallet.loadMint();
 		const result = await wallet
 			.send(
 				1,
@@ -1265,6 +1298,8 @@ describe('WebSocket Updates', () => {
 			});
 		});
 		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+
 		const state = await new Promise(async (res, rej) => {
 			const callback = (p: MintQuoteResponse) => {
 				if (p.state === MintQuoteState.PAID) {
@@ -1302,6 +1337,8 @@ describe('WebSocket Updates', () => {
 			});
 		});
 		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+
 		const state = await new Promise(async (res, rej) => {
 			const callback = (p: MeltQuoteResponse) => {
 				console.log(p);
@@ -1352,6 +1389,8 @@ describe('multi mint', async () => {
 		);
 		const mint = new CashuMint(mintUrl);
 		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+
 		const invoice =
 			'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
 		const meltQuote = await wallet.createMultiPathMeltQuote(invoice, 1000);
@@ -1363,7 +1402,8 @@ describe('multi mint', async () => {
 describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with locktime and single refund key', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
 			21,
@@ -1380,7 +1420,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to single pk with locktime and multiple refund keys', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
@@ -1397,7 +1438,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to single pk without locktime and no refund keys', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
@@ -1409,7 +1451,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to single pk with unexpected requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', requiredSignatures: 5 },
 			21,
@@ -1425,7 +1468,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'] },
 			21,
@@ -1442,7 +1486,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple pks with 2-of-3 requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 2 },
 			21,
@@ -1459,7 +1504,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple pks with out of range requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 5 },
 			21,
@@ -1476,7 +1522,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1499,7 +1546,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple refund keys with no requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
@@ -1517,7 +1565,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple refund keys with 2-of-3 requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1540,7 +1589,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple refund keys with out of range requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1563,7 +1613,8 @@ describe('P2PK BlindingData', () => {
 	});
 	test('Create BlindingData locked to multiple refund keys with expired multisig', async () => {
 		const wallet = new Wallet(mint);
-		const keys = await wallet.getKeys();
+		await wallet.loadMint();
+		const keys = wallet.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: ['thisisatest', 'asecondpk', 'athirdpk'],
@@ -1592,6 +1643,7 @@ describe('P2PK BlindingData', () => {
 describe('Restoring deterministic proofs', () => {
 	test('Batch restore', async () => {
 		const wallet = new Wallet(mint);
+		await wallet.loadMint();
 		let rounds = 0;
 		const mockRestore = vi
 			.spyOn(wallet, 'restore')
@@ -1610,6 +1662,7 @@ describe('Restoring deterministic proofs', () => {
 	});
 	test('Batch restore with custom values', async () => {
 		const wallet = new Wallet(mint);
+		await wallet.loadMint();
 		let rounds = 0;
 		const mockRestore = vi
 			.spyOn(wallet, 'restore')
@@ -1650,7 +1703,8 @@ describe('Blind Authentication', () => {
 			}),
 		);
 		const wallet = new Wallet(mint);
-		const info = await wallet.getMintInfo();
+		await wallet.loadMint();
+		const info = wallet.getMintInfo();
 		const mintRequiresAuth = info.requiresBlindAuthToken('/v1/mint/bolt11');
 		const restoreRequiresAuth = info.requiresBlindAuthToken('v1/restore');
 		expect(mintRequiresAuth).toBeTruthy();
@@ -1700,6 +1754,7 @@ describe('Test coinselection', () => {
 	test('offline coinselection, zero fee keyset', async () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 25;
 		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: false });
 		expect(send).toHaveLength(3);
@@ -1715,6 +1770,7 @@ describe('Test coinselection', () => {
 	test('next best match coinselection', async () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 23;
 		const { send } = wallet.selectProofsToSend(
 			notes,
@@ -1739,6 +1795,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 31;
 		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
@@ -1759,6 +1816,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 31;
 		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
@@ -1779,6 +1837,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const smallNotes = [
 			{ id: '00bd033559de27d0', amount: 1, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 1, secret: 'secret2', C: 'C2' },
@@ -1811,6 +1870,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const largeNote = [
 			{ id: '00bd033559de27d0', amount: 64, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 16, secret: 'secret2', C: 'C2' },
@@ -1850,6 +1910,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const mixedNotes = [
 			{ id: '00keyset1', amount: 16, secret: 'secret1', C: 'C1' },
 			{ id: '00keyset2', amount: 16, secret: 'secret2', C: 'C2' },
@@ -1879,6 +1940,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 0;
 		// Exact match (offline)
 		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
@@ -1903,6 +1965,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const smallNotes = [
 			{ id: '00bd033559de27d0', amount: 8, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 8, secret: 'secret2', C: 'C2' },
@@ -1942,6 +2005,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const smallNotes = [
 			{ id: '00bd033559de27d0', amount: 64, secret: 'secret1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 32, secret: 'secret2', C: 'C2' },
@@ -1966,6 +2030,7 @@ describe('Test coinselection', () => {
 	test('exact match not possible', async () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const proofs = [
 			{ id: '00bd033559de27d0', amount: 2, secret: 's1', C: 'C1' },
 			{ id: '00bd033559de27d0', amount: 2, secret: 's2', C: 'C2' },
@@ -1993,6 +2058,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const proofs = [
 			{ id: '00low', amount: 16, secret: 's1', C: 'C1' },
 			{ id: '00high', amount: 16, secret: 's2', C: 'C2' },
@@ -2019,6 +2085,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 25;
 		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
@@ -2027,6 +2094,7 @@ describe('Test coinselection', () => {
 	test('duplicate proofs exceeding limit', async () => {
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const dupNotes = Array(10).fill({ id: '00bd033559de27d0', amount: 8, secret: 's', C: 'C' });
 		const targetAmount = 24;
 		const { send } = await wallet.sendOffline(targetAmount, dupNotes, {
@@ -2044,6 +2112,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 23;
 		const { send } = wallet.selectProofsToSend(
 			notes,
@@ -2082,6 +2151,7 @@ describe('Test coinselection', () => {
 		// console.log('allNotes', allNotes.map((p)=>p.amount));
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 
 		// Exact Match Test No Fees
 		const targetAmountExact = 128;
@@ -2129,6 +2199,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const smallNotes = [
 			...Array(50).fill({ id: '00bd033559de27d0', amount: 1, secret: 's1', C: 'C1' }),
 			...Array(50).fill({ id: '00bd033559de27d0', amount: 2, secret: 's2', C: 'C2' }),
@@ -2161,6 +2232,7 @@ describe('Test coinselection', () => {
 		);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 5;
 		const { send } = wallet.selectProofsToSend(
 			notes,
@@ -2180,7 +2252,7 @@ describe('Test coinselection', () => {
 	});
 	test('optimal offline coinselection', async () => {
 		const wallet = new Wallet(mint, { unit });
-		await wallet.getKeys();
+		await wallet.loadMint();
 		const targetAmount = 25;
 		const { send } = await wallet.sendOffline(targetAmount, notes);
 		expect(send).toHaveLength(3);
@@ -2189,7 +2261,7 @@ describe('Test coinselection', () => {
 	});
 	test('next optimal offline coinselection', async () => {
 		const wallet = new Wallet(mint, { unit });
-		await wallet.getKeys();
+		await wallet.loadMint();
 		const targetAmount = 23;
 		const { send } = await wallet.sendOffline(targetAmount, notes, { exactMatch: false });
 		expect(send).toHaveLength(2);
@@ -2404,7 +2476,7 @@ describe('Test coinselection', () => {
 	test('test send tokens exact without previous split', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new Wallet(mint, { unit });
-		await wallet.getKeys();
+		await wallet.loadMint();
 
 		const sendResponse = await wallet.send(64, [
 			{
