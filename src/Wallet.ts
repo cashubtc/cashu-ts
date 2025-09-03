@@ -2402,10 +2402,9 @@ class Wallet {
 			};
 		}
 		const meltResponse = await this.mint.melt(meltPayload);
-		return {
-			quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
-			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
-		};
+		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [];
+		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+		return { quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request }, change };
 	}
 }
 
