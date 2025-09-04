@@ -96,76 +96,7 @@ export type P2PKOptions = {
 };
 
 /**
- * Defines the configuration for generating blinded message outputs in CashuWallet. This is a tagged
- * union where the `type` field determines the variant and its behavior.
- *
- * @remarks
- * This type is experimental and may change in future releases. For production use, rely on
- * CashuWallet's established API.
- * @example
- *
- * ```typescript
- * // Random output type
- * const randomOutput: OutputType = { type: 'random', splitAmounts: [1, 2, 4] };
- * // Deterministic output type
- * const deterministicOutput: OutputType = { type: 'deterministic', counter: 0 };
- * ```
- *
- * @v3
- */
-export type OutputType =
-	| ({
-			/**
-			 * Generates outputs with random blinding factors.
-			 *
-			 * @remarks
-			 * The default type: Used for standard, non-deterministic output generation.
-			 */
-			type: 'random';
-	  } & SharedOutputTypeProps)
-	| ({
-			/**
-			 * Generates outputs deterministically based on a counter.
-			 *
-			 * @remarks
-			 * Useful for reproducible output sequences.
-			 */
-			type: 'deterministic';
-			counter: number;
-	  } & SharedOutputTypeProps)
-	| ({
-			/**
-			 * Generates pay-to-public-key (P2PK) outputs with specific options.
-			 *
-			 * @see P2PKOptions for configuration options.
-			 */
-			type: 'p2pk';
-			options: P2PKOptions;
-	  } & SharedOutputTypeProps)
-	| ({
-			/**
-			 * Uses a factory to generate OutputData instances.
-			 *
-			 * @remarks
-			 * The number of outputs is determined by splitAmounts or basic split.
-			 * @see OutputDataFactory for factory details.
-			 */
-			type: 'factory';
-			factory: OutputDataFactory;
-	  } & SharedOutputTypeProps)
-	| {
-			/**
-			 * Provides pre-created OutputData instances, bypassing automatic splitting.
-			 *
-			 * @remarks
-			 * Use this when you have specific OutputData pre-prepared.
-			 */
-			type: 'custom';
-			data: OutputData[];
-	  };
-
-/**
- * Shared properties for OutputType variants, except 'custom'.
+ * Shared properties for most `OutputType` variants (except 'custom').
  *
  * @v3
  */
@@ -177,35 +108,88 @@ interface SharedOutputTypeProps {
 	 */
 	splitAmounts?: number[];
 	/**
-	 * Optional other proofs you have from this mint.
+	 * Optional proofs from this mint for optimizing denomination splitting.
 	 *
 	 * @remarks
-	 * Used to optimize denomination splitting outputs based on the wallet denomination target.
-	 * @see Wallet constructor's `denominationTarget` option for configuration details.
+	 * Used with Wallet's `denominationTarget` option.
+	 * @see Wallet constructor for details.
 	 */
 	proofsWeHave?: Proof[];
 }
 
 /**
- * Output configuration for send/swap operations.
+ * Configuration for generating blinded message outputs
  *
  * @remarks
- * Defines the output types for proofs to be sent and kept during a send or swap operation.
+ * A discriminated union based on the `type` field.
+ * Experimental; may change. For production, use CashuWallet's main API.
+ * @example
  *
- * - `send`: Specifies the output type for proofs to be sent to the recipient. Required to ensure
- *   valid output generation.
- * - `keep`: Specifies the output type for change proofs to be retained by the wallet. Optional, as it
- *   defaults to random output generation if not provided.
+ *     // Random with custom splits
+ *     const random: OutputType = { type: 'random', splitAmounts: [1, 2, 4] };
+ *     // Deterministic
+ *     const deterministic: OutputType = { type: 'deterministic', counter: 0 };
+ *
+ * @v3
+ */
+export type OutputType =
+	| ({
+			/**
+			 * Random blinding factors (default behavior).
+			 */
+			type: 'random';
+	  } & SharedOutputTypeProps)
+	| ({
+			/**
+			 * Deterministic outputs based on a counter.
+			 */
+			type: 'deterministic';
+			counter: number;
+	  } & SharedOutputTypeProps)
+	| ({
+			/**
+			 * Pay-to-public-key (P2PK) outputs.
+			 *
+			 * @see P2PKOptions
+			 */
+			type: 'p2pk';
+			options: P2PKOptions;
+	  } & SharedOutputTypeProps)
+	| ({
+			/**
+			 * Factory-generated OutputData.
+			 *
+			 * @remarks
+			 * Outputs count from splitAmounts or basic split.
+			 * @see OutputDataFactory
+			 */
+			type: 'factory';
+			factory: OutputDataFactory;
+	  } & SharedOutputTypeProps)
+	| {
+			/**
+			 * Pre-created OutputData, bypassing splitting.
+			 */
+			type: 'custom';
+			data: OutputData[];
+	  };
+
+/**
+ * Output config for send/swap operations.
+ *
+ * @remarks
+ * Defines types for sent and kept proofs.
+ *
+ * - `send`: Required for recipient proofs.
+ * - `keep`: Optional; defaults to random.
  *
  * @example
  *
- * ```typescript
- * const config: OutputConfig = {
- * 	send: { type: 'random', splitAmounts: [1, 2] },
- * 	keep: { type: 'deterministic', counter: 0 },
- * };
- * const result = await wallet.send(3, proofs, config, { includeFees: true });
- * ```
+ *     const config: OutputConfig = {
+ *     	send: { type: 'random', splitAmounts: [1, 2] },
+ *     	keep: { type: 'deterministic', counter: 0 },
+ *     };
+ *     await wallet.send(3, proofs, config, { includeFees: true });
  *
  * @v3
  */
@@ -215,41 +199,36 @@ export interface OutputConfig {
 }
 
 /**
- * Default configuration for `OutputType`, equivalent to `{ type: 'random' }`.
+ * Default `OutputType` ({ type: 'random' }).
  *
  * @remarks
- * Use this constant to specify the default, non-deterministic output generation behavior for
- * methods like `wallet.receive`.
+ * Use for default random outputs in methods like `wallet.receive`. Narrowly typed for easy
+ * spreading/customization.
  * @example
  *
- * ```typescript
- * const token = 'cashuB...';
- * // Uses random blinding factors for output generation
- * const proofs = await wallet.receive(token, DEFAULT_OUTPUT, { requireDleq: true });
- * ```
+ *     // Basic usage
+ *     await wallet.receive('cashuB...', DEFAULT_OUTPUT, { requireDleq: true });
+ *     // Customized
+ *     const custom: OutputType = { ...DEFAULT_OUTPUT, splitAmounts: [1, 2, 4] };
  *
  * @v3
  */
-export const DEFAULT_OUTPUT: OutputType = { type: 'random' };
+export const DEFAULT_OUTPUT = { type: 'random' } satisfies Extract<OutputType, { type: 'random' }>;
 
 /**
- * Default output configuration for send/swap operations.
+ * Default config for send/swap operations.
  *
  * @remarks
- * Provides a default configuration where both `send` and `keep` outputs use random blinding
- * factors. Useful for simplifying calls to `send` or `swap` when no custom output types are needed,
- * but options are. Can also be spread as an entry point for customization.
+ * Simplifies calls; spread for customization.
  * @example
  *
- * ```typescript
- * const result = await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
+ *     await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
  *
- * const deterministicKeep = {
- * 	...DEFAULT_OUTPUT_CONFIG,
- * 	keep: { type: 'deterministic', counter: 0 },
- * };
- * const result = await wallet.send(5, proofs, deterministicKeep, { includeFees: true });
- * ```
+ *     const customKeep = {
+ *     	...DEFAULT_OUTPUT_CONFIG,
+ *     	keep: { type: 'deterministic', counter: 0 },
+ *     };
+ *     await wallet.send(5, proofs, customKeep, { includeFees: true });
  *
  * @v3
  */
@@ -1879,7 +1858,7 @@ class Wallet {
 		},
 	): Promise<Proof[]> {
 		const { splitAmounts, proofsWeHave } = config ?? {};
-		const effectiveOutputType: OutputType = { type: 'random', splitAmounts, proofsWeHave };
+		const effectiveOutputType: OutputType = { ...DEFAULT_OUTPUT, splitAmounts, proofsWeHave };
 		return this.mintProofs(amount, quote, effectiveOutputType, {
 			privkey: config?.privkey,
 			keysetId: config?.keysetId,
@@ -2310,6 +2289,7 @@ class Wallet {
 	 * @param keysetId Mint keysetId.
 	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
 	 *   must be initialized with seed phrase to take effect.
+	 * @param factory? Optionally set a factory for proof creation.
 	 * @returns Blinded messages, secrets, and rs.
 	 */
 	private createBlankOutputs(
