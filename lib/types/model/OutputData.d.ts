@@ -21,8 +21,8 @@ export declare class OutputData implements OutputDataLike {
         requiredRefundSignatures?: number;
     }, amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     static createCairoData(cairoSend: {
-        programHash: string;
-        outputHash: string;
+        executable: string;
+        expectedOutput: bigint;
     }, amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     static createSingleP2PKData(p2pk: {
         pubkey: string | string[];

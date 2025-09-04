@@ -49,6 +49,33 @@ class Felt252 {
 }
 
 /**
+ * Helper function to create cairoSend object from executable and expected output.
+ * 
+ * @param cairoExecutable - JSON string representing the Cairo executable
+ * @param cairoExpectedOutput - Expected output as a number or bigint
+ * @returns Object with programHash and outputHash for use in wallet.send
+ */
+export const createCairoDataPayload = (
+	cairoExecutable: string,
+	cairoExpectedOutput: number | bigint
+): { programHash: string; outputHash: string } => {
+	const executable = JSON.parse(cairoExecutable);
+	const bytecode = executable.program.bytecode;
+	const programHash = bytesToHex(hashExecutableBytecode(bytecode));
+	const outputBigInt = BigInt(cairoExpectedOutput);
+	const outputBytes = new Uint8Array(32);
+	let temp = outputBigInt;
+
+	for (let i = 0; i < 32; i++) {
+		outputBytes[i] = Number(temp & 0xffn);
+		temp >>= 8n;
+	}
+	const outputHash = bytesToHex(hashByteArray(outputBytes));
+	
+	return { programHash, outputHash };
+};
+
+/**
  * @param programHash - The BLAKE2s hash of the Cairo program's bytecode.
  * @returns A JSON string representing the Cairo secret.
  */

@@ -736,7 +736,7 @@ class CashuWallet {
 			Math.max(
 				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
-					1000,
+				1000,
 				0,
 			),
 		);
@@ -1273,8 +1273,8 @@ class CashuWallet {
 			programInput: bigint[];
 		},
 		cairoSend?: {
-			programHash: string;
-			outputHash: string;
+			executable: string;
+			expectedOutput: bigint;
 		},
 	): Promise<SwapTransaction> {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
@@ -1576,8 +1576,8 @@ class CashuWallet {
 			requiredRefundSignatures?: number;
 		},
 		cairoSend?: {
-			programHash: string;
-			outputHash: string;
+			executable: string;
+			expectedOutput: bigint;
 		},
 		factory?: OutputDataFactory,
 	): OutputDataLike[] {

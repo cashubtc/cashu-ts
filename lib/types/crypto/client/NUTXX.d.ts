@@ -1,5 +1,16 @@
 import { Proof } from '../../model/types/index';
 /**
+ * Helper function to create cairoSend object from executable and expected output.
+ *
+ * @param cairoExecutable - JSON string representing the Cairo executable
+ * @param cairoExpectedOutput - Expected output as a number or bigint
+ * @returns Object with programHash and outputHash for use in wallet.send
+ */
+export declare const createCairoDataPayload: (cairoExecutable: string, cairoExpectedOutput: number | bigint) => {
+    programHash: string;
+    outputHash: string;
+};
+/**
  * @param programHash - The BLAKE2s hash of the Cairo program's bytecode.
  * @returns A JSON string representing the Cairo secret.
  */

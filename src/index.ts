@@ -15,6 +15,7 @@ import {
 	hasValidDleq,
 } from './utils';
 import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
+import { createCairoDataPayload } from './crypto/client/NUTXX';
 
 export * from './model/types/index';
 
@@ -36,6 +37,7 @@ export {
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
 	hasValidDleq,
+	createCairoDataPayload as createCairoSend,
 	LogLevel,
 	ConsoleLogger,
 	type Logger,

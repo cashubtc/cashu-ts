@@ -94,8 +94,8 @@ export type SendOptions = {
 	};
 
 	cairoSend?: {
-		programHash: string;
-		outputHash: string;
+		executable: string;
+		expectedOutput: bigint;
 	};
 };
 
@@ -138,8 +138,8 @@ export type SwapOptions = {
 		requiredRefundSignatures?: number;
 	};
 	cairoSend?: {
-		programHash: string;
-		outputHash: string;
+		executable: string;
+		expectedOutput: bigint;
 	};
 	cairoReceive?: {
 		executable: string;

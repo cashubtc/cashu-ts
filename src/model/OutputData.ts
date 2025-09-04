@@ -11,6 +11,7 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { type DLEQ, pointFromHex } from '../crypto/common/index';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 import { deriveBlindingFactor, deriveSecret } from '../crypto/client/NUT09';
+import { createCairoDataPayload } from '../crypto/client/NUTXX';
 
 export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
@@ -86,13 +87,14 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createCairoData(
-		cairoSend: { programHash: string; outputHash: string },
+		cairoSend: { executable: string; expectedOutput: bigint },
 		amount: number,
 		keyset: MintKeys,
 		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		return amounts.map((a) => this.createSingleCairoData(cairoSend, a, keyset.id));
+		const cairoDataPayload = createCairoDataPayload(cairoSend.executable, cairoSend.expectedOutput);
+		return amounts.map((a) => this.createSingleCairoData(cairoDataPayload, a, keyset.id));
 	}
 
 	static createSingleP2PKData(
