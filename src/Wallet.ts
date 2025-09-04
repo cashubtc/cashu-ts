@@ -351,7 +351,7 @@ class Wallet {
 	 *
 	 * @returns The unit (e.g., 'sat').
 	 */
-	getUnit(): string {
+	get unit(): string {
 		return this._unit;
 	}
 
