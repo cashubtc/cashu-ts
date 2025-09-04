@@ -96,6 +96,16 @@ export type P2PKOptions = {
 };
 
 /**
+ * @v3
+ * Configuration for receive operations.
+ */
+export type ReceiveConfig = {
+	privkey?: string;
+	requireDleq?: boolean;
+	keysetId?: string;
+};
+
+/**
  * Shared properties for most `OutputType` variants (except 'custom').
  *
  * @v3
@@ -719,129 +729,108 @@ class Wallet {
 	}
 
 	/**
-	 * Receives a cashu token and returns proofs using Default (random) secrets This is a convenience
-	 * method - @see receive()
+	 * Receives a cashu token and returns proofs using Default (random) secrets.
 	 *
 	 * @param token Cashu token.
+	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using random secrets.
+	 * @v3
 	 */
 	async receiveAsDefault(
 		token: Token | string,
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		splitAmounts?: number[],
+		proofsWeHave?: Proof[],
+		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'random',
-			splitAmounts: config?.splitAmounts,
-			proofsWeHave: config?.proofsWeHave,
+			splitAmounts,
+			proofsWeHave,
 		};
-		return this.receive(token, outputType, {
-			privkey: config?.privkey,
-			requireDleq: config?.requireDleq,
-			keysetId: config?.keysetId,
-		});
+		return this.receive(token, outputType, config);
 	}
 
 	/**
-	 * Receives a cashu token and returns proofs using Deterministic secrets This is a convenience
-	 * method - @see receive()
+	 * Receives a cashu token and returns proofs using Deterministic secrets.
 	 *
 	 * @param token Cashu token.
+	 * @param counter Starting counter for deterministic secrets.
+	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using deterministic secrets.
+	 * @v3
 	 */
 	async receiveAsDeterministic(
 		token: Token | string,
 		counter: number,
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		splitAmounts?: number[],
+		proofsWeHave?: Proof[],
+		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'deterministic',
 			counter,
-			splitAmounts: config?.splitAmounts,
-			proofsWeHave: config?.proofsWeHave,
+			splitAmounts,
+			proofsWeHave,
 		};
-		return this.receive(token, outputType, {
-			privkey: config?.privkey,
-			requireDleq: config?.requireDleq,
-			keysetId: config?.keysetId,
-		});
+		return this.receive(token, outputType, config);
 	}
 
 	/**
-	 * Receives a cashu token and returns P2PK locked proofs This is a convenience method - @see
-	 * receive()
+	 * Receives a cashu token and returns P2PK-locked proofs.
 	 *
 	 * @param token Cashu token.
+	 * @param options P2PK locking options (e.g., pubkey, locktime).
+	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
-	 * @returns The proofs received from the token, P2PK locked.
+	 * @returns The proofs received from the token, P2PK-locked.
+	 * @v3
 	 */
 	async receiveAsP2PK(
 		token: Token | string,
 		options: P2PKOptions,
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		splitAmounts?: number[],
+		proofsWeHave?: Proof[],
+		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'p2pk',
 			options,
-			splitAmounts: config?.splitAmounts,
-			proofsWeHave: config?.proofsWeHave,
+			splitAmounts,
+			proofsWeHave,
 		};
-		return this.receive(token, outputType, {
-			privkey: config?.privkey,
-			requireDleq: config?.requireDleq,
-			keysetId: config?.keysetId,
-		});
+		return this.receive(token, outputType, config);
 	}
 
 	/**
-	 * Receives a cashu token and returns proofs using factory generated secrets This is a convenience
-	 * method - @see receive()
+	 * Receives a cashu token and returns proofs using factory-generated secrets.
 	 *
 	 * @param token Cashu token.
+	 * @param factory Output data factory.
+	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
-	 * @returns The proofs received from the token, using factory generated secrets.
+	 * @returns The proofs received from the token, using factory-generated secrets.
+	 * @v3
 	 */
 	async receiveAsFactory(
 		token: Token | string,
 		factory: OutputDataFactory,
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		splitAmounts?: number[],
+		proofsWeHave?: Proof[],
+		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'factory',
 			factory,
-			splitAmounts: config?.splitAmounts,
-			proofsWeHave: config?.proofsWeHave,
+			splitAmounts,
+			proofsWeHave,
 		};
-		return this.receive(token, outputType, {
-			privkey: config?.privkey,
-			requireDleq: config?.requireDleq,
-			keysetId: config?.keysetId,
-		});
+		return this.receive(token, outputType, config);
 	}
 
 	/**
