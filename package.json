@@ -19,6 +19,7 @@
 	"scripts": {
 		"compile": "vite build",
 		"compile:standalone": "BUILD_FORMAT=iife vite build",
+		"prepare": "npm run compile",
 		"test:prepare": "npx playwright install chromium --with-deps",
 		"test": "vitest run --coverage --project node --project browser",
 		"test-integration": "vitest run --coverage --project integration",
@@ -30,13 +31,15 @@
 		"typedoc": "typedoc src/index.ts",
 		"api:check": "npm run compile && api-extractor run",
 		"api:update": "npm run compile && api-extractor run --local",
-		"test:cairo": "vitest --config=vitest.browser.config.ts"
+		"test:cairo": "vitest --config=vitest.browser.config.ts",
+		"prepublishOnly": "npm run compile"
 	},
 	"exports": {
 		".": {
 			"types": "./lib/types/index.d.ts",
 			"require": "./lib/cashu-ts.cjs.js",
-			"import": "./lib/cashu-ts.es.js"
+			"import": "./lib/cashu-ts.es.js",
+			"default": "./lib/cashu-ts.es.js"
 		},
 		"./crypto/client": {
 			"types": "./lib/types/crypto/client/index.d.ts",
@@ -83,7 +86,7 @@
 			"require": "./lib/crypto/client/NUTXX.cjs.js",
 			"import": "./lib/crypto/client/NUTXX.es.js"
 		},
-		"./crypto/common/NUT11": {
+		"./crypto/common/NUT10": {
 			"types": "./lib/types/crypto/common/NUT10.d.ts",
 			"require": "./lib/crypto/common/NUT10.cjs.js",
 			"import": "./lib/crypto/common/NUT10.es.js"
