@@ -325,7 +325,7 @@ class Wallet {
 	 *
 	 * @returns The unit (e.g., 'sat').
 	 */
-	get unit(): string {
+	getUnit(): string {
 		return this._unit;
 	}
 
@@ -335,7 +335,7 @@ class Wallet {
 	 * @returns The active keyset ID.
 	 * @throws If no keyset ID is set.
 	 */
-	get keysetId(): string {
+	getKeysetId(): string {
 		if (!this._keysetId) {
 			const message = 'No keyset ID set; call loadMint first';
 			this._logger.error(message);
@@ -1709,7 +1709,7 @@ class Wallet {
 			description: description,
 		};
 		const res = await this.mint.createMintQuote(mintQuotePayload);
-		return { ...res, amount: res.amount || amount, unit: res.unit || this.unit };
+		return { ...res, amount: res.amount || amount, unit: res.unit || this._unit };
 	}
 
 	/**
@@ -1745,7 +1745,7 @@ class Wallet {
 			throw new Error(message);
 		} else {
 			const pubkey = res.pubkey;
-			return { ...res, pubkey, amount: res.amount || amount, unit: res.unit || this.unit };
+			return { ...res, pubkey, amount: res.amount || amount, unit: res.unit || this._unit };
 		}
 	}
 
@@ -1971,7 +1971,7 @@ class Wallet {
 		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
 		return {
 			...meltQuote,
-			unit: meltQuote.unit || this.unit,
+			unit: meltQuote.unit || this._unit,
 			request: meltQuote.request || invoice,
 		};
 	}
@@ -2021,8 +2021,8 @@ class Wallet {
 			this._logger.error(message);
 			throw new Error(message);
 		}
-		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this.unit)) {
-			const message = `Mint does not support MPP for bolt11 and ${this.unit}`;
+		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit)) {
+			const message = `Mint does not support MPP for bolt11 and ${this._unit}`;
 			this._logger.error(message);
 			throw new Error(message);
 		}
