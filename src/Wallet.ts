@@ -747,6 +747,8 @@ class Wallet {
 	/**
 	 * Receives a cashu token and returns proofs using Default (random) secrets.
 	 *
+	 * @remarks
+	 * Beginner-friendly default for privacy-focused receive.
 	 * @param token Cashu token.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using random secrets.
@@ -760,6 +762,8 @@ class Wallet {
 	/**
 	 * Receives a cashu token and returns proofs using Deterministic secrets.
 	 *
+	 * @remarks
+	 * Beginner-friendly for receiving recoverable proofs. Requires wallet seed.
 	 * @param token Cashu token.
 	 * @param counter Starting counter for deterministic secrets.
 	 * @param splitAmounts Optional custom amounts for splitting outputs.
@@ -1803,7 +1807,7 @@ class Wallet {
 	}
 
 	/**
-	 * Mint proofs for a given mint quote.
+	 * Mint proofs for a bolt11 quote for a given mint quote.
 	 *
 	 * @remarks
 	 * For common cases, use `mintProofsAs...` helpers (eg mintProofsAsDefault, mintProofsAsP2PK etc).
@@ -1817,19 +1821,16 @@ class Wallet {
 		amount: number,
 		quote: string | MintQuoteResponse,
 		outputType: OutputType = DEFAULT_OUTPUT,
-		config?: {
-			privkey?: string;
-			keysetId?: string;
-		},
+		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		return this._mintProofs('bolt11', amount, quote, outputType, config);
 	}
 
 	/**
-	 * Mints proofs using random secrets.
+	 * Mints proofs for a bolt11 quote using default (random) secrets.
 	 *
 	 * @remarks
-	 * Beginner-friendly default for privacy-focused minting.
+	 * Beginner-friendly default for privacy-focused bolt11 minting.
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
@@ -1838,26 +1839,16 @@ class Wallet {
 	async mintProofsAsDefault(
 		amount: number,
 		quote: string | MintQuoteResponse,
-		config?: {
-			privkey?: string;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		config?: MintProofsConfig,
 	): Promise<Proof[]> {
-		const { splitAmounts, proofsWeHave } = config ?? {};
-		const effectiveOutputType: OutputType = { ...DEFAULT_OUTPUT, splitAmounts, proofsWeHave };
-		return this.mintProofs(amount, quote, effectiveOutputType, {
-			privkey: config?.privkey,
-			keysetId: config?.keysetId,
-		});
+		return this.mintProofs(amount, quote, DEFAULT_OUTPUT, config);
 	}
 
 	/**
-	 * Mints proofs using deterministic secrets.
+	 * Mints proofs for a bolt11 quote using deterministic secrets.
 	 *
 	 * @remarks
-	 * Beginner-friendly for recoverable minting. Requires wallet seed.
+	 * Beginner-friendly for recoverable bolt11 proof minting. Requires wallet seed.
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param counter Starting counter for deterministic secrets.
@@ -1868,28 +1859,17 @@ class Wallet {
 		amount: number,
 		quote: string | MintQuoteResponse,
 		counter: number,
-		config?: {
-			privkey?: string;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		config?: MintProofsConfig,
 	): Promise<Proof[]> {
-		const { splitAmounts, proofsWeHave } = config ?? {};
 		const effectiveOutputType: OutputType = {
 			type: 'deterministic',
 			counter,
-			splitAmounts,
-			proofsWeHave,
 		};
-		return this.mintProofs(amount, quote, effectiveOutputType, {
-			privkey: config?.privkey,
-			keysetId: config?.keysetId,
-		});
+		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
 
 	/**
-	 * Mints proofs using P2PK-locked secrets.
+	 * Mints proofs for a bolt11 quote using P2PK-locked secrets.
 	 *
 	 * @remarks
 	 * Beginner-friendly for secure minting (e.g. locked to pubkey).
@@ -1903,24 +1883,13 @@ class Wallet {
 		amount: number,
 		quote: string | MintQuoteResponse,
 		p2pkOptions: P2PKOptions,
-		config?: {
-			privkey?: string;
-			keysetId?: string;
-			splitAmounts?: number[];
-			proofsWeHave?: Proof[];
-		},
+		config?: MintProofsConfig,
 	): Promise<Proof[]> {
-		const { splitAmounts, proofsWeHave } = config ?? {};
 		const effectiveOutputType: OutputType = {
 			type: 'p2pk',
 			options: p2pkOptions,
-			splitAmounts,
-			proofsWeHave,
 		};
-		return this.mintProofs(amount, quote, effectiveOutputType, {
-			privkey: config?.privkey,
-			keysetId: config?.keysetId,
-		});
+		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
 
 	/**
@@ -2060,6 +2029,8 @@ class Wallet {
 	 * Melt proofs for a bolt11 melt quote, returns change proofs using using Default (random)
 	 * secrets.
 	 *
+	 * @remarks
+	 * Beginner-friendly default for privacy-focused melting.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param config Optional parameters.
@@ -2076,6 +2047,8 @@ class Wallet {
 	/**
 	 * Melt proofs for a bolt11 melt quote, returns change proofs using deterministic secrets.
 	 *
+	 * @remarks
+	 * Beginner-friendly for receiving recoverable change proofs. Requires wallet seed.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param counter Starting counter for deterministic secrets.
