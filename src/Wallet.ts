@@ -118,11 +118,11 @@ interface SharedOutputTypeProps {
 }
 
 /**
- * Configuration for generating blinded message outputs
+ * Configuration for generating blinded message outputs.
  *
  * @remarks
- * A discriminated union based on the `type` field.
- * Experimental; may change. For production, use CashuWallet's main API.
+ * A discriminated union based on the `type` field. Experimental; may change. For production, use
+ * CashuWallet's main API.
  * @example
  *
  *     // Random with custom splits
@@ -263,7 +263,6 @@ class Wallet {
 	private _unit = DEFAULT_UNIT;
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
-	private _keepFactory: OutputDataFactory | undefined;
 	private _logger: Logger;
 
 	mint: CashuMint;
@@ -317,7 +316,6 @@ class Wallet {
 			}
 			this._seed = options.bip39seed;
 		}
-		this._keepFactory = options?.keepFactory ?? this._keepFactory;
 	}
 
 	/**
@@ -2077,9 +2075,10 @@ class Wallet {
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Proof[],
+		outputType: OutputType = DEFAULT_OUTPUT,
 		options?: MeltProofOptions,
 	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, options);
+		return this._meltProofs('bolt11', meltQuote, proofsToSend, outputType, options);
 	}
 
 	/**
@@ -2095,12 +2094,13 @@ class Wallet {
 	async meltProofsBolt12(
 		meltQuote: Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
+		outputType: OutputType = DEFAULT_OUTPUT,
 		options?: MeltProofOptions,
 	): Promise<{
 		quote: Bolt12MeltQuoteResponse;
 		change: Proof[];
 	}> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, options);
+		return this._meltProofs('bolt12', meltQuote, proofsToSend, outputType, options);
 	}
 
 	/**
@@ -2282,32 +2282,6 @@ class Wallet {
 	}
 
 	/**
-	 * Creates NUT-08 blank outputs (fee returns) for a given fee reserve See:
-	 * https://github.com/cashubtc/nuts/blob/main/08.md.
-	 *
-	 * @param amount Amount to cover with blank outputs.
-	 * @param keysetId Mint keysetId.
-	 * @param counter? Optionally set counter to derive secret deterministically. CashuWallet class
-	 *   must be initialized with seed phrase to take effect.
-	 * @param factory? Optionally set a factory for proof creation.
-	 * @returns Blinded messages, secrets, and rs.
-	 */
-	private createBlankOutputs(
-		amount: number,
-		keyset: MintKeys,
-		counter?: number,
-		factory?: OutputDataFactory,
-	): OutputDataLike[] {
-		let count = Math.ceil(Math.log2(amount)) || 1;
-		if (count < 0) count = 0;
-		const amounts = count ? Array(count).fill(1) : [];
-		const outputType: OutputType = factory
-			? { type: 'factory', factory, splitAmounts: amounts }
-			: { type: 'deterministic', counter: counter ?? 0, splitAmounts: amounts };
-		return this.createOutputData(amounts.length, keyset, outputType);
-	}
-
-	/**
 	 * Internal helper for minting proofs with bolt11 or bolt12.
 	 *
 	 * @remarks
@@ -2373,26 +2347,50 @@ class Wallet {
 	/**
 	 * Melt proofs for a given melt quote created with the bolt11 or bolt12 method.
 	 *
+	 * @remarks
+	 * Creates NUT-08 blanks (1-sat) for Lightning fee return.
 	 * @param method Payment method of the quote.
 	 * @param meltQuote The bolt11 or bolt12 melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param options Optional parameters for configuring the Melting Proof operation.
 	 * @returns Melt quote and change proofs.
+	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
 	private async _meltProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
+		outputType: OutputType = DEFAULT_OUTPUT,
 		options?: MeltProofOptions,
 	): Promise<MeltProofsResponse> {
-		const { keysetId, counter, privkey } = options || {};
+		const { keysetId, privkey } = options || {};
 		const keys = this.getKeys(keysetId);
-		const outputData = this.createBlankOutputs(
-			sumProofs(proofsToSend) - meltQuote.amount,
-			keys,
-			counter,
-			this._keepFactory,
-		);
+		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
+		let outputData: OutputDataLike[] = [];
+
+		// Create NUT-08 blanks for return of Lightning fee change
+		if (feeReserve > 0) {
+			let count = Math.ceil(Math.log2(feeReserve)) || 1;
+			if (count < 0) count = 0; // Prevents: -Infinity
+			const splitAmounts: number[] = count ? new Array<number>(count).fill(1) : [];
+			const changeAmount = splitAmounts.reduce((sum, a) => sum + a, 0);
+
+			// Build effective OutputType and merge splitAmounts
+			if (outputType.type === 'custom') {
+				const message =
+					'Custom OutputType not supported for melt change (must enforce 1-sat blanks)';
+				this._logger.error(message);
+				throw new Error(message);
+			}
+			const effectiveOutputType = {
+				...outputType,
+				splitAmounts, // Our 1-sat blanks
+				proofsWeHave: undefined, // No optimization for change
+			};
+
+			// Generate the blank outputs
+			outputData = this.configureOutputs(changeAmount, keys, effectiveOutputType, false);
+		}
 
 		// Sign P2PK proofs and prepare proofs for mint
 		proofsToSend = this.prepareInputs(proofsToSend, privkey);
