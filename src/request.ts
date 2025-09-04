@@ -47,45 +47,88 @@ async function _request({
 
 	let response: Response;
 	try {
+		requestLogger.debug?.('HTTP request', {
+			method: options.method ?? 'GET',
+			url: endpoint,
+			bodyLength: body?.length ?? 0,
+			headers,
+		});
 		response = await fetch(endpoint, { body, headers, ...options });
 	} catch (err) {
-		// A fetch() promise only rejects when the request fails,
-		// for example, because of a badly-formed request URL or a network error.
 		throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
 	}
 
+	const contentType = response.headers.get('content-type') ?? '';
+	const rawText = await response.text().catch(() => undefined);
+
 	if (!response.ok) {
-		let errorData: ApiError;
-		try {
-			errorData = (await response.json()) as ApiError;
-		} catch {
-			errorData = { error: 'bad response' };
+		let errorMessage = 'HTTP request failed';
+		let parsed: unknown;
+		if (contentType.includes('application/json') && rawText) {
+			try {
+				parsed = JSON.parse(rawText);
+			} catch {
+				// ignore
+			}
+		} else if (rawText && rawText.trim().startsWith('{')) {
+			try {
+				parsed = JSON.parse(rawText);
+			} catch {
+				// ignore
+			}
 		}
 
+		let errorData: ApiError | undefined =
+			parsed && typeof parsed === 'object' ? (parsed as ApiError) : undefined;
 		if (
 			response.status === 400 &&
+			errorData &&
 			'code' in errorData &&
-			typeof errorData.code === 'number' &&
+			typeof (errorData as any).code === 'number' &&
 			'detail' in errorData &&
-			typeof errorData.detail === 'string'
+			typeof (errorData as any).detail === 'string'
 		) {
-			throw new MintOperationError(errorData.code, errorData.detail);
+			// Specific mint operation error
+			throw new MintOperationError((errorData as any).code, (errorData as any).detail);
 		}
 
-		let errorMessage = 'HTTP request failed';
-		if ('error' in errorData && typeof errorData.error === 'string') {
-			errorMessage = errorData.error;
-		} else if ('detail' in errorData && typeof errorData.detail === 'string') {
-			errorMessage = errorData.detail;
+		if (errorData) {
+			if ('error' in errorData && typeof errorData.error === 'string') {
+				errorMessage = errorData.error;
+			} else if ('detail' in errorData && typeof errorData.detail === 'string') {
+				errorMessage = errorData.detail;
+			}
+		} else if (rawText && rawText.trim().length > 0) {
+			errorMessage = rawText.trim();
+		} else {
+			errorMessage = 'bad response';
 		}
+		requestLogger.error?.('HTTP error response', {
+			method: options.method ?? 'GET',
+			url: endpoint,
+			status: response.status,
+			statusText: response.statusText,
+			contentType,
+			bodySnippet: rawText ? rawText.slice(0, 2000) : undefined,
+		});
 
 		throw new HttpResponseError(errorMessage, response.status);
 	}
 
 	try {
-		return await response.json();
+		if (rawText && rawText.length > 0) {
+			return JSON.parse(rawText);
+		}
+		// empty 204/205
+		return null;
 	} catch (err) {
-		requestLogger.error('Failed to parse HTTP response', { err });
+		requestLogger.error?.('Failed to parse HTTP response', {
+			err: err instanceof Error ? err.message : String(err),
+			url: endpoint,
+			status: response.status,
+			contentType,
+			bodySnippet: rawText ? rawText.slice(0, 2000) : undefined,
+		});
 		throw new HttpResponseError('bad response', response.status);
 	}
 }

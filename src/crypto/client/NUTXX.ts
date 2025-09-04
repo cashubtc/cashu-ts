@@ -1,7 +1,15 @@
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { randomBytes } from '@noble/hashes/utils';
-import { type Secret } from '../common/index';
 import { BLAKE2s } from '@noble/hashes/blake2';
+import { type CairoWitness, type Proof } from '../../model/types/index';
+import { type Secret } from '../common/index';
+import { parseSecret } from '../common/NUT10';
+import {
+	init,
+	execute as stwoExecute,
+	prove as stwoProve,
+	containsPedersenBuiltin,
+} from 'stwo-cairo';
 
 /**
  * Order of the prime field.
@@ -84,4 +92,46 @@ export const hashByteArray = (a: Uint8Array): Uint8Array => {
 	let hasher = new BLAKE2s();
 	a.forEach((byte) => hasher.update(new Uint8Array([byte])));
 	return hasher.digest();
+};
+
+/**
+ * @param proofs
+ * @param executable
+ * @param programInputs
+ */
+export const cairoProveProofs = async (
+	proofs: Proof[],
+	executable: string,
+	programInputs: bigint[],
+): Promise<Proof[]> => {
+	let time = Date.now();
+	console.log('Executing cairo program...');
+	const proverInput = await stwoExecute(executable, ...programInputs);
+	console.log('Execution complete in', Date.now() - time, 'ms');
+	const withPedersen = containsPedersenBuiltin(proverInput);
+	time = Date.now();
+	console.log('Proving cairo execution...');
+	const cairoProof = await stwoProve(proverInput);
+	console.log('Proving complete in', Date.now() - time, 'ms');
+
+	proofs.forEach((p) => {
+		try {
+			console.log('adding cairo witness to proof with amount:', p.amount);
+			const secret = parseSecret(p.secret);
+			if (secret[0] !== 'Cairo') {
+				throw new Error('not a Cairo secret');
+			}
+			const cairoWitness: CairoWitness = {
+				cairo_proof_json: cairoProof,
+				with_pedersen: withPedersen,
+				with_bootloader: false,
+			};
+			p.witness = JSON.stringify(cairoWitness);
+		} catch (e) {
+			console.error('Failed to attach Cairo witness:', e);
+			throw e;
+		}
+	});
+
+	return proofs;
 };

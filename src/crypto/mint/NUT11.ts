@@ -7,7 +7,7 @@ import {
 	getP2PKNSigs,
 	verifyP2PKSecretSignature,
 } from '../client/NUT11';
-import { type Proof } from '../../model/types/index';
+import { P2PKWitness, type Proof } from '../../model/types/index';
 import { type BlindedMessage } from '../client/index';
 
 export const verifyP2PKSig = (proof: Proof): boolean => {
@@ -21,7 +21,7 @@ export const verifyP2PKSig = (proof: Proof): boolean => {
 	}
 	let signatories = 0;
 	const requiredSigs = getP2PKNSigs(parsedSecret);
-	const signatures = getP2PKWitnessSignatures(proof.witness);
+	const signatures = getP2PKWitnessSignatures(proof.witness as string | P2PKWitness | undefined);
 	// Loop through witnesses to see if any of the signatures belong to them.
 	// We need to do this as Schnorr signatures are non-deterministic, so we
 	// count the number of valid witnesses, not the number of valid signatures

@@ -46,9 +46,9 @@ export type ReceiveOptions = {
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
 	};
-	cairo?: {
-		programHash: string;
-		outputsHash: string;
+	cairoReceive?: {
+		executable: string;
+		programInput: bigint[];
 	};
 };
 
@@ -93,7 +93,7 @@ export type SendOptions = {
 		requiredRefundSignatures?: number;
 	};
 
-	cairo?: {
+	cairoSend?: {
 		programHash: string;
 		outputHash: string;
 	};
@@ -137,9 +137,13 @@ export type SwapOptions = {
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
 	};
-	cairo?: {
+	cairoSend?: {
 		programHash: string;
-		outputsHash: string;
+		outputHash: string;
+	};
+	cairoReceive?: {
+		executable: string;
+		programInput: bigint[];
 	};
 };
 

@@ -29,7 +29,8 @@
 		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts",
 		"api:check": "npm run compile && api-extractor run",
-		"api:update": "npm run compile && api-extractor run --local"
+		"api:update": "npm run compile && api-extractor run --local",
+		"test:cairo": "vitest --config=vitest.browser.config.ts"
 	},
 	"exports": {
 		".": {
@@ -77,10 +78,15 @@
 			"require": "./lib/crypto/client/NUT20.cjs.js",
 			"import": "./lib/crypto/client/NUT20.es.js"
 		},
+		"./crypto/client/NUTXX": {
+			"types": "./lib/types/crypto/client/NUTXX.d.ts",
+			"require": "./lib/crypto/client/NUTXX.cjs.js",
+			"import": "./lib/crypto/client/NUTXX.es.js"
+		},
 		"./crypto/common/NUT11": {
-			"types": "./lib/types/crypto/common/NUT11.d.ts",
-			"require": "./lib/crypto/common/NUT11.cjs.js",
-			"import": "./lib/crypto/common/NUT11.es.js"
+			"types": "./lib/types/crypto/common/NUT10.d.ts",
+			"require": "./lib/crypto/common/NUT10.cjs.js",
+			"import": "./lib/crypto/common/NUT10.es.js"
 		},
 		"./crypto/mint/NUT11": {
 			"types": "./lib/types/crypto/mint/NUT11.d.ts",
@@ -117,7 +123,7 @@
 		"mock-socket": "^9.3.1",
 		"msw": "^2.6.6",
 		"node-fetch": "^3.3.2",
-		"playwright": "^1.54.1",
+		"playwright": "^1.55.0",
 		"prettier": "^3.6.2",
 		"prettier-plugin-jsdoc": "^1.3.3",
 		"ts-node": "^10.9.1",
@@ -135,6 +141,7 @@
 		"@noble/hashes": "^1.5.0",
 		"@scure/bip32": "^1.5.0",
 		"buffer": "^6.0.3",
-		"stwo-cairo": "^0.1.0"
+		"stwo-cairo": "^1.1.0",
+		"vite-plugin-wasm": "^3.5.0"
 	}
 }

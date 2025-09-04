@@ -289,21 +289,6 @@ describe('mint api', () => {
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
 
-	test('send with cairo', async () => {
-		const mint = new CashuMint(mintUrl);
-		const wallet = new CashuWallet(mint, { unit });
-
-		const programHash = bytesToHex(hashExecutableBytecode(is_prime_executable.program.bytecode));
-		const outputHash = bytesToHex(Uint8Array.from([1]));
-
-		const request = await wallet.createMintQuote(128);
-		const mintedProofs = await wallet.mintProofs(128, request.quote);
-
-		const { send } = await wallet.send(64, mintedProofs, { cairo: { programHash, outputHash } });
-		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
-		console.log('encoded token minted with cairo', encoded);
-	});
-
 	test('mint deterministic', async () => {
 		const hexSeed = bytesToHex(randomBytes(64));
 		const mint = new CashuMint(mintUrl);

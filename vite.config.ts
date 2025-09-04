@@ -22,7 +22,8 @@ export default defineConfig({
 							'crypto/client/NUT11': resolve(__dirname, 'src/crypto/client/NUT11.ts'),
 							'crypto/client/NUT12': resolve(__dirname, 'src/crypto/client/NUT12.ts'),
 							'crypto/client/NUT20': resolve(__dirname, 'src/crypto/client/NUT20.ts'),
-							'crypto/common/NUT11': resolve(__dirname, 'src/crypto/common/NUT11.ts'),
+							'crypto/client/NUTXX': resolve(__dirname, 'src/crypto/client/NUTXX.ts'),
+							'crypto/common/NUT10': resolve(__dirname, 'src/crypto/common/NUT10.ts'),
 							'crypto/mint/NUT11': resolve(__dirname, 'src/crypto/mint/NUT11.ts'),
 							'crypto/mint/NUT12': resolve(__dirname, 'src/crypto/mint/NUT12.ts'),
 						},
@@ -62,7 +63,10 @@ export default defineConfig({
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
-						exclude: ['test/{auth,integration}.test.ts', 'test/**.browser.test.ts'],
+						exclude: [
+							'test/{auth,integration, cairoIntegration}.test.ts',
+							'test/**.browser.test.ts',
+						],
 					},
 				},
 			},
@@ -78,7 +82,7 @@ export default defineConfig({
 					},
 					include: ['test/**/*.test.ts'],
 					exclude: [
-						'test/{auth,integration}.test.ts',
+						'test/{auth,integration,cairoIntegration}.test.ts',
 						'test/**.node.test.ts',
 						...configDefaults.exclude,
 					],

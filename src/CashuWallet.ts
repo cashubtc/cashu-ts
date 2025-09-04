@@ -51,6 +51,7 @@ import {
 	type OutputDataLike,
 	isOutputDataFactory,
 } from './model/OutputData';
+import { cairoProveProofs } from './crypto/client/NUTXX';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -293,8 +294,17 @@ class CashuWallet {
 	 * @returns New token with newly created proofs, token entries that had errors.
 	 */
 	async receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]> {
-		const { requireDleq, keysetId, outputAmounts, counter, pubkey, privkey, outputData, p2pk } =
-			options || {};
+		const {
+			requireDleq,
+			keysetId,
+			outputAmounts,
+			counter,
+			pubkey,
+			privkey,
+			outputData,
+			p2pk,
+			cairoReceive,
+		} = options || {};
 
 		if (typeof token === 'string') {
 			token = getDecodedToken(token);
@@ -312,7 +322,7 @@ class CashuWallet {
 		} else if (this._keepFactory) {
 			newOutputData = { send: this._keepFactory };
 		}
-		const swapTransaction = this.createSwapPayload(
+		const swapTransaction = await this.createSwapPayload(
 			amount,
 			token.proofs,
 			keys,
@@ -322,6 +332,7 @@ class CashuWallet {
 			privkey,
 			newOutputData,
 			p2pk,
+			cairoReceive,
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const proofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
@@ -742,8 +753,18 @@ class CashuWallet {
 	 */
 	async swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse> {
 		let { outputAmounts } = options || {};
-		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, outputData, p2pk } =
-			options || {};
+		const {
+			includeFees,
+			keysetId,
+			counter,
+			pubkey,
+			privkey,
+			proofsWeHave,
+			outputData,
+			p2pk,
+			cairoSend,
+			cairoReceive,
+		} = options || {};
 		const keyset = await this.getKeys(keysetId);
 
 		let amountToSend = amount;
@@ -813,7 +834,7 @@ class CashuWallet {
 		const keepOutputData = outputData?.keep || this._keepFactory;
 		const sendOutputData = outputData?.send;
 
-		const swapTransaction = this.createSwapPayload(
+		const swapTransaction = await this.createSwapPayload(
 			amountToSend,
 			sendProofs,
 			keyset,
@@ -823,6 +844,8 @@ class CashuWallet {
 			privkey,
 			{ keep: keepOutputData, send: sendOutputData },
 			p2pk,
+			cairoReceive,
+			cairoSend,
 		);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
@@ -1226,7 +1249,7 @@ class CashuWallet {
 	 * @param p2pk? Optionally specify options to lock the proofs according to NUT-11.
 	 * @returns
 	 */
-	private createSwapPayload(
+	private async createSwapPayload(
 		amount: number,
 		proofsToSend: Proof[],
 		keyset: MintKeys,
@@ -1245,11 +1268,15 @@ class CashuWallet {
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
-		cairo?: {
+		cairoReceive?: {
+			executable: string;
+			programInput: bigint[];
+		},
+		cairoSend?: {
 			programHash: string;
 			outputHash: string;
 		},
-	): SwapTransaction {
+	): Promise<SwapTransaction> {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
 		if (outputAmounts && outputAmounts.sendAmounts && !outputAmounts.keepAmounts) {
 			outputAmounts.keepAmounts = splitAmount(
@@ -1302,11 +1329,18 @@ class CashuWallet {
 				pubkey,
 				outputAmounts?.sendAmounts,
 				p2pk,
+				cairoSend,
 			);
 		}
 
 		if (privkey) {
 			proofsToSend = signP2PKProofs(proofsToSend, privkey);
+		} else if (cairoReceive) {
+			proofsToSend = await cairoProveProofs(
+				proofsToSend,
+				cairoReceive.executable,
+				cairoReceive.programInput,
+			);
 		}
 
 		proofsToSend = stripDleq(proofsToSend);
@@ -1541,7 +1575,7 @@ class CashuWallet {
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
 		},
-		cairo?: {
+		cairoSend?: {
 			programHash: string;
 			outputHash: string;
 		},
@@ -1563,8 +1597,8 @@ class CashuWallet {
 			);
 		} else if (p2pk) {
 			outputData = OutputData.createP2PKData(p2pk, amount, keyset, outputAmounts);
-		} else if (cairo) {
-			outputData = OutputData.createCairoData(cairo, amount, keyset, outputAmounts);
+		} else if (cairoSend) {
+			outputData = OutputData.createCairoData(cairoSend, amount, keyset, outputAmounts);
 		} else if (factory) {
 			const amounts = splitAmount(amount, keyset.keys);
 			outputData = amounts.map((a) => factory(a, keyset));

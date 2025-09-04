@@ -86,13 +86,13 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createCairoData(
-		cairo: { programHash: string; outputHash: string },
+		cairoSend: { programHash: string; outputHash: string },
 		amount: number,
 		keyset: MintKeys,
 		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
-		return amounts.map((a) => this.createSingleCairoData(cairo, a, keyset.id));
+		return amounts.map((a) => this.createSingleCairoData(cairoSend, a, keyset.id));
 	}
 
 	static createSingleP2PKData(
@@ -150,7 +150,7 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createSingleCairoData(
-		cairo: { programHash: string; outputHash: string },
+		cairoSend: { programHash: string; outputHash: string },
 		amount: number,
 		keysetId: string,
 	) {
@@ -158,8 +158,8 @@ export class OutputData implements OutputDataLike {
 			'Cairo',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: cairo.programHash,
-				tags: [['program_output', cairo.outputHash]],
+				data: cairoSend.programHash,
+				tags: [['program_output', cairoSend.outputHash]],
 			},
 		];
 		const parsed = JSON.stringify(newSecret);

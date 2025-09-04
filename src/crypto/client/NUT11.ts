@@ -67,7 +67,7 @@ export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
 	if (!proof.witness) {
 		return false;
 	}
-	const signatures = getP2PKWitnessSignatures(proof.witness);
+	const signatures = getP2PKWitnessSignatures(proof.witness as string | P2PKWitness);
 	// See if any of the signatures belong to this pubkey.
 	// We need to do this as Schnorr signatures are non-deterministic.
 	return signatures.some((sig) => {
@@ -280,7 +280,7 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 		throw new Error(`Signature not required from [02|03]${pubkey}`);
 	}
 	// Check if the public key has already signed
-	const signatures = getP2PKWitnessSignatures(proof.witness);
+	const signatures = getP2PKWitnessSignatures(proof.witness as string | P2PKWitness);
 	const alreadySigned = signatures.some((sig) => {
 		try {
 			return verifyP2PKSecretSignature(sig, proof.secret, pubkey);

@@ -32,7 +32,7 @@ export type Proof = {
 	/**
 	 * The witness for this proof.
 	 */
-	witness?: string | P2PKWitness | HTLCWitness;
+	witness?: string | P2PKWitness | HTLCWitness | CairoWitness;
 };
 
 /**
