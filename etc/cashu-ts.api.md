@@ -669,6 +669,7 @@ export class OutputData implements OutputDataLike {
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
     // (undocumented)
     secret: Uint8Array;
+    static sumOutputAmounts(outputs: OutputDataLike[]): number;
     // (undocumented)
     toProof(sig: SerializedBlindedSignature_2, keyset: MintKeys_2): Proof_2;
 }
