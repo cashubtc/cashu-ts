@@ -294,7 +294,7 @@ class Wallet {
 	private _logger: Logger;
 
 	/**
-	 * Cashu Mint instance
+	 * Cashu Mint instance.
 	 */
 	mint: CashuMint;
 
