@@ -853,11 +853,7 @@ class Wallet {
 	async receiveAsCustom(
 		token: Token | string,
 		data: OutputData[],
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			keysetId?: string;
-		},
+		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'custom',
@@ -1852,6 +1848,8 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param counter Starting counter for deterministic secrets.
+	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
@@ -1859,11 +1857,15 @@ class Wallet {
 		amount: number,
 		quote: string | MintQuoteResponse,
 		counter: number,
+		splitAmounts?: number[],
+		proofsWeHave?: Proof[],
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const effectiveOutputType: OutputType = {
 			type: 'deterministic',
 			counter,
+			splitAmounts,
+			proofsWeHave,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
@@ -1876,6 +1878,8 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
+	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
@@ -1883,11 +1887,15 @@ class Wallet {
 		amount: number,
 		quote: string | MintQuoteResponse,
 		p2pkOptions: P2PKOptions,
+		splitAmounts?: number[],
+		proofsWeHave?: Proof[],
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const effectiveOutputType: OutputType = {
 			type: 'p2pk',
 			options: p2pkOptions,
+			splitAmounts,
+			proofsWeHave,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
@@ -2382,6 +2390,11 @@ class Wallet {
 			if (count < 0) count = 0; // Prevents: -Infinity
 			const splitAmounts: number[] = count ? new Array<number>(count).fill(1) : [];
 			const changeAmount = splitAmounts.reduce((sum, a) => sum + a, 0);
+			this._logger.debug('Creating NUT-08 blanks for fee reserve', {
+				feeReserve,
+				changeAmount,
+				splitAmounts,
+			});
 
 			// Build effective OutputType and merge splitAmounts
 			if (outputType.type === 'custom') {
