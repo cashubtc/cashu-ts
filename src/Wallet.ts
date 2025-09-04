@@ -30,7 +30,6 @@ import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
 	GetInfoResponse,
-	MeltProofOptions,
 	MintQuoteResponse,
 	ProofState,
 	RestoreOptions,
@@ -89,10 +88,38 @@ export type P2PKOptions = {
  * @v3
  * Configuration for receive operations.
  */
+export type SendConfig = {
+	keysetId?: string;
+	privkey?: string;
+	includeFees?: boolean;
+};
+
+/**
+ * @v3
+ * Configuration for receive operations.
+ */
 export type ReceiveConfig = {
+	keysetId?: string;
 	privkey?: string;
 	requireDleq?: boolean;
+};
+
+/**
+ * @v3
+ * Configuration for receive operations.
+ */
+export type MintProofsConfig = {
 	keysetId?: string;
+	privkey?: string;
+};
+
+/**
+ * @v3
+ * Configuration for receive operations.
+ */
+export type MeltProofsConfig = {
+	keysetId?: string;
+	privkey?: string;
 };
 
 /**
@@ -938,11 +965,7 @@ class Wallet {
 	 * @param config Optional parameters (e.g. includeFees).
 	 * @returns SendResponse with keep/send proofs.
 	 */
-	async sendAsDefault(
-		amount: number,
-		proofs: Proof[],
-		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
-	): Promise<SendResponse> {
+	async sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse> {
 		return this.send(amount, proofs, { send: DEFAULT_OUTPUT }, config);
 	}
 
@@ -963,7 +986,7 @@ class Wallet {
 		amount: number,
 		proofs: Proof[],
 		counter: number,
-		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+		config?: SendConfig,
 	): Promise<SendResponse> {
 		return this.send(
 			amount,
@@ -993,7 +1016,7 @@ class Wallet {
 		proofs: Proof[],
 		p2pkOptions: P2PKOptions,
 		counter?: number,
-		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+		config?: SendConfig,
 	): Promise<SendResponse> {
 		const keepOutput: OutputType = counter ? { type: 'deterministic', counter } : DEFAULT_OUTPUT;
 		return this.send(
@@ -1019,7 +1042,7 @@ class Wallet {
 		amount: number,
 		proofs: Proof[],
 		p2pkOptions: P2PKOptions,
-		config?: { privkey?: string; keysetId?: string; includeFees?: boolean },
+		config?: SendConfig,
 	): Promise<SendResponse> {
 		return this.send(
 			amount,
@@ -2007,7 +2030,7 @@ class Wallet {
 	}
 
 	/**
-	 * Return an existing melt quote from the mint.
+	 * Returns an existing bolt11 melt quote from the mint.
 	 *
 	 * @param quote ID of the melt quote.
 	 * @returns The mint will return an existing melt quote.
@@ -2023,66 +2046,94 @@ class Wallet {
 		return { ...meltQuote, request: quote.request, unit: quote.unit };
 	}
 
+	/**
+	 * Returns an existing bolt12 melt quote from the mint.
+	 *
+	 * @param quote ID of the melt quote.
+	 * @returns The mint will return an existing melt quote.
+	 */
 	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
 		return this.mint.checkMeltQuoteBolt12(quote);
 	}
 
+	/**
+	 * Melt proofs for a bolt11 melt quote, returns change proofs using using Default (random)
+	 * secrets.
+	 *
+	 * @param meltQuote ID of the melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param config Optional parameters.
+	 * @returns MeltProofsResponse with quote and change proofs.
+	 */
 	async meltProofsAsDefault(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Proof[],
-		options?: MeltProofOptions,
+		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
-		return this.meltProofs(meltQuote, proofsToSend, DEFAULT_OUTPUT, options);
+		return this.meltProofs(meltQuote, proofsToSend, DEFAULT_OUTPUT, config);
 	}
 
+	/**
+	 * Melt proofs for a bolt11 melt quote, returns change proofs using deterministic secrets.
+	 *
+	 * @param meltQuote ID of the melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param counter Starting counter for deterministic secrets.
+	 * @param config Optional parameters.
+	 * @returns MeltProofsResponse with quote and change proofs.
+	 */
 	async meltProofsAsDeterministic(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Proof[],
 		counter: number,
-		options?: MeltProofOptions,
+		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
-		return this.meltProofs(meltQuote, proofsToSend, { type: 'deterministic', counter }, options);
+		return this.meltProofs(meltQuote, proofsToSend, { type: 'deterministic', counter }, config);
 	}
 
 	/**
-	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt
-	 * quote. This function does not perform coin selection!. Returns melt quote and change proofs.
+	 * Melt proofs for a bolt11 melt quote, returns change proofs using specified outputType.
 	 *
+	 * @remarks
+	 * ProofsToSend must be at least amount+fee_reserve frorm the melt quote. This function does not
+	 * perform coin selection!.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
-	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof
-	 *   operation.
-	 * @returns
+	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
+	 * @param config Optional parameters.
+	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Proof[],
 		outputType: OutputType = DEFAULT_OUTPUT,
-		options?: MeltProofOptions,
+		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, outputType, options);
+		return this._meltProofs('bolt11', meltQuote, proofsToSend, outputType, config);
 	}
 
 	/**
-	 * Melt proofs for a melt quote. proofsToSend must be at least amount+fee_reserve form the melt
-	 * quote. This function does not perform coin selection!. Returns melt quote and change proofs.
+	 * Melt proofs for a bolt12 melt quote, returns change proofs using specified outputType.
 	 *
+	 * @remarks
+	 * ProofsToSend must be at least amount+fee_reserve frorm the melt quote. This function does not
+	 * perform coin selection!.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
-	 * @param {MeltProofOptions} [options] - Optional parameters for configuring the Melting Proof
-	 *   operation.
-	 * @returns
+	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
+	 * @param config Optional parameters.
+	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofsBolt12(
 		meltQuote: Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
 		outputType: OutputType = DEFAULT_OUTPUT,
-		options?: MeltProofOptions,
+		config?: MeltProofsConfig,
 	): Promise<{
 		quote: Bolt12MeltQuoteResponse;
 		change: Proof[];
 	}> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, outputType, options);
+		return this._meltProofs('bolt12', meltQuote, proofsToSend, outputType, config);
 	}
 
 	/**
@@ -2334,8 +2385,10 @@ class Wallet {
 	 * @param method Payment method of the quote.
 	 * @param meltQuote The bolt11 or bolt12 melt quote.
 	 * @param proofsToSend Proofs to melt.
-	 * @param options Optional parameters for configuring the Melting Proof operation.
-	 * @returns Melt quote and change proofs.
+	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
+	 * @param config Optional (privkey, keysetId).
+	 * @returns Minted proofs.
+	 * @throws If params are invalid or mint returns errors.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
 	private async _meltProofs<T extends 'bolt11' | 'bolt12'>(
@@ -2343,9 +2396,9 @@ class Wallet {
 		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
 		outputType: OutputType = DEFAULT_OUTPUT,
-		options?: MeltProofOptions,
+		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
-		const { keysetId, privkey } = options || {};
+		const { keysetId, privkey } = config || {};
 		const keys = this.getKeys(keysetId);
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
