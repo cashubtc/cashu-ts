@@ -127,7 +127,7 @@ export type MeltProofsConfig = {
  *
  * @v3
  */
-interface SharedOutputTypeProps {
+export interface SharedOutputTypeProps {
 	/**
 	 * Optional custom amounts for splitting outputs.
 	 *
@@ -293,6 +293,9 @@ class Wallet {
 	private _denominationTarget = 3;
 	private _logger: Logger;
 
+	/**
+	 * Cashu Mint instance
+	 */
 	mint: CashuMint;
 
 	/**
@@ -1085,7 +1088,6 @@ class Wallet {
 	 * @returns SendResponse with keep/send proofs.
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
-	public readonly swap = this.send.bind(this); // Swap is an alias of send
 	async send(
 		amount: number,
 		proofs: Proof[],
@@ -1226,6 +1228,10 @@ class Wallet {
 			send: sendProofs,
 		};
 	}
+	/**
+	 * Swap is an alias of send.
+	 */
+	public readonly swap = this.send.bind(this);
 
 	/**
 	 * Selects proofs to send based on amount and fee inclusion.
@@ -1778,8 +1784,6 @@ class Wallet {
 	 * @param quote Quote ID.
 	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
-	async checkMintQuote(quote: MintQuoteResponse): Promise<MintQuoteResponse>;
-	async checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
 	async checkMintQuote(
 		quote: string | MintQuoteResponse,
 	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {

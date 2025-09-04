@@ -1,5 +1,21 @@
 import { CashuMint } from './CashuMint';
 import { CashuWallet } from './CashuWallet';
+/**
+ * @v3 imports
+ */
+import {
+	type P2PKOptions,
+	type OutputType,
+	type OutputConfig,
+	type SendConfig,
+	type ReceiveConfig,
+	type MintProofsConfig,
+	type MeltProofsConfig,
+	type SharedOutputTypeProps,
+	DEFAULT_OUTPUT,
+	DEFAULT_OUTPUT_CONFIG,
+	Wallet,
+} from './Wallet';
 import { OutputData } from './model/OutputData';
 import { PaymentRequest } from './model/PaymentRequest';
 import { setGlobalRequestOptions } from './request';
@@ -17,6 +33,23 @@ import {
 import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
 
 export * from './model/types/index';
+
+/**
+ * @v3 exports
+ */
+export {
+	type P2PKOptions,
+	type OutputType,
+	type OutputConfig,
+	type SendConfig,
+	type ReceiveConfig,
+	type MintProofsConfig,
+	type MeltProofsConfig,
+	type SharedOutputTypeProps,
+	DEFAULT_OUTPUT,
+	DEFAULT_OUTPUT_CONFIG,
+	Wallet,
+};
 
 export {
 	CashuMint,
