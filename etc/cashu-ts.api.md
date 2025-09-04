@@ -1162,7 +1162,6 @@ export class Wallet {
     getKeysetId(): string;
     getKeySets(): MintKeyset[];
     getMintInfo(): MintInfo;
-    getUnit(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
     meltProofsAsDefault(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig): Promise<MeltProofsResponse>;
@@ -1221,6 +1220,7 @@ export class Wallet {
         keysetId?: string;
         includeFees?: boolean;
     }) => Promise<SendResponse>;
+    get unit(): string;
 }
 
 // @public
