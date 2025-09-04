@@ -73,16 +73,6 @@ import { signMintQuote } from './crypto/client/NUT20';
 import { OutputData, type OutputDataFactory, type OutputDataLike } from './model/OutputData';
 
 /**
- * The default number of proofs per denomination to keep in a wallet.
- */
-const DEFAULT_DENOMINATION_TARGET = 3;
-
-/**
- * The default unit for the wallet, if not specified in constructor.
- */
-const DEFAULT_UNIT = 'sat';
-
-/**
  * @v3
  * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11. This type
  * represents a stable data structure used in the original CashuWallet API.
@@ -270,21 +260,20 @@ class Wallet {
 	private _keysetId: string | undefined;
 	private _keysets: MintKeyset[] = [];
 	private _seed: Uint8Array | undefined = undefined;
-	private _unit = DEFAULT_UNIT;
+	private _unit = 'sat';
 	private _mintInfo: MintInfo | undefined = undefined;
-	private _denominationTarget = DEFAULT_DENOMINATION_TARGET;
+	private _denominationTarget = 3;
 	private _logger: Logger;
 
 	mint: CashuMint;
 
 	/**
 	 * @param mint Cashu mint instance is used to make api calls.
-	 * @param options.unit Optionally set unit (default is 'sat')
+	 * @param options.unit Optionally set unit (default: 'sat')
 	 * @param options.keys Public keys from the mint (will be fetched from mint if not provided)
 	 * @param options.keysets Keysets from the mint (will be fetched from mint if not provided)
 	 * @param options.mintInfo Mint info from the mint (will be fetched from mint if not provided)
-	 * @param options.denominationTarget Target number proofs per denomination (default: see @constant
-	 *   DEFAULT_DENOMINATION_TARGET)
+	 * @param options.denominationTarget Target number proofs per denomination (default: 3)
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
 	 * @param options.keepFactory A function that will be used by all parts of the library that
 	 *   produce proofs to be kept (change, etc.). This can lead to poor performance, in which case
@@ -2023,8 +2012,6 @@ class Wallet {
 	 * @param quote ID of the melt quote.
 	 * @returns The mint will return an existing melt quote.
 	 */
-	async checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-	async checkMeltQuote(quote: MeltQuoteResponse): Promise<MeltQuoteResponse>;
 	async checkMeltQuote(
 		quote: string | MeltQuoteResponse,
 	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
