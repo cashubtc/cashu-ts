@@ -101,6 +101,221 @@ afterAll(() => {
 	server.close();
 });
 
+describe('test wallet init', () => {
+	it('should initialize with mint instance and load mint info, keys, and keysets', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		// Verify mint info
+		const info = wallet.getMintInfo();
+		expect(info.contact).toEqual([
+			{ method: 'email', info: 'contact@me.com' },
+			{ method: 'twitter', info: '@me' },
+			{ method: 'nostr', info: 'npub1337' },
+		]);
+		expect(info.name).toBe('Testnut mint');
+		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
+
+		// Verify keysets
+		const keysets = wallet.getKeySets();
+		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		expect(keysets).toHaveLength(1);
+		expect(keysets[0]).toEqual({
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+		});
+
+		// Verify keys
+		const keys = wallet.getAllKeys();
+		expect(keys).toEqual(dummyKeysResp.keysets);
+		expect(keys).toHaveLength(1);
+		expect(keys[0]).toEqual({
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			keys: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			},
+			expiry: 1754296607,
+		});
+
+		// Verify active keyset ID
+		const keysetId = wallet.getKeysetId();
+		expect(keysetId).toBe('00bd033559de27d0');
+
+		// Verify specific keyset retrieval
+		const specificKeys = wallet.getKeys('00bd033559de27d0');
+		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
+	});
+
+	it('should initialize with mint URL string and load mint info, keys, and keysets', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+
+		// Verify mint info
+		const info = wallet.getMintInfo();
+		expect(info.contact).toEqual([
+			{ method: 'email', info: 'contact@me.com' },
+			{ method: 'twitter', info: '@me' },
+			{ method: 'nostr', info: 'npub1337' },
+		]);
+		expect(info.name).toBe('Testnut mint');
+		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
+
+		// Verify keysets
+		const keysets = wallet.getKeySets();
+		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		expect(keysets).toHaveLength(1);
+		expect(keysets[0]).toEqual({
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+		});
+
+		// Verify keys
+		const keys = wallet.getAllKeys();
+		expect(keys).toEqual(dummyKeysResp.keysets);
+		expect(keys).toHaveLength(1);
+		expect(keys[0]).toEqual({
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			keys: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			},
+			expiry: 1754296607,
+		});
+
+		// Verify active keyset ID
+		const keysetId = wallet.getKeysetId();
+		expect(keysetId).toBe('00bd033559de27d0');
+
+		// Verify specific keyset retrieval
+		const specificKeys = wallet.getKeys('00bd033559de27d0');
+		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
+	});
+
+	it('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
+		const wallet = new Wallet(mintUrl, {
+			unit,
+			mintInfo: mintInfoResp,
+			keys: dummyKeysResp.keysets,
+			keysets: dummyKeysetResp.keysets,
+		});
+		const spyMintInfo = vi.spyOn((wallet as any).mint, 'getInfo');
+		const spyKeySets = vi.spyOn((wallet as any).mint, 'getKeySets');
+		const spyKeys = vi.spyOn((wallet as any).mint, 'getKeys');
+		await wallet.loadMint();
+
+		// Verify mint info
+		const info = wallet.getMintInfo();
+		expect(info.contact).toEqual([
+			{ method: 'email', info: 'contact@me.com' },
+			{ method: 'twitter', info: '@me' },
+			{ method: 'nostr', info: 'npub1337' },
+		]);
+		expect(info.name).toBe('Testnut mint');
+		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
+
+		// Verify keysets
+		const keysets = wallet.getKeySets();
+		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		expect(keysets).toHaveLength(1);
+		expect(keysets[0]).toEqual({
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+		});
+
+		// Verify keys
+		const keys = wallet.getAllKeys();
+		expect(keys).toEqual(dummyKeysResp.keysets);
+		expect(keys).toHaveLength(1);
+		expect(keys[0]).toEqual({
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			keys: {
+				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			},
+			expiry: 1754296607,
+		});
+
+		// Verify active keyset ID
+		const keysetId = wallet.getKeysetId();
+		expect(keysetId).toBe('00bd033559de27d0');
+
+		// Verify specific keyset retrieval
+		const specificKeys = wallet.getKeys('00bd033559de27d0');
+		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
+
+		// Verify no network calls were made
+		expect(spyMintInfo).toHaveBeenCalledTimes(0);
+		expect(spyKeySets).toHaveBeenCalledTimes(0);
+		expect(spyKeys).toHaveBeenCalledTimes(0);
+
+		spyMintInfo.mockRestore();
+		spyKeySets.mockRestore();
+		spyKeys.mockRestore();
+	});
+
+	it('should throw when retrieving keys for an invalid keyset ID', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+
+		expect(() => wallet.getKeys('invalid-keyset-id')).toThrow(
+			'No keyset found with ID invalid-keyset-id',
+		);
+	});
+
+	it('should throw when accessing getters before loadMint', () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
+		expect(() => wallet.getKeySets()).toThrow('Keysets not initialized; call loadMint first');
+		expect(() => wallet.getAllKeys()).toThrow('Keys not initialized; call loadMint first');
+		expect(() => wallet.getKeysetId()).toThrow('No keyset ID set; call loadMint first');
+	});
+
+	it('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
+		const wallet = new Wallet(mintUrl, {
+			unit,
+			mintInfo: mintInfoResp,
+			keys: dummyKeysResp.keysets,
+			keysets: dummyKeysetResp.keysets,
+		});
+		const spyMintInfo = vi.spyOn((wallet as any).mint, 'getInfo');
+		const spyKeySets = vi.spyOn((wallet as any).mint, 'getKeySets');
+		const spyKeys = vi.spyOn((wallet as any).mint, 'getKeys');
+		await wallet.loadMint(true); // Force refresh
+
+		// Verify network calls were made despite preloaded data
+		expect(spyMintInfo).toHaveBeenCalledTimes(1);
+		expect(spyKeySets).toHaveBeenCalledTimes(1);
+		expect(spyKeys).toHaveBeenCalledTimes(1);
+
+		// Verify data
+		const info = wallet.getMintInfo();
+		expect(info.contact).toEqual([
+			{ method: 'email', info: 'contact@me.com' },
+			{ method: 'twitter', info: '@me' },
+			{ method: 'nostr', info: 'npub1337' },
+		]);
+		const keysets = wallet.getKeySets();
+		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		const keys = wallet.getAllKeys();
+		expect(keys).toEqual(dummyKeysResp.keysets);
+		const keysetId = wallet.getKeysetId();
+		expect(keysetId).toBe('00bd033559de27d0');
+
+		spyMintInfo.mockRestore();
+		spyKeySets.mockRestore();
+		spyKeys.mockRestore();
+	});
+});
 describe('test info', () => {
 	test('test info', async () => {
 		const wallet = new Wallet(mint, { unit });

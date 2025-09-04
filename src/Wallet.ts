@@ -25,7 +25,7 @@
 
 import { signP2PKProofs } from './crypto/client/NUT11';
 import { hashToCurve } from './crypto/common/index';
-import { type CashuMint } from './CashuMint';
+import { CashuMint } from './CashuMint';
 import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
@@ -265,15 +265,16 @@ export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
 };
 
 /**
- * Class that represents a Cashu wallet. This class should act as the entry point for this library.
+ * Class that represents a Cashu wallet.
  *
+ * @remarks
+ * This class should act as the entry point for this library. Can be instantiated with a mint
+ * instance or mint url.
  * @example
  *
  * ```typescript
- * import { CashuMint, Wallet } from '@cashu/cashu-ts';
- * const mintUrl = 'http://localhost:3338';
- * const mint = new CashuMint(mintUrl);
- * const wallet = new Wallet(mint, { unit: 'sat' });
+ * import { Wallet } from '@cashu/cashu-ts';
+ * const wallet = new Wallet('http://localhost:3338', { unit: 'sat' });
  * await wallet.loadMint(); // Initialize mint info, keysets, and keys
  * // Wallet is now ready to use, eg:
  * const proofs = [...]; // your array of unspent proofs
@@ -295,19 +296,17 @@ class Wallet {
 	mint: CashuMint;
 
 	/**
-	 * @param mint Cashu mint instance is used to make api calls.
+	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
 	 * @param options.unit Optionally set unit (default: 'sat')
 	 * @param options.keys Public keys from the mint (will be fetched from mint if not provided)
 	 * @param options.keysets Keysets from the mint (will be fetched from mint if not provided)
 	 * @param options.mintInfo Mint info from the mint (will be fetched from mint if not provided)
 	 * @param options.denominationTarget Target number proofs per denomination (default: 3)
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
-	 * @param options.keepFactory A function that will be used by all parts of the library that
-	 *   produce proofs to be kept (change, etc.). This can lead to poor performance, in which case
-	 *   the seed should be directly provided.
+	 * @param options.logger - Custom logger instance. Defaults to a null logger.
 	 */
 	constructor(
-		mint: CashuMint,
+		mint: CashuMint | string,
 		options?: {
 			unit?: string;
 			keys?: MintKeys[] | MintKeys;
@@ -319,7 +318,7 @@ class Wallet {
 			logger?: Logger;
 		},
 	) {
-		this.mint = mint;
+		this.mint = typeof mint === 'string' ? new CashuMint(mint) : mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
 		this._unit = options?.unit ?? this._unit;
 		this._keysets = options?.keysets ?? this._keysets;
