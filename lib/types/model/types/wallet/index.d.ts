@@ -1,0 +1,105 @@
+import { SerializedDLEQ } from '../mint';
+export type * from './payloads';
+export type * from './responses';
+export type * from './tokens';
+export * from './paymentRequests';
+/**
+ * Represents a single Cashu proof.
+ */
+export type Proof = {
+    /**
+     * Keyset id, used to link proofs to a mint an its MintKeys.
+     */
+    id: string;
+    /**
+     * Amount denominated in Satoshis. Has to match the amount of the mints signing key.
+     */
+    amount: number;
+    /**
+     * The initial secret that was (randomly) chosen for the creation of this proof.
+     */
+    secret: string;
+    /**
+     * The unblinded signature for this secret, signed by the mints private key.
+     */
+    C: string;
+    /**
+     * DLEQ proof.
+     */
+    dleq?: SerializedDLEQ;
+    /**
+     * The witness for this proof.
+     */
+    witness?: string | P2PKWitness | HTLCWitness | CairoWitness;
+};
+/**
+ * P2PK witness.
+ */
+export type P2PKWitness = {
+    /**
+     * An array of signatures in hex format.
+     */
+    signatures?: string[];
+};
+/**
+ * HTLC witness.
+ */
+export type HTLCWitness = {
+    /**
+     * Preimage.
+     */
+    preimage: string;
+    /**
+     * An array of signatures in hex format.
+     */
+    signatures?: string[];
+};
+/**
+ * Cairo witness.
+ */
+export type CairoWitness = {
+    /**
+     * Serialized Cairo proof.
+     */
+    cairo_proof_json: string;
+    /**
+     * Cairo proof using pedersen preprocessed variant.
+     */
+    with_pedersen: boolean;
+    /**
+     * Cairo proof using the bootloader.
+     */
+    with_bootloader: boolean;
+};
+/**
+ * Response when after receiving a single TokenEntry.
+ */
+export type ReceiveTokenEntryResponse = {
+    /**
+     * Received proofs.
+     */
+    proofs: Proof[];
+};
+/**
+ * Payload that needs to be sent to the mint when paying a lightning invoice.
+ */
+export type PaymentPayload = {
+    /**
+     * Payment request/Lighting invoice that should get paid by the mint.
+     */
+    pr: string;
+    /**
+     * Proofs, matching Lightning invoices amount + fees.
+     */
+    proofs: Proof[];
+};
+/**
+ * @deprecated Token V2 should no longer be used.
+ */
+export type TokenV2 = {
+    proofs: Proof[];
+    mints: Array<{
+        url: string;
+        ids: string[];
+    }>;
+};
