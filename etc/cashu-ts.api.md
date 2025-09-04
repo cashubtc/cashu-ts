@@ -530,6 +530,39 @@ export const MeltQuoteState: {
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
 
 // @public
+export class Mint {
+    constructor(_mintUrl: string, customRequest?: typeof request, authTokenGetter?: () => Promise<string>, options?: {
+        logger?: Logger;
+    });
+    check(checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
+    checkMeltQuote(quote: string, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
+    checkMeltQuoteBolt12(quote: string, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
+    checkMintQuote(quote: string, customRequest?: typeof request): Promise<PartialMintQuoteResponse>;
+    checkMintQuoteBolt12(quote: string, customRequest?: typeof request): Promise<Bolt12MintQuoteResponse>;
+    connectWebSocket(): Promise<void>;
+    createMeltQuote(meltQuotePayload: MeltQuotePayload, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
+    createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
+    createMintQuote(mintQuotePayload: MintQuotePayload, customRequest?: typeof request): Promise<PartialMintQuoteResponse>;
+    createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: typeof request): Promise<Bolt12MintQuoteResponse>;
+    disconnectWebSocket(): void;
+    getInfo(customRequest?: typeof request): Promise<GetInfoResponse>;
+    getKeys(keysetId?: string, mintUrl?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
+    getKeySets(customRequest?: typeof request): Promise<MintAllKeysets>;
+    getLazyMintInfo(): Promise<MintInfo>;
+    handleBlindAuth(path: string): Promise<string | undefined>;
+    melt(meltPayload: MeltPayload, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
+    meltBolt12(meltPayload: MeltPayload, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
+    mint(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse>;
+    mintBolt12(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse>;
+    // (undocumented)
+    get mintUrl(): string;
+    restore(restorePayload: PostRestorePayload, customRequest?: typeof request): Promise<PostRestoreResponse>;
+    swap(swapPayload: SwapPayload, customRequest?: typeof request): Promise<SwapResponse>;
+    // (undocumented)
+    get webSocketConnection(): WSConnection | undefined;
+}
+
+// @public
 export type MintActiveKeys = {
     keysets: MintKeys[];
 };
@@ -1093,7 +1126,7 @@ export type V4ProofTemplate = {
 
 // @public
 export class Wallet {
-    constructor(mint: CashuMint | string, options?: {
+    constructor(mint: Mint | string, options?: {
         unit?: string;
         keys?: MintKeys[] | MintKeys;
         keysets?: MintKeyset[];
@@ -1138,7 +1171,7 @@ export class Wallet {
         quote: Bolt12MeltQuoteResponse;
         change: Proof[];
     }>;
-    mint: CashuMint;
+    mint: Mint;
     mintProofs(amount: number, quote: string | MintQuoteResponse, outputType?: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, splitAmounts?: number[], proofsWeHave?: Proof[], config?: MintProofsConfig): Promise<Proof[]>;

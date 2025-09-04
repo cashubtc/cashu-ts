@@ -1,6 +1,10 @@
 import { CashuMint } from './CashuMint';
 import { CashuWallet } from './CashuWallet';
 /**
+ * @v3 import
+ */
+import { Mint } from './Mint';
+/**
  * @v3 imports
  */
 import {
@@ -49,6 +53,7 @@ export {
 	DEFAULT_OUTPUT,
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
+	Mint,
 };
 
 export {

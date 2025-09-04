@@ -12,9 +12,9 @@
  * changes during the v3 refactor process.
  * @example
  *
- *     import { CashuMint, Wallet } from '@cashu/cashu-ts';
+ *     import { Wallet } from '@cashu/cashu-ts';
  *     const mintUrl = 'http://localhost:3338';
- *     const mint = new CashuMint(mintUrl); const wallet = new Wallet(mint, { unit: 'sat' });
+ *     const wallet = new Wallet(mintUrl, { unit: 'sat' });
  *     await wallet.loadMint(); // Initialize mint info, keysets, and keys
  *     // Wallet is now ready to use, eg:
  *     const proofs = [...]; // your array of unspent proofs
@@ -25,7 +25,7 @@
 
 import { signP2PKProofs } from './crypto/client/NUT11';
 import { hashToCurve } from './crypto/common/index';
-import { CashuMint } from './CashuMint';
+import { Mint } from './Mint';
 import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
@@ -296,7 +296,7 @@ class Wallet {
 	/**
 	 * Cashu Mint instance.
 	 */
-	mint: CashuMint;
+	mint: Mint;
 
 	/**
 	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
@@ -309,7 +309,7 @@ class Wallet {
 	 * @param options.logger - Custom logger instance. Defaults to a null logger.
 	 */
 	constructor(
-		mint: CashuMint | string,
+		mint: Mint | string,
 		options?: {
 			unit?: string;
 			keys?: MintKeys[] | MintKeys;
@@ -321,7 +321,7 @@ class Wallet {
 			logger?: Logger;
 		},
 	) {
-		this.mint = typeof mint === 'string' ? new CashuMint(mint) : mint;
+		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
 		this._unit = options?.unit ?? this._unit;
 		this._keysets = options?.keysets ?? this._keysets;
@@ -1635,8 +1635,7 @@ class Wallet {
 	 *
 	 * @param start Set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count Set number of blinded messages that should be generated.
-	 * @param options.keysetId Set a custom keysetId to restore from. keysetIds can be loaded with
-	 *   `CashuMint.getKeySets()`
+	 * @param options.keysetId Set a custom keysetId to restore from. @see `getKeySets()`
 	 */
 	async restore(
 		start: number,

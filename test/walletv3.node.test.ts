@@ -2,7 +2,7 @@ import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { CashuMint } from '../src/CashuMint';
+import { Mint } from '../src/Mint';
 import { Wallet, DEFAULT_OUTPUT } from '../src/Wallet';
 import {
 	CheckStateEnum,
@@ -57,7 +57,7 @@ const dummyKeysetResp = {
 	],
 };
 const mintUrl = 'http://localhost:3338';
-const mint = new CashuMint(mintUrl);
+const mint = new Mint(mintUrl);
 const unit = 'sat';
 const invoice =
 	'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
@@ -1602,7 +1602,7 @@ describe('multi mint', async () => {
 				},
 			),
 		);
-		const mint = new CashuMint(mintUrl);
+		const mint = new Mint(mintUrl);
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 
@@ -2499,7 +2499,7 @@ describe('Test coinselection', () => {
 				});
 			}),
 		);
-		const mint = new CashuMint(mintUrl);
+		const mint = new Mint(mintUrl);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
@@ -2528,7 +2528,7 @@ describe('Test coinselection', () => {
 				});
 			}),
 		);
-		const mint = new CashuMint(mintUrl);
+		const mint = new Mint(mintUrl);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 31;
@@ -2689,7 +2689,7 @@ describe('Test coinselection', () => {
 		}
 	});
 	test('test send tokens exact without previous split', async () => {
-		const mint = new CashuMint(mintUrl);
+		const mint = new Mint(mintUrl);
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
