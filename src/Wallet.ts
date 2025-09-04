@@ -732,23 +732,12 @@ class Wallet {
 	 * Receives a cashu token and returns proofs using Default (random) secrets.
 	 *
 	 * @param token Cashu token.
-	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using random secrets.
 	 * @v3
 	 */
-	async receiveAsDefault(
-		token: Token | string,
-		splitAmounts?: number[],
-		proofsWeHave?: Proof[],
-		config?: ReceiveConfig,
-	): Promise<Proof[]> {
-		const outputType: OutputType = {
-			type: 'random',
-			splitAmounts,
-			proofsWeHave,
-		};
+	async receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]> {
+		const outputType: OutputType = { type: 'random' }; // Pure default: no splits/proofs
 		return this.receive(token, outputType, config);
 	}
 
@@ -2049,6 +2038,23 @@ class Wallet {
 
 	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
 		return this.mint.checkMeltQuoteBolt12(quote);
+	}
+
+	async meltProofsAsDefault(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Proof[],
+		options?: MeltProofOptions,
+	): Promise<MeltProofsResponse> {
+		return this.meltProofs(meltQuote, proofsToSend, DEFAULT_OUTPUT, options);
+	}
+
+	async meltProofsAsDeterministic(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Proof[],
+		counter: number,
+		options?: MeltProofOptions,
+	): Promise<MeltProofsResponse> {
+		return this.meltProofs(meltQuote, proofsToSend, { type: 'deterministic', counter }, options);
 	}
 
 	/**
