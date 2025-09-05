@@ -325,11 +325,6 @@ class Wallet {
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._unit = options?.unit ?? this._unit;
 		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
-		if (!(options?.keysets && options?.keys)) {
-			this._logger.warn(
-				'Partial preload of keysets / keys ignored; call init() to fetch complete data.',
-			);
-		}
 		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
 		// Validate and set seed
@@ -366,6 +361,7 @@ class Wallet {
 		promises.push(this.keyChain.init(forceRefresh).then(() => null));
 
 		await Promise.all(promises);
+		this._logger.debug('KeyChain', { keychain: this.keyChain.getCache() });
 	}
 
 	/**

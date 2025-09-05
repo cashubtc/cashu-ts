@@ -157,14 +157,21 @@ export class KeyChain {
 		unit: string;
 		mintUrl: string;
 	} {
-		const unitKeysets = this.getKeysetList().map((k) => ({
+		const allKeysets = this.getKeysetList();
+		const unitKeysets = allKeysets.map((k) => ({
 			id: k.id,
 			unit: k.unit,
 			active: k.isActive,
 			input_fee_ppk: k.fee,
 			final_expiry: k.final_expiry,
 		}));
-		const unitKeys = unitKeysets.map((k) => this.getKeys(k.id)).filter(Boolean);
+		const unitKeys = allKeysets
+			.filter((k) => k.keyPairs !== undefined) // Only valid keyPairs
+			.map((k) => ({
+				id: k.id,
+				unit: k.unit,
+				keys: k.keyPairs!, // Non-null assertion since we filtered out undefined
+			}));
 		return {
 			keysets: unitKeysets,
 			keys: unitKeys,

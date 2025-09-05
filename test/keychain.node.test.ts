@@ -167,12 +167,7 @@ describe('KeyChain initialization', () => {
 		console.log('originalCache', originalCache);
 
 		// Instantiate new KeyChain with cached data (arrays)
-		const cachedChain = new KeyChain(
-			mint,
-			unit,
-			originalCache.keysets,
-			originalCache.keys,
-		);
+		const cachedChain = new KeyChain(mint, unit, originalCache.keysets, originalCache.keys);
 
 		// Verify preloaded without init()
 		const cachedActive = cachedChain.getActiveKeyset();
