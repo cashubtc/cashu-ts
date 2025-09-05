@@ -20,7 +20,6 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
 			},
-			final_expiry: 1754296607,
 		},
 		{
 			id: '00abc12345678901',
@@ -29,7 +28,6 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 				1: '03anotherpubkey1',
 				2: '03anotherpubkey2',
 			},
-			final_expiry: undefined,
 		},
 	],
 };
@@ -41,12 +39,14 @@ const dummyKeysetResp: { keysets: MintKeyset[] } = {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
+			final_expiry: 1754296607,
 		},
 		{
 			id: '00abc12345678901',
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 2,
+			final_expiry: undefined,
 		},
 		{
 			id: 'invalidbase64',
@@ -196,7 +196,6 @@ describe('KeyChain getters', () => {
 		const activeKeys = keyChain.getKeys();
 		expect(activeKeys.id).toBe('00bd033559de27d0');
 		expect(activeKeys.unit).toBe('sat');
-		expect(activeKeys.final_expiry).toBe(1754296607);
 		expect(activeKeys.keys).toEqual(dummyKeysResp.keysets[0].keys);
 
 		const specificKeys = keyChain.getKeys('00abc12345678901');

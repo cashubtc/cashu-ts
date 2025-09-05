@@ -67,4 +67,8 @@ export type MintKeyset = {
 	 * Input fee for keyset (in ppk)
 	 */
 	input_fee_ppk?: number;
+	/**
+	 * Expiry of the keyset.
+	 */
+	final_expiry?: number;
 };

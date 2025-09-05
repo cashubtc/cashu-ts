@@ -41,6 +41,8 @@ import type {
 	MeltQuoteResponse,
 	MintKeys,
 	MintKeyset,
+	MintActiveKeys,
+	MintAllKeysets,
 	MintPayload,
 	MintQuotePayload,
 	Proof,
@@ -299,12 +301,12 @@ class Wallet {
 
 	/**
 	 * @remarks
-	 * Mint data will be fetched if not supplied. Note: For keys and keysets - both must be provided,
-	 * or they will be ignored.
+	 * Mint data will be fetched if not supplied. Note: to preload keys and keysets, both must be
+	 * provided. If only one is provided, it will be ignored.
 	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
 	 * @param options.unit Optional. Set unit (default: 'sat')
-	 * @param options.keys Optional. Public keys from the mint.
-	 * @param options.keysets Optional. Keysets from the mint.
+	 * @param options.keys Optional. Cached public keys (single, array, or full MintActiveKeys).
+	 * @param options.keysets Optional. Cached keysets (array or full MintAllKeysets).
 	 * @param options.mintInfo Optional. Mint info from the mint.
 	 * @param options.denominationTarget Target number proofs per denomination (default: 3)
 	 * @param options.bip39seed Optional. BIP39 seed for deterministic secrets.
@@ -314,8 +316,8 @@ class Wallet {
 		mint: Mint | string,
 		options?: {
 			unit?: string;
-			keys?: MintKeys[] | MintKeys;
-			keysets?: MintKeyset[];
+			keys?: MintKeys[] | MintKeys | MintActiveKeys;
+			keysets?: MintKeyset[] | MintAllKeysets;
 			mintInfo?: GetInfoResponse;
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;
@@ -1514,7 +1516,7 @@ class Wallet {
 	 * @returns FeePPK {number} The feePPK for the selected proof.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
-	private getProofFeePPK(proof: Proof) {
+	private getProofFeePPK(proof: Proof): number {
 		try {
 			return this.keyChain.getKeyset(proof.id).fee;
 		} catch (e) {

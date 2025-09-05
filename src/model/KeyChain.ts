@@ -8,15 +8,22 @@ export class KeyChain {
 	private keysets: { [id: string]: Keyset } = {};
 	private _activeKeysetId: string | undefined;
 
-	constructor(mint: Mint, unit: string, keysets?: MintKeyset[], keys?: MintKeys[] | MintKeys) {
+	constructor(
+		mint: Mint,
+		unit: string,
+		cachedKeysets?: MintKeyset[] | MintAllKeysets,
+		cachedKeys?: MintKeys[] | MintKeys | MintActiveKeys,
+	) {
 		this.mint = mint;
 		this.unit = unit;
-		if (keysets && keys) {
-			// Only preload if both are provided
-			this.buildKeychain(
-				{ keysets: keysets } as MintAllKeysets,
-				{ keysets: Array.isArray(keys) ? keys : keys ? [keys] : [] } as MintActiveKeys,
-			);
+		if (cachedKeysets && cachedKeys) {
+			// Normalize and preload if both are provided
+			const allKeysets = 'keysets' in cachedKeysets ? cachedKeysets : { keysets: cachedKeysets };
+			const activeKeys =
+				'keysets' in cachedKeys
+					? cachedKeys
+					: { keysets: Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys] };
+			this.buildKeychain(allKeysets, activeKeys);
 		}
 	}
 
@@ -52,7 +59,7 @@ export class KeyChain {
 		// Filter and create Keysets for unit
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this.unit);
 		unitKeysets.forEach((k: MintKeyset) => {
-			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk);
+			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk, k.final_expiry);
 		});
 
 		// Assign keys to matching keysets
@@ -60,7 +67,6 @@ export class KeyChain {
 			const keyset = this.keysets[mk.id];
 			if (keyset && mk.unit === this.unit) {
 				keyset.keyPairs = mk.keys;
-				keyset.final_expiry = mk.final_expiry;
 			}
 		});
 
@@ -130,13 +136,33 @@ export class KeyChain {
 	getKeys(id?: string): MintKeys {
 		const keyset = id ? this.getKeyset(id) : this.getActiveKeyset();
 		if (!keyset.hasKeyPairs) {
-			throw new Error(`No keys loaded for keyset '${id}'`);
+			throw new Error(`No keys loaded for keyset '${id || keyset.id}'`);
 		}
 		return {
 			id: keyset.id,
 			unit: keyset.unit,
-			final_expiry: keyset.final_expiry,
 			keys: keyset.keyPairs!,
 		} as MintKeys;
+	}
+
+	/**
+	 * Extract the Mint API data from the keychain.
+	 *
+	 * @remarks
+	 * Useful for instantiating new wallets / keychains without repeatedly calling the mint API.
+	 */
+	getCache(): { cachedKeysets: MintKeyset[]; cachedKeys: MintKeys[] } {
+		const unitKeysets = this.getKeysetList().map((k) => ({
+			id: k.id,
+			unit: k.unit,
+			active: k.isActive,
+			input_fee_ppk: k.fee,
+			final_expiry: k.final_expiry,
+		}));
+		const unitKeys = unitKeysets.map((k) => this.getKeys(k.id)).filter(Boolean);
+		return {
+			cachedKeysets: unitKeysets,
+			cachedKeys: unitKeys,
+		};
 	}
 }

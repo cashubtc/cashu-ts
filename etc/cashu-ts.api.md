@@ -592,6 +592,7 @@ export type MintKeyset = {
     unit: string;
     active: boolean;
     input_fee_ppk?: number;
+    final_expiry?: number;
 };
 
 // @public
@@ -1128,8 +1129,8 @@ export type V4ProofTemplate = {
 export class Wallet {
     constructor(mint: Mint | string, options?: {
         unit?: string;
-        keys?: MintKeys[] | MintKeys;
-        keysets?: MintKeyset[];
+        keys?: MintKeys[] | MintKeys | MintActiveKeys;
+        keysets?: MintKeyset[] | MintAllKeysets;
         mintInfo?: GetInfoResponse;
         bip39seed?: Uint8Array;
         denominationTarget?: number;

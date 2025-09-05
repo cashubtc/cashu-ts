@@ -8,11 +8,18 @@ export class Keyset {
 	private _input_fee_ppk?: number;
 	private _final_expiry?: number;
 
-	constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number) {
+	constructor(
+		id: string,
+		unit: string,
+		active: boolean,
+		input_fee_ppk?: number,
+		final_expiry?: number,
+	) {
 		this._id = id;
 		this._unit = unit;
 		this._active = active;
 		this._input_fee_ppk = input_fee_ppk;
+		this._final_expiry = final_expiry;
 	}
 
 	get id(): string {
@@ -45,10 +52,6 @@ export class Keyset {
 
 	get keyPairs(): Record<number, string> | undefined {
 		return this._keyPairs;
-	}
-
-	set final_expiry(val: number | undefined) {
-		this._final_expiry = val;
 	}
 
 	get final_expiry(): number | undefined {
