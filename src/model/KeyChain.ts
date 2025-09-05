@@ -121,7 +121,7 @@ export class KeyChain {
 	}
 
 	/**
-	 * Get keys for a keyset (as MintKeys).
+	 * Get keys for a keyset (default: the active keyset)
 	 *
 	 * @param id Optional ID; defaults to active.
 	 * @returns {id, unit, final_expiry?, keys} .
