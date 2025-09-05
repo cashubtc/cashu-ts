@@ -152,8 +152,8 @@ export class KeyChain {
 	 * Useful for instantiating new wallets / keychains without repeatedly calling the mint API.
 	 */
 	getCache(): {
-		cachedKeysets: MintKeyset[];
-		cachedKeys: MintKeys[];
+		keysets: MintKeyset[];
+		keys: MintKeys[];
 		unit: string;
 		mintUrl: string;
 	} {
@@ -166,8 +166,8 @@ export class KeyChain {
 		}));
 		const unitKeys = unitKeysets.map((k) => this.getKeys(k.id)).filter(Boolean);
 		return {
-			cachedKeysets: unitKeysets,
-			cachedKeys: unitKeys,
+			keysets: unitKeysets,
+			keys: unitKeys,
 			unit: this.unit,
 			mintUrl: this.mint.mintUrl,
 		};

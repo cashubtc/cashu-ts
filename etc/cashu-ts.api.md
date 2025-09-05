@@ -11,10 +11,13 @@ import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
 import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
 import { Keys as Keys_2 } from './model/types.js';
+import { MintActiveKeys as MintActiveKeys_2 } from './types.js';
+import { MintAllKeysets as MintAllKeysets_2 } from './types.js';
 import { MintContactInfo as MintContactInfo_2 } from './types';
 import { MintKeys as MintKeys_2 } from './types.js';
 import { MintKeys as MintKeys_3 } from './model/types.js';
-import { MintKeyset as MintKeyset_2 } from './model/types.js';
+import { MintKeyset as MintKeyset_2 } from './types.js';
+import { MintKeyset as MintKeyset_3 } from './model/types.js';
 import { MPPMethod as MPPMethod_2 } from './types.js';
 import { NUT10Option as NUT10Option_2 } from './types.js';
 import { PaymentRequestTransport as PaymentRequestTransport_2 } from './types.js';
@@ -291,7 +294,7 @@ export function deriveKeysetId(keys: Keys_2, unit?: string, expiry?: number, ver
 export { getBlindedAuthToken }
 
 // @public
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset_2[]): Token_2;
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset_3[]): Token_2;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token_2;
@@ -1162,6 +1165,10 @@ export class Wallet {
     getKeysetId(): string;
     getKeySets(): MintKeyset[];
     getMintInfo(): MintInfo;
+    // Warning: (ae-forgotten-export) The symbol "KeyChain" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    readonly keyChain: KeyChain;
     loadMint(forceRefresh?: boolean): Promise<void>;
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
     meltProofsAsDefault(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig): Promise<MeltProofsResponse>;
@@ -1170,7 +1177,8 @@ export class Wallet {
         quote: Bolt12MeltQuoteResponse;
         change: Proof[];
     }>;
-    mint: Mint;
+    // (undocumented)
+    readonly mint: Mint;
     mintProofs(amount: number, quote: string | MintQuoteResponse, outputType?: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, splitAmounts?: number[], proofsWeHave?: Proof[], config?: MintProofsConfig): Promise<Proof[]>;

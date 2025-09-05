@@ -287,17 +287,13 @@ export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
  * @v3
  */
 class Wallet {
-	private keyChain: KeyChain;
+	readonly mint: Mint;
+	readonly keyChain: KeyChain;
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = 3;
 	private _logger: Logger;
-
-	/**
-	 * Cashu Mint instance.
-	 */
-	mint: Mint;
 
 	/**
 	 * @remarks
@@ -407,8 +403,8 @@ class Wallet {
 	 */
 	getKeySets(): MintKeyset[] {
 		try {
-			const { cachedKeysets } = this.keyChain.getCache();
-			return cachedKeysets;
+			const { keysets } = this.keyChain.getCache();
+			return keysets;
 		} catch (e) {
 			const message = 'Keysets not initialized; call loadMint first';
 			this._logger.error(message, { e });
@@ -426,8 +422,8 @@ class Wallet {
 	 */
 	getAllKeys(): MintKeys[] {
 		try {
-			const { cachedKeys } = this.keyChain.getCache();
-			return cachedKeys;
+			const { keys } = this.keyChain.getCache();
+			return keys;
 		} catch (e) {
 			const message = 'Keys not initialized; call loadMint first';
 			this._logger.error(message, { e });

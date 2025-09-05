@@ -58,17 +58,44 @@ Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usa
 npm i @cashu/cashu-ts
 ```
 
+### Create a wallet
+
+There are a number of ways to instantiate a wallet, depending on your needs.
+
+Wallet classes are mostly stateless, so you can instantiate and throw them away as needed. Your app must therefore manage state, such as fetching and storing proofs in a database.
+
+NB: You must always call `loadMint()` after instantiating a wallet.
+
+```typescript
+import { Wallet } from '@cashu/cashu-ts';
+
+// Simplest: With a  mint url
+const mintUrl = 'http://localhost:3338';
+const wallet1 = new Wallet(mintUrl); // unit is 'sat'
+await wallet1.loadMint(); // wallet is now ready to use
+const cache = wallet1.keyChain.getCache(); // persist mint data in your app
+
+// Advanced: With cached mint data (reduces API calls)
+const wallet2 = new Wallet(cache.mintUrl, {
+	unit: cache.unit,
+	keysets: cache.keysets,
+	keys: cache.keys,
+});
+await wallet2.loadMint(); // wallet2 is now ready to use
+```
+
 ### Logging
 
 By default, cashu-ts does not log to the console. If you want to enable logging for debugging purposes, you can set the `logger` option when creating a wallet or mint. A `ConsoleLogger` is provided, or you can wrap your existing logger to conform to the `Logger` interface:
 
 ```typescript
-import { CashuMint, CashuWallet, ConsoleLogger, LogLevel } from '@cashu/cashu-ts';
+import { Mint, Wallet, ConsoleLogger, LogLevel } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338';
 const mintLogger = new ConsoleLogger(LogLevel.ERROR);
-const mint = new CashuMint(mintUrl, undefined, { logger: mintLogger }); // Enable logging for the mint
+const mint = new Mint(mintUrl, undefined, { logger: mintLogger }); // Enable logging for the mint
 const walletLogger = new ConsoleLogger(LogLevel.DEBUG);
-const wallet = new CashuWallet(mint, { logger: walletLogger }); // Enable logging for the wallet
+const wallet = new Wallet(mint, { logger: walletLogger }); // Enable logging for the wallet
+await wallet.loadMint(); // wallet with logging is now ready to use
 ```
 
 ### Examples
@@ -76,53 +103,64 @@ const wallet = new CashuWallet(mint, { logger: walletLogger }); // Enable loggin
 #### Mint tokens
 
 ```typescript
-import { CashuMint, CashuWallet, MintQuoteState } from '@cashu/cashu-ts';
+import { Wallet, MintQuoteState } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338';
-const mint = new CashuMint(mintUrl);
-const wallet = new CashuWallet(mint);
-await wallet.loadMint(); // persist wallet.keys and wallet.keysets to avoid calling loadMint() in the future
+const wallet = new Wallet(mintUrl);
+await wallet.loadMint(); // wallet is now ready to use
+
 const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
 if (mintQuoteChecked.state == MintQuoteState.PAID) {
 	const proofs = await wallet.mintProofs(64, mintQuote.quote);
 }
+// store proofs in your app ..
 ```
 
 #### Melt tokens
 
 ```typescript
-import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
-const mintUrl = 'http://localhost:3338'; // the mint URL
-const mint = new CashuMint(mintUrl);
-const wallet = new CashuWallet(mint); // load the keysets of the mint
+import { Wallet, DEFAULT_OUTPUT_CONFIG } from '@cashu/cashu-ts';
+const mintUrl = 'http://localhost:3338';
+const wallet = new Wallet(mintUrl);
+await wallet.loadMint(); // wallet is now ready to use
 
 const invoice = 'lnbc......'; // Lightning invoice to pay
 const meltQuote = await wallet.createMeltQuote(invoice);
 const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 
-// CashuWallet.send performs coin selection and swaps the proofs with the mint
-// if no appropriate amount can be selected offline. We must include potential
-// ecash fees that the mint might require to melt the resulting proofsToSend later.
-const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs, {
-	includeFees: true,
-});
-// store proofsToKeep in wallet ..
-
+// Wallet.send performs coin selection and swaps the proofs with the mint
+// if no appropriate amount can be selected offline. When selecting coins for a
+// melt, we must include the mint and/or lightning fees to ensure there are
+// sufficient funds to cover the invoice.
+// NB: send has helpers for different output types (eg: sendAsDefault, sendAsP2PK)
+// but for this example, we are using the full, flexible version for maximum control.
+const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(
+	amountToSend,
+	proofs,
+	DEFAULT_OUTPUT_CONFIG, // uses random proof secrets
+	{
+		includeFees: true,
+	},
+);
 const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
-// store meltResponse.change in wallet ..
+// store proofsToKeep and meltResponse.change in your app ..
 ```
 
 #### Create a token and receive it
 
 ```typescript
 // we assume that `wallet` already minted `proofs`, as above
+// or you fetched existing proofs from your app database
+const proofs = [...]; // array of proofs
 const { keep, send } = await wallet.send(32, proofs);
 const token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
 console.log(token);
 
-const wallet2 = new CashuWallet(mint); // receiving wallet
+const wallet2 = new Wallet(mintUrl); // receiving wallet
+await wallet2.loadMint(); // wallet2 is now ready to use
 const receiveProofs = await wallet2.receive(token);
+// store receiveProofs in your app ..
 ```
 
 #### Get token data
