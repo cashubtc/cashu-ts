@@ -1,7 +1,7 @@
 // keyChain.ts
 import { Keyset } from './Keyset';
 import { type Mint } from '../Mint';
-import { type MintKeyset, type MintKeys } from './types';
+import { type MintKeyset, type MintKeys, type MintAllKeysets, type MintActiveKeys } from './types';
 
 export class KeyChain {
 	private mint: Mint;
@@ -9,9 +9,16 @@ export class KeyChain {
 	private keysets: { [id: string]: Keyset } = {};
 	private _activeKeysetId: string | undefined;
 
-	constructor(mint: Mint, unit: string) {
+	constructor(mint: Mint, unit: string, keysets?: MintKeyset[], keys?: MintKeys[] | MintKeys) {
 		this.mint = mint;
 		this.unit = unit;
+		if (keysets) {
+			// A keyset may not have keys (eg inactive)
+			this.buildKeychain(
+				{ keysets: keysets } as MintAllKeysets,
+				{ keysets: Array.isArray(keys) ? keys : keys ? [keys] : [] } as MintActiveKeys,
+			);
+		}
 	}
 
 	/**
@@ -29,10 +36,20 @@ export class KeyChain {
 
 		// Fetch keys and keysets in parallel
 		const [allKeysets, allKeys] = await Promise.all([
-			this.mint.getKeySets(), // Returns MintKeyset
-			this.mint.getKeys(), // Returns MintActiveKeys with keysets as MintKeys[]
+			this.mint.getKeySets(), // Returns MintAllKeysets
+			this.mint.getKeys(), // Returns MintActiveKeys
 		]);
 
+		this.buildKeychain(allKeysets, allKeys);
+	}
+
+	/**
+	 * Builds keychain from MintAllKeysets and MintActiveKeys data.
+	 *
+	 * @param allKeysets Keyset data from mint.getKeySets() API.
+	 * @param allKeys Keys data from mint.getKeys() API.
+	 */
+	private buildKeychain(allKeysets: MintAllKeysets, allKeys: MintActiveKeys): void {
 		// Filter and create Keysets for unit
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this.unit);
 		unitKeysets.forEach((k: MintKeyset) => {
@@ -62,15 +79,12 @@ export class KeyChain {
 	 *
 	 * @param id Keyset ID.
 	 * @returns Keyset with keys.
-	 * @throws If not found or no keys loaded.
+	 * @throws If not found
 	 */
 	getKeyset(id: string): Keyset {
 		const keyset = this.keysets[id];
 		if (!keyset) {
 			throw new Error(`Keyset '${id}' not found`);
-		}
-		if (!keyset.hasKeyPairs) {
-			throw new Error(`No keys loaded for keyset '${id}'`);
 		}
 		return keyset;
 	}
@@ -112,9 +126,13 @@ export class KeyChain {
 	 *
 	 * @param id Optional ID; defaults to active.
 	 * @returns {id, unit, final_expiry?, keys} .
+	 * @throws If no keys found
 	 */
 	getKeys(id?: string): MintKeys {
 		const keyset = id ? this.getKeyset(id) : this.getActiveKeyset();
+		if (!keyset.hasKeyPairs) {
+			throw new Error(`No keys loaded for keyset '${id}'`);
+		}
 		return {
 			id: keyset.id,
 			unit: keyset.unit,

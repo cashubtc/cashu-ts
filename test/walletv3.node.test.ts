@@ -34,8 +34,7 @@ const dummyKeysResp = {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-			expiry: 1754296607,
+			}
 		},
 	],
 };
@@ -52,7 +51,7 @@ const dummyKeysetResp = {
 			id: '00bd033559de27d0',
 			unit: 'sat',
 			active: true,
-			input_fee_ppk: 0,
+			input_fee_ppk: 0
 		},
 	],
 };
@@ -137,8 +136,7 @@ describe('test wallet init', () => {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-			expiry: 1754296607,
+			}
 		});
 
 		// Verify active keyset ID
@@ -185,8 +183,7 @@ describe('test wallet init', () => {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-			expiry: 1754296607,
+			}
 		});
 
 		// Verify active keyset ID
@@ -241,8 +238,7 @@ describe('test wallet init', () => {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-			expiry: 1754296607,
+			}
 		});
 
 		// Verify active keyset ID
@@ -268,7 +264,7 @@ describe('test wallet init', () => {
 		await wallet.loadMint();
 
 		expect(() => wallet.getKeys('invalid-keyset-id')).toThrow(
-			'No keyset found with ID invalid-keyset-id',
+			'No keys found for keyset ID invalid-keyset-id; call loadMint with forceRefresh',
 		);
 	});
 
@@ -1244,7 +1240,7 @@ describe('send', () => {
 			}),
 		);
 		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets, logger });
 		await wallet.loadMint();
 
 		const result = await wallet
@@ -2117,8 +2113,8 @@ describe('Test coinselection', () => {
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
 					keysets: [
-						{ id: '00keyset1', unit: 'sat', active: true, input_fee_ppk: 600 },
-						{ id: '00keyset2', unit: 'sat', active: true, input_fee_ppk: 1000 },
+						{ id: '001111', unit: 'sat', active: true, input_fee_ppk: 600 },
+						{ id: '002222', unit: 'sat', active: true, input_fee_ppk: 1000 },
 					],
 				});
 			}),
@@ -2127,10 +2123,10 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const mixedNotes = [
-			{ id: '00keyset1', amount: 16, secret: 'secret1', C: 'C1' },
-			{ id: '00keyset2', amount: 16, secret: 'secret2', C: 'C2' },
-			{ id: '00keyset1', amount: 1, secret: 'secret3', C: 'C3' },
-			{ id: '00keyset2', amount: 10, secret: 'secret4', C: 'C4' },
+			{ id: '001111', amount: 16, secret: 'secret1', C: 'C1' },
+			{ id: '002222', amount: 16, secret: 'secret2', C: 'C2' },
+			{ id: '001111', amount: 1, secret: 'secret3', C: 'C3' },
+			{ id: '002222', amount: 10, secret: 'secret4', C: 'C4' },
 		];
 		const targetAmount = 31;
 		const { send } = wallet.selectProofsToSend(
@@ -2141,7 +2137,7 @@ describe('Test coinselection', () => {
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
 		expect(amountSend - fee).toBeGreaterThanOrEqual(targetAmount);
-		// e.g., [16_00keyset1, 16_00keyset2, 10_00keyset2], fee = ceil((600+1000+1000)/1000) = 3, net = 42 - 3 = 39 >= 31
+		// e.g., [16_001111, 16_002222, 10_002222], fee = ceil((600+1000+1000)/1000) = 3, net = 42 - 3 = 39 >= 31
 		expect(send).toHaveLength(3);
 		expect(amountSend).toBe(42);
 	});
@@ -2265,8 +2261,8 @@ describe('Test coinselection', () => {
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
 					keysets: [
-						{ id: '00low', unit: 'sat', active: true, input_fee_ppk: 200 },
-						{ id: '00high', unit: 'sat', active: true, input_fee_ppk: 1000 },
+						{ id: '00200', unit: 'sat', active: true, input_fee_ppk: 200 },
+						{ id: '001000', unit: 'sat', active: true, input_fee_ppk: 1000 },
 					],
 				});
 			}),
@@ -2275,9 +2271,9 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const proofs = [
-			{ id: '00low', amount: 16, secret: 's1', C: 'C1' },
-			{ id: '00high', amount: 16, secret: 's2', C: 'C2' },
-			{ id: '00low', amount: 8, secret: 's3', C: 'C3' },
+			{ id: '00200', amount: 16, secret: 's1', C: 'C1' },
+			{ id: '001000', amount: 16, secret: 's2', C: 'C2' },
+			{ id: '00200', amount: 8, secret: 's3', C: 'C3' },
 		];
 		const targetAmount = 20;
 		const { send } = wallet.selectProofsToSend(
@@ -2287,7 +2283,7 @@ describe('Test coinselection', () => {
 		);
 		const fee = wallet.getFeesForProofs(send);
 		console.log(send.map((p) => [p.amount, p.id]));
-		expect(send.every((p) => p.id === '00low')).toBe(true); // Prefer low-fee keyset
+		expect(send.every((p) => p.id === '00200')).toBe(true); // Prefer low-fee keyset
 		expect(send.reduce((a, p) => a + p.amount, 0) - fee).toBeGreaterThanOrEqual(targetAmount);
 	});
 	test('zero fee scenario', async () => {
@@ -2502,6 +2498,7 @@ describe('Test coinselection', () => {
 		const mint = new Mint(mintUrl);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 31;
 		const { send } = await wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
@@ -2531,6 +2528,7 @@ describe('Test coinselection', () => {
 		const mint = new Mint(mintUrl);
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const targetAmount = 31;
 		const { send } = await wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
@@ -2575,6 +2573,7 @@ describe('Test coinselection', () => {
 
 		const keysets = await mint.getKeySets();
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		await wallet.loadMint();
 		const amountToSend = Math.floor((Math.random() * totalAmount) / 2 + totalAmount / 2);
 
 		// Reusable vars
@@ -2650,7 +2649,8 @@ describe('Test coinselection', () => {
 		console.log(`N Proofs: ${numProofs}`);
 
 		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets, logger });
+		// await wallet.loadMint();
 		const amountToSend = Math.floor((Math.random() * totalAmount) / numProofs);
 
 		// Reusable vars

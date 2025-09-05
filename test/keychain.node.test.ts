@@ -208,9 +208,7 @@ describe('KeyChain getters', () => {
 
 	test('should throw getters if not initialized', () => {
 		const uninitChain = new KeyChain(mint, unit);
-		expect(() => uninitChain.getKeyset('any')).toThrow(
-			"Keyset 'any' not found",
-		);
+		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
 		expect(() => uninitChain.getActiveKeyset()).toThrow(
 			'KeyChain not initialized; call init() first',
 		);
