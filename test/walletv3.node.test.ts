@@ -34,7 +34,7 @@ const dummyKeysResp = {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			}
+			},
 		},
 	],
 };
@@ -51,7 +51,7 @@ const dummyKeysetResp = {
 			id: '00bd033559de27d0',
 			unit: 'sat',
 			active: true,
-			input_fee_ppk: 0
+			input_fee_ppk: 0,
 		},
 	],
 };
@@ -136,7 +136,7 @@ describe('test wallet init', () => {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			}
+			},
 		});
 
 		// Verify active keyset ID
@@ -183,7 +183,7 @@ describe('test wallet init', () => {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			}
+			},
 		});
 
 		// Verify active keyset ID
@@ -238,7 +238,7 @@ describe('test wallet init', () => {
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			}
+			},
 		});
 
 		// Verify active keyset ID
@@ -476,7 +476,7 @@ describe('receive', () => {
 			}),
 		);
 
-		const wallet = new Wallet(mint, { unit, logger });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
 		const proofs = await wallet.receive(token3sat, { type: 'random', splitAmounts: [1, 1, 1] });
@@ -968,8 +968,7 @@ describe('send', () => {
 				});
 			}),
 		);
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
 		const result = await wallet.send(1, [
@@ -1009,8 +1008,7 @@ describe('send', () => {
 				});
 			}),
 		);
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
 		const result = await wallet.send(
@@ -1054,8 +1052,7 @@ describe('send', () => {
 				});
 			}),
 		);
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
 		const overpayProofs = [
@@ -1239,8 +1236,7 @@ describe('send', () => {
 				return HttpResponse.json({});
 			}),
 		);
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets, logger });
+		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
 
 		const result = await wallet
@@ -1963,8 +1959,7 @@ describe('Test coinselection', () => {
 		},
 	];
 	test('offline coinselection, zero fee keyset', async () => {
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 		const targetAmount = 25;
 		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: false });
@@ -1979,8 +1974,7 @@ describe('Test coinselection', () => {
 		expect(amountSendFeesInc).toBe(25);
 	});
 	test('next best match coinselection', async () => {
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
+		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 		const targetAmount = 23;
 		const { send } = wallet.selectProofsToSend(
@@ -2648,9 +2642,8 @@ describe('Test coinselection', () => {
 		console.log(`totalAmount: ${totalAmount}`);
 		console.log(`N Proofs: ${numProofs}`);
 
-		const keysets = await mint.getKeySets();
-		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets, logger });
-		// await wallet.loadMint();
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
 		const amountToSend = Math.floor((Math.random() * totalAmount) / numProofs);
 
 		// Reusable vars

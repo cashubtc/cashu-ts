@@ -12,8 +12,8 @@ export class KeyChain {
 	constructor(mint: Mint, unit: string, keysets?: MintKeyset[], keys?: MintKeys[] | MintKeys) {
 		this.mint = mint;
 		this.unit = unit;
-		if (keysets) {
-			// A keyset may not have keys (eg inactive)
+		if (keysets && keys) {
+			// Only preload if both are provided
 			this.buildKeychain(
 				{ keysets: keysets } as MintAllKeysets,
 				{ keysets: Array.isArray(keys) ? keys : keys ? [keys] : [] } as MintActiveKeys,
@@ -79,7 +79,7 @@ export class KeyChain {
 	 *
 	 * @param id Keyset ID.
 	 * @returns Keyset with keys.
-	 * @throws If not found
+	 * @throws If not found.
 	 */
 	getKeyset(id: string): Keyset {
 		const keyset = this.keysets[id];
@@ -126,7 +126,7 @@ export class KeyChain {
 	 *
 	 * @param id Optional ID; defaults to active.
 	 * @returns {id, unit, final_expiry?, keys} .
-	 * @throws If no keys found
+	 * @throws If no keys found.
 	 */
 	getKeys(id?: string): MintKeys {
 		const keyset = id ? this.getKeyset(id) : this.getActiveKeyset();

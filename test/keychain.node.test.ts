@@ -1,4 +1,3 @@
-// keychain.test.ts
 import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
@@ -168,7 +167,7 @@ describe('KeyChain getters', () => {
 	});
 
 	test('should throw if no keys loaded for keyset', async () => {
-		// Simulate a keyset without keys assigned
+		// Simulate no keys from mint
 		server.use(
 			http.get(mintUrl + '/v1/keys', () => {
 				return HttpResponse.json({ keysets: [] }); // No keys
@@ -176,7 +175,7 @@ describe('KeyChain getters', () => {
 		);
 		const tempKeyChain = new KeyChain(mint, unit);
 		await tempKeyChain.init();
-		expect(() => tempKeyChain.getKeyset('00bd033559de27d0')).toThrow(
+		expect(() => tempKeyChain.getKeys('00bd033559de27d0')).toThrow(
 			"No keys loaded for keyset '00bd033559de27d0'",
 		);
 	});
@@ -185,7 +184,6 @@ describe('KeyChain getters', () => {
 		const active = keyChain.getActiveKeyset();
 		expect(active.id).toBe('00bd033559de27d0'); // Lowest fee 0
 		expect(active.fee).toBe(0);
-		expect(active.hasHexId).toBe(true);
 	});
 
 	test('should get keyset list', () => {

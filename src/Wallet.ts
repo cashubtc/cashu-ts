@@ -298,14 +298,17 @@ class Wallet {
 	mint: Mint;
 
 	/**
+	 * @remarks
+	 * Mint data will be fetched if not supplied. Note: For keys and keysets - both must be provided, or
+	 * they will be ignored.
 	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
-	 * @param options.unit Optionally set unit (default: 'sat')
-	 * @param options.keys Public keys from the mint (will be fetched from mint if not provided)
-	 * @param options.keysets Keysets from the mint (will be fetched from mint if not provided)
-	 * @param options.mintInfo Mint info from the mint (will be fetched from mint if not provided)
+	 * @param options.unit Optional. Set unit (default: 'sat')
+	 * @param options.keys Optional. Public keys from the mint.
+	 * @param options.keysets Optional. Keysets from the mint.
+	 * @param options.mintInfo Optional. Mint info from the mint.
 	 * @param options.denominationTarget Target number proofs per denomination (default: 3)
-	 * @param options.bip39seed BIP39 seed for deterministic secrets.
-	 * @param options.logger - Custom logger instance. Defaults to a null logger.
+	 * @param options.bip39seed Optional. BIP39 seed for deterministic secrets.
+	 * @param options.logger Custom logger instance. Defaults to a null logger.
 	 */
 	constructor(
 		mint: Mint | string,
@@ -320,10 +323,15 @@ class Wallet {
 			logger?: Logger;
 		},
 	) {
-		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
-		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
 		this._logger = options?.logger ?? NULL_LOGGER;
+		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._unit = options?.unit ?? this._unit;
+		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
+		if (!(options?.keysets && options?.keys)) {
+			this._logger.warn(
+				'Partial preload of keysets / keys ignored; call init() to fetch complete data.',
+			);
+		}
 		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
 		// Validate and set seed

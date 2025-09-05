@@ -1154,7 +1154,6 @@ export class Wallet {
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
-    getActiveKeyset(keysets: MintKeyset[]): MintKeyset;
     getAllKeys(): MintKeys[];
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
