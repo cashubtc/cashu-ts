@@ -131,6 +131,7 @@ export const cairoProveProofs = async (
 	executable: string,
 	programInputs: bigint[],
 ): Promise<Proof[]> => {
+	init();
 	let time = Date.now();
 	console.log('Executing cairo program...');
 	const proverInput = await stwoExecute(executable, ...programInputs);
