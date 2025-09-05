@@ -1,4 +1,3 @@
-// keyChain.ts
 import { Keyset } from './Keyset';
 import { type Mint } from '../Mint';
 import { type MintKeyset, type MintKeys, type MintAllKeysets, type MintActiveKeys } from './types';
