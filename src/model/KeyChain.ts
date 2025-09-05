@@ -1,3 +1,4 @@
+// keyChain.ts
 import { Keyset } from './Keyset';
 import { type Mint } from '../Mint';
 import { type MintKeyset, type MintKeys } from './types';
@@ -5,7 +6,7 @@ import { type MintKeyset, type MintKeys } from './types';
 export class KeyChain {
 	private mint: Mint;
 	private unit: string;
-	private keysets: { [id: string]: Keyset } = {}; // Compact: plain object over Map
+	private keysets: { [id: string]: Keyset } = {};
 	private _activeKeysetId: string | undefined;
 
 	constructor(mint: Mint, unit: string) {
@@ -14,22 +15,25 @@ export class KeyChain {
 	}
 
 	/**
-	 * Single entry point to load or refresh keysets and keys for the unit. Fetches in parallel,
-	 * filters by unit, assigns keys.
+	 * Single entry point to load or refresh keysets and keys for the unit.
 	 *
+	 * @remarks
+	 * Fetches in parallel, filters by unit, assigns keys.
 	 * @param forceRefresh If true, refetch even if loaded.
 	 */
 	async init(forceRefresh?: boolean): Promise<void> {
+		// Skip if already loaded, unless force
 		if (Object.keys(this.keysets).length > 0 && !forceRefresh) {
-			return; // Already loaded, skip unless force
+			return;
 		}
 
+		// Fetch keys and keysets in parallel
 		const [allKeysets, allKeys] = await Promise.all([
-			this.mint.getKeySets(),
-			this.mint.getKeys(), // Assume returns all active keys
+			this.mint.getKeySets(), // Returns MintKeyset
+			this.mint.getKeys(), // Returns MintActiveKeys with keysets as MintKeys[]
 		]);
 
-		// Filter and create keysets for unit
+		// Filter and create Keysets for unit
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this.unit);
 		unitKeysets.forEach((k: MintKeyset) => {
 			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk);
@@ -72,8 +76,10 @@ export class KeyChain {
 	}
 
 	/**
-	 * Get the active keyset (lowest fee, active, hex ID).
+	 * Get the active keyset.
 	 *
+	 * @remarks
+	 * Selects active keyset with lowest fee and hex ID.
 	 * @returns Active Keyset.
 	 * @throws If none found or uninitialized.
 	 */
@@ -114,6 +120,6 @@ export class KeyChain {
 			unit: keyset.unit,
 			final_expiry: keyset.final_expiry,
 			keys: keyset.keyPairs!,
-		};
+		} as MintKeys;
 	}
 }

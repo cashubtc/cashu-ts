@@ -15,24 +15,24 @@ export class Keyset {
 		this._input_fee_ppk = input_fee_ppk;
 	}
 
-	get isActive(): boolean {
-		return this._active;
+	get id(): string {
+		return this._id;
 	}
 
 	get unit(): string {
 		return this._unit;
 	}
 
-	get id(): string {
-		return this._id;
-	}
-
-	get hasKeyPairs(): boolean {
-		return !!this._keyPairs;
+	get isActive(): boolean {
+		return this._active;
 	}
 
 	get fee(): number {
 		return this._input_fee_ppk ?? 0;
+	}
+
+	get hasKeyPairs(): boolean {
+		return !!this._keyPairs;
 	}
 
 	get hasHexId(): boolean {
