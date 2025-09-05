@@ -407,12 +407,8 @@ class Wallet {
 	 */
 	getKeySets(): MintKeyset[] {
 		try {
-			return this.keyChain.getKeysetList().map((k) => ({
-				id: k.id,
-				unit: k.unit,
-				active: k.isActive,
-				input_fee_ppk: k.fee,
-			}));
+			const { cachedKeysets } = this.keyChain.getCache();
+			return cachedKeysets;
 		} catch (e) {
 			const message = 'Keysets not initialized; call loadMint first';
 			this._logger.error(message, { e });
@@ -430,10 +426,8 @@ class Wallet {
 	 */
 	getAllKeys(): MintKeys[] {
 		try {
-			return this.keyChain
-				.getKeysetList()
-				.filter((k) => k.hasKeyPairs)
-				.map((k) => this.keyChain.getKeys(k.id));
+			const { cachedKeys } = this.keyChain.getCache();
+			return cachedKeys;
 		} catch (e) {
 			const message = 'Keys not initialized; call loadMint first';
 			this._logger.error(message, { e });

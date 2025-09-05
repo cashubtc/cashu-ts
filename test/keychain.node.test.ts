@@ -29,6 +29,22 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 				2: '03anotherpubkey2',
 			},
 		},
+		{
+			id: 'invalidbase64',
+			unit: 'sat',
+			keys: {
+				1: '03pubkey1invalid',
+				2: '03pubkey2invalid',
+			},
+		},
+		{
+			id: '00inactive',
+			unit: 'sat',
+			keys: {
+				1: '03pubkey1inactive',
+				2: '03pubkey2inactive',
+			},
+		},
 	],
 };
 
@@ -142,6 +158,31 @@ describe('KeyChain initialization', () => {
 
 		const keyChain = new KeyChain(mint, unit);
 		await expect(keyChain.init()).rejects.toThrow('KeyChain not initialized; call init() first');
+	});
+
+	test('should preload from cache and match original getCache', async () => {
+		const originalChain = new KeyChain(mint, unit);
+		await originalChain.init();
+		const originalCache = originalChain.getCache();
+		// console.log('originalCache', originalCache);
+
+		// Instantiate new KeyChain with cached data (arrays)
+		const cachedChain = new KeyChain(
+			mint,
+			unit,
+			originalCache.cachedKeysets,
+			originalCache.cachedKeys,
+		);
+
+		// Verify preloaded without init()
+		const cachedActive = cachedChain.getActiveKeyset();
+		expect(cachedActive.id).toBe(originalChain.getActiveKeyset().id);
+		expect(cachedActive.fee).toBe(0);
+		expect(cachedChain.getKeysetList().length).toBe(originalChain.getKeysetList().length);
+
+		// Get cache from cachedChain and compare
+		const newCache = cachedChain.getCache();
+		expect(newCache).toEqual(originalCache);
 	});
 });
 
