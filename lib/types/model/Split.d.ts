@@ -1,5 +1,5 @@
-import { BlindedMessage } from './BlindedMessage';
-import { Proof } from './types/index';
+import { type BlindedMessage } from './BlindedMessage';
+import { type Proof } from './types/index';
 declare class Split {
     proofs: Proof[];
     amount: number;

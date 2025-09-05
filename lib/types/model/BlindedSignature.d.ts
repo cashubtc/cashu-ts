@@ -1,6 +1,6 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { SerializedBlindedSignature } from './types/index';
-import { DLEQ } from '../crypto/common/index';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type SerializedBlindedSignature } from './types/index';
+import { type DLEQ } from '../crypto/common/index';
 declare class BlindedSignature {
     id: string;
     amount: number;

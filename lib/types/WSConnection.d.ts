@@ -1,5 +1,5 @@
-import { JsonRpcReqParams } from './model/types';
-import { Logger } from './logger';
+import { type JsonRpcReqParams } from './model/types';
+import { type Logger } from './logger';
 export declare class ConnectionManager {
     private static instance;
     private connectionMap;

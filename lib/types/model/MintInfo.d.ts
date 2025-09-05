@@ -1,4 +1,4 @@
-import { GetInfoResponse, MPPMethod, SwapMethod, WebSocketSupport } from './types';
+import { type GetInfoResponse, type MPPMethod, type SwapMethod, type WebSocketSupport } from './types';
 export declare class MintInfo {
     private readonly _mintInfo;
     private readonly _protectedEnpoints?;
@@ -23,7 +23,7 @@ export declare class MintInfo {
     private checkMintMelt;
     private checkNut17;
     private checkNut15;
-    get contact(): import('./types').MintContactInfo[];
+    get contact(): import("./types").MintContactInfo[];
     get description(): string | undefined;
     get description_long(): string | undefined;
     get name(): string;

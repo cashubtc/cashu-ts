@@ -1,8 +1,8 @@
-import { WSConnection } from './WSConnection';
-import { CheckStatePayload, CheckStateResponse, GetInfoResponse, MeltPayload, MintActiveKeys, MintAllKeysets, PostRestoreResponse, SerializedBlindedMessage, SwapPayload, SwapResponse, MintQuotePayload, MintPayload, MintResponse, PostRestorePayload, MeltQuotePayload, PartialMintQuoteResponse, PartialMeltQuoteResponse } from './model/types/index';
-import { default as request } from './request';
+import { type WSConnection } from './WSConnection';
+import type { CheckStatePayload, CheckStateResponse, GetInfoResponse, MeltPayload, MintActiveKeys, MintAllKeysets, PostRestoreResponse, SerializedBlindedMessage, SwapPayload, SwapResponse, MintQuotePayload, MintPayload, MintResponse, PostRestorePayload, MeltQuotePayload, PartialMintQuoteResponse, PartialMeltQuoteResponse } from './model/types/index';
+import request from './request';
 import { MintInfo } from './model/MintInfo';
-import { Logger } from './logger';
+import { type Logger } from './logger';
 /**
  * Class represents Cashu Mint API. This class contains Lower level functions that are implemented
  * by CashuWallet.

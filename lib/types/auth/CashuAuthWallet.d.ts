@@ -1,5 +1,5 @@
-import { MintKeys, MintKeyset, Proof } from '../model/types';
-import { CashuAuthMint } from './CashuAuthMint';
+import { type MintKeys, type MintKeyset, type Proof } from '../model/types';
+import { type CashuAuthMint } from './CashuAuthMint';
 /**
  * Class that represents a Cashu NUT-22 wallet.
  */

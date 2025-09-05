@@ -1,6 +1,6 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { BlindSignature, Proof, SerializedBlindedMessage, SerializedProof, Witness } from '../common/index.js';
-import { PrivKey } from '@noble/curves/abstract/utils';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type BlindSignature, type Proof, type SerializedBlindedMessage, type SerializedProof, type Witness } from '../common/index.js';
+import { type PrivKey } from '@noble/curves/abstract/utils';
 export type BlindedMessage = {
     B_: ProjPointType<bigint>;
     r: bigint;

@@ -1,4 +1,4 @@
-import { MintKeys, Proof, SerializedBlindedMessage, SerializedBlindedSignature } from './types';
+import { type MintKeys, type Proof, type SerializedBlindedMessage, type SerializedBlindedSignature } from './types';
 export interface OutputDataLike {
     blindedMessage: SerializedBlindedMessage;
     blindingFactor: bigint;

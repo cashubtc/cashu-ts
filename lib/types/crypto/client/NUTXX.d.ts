@@ -1,4 +1,4 @@
-import { Proof } from '../../model/types/index';
+import { type Proof } from '../../model/types/index';
 /**
  * Helper function to create cairoSend object from executable and expected output.
  *

@@ -1,9 +1,9 @@
-import { CashuMint } from './CashuMint';
+import { type CashuMint } from './CashuMint';
 import { MintInfo } from './model/MintInfo';
-import { Logger } from './logger';
-import { GetInfoResponse, MeltProofOptions, MintProofOptions, MintQuoteResponse, ProofState, ReceiveOptions, RestoreOptions, SendOptions, SwapOptions, MeltProofsResponse, MeltQuoteResponse, MintKeys, MintKeyset, Proof, SendResponse, Token, LockedMintQuoteResponse, PartialMintQuoteResponse, PartialMeltQuoteResponse } from './model/types/index';
-import { SubscriptionCanceller } from './model/types/wallet/websocket';
-import { OutputDataFactory } from './model/OutputData';
+import { type Logger } from './logger';
+import type { GetInfoResponse, MeltProofOptions, MintProofOptions, MintQuoteResponse, ProofState, ReceiveOptions, RestoreOptions, SendOptions, SwapOptions, MeltProofsResponse, MeltQuoteResponse, MintKeys, MintKeyset, Proof, SendResponse, Token, LockedMintQuoteResponse, PartialMintQuoteResponse, PartialMeltQuoteResponse } from './model/types/index';
+import { type SubscriptionCanceller } from './model/types/wallet/websocket';
+import { type OutputDataFactory } from './model/OutputData';
 /**
  * Class that represents a Cashu wallet. This class should act as the entry point for this library.
  */

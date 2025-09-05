@@ -1,5 +1,5 @@
-import { BlindAuthMintPayload, BlindAuthMintResponse, MintActiveKeys, MintAllKeysets } from '../model/types';
-import { default as request } from '../request';
+import { type BlindAuthMintPayload, type BlindAuthMintResponse, type MintActiveKeys, type MintAllKeysets } from '../model/types';
+import request from '../request';
 /**
  * Class represents Cashu Auth Mint API. This class contains Lower level functions that are
  * implemented by CashuAuthWallet.

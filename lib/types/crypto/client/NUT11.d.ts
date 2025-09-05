@@ -1,7 +1,7 @@
-import { PrivKey } from '@noble/curves/abstract/utils';
-import { Secret } from '../common/index';
-import { P2PKWitness, Proof } from '../../model/types/index';
-import { BlindedMessage } from './index';
+import { type PrivKey } from '@noble/curves/abstract/utils';
+import { type Secret } from '../common/index';
+import { type P2PKWitness, type Proof } from '../../model/types/index';
+import { type BlindedMessage } from './index';
 export declare const createP2PKsecret: (pubkey: string) => string;
 export declare const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 export declare const signBlindedMessage: (B_: string, privateKey: PrivKey) => string;

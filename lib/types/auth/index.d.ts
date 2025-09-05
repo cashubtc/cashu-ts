@@ -1,6 +1,6 @@
 import { CashuAuthMint } from './CashuAuthMint';
 import { CashuAuthWallet } from './CashuAuthWallet';
-import { Proof } from '../model/types';
+import { type Proof } from '../model/types';
 /**
  * Helper function to encode a cashu auth token authA.
  *

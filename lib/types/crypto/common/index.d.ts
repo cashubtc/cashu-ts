@@ -1,4 +1,4 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 export type MintKeys = {
@@ -62,8 +62,8 @@ export type Tags = {
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 export declare function hashToCurve(secret: Uint8Array): ProjPointType<bigint>;
 export declare function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array;
-export declare function pointFromBytes(bytes: Uint8Array): import('@noble/curves/abstract/weierstrass').WeierstrassPoint<bigint>;
-export declare function pointFromHex(hex: string): import('@noble/curves/abstract/weierstrass').WeierstrassPoint<bigint>;
+export declare function pointFromBytes(bytes: Uint8Array): import("@noble/curves/abstract/weierstrass").WeierstrassPoint<bigint>;
+export declare function pointFromHex(hex: string): import("@noble/curves/abstract/weierstrass").WeierstrassPoint<bigint>;
 export declare const getKeysetIdInt: (keysetId: string) => bigint;
 export declare function createRandomPrivateKey(): Uint8Array<ArrayBufferLike>;
 export declare function serializeMintKeys(mintKeys: MintKeys): SerializedMintKeys;

@@ -1,5 +1,5 @@
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { BlindSignature, IntRange, Keyset, MintKeys, Proof } from '../common/index';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type BlindSignature, type IntRange, type Keyset, type MintKeys, type Proof } from '../common/index';
 export type KeysetPair = {
     keysetId: string;
     pubKeys: MintKeys;

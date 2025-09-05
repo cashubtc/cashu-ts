@@ -3,7 +3,7 @@ import { CashuWallet } from './CashuWallet';
 import { OutputData } from './model/OutputData';
 import { PaymentRequest } from './model/PaymentRequest';
 import { setGlobalRequestOptions } from './request';
-import { LogLevel, ConsoleLogger, Logger } from './logger';
+import { LogLevel, ConsoleLogger, type Logger } from './logger';
 import { getEncodedToken, getEncodedTokenV4, getDecodedToken, deriveKeysetId, decodePaymentRequest, getDecodedTokenBinary, getEncodedTokenBinary, hasValidDleq } from './utils';
 import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
 import { createCairoDataPayload } from './crypto/client/NUTXX';

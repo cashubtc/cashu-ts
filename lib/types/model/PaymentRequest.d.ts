@@ -1,4 +1,4 @@
-import { RawPaymentRequest, NUT10Option, PaymentRequestTransport, PaymentRequestTransportType } from './types';
+import { type RawPaymentRequest, type NUT10Option, type PaymentRequestTransport, type PaymentRequestTransportType } from './types';
 export declare class PaymentRequest {
     transport?: PaymentRequestTransport[] | undefined;
     id?: string | undefined;

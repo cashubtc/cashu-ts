@@ -1,5 +1,5 @@
-import { DLEQ } from '../common/index';
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type DLEQ } from '../common/index';
+import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 /**
  * !!! WARNING !!! Not recommended for production use, due to non-constant time operations See:
  * https://github.com/cashubtc/cashu-crypto-ts/pull/2 for more details See:

@@ -1,5 +1,5 @@
-import { PartialMintQuoteResponse } from '../model/types/index';
-import { Logger } from '../logger';
+import type { PartialMintQuoteResponse } from '../model/types/index';
+import type { Logger } from '../logger';
 export type MintQuoteResponsePaidDeprecated = {
     paid?: boolean;
 };

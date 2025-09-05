@@ -1,5 +1,5 @@
 import { PaymentRequest } from './model/PaymentRequest';
-import { Keys, MintKeys, Proof, Token } from './model/types/index';
+import { type Keys, type MintKeys, type Proof, type Token } from './model/types/index';
 /**
  * Splits the amount into denominations of the provided @param keyset.
  *

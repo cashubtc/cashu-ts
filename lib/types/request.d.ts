@@ -1,4 +1,4 @@
-import { Logger } from './logger';
+import { type Logger } from './logger';
 type RequestArgs = {
     endpoint: string;
     requestBody?: Record<string, unknown>;
