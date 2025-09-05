@@ -299,8 +299,8 @@ class Wallet {
 
 	/**
 	 * @remarks
-	 * Mint data will be fetched if not supplied. Note: For keys and keysets - both must be provided, or
-	 * they will be ignored.
+	 * Mint data will be fetched if not supplied. Note: For keys and keysets - both must be provided,
+	 * or they will be ignored.
 	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
 	 * @param options.unit Optional. Set unit (default: 'sat')
 	 * @param options.keys Optional. Public keys from the mint.
