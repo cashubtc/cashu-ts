@@ -11,8 +11,6 @@ import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
 import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
 import { Keys as Keys_2 } from './model/types.js';
-import { MintActiveKeys as MintActiveKeys_2 } from './types.js';
-import { MintAllKeysets as MintAllKeysets_2 } from './types.js';
 import { MintContactInfo as MintContactInfo_2 } from './types';
 import { MintKeys as MintKeys_2 } from './types.js';
 import { MintKeys as MintKeys_3 } from './model/types.js';
@@ -432,7 +430,7 @@ export type JsonRpcReqParams = {
 
 // @public (undocumented)
 export class KeyChain {
-    constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset_2[] | MintAllKeysets_2, cachedKeys?: MintKeys_2[] | MintKeys_2 | MintActiveKeys_2);
+    constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset_2[], cachedKeys?: MintKeys_2[] | MintKeys_2);
     getActiveKeyset(): Keyset;
     getAllKeys(): MintKeys_2[];
     getCache(): {
@@ -1157,8 +1155,8 @@ export type V4ProofTemplate = {
 export class Wallet {
     constructor(mint: Mint | string, options?: {
         unit?: string;
-        keys?: MintKeys[] | MintKeys | MintActiveKeys;
-        keysets?: MintKeyset[] | MintAllKeysets;
+        keys?: MintKeys[] | MintKeys;
+        keysets?: MintKeyset[];
         mintInfo?: GetInfoResponse;
         bip39seed?: Uint8Array;
         denominationTarget?: number;

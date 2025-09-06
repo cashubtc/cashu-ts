@@ -41,8 +41,6 @@ import type {
 	MeltQuoteResponse,
 	MintKeys,
 	MintKeyset,
-	MintActiveKeys,
-	MintAllKeysets,
 	MintPayload,
 	MintQuotePayload,
 	Proof,
@@ -308,8 +306,8 @@ class Wallet {
 	 * provided. If only one is provided, it will be ignored.
 	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
 	 * @param options.unit Optional. Set unit (default: 'sat')
-	 * @param options.keys Optional. Cached public keys (single, array, or full MintActiveKeys).
-	 * @param options.keysets Optional. Cached keysets (array or full MintAllKeysets).
+	 * @param options.keys Optional. Cached public keys.
+	 * @param options.keysets Optional. Cached keysets.
 	 * @param options.mintInfo Optional. Mint info from the mint.
 	 * @param options.denominationTarget Target number proofs per denomination (default: 3)
 	 * @param options.bip39seed Optional. BIP39 seed for deterministic secrets.
@@ -319,8 +317,8 @@ class Wallet {
 		mint: Mint | string,
 		options?: {
 			unit?: string;
-			keys?: MintKeys[] | MintKeys | MintActiveKeys;
-			keysets?: MintKeyset[] | MintAllKeysets;
+			keys?: MintKeys[] | MintKeys;
+			keysets?: MintKeyset[];
 			mintInfo?: GetInfoResponse;
 			bip39seed?: Uint8Array;
 			denominationTarget?: number;

@@ -1,6 +1,6 @@
 import { Keyset } from './Keyset';
 import { type Mint } from '../Mint';
-import { type MintKeyset, type MintKeys, type MintAllKeysets, type MintActiveKeys } from './types';
+import { type MintKeyset, type MintKeys } from './types';
 
 export class KeyChain {
 	private mint: Mint;
@@ -11,19 +11,15 @@ export class KeyChain {
 	constructor(
 		mint: Mint,
 		unit: string,
-		cachedKeysets?: MintKeyset[] | MintAllKeysets,
-		cachedKeys?: MintKeys[] | MintKeys | MintActiveKeys,
+		cachedKeysets?: MintKeyset[],
+		cachedKeys?: MintKeys[] | MintKeys,
 	) {
 		this.mint = mint;
 		this.unit = unit;
 		if (cachedKeysets && cachedKeys) {
 			// Normalize and preload if both are provided
-			const allKeysets = 'keysets' in cachedKeysets ? cachedKeysets : { keysets: cachedKeysets };
-			const activeKeys =
-				'keysets' in cachedKeys
-					? cachedKeys
-					: { keysets: Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys] };
-			this.buildKeychain(allKeysets, activeKeys);
+			const arrayOfKeys = Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys];
+			this.buildKeychain(cachedKeysets, arrayOfKeys);
 		}
 	}
 
@@ -41,33 +37,33 @@ export class KeyChain {
 		}
 
 		// Fetch keys and keysets in parallel
-		const [allKeysets, allKeys] = await Promise.all([
-			this.mint.getKeySets(), // Returns MintAllKeysets
-			this.mint.getKeys(), // Returns MintActiveKeys
-		]);
+		const [allKeysetsResponse, allKeysResponse]: [
+			{ keysets: MintKeyset[] },
+			{ keysets: MintKeys[] },
+		] = await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
-		this.buildKeychain(allKeysets, allKeys);
+		this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
 	}
 
 	/**
-	 * Builds keychain from MintAllKeysets and MintActiveKeys data.
+	 * Builds keychain from Mint Keyset and Keys data.
 	 *
 	 * @param allKeysets Keyset data from mint.getKeySets() API.
 	 * @param allKeys Keys data from mint.getKeys() API.
 	 */
-	private buildKeychain(allKeysets: MintAllKeysets, allKeys: MintActiveKeys): void {
+	private buildKeychain(allKeysets: MintKeyset[], allKeys: MintKeys[]): void {
 		// Clear existing keysets to avoid stale data
 		this.keysets = {};
 
 		// Filter and create Keysets for unit
-		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this.unit);
+		const unitKeysets = allKeysets.filter((k: MintKeyset) => k.unit === this.unit);
 		unitKeysets.forEach((k: MintKeyset) => {
 			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk, k.final_expiry);
 		});
 
 		// Create map of keys filtered by unit for fast lookup
 		const keysMap = new Map<string, MintKeys>(
-			allKeys.keysets.filter((k) => k.unit === this.unit).map((k) => [k.id, k]),
+			allKeys.filter((k) => k.unit === this.unit).map((k) => [k.id, k]),
 		);
 
 		// Assign keys and validate active hex keysets
