@@ -1204,11 +1204,7 @@ export class Wallet {
     onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    receive(token: Token | string, outputType?: OutputType, config?: {
-        privkey?: string;
-        requireDleq?: boolean;
-        keysetId?: string;
-    }): Promise<Proof[]>;
+    receive(token: Token | string, outputType?: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsCustom(token: Token | string, data: OutputData[], config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsDeterministic(token: Token | string, counter: number, splitAmounts?: number[], proofsWeHave?: Proof[], config?: ReceiveConfig): Promise<Proof[]>;

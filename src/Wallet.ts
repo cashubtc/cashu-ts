@@ -740,11 +740,7 @@ class Wallet {
 	async receive(
 		token: Token | string,
 		outputType: OutputType = DEFAULT_OUTPUT,
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			keysetId?: string;
-		},
+		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const keysets = this.keyChain.getKeySets();
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
