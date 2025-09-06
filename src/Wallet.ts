@@ -767,7 +767,7 @@ class Wallet {
 		}
 		// Sign token if needed
 		if (config?.privkey) {
-			proofs = this.prepareProofsForSending(proofs);
+			proofs = this.prepareProofsForSending(proofs, config?.privkey);
 		}
 		// Check DLEQs if needed
 		const keys = this.keyChain.getKeys(config?.keysetId);

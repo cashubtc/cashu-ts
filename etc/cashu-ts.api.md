@@ -932,6 +932,7 @@ export type RawTransport = {
 // @public
 export type ReceiveConfig = {
     keysetId?: string;
+    privkey?: string | string[];
     requireDleq?: boolean;
     proofsWeHave?: Proof[];
 };
