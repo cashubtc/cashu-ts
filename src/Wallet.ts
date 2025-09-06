@@ -111,6 +111,7 @@ export type SendOfflineConfig = {
  */
 export type ReceiveConfig = {
 	keysetId?: string;
+	privkey?: string | string[];
 	requireDleq?: boolean;
 	proofsWeHave?: Proof[];
 };
@@ -669,6 +670,8 @@ class Wallet {
 	/**
 	 * Receives a cashu token and returns P2PK-locked proofs.
 	 *
+	 * @remarks
+	 * For apps storing P2PK locked proofs. Uses NUT-11 options for locking.
 	 * @param token Cashu token.
 	 * @param options P2PK locking options (e.g., pubkey, locktime).
 	 * @param denominations Optional custom amounts for splitting outputs.
@@ -748,24 +751,32 @@ class Wallet {
 		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
+		let proofs: Proof[] = [];
 		const keysets = this.keyChain.getKeySets();
+		// Decode token
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
 		if (decodedToken.mint !== this.mint.mintUrl) {
 			const message = 'Token belongs to a different mint';
 			this._logger.error(message);
 			throw new Error(message);
 		}
-		const { proofs } = decodedToken;
+		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		if (totalAmount === 0) {
 			return [];
 		}
+		// Sign token if needed
+		if (config?.privkey) {
+			proofs = this.prepareProofsForSending(proofs);
+		}
+		// Check DLEQs if needed
 		const keys = this.keyChain.getKeys(config?.keysetId);
 		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
 			const message = 'Token contains proofs with invalid or missing DLEQ';
 			this._logger.error(message);
 			throw new Error(message);
 		}
+		// Create outputs and swap for new proofs
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
 		const outputs = this.configureOutputs(
 			netAmount,
@@ -789,9 +800,9 @@ class Wallet {
 	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @remarks
-	 * If proofs are P2PK-locked, call prepareProofsForSending first to sign them. The default config
-	 * uses exact match selection, and does not includeFees or requireDleq. Because the send is
-	 * offline, the user will unlock the signed proofs when they receive them online.
+	 * If proofs are P2PK-locked to your public key, call prepareProofsForSending first to sign them.
+	 * The default config uses exact match selection, and does not includeFees or requireDleq. Because
+	 * the send is offline, the user will unlock the signed proofs when they receive them online.
 	 * @param amount Amount to send.
 	 * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
 	 * @param config Optional parameters for the send.
@@ -820,6 +831,7 @@ class Wallet {
 	 *
 	 * @remarks
 	 * Beginner-friendly default for privacy-focused sends. Uses random blinding to avoid linkability.
+	 * If proofs are P2PK-locked to your public key, call prepareProofsForSending first to sign them.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param config Optional parameters (e.g. includeFees).
@@ -835,7 +847,8 @@ class Wallet {
 	 *
 	 * @remarks
 	 * Beginner-friendly for recoverable sends. Requires wallet seed. The keep counter is
-	 * automatically offset to account for send outputs, so a single counter can be used.
+	 * automatically offset to account for send outputs, so a single counter can be used. If proofs
+	 * are P2PK-locked to your public key, call prepareProofsForSending first to sign them.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param counter Starting counter for deterministic secrets.
@@ -864,7 +877,8 @@ class Wallet {
 	 *
 	 * @remarks
 	 * Beginner-friendly for secure sends (e.g. locked to pubkey). Uses NUT-11 options for locking.
-	 * Change proofs will be deterministic if a counter is provided, random otherwise.
+	 * Change proofs will be deterministic if a counter is provided, random otherwise. If proofs are
+	 * already P2PK-locked to your key, call prepareProofsForSending first to sign them.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
@@ -891,7 +905,7 @@ class Wallet {
 	 * Sends proofs with P2PK-locked change (keep) outputs (random for send).
 	 *
 	 * @remarks
-	 * For secure storage of change proofs. Uses NUT-11 options for keep locking.
+	 * For apps storing locked proofs. Uses NUT-11 options to lock change.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param p2pkOptions P2PK locking options for keep.
@@ -918,7 +932,8 @@ class Wallet {
 	 * @remarks
 	 * This method performs an online swap if necessary. The `outputConfig` defaults to
 	 * `DEFAULT_OUTPUT_CONFIG`, which uses random blinding factors for both `send` and `keep` outputs.
-	 * For common cases, use `sendAs...` helpers (eg sendAsDefault, sendAsP2PK etc).
+	 * For common cases, use `sendAs...` helpers (eg sendAsDefault, sendAsP2PK etc). If proofs are
+	 * P2PK-locked to your public key, call prepareProofsForSending first to sign them.
 	 * @example
 	 *
 	 * ```typescript
