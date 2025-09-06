@@ -7,6 +7,7 @@ import { Mint } from './Mint';
 /**
  * @v3 imports
  */
+import { KeyChain } from './model/KeyChain';
 import {
 	type P2PKOptions,
 	type OutputType,
@@ -54,6 +55,7 @@ export {
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
 	Mint,
+	KeyChain
 };
 
 export {

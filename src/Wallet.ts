@@ -286,7 +286,13 @@ export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
  * @v3
  */
 class Wallet {
+	/**
+	 * Mint instance - allows direct calls to the mint.
+	 */
 	readonly mint: Mint;
+	/**
+	 * KeyChain instance - contains wallet keysets/keys.
+	 */
 	readonly keyChain: KeyChain;
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';

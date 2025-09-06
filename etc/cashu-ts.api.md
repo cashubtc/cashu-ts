@@ -430,6 +430,25 @@ export type JsonRpcReqParams = {
     subId: string;
 };
 
+// @public (undocumented)
+export class KeyChain {
+    constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset_2[] | MintAllKeysets_2, cachedKeys?: MintKeys_2[] | MintKeys_2 | MintActiveKeys_2);
+    getActiveKeyset(): Keyset;
+    getAllKeys(): MintKeys_2[];
+    getCache(): {
+        keysets: MintKeyset_2[];
+        keys: MintKeys_2[];
+        unit: string;
+        mintUrl: string;
+    };
+    getKeys(id?: string): MintKeys_2;
+    // Warning: (ae-forgotten-export) The symbol "Keyset" needs to be exported by the entry point index.d.ts
+    getKeyset(id: string): Keyset;
+    getKeysetList(): Keyset[];
+    getKeySets(): MintKeyset_2[];
+    init(forceRefresh?: boolean): Promise<void>;
+}
+
 // @public
 export type Keys = {
     [amount: number]: string;
@@ -1158,16 +1177,9 @@ export class Wallet {
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
-    getAllKeys(): MintKeys[];
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
-    getKeys(keysetId?: string): MintKeys;
-    getKeysetId(): string;
-    getKeySets(): MintKeyset[];
     getMintInfo(): MintInfo;
-    // Warning: (ae-forgotten-export) The symbol "KeyChain" needs to be exported by the entry point index.d.ts
-    //
-    // (undocumented)
     readonly keyChain: KeyChain;
     loadMint(forceRefresh?: boolean): Promise<void>;
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
@@ -1177,7 +1189,6 @@ export class Wallet {
         quote: Bolt12MeltQuoteResponse;
         change: Proof[];
     }>;
-    // (undocumented)
     readonly mint: Mint;
     mintProofs(amount: number, quote: string | MintQuoteResponse, outputType?: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
