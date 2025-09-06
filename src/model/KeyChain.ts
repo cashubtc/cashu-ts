@@ -1,7 +1,6 @@
 import { Keyset } from './Keyset';
 import { type Mint } from '../Mint';
 import { type MintKeyset, type MintKeys, type MintAllKeysets, type MintActiveKeys } from './types';
-import { verifyKeysetId } from '../utils';
 
 export class KeyChain {
 	private mint: Mint;
@@ -66,11 +65,22 @@ export class KeyChain {
 			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk, k.final_expiry);
 		});
 
-		// Assign keys to matching keysets
-		allKeys.keysets.forEach((mk: MintKeys) => {
-			const keyset = this.keysets[mk.id];
-			if (keyset && mk.unit === this.unit) {
+		// Create map of keys filtered by unit for fast lookup
+		const keysMap = new Map<string, MintKeys>(
+			allKeys.keysets.filter((k) => k.unit === this.unit).map((k) => [k.id, k]),
+		);
+
+		// Assign keys and validate only for hex keysets
+		// Non-hex keysets are legacy/inactive/invalid, so have no keys
+		Object.values(this.keysets).forEach((keyset) => {
+			if (!keyset.hasHexId) return;
+
+			const mk = keysMap.get(keyset.id);
+			if (mk) {
 				keyset.keyPairs = mk.keys;
+				if (!keyset.verify()) {
+					throw new Error(`Keyset verification failed for ID ${keyset.id}`);
+				}
 			}
 		});
 
@@ -138,9 +148,10 @@ export class KeyChain {
 		if (!mintKeys) {
 			throw new Error(`No keys loaded for keyset '${id || keyset.id}'`);
 		}
-		if (!keyset.hasHexId || !verifyKeysetId(mintKeys)) {
-			throw new Error(`Couldn't verify keyset ID '${id || keyset.id}'`);
+		if (!keyset.hasHexId) {
+			throw new Error(`Non-hex keyset IDs are not supported for keys`);
 		}
+		// No need for verify here; validated in build
 		return mintKeys;
 	}
 
@@ -155,11 +166,12 @@ export class KeyChain {
 			throw new Error('KeyChain not initialized; call init() first');
 		}
 		const allKeysets = this.getKeysetList();
-		return allKeysets
+		const allKeys = allKeysets
 			.filter((k) => k.hasHexId)
 			.map((k) => k.toMintKeys())
-			.filter((mk): mk is MintKeys => mk !== null)
-			.filter((mk) => verifyKeysetId(mk));
+			.filter((mk): mk is MintKeys => mk !== null);
+		// No need for verify filter; validated in build
+		return allKeys;
 	}
 
 	/**

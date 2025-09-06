@@ -1,5 +1,6 @@
-import { isValidHex } from '../utils';
+import { isValidHex, deriveKeysetId } from '../utils';
 import { type MintKeyset, type MintKeys } from './types';
+import { hexToBytes } from '@noble/curves/abstract/utils';
 
 export class Keyset {
 	private _id: string;
@@ -78,5 +79,19 @@ export class Keyset {
 			unit: this._unit,
 			keys: this._keyPairs!,
 		};
+	}
+
+	/**
+	 * Verifies that the keyset's ID matches the derived ID from its keys, unit, and expiry.
+	 *
+	 * @returns True if verification succeeds, false otherwise (e.g., no keys or mismatch).
+	 */
+	verify(): boolean {
+		if (!this.hasKeyPairs) {
+			return false;
+		}
+		const versionByte = hexToBytes(this._id)[0];
+		const derivedId = deriveKeysetId(this._keyPairs!, this._unit, this._final_expiry, versionByte);
+		return derivedId === this._id;
 	}
 }
