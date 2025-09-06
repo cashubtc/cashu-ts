@@ -85,14 +85,14 @@ export class KeyChain {
 	}
 
 	/**
-	 * Get a keyset by ID. Assumes init() called.
+	 * Get a keyset by ID or the active keyset if no ID is provided.
 	 *
-	 * @param id Keyset ID.
+	 * @param id Optional keyset ID.
 	 * @returns Keyset with keys.
-	 * @throws If not found.
+	 * @throws If keyset not found or uninitialized.
 	 */
-	getKeyset(id: string): Keyset {
-		const keyset = this.keysets[id];
+	getKeyset(id?: string): Keyset {
+		const keyset = id ? this.keysets[id] : this.getActiveKeyset();
 		if (!keyset) {
 			throw new Error(`Keyset '${id}' not found`);
 		}
@@ -124,63 +124,11 @@ export class KeyChain {
 	 * @returns Array of Keysets.
 	 * @throws If uninitialized.
 	 */
-	getKeysetList(): Keyset[] {
+	getKeysets(): Keyset[] {
 		if (Object.keys(this.keysets).length === 0) {
 			throw new Error('KeyChain not initialized');
 		}
 		return Object.values(this.keysets);
-	}
-
-	/**
-	 * Get all keysets for the unit in Mint API format.
-	 *
-	 * @returns Array of MintKeyset.
-	 * @throws If uninitialized.
-	 */
-	getKeySets(): MintKeyset[] {
-		if (Object.keys(this.keysets).length === 0) {
-			throw new Error('KeyChain not initialized');
-		}
-		return this.getKeysetList().map((k) => k.toMintKeyset());
-	}
-
-	/**
-	 * Get keys for a keyset (default: the active keyset)
-	 *
-	 * @param id Optional ID; defaults to active.
-	 * @returns {id, unit, final_expiry?, keys} .
-	 * @throws If no keys found.
-	 */
-	getKeys(id?: string): MintKeys {
-		const keyset = id ? this.getKeyset(id) : this.getActiveKeyset();
-		const mintKeys = keyset.toMintKeys();
-		if (!mintKeys) {
-			throw new Error(`No keys loaded for keyset '${id || keyset.id}'`);
-		}
-		if (!keyset.hasHexId) {
-			throw new Error(`Non-hex keyset IDs are not supported for keys`);
-		}
-		// No need for verify here; validated in build
-		return mintKeys;
-	}
-
-	/**
-	 * Get all keys for all loaded keysets in the unit.
-	 *
-	 * @returns Array of MintKeys for keysets that have keys loaded.
-	 * @throws If uninitialized or if any keyset ID verification fails.
-	 */
-	getAllKeys(): MintKeys[] {
-		if (Object.keys(this.keysets).length === 0) {
-			throw new Error('KeyChain not initialized');
-		}
-		const allKeysets = this.getKeysetList();
-		const allKeys = allKeysets
-			.filter((k) => k.hasHexId)
-			.map((k) => k.toMintKeys())
-			.filter((mk): mk is MintKeys => mk !== null);
-		// No need for verify filter; validated in build
-		return allKeys;
 	}
 
 	/**
@@ -195,10 +143,14 @@ export class KeyChain {
 		unit: string;
 		mintUrl: string;
 	} {
-		const allKeysets = this.getKeysetList();
+		const allKeysets = this.getKeysets();
+		const allKeys = allKeysets
+			.filter((k) => k.hasHexId)
+			.map((k) => k.toMintKeys())
+			.filter((mk): mk is MintKeys => mk !== null);
 		return {
 			keysets: allKeysets.map((k) => k.toMintKeyset()),
-			keys: this.getAllKeys(),
+			keys: allKeys,
 			unit: this.unit,
 			mintUrl: this.mint.mintUrl,
 		};

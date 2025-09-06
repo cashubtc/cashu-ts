@@ -24,6 +24,7 @@ import {
 	type V4InnerToken,
 	type V4ProofTemplate,
 } from './model/types';
+import { type Keyset } from './model/Keyset';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
 import { Bytes } from './utils/Bytes';
 
@@ -372,7 +373,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @param token An encoded cashu token (cashuAey...)
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]) {
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
 	// remove prefixes
 	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
 	uriPrefixes.forEach((prefix: string) => {
@@ -611,6 +612,7 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
  * @param keys The keyset to be verified.
  * @returns True if the verification was successful, false otherwise.
  * @throws Error if the keyset ID version is unrecognized.
+ * @deprecated Now part of Keyset class
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const isBase64 = isBase64String(keys.id);
@@ -631,7 +633,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
  */
-function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[]): Proof[] {
+function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): Proof[] {
 	const newProofs = [];
 	for (const proof of proofs) {
 		let idBytes;
@@ -680,7 +682,7 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[]): Proof[] {
  * @returns True if verification succeeded, false otherwise.
  * @throws Error if @param proof does not match any key in @param keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
+export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
 	if (proof.dleq == undefined) {
 		return false;
 	}

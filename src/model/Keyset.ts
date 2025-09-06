@@ -82,7 +82,7 @@ export class Keyset {
 	}
 
 	/**
-	 * Temporary helper for migration.
+	 * To Mint API MintKeyset format.
 	 *
 	 * @returns MintKeyset object.
 	 */
@@ -97,7 +97,7 @@ export class Keyset {
 	}
 
 	/**
-	 * Temporary helper for migration.
+	 * To Mint API MintKeys format.
 	 *
 	 * @returns MintKeys object.
 	 */

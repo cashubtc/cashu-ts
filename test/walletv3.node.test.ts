@@ -116,18 +116,19 @@ describe('test wallet init', () => {
 		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
 
 		// Verify keysets
-		const keysets = wallet.keyChain.getKeySets();
-		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		const keysets = wallet.keyChain.getKeysets();
+		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
-		expect(keysets[0]).toEqual({
+		expect(keysets[0].toMintKeyset()).toEqual({
 			id: '00bd033559de27d0',
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
+			final_expiry: undefined,
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getAllKeys();
+		const keys = wallet.keyChain.getCache().keys;
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -144,8 +145,8 @@ describe('test wallet init', () => {
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
-		const specificKeys = wallet.keyChain.getKeys('00bd033559de27d0');
-		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
+		const specificKeys = wallet.keyChain.getKeyset('00bd033559de27d0').keys;
+		expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
 	});
 
 	it('should initialize with mint URL string and load mint info, keys, and keysets', async () => {
@@ -163,18 +164,19 @@ describe('test wallet init', () => {
 		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
 
 		// Verify keysets
-		const keysets = wallet.keyChain.getKeySets();
-		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		const keysets = wallet.keyChain.getKeysets();
+		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
-		expect(keysets[0]).toEqual({
+		expect(keysets[0].toMintKeyset()).toEqual({
 			id: '00bd033559de27d0',
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
+			final_expiry: undefined,
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getAllKeys();
+		const keys = wallet.keyChain.getCache().keys;
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -191,8 +193,8 @@ describe('test wallet init', () => {
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
-		const specificKeys = wallet.keyChain.getKeys('00bd033559de27d0');
-		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
+		const specificKeys = wallet.keyChain.getKeyset('00bd033559de27d0').keys;
+		expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
 	});
 
 	it('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
@@ -218,18 +220,19 @@ describe('test wallet init', () => {
 		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
 
 		// Verify keysets
-		const keysets = wallet.keyChain.getKeySets();
-		expect(keysets).toEqual(dummyKeysetResp.keysets);
+		const keysets = wallet.keyChain.getKeysets();
+		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
-		expect(keysets[0]).toEqual({
+		expect(keysets[0].toMintKeyset()).toEqual({
 			id: '00bd033559de27d0',
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
+			final_expiry: undefined,
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getAllKeys();
+		const keys = wallet.keyChain.getCache().keys;
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -246,8 +249,8 @@ describe('test wallet init', () => {
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
-		const specificKeys = wallet.keyChain.getKeys('00bd033559de27d0');
-		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
+		const specificKeys = wallet.keyChain.getKeyset('00bd033559de27d0').keys;
+		expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
 
 		// Verify no network calls were made
 		expect(spyMintInfo).toHaveBeenCalledTimes(0);
@@ -259,11 +262,11 @@ describe('test wallet init', () => {
 		spyKeys.mockRestore();
 	});
 
-	it('should throw when retrieving keys for an invalid keyset ID', async () => {
+	it('should throw when retrieving an invalid keyset ID', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
-		expect(() => wallet.keyChain.getKeys('invalid-keyset-id')).toThrow(
+		expect(() => wallet.keyChain.getKeyset('invalid-keyset-id')).toThrow(
 			"Keyset 'invalid-keyset-id' not found",
 		);
 	});
@@ -271,8 +274,7 @@ describe('test wallet init', () => {
 	it('should throw when accessing getters before loadMint', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
-		expect(() => wallet.keyChain.getKeySets()).toThrow('KeyChain not initialized');
-		expect(() => wallet.keyChain.getAllKeys()).toThrow('KeyChain not initialized');
+		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
 		expect(() => wallet.keyChain.getActiveKeyset().id).toThrow('KeyChain not initialized');
 	});
 
@@ -300,9 +302,9 @@ describe('test wallet init', () => {
 			{ method: 'twitter', info: '@me' },
 			{ method: 'nostr', info: 'npub1337' },
 		]);
-		const keysets = wallet.keyChain.getKeySets();
-		expect(keysets).toEqual(dummyKeysetResp.keysets);
-		const keys = wallet.keyChain.getAllKeys();
+		const keysets = wallet.keyChain.getKeysets();
+		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
+		const keys = wallet.keyChain.getCache().keys;
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		const keysetId = wallet.keyChain.getActiveKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
@@ -671,7 +673,7 @@ describe('receive', () => {
 
 		const customData = OutputData.createRandomData(
 			3,
-			wallet.keyChain.getKeys('00bd033559de27d0')!,
+			wallet.keyChain.getKeyset('00bd033559de27d0')!,
 			[1, 1, 1],
 		);
 		const proofs = await wallet.receive(token3sat, { type: 'custom', data: customData });
@@ -1624,7 +1626,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with locktime and single refund key', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
 			21,
@@ -1642,7 +1644,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with locktime and multiple refund keys', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
@@ -1660,7 +1662,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk without locktime and no refund keys', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
@@ -1673,7 +1675,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with unexpected requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', requiredSignatures: 5 },
 			21,
@@ -1690,7 +1692,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'] },
 			21,
@@ -1708,7 +1710,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple pks with 2-of-3 requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 2 },
 			21,
@@ -1726,7 +1728,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple pks with out of range requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 5 },
 			21,
@@ -1744,7 +1746,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1768,7 +1770,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with no requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
@@ -1787,7 +1789,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with 2-of-3 requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1811,7 +1813,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with out of range requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1835,7 +1837,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with expired multisig', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.keyChain.getKeys();
+		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: ['thisisatest', 'asecondpk', 'athirdpk'],

@@ -28,6 +28,7 @@ import { hashToCurve } from './crypto/common/index';
 import { Mint } from './Mint';
 import { MintInfo } from './model/MintInfo';
 import { KeyChain } from './model/KeyChain';
+import { type Keyset } from './model/Keyset';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
 import type {
 	GetInfoResponse,
@@ -405,7 +406,7 @@ class Wallet {
 	 */
 	private createOutputData(
 		amount: number,
-		keyset: MintKeys,
+		keyset: Keyset,
 		outputType: OutputType,
 	): OutputDataLike[] {
 		if (amount <= 0) {
@@ -478,7 +479,7 @@ class Wallet {
 	 * Configures outputs with fee adjustments and optimization.
 	 *
 	 * @param amount The total amount for outputs.
-	 * @param keys The mint keys.
+	 * @param keyset The mint keyset.
 	 * @param outputType The output configuration.
 	 * @param includeFees Whether to include swap fees in the output amount.
 	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
@@ -486,7 +487,7 @@ class Wallet {
 	 */
 	private configureOutputs(
 		amount: number,
-		keys: MintKeys,
+		keyset: Keyset,
 		outputType: OutputType,
 		includeFees: boolean = false,
 		proofsWeHave: Proof[] = [],
@@ -500,7 +501,7 @@ class Wallet {
 				this._logger.error(message);
 				throw new Error(message);
 			}
-			return this.createOutputData(adjustedAmount, keys, outputType);
+			return this.createOutputData(adjustedAmount, keyset, outputType);
 		}
 
 		// Use denominations provided
@@ -512,7 +513,7 @@ class Wallet {
 			denominations = getKeepAmounts(
 				proofsWeHave,
 				adjustedAmount,
-				keys.keys,
+				keyset.keys,
 				this._denominationTarget,
 			);
 		}
@@ -520,26 +521,27 @@ class Wallet {
 		// If no denominations were provided or optimized, compute the default split
 		// before calculating fees to ensure accurate output count.
 		if (denominations.length === 0) {
-			denominations = splitAmount(adjustedAmount, keys.keys);
+			denominations = splitAmount(adjustedAmount, keyset.keys);
 		}
 
 		// With includeFees, we create additional output amounts to cover the
 		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
 		if (includeFees) {
-			let receiveFee = this.getFeesForKeyset(denominations.length, keys.id);
-			let receiveFeeAmounts = splitAmount(receiveFee, keys.keys);
+			let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
+			let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
 			while (
-				this.getFeesForKeyset(denominations.length + receiveFeeAmounts.length, keys.id) > receiveFee
+				this.getFeesForKeyset(denominations.length + receiveFeeAmounts.length, keyset.id) >
+				receiveFee
 			) {
 				receiveFee++;
-				receiveFeeAmounts = splitAmount(receiveFee, keys.keys);
+				receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
 			}
 			adjustedAmount += receiveFee;
 			denominations = [...denominations, ...receiveFeeAmounts];
 		}
 
 		const effectiveOutputType: OutputType = { ...outputType, denominations };
-		return this.createOutputData(adjustedAmount, keys, effectiveOutputType);
+		return this.createOutputData(adjustedAmount, keyset, effectiveOutputType);
 	}
 
 	/**
@@ -749,7 +751,7 @@ class Wallet {
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		let proofs: Proof[] = [];
-		const keysets = this.keyChain.getKeySets();
+		const keysets = this.keyChain.getKeysets();
 		// Decode token
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
 		if (decodedToken.mint !== this.mint.mintUrl) {
@@ -767,8 +769,8 @@ class Wallet {
 			proofs = this.signP2PKProofs(proofs, config?.privkey);
 		}
 		// Check DLEQs if needed
-		const keys = this.keyChain.getKeys(config?.keysetId);
-		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
+		const keyset = this.keyChain.getKeyset(config?.keysetId);
+		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keyset))) {
 			const message = 'Token contains proofs with invalid or missing DLEQ';
 			this._logger.error(message);
 			throw new Error(message);
@@ -777,14 +779,16 @@ class Wallet {
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
 		const outputs = this.configureOutputs(
 			netAmount,
-			keys,
+			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
 			config?.proofsWeHave,
 		);
 		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
-		const proofsReceived = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const proofsReceived = swapTransaction.outputData.map((d, i) =>
+			d.toProof(signatures[i], keyset),
+		);
 		const orderedProofs: Proof[] = [];
 		swapTransaction.sortedIndices.forEach((s, o) => {
 			orderedProofs[s] = proofsReceived[o];
@@ -1003,11 +1007,11 @@ class Wallet {
 		}
 
 		// Fetch keys
-		const keys = this.keyChain.getKeys(keysetId);
+		const keyset = this.keyChain.getKeyset(keysetId);
 
 		// Shape SEND output type and create outputs
 		const sendType: OutputType = outputConfig.send ?? DEFAULT_OUTPUT;
-		const sendOutputs = this.configureOutputs(amount, keys, sendType, includeFees);
+		const sendOutputs = this.configureOutputs(amount, keyset, sendType, includeFees);
 		const sendTarget = OutputData.sumOutputAmounts(sendOutputs);
 
 		// Select the subset of proofs needed to cover the swap (sendTarget + swap fee)
@@ -1055,7 +1059,7 @@ class Wallet {
 		// Use unselectedProofs to optimize denominations if needed
 		const keepOutputs = this.configureOutputs(
 			changeAmount,
-			keys,
+			keyset,
 			keepType,
 			false,
 			unselectedProofs,
@@ -1066,7 +1070,7 @@ class Wallet {
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
-		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
+		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const reorderedProofs = Array(swapProofs.length);
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
 		swapTransaction.sortedIndices.forEach((s, i) => {
@@ -1431,7 +1435,7 @@ class Wallet {
 			return this.keyChain.getKeyset(proof.id).fee;
 		} catch (e) {
 			const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
-			this._logger.error(message, { e, keychain: this.keyChain.getKeysetList() });
+			this._logger.error(message, { e, keychain: this.keyChain.getKeysets() });
 			throw new Error(message);
 		}
 	}
@@ -1505,7 +1509,7 @@ class Wallet {
 		options?: RestoreOptions,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
-		const keys = this.keyChain.getKeys(keysetId);
+		const keyset = this.keyChain.getKeyset(keysetId);
 		if (!this._seed) {
 			const message = 'CashuWallet must be initialized with a seed to use restore';
 			this._logger.error(message);
@@ -1517,7 +1521,7 @@ class Wallet {
 			amounts.length,
 			this._seed,
 			start,
-			keys,
+			keyset,
 			amounts,
 		);
 
@@ -1536,7 +1540,7 @@ class Wallet {
 			if (matchingSig) {
 				lastCounterWithSignature = start + i;
 				outputData[i].blindedMessage.amount = matchingSig.amount;
-				restoredProofs.push(outputData[i].toProof(matchingSig, keys));
+				restoredProofs.push(outputData[i].toProof(matchingSig, keyset));
 			}
 		}
 
@@ -2180,7 +2184,7 @@ class Wallet {
 			throw new Error('Amount must be positive');
 		}
 		// Create outputs for our proofs (we are receiving, so no includeFees)
-		const keyset = this.keyChain.getKeys(keysetId);
+		const keyset = this.keyChain.getKeyset(keysetId);
 		const outputs = this.configureOutputs(amount, keyset, outputType, false, proofsWeHave);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
@@ -2239,7 +2243,7 @@ class Wallet {
 		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
 		const { keysetId } = config || {};
-		const keys = this.keyChain.getKeys(keysetId);
+		const keyset = this.keyChain.getKeyset(keysetId);
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
 
@@ -2268,7 +2272,7 @@ class Wallet {
 			};
 
 			// Generate the blank outputs (no fees as we are receiving change)
-			outputData = this.configureOutputs(changeAmount, keys, effectiveOutputType, false);
+			outputData = this.configureOutputs(changeAmount, keyset, effectiveOutputType, false);
 		}
 
 		// Prepare proofs for mint
@@ -2283,11 +2287,11 @@ class Wallet {
 			const meltResponse = await this.mint.meltBolt12(meltPayload);
 			return {
 				quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
-				change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
+				change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [],
 			};
 		}
 		const meltResponse = await this.mint.melt(meltPayload);
-		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [];
+		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
 		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
 		return { quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request }, change };
 	}

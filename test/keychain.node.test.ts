@@ -110,12 +110,12 @@ describe('KeyChain initialization', () => {
 		await keyChain.init();
 
 		// Verify keysets loaded and filtered by unit
-		const keysets = keyChain.getKeysetList();
+		const keysets = keyChain.getKeysets();
 		expect(keysets).toHaveLength(4); // All from dummy, assuming same unit
 		expect(keysets.map((k) => k.id)).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id));
 
 		// Verify keys assigned
-		const keysForFirst = keyChain.getKeys('00bd033559de27d0');
+		const keysForFirst = keyChain.getKeyset('00bd033559de27d0').toMintKeys();
 		expect(keysForFirst).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset (lowest fee, active, hex ID)
@@ -171,7 +171,7 @@ describe('KeyChain initialization', () => {
 		const cachedActive = cachedChain.getActiveKeyset();
 		expect(cachedActive.id).toBe(originalChain.getActiveKeyset().id);
 		expect(cachedActive.fee).toBe(0);
-		expect(cachedChain.getKeysetList().length).toBe(originalChain.getKeysetList().length);
+		expect(cachedChain.getKeysets().length).toBe(originalChain.getKeysets().length);
 
 		// Get cache from cachedChain and compare
 		const newCache = cachedChain.getCache();
@@ -200,20 +200,6 @@ describe('KeyChain getters', () => {
 		expect(() => keyChain.getKeyset('invalid')).toThrow("Keyset 'invalid' not found");
 	});
 
-	test('should throw if no keys loaded for keyset', async () => {
-		// Simulate no keys from mint
-		server.use(
-			http.get(mintUrl + '/v1/keys', () => {
-				return HttpResponse.json({ keysets: [] }); // No keys
-			}),
-		);
-		const tempKeyChain = new KeyChain(mint, unit);
-		await tempKeyChain.init();
-		expect(() => tempKeyChain.getKeys('00bd033559de27d0')).toThrow(
-			"No keys loaded for keyset '00bd033559de27d0'",
-		);
-	});
-
 	test('should get active keyset correctly', () => {
 		const active = keyChain.getActiveKeyset();
 		expect(active.id).toBe('00bd033559de27d0'); // Lowest fee 0
@@ -221,27 +207,15 @@ describe('KeyChain getters', () => {
 	});
 
 	test('should get keyset list', () => {
-		const list = keyChain.getKeysetList();
+		const list = keyChain.getKeysets();
 		expect(list).toHaveLength(4);
 		expect(list.map((k) => k.id).sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
-	});
-
-	test('should get keys for specific or active keyset', () => {
-		const activeKeys = keyChain.getKeys();
-		expect(activeKeys.id).toBe('00bd033559de27d0');
-		expect(activeKeys.unit).toBe('sat');
-		expect(activeKeys.keys).toEqual(dummyKeysResp.keysets[0].keys);
-
-		const specificKeys = keyChain.getKeys('009a1f293253e41e');
-		expect(specificKeys.id).toBe('009a1f293253e41e');
-		expect(specificKeys.keys).toEqual(dummyKeysResp.keysets[1].keys);
 	});
 
 	test('should throw getters if not initialized', () => {
 		const uninitChain = new KeyChain(mint, unit);
 		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
 		expect(() => uninitChain.getActiveKeyset()).toThrow('KeyChain not initialized');
-		expect(() => uninitChain.getKeysetList()).toThrow('KeyChain not initialized');
-		expect(() => uninitChain.getKeys()).toThrow('KeyChain not initialized');
+		expect(() => uninitChain.getKeysets()).toThrow('KeyChain not initialized');
 	});
 });

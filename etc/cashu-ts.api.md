@@ -291,8 +291,10 @@ export function deriveKeysetId(keys: Keys_2, unit?: string, expiry?: number, ver
 
 export { getBlindedAuthToken }
 
+// Warning: (ae-forgotten-export) The symbol "Keyset" needs to be exported by the entry point index.d.ts
+//
 // @public
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset_3[]): Token_2;
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset_3[] | Keyset[]): Token_2;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token_2;
@@ -371,7 +373,7 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function hasValidDleq(proof: Proof_3, keyset: MintKeys_3): boolean;
+export function hasValidDleq(proof: Proof_3, keyset: MintKeys_3 | Keyset): boolean;
 
 // @public
 export type HTLCWitness = {
@@ -432,18 +434,14 @@ export type JsonRpcReqParams = {
 export class KeyChain {
     constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset_2[], cachedKeys?: MintKeys_2[] | MintKeys_2);
     getActiveKeyset(): Keyset;
-    getAllKeys(): MintKeys_2[];
     getCache(): {
         keysets: MintKeyset_2[];
         keys: MintKeys_2[];
         unit: string;
         mintUrl: string;
     };
-    getKeys(id?: string): MintKeys_2;
-    // Warning: (ae-forgotten-export) The symbol "Keyset" needs to be exported by the entry point index.d.ts
-    getKeyset(id: string): Keyset;
-    getKeysetList(): Keyset[];
-    getKeySets(): MintKeyset_2[];
+    getKeyset(id?: string): Keyset;
+    getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
 }
 
