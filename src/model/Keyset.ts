@@ -51,6 +51,10 @@ export class Keyset {
 		return this._final_expiry;
 	}
 
+	get keyPairs(): Record<number, string> | undefined {
+		return this._keyPairs;
+	}
+
 	set keyPairs(keyPairs: Record<number, string>) {
 		this._keyPairs = keyPairs;
 	}

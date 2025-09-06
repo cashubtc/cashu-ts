@@ -76,11 +76,6 @@ export class KeyChain {
 
 		// Set active ID
 		this._activeKeysetId = this.getActiveKeyset().id;
-
-		// Validate
-		if (!this._activeKeysetId) {
-			throw new Error('No active keyset found for unit');
-		}
 	}
 
 	/**
@@ -143,7 +138,7 @@ export class KeyChain {
 		if (!mintKeys) {
 			throw new Error(`No keys loaded for keyset '${id || keyset.id}'`);
 		}
-		if (!verifyKeysetId(mintKeys)) {
+		if (!keyset.hasHexId || !verifyKeysetId(mintKeys)) {
 			throw new Error(`Couldn't verify keyset ID '${id || keyset.id}'`);
 		}
 		return mintKeys;
@@ -160,15 +155,11 @@ export class KeyChain {
 			throw new Error('KeyChain not initialized; call init() first');
 		}
 		const allKeysets = this.getKeysetList();
-		const allKeys = allKeysets
+		return allKeysets
+			.filter((k) => k.hasHexId)
 			.map((k) => k.toMintKeys())
-			.filter((mk): mk is MintKeys => mk !== null);
-		allKeys.forEach((keys) => {
-			if (!verifyKeysetId(keys)) {
-				throw new Error(`Couldn't verify keyset ID '${keys.id}'`);
-			}
-		});
-		return allKeys;
+			.filter((mk): mk is MintKeys => mk !== null)
+			.filter((mk) => verifyKeysetId(mk));
 	}
 
 	/**
@@ -186,7 +177,7 @@ export class KeyChain {
 		const allKeysets = this.getKeysetList();
 		return {
 			keysets: allKeysets.map((k) => k.toMintKeyset()),
-			keys: this.getAllKeys(), // Reuse getAllKeys() to avoid duplication
+			keys: this.getAllKeys(),
 			unit: this.unit,
 			mintUrl: this.mint.mintUrl,
 		};
