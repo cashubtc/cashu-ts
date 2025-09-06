@@ -513,7 +513,6 @@ export type MeltProofOptions = {
 // @public
 export type MeltProofsConfig = {
     keysetId?: string;
-    privkey?: string;
 };
 
 // @public
@@ -933,7 +932,6 @@ export type RawTransport = {
 // @public
 export type ReceiveConfig = {
     keysetId?: string;
-    privkey?: string;
     requireDleq?: boolean;
     proofsWeHave?: Proof[];
 };
@@ -979,8 +977,14 @@ export type RpcSubId = string | number | null;
 // @public
 export type SendConfig = {
     keysetId?: string;
-    privkey?: string;
     includeFees?: boolean;
+};
+
+// @public
+export type SendOfflineConfig = {
+    requireDleq?: boolean;
+    includeFees?: boolean;
+    exactMatch?: boolean;
 };
 
 // @public (undocumented)
@@ -1205,6 +1209,7 @@ export class Wallet {
     onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    prepareProofsForSending(proofs: Proof[], privkey: string | string[]): Proof[];
     receive(token: Token | string, outputType?: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsCustom(token: Token | string, data: OutputData[], config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
@@ -1220,12 +1225,7 @@ export class Wallet {
     sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
     sendAsDeterministic(amount: number, proofs: Proof[], counter: number, config?: SendConfig): Promise<SendResponse>;
     sendAsP2PK(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, counter?: number, config?: SendConfig): Promise<SendResponse>;
-    sendOffline(amount: number, proofs: Proof[], config?: {
-        privkey?: string;
-        requireDleq?: boolean;
-        includeFees?: boolean;
-        exactMatch?: boolean;
-    }): SendResponse;
+    sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     sendWithP2PKChange(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, config?: SendConfig): Promise<SendResponse>;
     readonly swap: (amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig) => Promise<SendResponse>;
     get unit(): string;

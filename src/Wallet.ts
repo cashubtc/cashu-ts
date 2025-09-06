@@ -88,12 +88,21 @@ export type P2PKOptions = {
 
 /**
  * @v3
- * Configuration for receive operations.
+ * Configuration for send operations.
  */
 export type SendConfig = {
 	keysetId?: string;
-	privkey?: string;
 	includeFees?: boolean;
+};
+
+/**
+ * @v3
+ * Configuration for offline send operations.
+ */
+export type SendOfflineConfig = {
+	requireDleq?: boolean;
+	includeFees?: boolean;
+	exactMatch?: boolean;
 };
 
 /**
@@ -102,14 +111,13 @@ export type SendConfig = {
  */
 export type ReceiveConfig = {
 	keysetId?: string;
-	privkey?: string;
 	requireDleq?: boolean;
 	proofsWeHave?: Proof[];
 };
 
 /**
  * @v3
- * Configuration for receive operations.
+ * Configuration for minting operations.
  */
 export type MintProofsConfig = {
 	keysetId?: string;
@@ -119,11 +127,10 @@ export type MintProofsConfig = {
 
 /**
  * @v3
- * Configuration for receive operations.
+ * Configuration for melting operations.
  */
 export type MeltProofsConfig = {
 	keysetId?: string;
-	privkey?: string;
 };
 
 /**
@@ -537,29 +544,6 @@ class Wallet {
 	}
 
 	/**
-	 * Prepares inputs for a mint operation, with optional P2PK signing and DLEQ stripping.
-	 *
-	 * @remarks
-	 * Recommended to use this method before any mint operation. Strips DLEQ by default.
-	 * @param proofs The proofs to prepare.
-	 * @param privkey Optional private key for signing.
-	 * @param keepDleq Optional boolean to keep DLEQ.
-	 * @returns Prepared proofs.
-	 */
-	private prepareInputs(proofs: Proof[], privkey?: string, keepDleq?: boolean): Proof[] {
-		if (!keepDleq) {
-			proofs = stripDleq(proofs);
-		}
-		if (privkey) {
-			proofs = signP2PKProofs(proofs, privkey);
-		}
-		return proofs.map((p) => ({
-			...p,
-			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
-		}));
-	}
-
-	/**
 	 * Creates a swap transaction with sorted outputs for mint compatibility.
 	 *
 	 * @param inputs Prepared input proofs.
@@ -571,10 +555,9 @@ class Wallet {
 		inputs: Proof[],
 		keepOutputs: OutputDataLike[],
 		sendOutputs: OutputDataLike[] = [],
-		privkey?: string,
 	): SwapTransaction {
-		// Sign P2PK proofs and prepare inputs for mint
-		inputs = this.prepareInputs(inputs, privkey);
+		// Prepare inputs for mint
+		inputs = this._prepareInputsForMint(inputs);
 
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
 		const indices = mergedBlindingData
@@ -605,6 +588,41 @@ class Wallet {
 			keepVector: sortedKeepVector,
 			sortedIndices: indices,
 		};
+	}
+
+	/**
+	 * Prepares inputs for a mint operation.
+	 *
+	 * @remarks
+	 * Internal method; strips DLEQ for privacy and serializes witnesses.
+	 * @param proofs The proofs to prepare.
+	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
+	 * @returns Prepared proofs for mint payload.
+	 */
+	private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
+		if (!keepDleq) {
+			proofs = stripDleq(proofs);
+		}
+		return proofs.map((p) => ({
+			...p,
+			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
+		}));
+	}
+
+	/**
+	 * Prepares proofs for sending by signing P2PK-locked proofs.
+	 *
+	 * @remarks
+	 * Call this method before operations like send, receive, or melt if the proofs are P2PK-locked
+	 * and need unlocking. This is a public wrapper for signing.
+	 * @param proofs The proofs to sign.
+	 * @param privkey The private key for signing.
+	 * @returns Signed proofs.
+	 * @v3
+	 */
+	prepareProofsForSending(proofs: Proof[], privkey: string | string[]): Proof[] {
+		proofs = signP2PKProofs(proofs, privkey);
+		return this._prepareInputsForMint(proofs);
 	}
 
 	/**
@@ -756,7 +774,7 @@ class Wallet {
 			false, // includeFees is not applicable for receive
 			config?.proofsWeHave,
 		);
-		const swapTransaction = this.createSwapTransaction(proofs, outputs, [], config?.privkey);
+		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 		const proofsReceived = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keys));
 		const orderedProofs: Proof[] = [];
@@ -771,26 +789,17 @@ class Wallet {
 	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @remarks
-	 * The default config uses exact match selection, and does not includeFees or requireDleq. P2PK
-	 * locked proofs can be signed (witnessed) with the privkey option. Because the send is offline,
-	 * the user will unlock the signed proofs when they they receive them online.
+	 * If proofs are P2PK-locked, call prepareProofsForSending first to sign them. The default config
+	 * uses exact match selection, and does not includeFees or requireDleq. Because the send is
+	 * offline, the user will unlock the signed proofs when they receive them online.
 	 * @param amount Amount to send.
-	 * @param proofs Array of proofs (must sum >= amount).
+	 * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
 	 * @param config Optional parameters for the send.
 	 * @returns SendResponse with keep/send proofs.
 	 * @throws Throws if the send cannot be completed offline.
 	 */
-	sendOffline(
-		amount: number,
-		proofs: Proof[],
-		config?: {
-			privkey?: string;
-			requireDleq?: boolean;
-			includeFees?: boolean;
-			exactMatch?: boolean;
-		},
-	): SendResponse {
-		const { privkey, requireDleq = false, includeFees = false, exactMatch = true } = config || {};
+	sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
+		const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
@@ -801,9 +810,9 @@ class Wallet {
 			throw new Error(message);
 		}
 		const { keep, send } = this.selectProofsToSend(proofs, amount, includeFees, exactMatch);
-		// Sign P2PK proofs if needed and ensure witnesses are serialized
-		const sendSigned = this.prepareInputs(send, privkey);
-		return { keep, send: sendSigned };
+		// Ensure witnesses are serialized, strip DLEQ if not required
+		const sendPrepared = this._prepareInputsForMint(send, requireDleq);
+		return { keep, send: sendPrepared };
 	}
 
 	/**
@@ -943,7 +952,7 @@ class Wallet {
 		outputConfig: OutputConfig = DEFAULT_OUTPUT_CONFIG,
 		config?: SendConfig,
 	): Promise<SendResponse> {
-		const { privkey, keysetId, includeFees = false } = config || {};
+		const { keysetId, includeFees = false } = config || {};
 		// First, let's see if we can avoid a swap (and fees)
 		// by trying an exact match offline selection, including fees if
 		// we are giving the receiver the amount + their fee to receive
@@ -967,7 +976,6 @@ class Wallet {
 				throw new Error(`Options require a swap: ${issues}`);
 			}
 			const { keep, send } = this.sendOffline(amount, proofs, {
-				privkey,
 				includeFees,
 				exactMatch: true,
 				requireDleq: false, // safety
@@ -1042,12 +1050,7 @@ class Wallet {
 		);
 
 		// Execute swap
-		const swapTransaction = this.createSwapTransaction(
-			selectedProofs,
-			keepOutputs,
-			sendOutputs,
-			privkey,
-		);
+		const swapTransaction = this.createSwapTransaction(selectedProofs, keepOutputs, sendOutputs);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
@@ -2211,7 +2214,7 @@ class Wallet {
 	 * @param meltQuote The bolt11 or bolt12 melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
-	 * @param config Optional (privkey, keysetId).
+	 * @param config Optional (keysetId).
 	 * @returns Minted proofs.
 	 * @throws If params are invalid or mint returns errors.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
@@ -2223,7 +2226,7 @@ class Wallet {
 		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
-		const { keysetId, privkey } = config || {};
+		const { keysetId } = config || {};
 		const keys = this.keyChain.getKeys(keysetId);
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
@@ -2256,8 +2259,8 @@ class Wallet {
 			outputData = this.configureOutputs(changeAmount, keys, effectiveOutputType, false);
 		}
 
-		// Sign P2PK proofs and prepare proofs for mint
-		proofsToSend = this.prepareInputs(proofsToSend, privkey);
+		// Prepare proofs for mint
+		proofsToSend = this._prepareInputsForMint(proofsToSend);
 
 		const meltPayload: MeltPayload = {
 			quote: meltQuote.quote,
