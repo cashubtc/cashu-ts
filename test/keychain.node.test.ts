@@ -192,8 +192,8 @@ describe('KeyChain getters', () => {
 		expect(keyset.id).toBe('00bd033559de27d0');
 		expect(keyset.unit).toBe('sat');
 		expect(keyset.isActive).toBe(true);
-		expect(keyset.hasKeyPairs).toBe(true);
-		expect(keyset.keyPairs).toEqual(dummyKeysResp.keysets[0].keys);
+		expect(keyset.hasKeys).toBe(true);
+		expect(keyset.keys).toEqual(dummyKeysResp.keysets[0].keys);
 	});
 
 	test('should throw on invalid keyset ID', () => {

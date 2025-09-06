@@ -726,7 +726,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
+    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys_2 | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createP2PKData(p2pk: {
         pubkey: string | string[];
@@ -734,9 +734,9 @@ export class OutputData implements OutputDataLike {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
-    }, amount: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
+    }, amount: number, keyset: MintKeys_2 | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData(amount: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
+    static createRandomData(amount: number, keyset: MintKeys_2 | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -753,7 +753,7 @@ export class OutputData implements OutputDataLike {
     secret: Uint8Array;
     static sumOutputAmounts(outputs: OutputDataLike[]): number;
     // (undocumented)
-    toProof(sig: SerializedBlindedSignature_2, keyset: MintKeys_2): Proof_2;
+    toProof(sig: SerializedBlindedSignature_2, keyset: MintKeys_2 | Keyset): Proof_2;
 }
 
 // @public

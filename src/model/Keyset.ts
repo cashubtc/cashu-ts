@@ -6,7 +6,7 @@ export class Keyset {
 	private _id: string;
 	private _unit: string;
 	private _active: boolean;
-	private _keyPairs?: Record<number, string>;
+	private _keys: Record<number, string> = {};
 	private _input_fee_ppk?: number;
 	private _final_expiry?: number;
 
@@ -40,26 +40,52 @@ export class Keyset {
 		return this._input_fee_ppk ?? 0;
 	}
 
-	get hasKeyPairs(): boolean {
-		return !!this._keyPairs;
+	get expiry(): number | undefined {
+		return this._final_expiry;
+	}
+
+	get hasKeys(): boolean {
+		return Object.keys(this._keys).length > 0;
 	}
 
 	get hasHexId(): boolean {
 		return isValidHex(this._id);
 	}
 
+	get keys(): Record<number, string> {
+		return this._keys;
+	}
+
+	set keys(keys: Record<number, string>) {
+		this._keys = keys;
+	}
+
+	/**
+	 * For compat with v2 MintKeyset type.
+	 */
+	get active(): boolean {
+		return this._active;
+	}
+
+	/**
+	 * For compat with v2 MintKeyset type.
+	 */
+	get input_fee_ppk(): number {
+		return this._input_fee_ppk ?? 0;
+	}
+
+	/**
+	 * For compat with v2 MintKeyset type.
+	 */
 	get final_expiry(): number | undefined {
 		return this._final_expiry;
 	}
 
-	get keyPairs(): Record<number, string> | undefined {
-		return this._keyPairs;
-	}
-
-	set keyPairs(keyPairs: Record<number, string>) {
-		this._keyPairs = keyPairs;
-	}
-
+	/**
+	 * Temporary helper for migration.
+	 *
+	 * @returns MintKeyset object.
+	 */
 	toMintKeyset(): MintKeyset {
 		return {
 			id: this._id,
@@ -70,14 +96,19 @@ export class Keyset {
 		};
 	}
 
+	/**
+	 * Temporary helper for migration.
+	 *
+	 * @returns MintKeys object.
+	 */
 	toMintKeys(): MintKeys | null {
-		if (!this.hasKeyPairs) {
+		if (!this.hasKeys) {
 			return null;
 		}
 		return {
 			id: this._id,
 			unit: this._unit,
-			keys: this._keyPairs!,
+			keys: this._keys,
 		};
 	}
 
@@ -87,11 +118,11 @@ export class Keyset {
 	 * @returns True if verification succeeds, false otherwise (e.g., no keys or mismatch).
 	 */
 	verify(): boolean {
-		if (!this.hasKeyPairs) {
+		if (!this.hasKeys) {
 			return false;
 		}
 		const versionByte = hexToBytes(this._id)[0];
-		const derivedId = deriveKeysetId(this._keyPairs!, this._unit, this._final_expiry, versionByte);
+		const derivedId = deriveKeysetId(this._keys, this._unit, this._final_expiry, versionByte);
 		return derivedId === this._id;
 	}
 }

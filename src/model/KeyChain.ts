@@ -73,7 +73,7 @@ export class KeyChain {
 
 			const mk = keysMap.get(keyset.id);
 			if (mk) {
-				keyset.keyPairs = mk.keys;
+				keyset.keys = mk.keys;
 				if (!keyset.verify()) {
 					throw new Error(`Keyset verification failed for ID ${keyset.id}`);
 				}
