@@ -1,4 +1,5 @@
 import { isValidHex } from '../utils';
+import { type MintKeyset, type MintKeys } from './types';
 
 export class Keyset {
 	private _id: string;
@@ -46,15 +47,32 @@ export class Keyset {
 		return isValidHex(this._id);
 	}
 
+	get final_expiry(): number | undefined {
+		return this._final_expiry;
+	}
+
 	set keyPairs(keyPairs: Record<number, string>) {
 		this._keyPairs = keyPairs;
 	}
 
-	get keyPairs(): Record<number, string> | undefined {
-		return this._keyPairs;
+	toMintKeyset(): MintKeyset {
+		return {
+			id: this._id,
+			unit: this._unit,
+			active: this._active,
+			input_fee_ppk: this._input_fee_ppk,
+			final_expiry: this._final_expiry,
+		};
 	}
 
-	get final_expiry(): number | undefined {
-		return this._final_expiry;
+	toMintKeys(): MintKeys | null {
+		if (!this.hasKeyPairs) {
+			return null;
+		}
+		return {
+			id: this._id,
+			unit: this._unit,
+			keys: this._keyPairs!,
+		};
 	}
 }

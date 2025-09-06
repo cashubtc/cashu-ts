@@ -144,7 +144,7 @@ describe('test wallet init', () => {
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
-		const specificKeys = wallet.getKeys('00bd033559de27d0');
+		const specificKeys = wallet.keyChain.getKeys('00bd033559de27d0');
 		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
 	});
 
@@ -191,7 +191,7 @@ describe('test wallet init', () => {
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
-		const specificKeys = wallet.getKeys('00bd033559de27d0');
+		const specificKeys = wallet.keyChain.getKeys('00bd033559de27d0');
 		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
 	});
 
@@ -246,7 +246,7 @@ describe('test wallet init', () => {
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
-		const specificKeys = wallet.getKeys('00bd033559de27d0');
+		const specificKeys = wallet.keyChain.getKeys('00bd033559de27d0');
 		expect(specificKeys).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify no network calls were made
@@ -263,8 +263,8 @@ describe('test wallet init', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
-		expect(() => wallet.getKeys('invalid-keyset-id')).toThrow(
-			'No keys found for keyset ID invalid-keyset-id; call loadMint with forceRefresh',
+		expect(() => wallet.keyChain.getKeys('invalid-keyset-id')).toThrow(
+			"Keyset 'invalid-keyset-id' not found",
 		);
 	});
 
@@ -671,7 +671,7 @@ describe('receive', () => {
 
 		const customData = OutputData.createRandomData(
 			3,
-			wallet.getKeys('00bd033559de27d0')!,
+			wallet.keyChain.getKeys('00bd033559de27d0')!,
 			[1, 1, 1],
 		);
 		const proofs = await wallet.receive(token3sat, { type: 'custom', data: customData });
@@ -1610,7 +1610,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with locktime and single refund key', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
 			21,
@@ -1628,7 +1628,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with locktime and multiple refund keys', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
@@ -1646,7 +1646,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk without locktime and no refund keys', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
@@ -1659,7 +1659,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with unexpected requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', requiredSignatures: 5 },
 			21,
@@ -1676,7 +1676,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'] },
 			21,
@@ -1694,7 +1694,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple pks with 2-of-3 requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 2 },
 			21,
@@ -1712,7 +1712,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple pks with out of range requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 5 },
 			21,
@@ -1730,7 +1730,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1754,7 +1754,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with no requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
 			21,
@@ -1773,7 +1773,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with 2-of-3 requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1797,7 +1797,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with out of range requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: 'thisisatest',
@@ -1821,7 +1821,7 @@ describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to multiple refund keys with expired multisig', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
-		const keys = wallet.getKeys();
+		const keys = wallet.keyChain.getKeys();
 		const data = OutputData.createP2PKData(
 			{
 				pubkey: ['thisisatest', 'asecondpk', 'athirdpk'],

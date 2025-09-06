@@ -6,6 +6,7 @@ import { Mint } from '../src/Mint';
 import { KeyChain } from '../src/model/KeyChain';
 import { type MintKeyset, type MintKeys } from '../src/types';
 import { isValidHex } from '../src/utils';
+import { PUBKEYS } from './consts';
 
 const mintUrl = 'http://localhost:3338';
 const mint = new Mint(mintUrl);
@@ -22,12 +23,9 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 			},
 		},
 		{
-			id: '00abc12345678901',
+			id: '009a1f293253e41e',
 			unit: 'sat',
-			keys: {
-				1: '03anotherpubkey1',
-				2: '03anotherpubkey2',
-			},
+			keys: PUBKEYS,
 		},
 		{
 			id: 'invalidbase64',
@@ -58,7 +56,7 @@ const dummyKeysetResp: { keysets: MintKeyset[] } = {
 			final_expiry: 1754296607,
 		},
 		{
-			id: '00abc12345678901',
+			id: '009a1f293253e41e',
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 2,
@@ -234,8 +232,8 @@ describe('KeyChain getters', () => {
 		expect(activeKeys.unit).toBe('sat');
 		expect(activeKeys.keys).toEqual(dummyKeysResp.keysets[0].keys);
 
-		const specificKeys = keyChain.getKeys('00abc12345678901');
-		expect(specificKeys.id).toBe('00abc12345678901');
+		const specificKeys = keyChain.getKeys('009a1f293253e41e');
+		expect(specificKeys.id).toBe('009a1f293253e41e');
 		expect(specificKeys.keys).toEqual(dummyKeysResp.keysets[1].keys);
 	});
 

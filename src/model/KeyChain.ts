@@ -1,6 +1,7 @@
 import { Keyset } from './Keyset';
 import { type Mint } from '../Mint';
 import { type MintKeyset, type MintKeys, type MintAllKeysets, type MintActiveKeys } from './types';
+import { verifyKeysetId } from '../utils';
 
 export class KeyChain {
 	private mint: Mint;
@@ -56,6 +57,9 @@ export class KeyChain {
 	 * @param allKeys Keys data from mint.getKeys() API.
 	 */
 	private buildKeychain(allKeysets: MintAllKeysets, allKeys: MintActiveKeys): void {
+		// Clear existing keysets to avoid stale data
+		this.keysets = {};
+
 		// Filter and create Keysets for unit
 		const unitKeysets = allKeysets.keysets.filter((k: MintKeyset) => k.unit === this.unit);
 		unitKeysets.forEach((k: MintKeyset) => {
@@ -135,14 +139,36 @@ export class KeyChain {
 	 */
 	getKeys(id?: string): MintKeys {
 		const keyset = id ? this.getKeyset(id) : this.getActiveKeyset();
-		if (!keyset.hasKeyPairs) {
+		const mintKeys = keyset.toMintKeys();
+		if (!mintKeys) {
 			throw new Error(`No keys loaded for keyset '${id || keyset.id}'`);
 		}
-		return {
-			id: keyset.id,
-			unit: keyset.unit,
-			keys: keyset.keyPairs!,
-		} as MintKeys;
+		if (!verifyKeysetId(mintKeys)) {
+			throw new Error(`Couldn't verify keyset ID '${id || keyset.id}'`);
+		}
+		return mintKeys;
+	}
+
+	/**
+	 * Get all keys for all loaded keysets in the unit.
+	 *
+	 * @returns Array of MintKeys for keysets that have keys loaded.
+	 * @throws If uninitialized or if any keyset ID verification fails.
+	 */
+	getAllKeys(): MintKeys[] {
+		if (Object.keys(this.keysets).length === 0) {
+			throw new Error('KeyChain not initialized; call init() first');
+		}
+		const allKeysets = this.getKeysetList();
+		const allKeys = allKeysets
+			.map((k) => k.toMintKeys())
+			.filter((mk): mk is MintKeys => mk !== null);
+		allKeys.forEach((keys) => {
+			if (!verifyKeysetId(keys)) {
+				throw new Error(`Couldn't verify keyset ID '${keys.id}'`);
+			}
+		});
+		return allKeys;
 	}
 
 	/**
@@ -158,23 +184,9 @@ export class KeyChain {
 		mintUrl: string;
 	} {
 		const allKeysets = this.getKeysetList();
-		const unitKeysets = allKeysets.map((k) => ({
-			id: k.id,
-			unit: k.unit,
-			active: k.isActive,
-			input_fee_ppk: k.fee,
-			final_expiry: k.final_expiry,
-		}));
-		const unitKeys = allKeysets
-			.filter((k) => k.keyPairs !== undefined) // Only valid keyPairs
-			.map((k) => ({
-				id: k.id,
-				unit: k.unit,
-				keys: k.keyPairs!, // Non-null assertion since we filtered out undefined
-			}));
 		return {
-			keysets: unitKeysets,
-			keys: unitKeys,
+			keysets: allKeysets.map((k) => k.toMintKeyset()),
+			keys: this.getAllKeys(), // Reuse getAllKeys() to avoid duplication
 			unit: this.unit,
 			mintUrl: this.mint.mintUrl,
 		};

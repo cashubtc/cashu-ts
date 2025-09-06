@@ -68,7 +68,6 @@ import {
 	splitAmount,
 	stripDleq,
 	sumProofs,
-	verifyKeysetId,
 	deepEqual,
 } from './utils';
 import { signMintQuote } from './crypto/client/NUT20';
@@ -422,33 +421,6 @@ class Wallet {
 			return keys;
 		} catch (e) {
 			const message = 'Keys not initialized; call loadMint first';
-			this._logger.error(message, { e });
-			throw new Error(message);
-		}
-	}
-
-	/**
-	 * Get public keys for a specific keyset or the active keyset.
-	 *
-	 * @remarks
-	 * Returns cached keys. Call `loadMint` first to initialize the wallet.
-	 * @param keysetId Optional keyset ID to get keys for; defaults to the active keyset.
-	 * @returns Mint keys for the specified or active keyset.
-	 * @throws If keys or keysets are not initialized or if the keyset ID is invalid.
-	 */
-	getKeys(keysetId?: string): MintKeys {
-		try {
-			const keys = this.keyChain.getKeys(keysetId);
-			if (!verifyKeysetId(keys)) {
-				const message = `Couldn't verify keyset ID ${keys.id}`;
-				this._logger.error(message);
-				throw new Error(message);
-			}
-			return keys;
-		} catch (e) {
-			const message = keysetId
-				? `No keys found for keyset ID ${keysetId}; call loadMint with forceRefresh`
-				: 'Keys not initialized; call loadMint first';
 			this._logger.error(message, { e });
 			throw new Error(message);
 		}
@@ -834,7 +806,7 @@ class Wallet {
 		if (totalAmount === 0) {
 			return [];
 		}
-		const keys = this.getKeys(config?.keysetId);
+		const keys = this.keyChain.getKeys(config?.keysetId);
 		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keys))) {
 			const message = 'Token contains proofs with invalid or missing DLEQ';
 			this._logger.error(message);
@@ -1078,7 +1050,7 @@ class Wallet {
 		}
 
 		// Fetch keys
-		const keys = this.getKeys(keysetId);
+		const keys = this.keyChain.getKeys(keysetId);
 
 		// Shape SEND output type and create outputs
 		// Note: proofsWeHave is not valid for send outputs (optimization is for keep only)
@@ -1581,7 +1553,7 @@ class Wallet {
 		options?: RestoreOptions,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const { keysetId } = options || {};
-		const keys = this.getKeys(keysetId);
+		const keys = this.keyChain.getKeys(keysetId);
 		if (!this._seed) {
 			const message = 'CashuWallet must be initialized with a seed to use restore';
 			this._logger.error(message);
@@ -2261,7 +2233,7 @@ class Wallet {
 			this._logger.warn('Invalid mint amount: must be positive', { amount });
 			throw new Error('Amount must be positive');
 		}
-		const keyset = this.getKeys(keysetId);
+		const keyset = this.keyChain.getKeys(keysetId);
 		const outputs = this.configureOutputs(amount, keyset, outputType, false); // No includeFees for mint
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
@@ -2320,7 +2292,7 @@ class Wallet {
 		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
 		const { keysetId, privkey } = config || {};
-		const keys = this.getKeys(keysetId);
+		const keys = this.keyChain.getKeys(keysetId);
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
 
