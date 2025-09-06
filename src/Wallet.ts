@@ -614,16 +614,15 @@ class Wallet {
 	 * Prepares proofs for sending by signing P2PK-locked proofs.
 	 *
 	 * @remarks
-	 * Call this method before operations like send, receive, or melt if the proofs are P2PK-locked
-	 * and need unlocking. This is a public wrapper for signing.
+	 * Call this method before operations like send if the proofs are P2PK-locked and need unlocking.
+	 * This is a public wrapper for signing.
 	 * @param proofs The proofs to sign.
 	 * @param privkey The private key for signing.
 	 * @returns Signed proofs.
 	 * @v3
 	 */
-	prepareProofsForSending(proofs: Proof[], privkey: string | string[]): Proof[] {
-		proofs = signP2PKProofs(proofs, privkey);
-		return this._prepareInputsForMint(proofs);
+	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
+		return signP2PKProofs(proofs, privkey);
 	}
 
 	/**
@@ -767,7 +766,7 @@ class Wallet {
 		}
 		// Sign token if needed
 		if (config?.privkey) {
-			proofs = this.prepareProofsForSending(proofs, config?.privkey);
+			proofs = this.signP2PKProofs(proofs, config?.privkey);
 		}
 		// Check DLEQs if needed
 		const keys = this.keyChain.getKeys(config?.keysetId);
@@ -800,9 +799,9 @@ class Wallet {
 	 * Sends proofs of a given amount from provided proofs.
 	 *
 	 * @remarks
-	 * If proofs are P2PK-locked to your public key, call prepareProofsForSending first to sign them.
-	 * The default config uses exact match selection, and does not includeFees or requireDleq. Because
-	 * the send is offline, the user will unlock the signed proofs when they receive them online.
+	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them. The
+	 * default config uses exact match selection, and does not includeFees or requireDleq. Because the
+	 * send is offline, the user will unlock the signed proofs when they receive them online.
 	 * @param amount Amount to send.
 	 * @param proofs Array of proofs (must sum >= amount; pre-sign if P2PK-locked).
 	 * @param config Optional parameters for the send.
@@ -831,7 +830,7 @@ class Wallet {
 	 *
 	 * @remarks
 	 * Beginner-friendly default for privacy-focused sends. Uses random blinding to avoid linkability.
-	 * If proofs are P2PK-locked to your public key, call prepareProofsForSending first to sign them.
+	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param config Optional parameters (e.g. includeFees).
@@ -848,7 +847,7 @@ class Wallet {
 	 * @remarks
 	 * Beginner-friendly for recoverable sends. Requires wallet seed. The keep counter is
 	 * automatically offset to account for send outputs, so a single counter can be used. If proofs
-	 * are P2PK-locked to your public key, call prepareProofsForSending first to sign them.
+	 * are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param counter Starting counter for deterministic secrets.
@@ -878,7 +877,7 @@ class Wallet {
 	 * @remarks
 	 * Beginner-friendly for secure sends (e.g. locked to pubkey). Uses NUT-11 options for locking.
 	 * Change proofs will be deterministic if a counter is provided, random otherwise. If proofs are
-	 * already P2PK-locked to your key, call prepareProofsForSending first to sign them.
+	 * already P2PK-locked to your key, call signP2PKProofs first to sign them.
 	 * @param amount Amount to send.
 	 * @param proofs Proofs to split (sum >= amount).
 	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
@@ -933,7 +932,7 @@ class Wallet {
 	 * This method performs an online swap if necessary. The `outputConfig` defaults to
 	 * `DEFAULT_OUTPUT_CONFIG`, which uses random blinding factors for both `send` and `keep` outputs.
 	 * For common cases, use `sendAs...` helpers (eg sendAsDefault, sendAsP2PK etc). If proofs are
-	 * P2PK-locked to your public key, call prepareProofsForSending first to sign them.
+	 * P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
