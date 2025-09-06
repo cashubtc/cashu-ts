@@ -609,10 +609,10 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 /**
  * Check that the keyset hashes to the specified ID.
  *
+ * @deprecated Now part of Keyset class.
  * @param keys The keyset to be verified.
  * @returns True if the verification was successful, false otherwise.
  * @throws Error if the keyset ID version is unrecognized.
- * @deprecated Now part of Keyset class
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const isBase64 = isBase64String(keys.id);
