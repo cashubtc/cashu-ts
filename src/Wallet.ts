@@ -137,7 +137,7 @@ export interface SharedOutputTypeProps {
 	 *
 	 * @default Uses basic splitAmount if omitted.
 	 */
-	splitAmounts?: number[];
+	denominations?: number[];
 }
 
 /**
@@ -149,7 +149,7 @@ export interface SharedOutputTypeProps {
  * @example
  *
  *     // Random with custom splits
- *     const random: OutputType = { type: 'random', splitAmounts: [1, 2, 4] };
+ *     const random: OutputType = { type: 'random', denominations: [1, 2, 4] };
  *     // Deterministic
  *     const deterministic: OutputType = { type: 'deterministic', counter: 0 };
  *
@@ -183,7 +183,7 @@ export type OutputType =
 			 * Factory-generated OutputData.
 			 *
 			 * @remarks
-			 * Outputs count from splitAmounts or basic split.
+			 * Outputs count from denominations or basic split.
 			 * @see OutputDataFactory
 			 */
 			type: 'factory';
@@ -209,7 +209,7 @@ export type OutputType =
  * @example
  *
  *     const config: OutputConfig = {
- *     	send: { type: 'random', splitAmounts: [1, 2] },
+ *     	send: { type: 'random', denominations: [1, 2] },
  *     	keep: { type: 'deterministic', counter: 0 },
  *     };
  *     await wallet.send(3, proofs, config, { includeFees: true });
@@ -232,7 +232,7 @@ export interface OutputConfig {
  *     // Basic usage
  *     await wallet.receive('cashuB...', DEFAULT_OUTPUT, { requireDleq: true });
  *     // Customized
- *     const custom: OutputType = { ...DEFAULT_OUTPUT, splitAmounts: [1, 2, 4] };
+ *     const custom: OutputType = { ...DEFAULT_OUTPUT, denominations: [1, 2, 4] };
  *
  * @v3
  */
@@ -408,19 +408,19 @@ class Wallet {
 		}
 		if (
 			'custom' != outputType.type &&
-			outputType.splitAmounts &&
-			outputType.splitAmounts.length > 0
+			outputType.denominations &&
+			outputType.denominations.length > 0
 		) {
-			const splitSum = outputType.splitAmounts.reduce((sum, a) => sum + a, 0);
+			const splitSum = outputType.denominations.reduce((sum, a) => sum + a, 0);
 			if (splitSum !== amount) {
-				this._logger.error('Custom splitAmounts sum mismatch', { splitSum, expected: amount });
-				throw new Error(`Custom splitAmounts sum to ${splitSum}, expected ${amount}`);
+				this._logger.error('Custom denominations sum mismatch', { splitSum, expected: amount });
+				throw new Error(`Custom denominations sum to ${splitSum}, expected ${amount}`);
 			}
 		}
 		let outputData: OutputDataLike[];
 		switch (outputType.type) {
 			case 'random':
-				outputData = OutputData.createRandomData(amount, keyset, outputType.splitAmounts);
+				outputData = OutputData.createRandomData(amount, keyset, outputType.denominations);
 				break;
 			case 'deterministic':
 				if (!this._seed) {
@@ -433,7 +433,7 @@ class Wallet {
 					this._seed,
 					outputType.counter,
 					keyset,
-					outputType.splitAmounts,
+					outputType.denominations,
 				);
 				break;
 			case 'p2pk':
@@ -441,11 +441,11 @@ class Wallet {
 					outputType.options,
 					amount,
 					keyset,
-					outputType.splitAmounts,
+					outputType.denominations,
 				);
 				break;
 			case 'factory': {
-				const factorySplit = splitAmount(amount, keyset.keys, outputType.splitAmounts);
+				const factorySplit = splitAmount(amount, keyset.keys, outputType.denominations);
 				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
 				break;
 			}
@@ -497,13 +497,13 @@ class Wallet {
 			return this.createOutputData(adjustedAmount, keys, outputType);
 		}
 
-		// Use splitAmounts provided
-		let splitAmounts = outputType.splitAmounts ?? [];
+		// Use denominations provided
+		let denominations = outputType.denominations ?? [];
 
 		// If proofsWeHave was provided - we will try to optimize the outputs so
 		// that we only keep around _denominationTarget proofs of each amount.
-		if (splitAmounts.length === 0 && proofsWeHave.length > 0) {
-			splitAmounts = getKeepAmounts(
+		if (denominations.length === 0 && proofsWeHave.length > 0) {
+			denominations = getKeepAmounts(
 				proofsWeHave,
 				adjustedAmount,
 				keys.keys,
@@ -511,28 +511,28 @@ class Wallet {
 			);
 		}
 
-		// If no splitAmounts were provided or optimized, compute the default split
+		// If no denominations were provided or optimized, compute the default split
 		// before calculating fees to ensure accurate output count.
-		if (splitAmounts.length === 0) {
-			splitAmounts = splitAmount(adjustedAmount, keys.keys);
+		if (denominations.length === 0) {
+			denominations = splitAmount(adjustedAmount, keys.keys);
 		}
 
 		// With includeFees, we create additional output amounts to cover the
 		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
 		if (includeFees) {
-			let receiveFee = this.getFeesForKeyset(splitAmounts.length, keys.id);
+			let receiveFee = this.getFeesForKeyset(denominations.length, keys.id);
 			let receiveFeeAmounts = splitAmount(receiveFee, keys.keys);
 			while (
-				this.getFeesForKeyset(splitAmounts.length + receiveFeeAmounts.length, keys.id) > receiveFee
+				this.getFeesForKeyset(denominations.length + receiveFeeAmounts.length, keys.id) > receiveFee
 			) {
 				receiveFee++;
 				receiveFeeAmounts = splitAmount(receiveFee, keys.keys);
 			}
 			adjustedAmount += receiveFee;
-			splitAmounts = [...splitAmounts, ...receiveFeeAmounts];
+			denominations = [...denominations, ...receiveFeeAmounts];
 		}
 
-		const effectiveOutputType: OutputType = { ...outputType, splitAmounts };
+		const effectiveOutputType: OutputType = { ...outputType, denominations };
 		return this.createOutputData(adjustedAmount, keys, effectiveOutputType);
 	}
 
@@ -629,7 +629,7 @@ class Wallet {
 	 * Beginner-friendly for receiving recoverable proofs. Requires wallet seed.
 	 * @param token Cashu token.
 	 * @param counter Starting counter for deterministic secrets.
-	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param denominations Optional custom amounts for splitting outputs.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using deterministic secrets.
 	 * @v3
@@ -637,13 +637,13 @@ class Wallet {
 	async receiveAsDeterministic(
 		token: Token | string,
 		counter: number,
-		splitAmounts?: number[],
+		denominations?: number[],
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'deterministic',
 			counter,
-			splitAmounts,
+			denominations,
 		};
 		return this.receive(token, outputType, config);
 	}
@@ -653,7 +653,7 @@ class Wallet {
 	 *
 	 * @param token Cashu token.
 	 * @param options P2PK locking options (e.g., pubkey, locktime).
-	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param denominations Optional custom amounts for splitting outputs.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, P2PK-locked.
 	 * @v3
@@ -661,13 +661,13 @@ class Wallet {
 	async receiveAsP2PK(
 		token: Token | string,
 		options: P2PKOptions,
-		splitAmounts?: number[],
+		denominations?: number[],
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'p2pk',
 			options,
-			splitAmounts,
+			denominations,
 		};
 		return this.receive(token, outputType, config);
 	}
@@ -677,7 +677,7 @@ class Wallet {
 	 *
 	 * @param token Cashu token.
 	 * @param factory Output data factory.
-	 * @param splitAmounts Optional custom amounts for splitting outputs.
+	 * @param denominations Optional custom amounts for splitting outputs.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using factory-generated secrets.
 	 * @v3
@@ -685,13 +685,13 @@ class Wallet {
 	async receiveAsFactory(
 		token: Token | string,
 		factory: OutputDataFactory,
-		splitAmounts?: number[],
+		denominations?: number[],
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'factory',
 			factory,
-			splitAmounts,
+			denominations,
 		};
 		return this.receive(token, outputType, config);
 	}
@@ -1678,7 +1678,7 @@ class Wallet {
 	 * Beginner-friendly default for privacy-focused bolt11 minting.
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
-	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
+	 * @param config Optional parameters (e.g. privkey, denominations, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
 	async mintProofsAsDefault(
@@ -1697,21 +1697,21 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param counter Starting counter for deterministic secrets.
-	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
+	 * @param denominations Optional custom amounts for splitting outputs.
+	 * @param config Optional parameters (e.g. privkey, denominations, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
 	async mintProofsAsDeterministic(
 		amount: number,
 		quote: string | MintQuoteResponse,
 		counter: number,
-		splitAmounts?: number[],
+		denominations?: number[],
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const effectiveOutputType: OutputType = {
 			type: 'deterministic',
 			counter,
-			splitAmounts,
+			denominations,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
@@ -1724,21 +1724,21 @@ class Wallet {
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object.
 	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
-	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
+	 * @param denominations Optional custom amounts for splitting outputs.
+	 * @param config Optional parameters (e.g. privkey, denominations, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
 	async mintProofsAsP2PK(
 		amount: number,
 		quote: string | MintQuoteResponse,
 		p2pkOptions: P2PKOptions,
-		splitAmounts?: number[],
+		denominations?: number[],
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const effectiveOutputType: OutputType = {
 			type: 'p2pk',
 			options: p2pkOptions,
-			splitAmounts,
+			denominations,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
@@ -2232,15 +2232,15 @@ class Wallet {
 		if (feeReserve > 0) {
 			let count = Math.ceil(Math.log2(feeReserve)) || 1;
 			if (count < 0) count = 0; // Prevents: -Infinity
-			const splitAmounts: number[] = count ? new Array<number>(count).fill(1) : [];
-			const changeAmount = splitAmounts.reduce((sum, a) => sum + a, 0);
+			const denominations: number[] = count ? new Array<number>(count).fill(1) : [];
+			const changeAmount = denominations.reduce((sum, a) => sum + a, 0);
 			this._logger.debug('Creating NUT-08 blanks for fee reserve', {
 				feeReserve,
 				changeAmount,
-				splitAmounts,
+				denominations,
 			});
 
-			// Build effective OutputType and merge splitAmounts
+			// Build effective OutputType and merge denominations
 			if (outputType.type === 'custom') {
 				const message =
 					'Custom OutputType not supported for melt change (must enforce 1-sat blanks)';
@@ -2249,7 +2249,7 @@ class Wallet {
 			}
 			const effectiveOutputType = {
 				...outputType,
-				splitAmounts, // Our 1-sat blanks
+				denominations, // Our 1-sat blanks
 			};
 
 			// Generate the blank outputs (no fees as we are receiving change)

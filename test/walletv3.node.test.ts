@@ -479,7 +479,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, { type: 'random', splitAmounts: [1, 1, 1] });
+		const proofs = await wallet.receive(token3sat, { type: 'random', denominations: [1, 1, 1] });
 
 		expect(proofs).toHaveLength(3);
 		expect(proofs).toMatchObject([
@@ -1124,8 +1124,8 @@ describe('send', () => {
 			4,
 			overpayProofs,
 			{
-				send: { type: 'random', splitAmounts: [1, 1, 1, 1] },
-				keep: { type: 'random', splitAmounts: [] },
+				send: { type: 'random', denominations: [1, 1, 1, 1] },
+				keep: { type: 'random', denominations: [] },
 			},
 			{
 				// preference: { sendPreference: [{ amount: 1, count: 4 }] }
@@ -1193,8 +1193,8 @@ describe('send', () => {
 			3,
 			overpayProofs,
 			{
-				send: { type: 'random', splitAmounts: [1, 1, 1] },
-				keep: { type: 'random', splitAmounts: [1] },
+				send: { type: 'random', denominations: [1, 1, 1] },
+				keep: { type: 'random', denominations: [1] },
 			},
 			{},
 		);

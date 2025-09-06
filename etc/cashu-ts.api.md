@@ -652,6 +652,7 @@ export type MintProofOptions = {
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string;
+    proofsWeHave?: Proof[];
 };
 
 // @public
@@ -934,6 +935,7 @@ export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string;
     requireDleq?: boolean;
+    proofsWeHave?: Proof[];
 };
 
 // @public (undocumented)
@@ -1044,8 +1046,7 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
 // @public
 export interface SharedOutputTypeProps {
-    proofsWeHave?: Proof[];
-    splitAmounts?: number[];
+    denominations?: number[];
 }
 
 // @public
@@ -1192,8 +1193,8 @@ export class Wallet {
     readonly mint: Mint;
     mintProofs(amount: number, quote: string | MintQuoteResponse, outputType?: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, splitAmounts?: number[], proofsWeHave?: Proof[], config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsP2PK(amount: number, quote: string | MintQuoteResponse, p2pkOptions: P2PKOptions, splitAmounts?: number[], proofsWeHave?: Proof[], config?: MintProofsConfig): Promise<Proof[]>;
+    mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
+    mintProofsAsP2PK(amount: number, quote: string | MintQuoteResponse, p2pkOptions: P2PKOptions, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, outputType?: OutputType, config?: {
         keysetId?: string;
     }): Promise<Proof[]>;
@@ -1207,19 +1208,15 @@ export class Wallet {
     receive(token: Token | string, outputType?: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsCustom(token: Token | string, data: OutputData[], config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsDeterministic(token: Token | string, counter: number, splitAmounts?: number[], proofsWeHave?: Proof[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsFactory(token: Token | string, factory: OutputDataFactory, splitAmounts?: number[], proofsWeHave?: Proof[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsP2PK(token: Token | string, options: P2PKOptions, splitAmounts?: number[], proofsWeHave?: Proof[], config?: ReceiveConfig): Promise<Proof[]>;
+    receiveAsDeterministic(token: Token | string, counter: number, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
+    receiveAsFactory(token: Token | string, factory: OutputDataFactory, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
+    receiveAsP2PK(token: Token | string, options: P2PKOptions, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
     restore(start: number, count: number, options?: RestoreOptions): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
-    send(amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: {
-        privkey?: string;
-        keysetId?: string;
-        includeFees?: boolean;
-    }): Promise<SendResponse>;
+    send(amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig): Promise<SendResponse>;
     sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
     sendAsDeterministic(amount: number, proofs: Proof[], counter: number, config?: SendConfig): Promise<SendResponse>;
     sendAsP2PK(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, counter?: number, config?: SendConfig): Promise<SendResponse>;
@@ -1230,11 +1227,7 @@ export class Wallet {
         exactMatch?: boolean;
     }): SendResponse;
     sendWithP2PKChange(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, config?: SendConfig): Promise<SendResponse>;
-    readonly swap: (amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: {
-        privkey?: string;
-        keysetId?: string;
-        includeFees?: boolean;
-    }) => Promise<SendResponse>;
+    readonly swap: (amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig) => Promise<SendResponse>;
     get unit(): string;
 }
 
