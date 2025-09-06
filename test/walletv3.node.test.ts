@@ -116,7 +116,7 @@ describe('test wallet init', () => {
 		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
 
 		// Verify keysets
-		const keysets = wallet.getKeySets();
+		const keysets = wallet.keyChain.getKeySets();
 		expect(keysets).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
 		expect(keysets[0]).toEqual({
@@ -127,7 +127,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.getAllKeys();
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -140,7 +140,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify active keyset ID
-		const keysetId = wallet.getKeysetId();
+		const keysetId = wallet.keyChain.getActiveKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
@@ -163,7 +163,7 @@ describe('test wallet init', () => {
 		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
 
 		// Verify keysets
-		const keysets = wallet.getKeySets();
+		const keysets = wallet.keyChain.getKeySets();
 		expect(keysets).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
 		expect(keysets[0]).toEqual({
@@ -174,7 +174,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.getAllKeys();
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -187,7 +187,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify active keyset ID
-		const keysetId = wallet.getKeysetId();
+		const keysetId = wallet.keyChain.getActiveKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
@@ -218,7 +218,7 @@ describe('test wallet init', () => {
 		expect(info.pubkey).toBe('0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679');
 
 		// Verify keysets
-		const keysets = wallet.getKeySets();
+		const keysets = wallet.keyChain.getKeySets();
 		expect(keysets).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
 		expect(keysets[0]).toEqual({
@@ -229,7 +229,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.getAllKeys();
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -242,7 +242,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify active keyset ID
-		const keysetId = wallet.getKeysetId();
+		const keysetId = wallet.keyChain.getActiveKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
@@ -271,9 +271,9 @@ describe('test wallet init', () => {
 	it('should throw when accessing getters before loadMint', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
-		expect(() => wallet.getKeySets()).toThrow('Keysets not initialized; call loadMint first');
-		expect(() => wallet.getAllKeys()).toThrow('Keys not initialized; call loadMint first');
-		expect(() => wallet.getKeysetId()).toThrow('No keyset ID set; call loadMint first');
+		expect(() => wallet.keyChain.getKeySets()).toThrow('KeyChain not initialized');
+		expect(() => wallet.keyChain.getAllKeys()).toThrow('KeyChain not initialized');
+		expect(() => wallet.keyChain.getActiveKeyset().id).toThrow('KeyChain not initialized');
 	});
 
 	it('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
@@ -300,11 +300,11 @@ describe('test wallet init', () => {
 			{ method: 'twitter', info: '@me' },
 			{ method: 'nostr', info: 'npub1337' },
 		]);
-		const keysets = wallet.getKeySets();
+		const keysets = wallet.keyChain.getKeySets();
 		expect(keysets).toEqual(dummyKeysetResp.keysets);
-		const keys = wallet.getAllKeys();
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
-		const keysetId = wallet.getKeysetId();
+		const keysetId = wallet.keyChain.getActiveKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		spyMintInfo.mockRestore();

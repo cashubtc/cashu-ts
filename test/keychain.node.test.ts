@@ -155,7 +155,7 @@ describe('KeyChain initialization', () => {
 		);
 
 		const keyChain = new KeyChain(mint, unit);
-		await expect(keyChain.init()).rejects.toThrow('KeyChain not initialized; call init() first');
+		await expect(keyChain.init()).rejects.toThrow('KeyChain not initialized');
 	});
 
 	test('should preload from cache and match original getCache', async () => {
@@ -240,12 +240,8 @@ describe('KeyChain getters', () => {
 	test('should throw getters if not initialized', () => {
 		const uninitChain = new KeyChain(mint, unit);
 		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
-		expect(() => uninitChain.getActiveKeyset()).toThrow(
-			'KeyChain not initialized; call init() first',
-		);
-		expect(() => uninitChain.getKeysetList()).toThrow(
-			'KeyChain not initialized; call init() first',
-		);
-		expect(() => uninitChain.getKeys()).toThrow('KeyChain not initialized; call init() first');
+		expect(() => uninitChain.getActiveKeyset()).toThrow('KeyChain not initialized');
+		expect(() => uninitChain.getKeysetList()).toThrow('KeyChain not initialized');
+		expect(() => uninitChain.getKeys()).toThrow('KeyChain not initialized');
 	});
 });

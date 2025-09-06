@@ -113,7 +113,7 @@ export class KeyChain {
 	 */
 	getActiveKeyset(): Keyset {
 		if (Object.keys(this.keysets).length === 0) {
-			throw new Error('KeyChain not initialized; call init() first');
+			throw new Error('KeyChain not initialized');
 		}
 		const activeKeysets = Object.values(this.keysets).filter((k) => k.isActive && k.hasHexId);
 		if (activeKeysets.length === 0) {
@@ -130,9 +130,22 @@ export class KeyChain {
 	 */
 	getKeysetList(): Keyset[] {
 		if (Object.keys(this.keysets).length === 0) {
-			throw new Error('KeyChain not initialized; call init() first');
+			throw new Error('KeyChain not initialized');
 		}
 		return Object.values(this.keysets);
+	}
+
+	/**
+	 * Get all keysets for the unit in Mint API format.
+	 *
+	 * @returns Array of MintKeyset.
+	 * @throws If uninitialized.
+	 */
+	getKeySets(): MintKeyset[] {
+		if (Object.keys(this.keysets).length === 0) {
+			throw new Error('KeyChain not initialized');
+		}
+		return this.getKeysetList().map((k) => k.toMintKeyset());
 	}
 
 	/**
@@ -163,7 +176,7 @@ export class KeyChain {
 	 */
 	getAllKeys(): MintKeys[] {
 		if (Object.keys(this.keysets).length === 0) {
-			throw new Error('KeyChain not initialized; call init() first');
+			throw new Error('KeyChain not initialized');
 		}
 		const allKeysets = this.getKeysetList();
 		const allKeys = allKeysets

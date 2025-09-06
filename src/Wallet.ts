@@ -373,60 +373,6 @@ class Wallet {
 	}
 
 	/**
-	 * Get the active keyset ID.
-	 *
-	 * @returns The active keyset ID.
-	 * @throws If no keyset ID is set.
-	 */
-	getKeysetId(): string {
-		try {
-			return this.keyChain.getActiveKeyset().id;
-		} catch (e) {
-			const message = 'No keyset ID set; call loadMint first';
-			this._logger.error(message, { e });
-			throw new Error(message);
-		}
-	}
-
-	/**
-	 * Get keysets for the wallet's unit.
-	 *
-	 * @remarks
-	 * Returns cached keysets. Call `loadMint` first to initialize the wallet.
-	 * @returns Keysets with wallet's unit.
-	 * @throws If keysets are not initialized.
-	 */
-	getKeySets(): MintKeyset[] {
-		try {
-			const { keysets } = this.keyChain.getCache();
-			return keysets;
-		} catch (e) {
-			const message = 'Keysets not initialized; call loadMint first';
-			this._logger.error(message, { e });
-			throw new Error(message);
-		}
-	}
-
-	/**
-	 * Get all active keys from the mint.
-	 *
-	 * @remarks
-	 * Returns cached keys as an array. Call `loadMint` first to initialize the wallet.
-	 * @returns Array of mint keys.
-	 * @throws If keys are not initialized.
-	 */
-	getAllKeys(): MintKeys[] {
-		try {
-			const { keys } = this.keyChain.getCache();
-			return keys;
-		} catch (e) {
-			const message = 'Keys not initialized; call loadMint first';
-			this._logger.error(message, { e });
-			throw new Error(message);
-		}
-	}
-
-	/**
 	 * Get information about the mint.
 	 *
 	 * @remarks
@@ -794,7 +740,7 @@ class Wallet {
 			keysetId?: string;
 		},
 	): Promise<Proof[]> {
-		const keysets = this.getKeySets();
+		const keysets = this.keyChain.getKeySets();
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
 		if (decodedToken.mint !== this.mint.mintUrl) {
 			const message = 'Token belongs to a different mint';
@@ -1545,7 +1491,7 @@ class Wallet {
 	 *
 	 * @param start Set starting point for count (first cycle for each keyset should usually be 0)
 	 * @param count Set number of blinded messages that should be generated.
-	 * @param options.keysetId Set a custom keysetId to restore from. @see `getKeySets()`
+	 * @param options.keysetId Set a custom keysetId to restore from. @see `keyChain)`
 	 */
 	async restore(
 		start: number,
