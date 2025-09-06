@@ -55,7 +55,7 @@ export {
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
 	Mint,
-	KeyChain
+	KeyChain,
 };
 
 export {
