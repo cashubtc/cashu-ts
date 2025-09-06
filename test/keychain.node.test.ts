@@ -119,7 +119,7 @@ describe('KeyChain initialization', () => {
 		expect(keysForFirst).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset (lowest fee, active, hex ID)
-		const active = keyChain.getActiveKeyset();
+		const active = keyChain.getCheapestKeyset();
 		expect(active.id).toBe('00bd033559de27d0'); // Fee 0, hex ID
 		expect(active.fee).toBe(0);
 		expect(active.hasHexId).toBe(true);
@@ -168,8 +168,8 @@ describe('KeyChain initialization', () => {
 		const cachedChain = new KeyChain(mint, unit, originalCache.keysets, originalCache.keys);
 
 		// Verify preloaded without init()
-		const cachedActive = cachedChain.getActiveKeyset();
-		expect(cachedActive.id).toBe(originalChain.getActiveKeyset().id);
+		const cachedActive = cachedChain.getCheapestKeyset();
+		expect(cachedActive.id).toBe(originalChain.getCheapestKeyset().id);
 		expect(cachedActive.fee).toBe(0);
 		expect(cachedChain.getKeysets().length).toBe(originalChain.getKeysets().length);
 
@@ -201,7 +201,7 @@ describe('KeyChain getters', () => {
 	});
 
 	test('should get active keyset correctly', () => {
-		const active = keyChain.getActiveKeyset();
+		const active = keyChain.getCheapestKeyset();
 		expect(active.id).toBe('00bd033559de27d0'); // Lowest fee 0
 		expect(active.fee).toBe(0);
 	});
@@ -215,7 +215,7 @@ describe('KeyChain getters', () => {
 	test('should throw getters if not initialized', () => {
 		const uninitChain = new KeyChain(mint, unit);
 		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
-		expect(() => uninitChain.getActiveKeyset()).toThrow('KeyChain not initialized');
+		expect(() => uninitChain.getCheapestKeyset()).toThrow('KeyChain not initialized');
 		expect(() => uninitChain.getKeysets()).toThrow('KeyChain not initialized');
 	});
 });

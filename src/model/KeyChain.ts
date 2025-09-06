@@ -70,7 +70,6 @@ export class KeyChain {
 		// Note: Non-hex and inactive keysets should not have keys
 		Object.values(this.keysets).forEach((keyset) => {
 			if (!keyset.hasHexId || !keyset.isActive) return;
-
 			const mk = keysMap.get(keyset.id);
 			if (mk) {
 				keyset.keys = mk.keys;
@@ -81,7 +80,7 @@ export class KeyChain {
 		});
 
 		// Set active ID
-		this._activeKeysetId = this.getActiveKeyset().id;
+		this._activeKeysetId = this.getCheapestKeyset().id;
 	}
 
 	/**
@@ -92,7 +91,7 @@ export class KeyChain {
 	 * @throws If keyset not found or uninitialized.
 	 */
 	getKeyset(id?: string): Keyset {
-		const keyset = id ? this.keysets[id] : this.getActiveKeyset();
+		const keyset = id ? this.keysets[id] : this.getCheapestKeyset();
 		if (!keyset) {
 			throw new Error(`Keyset '${id}' not found`);
 		}
@@ -107,7 +106,7 @@ export class KeyChain {
 	 * @returns Active Keyset.
 	 * @throws If none found or uninitialized.
 	 */
-	getActiveKeyset(): Keyset {
+	getCheapestKeyset(): Keyset {
 		if (Object.keys(this.keysets).length === 0) {
 			throw new Error('KeyChain not initialized');
 		}
@@ -145,7 +144,7 @@ export class KeyChain {
 	} {
 		const allKeysets = this.getKeysets();
 		const allKeys = allKeysets
-			.filter((k) => k.hasHexId)
+			.filter((k) => k.hasKeys)
 			.map((k) => k.toMintKeys())
 			.filter((mk): mk is MintKeys => mk !== null);
 		return {

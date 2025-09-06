@@ -433,13 +433,13 @@ export type JsonRpcReqParams = {
 // @public (undocumented)
 export class KeyChain {
     constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset_2[], cachedKeys?: MintKeys_2[] | MintKeys_2);
-    getActiveKeyset(): Keyset;
     getCache(): {
         keysets: MintKeyset_2[];
         keys: MintKeys_2[];
         unit: string;
         mintUrl: string;
     };
+    getCheapestKeyset(): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;

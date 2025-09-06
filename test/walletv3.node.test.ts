@@ -141,7 +141,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify active keyset ID
-		const keysetId = wallet.keyChain.getActiveKeyset().id;
+		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
@@ -189,7 +189,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify active keyset ID
-		const keysetId = wallet.keyChain.getActiveKeyset().id;
+		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
@@ -245,7 +245,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify active keyset ID
-		const keysetId = wallet.keyChain.getActiveKeyset().id;
+		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		// Verify specific keyset retrieval
@@ -275,7 +275,7 @@ describe('test wallet init', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
 		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
-		expect(() => wallet.keyChain.getActiveKeyset().id).toThrow('KeyChain not initialized');
+		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
 	});
 
 	it('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
@@ -306,7 +306,7 @@ describe('test wallet init', () => {
 		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
 		const keys = wallet.keyChain.getCache().keys;
 		expect(keys).toEqual(dummyKeysResp.keysets);
-		const keysetId = wallet.keyChain.getActiveKeyset().id;
+		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
 
 		spyMintInfo.mockRestore();
