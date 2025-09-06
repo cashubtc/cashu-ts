@@ -70,10 +70,10 @@ export class KeyChain {
 			allKeys.keysets.filter((k) => k.unit === this.unit).map((k) => [k.id, k]),
 		);
 
-		// Assign keys and validate only for hex keysets
-		// Non-hex keysets are legacy/inactive/invalid, so have no keys
+		// Assign keys and validate active hex keysets
+		// Note: Non-hex and inactive keysets should not have keys
 		Object.values(this.keysets).forEach((keyset) => {
-			if (!keyset.hasHexId) return;
+			if (!keyset.hasHexId || !keyset.isActive) return;
 
 			const mk = keysMap.get(keyset.id);
 			if (mk) {
