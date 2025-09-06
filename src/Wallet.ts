@@ -104,6 +104,7 @@ export type ReceiveConfig = {
 	keysetId?: string;
 	privkey?: string;
 	requireDleq?: boolean;
+	proofsWeHave?: Proof[];
 };
 
 /**
@@ -113,6 +114,7 @@ export type ReceiveConfig = {
 export type MintProofsConfig = {
 	keysetId?: string;
 	privkey?: string;
+	proofsWeHave?: Proof[];
 };
 
 /**
@@ -136,14 +138,6 @@ export interface SharedOutputTypeProps {
 	 * @default Uses basic splitAmount if omitted.
 	 */
 	splitAmounts?: number[];
-	/**
-	 * Optional proofs from this mint for optimizing denomination splitting.
-	 *
-	 * @remarks
-	 * Used with Wallet's `denominationTarget` option.
-	 * @see Wallet constructor for details.
-	 */
-	proofsWeHave?: Proof[];
 }
 
 /**
@@ -481,13 +475,15 @@ class Wallet {
 	 * @param keys The mint keys.
 	 * @param outputType The output configuration.
 	 * @param includeFees Whether to include swap fees in the output amount.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @returns Prepared output data.
 	 */
 	private configureOutputs(
 		amount: number,
 		keys: MintKeys,
 		outputType: OutputType,
-		includeFees?: boolean,
+		includeFees: boolean = false,
+		proofsWeHave: Proof[] = [],
 	): OutputDataLike[] {
 		let adjustedAmount = amount;
 
@@ -501,12 +497,12 @@ class Wallet {
 			return this.createOutputData(adjustedAmount, keys, outputType);
 		}
 
+		// Use splitAmounts provided
 		let splitAmounts = outputType.splitAmounts ?? [];
-		const proofsWeHave = outputType.proofsWeHave ?? [];
 
 		// If proofsWeHave was provided - we will try to optimize the outputs so
 		// that we only keep around _denominationTarget proofs of each amount.
-		if (proofsWeHave.length > 0) {
+		if (splitAmounts.length === 0 && proofsWeHave.length > 0) {
 			splitAmounts = getKeepAmounts(
 				proofsWeHave,
 				adjustedAmount,
@@ -593,14 +589,15 @@ class Wallet {
 		];
 		const sortedOutputData: OutputDataLike[] = indices.map((i) => mergedBlindingData[i]);
 		const sortedKeepVector: boolean[] = indices.map((i) => keepVector[i]);
+		const outputs = sortedOutputData.map((d) => d.blindedMessage);
 		this._logger.debug('createSwapTransaction:', {
 			indices,
 			sortedKeepVector,
-			outputs: sortedOutputData.map((d) => d.blindedMessage),
+			outputs,
 		});
 		const payload: SwapPayload = {
 			inputs,
-			outputs: sortedOutputData.map((d) => d.blindedMessage),
+			outputs,
 		};
 		return {
 			payload,
@@ -633,7 +630,6 @@ class Wallet {
 	 * @param token Cashu token.
 	 * @param counter Starting counter for deterministic secrets.
 	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using deterministic secrets.
 	 * @v3
@@ -642,14 +638,12 @@ class Wallet {
 		token: Token | string,
 		counter: number,
 		splitAmounts?: number[],
-		proofsWeHave?: Proof[],
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'deterministic',
 			counter,
 			splitAmounts,
-			proofsWeHave,
 		};
 		return this.receive(token, outputType, config);
 	}
@@ -660,7 +654,6 @@ class Wallet {
 	 * @param token Cashu token.
 	 * @param options P2PK locking options (e.g., pubkey, locktime).
 	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, P2PK-locked.
 	 * @v3
@@ -669,14 +662,12 @@ class Wallet {
 		token: Token | string,
 		options: P2PKOptions,
 		splitAmounts?: number[],
-		proofsWeHave?: Proof[],
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'p2pk',
 			options,
 			splitAmounts,
-			proofsWeHave,
 		};
 		return this.receive(token, outputType, config);
 	}
@@ -687,7 +678,6 @@ class Wallet {
 	 * @param token Cashu token.
 	 * @param factory Output data factory.
 	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using factory-generated secrets.
 	 * @v3
@@ -696,14 +686,12 @@ class Wallet {
 		token: Token | string,
 		factory: OutputDataFactory,
 		splitAmounts?: number[],
-		proofsWeHave?: Proof[],
 		config?: ReceiveConfig,
 	): Promise<Proof[]> {
 		const outputType: OutputType = {
 			type: 'factory',
 			factory,
 			splitAmounts,
-			proofsWeHave,
 		};
 		return this.receive(token, outputType, config);
 	}
@@ -766,6 +754,7 @@ class Wallet {
 			keys,
 			outputType,
 			false, // includeFees is not applicable for receive
+			config?.proofsWeHave,
 		);
 		const swapTransaction = this.createSwapTransaction(proofs, outputs, [], config?.privkey);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
@@ -952,11 +941,7 @@ class Wallet {
 		amount: number,
 		proofs: Proof[],
 		outputConfig: OutputConfig = DEFAULT_OUTPUT_CONFIG,
-		config?: {
-			privkey?: string;
-			keysetId?: string;
-			includeFees?: boolean;
-		},
+		config?: SendConfig,
 	): Promise<SendResponse> {
 		const { privkey, keysetId, includeFees = false } = config || {};
 		// First, let's see if we can avoid a swap (and fees)
@@ -1001,11 +986,7 @@ class Wallet {
 		const keys = this.keyChain.getKeys(keysetId);
 
 		// Shape SEND output type and create outputs
-		// Note: proofsWeHave is not valid for send outputs (optimization is for keep only)
-		let sendType: OutputType = outputConfig.send ?? DEFAULT_OUTPUT;
-		if ('custom' != sendType.type && sendType.proofsWeHave) {
-			sendType = { ...sendType, proofsWeHave: undefined };
-		}
+		const sendType: OutputType = outputConfig.send ?? DEFAULT_OUTPUT;
 		const sendOutputs = this.configureOutputs(amount, keys, sendType, includeFees);
 		const sendTarget = OutputData.sumOutputAmounts(sendOutputs);
 
@@ -1039,7 +1020,7 @@ class Wallet {
 		}
 
 		// Shape KEEP (change) output type and create outputs.
-		// Note: no includeFees, as we are the receiver
+		// We auto-offset the counter if both send and receive are deterministic
 		let keepType = outputConfig.keep ?? DEFAULT_OUTPUT;
 		if (keepType.type === 'deterministic' && sendType.type === 'deterministic') {
 			const oldKeepCounter = keepType.counter;
@@ -1050,7 +1031,15 @@ class Wallet {
 				newKeepCounter: keepType.counter,
 			});
 		}
-		const keepOutputs = this.configureOutputs(changeAmount, keys, keepType, false);
+		// No includeFees, as we are the receiver of the change
+		// Use unselectedProofs to optimize denominations if needed
+		const keepOutputs = this.configureOutputs(
+			changeAmount,
+			keys,
+			keepType,
+			false,
+			unselectedProofs,
+		);
 
 		// Execute swap
 		const swapTransaction = this.createSwapTransaction(
@@ -1709,7 +1698,6 @@ class Wallet {
 	 * @param quote Mint quote ID or object.
 	 * @param counter Starting counter for deterministic secrets.
 	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
@@ -1718,14 +1706,12 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 		counter: number,
 		splitAmounts?: number[],
-		proofsWeHave?: Proof[],
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const effectiveOutputType: OutputType = {
 			type: 'deterministic',
 			counter,
 			splitAmounts,
-			proofsWeHave,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
@@ -1739,7 +1725,6 @@ class Wallet {
 	 * @param quote Mint quote ID or object.
 	 * @param p2pkOptions P2PK locking options (e.g. pubkey, locktime).
 	 * @param splitAmounts Optional custom amounts for splitting outputs.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
 	 * @param config Optional parameters (e.g. privkey, splitAmounts, proofsWeHave).
 	 * @returns Minted proofs.
 	 */
@@ -1748,14 +1733,12 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 		p2pkOptions: P2PKOptions,
 		splitAmounts?: number[],
-		proofsWeHave?: Proof[],
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const effectiveOutputType: OutputType = {
 			type: 'p2pk',
 			options: p2pkOptions,
 			splitAmounts,
-			proofsWeHave,
 		};
 		return this.mintProofs(amount, quote, effectiveOutputType, config);
 	}
@@ -2174,15 +2157,16 @@ class Wallet {
 		amount: number,
 		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
 		outputType: OutputType = DEFAULT_OUTPUT,
-		config?: { privkey?: string; keysetId?: string },
+		config?: MintProofsConfig,
 	): Promise<Proof[]> {
-		const { privkey, keysetId } = config ?? {};
+		const { privkey, keysetId, proofsWeHave } = config ?? {};
 		if (amount <= 0) {
 			this._logger.warn('Invalid mint amount: must be positive', { amount });
 			throw new Error('Amount must be positive');
 		}
+		// Create outputs for our proofs (we are receiving, so no includeFees)
 		const keyset = this.keyChain.getKeys(keysetId);
-		const outputs = this.configureOutputs(amount, keyset, outputType, false); // No includeFees for mint
+		const outputs = this.configureOutputs(amount, keyset, outputType, false, proofsWeHave);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
 		if (typeof quote === 'string') {
@@ -2266,10 +2250,9 @@ class Wallet {
 			const effectiveOutputType = {
 				...outputType,
 				splitAmounts, // Our 1-sat blanks
-				proofsWeHave: undefined, // No optimization for change
 			};
 
-			// Generate the blank outputs
+			// Generate the blank outputs (no fees as we are receiving change)
 			outputData = this.configureOutputs(changeAmount, keys, effectiveOutputType, false);
 		}
 

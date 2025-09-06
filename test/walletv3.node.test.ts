@@ -759,7 +759,7 @@ describe('receive', () => {
 			],
 			unit: 'sat',
 		};
-		const proofs = await wallet.receive(tok, { type: 'random', proofsWeHave: existingProofs });
+		const proofs = await wallet.receive(tok, DEFAULT_OUTPUT, { proofsWeHave: existingProofs });
 		// receiving 5 with a target count of 3, we expect three 1s, and one 2
 		// as we already have the target amount of 2s
 		expect(proofs).toHaveLength(4);
@@ -1271,7 +1271,12 @@ describe('send', () => {
 						},
 						{
 							id: '00bd033559de27d0',
-							amount: 2,
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
 							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
 						},
 						{
@@ -1309,16 +1314,20 @@ describe('send', () => {
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
 		// Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
+		// Total unselected = [1]
 		// Total send = [1, 2, 2]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
+		// Total change = [1, 1] because proofs are optimized to target (3)
+		// Total keep = [1, 1, 1]
 		expect(result.send).toHaveLength(3);
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 		expect(result.send[1]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
 		expect(result.send[2]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
-		expect(result.keep).toHaveLength(2);
-		expect(result.keep[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.keep).toHaveLength(3);
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 		expect(result.keep[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.keep[2]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
 	test('send with deterministic keep/send auto-offsets counters and fees', async () => {
 		server.use(
@@ -1339,7 +1348,12 @@ describe('send', () => {
 						},
 						{
 							id: '00bd033559de27d0',
-							amount: 2,
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
 							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
 						},
 						{
@@ -1359,7 +1373,7 @@ describe('send', () => {
 		const seed = hexToBytes(
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 		);
-		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		const wallet = new Wallet(mint, { unit, bip39seed: seed });
 		await wallet.loadMint();
 
 		const overpayProofs = [
