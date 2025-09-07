@@ -2719,6 +2719,451 @@ describe('Test coinselection', () => {
 	});
 });
 
+describe('melt proofs', () => {
+	test('test melt proofs base case', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				return HttpResponse.json({
+					paid: true,
+					preimage: 'preimage',
+					change: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		]; // sum=13, feeReserve=3, amount=10
+		const response = await wallet.meltProofs(meltQuote, proofsToSend);
+
+		expect(response.quote.paid).toBe(true);
+		expect(response.quote.preimage).toBe('preimage');
+		expect(response.change).toHaveLength(2);
+		expect(response.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(response.change[1]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(response.change[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(response.change[0].secret)).toBe(true);
+	});
+
+	test('test melt proofs no change', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				return HttpResponse.json({
+					paid: true,
+					preimage: 'preimage',
+					change: [],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 12,
+			fee_reserve: 0,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 4,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		]; // sum=12, feeReserve=0
+		const response = await wallet.meltProofs(meltQuote, proofsToSend);
+
+		expect(response.quote.paid).toBe(true);
+		expect(response.quote.preimage).toBe('preimage');
+		expect(response.change).toHaveLength(0);
+	});
+
+	test('test melt proofs pending', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				return HttpResponse.json({
+					paid: false,
+					preimage: null,
+					change: null,
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+		const response = await wallet.meltProofs(meltQuote, proofsToSend);
+
+		expect(response.quote.paid).toBe(false);
+		expect(response.quote.preimage).toBeNull();
+		expect(response.change).toHaveLength(0);
+	});
+
+	test('test melt proofs with callback for blanks', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				return HttpResponse.json({
+					paid: true,
+					preimage: 'preimage',
+					change: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+		let capturedBlanks: MeltBlanks | undefined;
+		const config: MeltProofsConfig = {
+			onChangeOutputsCreated: (blanks) => {
+				capturedBlanks = blanks;
+			},
+		};
+		const response = await wallet.meltProofs(meltQuote, proofsToSend, DEFAULT_OUTPUT, config);
+
+		expect(capturedBlanks).toBeDefined();
+		expect(capturedBlanks!.method).toBe('bolt11');
+		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
+		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
+		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
+		expect(capturedBlanks!.payload.quote).toBe('test_melt_quote');
+		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
+		expect(capturedBlanks!.payload.outputs).toHaveLength(2);
+
+		// Response still completes sync
+		expect(response.change).toHaveLength(2);
+	});
+
+	test('test melt proofs pending with callback and completeMelt', async () => {
+		let callCount = 0;
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				callCount++;
+				if (callCount === 1) {
+					return HttpResponse.json({
+						paid: false,
+						preimage: null,
+						change: null,
+					});
+				}
+				return HttpResponse.json({
+					paid: true,
+					preimage: 'preimage',
+					change: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+		let capturedBlanks: MeltBlanks | undefined;
+		const config: MeltProofsConfig = {
+			onChangeOutputsCreated: (blanks) => {
+				capturedBlanks = blanks;
+			},
+		};
+		const initialResponse = await wallet.meltProofs(
+			meltQuote,
+			proofsToSend,
+			DEFAULT_OUTPUT,
+			config,
+		);
+
+		expect(initialResponse.quote.paid).toBe(false);
+		expect(initialResponse.change).toHaveLength(0);
+		expect(capturedBlanks).toBeDefined();
+
+		// Simulate completion later
+		const completedResponse = await wallet.completeMelt(capturedBlanks!);
+
+		expect(completedResponse.quote.paid).toBe(true);
+		expect(completedResponse.quote.preimage).toBe('preimage');
+		expect(completedResponse.change).toHaveLength(2);
+		expect(completedResponse.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
+
+	test('test melt proofs bolt12 variant', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt12', () => {
+				return HttpResponse.json({
+					paid: true,
+					preimage: 'preimage',
+					change: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: Bolt12MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt12request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+		const response = await wallet.meltProofsBolt12(meltQuote, proofsToSend);
+
+		expect(response.quote.paid).toBe(true);
+		expect(response.quote.preimage).toBe('preimage');
+		expect(response.change).toHaveLength(2);
+		expect(response.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
+
+	test('test melt proofs bad response', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				return HttpResponse.json({});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+		const result = await wallet.meltProofs(meltQuote, proofsToSend).catch((e) => e);
+
+		expect(result).toEqual(new Error('bad response'));
+	});
+
+	test('test melt proofs mismatch signatures', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', () => {
+				return HttpResponse.json({
+					paid: true,
+					preimage: 'preimage',
+					change: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const meltQuote: MeltQuoteResponse = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 2,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			unit: 'sat',
+		};
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 4,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+		const result = await wallet.meltProofs(meltQuote, proofsToSend).catch((e) => e);
+
+		expect(result.message).toContain('Mint returned 3 signatures, but only 1 blanks were provided');
+	});
+});
+
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	p.forEach((p) => {
 		const parsedSecret = JSON.parse(p.secret);

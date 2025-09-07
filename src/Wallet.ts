@@ -131,7 +131,20 @@ export type MintProofsConfig = {
  */
 export type MeltProofsConfig = {
 	keysetId?: string;
+	onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
 };
+
+/**
+ * @v3
+ * Blanks for completing a melt operation asynchronously.
+ */
+export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
+	method: 'bolt11' | 'bolt12';
+	payload: MeltPayload;
+	outputData: OutputDataLike[];
+	keyset: Keyset;
+	quote: T;
+}
 
 /**
  * Shared properties for most `OutputType` variants (except 'custom').
@@ -1938,7 +1951,7 @@ class Wallet {
 	 * Melt proofs for a bolt11 melt quote, returns change proofs using specified outputType.
 	 *
 	 * @remarks
-	 * ProofsToSend must be at least amount+fee_reserve frorm the melt quote. This function does not
+	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
 	 * perform coin selection!.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
@@ -1959,7 +1972,7 @@ class Wallet {
 	 * Melt proofs for a bolt12 melt quote, returns change proofs using specified outputType.
 	 *
 	 * @remarks
-	 * ProofsToSend must be at least amount+fee_reserve frorm the melt quote. This function does not
+	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
 	 * perform coin selection!.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
@@ -1972,10 +1985,7 @@ class Wallet {
 		proofsToSend: Proof[],
 		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MeltProofsConfig,
-	): Promise<{
-		quote: Bolt12MeltQuoteResponse;
-		change: Proof[];
-	}> {
+	): Promise<MeltProofsResponse> {
 		return this._meltProofs('bolt12', meltQuote, proofsToSend, outputType, config);
 	}
 
@@ -2225,13 +2235,14 @@ class Wallet {
 	 * Melt proofs for a given melt quote created with the bolt11 or bolt12 method.
 	 *
 	 * @remarks
-	 * Creates NUT-08 blanks (1-sat) for Lightning fee return.
+	 * Creates NUT-08 blanks (1-sat) for Lightning fee return. Get these by setting a
+	 * config.onChangeOutputsCreated callback for async melting. @see completeMelt.
 	 * @param method Payment method of the quote.
 	 * @param meltQuote The bolt11 or bolt12 melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
-	 * @param config Optional (keysetId).
-	 * @returns Minted proofs.
+	 * @param config Optional (keysetId, onChangeOutputsCreated).
+	 * @returns MeltProofsResponse.
 	 * @throws If params are invalid or mint returns errors.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
@@ -2242,7 +2253,7 @@ class Wallet {
 		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MeltProofsConfig,
 	): Promise<MeltProofsResponse> {
-		const { keysetId } = config || {};
+		const { keysetId, onChangeOutputsCreated } = config || {};
 		const keyset = this.keyChain.getKeyset(keysetId);
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
@@ -2283,17 +2294,76 @@ class Wallet {
 			inputs: proofsToSend,
 			outputs: outputData.map((d) => d.blindedMessage),
 		};
-		if (method === 'bolt12') {
-			const meltResponse = await this.mint.meltBolt12(meltPayload);
-			return {
-				quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
-				change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [],
+
+		// Fire callback with blanks (if provided)
+		if (onChangeOutputsCreated) {
+			const blanks: MeltBlanks = {
+				method,
+				payload: meltPayload,
+				outputData,
+				keyset,
+				quote: meltQuote,
 			};
+			onChangeOutputsCreated(blanks);
 		}
-		const meltResponse = await this.mint.melt(meltPayload);
+
+		// Proceed with melt
+		let meltResponse;
+		if (method === 'bolt12') {
+			meltResponse = await this.mint.meltBolt12(meltPayload);
+		} else {
+			meltResponse = await this.mint.melt(meltPayload);
+		}
+
+		// Sanity check mint didn't send too many signatures before mapping
+		// Should not happen, except in case of a broken or malicious mint
+		if (meltResponse.change && meltResponse.change.length > outputData.length) {
+			const message = `Mint returned ${meltResponse.change.length} signatures, but only ${outputData.length} blanks were provided`;
+			this._logger.error(message);
+			throw new Error(message);
+		}
+
+		// Construct change if provided (empty if pending/not paid; shorter ok if less overfee)
 		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
 		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
 		return { quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request }, change };
+	}
+
+	/**
+	 * Completes a pending melt by re-calling the melt endpoint and constructing change proofs.
+	 *
+	 * @remarks
+	 * Use with blanks from onChangeOutputsCreated to retry pending melts. Works for Bolt11/Bolt12.
+	 * Returns change proofs if paid, else empty change.
+	 * @param blanks The blanks from onChangeOutputsCreated.
+	 * @returns Updated MeltProofsResponse.
+	 * @throws If melt fails or signatures don't match output count.
+	 * @v3
+	 */
+	async completeMelt<T extends MeltQuoteResponse>(
+		blanks: MeltBlanks<T>,
+	): Promise<MeltProofsResponse> {
+		const meltResponse =
+			blanks.method === 'bolt12'
+				? await this.mint.meltBolt12(blanks.payload)
+				: await this.mint.melt(blanks.payload);
+
+		// Check for too many signatures before mapping
+		if (meltResponse.change && meltResponse.change.length > blanks.outputData.length) {
+			const message = `Mint returned ${meltResponse.change.length} signatures, but only ${blanks.outputData.length} blanks were provided`;
+			this._logger.error(message);
+			throw new Error(message);
+		}
+
+		// Construct change (shorter ok)
+		const change =
+			meltResponse.change?.map((s, i) => blanks.outputData[i].toProof(s, blanks.keyset)) ?? [];
+
+		this._logger.debug('COMPLETE MELT', { changeAmounts: change.map((p) => p.amount) });
+		return {
+			quote: { ...meltResponse, unit: blanks.quote.unit, request: blanks.quote.request },
+			change,
+		};
 	}
 }
 
