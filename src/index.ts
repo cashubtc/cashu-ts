@@ -7,7 +7,7 @@ import { Mint } from './mint';
 /**
  * @v3 imports
  */
-import { KeyChain } from './model/KeyChain';
+import { KeyChain } from './wallet/KeyChain';
 import {
 	type P2PKOptions,
 	type OutputType,

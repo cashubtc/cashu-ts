@@ -5,7 +5,7 @@ import {
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type Keyset } from '../model/Keyset';
+import { type Keyset } from '../wallet';
 import { blindMessage, constructProofFromPromise, serializeProof } from '../crypto/client/index';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';

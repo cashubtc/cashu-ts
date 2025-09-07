@@ -23,8 +23,8 @@ import {
 	type V4DLEQTemplate,
 	type V4InnerToken,
 	type V4ProofTemplate,
-} from './model/types';
-import { type Keyset } from './model/Keyset';
+} from './model/types/index';
+import { type Keyset } from './wallet';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
 import { Bytes } from './utils/Bytes';
 

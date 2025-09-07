@@ -40,8 +40,8 @@ import { signP2PKProofs } from '../crypto/client/NUT11';
 import { hashToCurve } from '../crypto/common/index';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
-import { KeyChain } from '../model/KeyChain';
-import { type Keyset } from '../model/Keyset';
+import { KeyChain } from './KeyChain';
+import { type Keyset } from './Keyset';
 import { type Logger, NULL_LOGGER, measureTime } from '../logger';
 import {
 	type GetInfoResponse,

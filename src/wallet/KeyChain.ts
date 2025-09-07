@@ -1,6 +1,6 @@
 import { Keyset } from './Keyset';
 import { type Mint } from '../mint';
-import { type MintKeyset, type MintKeys } from './types';
+import { type MintKeyset, type MintKeys } from '../model/types';
 
 export class KeyChain {
 	private mint: Mint;

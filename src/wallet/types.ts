@@ -1,6 +1,6 @@
-import type { MeltPayload, MeltQuoteResponse ,Proof } from '../model/types/index';
+import type { MeltPayload, MeltQuoteResponse, Proof } from '../model/types/index';
 import { type OutputData, type OutputDataFactory, type OutputDataLike } from '../model/OutputData';
-import { type Keyset } from '../model/Keyset';
+import { type Keyset } from './Keyset';
 
 /**
  * @v3

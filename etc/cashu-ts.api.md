@@ -13,16 +13,13 @@ import { getBlindedAuthToken } from './auth.js';
 import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
 import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
-import { Keys as Keys_2 } from './model/types.js';
+import { Keyset as Keyset_2 } from './wallet.js';
 import { Logger } from './logger.js';
 import { LogLevel } from './logger.js';
 import { MeltProofsConfig } from './wallet.js';
 import { Mint } from './mint.js';
 import { MintContactInfo as MintContactInfo_2 } from './types';
 import { MintKeys as MintKeys_2 } from './types.js';
-import { MintKeys as MintKeys_3 } from './model/types.js';
-import { MintKeyset as MintKeyset_2 } from './types.js';
-import { MintKeyset as MintKeyset_3 } from './model/types.js';
 import { MintProofsConfig } from './wallet.js';
 import { MPPMethod as MPPMethod_2 } from './types.js';
 import { NUT10Option as NUT10Option_2 } from './types.js';
@@ -32,7 +29,6 @@ import { P2PKOptions } from './wallet.js';
 import { PaymentRequestTransport as PaymentRequestTransport_2 } from './types.js';
 import { PaymentRequestTransportType as PaymentRequestTransportType_2 } from './types.js';
 import { Proof as Proof_2 } from './types.js';
-import { Proof as Proof_3 } from './model/types.js';
 import { RawPaymentRequest as RawPaymentRequest_2 } from './types.js';
 import { ReceiveConfig } from './wallet.js';
 import { SendConfig } from './wallet.js';
@@ -41,7 +37,6 @@ import { SerializedBlindedMessage as SerializedBlindedMessage_2 } from './types.
 import { SerializedBlindedSignature as SerializedBlindedSignature_2 } from './types.js';
 import { SharedOutputTypeProps } from './wallet.js';
 import { SwapMethod as SwapMethod_2 } from './types.js';
-import { Token as Token_2 } from './model/types.js';
 import { Wallet } from './wallet.js';
 import { WebSocketSupport as WebSocketSupport_2 } from './types.js';
 
@@ -280,31 +275,29 @@ export type DeprecatedToken = {
 };
 
 // @public
-export function deriveKeysetId(keys: Keys_2, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 export { getBlindedAuthToken }
 
-// Warning: (ae-forgotten-export) The symbol "Keyset" needs to be exported by the entry point index.d.ts
-//
 // @public
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset_3[] | Keyset[]): Token_2;
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset_2[]): Token;
 
 // @public (undocumented)
-export function getDecodedTokenBinary(bytes: Uint8Array): Token_2;
+export function getDecodedTokenBinary(bytes: Uint8Array): Token;
 
 export { getEncodedAuthToken }
 
 // @public
-export function getEncodedToken(token: Token_2, opts?: {
+export function getEncodedToken(token: Token, opts?: {
     version?: 3 | 4;
     removeDleq?: boolean;
 }): string;
 
 // @public (undocumented)
-export function getEncodedTokenBinary(token: Token_2): Uint8Array;
+export function getEncodedTokenBinary(token: Token): Uint8Array;
 
 // @public (undocumented)
-export function getEncodedTokenV4(token: Token_2, removeDleq?: boolean): string;
+export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
 export type GetInfoResponse = {
@@ -366,7 +359,7 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function hasValidDleq(proof: Proof_3, keyset: MintKeys_3 | Keyset): boolean;
+export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset_2): boolean;
 
 // @public
 export type HTLCWitness = {
@@ -426,14 +419,15 @@ export type JsonRpcReqParams = {
 // @public (undocumented)
 export class KeyChain {
     // Warning: (ae-forgotten-export) The symbol "Mint_2" needs to be exported by the entry point index.d.ts
-    constructor(mint: Mint_2, unit: string, cachedKeysets?: MintKeyset_2[], cachedKeys?: MintKeys_2[] | MintKeys_2);
+    constructor(mint: Mint_2, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
     getCache(): {
-        keysets: MintKeyset_2[];
-        keys: MintKeys_2[];
+        keysets: MintKeyset[];
+        keys: MintKeys[];
         unit: string;
         mintUrl: string;
     };
     getCheapestKeyset(): Keyset;
+    // Warning: (ae-forgotten-export) The symbol "Keyset" needs to be exported by the entry point index.d.ts
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;

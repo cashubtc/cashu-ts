@@ -1,5 +1,5 @@
 import { isValidHex, deriveKeysetId } from '../utils';
-import { type MintKeyset, type MintKeys } from './types';
+import { type MintKeyset, type MintKeys } from '../model/types';
 import { hexToBytes } from '@noble/curves/abstract/utils';
 
 export class Keyset {

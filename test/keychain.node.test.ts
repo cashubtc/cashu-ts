@@ -3,7 +3,7 @@ import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
 import { Mint } from '../src/Mint';
-import { KeyChain } from '../src/model/KeyChain';
+import { KeyChain } from '../src/wallet/KeyChain';
 import { type MintKeyset, type MintKeys } from '../src/types';
 import { isValidHex } from '../src/utils';
 import { PUBKEYS } from './consts';
