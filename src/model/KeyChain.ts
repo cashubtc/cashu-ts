@@ -1,5 +1,5 @@
 import { Keyset } from './Keyset';
-import { type Mint } from '../Mint';
+import { type Mint } from '../mint';
 import { type MintKeyset, type MintKeys } from './types';
 
 export class KeyChain {

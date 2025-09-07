@@ -1,44 +1,4 @@
-/**
- * Defines the available log levels for the logger. Log levels are ordered from most severe (FATAL)
- * to least severe (TRACE).
- */
-export const LogLevel = {
-	FATAL: 'FATAL',
-	ERROR: 'ERROR',
-	WARN: 'WARN',
-	INFO: 'INFO',
-	DEBUG: 'DEBUG',
-	TRACE: 'TRACE',
-} as const;
-
-/**
- * Defines the available log levels for the logger. Log levels are ordered from most severe (FATAL)
- * to least severe (TRACE).
- */
-export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
-
-export interface Logger {
-	fatal(message: string, context?: Record<string, unknown>): void;
-	error(message: string, context?: Record<string, unknown>): void;
-	warn(message: string, context?: Record<string, unknown>): void;
-	info(message: string, context?: Record<string, unknown>): void;
-	debug(message: string, context?: Record<string, unknown>): void;
-	trace(message: string, context?: Record<string, unknown>): void;
-	log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
-}
-
-// The default logger implementation - does nothing
-/* eslint-disable @typescript-eslint/no-empty-function */
-export const NULL_LOGGER: Logger = {
-	fatal() {},
-	error() {},
-	warn() {},
-	info() {},
-	debug() {},
-	trace() {},
-	log() {},
-};
-/* eslint-enable @typescript-eslint/no-empty-function */
+import { type Logger, LogLevel } from './Logger';
 
 /**
  * Outputs messages to the console based on the specified log level.

@@ -6,27 +6,43 @@
 
 import { CashuAuthMint } from './auth.js';
 import { CashuAuthWallet } from './auth.js';
+import { ConsoleLogger } from './logger.js';
+import { DEFAULT_OUTPUT } from './wallet.js';
+import { DEFAULT_OUTPUT_CONFIG } from './wallet.js';
 import { getBlindedAuthToken } from './auth.js';
 import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
 import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
 import { Keys as Keys_2 } from './model/types.js';
+import { Logger } from './logger.js';
+import { LogLevel } from './logger.js';
+import { MeltProofsConfig } from './wallet.js';
+import { Mint } from './mint.js';
 import { MintContactInfo as MintContactInfo_2 } from './types';
 import { MintKeys as MintKeys_2 } from './types.js';
 import { MintKeys as MintKeys_3 } from './model/types.js';
 import { MintKeyset as MintKeyset_2 } from './types.js';
 import { MintKeyset as MintKeyset_3 } from './model/types.js';
+import { MintProofsConfig } from './wallet.js';
 import { MPPMethod as MPPMethod_2 } from './types.js';
 import { NUT10Option as NUT10Option_2 } from './types.js';
+import { OutputConfig } from './wallet.js';
+import { OutputType } from './wallet.js';
+import { P2PKOptions } from './wallet.js';
 import { PaymentRequestTransport as PaymentRequestTransport_2 } from './types.js';
 import { PaymentRequestTransportType as PaymentRequestTransportType_2 } from './types.js';
 import { Proof as Proof_2 } from './types.js';
 import { Proof as Proof_3 } from './model/types.js';
 import { RawPaymentRequest as RawPaymentRequest_2 } from './types.js';
+import { ReceiveConfig } from './wallet.js';
+import { SendConfig } from './wallet.js';
+import { SendOfflineConfig } from './wallet.js';
 import { SerializedBlindedMessage as SerializedBlindedMessage_2 } from './types.js';
 import { SerializedBlindedSignature as SerializedBlindedSignature_2 } from './types.js';
+import { SharedOutputTypeProps } from './wallet.js';
 import { SwapMethod as SwapMethod_2 } from './types.js';
 import { Token as Token_2 } from './model/types.js';
+import { Wallet } from './wallet.js';
 import { WebSocketSupport as WebSocketSupport_2 } from './types.js';
 
 // @public
@@ -247,37 +263,14 @@ export type CheckStateResponse = {
     states: ProofState[];
 } & ApiError;
 
-// @public
-export class ConsoleLogger implements Logger {
-    constructor(minLevel?: LogLevel);
-    // (undocumented)
-    debug(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    error(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    fatal(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    info(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    static readonly SEVERITY: Record<LogLevel, number>;
-    // (undocumented)
-    trace(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    warn(message: string, context?: Record<string, unknown>): void;
-}
+export { ConsoleLogger }
 
 // @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
-// @public
-export const DEFAULT_OUTPUT: {
-    type: "random";
-};
+export { DEFAULT_OUTPUT }
 
-// @public
-export const DEFAULT_OUTPUT_CONFIG: OutputConfig;
+export { DEFAULT_OUTPUT_CONFIG }
 
 // @public
 export type DeprecatedToken = {
@@ -432,7 +425,8 @@ export type JsonRpcReqParams = {
 
 // @public (undocumented)
 export class KeyChain {
-    constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset_2[], cachedKeys?: MintKeys_2[] | MintKeys_2);
+    // Warning: (ae-forgotten-export) The symbol "Mint_2" needs to be exported by the entry point index.d.ts
+    constructor(mint: Mint_2, unit: string, cachedKeysets?: MintKeyset_2[], cachedKeys?: MintKeys_2[] | MintKeys_2);
     getCache(): {
         keysets: MintKeyset_2[];
         keys: MintKeys_2[];
@@ -461,36 +455,9 @@ export type LockedMintQuoteResponse = MintQuoteResponse & {
     pubkey: string;
 };
 
-// @public (undocumented)
-export interface Logger {
-    // (undocumented)
-    debug(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    error(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    fatal(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    info(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    trace(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    warn(message: string, context?: Record<string, unknown>): void;
-}
+export { Logger }
 
-// @public
-export const LogLevel: {
-    readonly FATAL: "FATAL";
-    readonly ERROR: "ERROR";
-    readonly WARN: "WARN";
-    readonly INFO: "INFO";
-    readonly DEBUG: "DEBUG";
-    readonly TRACE: "TRACE";
-};
-
-// @public
-export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+export { LogLevel }
 
 // @public
 export type MeltPayload = {
@@ -506,11 +473,7 @@ export type MeltProofOptions = {
     privkey?: string;
 };
 
-// @public
-export type MeltProofsConfig = {
-    keysetId?: string;
-    onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
-};
+export { MeltProofsConfig }
 
 // @public
 export type MeltProofsResponse = {
@@ -547,38 +510,7 @@ export const MeltQuoteState: {
 // @public (undocumented)
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
 
-// @public
-export class Mint {
-    constructor(_mintUrl: string, customRequest?: typeof request, authTokenGetter?: () => Promise<string>, options?: {
-        logger?: Logger;
-    });
-    check(checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
-    checkMeltQuote(quote: string, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
-    checkMeltQuoteBolt12(quote: string, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
-    checkMintQuote(quote: string, customRequest?: typeof request): Promise<PartialMintQuoteResponse>;
-    checkMintQuoteBolt12(quote: string, customRequest?: typeof request): Promise<Bolt12MintQuoteResponse>;
-    connectWebSocket(): Promise<void>;
-    createMeltQuote(meltQuotePayload: MeltQuotePayload, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
-    createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
-    createMintQuote(mintQuotePayload: MintQuotePayload, customRequest?: typeof request): Promise<PartialMintQuoteResponse>;
-    createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: typeof request): Promise<Bolt12MintQuoteResponse>;
-    disconnectWebSocket(): void;
-    getInfo(customRequest?: typeof request): Promise<GetInfoResponse>;
-    getKeys(keysetId?: string, mintUrl?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
-    getKeySets(customRequest?: typeof request): Promise<MintAllKeysets>;
-    getLazyMintInfo(): Promise<MintInfo>;
-    handleBlindAuth(path: string): Promise<string | undefined>;
-    melt(meltPayload: MeltPayload, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
-    meltBolt12(meltPayload: MeltPayload, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
-    mint(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse>;
-    mintBolt12(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse>;
-    // (undocumented)
-    get mintUrl(): string;
-    restore(restorePayload: PostRestorePayload, customRequest?: typeof request): Promise<PostRestoreResponse>;
-    swap(swapPayload: SwapPayload, customRequest?: typeof request): Promise<SwapResponse>;
-    // (undocumented)
-    get webSocketConnection(): WSConnection | undefined;
-}
+export { Mint }
 
 // @public
 export type MintActiveKeys = {
@@ -644,12 +576,7 @@ export type MintProofOptions = {
     };
 };
 
-// @public
-export type MintProofsConfig = {
-    keysetId?: string;
-    privkey?: string;
-    proofsWeHave?: Proof[];
-};
+export { MintProofsConfig }
 
 // @public
 export type MintQuotePayload = {
@@ -709,13 +636,7 @@ export type OutputAmounts = {
     keepAmounts?: number[];
 };
 
-// @public
-export interface OutputConfig {
-    // (undocumented)
-    keep?: OutputType;
-    // (undocumented)
-    send: OutputType;
-}
+export { OutputConfig }
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
@@ -755,31 +676,9 @@ export class OutputData implements OutputDataLike {
     toProof(sig: SerializedBlindedSignature_2, keyset: MintKeys_2 | Keyset): Proof_2;
 }
 
-// @public
-export type OutputType = ({
-    type: 'random';
-} & SharedOutputTypeProps) | ({
-    type: 'deterministic';
-    counter: number;
-} & SharedOutputTypeProps) | ({
-    type: 'p2pk';
-    options: P2PKOptions;
-} & SharedOutputTypeProps) | ({
-    type: 'factory';
-    factory: OutputDataFactory;
-} & SharedOutputTypeProps) | {
-    type: 'custom';
-    data: OutputData[];
-};
+export { OutputType }
 
-// @public
-export type P2PKOptions = {
-    pubkey: string | string[];
-    locktime?: number;
-    refundKeys?: string[];
-    requiredSignatures?: number;
-    requiredRefundSignatures?: number;
-};
+export { P2PKOptions }
 
 // @public
 export type P2PKWitness = {
@@ -926,13 +825,7 @@ export type RawTransport = {
     g?: string[][];
 };
 
-// @public
-export type ReceiveConfig = {
-    keysetId?: string;
-    privkey?: string | string[];
-    requireDleq?: boolean;
-    proofsWeHave?: Proof[];
-};
+export { ReceiveConfig }
 
 // @public (undocumented)
 export type ReceiveOptions = {
@@ -972,18 +865,9 @@ export type RestoreOptions = {
 // @public (undocumented)
 export type RpcSubId = string | number | null;
 
-// @public
-export type SendConfig = {
-    keysetId?: string;
-    includeFees?: boolean;
-};
+export { SendConfig }
 
-// @public
-export type SendOfflineConfig = {
-    requireDleq?: boolean;
-    includeFees?: boolean;
-    exactMatch?: boolean;
-};
+export { SendOfflineConfig }
 
 // @public (undocumented)
 export type SendOptions = {
@@ -1046,10 +930,7 @@ export type SerializedDLEQ = {
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
-// @public
-export interface SharedOutputTypeProps {
-    denominations?: number[];
-}
+export { SharedOutputTypeProps }
 
 // @public
 export type SwapMethod = {
@@ -1150,82 +1031,7 @@ export type V4ProofTemplate = {
     w?: string;
 };
 
-// @public
-export class Wallet {
-    constructor(mint: Mint | string, options?: {
-        unit?: string;
-        keys?: MintKeys[] | MintKeys;
-        keysets?: MintKeyset[];
-        mintInfo?: GetInfoResponse;
-        bip39seed?: Uint8Array;
-        denominationTarget?: number;
-        keepFactory?: OutputDataFactory;
-        logger?: Logger;
-    });
-    batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
-        proofs: Proof[];
-        lastCounterWithSignature?: number;
-    }>;
-    checkMeltQuote(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
-    checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse>;
-    checkMintQuote(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
-    checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
-    checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
-    completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
-    createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
-    createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
-    createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
-    createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
-    createMintQuoteBolt12(pubkey: string, options?: {
-        amount?: number;
-        description?: string;
-    }): Promise<Bolt12MintQuoteResponse>;
-    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
-    getFeesForKeyset(nInputs: number, keysetId: string): number;
-    getFeesForProofs(proofs: Proof[]): number;
-    getMintInfo(): MintInfo;
-    readonly keyChain: KeyChain;
-    loadMint(forceRefresh?: boolean): Promise<void>;
-    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    meltProofsAsDefault(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    meltProofsAsDeterministic(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], counter: number, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    readonly mint: Mint;
-    mintProofs(amount: number, quote: string | MintQuoteResponse, outputType?: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsP2PK(amount: number, quote: string | MintQuoteResponse, p2pkOptions: P2PKOptions, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, outputType?: OutputType, config?: {
-        keysetId?: string;
-    }): Promise<Proof[]>;
-    onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onMintQuoteUpdates(quoteIds: string[], callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
-        proof: Proof;
-    }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    receive(token: Token | string, outputType?: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsCustom(token: Token | string, data: OutputData[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsDeterministic(token: Token | string, counter: number, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsFactory(token: Token | string, factory: OutputDataFactory, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsP2PK(token: Token | string, options: P2PKOptions, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
-    restore(start: number, count: number, options?: RestoreOptions): Promise<{
-        proofs: Proof[];
-        lastCounterWithSignature?: number;
-    }>;
-    selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
-    send(amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig): Promise<SendResponse>;
-    sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
-    sendAsDeterministic(amount: number, proofs: Proof[], counter: number, config?: SendConfig): Promise<SendResponse>;
-    sendAsP2PK(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, counter?: number, config?: SendConfig): Promise<SendResponse>;
-    sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
-    sendWithP2PKChange(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, config?: SendConfig): Promise<SendResponse>;
-    signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[];
-    readonly swap: (amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig) => Promise<SendResponse>;
-    get unit(): string;
-}
+export { Wallet }
 
 // @public
 export type WebSocketSupport = {
@@ -1237,7 +1043,6 @@ export type WebSocketSupport = {
 // Warnings were encountered during analysis:
 //
 // lib/types/CashuWallet.d.ts:41:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/Wallet.d.ts:63:5 - (ae-forgotten-export) The symbol "MeltBlanks" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:150:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:190:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/index.d.ts:218:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts

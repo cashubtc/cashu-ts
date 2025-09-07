@@ -3,7 +3,7 @@ import { CashuWallet } from './CashuWallet';
 /**
  * @v3 import
  */
-import { Mint } from './Mint';
+import { Mint } from './mint';
 /**
  * @v3 imports
  */
@@ -21,7 +21,7 @@ import {
 	DEFAULT_OUTPUT,
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
-} from './Wallet';
+} from './wallet';
 import { OutputData } from './model/OutputData';
 import { PaymentRequest } from './model/PaymentRequest';
 import { setGlobalRequestOptions } from './request';
