@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi 
 
 import { Mint } from '../../src/Mint';
 import { KeyChain } from '../../src/wallet/KeyChain';
+import { Keyset } from '../../src/wallet/Keyset';
 import { type MintKeyset, type MintKeys } from '../../src/types';
 import { isValidHex } from '../../src/utils';
 import { PUBKEYS } from '../consts';
@@ -147,6 +148,47 @@ describe('KeyChain initialization', () => {
 		expect(spyGetKeys).toHaveBeenCalledTimes(2);
 	});
 
+	test('should throw if no active hex keyset found', async () => {
+		// Only include inactive and non-hex keysets
+		const limitedKeysetResp = { keysets: dummyKeysetResp.keysets.slice(2) }; // 'invalidbase64' and '00inactive'
+		const limitedKeysResp = { keysets: dummyKeysResp.keysets.slice(2) };
+
+		server.use(
+			http.get(mintUrl + '/v1/keys', () => {
+				return HttpResponse.json(limitedKeysResp);
+			}),
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json(limitedKeysetResp);
+			}),
+		);
+
+		const keyChain = new KeyChain(mint, unit);
+		await expect(keyChain.init()).rejects.toThrow('No active keyset found');
+	});
+
+	test('should throw if keyset verification fails', async () => {
+		// Create mismatched data by changing ID but keeping keys the same (derived ID won't match)
+		const mismatchedKeysetResp = JSON.parse(JSON.stringify(dummyKeysetResp));
+		const mismatchedKeysResp = JSON.parse(JSON.stringify(dummyKeysResp));
+
+		// Change ID of first keyset and corresponding keys entry
+		const newId = '00bd033559de27d1'; // Mismatched by changing last character
+		mismatchedKeysetResp.keysets[0].id = newId;
+		mismatchedKeysResp.keysets[0].id = newId;
+
+		server.use(
+			http.get(mintUrl + '/v1/keys', () => {
+				return HttpResponse.json(mismatchedKeysResp);
+			}),
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json(mismatchedKeysetResp);
+			}),
+		);
+
+		const keyChain = new KeyChain(mint, unit);
+		await expect(keyChain.init()).rejects.toThrow(`Keyset verification failed for ID ${newId}`);
+	});
+
 	test('should throw if no active keyset found after init', async () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
@@ -177,6 +219,25 @@ describe('KeyChain initialization', () => {
 		const newCache = cachedChain.getCache();
 		expect(newCache).toEqual(originalCache);
 	});
+
+	test('should preload from single cached keys object', async () => {
+		const originalChain = new KeyChain(mint, unit);
+		await originalChain.init();
+		const originalCache = originalChain.getCache();
+
+		// Use only the first keys object as single MintKeys
+		const singleKeys = originalCache.keys[0];
+
+		// Filter keysets to match the single keys' ID for consistency
+		const matchingKeysets = originalCache.keysets.filter((ks) => ks.id === singleKeys.id);
+
+		const cachedChain = new KeyChain(mint, unit, matchingKeysets, singleKeys);
+
+		// Verify preloaded
+		const cachedActive = cachedChain.getCheapestKeyset();
+		expect(cachedActive.id).toBe(singleKeys.id);
+		expect(cachedChain.getKeysets().length).toBe(1);
+	});
 });
 
 describe('KeyChain getters', () => {
@@ -203,6 +264,23 @@ describe('KeyChain getters', () => {
 		expect(keyset.final_expiry).toBe(1754296607);
 	});
 
+	test('should handle keyset without keys', () => {
+		const keyset = keyChain.getKeyset('00inactive');
+		expect(keyset.id).toBe('00inactive');
+		expect(keyset.isActive).toBe(false);
+		expect(keyset.hasKeys).toBe(false);
+		expect(keyset.hasHexId).toBe(false);
+		expect(keyset.toMintKeys()).toBe(null);
+		expect(keyset.verify()).toBe(false);
+
+		// Also test non-hex
+		const nonHexKeyset = keyChain.getKeyset('invalidbase64');
+		expect(nonHexKeyset.hasHexId).toBe(false);
+		expect(nonHexKeyset.hasKeys).toBe(false);
+		expect(nonHexKeyset.toMintKeys()).toBe(null);
+		expect(nonHexKeyset.verify()).toBe(false);
+	});
+
 	test('should throw on invalid keyset ID', () => {
 		expect(() => keyChain.getKeyset('invalid')).toThrow("Keyset 'invalid' not found");
 	});
@@ -224,5 +302,13 @@ describe('KeyChain getters', () => {
 		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
 		expect(() => uninitChain.getCheapestKeyset()).toThrow('KeyChain not initialized');
 		expect(() => uninitChain.getKeysets()).toThrow('KeyChain not initialized');
+	});
+});
+
+describe('Keyset', () => {
+	test('should default fee to 0 if input_fee_ppk undefined', () => {
+		const keyset = new Keyset('testid', 'sat', true, undefined, undefined);
+		expect(keyset.fee).toBe(0);
+		expect(keyset.input_fee_ppk).toBe(0);
 	});
 });
