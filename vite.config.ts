@@ -71,7 +71,7 @@ export default defineConfig({
 						exclude: [
 							'test/{auth,integration}.test.ts',
 							'test/consumer-*/**/*.test.ts',
-							'test/**.browser.test.ts',
+							'test/**/**.browser.test.ts',
 						],
 					},
 				},
@@ -90,7 +90,7 @@ export default defineConfig({
 					exclude: [
 						'test/{auth,integration}.test.ts',
 						'test/consumer-*/**/*.test.ts',
-						'test/**.node.test.ts',
+						'test/**/**.node.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {

@@ -2,11 +2,11 @@ import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { Mint } from '../src/Mint';
-import { KeyChain } from '../src/wallet/KeyChain';
-import { type MintKeyset, type MintKeys } from '../src/types';
-import { isValidHex } from '../src/utils';
-import { PUBKEYS } from './consts';
+import { Mint } from '../../src/Mint';
+import { KeyChain } from '../../src/wallet/KeyChain';
+import { type MintKeyset, type MintKeys } from '../../src/types';
+import { isValidHex } from '../../src/utils';
+import { PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
 const mint = new Mint(mintUrl);
@@ -192,8 +192,15 @@ describe('KeyChain getters', () => {
 		expect(keyset.id).toBe('00bd033559de27d0');
 		expect(keyset.unit).toBe('sat');
 		expect(keyset.isActive).toBe(true);
+		expect(keyset.fee).toBe(0);
+		expect(keyset.expiry).toBe(1754296607);
 		expect(keyset.hasKeys).toBe(true);
+		expect(keyset.hasHexId).toBe(true);
 		expect(keyset.keys).toEqual(dummyKeysResp.keysets[0].keys);
+		// v2 compat items
+		expect(keyset.active).toBe(true);
+		expect(keyset.input_fee_ppk).toBe(0);
+		expect(keyset.final_expiry).toBe(1754296607);
 	});
 
 	test('should throw on invalid keyset ID', () => {

@@ -2,8 +2,8 @@ import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { Mint } from '../src/Mint';
-import { Wallet, DEFAULT_OUTPUT } from '../src/Wallet';
+import { Mint } from '../../src/Mint';
+import { Wallet, DEFAULT_OUTPUT } from '../../src/Wallet';
 import {
 	CheckStateEnum,
 	MeltQuoteResponse,
@@ -11,13 +11,13 @@ import {
 	MintQuoteResponse,
 	MintQuoteState,
 	Proof,
-} from '../src/model/types/index';
-import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
-import { type Logger, ConsoleLogger } from '../src/logger';
+} from '../../src/model/types/index';
+import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../../src/utils';
+import { type Logger, ConsoleLogger } from '../../src/logger';
 import { Server, WebSocket } from 'mock-socket';
-import { injectWebSocketImpl } from '../src/ws';
-import { MintInfo } from '../src/model/MintInfo';
-import { OutputData } from '../src/model/OutputData';
+import { injectWebSocketImpl } from '../../src/ws';
+import { MintInfo } from '../../src/model/MintInfo';
+import { OutputData } from '../../src/model/OutputData';
 import { hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 
