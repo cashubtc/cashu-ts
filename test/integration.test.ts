@@ -375,6 +375,8 @@ describe('mint api', () => {
 			wallet.send(21, proofs, { keysetId }); // fire and forget
 		});
 		mint.disconnectWebSocket();
+		// todo - it should be uncommented if/once cdk mints will be closing quicker than now (6000ms). Also we should close connection after every test
+		// expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
 	}, 10000);
 	test('mint with signed quote and payload', async () => {
 		const wallet = new Wallet(mintUrl);
