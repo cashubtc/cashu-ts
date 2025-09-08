@@ -1,6 +1,6 @@
 import { blindMessage, constructProofFromPromise, serializeProof } from '../src/crypto/client/';
 import { test, describe, expect } from 'vitest';
-import { Keys, Proof, Token } from '../src/model/types/index';
+import { type Keys, type Proof, type Token } from '../src';
 import * as utils from '../src/utils';
 import { PUBKEYS } from './consts';
 import { createDLEQProof } from '../src/crypto/mint/NUT12';

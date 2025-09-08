@@ -2,21 +2,22 @@ import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
-import { CheckStateEnum, Proof } from '../src/model/types';
 import {
+	CashuMint,
+	CashuWallet,
+	CheckStateEnum,
+	type Proof,
 	MeltQuoteResponse,
 	MeltQuoteState,
 	MintQuoteResponse,
 	MintQuoteState,
-} from '../src/mint/types';
+	injectWebSocketImpl,
+	MintInfo,
+	OutputData,
+} from '../src';
 import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
 import { type Logger, ConsoleLogger } from '../src/logger';
 import { Server, WebSocket } from 'mock-socket';
-import { injectWebSocketImpl } from '../src/ws';
-import { MintInfo } from '../src/model/MintInfo';
-import { OutputData } from '../src/model/OutputData';
 import { hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 

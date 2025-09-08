@@ -1,7 +1,5 @@
 import { test, describe, expect } from 'vitest';
-import { CashuWallet } from '../src/CashuWallet';
-import { CashuMint } from '../src/CashuMint';
-import { getBlindedAuthToken } from '../src/auth';
+import { CashuWallet, CashuMint, getBlindedAuthToken } from '../src';
 
 async function getClearAuthToken() {
 	const res = await fetch(process.env.OICD_TOKEN_ENDPOINT!, {

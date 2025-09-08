@@ -1,22 +1,23 @@
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
-
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
 import { vi } from 'vitest';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 import {
+	CashuMint,
+	CashuWallet,
 	CheckStateEnum,
 	MeltQuoteState,
-	MintKeys,
 	MintQuoteState,
-	Proof,
-	ProofState,
-	Token,
-} from '../src/model/types/index';
-import { MintOperationError } from '../src/model/Errors';
+	type MintKeys,
+	type Proof,
+	type ProofState,
+	type Token,
+	MintOperationError,
+	injectWebSocketImpl,
+	OutputData,
+	OutputDataFactory,
+} from '../src';
 import ws from 'ws';
-import { injectWebSocketImpl } from '../src/ws';
 import {
 	getDecodedToken,
 	getEncodedToken,
@@ -26,7 +27,6 @@ import {
 	splitAmount,
 	sumProofs,
 } from '../src/utils';
-import { OutputData, OutputDataFactory } from '../src/model/OutputData';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
 dns.setDefaultResultOrder('ipv4first');
 

@@ -1,10 +1,14 @@
 import { beforeAll, test, describe, expect, afterAll, afterEach } from 'vitest';
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
+import {
+	CashuMint,
+	CashuWallet,
+	HttpResponseError,
+	NetworkError,
+	MintOperationError,
+} from '../src';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../src/request';
-import { HttpResponseError, NetworkError, MintOperationError } from '../src/model/Errors';
 
 const mintUrl = 'https://localhost:3338';
 const unit = 'sats';

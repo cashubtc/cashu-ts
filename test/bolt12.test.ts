@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
+import { CashuMint, CashuWallet } from '../src';
 
 type ReqArgs = {
 	endpoint: string;
