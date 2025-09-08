@@ -2,21 +2,27 @@ import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { Mint } from '../../src/Mint';
-import { Wallet, DEFAULT_OUTPUT } from '../../src/Wallet';
-import { CheckStateEnum, Proof } from '../../src/model/types';
 import {
-	MeltQuoteResponse,
+	Mint,
+	Wallet,
+	DEFAULT_OUTPUT,
+	CheckStateEnum,
+	type Proof,
+	type MeltQuoteResponse,
 	MeltQuoteState,
-	MintQuoteResponse,
+	type MintQuoteResponse,
 	MintQuoteState,
-} from '../../src/mint/types';
-import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../../src/utils';
-import { type Logger, ConsoleLogger } from '../../src/logger';
+	deriveKeysetId,
+	getDecodedToken,
+	injectWebSocketImpl,
+	MintInfo,
+	OutputData,
+	ConsoleLogger,
+	type Logger,
+} from '../../src';
+
+import { bytesToNumber, sumProofs } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
-import { injectWebSocketImpl } from '../../src/ws';
-import { MintInfo } from '../../src/model/MintInfo';
-import { OutputData } from '../../src/model/OutputData';
 import { hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 

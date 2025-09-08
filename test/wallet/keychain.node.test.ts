@@ -2,10 +2,7 @@ import { setupServer } from 'msw/node';
 import { HttpResponse, http } from 'msw';
 import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi } from 'vitest';
 
-import { Mint } from '../../src/Mint';
-import { KeyChain } from '../../src/wallet/KeyChain';
-import { Keyset } from '../../src/wallet/Keyset';
-import { type MintKeyset, type MintKeys } from '../../src/types';
+import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys } from '../../src';
 import { isValidHex } from '../../src/utils';
 import { PUBKEYS } from '../consts';
 
