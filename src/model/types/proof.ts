@@ -1,9 +1,4 @@
-import { type SerializedDLEQ } from '../mint';
-
-export type * from './payloads';
-export type * from './responses';
-export type * from './tokens';
-export * from './paymentRequests';
+import { type SerializedDLEQ } from './blinded';
 
 /**
  * Represents a single Cashu proof.
@@ -67,26 +62,4 @@ export type ReceiveTokenEntryResponse = {
 	 * Received proofs.
 	 */
 	proofs: Proof[];
-};
-
-/**
- * Payload that needs to be sent to the mint when paying a lightning invoice.
- */
-export type PaymentPayload = {
-	/**
-	 * Payment request/Lighting invoice that should get paid by the mint.
-	 */
-	pr: string;
-	/**
-	 * Proofs, matching Lightning invoices amount + fees.
-	 */
-	proofs: Proof[];
-};
-
-/**
- * @deprecated Token V2 should no longer be used.
- */
-export type TokenV2 = {
-	proofs: Proof[];
-	mints: Array<{ url: string; ids: string[] }>;
 };

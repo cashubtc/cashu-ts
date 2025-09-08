@@ -1,6 +1,12 @@
-import type { MeltPayload, MeltQuoteResponse, Proof } from '../model/types/index';
-import { type OutputData, type OutputDataFactory, type OutputDataLike } from '../model/OutputData';
-import { type Keyset } from './Keyset';
+import type { Proof } from '../../model/types/proof';
+import type { MeltQuoteResponse } from '../../mint/types';
+import {
+	type OutputData,
+	type OutputDataFactory,
+	type OutputDataLike,
+} from '../../model/OutputData';
+import type { Keyset } from '../Keyset';
+import type { MeltPayload } from './payloads';
 
 /**
  * @v3

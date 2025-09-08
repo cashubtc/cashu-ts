@@ -1,8 +1,17 @@
 import { type OutputDataFactory, type OutputDataLike } from '../OutputData';
-import { type Proof } from './wallet/index';
+import type { Proof } from './proof';
 
-export * from './mint/index';
-export * from './wallet/index';
+export type { Proof, P2PKWitness, HTLCWitness, ReceiveTokenEntryResponse } from './proof';
+export type {
+	SerializedBlindedMessage,
+	SerializedBlindedSignature,
+	SerializedDLEQ,
+} from './blinded';
+export type { Token, DeprecatedToken } from './token';
+export type * from './token.v4';
+export type * from './keyset';
+export * from './proof-state';
+export type * from './amount';
 
 export type OutputAmounts = {
 	sendAmounts: number[];

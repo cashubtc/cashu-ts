@@ -1,5 +1,6 @@
-import { type OutputData } from '../../OutputData';
-import { type Proof } from './index';
+import { type OutputData } from '../../model/OutputData';
+import { type Proof } from '../../model/types/proof';
+import { type SerializedBlindedMessage } from '../../model/types/blinded';
 
 /**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees.
@@ -129,24 +130,6 @@ export type SwapPayload = {
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */
 	outputs: SerializedBlindedMessage[];
-};
-
-/**
- * Blinded message for sending to the mint.
- */
-export type SerializedBlindedMessage = {
-	/**
-	 * Amount.
-	 */
-	amount: number;
-	/**
-	 * Blinded message.
-	 */
-	B_: string;
-	/**
-	 * Keyset id.
-	 */
-	id: string;
 };
 
 /**

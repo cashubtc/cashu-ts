@@ -35,7 +35,22 @@ import {
 	type ReceiveConfig,
 	type MintProofsConfig,
 	type MeltProofsConfig,
+	// wallet-constructed DTOs and wallet responses
+	type MeltPayload,
+	type MeltQuotePayload,
+	type MintPayload,
+	type MintQuotePayload,
+	type MPPOption,
+	type MeltQuoteOptions,
+	type SwapTransaction,
+	type Bolt12MintQuotePayload,
+	type SwapPayload,
+	type MeltProofsResponse,
+	type SendResponse,
+	// websocket types are part of wallet seam too
+	type SubscriptionCanceller,
 } from './types';
+
 import { signP2PKProofs } from '../crypto/client/NUT11';
 import { hashToCurve } from '../crypto/common/index';
 import { Mint } from '../mint';
@@ -43,37 +58,31 @@ import { MintInfo } from '../model/MintInfo';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
 import { type Logger, NULL_LOGGER, measureTime } from '../logger';
-import {
-	type GetInfoResponse,
-	type MintQuoteResponse,
-	type ProofState,
-	type RestoreOptions,
-	type SerializedBlindedSignature,
-	type MeltPayload,
-	type MeltProofsResponse,
-	type MeltQuotePayload,
-	type MeltQuoteResponse,
-	type MintKeys,
-	type MintKeyset,
-	type MintPayload,
-	type MintQuotePayload,
-	type Proof,
-	type SendResponse,
-	type Token,
-	type MPPOption,
-	type MeltQuoteOptions,
-	type SwapTransaction,
-	type LockedMintQuoteResponse,
-	type PartialMintQuoteResponse,
-	type PartialMeltQuoteResponse,
-	type Bolt12MintQuotePayload,
-	type Bolt12MintQuoteResponse,
-	type Bolt12MeltQuoteResponse,
-	type SwapPayload,
-	MintQuoteState,
-	MeltQuoteState,
-} from '../model/types/index';
-import { type SubscriptionCanceller } from '../model/types/wallet/websocket';
+
+// shared primitives and shared options
+import type { Proof } from '../model/types/proof';
+import type { Token } from '../model/types/token';
+import type { SerializedBlindedSignature } from '../model/types/blinded';
+import type { ProofState } from '../model/types/proof-state';
+import type { RestoreOptions } from '../model/types';
+import type { MintKeys, MintKeyset } from '../model/types/keyset';
+
+// mint wire DTOs and enums
+import type {
+	GetInfoResponse,
+	MintQuoteResponse,
+	MeltQuoteResponse,
+	PartialMintQuoteResponse,
+	PartialMeltQuoteResponse,
+	LockedMintQuoteResponse,
+	Bolt12MintQuoteResponse,
+	Bolt12MeltQuoteResponse,
+} from '../mint/types';
+import { MintQuoteState, MeltQuoteState } from '../mint/types';
+
+// model helpers
+import { OutputData, type OutputDataFactory, type OutputDataLike } from '../model/OutputData';
+
 import {
 	getDecodedToken,
 	getKeepAmounts,
@@ -83,8 +92,8 @@ import {
 	sumProofs,
 	deepEqual,
 } from '../utils';
+
 import { signMintQuote } from '../crypto/client/NUT20';
-import { OutputData, type OutputDataFactory, type OutputDataLike } from '../model/OutputData';
 
 /**
  * Class that represents a Cashu wallet.

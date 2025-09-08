@@ -3,41 +3,52 @@ import { hashToCurve } from './crypto/common/index';
 import { type CashuMint } from './CashuMint';
 import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';
+
+// shared primitives and shared options
+import type { Proof } from './model/types/proof';
+import type { Token } from './model/types/token';
+import type { SerializedBlindedSignature } from './model/types/blinded';
+import type { ProofState } from './model/types/proof-state';
 import type {
-	GetInfoResponse,
+	OutputAmounts,
+	ReceiveOptions,
+	SendOptions,
+	SwapOptions,
+	RestoreOptions,
 	MeltProofOptions,
 	MintProofOptions,
-	MintQuoteResponse,
-	OutputAmounts,
-	ProofState,
-	ReceiveOptions,
-	RestoreOptions,
-	SendOptions,
-	SerializedBlindedSignature,
-	SwapOptions,
+} from './model/types';
+import type { MintKeys, MintKeyset } from './model/types/keyset';
+
+// wallet constructed DTOs and wallet responses
+import type {
 	MeltPayload,
 	MeltProofsResponse,
 	MeltQuotePayload,
-	MeltQuoteResponse,
-	MintKeys,
-	MintKeyset,
 	MintPayload,
 	MintQuotePayload,
-	Proof,
-	SendResponse,
-	Token,
 	MPPOption,
 	MeltQuoteOptions,
 	SwapTransaction,
-	LockedMintQuoteResponse,
+	Bolt12MintQuotePayload,
+	SendResponse,
+	SubscriptionCanceller,
+} from './wallet/types';
+
+// mint wire DTOs and enums
+import type {
+	GetInfoResponse,
+	MintQuoteResponse,
+	MeltQuoteResponse,
 	PartialMintQuoteResponse,
 	PartialMeltQuoteResponse,
-	Bolt12MintQuotePayload,
+	LockedMintQuoteResponse,
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
-} from './model/types/index';
-import { MintQuoteState, MeltQuoteState } from './model/types/index';
-import { type SubscriptionCanceller } from './model/types/wallet/websocket';
+} from './mint/types';
+import { MintQuoteState, MeltQuoteState } from './mint/types';
+
+// utils and helpers
 import {
 	getDecodedToken,
 	getKeepAmounts,

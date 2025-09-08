@@ -1,6 +1,6 @@
 import { HttpResponseError, NetworkError, MintOperationError } from './model/Errors';
 import { type Logger, NULL_LOGGER } from './logger';
-import { type ApiError } from './model/types/mint/responses';
+import { type ApiError } from './mint/types/responses';
 
 type RequestArgs = {
 	endpoint: string;

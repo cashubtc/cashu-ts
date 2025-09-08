@@ -1,10 +1,6 @@
 import { OutputData } from '../model/OutputData';
-import {
-	type BlindAuthMintPayload,
-	type MintKeys,
-	type MintKeyset,
-	type Proof,
-} from '../model/types';
+import type { BlindAuthMintPayload } from '../wallet/types';
+import { type MintKeys, type MintKeyset, type Proof } from '../model/types';
 import { hasValidDleq } from '../utils';
 import { type CashuAuthMint } from './CashuAuthMint';
 

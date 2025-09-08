@@ -1,4 +1,8 @@
-import { type SerializedBlindedMessage } from '../wallet';
+import type {
+	SerializedBlindedMessage,
+	SerializedBlindedSignature,
+} from '../../model/types/blinded';
+import type { ProofState } from '../../model/types/proof-state';
 
 /**
  * Cashu api error.
@@ -17,25 +21,6 @@ export type ApiError = {
 	 */
 	detail?: string;
 };
-
-/**
- * Entries of CheckStateResponse with state of the proof.
- */
-export type ProofState = {
-	Y: string;
-	state: CheckStateEnum;
-	witness: string | null;
-};
-
-/**
- * Enum for the state of a proof.
- */
-export const CheckStateEnum = {
-	UNSPENT: 'UNSPENT',
-	PENDING: 'PENDING',
-	SPENT: 'SPENT',
-} as const;
-export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum];
 
 /**
  * Response when checking proofs if they are spendable. Should not rely on this for receiving, since
@@ -277,38 +262,6 @@ export type MintResponse = {
 export type PostRestoreResponse = {
 	outputs: SerializedBlindedMessage[];
 	signatures: SerializedBlindedSignature[];
-};
-
-/*
- * Zero-Knowledge that BlindedSignature
- * was generated using a specific public key
- */
-export type SerializedDLEQ = {
-	s: string;
-	e: string;
-	r?: string;
-};
-
-/**
- * Blinded signature as it is received from the mint.
- */
-export type SerializedBlindedSignature = {
-	/**
-	 * Keyset id for indicating which public key was used to sign the blinded message.
-	 */
-	id: string;
-	/**
-	 * Amount denominated in Satoshi.
-	 */
-	amount: number;
-	/**
-	 * Blinded signature.
-	 */
-	C_: string;
-	/**
-	 * DLEQ Proof.
-	 */
-	dleq?: SerializedDLEQ;
 };
 
 /**

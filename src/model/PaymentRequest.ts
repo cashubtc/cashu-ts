@@ -1,12 +1,12 @@
 import { encodeBase64toUint8 } from '../base64';
 import { decodeCBOR, encodeCBOR } from '../cbor';
-import {
-	type RawPaymentRequest,
-	type RawTransport,
-	type NUT10Option,
-	type PaymentRequestTransport,
-	type PaymentRequestTransportType,
-} from './types';
+import type {
+	RawPaymentRequest,
+	RawTransport,
+	NUT10Option,
+	PaymentRequestTransport,
+	PaymentRequestTransportType,
+} from '../wallet/types';
 import { Bytes } from '../utils/Bytes';
 
 export class PaymentRequest {

@@ -16,3 +16,10 @@ If the two differ, the public API has changed and you will see a warning in the 
 
 `npm run api:update`
 This command will create an API report in the `/temp` directory AND update the status quo report in `/etc`. If there are changes to the status quo report commit the updated report. Otherwise CI will fail.
+
+## Build output contracts
+
+- **TS sources** use extensionless imports.
+- **Runtime ESM** (`lib/**/*.js`) must have `.js` on relative imports.
+- **Type declarations** (`lib/types/**/*.d.ts`) must stay **extensionless**.
+- Our `post-process-dts.js` intentionally skips `.d.ts` to keep API Extractor happy.

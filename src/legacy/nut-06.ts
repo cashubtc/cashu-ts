@@ -1,4 +1,4 @@
-import type { MintContactInfo, GetInfoResponse } from '../model/types/index';
+import type { MintContactInfo, GetInfoResponse } from '../mint/types';
 import type { Logger } from '../logger';
 
 export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse, logger: Logger) {

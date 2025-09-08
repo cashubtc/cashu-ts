@@ -4,14 +4,13 @@ import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi 
 
 import { CashuMint } from '../src/CashuMint';
 import { CashuWallet } from '../src/CashuWallet';
+import { CheckStateEnum, Proof } from '../src/model/types';
 import {
-	CheckStateEnum,
 	MeltQuoteResponse,
 	MeltQuoteState,
 	MintQuoteResponse,
 	MintQuoteState,
-	Proof,
-} from '../src/model/types/index';
+} from '../src/mint/types';
 import { bytesToNumber, deriveKeysetId, getDecodedToken, sumProofs } from '../src/utils';
 import { type Logger, ConsoleLogger } from '../src/logger';
 import { Server, WebSocket } from 'mock-socket';

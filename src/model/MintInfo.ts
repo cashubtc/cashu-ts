@@ -3,7 +3,7 @@ import {
 	type MPPMethod,
 	type SwapMethod,
 	type WebSocketSupport,
-} from './types';
+} from '../mint/types';
 
 export class MintInfo {
 	private readonly _mintInfo: GetInfoResponse;

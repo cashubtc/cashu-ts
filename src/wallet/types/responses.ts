@@ -1,5 +1,6 @@
-import { type MeltQuoteResponse } from '../mint';
-import { type Proof, type Token } from './index';
+import { type MeltQuoteResponse } from '../../mint/types';
+import { type Proof } from '../../model/types/proof';
+import { type Token } from '../../model/types/token';
 
 /**
  * Response after paying a Lightning invoice.

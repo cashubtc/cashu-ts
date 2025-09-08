@@ -1,28 +1,34 @@
 import { ConnectionManager, type WSConnection } from './WSConnection';
 import type {
-	CheckStatePayload,
-	CheckStateResponse,
+	// mint responses & enums
 	GetInfoResponse,
-	MeltPayload,
-	MintActiveKeys,
-	MintAllKeysets,
-	PostRestoreResponse,
-	SerializedBlindedMessage,
-	SwapPayload,
-	SwapResponse,
-	MintQuotePayload,
-	MintPayload,
-	MintResponse,
-	PostRestorePayload,
-	MeltQuotePayload,
-	MeltQuoteResponse,
 	PartialMintQuoteResponse,
+	MeltQuoteResponse,
 	PartialMeltQuoteResponse,
-	Bolt12MintQuotePayload,
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
-} from './model/types/index';
-import { MeltQuoteState } from './model/types/index';
+	CheckStateResponse,
+	PostRestoreResponse,
+	SwapResponse,
+	// mint payloads
+	CheckStatePayload,
+	PostRestorePayload,
+	// mint misc
+	MintResponse,
+	MintActiveKeys,
+	MintAllKeysets,
+} from './mint/types';
+import type {
+	// wallet-built payloads handed to mint endpoints
+	MintQuotePayload,
+	MintPayload,
+	MeltQuotePayload,
+	MeltPayload,
+	SwapPayload,
+	Bolt12MintQuotePayload,
+} from './wallet/types';
+import type { SerializedBlindedMessage } from './model/types/blinded';
+import { MeltQuoteState } from './mint/types';
 import request, { setRequestLogger } from './request';
 import { isObj, joinUrls, sanitizeUrl } from './utils';
 import {

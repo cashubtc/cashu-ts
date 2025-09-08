@@ -12,28 +12,30 @@
  */
 import { ConnectionManager, type WSConnection } from '../WSConnection';
 import type {
-	CheckStatePayload,
-	CheckStateResponse,
 	GetInfoResponse,
-	MeltPayload,
-	MintActiveKeys,
-	MintAllKeysets,
-	PostRestoreResponse,
-	SwapPayload,
-	SwapResponse,
-	MintQuotePayload,
-	MintPayload,
-	MintResponse,
-	PostRestorePayload,
-	MeltQuotePayload,
-	MeltQuoteResponse,
 	PartialMintQuoteResponse,
+	MeltQuoteResponse,
 	PartialMeltQuoteResponse,
-	Bolt12MintQuotePayload,
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
-} from '../model/types/index';
-import { MeltQuoteState } from '../model/types/index';
+	CheckStateResponse,
+	PostRestoreResponse,
+	SwapResponse,
+	CheckStatePayload,
+	PostRestorePayload,
+	MintResponse,
+	MintActiveKeys,
+	MintAllKeysets,
+} from './types';
+import type {
+	MintQuotePayload,
+	MintPayload,
+	MeltQuotePayload,
+	MeltPayload,
+	SwapPayload,
+	Bolt12MintQuotePayload,
+} from '../wallet/types';
+import { MeltQuoteState } from './types';
 import request, { setRequestLogger } from '../request';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 import {

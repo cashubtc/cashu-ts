@@ -1,88 +1,78 @@
-import { CashuMint } from './CashuMint';
-import { CashuWallet } from './CashuWallet';
 /**
- * @v3 import
+ * Legacy v2 (stable) exports.
  */
-import { Mint } from './mint';
-/**
- * @v3 imports
- */
-import { KeyChain } from './wallet/KeyChain';
-import {
-	type P2PKOptions,
-	type OutputType,
-	type OutputConfig,
-	type SendConfig,
-	type SendOfflineConfig,
-	type ReceiveConfig,
-	type MintProofsConfig,
-	type MeltProofsConfig,
-	type SharedOutputTypeProps,
-	DEFAULT_OUTPUT,
-	DEFAULT_OUTPUT_CONFIG,
-	Wallet,
-} from './wallet';
-import { OutputData } from './model/OutputData';
-import { PaymentRequest } from './model/PaymentRequest';
-import { setGlobalRequestOptions } from './request';
-import { LogLevel, ConsoleLogger, type Logger } from './logger';
-import {
-	getEncodedToken,
-	getEncodedTokenV4,
-	getDecodedToken,
-	deriveKeysetId,
-	decodePaymentRequest,
-	getDecodedTokenBinary,
-	getEncodedTokenBinary,
-	hasValidDleq,
-} from './utils';
-import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
+export { CashuMint } from './CashuMint';
+export { CashuWallet } from './CashuWallet';
 
+/**
+ * V3 (experimental) exports.
+ *
+ * NOTE: v3 is under active development and may change without notice.
+ */
+export { Mint } from './mint';
+export { Wallet, KeyChain, DEFAULT_OUTPUT, DEFAULT_OUTPUT_CONFIG } from './wallet/index';
+export type {
+	P2PKOptions,
+	OutputType,
+	OutputConfig,
+	SendConfig,
+	SendOfflineConfig,
+	ReceiveConfig,
+	MintProofsConfig,
+	MeltProofsConfig,
+	SharedOutputTypeProps,
+} from './wallet/index';
+
+/**
+ * Public model & DTO types.
+ */
 export * from './model/types/index';
 
 /**
- * @v3 exports
+ * Payment request API.
+ */
+export { PaymentRequest } from './model/PaymentRequest';
+export { PaymentRequestTransportType } from './wallet/types/index';
+export type {
+	PaymentRequestTransport,
+	RawPaymentRequest,
+	RawTransport,
+	NUT10Option,
+} from './wallet/types/index';
+
+/**
+ * Utilities.
  */
 export {
-	type P2PKOptions,
-	type OutputType,
-	type OutputConfig,
-	type SendConfig,
-	type SendOfflineConfig,
-	type ReceiveConfig,
-	type MintProofsConfig,
-	type MeltProofsConfig,
-	type SharedOutputTypeProps,
-	DEFAULT_OUTPUT,
-	DEFAULT_OUTPUT_CONFIG,
-	Wallet,
-	Mint,
-	KeyChain,
-};
-
-export {
-	CashuMint,
-	CashuWallet,
-	CashuAuthMint,
-	CashuAuthWallet,
-	getEncodedAuthToken,
-	getBlindedAuthToken,
-	PaymentRequest,
-	OutputData,
-	getDecodedToken,
 	getEncodedToken,
 	getEncodedTokenV4,
-	decodePaymentRequest,
-	deriveKeysetId,
-	setGlobalRequestOptions,
+	getDecodedToken,
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
+	deriveKeysetId,
+	decodePaymentRequest,
 	hasValidDleq,
-	LogLevel,
-	ConsoleLogger,
-	type Logger,
-};
-
+} from './utils';
+export { setGlobalRequestOptions } from './request';
 export { injectWebSocketImpl } from './ws';
 
+/**
+ * Auth helpers.
+ */
+export {
+	CashuAuthMint,
+	CashuAuthWallet,
+	getBlindedAuthToken,
+	getEncodedAuthToken,
+} from './auth/index';
+
+/**
+ * Logger.
+ */
+export { ConsoleLogger, LogLevel } from './logger/index';
+export type { Logger } from './logger/index';
+
+/**
+ * Errors.
+ */
 export { MintOperationError, NetworkError, HttpResponseError } from './model/Errors';
