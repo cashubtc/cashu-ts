@@ -1,6 +1,6 @@
 import { Keyset } from './Keyset';
 import { type Mint } from '../mint';
-import { type MintKeyset, type MintKeys } from '../model/types';
+import type { MintKeyset, MintKeys, MintAllKeysets, MintActiveKeys } from '../model/types/keyset';
 
 export class KeyChain {
 	private mint: Mint;
@@ -37,10 +37,8 @@ export class KeyChain {
 		}
 
 		// Fetch keys and keysets in parallel
-		const [allKeysetsResponse, allKeysResponse]: [
-			{ keysets: MintKeyset[] },
-			{ keysets: MintKeys[] },
-		] = await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
+		const [allKeysetsResponse, allKeysResponse]: [MintAllKeysets, MintActiveKeys] =
+			await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
 		this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
 	}

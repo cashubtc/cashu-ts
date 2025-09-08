@@ -4,22 +4,47 @@
 
 ```ts
 
-import { MintContactInfo as MintContactInfo_2 } from '../mint';
+import { MintContactInfo as MintContactInfo_2 } from '..';
 
 // @public (undocumented)
 export type Amount = number;
 
 // @public
+export type ApiError = {
+    error?: string;
+    code?: number;
+    detail?: string;
+};
+
+// @public
+export type BlindAuthMintResponse = {
+    signatures: SerializedBlindedSignature[];
+} & ApiError;
+
+// @public
+export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
+
+// @public
+export type Bolt12MintQuoteResponse = {
+    quote: string;
+    request: string;
+    amount: number | null;
+    unit: string;
+    expiry: number | null;
+    pubkey: string;
+    amount_paid: number;
+    amount_issued: number;
+};
+
+// @public
 export class CashuAuthMint {
-    // Warning: (ae-forgotten-export) The symbol "request" needs to be exported by the entry point index.d.ts
-    constructor(_mintUrl: string, _customRequest?: typeof request | undefined);
-    static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
+    constructor(_mintUrl: string, _customRequest?: RequestFn | undefined);
+    static getKeys(mintUrl: string, keysetId?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
-    static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
+    static getKeySets(mintUrl: string, customRequest?: RequestFn): Promise<MintAllKeysets>;
     getKeySets(): Promise<MintAllKeysets>;
     // Warning: (ae-forgotten-export) The symbol "BlindAuthMintPayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "BlindAuthMintResponse" needs to be exported by the entry point index.d.ts
-    static mint(mintUrl: string, mintPayload: BlindAuthMintPayload, clearAuthToken: string, customRequest?: typeof request): Promise<BlindAuthMintResponse>;
+    static mint(mintUrl: string, mintPayload: BlindAuthMintPayload, clearAuthToken: string, customRequest?: RequestFn): Promise<BlindAuthMintResponse>;
     mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string): Promise<BlindAuthMintResponse>;
     // (undocumented)
     get mintUrl(): string;
@@ -52,79 +77,63 @@ export class CashuAuthWallet {
 
 // @public
 export class CashuMint {
-    constructor(_mintUrl: string, _customRequest?: typeof request | undefined, authTokenGetter?: () => Promise<string>, options?: {
+    constructor(_mintUrl: string, _customRequest?: RequestFn | undefined, authTokenGetter?: () => Promise<string>, options?: {
         logger?: Logger;
     });
-    // Warning: (ae-forgotten-export) The symbol "CheckStatePayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "CheckStateResponse" needs to be exported by the entry point index.d.ts
-    static check(mintUrl: string, checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
+    static check(mintUrl: string, checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
     check(checkPayload: CheckStatePayload): Promise<CheckStateResponse>;
-    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
+    static checkMeltQuote(mintUrl: string, quote: string, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     checkMeltQuote(quote: string): Promise<PartialMeltQuoteResponse>;
-    static checkMeltQuoteBolt12(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
+    static checkMeltQuoteBolt12(mintUrl: string, quote: string, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse>;
-    static checkMintQuote(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
+    static checkMintQuote(mintUrl: string, quote: string, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
-    static checkMintQuoteBolt12(mintUrl: string, quote: string, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
+    static checkMintQuoteBolt12(mintUrl: string, quote: string, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     connectWebSocket(): Promise<void>;
     // Warning: (ae-forgotten-export) The symbol "MeltQuotePayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "PartialMeltQuoteResponse" needs to be exported by the entry point index.d.ts
-    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
+    static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
-    // Warning: (ae-forgotten-export) The symbol "Bolt12MeltQuoteResponse" needs to be exported by the entry point index.d.ts
-    static createMeltQuoteBolt12(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
+    static createMeltQuoteBolt12(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload): Promise<Bolt12MeltQuoteResponse>;
     // Warning: (ae-forgotten-export) The symbol "MintQuotePayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "PartialMintQuoteResponse" needs to be exported by the entry point index.d.ts
-    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
+    static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
     // Warning: (ae-forgotten-export) The symbol "Bolt12MintQuotePayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "Bolt12MintQuoteResponse" needs to be exported by the entry point index.d.ts
-    static createMintQuoteBolt12(mintUrl: string, mintQuotePayload: Bolt12MintQuotePayload, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
+    static createMintQuoteBolt12(mintUrl: string, mintQuotePayload: Bolt12MintQuotePayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
     createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload): Promise<Bolt12MintQuoteResponse>;
     disconnectWebSocket(): void;
-    // Warning: (ae-forgotten-export) The symbol "GetInfoResponse" needs to be exported by the entry point index.d.ts
-    static getInfo(mintUrl: string, customRequest?: typeof request, logger?: Logger): Promise<GetInfoResponse>;
+    static getInfo(mintUrl: string, customRequest?: RequestFn, logger?: Logger): Promise<GetInfoResponse>;
     getInfo(): Promise<GetInfoResponse>;
-    static getKeys(mintUrl: string, keysetId?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
+    static getKeys(mintUrl: string, keysetId?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
-    static getKeySets(mintUrl: string, customRequest?: typeof request): Promise<MintAllKeysets>;
+    static getKeySets(mintUrl: string, customRequest?: RequestFn): Promise<MintAllKeysets>;
     getKeySets(): Promise<MintAllKeysets>;
-    // Warning: (ae-forgotten-export) The symbol "MintInfo" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     getLazyMintInfo(): Promise<MintInfo>;
     // (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
     // Warning: (ae-forgotten-export) The symbol "MeltPayload" needs to be exported by the entry point index.d.ts
-    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
+    static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
-    static meltBolt12(mintUrl: string, meltPayload: MeltPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
+    static meltBolt12(mintUrl: string, meltPayload: MeltPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     meltBolt12(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse>;
     // Warning: (ae-forgotten-export) The symbol "MintPayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "MintResponse" needs to be exported by the entry point index.d.ts
-    static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
+    static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<MintResponse>;
     mint(mintPayload: MintPayload): Promise<MintResponse>;
-    static mintBolt12(mintUrl: string, mintPayload: MintPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<MintResponse>;
+    static mintBolt12(mintUrl: string, mintPayload: MintPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<MintResponse>;
     mintBolt12(mintPayload: MintPayload): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
-    // Warning: (ae-forgotten-export) The symbol "PostRestorePayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "PostRestoreResponse" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
-    static restore(mintUrl: string, restorePayload: PostRestorePayload, customRequest?: typeof request): Promise<PostRestoreResponse>;
+    static restore(mintUrl: string, restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
     // (undocumented)
     restore(restorePayload: {
         outputs: SerializedBlindedMessage[];
     }): Promise<PostRestoreResponse>;
     // Warning: (ae-forgotten-export) The symbol "SwapPayload" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "SwapResponse" needs to be exported by the entry point index.d.ts
-    static swap(mintUrl: string, swapPayload: SwapPayload, customRequest?: typeof request, blindAuthToken?: string): Promise<SwapResponse>;
+    static swap(mintUrl: string, swapPayload: SwapPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<SwapResponse>;
     swap(swapPayload: SwapPayload): Promise<SwapResponse>;
-    // Warning: (ae-forgotten-export) The symbol "WSConnection" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
@@ -155,12 +164,9 @@ export class CashuWallet {
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
-    // Warning: (ae-forgotten-export) The symbol "LockedMintQuoteResponse" needs to be exported by the entry point index.d.ts
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
-    // Warning: (ae-forgotten-export) The symbol "MeltQuoteResponse" needs to be exported by the entry point index.d.ts
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
-    // Warning: (ae-forgotten-export) The symbol "MintQuoteResponse" needs to be exported by the entry point index.d.ts
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: number;
@@ -183,6 +189,7 @@ export class CashuWallet {
     get keysets(): MintKeyset[];
     lazyGetMintInfo(): Promise<MintInfo>;
     loadMint(): Promise<void>;
+    // Warning: (ae-forgotten-export) The symbol "MeltProofOptions" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "MeltProofsResponse" needs to be exported by the entry point index.d.ts
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse>;
     meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<{
@@ -193,6 +200,7 @@ export class CashuWallet {
     mint: CashuMint;
     // (undocumented)
     get mintInfo(): MintInfo;
+    // Warning: (ae-forgotten-export) The symbol "MintProofOptions" needs to be exported by the entry point index.d.ts
     mintProofs(amount: number, quote: MintQuoteResponse, options: MintProofOptions & {
         privateKey: string;
     }): Promise<Proof[]>;
@@ -202,19 +210,22 @@ export class CashuWallet {
     onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // Warning: (ae-forgotten-export) The symbol "SubscriptionCanceller" needs to be exported by the entry point index.d.ts
     onMintQuoteUpdates(quoteIds: string[], callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // Warning: (ae-forgotten-export) The symbol "ReceiveOptions" needs to be exported by the entry point index.d.ts
     receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]>;
+    // Warning: (ae-forgotten-export) The symbol "RestoreOptions" needs to be exported by the entry point index.d.ts
     restore(start: number, count: number, options?: RestoreOptions): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean): SendResponse;
+    // Warning: (ae-forgotten-export) The symbol "SendOptions" needs to be exported by the entry point index.d.ts
     // Warning: (ae-forgotten-export) The symbol "SendResponse" needs to be exported by the entry point index.d.ts
     send(amount: number, proofs: Proof[], options?: SendOptions): Promise<SendResponse>;
+    // Warning: (ae-forgotten-export) The symbol "SwapOptions" needs to be exported by the entry point index.d.ts
     swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse>;
     // (undocumented)
     get unit(): string;
@@ -229,6 +240,16 @@ export const CheckStateEnum: {
 
 // @public (undocumented)
 export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum];
+
+// @public
+export type CheckStatePayload = {
+    Ys: string[];
+};
+
+// @public
+export type CheckStateResponse = {
+    states: ProofState[];
+} & ApiError;
 
 // @public
 export class ConsoleLogger implements Logger {
@@ -275,8 +296,6 @@ export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versi
 // @public (undocumented)
 export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
 
-// Warning: (ae-forgotten-export) The symbol "Keyset" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]): Token;
 
@@ -299,6 +318,65 @@ export function getEncodedTokenBinary(token: Token): Uint8Array;
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
+export type GetInfoResponse = {
+    name: string;
+    pubkey: string;
+    version: string;
+    description?: string;
+    description_long?: string;
+    icon_url?: string;
+    contact: MintContactInfo[];
+    nuts: {
+        '4': {
+            methods: SwapMethod[];
+            disabled: boolean;
+        };
+        '5': {
+            methods: SwapMethod[];
+            disabled: boolean;
+        };
+        '7'?: {
+            supported: boolean;
+        };
+        '8'?: {
+            supported: boolean;
+        };
+        '9'?: {
+            supported: boolean;
+        };
+        '10'?: {
+            supported: boolean;
+        };
+        '11'?: {
+            supported: boolean;
+        };
+        '12'?: {
+            supported: boolean;
+        };
+        '14'?: {
+            supported: boolean;
+        };
+        '15'?: {
+            methods: MPPMethod[];
+        };
+        '17'?: {
+            supported: WebSocketSupport[];
+        };
+        '20'?: {
+            supported: boolean;
+        };
+        '22'?: {
+            bat_max_mint: number;
+            protected_endpoints: Array<{
+                method: 'GET' | 'POST';
+                path: string;
+            }>;
+        };
+    };
+    motd?: string;
+};
+
+// @public
 export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
 
 // @public
@@ -318,14 +396,10 @@ export class HttpResponseError extends Error {
 export function injectWebSocketImpl(ws: typeof WebSocket): void;
 
 // @public (undocumented)
-export type InvoiceData = {
-    paymentRequest: string;
-    amountInSats?: number;
-    amountInMSats?: number;
-    timestamp?: number;
-    paymentHash?: string;
-    memo?: string;
-    expiry?: number;
+export type JsonRpcError = {
+    jsonrpc: '2.0';
+    error: JsonRpcErrorObject;
+    id: RpcSubId;
 };
 
 // @public (undocumented)
@@ -335,10 +409,6 @@ export type JsonRpcErrorObject = {
     data?: unknown;
 };
 
-// Warning: (ae-forgotten-export) The symbol "JsonRpcRequest" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "JsonRpcSuccess" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "JsonRpcError" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcSuccess | JsonRpcError;
 
@@ -350,10 +420,31 @@ export type JsonRpcNotification = {
 };
 
 // @public (undocumented)
+export type JsonRpcParams = {
+    subId?: string;
+    payload?: unknown;
+};
+
+// @public (undocumented)
 export type JsonRpcReqParams = {
     kind: RpcSubKinds;
     filters: string[];
     subId: string;
+};
+
+// @public (undocumented)
+export type JsonRpcRequest = {
+    jsonrpc: '2.0';
+    method: 'sub';
+    params: JsonRpcReqParams;
+    id: Exclude<RpcSubId, null>;
+};
+
+// @public (undocumented)
+export type JsonRpcSuccess<T = unknown> = {
+    jsonrpc: '2.0';
+    result: T;
+    id: RpcSubId;
 };
 
 // @public (undocumented)
@@ -377,9 +468,36 @@ export type Keys = {
 };
 
 // @public (undocumented)
-export type LockedMintQuote = {
-    id: string;
-    privkey: string;
+export class Keyset {
+    constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number, final_expiry?: number);
+    get active(): boolean;
+    // (undocumented)
+    get expiry(): number | undefined;
+    // (undocumented)
+    get fee(): number;
+    get final_expiry(): number | undefined;
+    // (undocumented)
+    get hasHexId(): boolean;
+    // (undocumented)
+    get hasKeys(): boolean;
+    // (undocumented)
+    get id(): string;
+    get input_fee_ppk(): number;
+    // (undocumented)
+    get isActive(): boolean;
+    // (undocumented)
+    get keys(): Record<number, string>;
+    set keys(keys: Record<number, string>);
+    toMintKeys(): MintKeys | null;
+    toMintKeyset(): MintKeyset;
+    // (undocumented)
+    get unit(): string;
+    verify(): boolean;
+}
+
+// @public (undocumented)
+export type LockedMintQuoteResponse = MintQuoteResponse & {
+    pubkey: string;
 };
 
 // @public (undocumented)
@@ -413,12 +531,19 @@ export const LogLevel: {
 // @public
 export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
-// @public (undocumented)
-export type MeltProofOptions = {
-    keysetId?: string;
-    counter?: number;
-    privkey?: string;
-};
+// @public
+export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
+    // (undocumented)
+    keyset: Keyset;
+    // (undocumented)
+    method: 'bolt11' | 'bolt12';
+    // (undocumented)
+    outputData: OutputDataLike[];
+    // (undocumented)
+    payload: MeltPayload;
+    // (undocumented)
+    quote: T;
+}
 
 // @public
 export type MeltProofsConfig = {
@@ -426,35 +551,51 @@ export type MeltProofsConfig = {
     onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
 };
 
+// @public (undocumented)
+export type MeltQuoteResponse = PartialMeltQuoteResponse & {
+    request: string;
+    unit: string;
+};
+
+// @public (undocumented)
+export const MeltQuoteState: {
+    readonly UNPAID: "UNPAID";
+    readonly PENDING: "PENDING";
+    readonly PAID: "PAID";
+};
+
+// @public (undocumented)
+export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
+
 // @public
 export class Mint {
-    constructor(_mintUrl: string, customRequest?: typeof request, authTokenGetter?: () => Promise<string>, options?: {
+    constructor(_mintUrl: string, customRequest?: RequestFn, authTokenGetter?: () => Promise<string>, options?: {
         logger?: Logger;
     });
-    check(checkPayload: CheckStatePayload, customRequest?: typeof request): Promise<CheckStateResponse>;
-    checkMeltQuote(quote: string, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
-    checkMeltQuoteBolt12(quote: string, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
-    checkMintQuote(quote: string, customRequest?: typeof request): Promise<PartialMintQuoteResponse>;
-    checkMintQuoteBolt12(quote: string, customRequest?: typeof request): Promise<Bolt12MintQuoteResponse>;
+    check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
+    checkMeltQuote(quote: string, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
+    checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
+    checkMintQuote(quote: string, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
+    checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     connectWebSocket(): Promise<void>;
-    createMeltQuote(meltQuotePayload: MeltQuotePayload, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
-    createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
-    createMintQuote(mintQuotePayload: MintQuotePayload, customRequest?: typeof request): Promise<PartialMintQuoteResponse>;
-    createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: typeof request): Promise<Bolt12MintQuoteResponse>;
+    createMeltQuote(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
+    createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
+    createMintQuote(mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
+    createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     disconnectWebSocket(): void;
-    getInfo(customRequest?: typeof request): Promise<GetInfoResponse>;
-    getKeys(keysetId?: string, mintUrl?: string, customRequest?: typeof request): Promise<MintActiveKeys>;
-    getKeySets(customRequest?: typeof request): Promise<MintAllKeysets>;
+    getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
+    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
+    getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
     handleBlindAuth(path: string): Promise<string | undefined>;
-    melt(meltPayload: MeltPayload, customRequest?: typeof request): Promise<PartialMeltQuoteResponse>;
-    meltBolt12(meltPayload: MeltPayload, customRequest?: typeof request): Promise<Bolt12MeltQuoteResponse>;
-    mint(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse>;
-    mintBolt12(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse>;
+    melt(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
+    meltBolt12(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
+    mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
-    restore(restorePayload: PostRestorePayload, customRequest?: typeof request): Promise<PostRestoreResponse>;
-    swap(swapPayload: SwapPayload, customRequest?: typeof request): Promise<SwapResponse>;
+    restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
+    swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
@@ -468,6 +609,101 @@ export type MintActiveKeys = {
 export type MintAllKeysets = {
     keysets: MintKeyset[];
 };
+
+// @public (undocumented)
+export type MintContactInfo = {
+    method: string;
+    info: string;
+};
+
+// @public (undocumented)
+export class MintInfo {
+    constructor(info: GetInfoResponse);
+    // (undocumented)
+    get contact(): MintContactInfo_2[];
+    // (undocumented)
+    get description(): string | undefined;
+    // (undocumented)
+    get description_long(): string | undefined;
+    // (undocumented)
+    isSupported(num: 4 | 5): {
+        disabled: boolean;
+        params: SwapMethod[];
+    };
+    // (undocumented)
+    isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): {
+        supported: boolean;
+    };
+    // (undocumented)
+    isSupported(num: 17): {
+        supported: boolean;
+        params?: WebSocketSupport[];
+    };
+    // (undocumented)
+    isSupported(num: 15): {
+        supported: boolean;
+        params?: MPPMethod[];
+    };
+    // (undocumented)
+    get motd(): string | undefined;
+    // (undocumented)
+    get name(): string;
+    // (undocumented)
+    get nuts(): {
+        '4': {
+            methods: SwapMethod[];
+            disabled: boolean;
+        };
+        '5': {
+            methods: SwapMethod[];
+            disabled: boolean;
+        };
+        '7'?: {
+            supported: boolean;
+        };
+        '8'?: {
+            supported: boolean;
+        };
+        '9'?: {
+            supported: boolean;
+        };
+        '10'?: {
+            supported: boolean;
+        };
+        '11'?: {
+            supported: boolean;
+        };
+        '12'?: {
+            supported: boolean;
+        };
+        '14'?: {
+            supported: boolean;
+        };
+        '15'?: {
+            methods: MPPMethod[];
+        };
+        '17'?: {
+            supported: WebSocketSupport[];
+        };
+        '20'?: {
+            supported: boolean;
+        };
+        '22'?: {
+            bat_max_mint: number;
+            protected_endpoints: Array<{
+                method: "GET" | "POST";
+                path: string;
+            }>;
+        };
+    };
+    // (undocumented)
+    get pubkey(): string;
+    // (undocumented)
+    requiresBlindAuthToken(path: string): boolean;
+    get supportsBolt12Description(): boolean;
+    // (undocumented)
+    get version(): string;
+}
 
 // @public
 export type MintKeys = {
@@ -493,28 +729,38 @@ export class MintOperationError extends HttpResponseError {
     code: number;
 }
 
-// @public (undocumented)
-export type MintProofOptions = {
-    keysetId?: string;
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Proof[];
-    counter?: number;
-    pubkey?: string;
-    outputData?: OutputDataLike[] | OutputDataFactory;
-    p2pk?: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    };
-};
-
 // @public
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string;
     proofsWeHave?: Proof[];
+};
+
+// @public (undocumented)
+export type MintQuoteResponse = PartialMintQuoteResponse & {
+    amount: number;
+    unit: string;
+};
+
+// @public (undocumented)
+export const MintQuoteState: {
+    readonly UNPAID: "UNPAID";
+    readonly PAID: "PAID";
+    readonly ISSUED: "ISSUED";
+};
+
+// @public (undocumented)
+export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState];
+
+// @public
+export type MintResponse = {
+    signatures: SerializedBlindedSignature[];
+} & ApiError;
+
+// @public
+export type MPPMethod = {
+    method: string;
+    unit: string;
 };
 
 // @public
@@ -529,18 +775,65 @@ export type NUT10Option = {
     tags: string[][];
 };
 
-// @public (undocumented)
-export type OutputAmounts = {
-    sendAmounts: number[];
-    keepAmounts?: number[];
-};
-
 // @public
 export interface OutputConfig {
     // (undocumented)
     keep?: OutputType;
     // (undocumented)
     send: OutputType;
+}
+
+// @public (undocumented)
+export class OutputData implements OutputDataLike {
+    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    // (undocumented)
+    blindedMessage: SerializedBlindedMessage;
+    // (undocumented)
+    blindingFactor: bigint;
+    // (undocumented)
+    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    // (undocumented)
+    static createP2PKData(p2pk: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+    }, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    // (undocumented)
+    static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    // (undocumented)
+    static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    // (undocumented)
+    static createSingleP2PKData(p2pk: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+    }, amount: number, keysetId: string): OutputData;
+    // (undocumented)
+    static createSingleRandomData(amount: number, keysetId: string): OutputData;
+    // (undocumented)
+    secret: Uint8Array;
+    static sumOutputAmounts(outputs: OutputDataLike[]): number;
+    // (undocumented)
+    toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset): Proof;
+}
+
+// @public (undocumented)
+export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+
+// @public (undocumented)
+export interface OutputDataLike {
+    // (undocumented)
+    blindedMessage: SerializedBlindedMessage;
+    // (undocumented)
+    blindingFactor: bigint;
+    // (undocumented)
+    secret: Uint8Array;
+    // (undocumented)
+    toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
 }
 
 // @public
@@ -573,6 +866,30 @@ export type P2PKOptions = {
 export type P2PKWitness = {
     signatures?: string[];
 };
+
+// @public
+export type PartialMeltQuoteResponse = {
+    quote: string;
+    amount: number;
+    fee_reserve: number;
+    state: MeltQuoteState;
+    expiry: number;
+    payment_preimage: string | null;
+    change?: SerializedBlindedSignature[];
+    request?: string;
+    unit?: string;
+} & ApiError;
+
+// @public
+export type PartialMintQuoteResponse = {
+    request: string;
+    quote: string;
+    state: MintQuoteState;
+    expiry: number;
+    pubkey?: string;
+    unit?: string;
+    amount?: number;
+} & ApiError;
 
 // @public (undocumented)
 class PaymentRequest_2 {
@@ -622,6 +939,17 @@ export enum PaymentRequestTransportType {
 }
 
 // @public
+export type PostRestorePayload = {
+    outputs: SerializedBlindedMessage[];
+};
+
+// @public
+export type PostRestoreResponse = {
+    outputs: SerializedBlindedMessage[];
+    signatures: SerializedBlindedSignature[];
+};
+
+// @public
 export type Proof = {
     id: string;
     amount: number;
@@ -636,6 +964,13 @@ export type ProofState = {
     Y: string;
     state: CheckStateEnum;
     witness: string | null;
+};
+
+// @public (undocumented)
+export type RawNUT10Option = {
+    k: string;
+    d: string;
+    t: string[][];
 };
 
 // @public (undocumented)
@@ -665,37 +1000,30 @@ export type ReceiveConfig = {
     proofsWeHave?: Proof[];
 };
 
-// @public (undocumented)
-export type ReceiveOptions = {
-    keysetId?: string;
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Proof[];
-    counter?: number;
-    pubkey?: string;
-    privkey?: string;
-    requireDleq?: boolean;
-    outputData?: OutputDataLike[] | OutputDataFactory;
-    p2pk?: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    };
-};
-
 // @public
 export type ReceiveTokenEntryResponse = {
     proofs: Proof[];
 };
 
 // @public (undocumented)
-export type RestoreOptions = {
-    keysetId?: string;
+export type RequestArgs = {
+    endpoint: string;
+    requestBody?: Record<string, unknown>;
+    headers?: Record<string, string>;
+    logger?: Logger;
 };
 
 // @public (undocumented)
+export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
+
+// @public (undocumented)
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+
+// @public (undocumented)
 export type RpcSubId = string | number | null;
+
+// @public (undocumented)
+export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
 
 // @public
 export type SendConfig = {
@@ -708,30 +1036,6 @@ export type SendOfflineConfig = {
     requireDleq?: boolean;
     includeFees?: boolean;
     exactMatch?: boolean;
-};
-
-// @public (undocumented)
-export type SendOptions = {
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Proof[];
-    counter?: number;
-    pubkey?: string;
-    privkey?: string;
-    keysetId?: string;
-    offline?: boolean;
-    includeFees?: boolean;
-    includeDleq?: boolean;
-    outputData?: {
-        send?: OutputDataLike[] | OutputDataFactory;
-        keep?: OutputDataLike[] | OutputDataFactory;
-    };
-    p2pk?: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    };
 };
 
 // @public
@@ -756,8 +1060,6 @@ export type SerializedDLEQ = {
     r?: string;
 };
 
-// Warning: (ae-forgotten-export) The symbol "RequestOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
@@ -767,26 +1069,23 @@ export interface SharedOutputTypeProps {
 }
 
 // @public (undocumented)
-export type SwapOptions = {
-    outputAmounts?: OutputAmounts;
-    proofsWeHave?: Proof[];
-    counter?: number;
-    pubkey?: string;
-    privkey?: string;
-    keysetId?: string;
-    includeFees?: boolean;
-    outputData?: {
-        send?: OutputDataLike[] | OutputDataFactory;
-        keep?: OutputDataLike[] | OutputDataFactory;
-    };
-    p2pk?: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
+export type SubscriptionCanceller = () => void;
+
+// @public
+export type SwapMethod = {
+    method: string;
+    unit: string;
+    min_amount: number;
+    max_amount: number;
+    options?: {
+        description?: boolean;
     };
 };
+
+// @public
+export type SwapResponse = {
+    signatures: SerializedBlindedSignature[];
+} & ApiError;
 
 // @public
 export type Token = {
@@ -794,6 +1093,12 @@ export type Token = {
     proofs: Proof[];
     memo?: string;
     unit?: string;
+};
+
+// @public
+export type TokenEntry = {
+    proofs: Proof[];
+    mint: string;
 };
 
 // @public
@@ -906,16 +1211,42 @@ export class Wallet {
     get unit(): string;
 }
 
-// Warnings were encountered during analysis:
-//
-// lib/types/CashuWallet.d.ts:46:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:155:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:195:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:223:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/token.d.ts:30:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
-// lib/types/wallet/types/config.d.ts:79:5 - (ae-forgotten-export) The symbol "OutputData" needs to be exported by the entry point index.d.ts
-// lib/types/wallet/types/config.d.ts:194:5 - (ae-forgotten-export) The symbol "MeltBlanks" needs to be exported by the entry point index.d.ts
-// lib/types/wallet/types/payment-requests.d.ts:20:5 - (ae-forgotten-export) The symbol "RawNUT10Option" needs to be exported by the entry point index.d.ts
+// @public
+export type WebSocketSupport = {
+    method: string;
+    unit: string;
+    commands: string[];
+};
+
+// @public (undocumented)
+export class WSConnection {
+    constructor(url: string, logger?: Logger);
+    // (undocumented)
+    get activeSubscriptions(): string[];
+    // (undocumented)
+    addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void): void;
+    cancelSubscription<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
+    // (undocumented)
+    close(): void;
+    // @deprecated (undocumented)
+    closeSubscription(subId: string): void;
+    // (undocumented)
+    connect(): Promise<void>;
+    // (undocumented)
+    createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
+    // (undocumented)
+    ensureConnection(): Promise<void>;
+    // (undocumented)
+    onClose(callback: (e: CloseEvent) => void): void;
+    // (undocumented)
+    sendRequest(method: 'subscribe', params: JsonRpcReqParams): void;
+    // (undocumented)
+    sendRequest(method: 'unsubscribe', params: {
+        subId: string;
+    }): void;
+    // (undocumented)
+    readonly url: URL;
+}
 
 // (No @packageDocumentation comment for this package)
 

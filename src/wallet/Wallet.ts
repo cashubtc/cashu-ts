@@ -49,6 +49,7 @@ import {
 	type SendResponse,
 	// websocket types are part of wallet seam too
 	type SubscriptionCanceller,
+	type RestoreOptions,
 } from './types';
 
 import { signP2PKProofs } from '../crypto/client/NUT11';
@@ -64,7 +65,6 @@ import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import type { ProofState } from '../model/types/proof-state';
-import type { RestoreOptions } from '../model/types';
 import type { MintKeys, MintKeyset } from '../model/types/keyset';
 
 // mint wire DTOs and enums

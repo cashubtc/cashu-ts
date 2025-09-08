@@ -1,5 +1,6 @@
 import { ConnectionManager, type WSConnection } from './WSConnection';
 import type {
+	ApiError,
 	// mint responses & enums
 	GetInfoResponse,
 	PartialMintQuoteResponse,
@@ -15,9 +16,8 @@ import type {
 	PostRestorePayload,
 	// mint misc
 	MintResponse,
-	MintActiveKeys,
-	MintAllKeysets,
 } from './mint/types';
+import type { MintActiveKeys, MintAllKeysets } from './model/types/keyset';
 import type {
 	// wallet-built payloads handed to mint endpoints
 	MintQuotePayload,
@@ -29,7 +29,7 @@ import type {
 } from './wallet/types';
 import type { SerializedBlindedMessage } from './model/types/blinded';
 import { MeltQuoteState } from './mint/types';
-import request, { setRequestLogger } from './request';
+import request, { setRequestLogger, type RequestFn } from './request';
 import { isObj, joinUrls, sanitizeUrl } from './utils';
 import {
 	type MeltQuoteResponsePaidDeprecated,
@@ -62,7 +62,7 @@ class CashuMint {
 	 */
 	constructor(
 		private _mintUrl: string,
-		private _customRequest?: typeof request,
+		private _customRequest?: RequestFn,
 		authTokenGetter?: () => Promise<string>,
 		options?: {
 			logger?: Logger;
@@ -92,7 +92,7 @@ class CashuMint {
 	 */
 	public static async getInfo(
 		mintUrl: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		logger?: Logger,
 	): Promise<GetInfoResponse> {
 		const mintLogger = logger ?? NULL_LOGGER;
@@ -130,7 +130,7 @@ class CashuMint {
 	public static async swap(
 		mintUrl: string,
 		swapPayload: SwapPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<SwapResponse> {
 		const requestInstance = customRequest || request;
@@ -143,7 +143,8 @@ class CashuMint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			throw new Error(data.detail ?? 'bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -171,7 +172,7 @@ class CashuMint {
 	public static async createMintQuote(
 		mintUrl: string,
 		mintQuotePayload: MintQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 		logger?: Logger,
 	): Promise<PartialMintQuoteResponse> {
@@ -219,7 +220,7 @@ class CashuMint {
 	public static async createMintQuoteBolt12(
 		mintUrl: string,
 		mintQuotePayload: Bolt12MintQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<Bolt12MintQuoteResponse> {
 		const requestInstance = customRequest || request;
@@ -263,7 +264,7 @@ class CashuMint {
 	public static async checkMintQuote(
 		mintUrl: string,
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 		logger?: Logger,
 	): Promise<PartialMintQuoteResponse> {
@@ -304,7 +305,7 @@ class CashuMint {
 	public static async checkMintQuoteBolt12(
 		mintUrl: string,
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<Bolt12MintQuoteResponse> {
 		const requestInstance = customRequest || request;
@@ -344,7 +345,7 @@ class CashuMint {
 	public static async mint(
 		mintUrl: string,
 		mintPayload: MintPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	) {
 		const requestInstance = customRequest || request;
@@ -385,7 +386,7 @@ class CashuMint {
 	public static async mintBolt12(
 		mintUrl: string,
 		mintPayload: MintPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<MintResponse> {
 		const requestInstance = customRequest || request;
@@ -425,7 +426,7 @@ class CashuMint {
 	public static async createMeltQuote(
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
@@ -483,7 +484,7 @@ class CashuMint {
 	public static async createMeltQuoteBolt12(
 		mintUrl: string,
 		meltQuotePayload: MeltQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<Bolt12MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
@@ -526,7 +527,7 @@ class CashuMint {
 	public static async checkMeltQuote(
 		mintUrl: string,
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
@@ -578,7 +579,7 @@ class CashuMint {
 	public static async checkMeltQuoteBolt12(
 		mintUrl: string,
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<Bolt12MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
@@ -621,7 +622,7 @@ class CashuMint {
 	public static async melt(
 		mintUrl: string,
 		meltPayload: MeltPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 		logger?: Logger,
 	): Promise<PartialMeltQuoteResponse> {
@@ -673,7 +674,7 @@ class CashuMint {
 	public static async meltBolt12(
 		mintUrl: string,
 		meltPayload: MeltPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		blindAuthToken?: string,
 	): Promise<Bolt12MeltQuoteResponse> {
 		const requestInstance = customRequest || request;
@@ -711,7 +712,7 @@ class CashuMint {
 	public static async check(
 		mintUrl: string,
 		checkPayload: CheckStatePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<CheckStateResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<CheckStateResponse>({
@@ -739,7 +740,7 @@ class CashuMint {
 	public static async getKeys(
 		mintUrl: string,
 		keysetId?: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<MintActiveKeys> {
 		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
@@ -781,7 +782,7 @@ class CashuMint {
 	 */
 	public static async getKeySets(
 		mintUrl: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<MintAllKeysets> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(mintUrl, '/v1/keysets') });
@@ -809,7 +810,7 @@ class CashuMint {
 	public static async restore(
 		mintUrl: string,
 		restorePayload: PostRestorePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PostRestoreResponse> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<PostRestoreResponse>({

@@ -2,13 +2,17 @@ import { HttpResponseError, NetworkError, MintOperationError } from './model/Err
 import { type Logger, NULL_LOGGER } from './logger';
 import { type ApiError } from './mint/types/responses';
 
-type RequestArgs = {
+// Generic request function type so callers can do requestInstance<T>(...)
+export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
+
+export type RequestArgs = {
 	endpoint: string;
 	requestBody?: Record<string, unknown>;
 	headers?: Record<string, string>;
+	logger?: Logger;
 };
 
-type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
 
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;

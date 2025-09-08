@@ -24,9 +24,9 @@ import type {
 	CheckStatePayload,
 	PostRestorePayload,
 	MintResponse,
-	MintActiveKeys,
-	MintAllKeysets,
+	ApiError,
 } from './types';
+import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
 import type {
 	MintQuotePayload,
 	MintPayload,
@@ -36,7 +36,7 @@ import type {
 	Bolt12MintQuotePayload,
 } from '../wallet/types';
 import { MeltQuoteState } from './types';
-import request, { setRequestLogger } from '../request';
+import request, { setRequestLogger, type RequestFn } from '../request';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 import {
 	type MeltQuoteResponsePaidDeprecated,
@@ -63,7 +63,7 @@ class Mint {
 	private _authTokenGetter?: () => Promise<string>;
 	private _checkNut22 = false;
 	private _logger: Logger;
-	private _request: typeof request;
+	private _request: RequestFn;
 
 	/**
 	 * @param _mintUrl Requires mint URL to create this object.
@@ -73,7 +73,7 @@ class Mint {
 	 */
 	constructor(
 		private _mintUrl: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 		authTokenGetter?: () => Promise<string>,
 		options?: {
 			logger?: Logger;
@@ -101,7 +101,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns The mint's information response.
 	 */
-	async getInfo(customRequest?: typeof request): Promise<GetInfoResponse> {
+	async getInfo(customRequest?: RequestFn): Promise<GetInfoResponse> {
 		const requestInstance = customRequest ?? this._request;
 		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(this._mintUrl, '/v1/info'),
@@ -131,7 +131,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Signed outputs.
 	 */
-	async swap(swapPayload: SwapPayload, customRequest?: typeof request): Promise<SwapResponse> {
+	async swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/swap');
 		const requestInstance = customRequest ?? this._request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -143,7 +143,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			throw new Error(data.detail ?? 'bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -158,7 +159,7 @@ class Mint {
 	 */
 	async createMintQuote(
 		mintQuotePayload: MintQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt11');
 		const requestInstance = customRequest ?? this._request;
@@ -185,7 +186,7 @@ class Mint {
 	 */
 	async createMintQuoteBolt12(
 		mintQuotePayload: Bolt12MintQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<Bolt12MintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt12');
 		const requestInstance = customRequest ?? this._request;
@@ -208,7 +209,7 @@ class Mint {
 	 */
 	async checkMintQuote(
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PartialMintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt11/${quote}`);
 		const requestInstance = customRequest ?? this._request;
@@ -234,7 +235,7 @@ class Mint {
 	 */
 	async checkMintQuoteBolt12(
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<Bolt12MintQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt12/${quote}`);
 		const requestInstance = customRequest ?? this._request;
@@ -254,7 +255,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures.
 	 */
-	async mint(mintPayload: MintPayload, customRequest?: typeof request): Promise<MintResponse> {
+	async mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt11');
 		const requestInstance = customRequest ?? this._request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -266,7 +267,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -279,10 +281,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures for the requested outputs.
 	 */
-	async mintBolt12(
-		mintPayload: MintPayload,
-		customRequest?: typeof request,
-	): Promise<MintResponse> {
+	async mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt12');
 		const requestInstance = customRequest ?? this._request;
 		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
@@ -294,7 +293,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -309,7 +309,7 @@ class Mint {
 	 */
 	async createMeltQuote(
 		meltQuotePayload: MeltQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt11');
 		const requestInstance = customRequest ?? this._request;
@@ -331,7 +331,8 @@ class Mint {
 			typeof data?.fee_reserve !== 'number' ||
 			typeof data?.quote !== 'string'
 		) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 		return data;
 	}
@@ -346,7 +347,7 @@ class Mint {
 	 */
 	async createMeltQuoteBolt12(
 		meltQuotePayload: MeltQuotePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<Bolt12MeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt12');
 		const requestInstance = customRequest ?? this._request;
@@ -369,7 +370,7 @@ class Mint {
 	 */
 	async checkMeltQuote(
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt11/${quote}`);
 		const requestInstance = customRequest ?? this._request;
@@ -390,7 +391,8 @@ class Mint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -406,7 +408,7 @@ class Mint {
 	 */
 	async checkMeltQuoteBolt12(
 		quote: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<Bolt12MeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt12/${quote}`);
 		const requestInstance = customRequest ?? this._request;
@@ -430,7 +432,7 @@ class Mint {
 	 */
 	async melt(
 		meltPayload: MeltPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt11');
 		const requestInstance = customRequest ?? this._request;
@@ -449,7 +451,8 @@ class Mint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -466,7 +469,7 @@ class Mint {
 	 */
 	async meltBolt12(
 		meltPayload: MeltPayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<Bolt12MeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt12');
 		const requestInstance = customRequest ?? this._request;
@@ -489,7 +492,7 @@ class Mint {
 	 */
 	async check(
 		checkPayload: CheckStatePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<CheckStateResponse> {
 		const requestInstance = customRequest ?? this._request;
 		const data = await requestInstance<CheckStateResponse>({
@@ -499,7 +502,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -517,7 +521,7 @@ class Mint {
 	async getKeys(
 		keysetId?: string,
 		mintUrl?: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<MintActiveKeys> {
 		const targetUrl = mintUrl || this._mintUrl;
 		// backwards compatibility for base64 encoded keyset ids
@@ -533,7 +537,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;
@@ -545,7 +550,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns All the mint's past and current keysets.
 	 */
-	async getKeySets(customRequest?: typeof request): Promise<MintAllKeysets> {
+	async getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets> {
 		const requestInstance = customRequest ?? this._request;
 		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(this._mintUrl, '/v1/keysets') });
 	}
@@ -559,7 +564,7 @@ class Mint {
 	 */
 	async restore(
 		restorePayload: PostRestorePayload,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<PostRestoreResponse> {
 		const requestInstance = customRequest ?? this._request;
 		const data = await requestInstance<PostRestoreResponse>({
@@ -569,7 +574,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
-			throw new Error('bad response');
+			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
+			throw new Error(errDetail ?? 'bad response');
 		}
 
 		return data;

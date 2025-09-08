@@ -1,7 +1,7 @@
 import { type MintActiveKeys, type MintAllKeysets } from '../model/types';
 import type { BlindAuthMintPayload } from '../wallet/types';
 import type { BlindAuthMintResponse } from '../mint/types';
-import request from '../request';
+import request, { type RequestFn } from '../request';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 
 /**
@@ -16,7 +16,7 @@ class CashuAuthMint {
 	 */
 	constructor(
 		private _mintUrl: string,
-		private _customRequest?: typeof request,
+		private _customRequest?: RequestFn,
 	) {
 		this._mintUrl = sanitizeUrl(_mintUrl);
 		this._customRequest = _customRequest;
@@ -39,7 +39,7 @@ class CashuAuthMint {
 		mintUrl: string,
 		mintPayload: BlindAuthMintPayload,
 		clearAuthToken: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	) {
 		const requestInstance = customRequest || request;
 		const headers = {
@@ -81,7 +81,7 @@ class CashuAuthMint {
 	public static async getKeys(
 		mintUrl: string,
 		keysetId?: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<MintActiveKeys> {
 		const requestInstance = customRequest || request;
 		const data = await requestInstance<MintActiveKeys>({
@@ -120,7 +120,7 @@ class CashuAuthMint {
 	 */
 	public static async getKeySets(
 		mintUrl: string,
-		customRequest?: typeof request,
+		customRequest?: RequestFn,
 	): Promise<MintAllKeysets> {
 		const requestInstance = customRequest || request;
 		return requestInstance<MintAllKeysets>({

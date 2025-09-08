@@ -43,7 +43,7 @@ export type DeprecatedToken = {
 /**
  * TokenEntry that stores proofs and mints.
  */
-type TokenEntry = {
+export type TokenEntry = {
 	/**
 	 * A list of proofs.
 	 */

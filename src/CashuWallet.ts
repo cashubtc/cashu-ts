@@ -9,6 +9,9 @@ import type { Proof } from './model/types/proof';
 import type { Token } from './model/types/token';
 import type { SerializedBlindedSignature } from './model/types/blinded';
 import type { ProofState } from './model/types/proof-state';
+import type { MintKeys, MintKeyset } from './model/types/keyset';
+
+// wallet constructed DTOs and wallet responses
 import type {
 	OutputAmounts,
 	ReceiveOptions,
@@ -17,11 +20,6 @@ import type {
 	RestoreOptions,
 	MeltProofOptions,
 	MintProofOptions,
-} from './model/types';
-import type { MintKeys, MintKeyset } from './model/types/keyset';
-
-// wallet constructed DTOs and wallet responses
-import type {
 	MeltPayload,
 	MeltProofsResponse,
 	MeltQuotePayload,

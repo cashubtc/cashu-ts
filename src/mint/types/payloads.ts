@@ -1,18 +1,17 @@
-// src/mint/types/payloads.ts
-import type { SerializedBlindedMessage } from '../../model/types/blinded';
+import { type SerializedBlindedMessage } from '../../model/types/blinded';
 
 /**
- * Payload for /v1/checkstate.
+ * Payload that needs to be sent to the mint when checking for spendable proofs.
  */
 export type CheckStatePayload = {
 	/**
-	 * Y = hash_to_curve(secret) values to check.
+	 * The Y = hash_to_curve(secret) of the proofs to be checked.
 	 */
 	Ys: string[];
 };
 
 /**
- * Payload for /v1/restore.
+ * Request to mint at /v1/restore endpoint.
  */
 export type PostRestorePayload = {
 	outputs: SerializedBlindedMessage[];
