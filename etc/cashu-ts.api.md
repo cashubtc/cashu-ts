@@ -1443,6 +1443,7 @@ export type SwapMethod = {
     unit: string;
     min_amount: number;
     max_amount: number;
+    description?: boolean;
     options?: {
         description?: boolean;
     };
