@@ -78,7 +78,7 @@ async function _request({
 			}
 		}
 
-		let errorData: ApiError | undefined =
+		const errorData: ApiError | undefined =
 			parsed && typeof parsed === 'object' ? (parsed as ApiError) : undefined;
 		if (
 			response.status === 400 &&

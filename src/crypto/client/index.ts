@@ -13,7 +13,6 @@ import {
 } from '../common/index.js';
 import { type PrivKey } from '@noble/curves/abstract/utils';
 import { getSignedOutput } from './NUT11';
-import { createCairoDataPayload } from './NUTXX';
 
 export type BlindedMessage = {
 	B_: ProjPointType<bigint>;

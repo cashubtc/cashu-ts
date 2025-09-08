@@ -50,8 +50,8 @@ export const verifyP2PKSecretSignature = (
 		if (schnorr.verify(signature, msghash, hexToBytes(pubkeyX))) {
 			return true;
 		}
-	} catch (e) {
-		console.error('verifyP2PKsecret error:', e);
+	} catch {
+		// Invalid signature, ignore error
 	}
 	return false; // no bueno
 };
@@ -218,8 +218,7 @@ export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefin
 		try {
 			const parsed = JSON.parse(witness) as Witness;
 			return parsed.signatures || [];
-		} catch (e) {
-			console.error('Failed to parse witness string:', e);
+		} catch {
 			return [];
 		}
 	}
@@ -250,7 +249,7 @@ export const signP2PKProofs = (
 				if (beStrict) {
 					throw new Error(`Failed signing proof #${index + 1}: ${message}`);
 				}
-				console.warn(`Proof #${index + 1}: ${message}`);
+				// Silently continue if not strict mode
 			}
 		}
 		return signedProof;

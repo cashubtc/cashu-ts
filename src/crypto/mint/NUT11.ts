@@ -7,7 +7,7 @@ import {
 	getP2PKNSigs,
 	verifyP2PKSecretSignature,
 } from '../client/NUT11';
-import { P2PKWitness, type Proof } from '../../model/types/index';
+import { type P2PKWitness, type Proof } from '../../model/types/index';
 import { type BlindedMessage } from '../client/index';
 
 export const verifyP2PKSig = (proof: Proof): boolean => {

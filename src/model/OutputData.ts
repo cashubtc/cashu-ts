@@ -34,9 +34,9 @@ export class OutputData implements OutputDataLike {
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array) {
+	constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array) {
 		this.secret = secret;
-		this.blindingFactor = blidingFactor;
+		this.blindingFactor = blindingFactor;
 		this.blindedMessage = blindedMessage;
 	}
 
@@ -152,7 +152,7 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createSingleCairoData(
-		cairoSend: { programHash: string; outputHash: string },
+		cairoDataPayload: { programHash: string; outputHash: string },
 		amount: number,
 		keysetId: string,
 	) {
@@ -160,8 +160,8 @@ export class OutputData implements OutputDataLike {
 			'Cairo',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: cairoSend.programHash,
-				tags: [['program_output', cairoSend.outputHash]],
+				data: cairoDataPayload.programHash,
+				tags: [['program_output', cairoDataPayload.outputHash]],
 			},
 		];
 		const parsed = JSON.stringify(newSecret);

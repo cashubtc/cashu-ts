@@ -37,7 +37,7 @@ export {
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
 	hasValidDleq,
-	createCairoDataPayload as createCairoSend,
+	createCairoDataPayload,
 	LogLevel,
 	ConsoleLogger,
 	type Logger,

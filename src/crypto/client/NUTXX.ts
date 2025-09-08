@@ -26,7 +26,7 @@ class Felt252 {
 
 	static fromHex(word: string): Felt252 {
 		// handling -0x.. case
-		let neg = word.startsWith('-');
+		const neg = word.startsWith('-');
 		if (neg) word = word.slice(1);
 
 		let n = BigInt(word);
@@ -59,7 +59,7 @@ export const createCairoDataPayload = (
 	cairoExecutable: string,
 	cairoExpectedOutput: number | bigint
 ): { programHash: string; outputHash: string } => {
-	const executable = JSON.parse(cairoExecutable);
+	const executable = JSON.parse(cairoExecutable) as { program: { bytecode: string[] } };
 	const bytecode = executable.program.bytecode;
 	const programHash = bytesToHex(hashExecutableBytecode(bytecode));
 	const outputBigInt = BigInt(cairoExpectedOutput);
@@ -116,8 +116,8 @@ export const hashExecutableBytecode = (executableBytecode: string[]): Uint8Array
  * @returns The 32-byte BLAKE2s hash of the input.
  */
 export const hashByteArray = (a: Uint8Array): Uint8Array => {
-	let hasher = new BLAKE2s();
-	a.forEach((byte) => hasher.update(new Uint8Array([byte])));
+	const hasher = new BLAKE2s();
+	hasher.update(a);
 	return hasher.digest();
 };
 
@@ -131,37 +131,23 @@ export const cairoProveProofs = async (
 	executable: string,
 	programInputs: bigint[],
 ): Promise<Proof[]> => {
-	console.log('Initializing cairo wasm workers...');
-	init();
-	console.log('Initialization complete.');
+	void init();
 
-	let time = Date.now();
-	console.log('Executing cairo program...');
 	const proverInput = await stwoExecute(executable, ...programInputs);
-	console.log('Execution complete in', Date.now() - time, 'ms');
 	const withPedersen = containsPedersenBuiltin(proverInput);
-	time = Date.now();
-	console.log('Proving cairo execution...');
 	const cairoProof = await stwoProve(proverInput);
-	console.log('Proving complete in', Date.now() - time, 'ms');
 
 	proofs.forEach((p) => {
-		try {
-			console.log('adding cairo witness to proof with amount:', p.amount);
-			const secret = parseSecret(p.secret);
-			if (secret[0] !== 'Cairo') {
-				throw new Error('not a Cairo secret');
-			}
-			const cairoWitness: CairoWitness = {
-				cairo_proof_json: cairoProof,
-				with_pedersen: withPedersen,
-				with_bootloader: false,
-			};
-			p.witness = JSON.stringify(cairoWitness);
-		} catch (e) {
-			console.error('Failed to attach Cairo witness:', e);
-			throw e;
+		const secret = parseSecret(p.secret);
+		if (secret[0] !== 'Cairo') {
+			throw new Error('not a Cairo secret');
 		}
+		const cairoWitness: CairoWitness = {
+			cairo_proof_json: cairoProof,
+			with_pedersen: withPedersen,
+			with_bootloader: false,
+		};
+		p.witness = JSON.stringify(cairoWitness);
 	});
 
 	return proofs;

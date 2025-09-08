@@ -1,7 +1,6 @@
-import { CashuWallet, CashuMint } from '@cashu/cashu-ts';
-import { createCairoSend } from '@cashu/cashu-ts';
+import { CashuWallet, CashuMint, createCairoDataPayload } from '@cashu/cashu-ts';
 
-// Example usage of the createCairoSend helper function
+// Example usage of the createCairoDataPayload helper function
 async function exampleCairoSend() {
 	const mint = new CashuMint('https://your-mint-url.com');
 	const wallet = new CashuWallet(mint, { unit: 'sat' });
@@ -21,7 +20,7 @@ async function exampleCairoSend() {
 	const expectedOutput = 1;
 
 	// Use the helper function to create cairoSend object
-	const cairoSend = createCairoSend(cairoExecutable, expectedOutput);
+	const cairoSend = createCairoDataPayload(cairoExecutable, expectedOutput);
 
 	// Now you can use it in wallet.send
 	const { send } = await wallet.send(64, proofs, {
