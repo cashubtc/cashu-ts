@@ -3,8 +3,8 @@ import {
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64,
-	isBase64String,
-} from '../src/base64';
+  isBase64String,
+} from '../src/utils';
 import { test, describe, expect } from 'vitest';
 describe('testing uint8 encoding', () => {
 	test('uint8 to base64', async () => {

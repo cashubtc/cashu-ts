@@ -1,5 +1,4 @@
-import { encodeBase64toUint8 } from '../base64';
-import { decodeCBOR, encodeCBOR } from '../cbor';
+import { encodeBase64toUint8, decodeCBOR, encodeCBOR } from '../utils';
 import type {
 	RawPaymentRequest,
 	RawTransport,

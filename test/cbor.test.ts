@@ -1,4 +1,4 @@
-import { decodeCBOR, encodeCBOR } from '../src/cbor';
+import { decodeCBOR, encodeCBOR } from '../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { test, describe, expect } from 'vitest';
 import { Bytes } from '../src/utils/Bytes';

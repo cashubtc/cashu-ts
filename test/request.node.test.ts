@@ -8,7 +8,7 @@ import {
 } from '../src';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { setGlobalRequestOptions } from '../src/request';
+import { setGlobalRequestOptions } from '../src/transport';
 
 const mintUrl = 'https://localhost:3338';
 const unit = 'sats';

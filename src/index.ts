@@ -7,17 +7,8 @@ export { CashuWallet } from './CashuWallet';
 // Core models & primitives
 export * from './model/types';
 
-// Serialization & helpers used across v2/v3
-export {
-	getEncodedToken,
-	getEncodedTokenV4,
-	getDecodedToken,
-	getDecodedTokenBinary,
-	getEncodedTokenBinary,
-	decodePaymentRequest,
-	deriveKeysetId,
-	hasValidDleq,
-} from './utils';
+// Serialization & helpers
+export * from './utils';
 
 // Auth
 export { CashuAuthMint, CashuAuthWallet, getEncodedAuthToken, getBlindedAuthToken } from './auth';
@@ -41,10 +32,8 @@ export { MintOperationError, NetworkError, HttpResponseError } from './model/Err
 export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
 export { MintInfo } from './model/MintInfo';
-export { WSConnection } from './WSConnection'; // getter type on mint surfaces
-export { injectWebSocketImpl } from './ws';
-export { setGlobalRequestOptions } from './request';
-export type { RequestFn, RequestArgs, RequestOptions } from './request';
+export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
+export type { RequestFn, RequestArgs, RequestOptions } from './transport';
 
 // ==========================
 // v3 (new API) surface

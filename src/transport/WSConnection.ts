@@ -1,8 +1,8 @@
-import { MessageQueue } from './utils';
-import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from './model/types';
-import { type OnOpenError, type OnOpenSuccess } from './wallet/types/websocket';
+import { MessageQueue } from '../utils';
+import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
+import { type OnOpenError, type OnOpenSuccess } from '../wallet/types/websocket';
 import { getWebSocketImpl } from './ws';
-import { type Logger, NULL_LOGGER } from './logger';
+import { type Logger, NULL_LOGGER } from '../logger';
 
 // Internal interface for RPC listeners
 interface RpcListener {

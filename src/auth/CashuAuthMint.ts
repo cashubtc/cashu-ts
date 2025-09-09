@@ -1,7 +1,7 @@
 import { type MintActiveKeys, type MintAllKeysets } from '../model/types';
 import type { BlindAuthMintPayload } from '../wallet/types';
 import type { BlindAuthMintResponse } from '../mint/types';
-import request, { type RequestFn } from '../request';
+import request, { type RequestFn } from '../transport';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 
 /**

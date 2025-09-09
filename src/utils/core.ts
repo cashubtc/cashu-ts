@@ -1,5 +1,5 @@
-import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
-import { type DLEQ, pointFromHex } from './crypto/common';
+import { verifyDLEQProof_reblind } from '../crypto/client/NUT12';
+import { type DLEQ, pointFromHex } from '../crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha2';
 import {
@@ -10,7 +10,7 @@ import {
 	isBase64String,
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
-import { PaymentRequest } from './model/PaymentRequest';
+import { PaymentRequest } from '../model/PaymentRequest';
 import {
 	type DeprecatedToken,
 	type Keys,
@@ -23,10 +23,9 @@ import {
 	type V4DLEQTemplate,
 	type V4InnerToken,
 	type V4ProofTemplate,
-} from './model/types/index';
-import { type Keyset } from './wallet';
-import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
+} from '../model/types';
 import { Bytes } from './utils/Bytes';
+import { type Keyset } from '../wallet';
 
 /**
  * Splits the amount into denominations of the provided @param keyset.
@@ -234,7 +233,9 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	if (token.memo) {
 		v3TokenObj.memo = token.memo;
 	}
-	return TOKEN_PREFIX + TOKEN_VERSION + encodeJsonToBase64(v3TokenObj);
+	const prefix = 'cashu';
+	const version = 'A';
+	return prefix + version + encodeJsonToBase64(v3TokenObj);
 }
 
 /*
@@ -701,23 +702,6 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
 		pointFromHex(proof.C),
 		pointFromHex(key),
 	);
-}
-
-/**
- * Helper function to encode a cashu auth token authA.
- *
- * @param proof
- */
-export function getEncodedAuthToken(proof: Proof): string {
-	const token = {
-		id: proof.id,
-		secret: proof.secret,
-		C: proof.C,
-	};
-	const base64Data = encodeJsonToBase64(token);
-	const prefix = 'auth';
-	const version = 'A';
-	return prefix + version + base64Data;
 }
 
 function concatByteArrays(...arrays: Uint8Array[]): Uint8Array {

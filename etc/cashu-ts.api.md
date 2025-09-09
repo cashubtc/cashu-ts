@@ -16,6 +16,9 @@ export type ApiError = {
     detail?: string;
 };
 
+// @public (undocumented)
+export function bigIntStringify<T>(_key: unknown, value: T): string | T;
+
 // @public
 export type BlindAuthMintResponse = {
     signatures: SerializedBlindedSignature[];
@@ -35,6 +38,9 @@ export type Bolt12MintQuoteResponse = {
     amount_paid: number;
     amount_issued: number;
 };
+
+// @public
+export function bytesToNumber(bytes: Uint8Array): bigint;
 
 // @public
 export class CashuAuthMint {
@@ -231,6 +237,12 @@ export class CashuWallet {
     get unit(): string;
 }
 
+// @public (undocumented)
+export function checkResponse(data: {
+    error?: string;
+    detail?: string;
+}): void;
+
 // @public
 export const CheckStateEnum: {
     readonly UNSPENT: "UNSPENT";
@@ -273,7 +285,13 @@ export class ConsoleLogger implements Logger {
 }
 
 // @public (undocumented)
+export function decodeCBOR(data: Uint8Array): ResultValue;
+
+// @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
+
+// @public
+export function deepEqual<T>(a: T, b: T): boolean;
 
 // @public
 export const DEFAULT_OUTPUT: {
@@ -292,6 +310,24 @@ export type DeprecatedToken = {
 
 // @public
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
+
+// @public (undocumented)
+export function encodeBase64ToJson<T extends object>(base64String: string): T;
+
+// @public (undocumented)
+export function encodeBase64toUint8(base64String: string): Uint8Array;
+
+// @public (undocumented)
+export function encodeCBOR(value: unknown): Uint8Array;
+
+// @public (undocumented)
+export function encodeJsonToBase64(jsonObj: unknown): string;
+
+// @public (undocumented)
+export function encodeUint8toBase64(uint8array: Uint8Array): string;
+
+// @public (undocumented)
+export function encodeUint8toBase64Url(bytes: Uint8Array): string;
 
 // @public (undocumented)
 export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
@@ -313,6 +349,9 @@ export function getEncodedToken(token: Token, opts?: {
 
 // @public (undocumented)
 export function getEncodedTokenBinary(token: Token): Uint8Array;
+
+// @public
+export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string;
 
 // @public (undocumented)
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
@@ -377,7 +416,25 @@ export type GetInfoResponse = {
 };
 
 // @public
+export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: number, keys: Keys, targetCount: number): number[];
+
+// @public
+export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[];
+
+// @public
+export function handleTokens(token: string): Token;
+
+// @public
+export function hasCorrespondingKey(amount: number, keyset: Keys): boolean;
+
+// @public
+export function hasNonHexId(p: Proof | Proof[]): boolean;
+
+// @public
 export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
+
+// @public
+export function hexToNumber(hex: string): bigint;
 
 // @public
 export type HTLCWitness = {
@@ -394,6 +451,15 @@ export class HttpResponseError extends Error {
 
 // @public (undocumented)
 export function injectWebSocketImpl(ws: typeof WebSocket): void;
+
+// @public (undocumented)
+export function isObj(v: unknown): v is object;
+
+// @public (undocumented)
+export function isValidHex(str: string): boolean;
+
+// @public (undocumented)
+export function joinUrls(...parts: string[]): string;
 
 // @public (undocumented)
 export type JsonRpcError = {
@@ -566,6 +632,38 @@ export const MeltQuoteState: {
 
 // @public (undocumented)
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
+
+// @public (undocumented)
+export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array;
+
+// @public (undocumented)
+export class MessageNode {
+    constructor(message: string);
+    // (undocumented)
+    get next(): MessageNode | null;
+    set next(node: MessageNode | null);
+    // (undocumented)
+    get value(): string;
+    set value(message: string);
+}
+
+// @public (undocumented)
+export class MessageQueue {
+    constructor();
+    // (undocumented)
+    dequeue(): string | null;
+    // (undocumented)
+    enqueue(message: string): boolean;
+    // (undocumented)
+    get first(): MessageNode | null;
+    set first(messageNode: MessageNode | null);
+    // (undocumented)
+    get last(): MessageNode | null;
+    set last(messageNode: MessageNode | null);
+    // (undocumented)
+    get size(): number;
+    set size(v: number);
+}
 
 // @public
 export class Mint {
@@ -767,6 +865,9 @@ export type MPPMethod = {
 export class NetworkError extends Error {
     constructor(message: string);
 }
+
+// @public
+export function numberToHexPadded64(number: bigint): string;
 
 // @public
 export type NUT10Option = {
@@ -1020,10 +1121,23 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
 
 // @public (undocumented)
+export type ResultObject = {
+    [key: string]: ResultValue;
+};
+
+// Warning: (ae-forgotten-export) The symbol "SimpleValue" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type ResultValue = SimpleValue | number | string | Uint8Array | ResultValue[] | ResultObject;
+
+// @public (undocumented)
 export type RpcSubId = string | number | null;
 
 // @public (undocumented)
 export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
+
+// @public (undocumented)
+export function sanitizeUrl(url: string): string;
 
 // @public
 export type SendConfig = {
@@ -1069,7 +1183,19 @@ export interface SharedOutputTypeProps {
 }
 
 // @public (undocumented)
+export function sortProofsById(proofs: Proof[]): Proof[];
+
+// @public
+export function splitAmount(value: number, keyset: Keys, split?: number[], order?: 'desc' | 'asc'): number[];
+
+// @public
+export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
+
+// @public (undocumented)
 export type SubscriptionCanceller = () => void;
+
+// @public (undocumented)
+export function sumProofs(proofs: Proof[]): number;
 
 // @public
 export type SwapMethod = {
@@ -1133,6 +1259,12 @@ export type V4ProofTemplate = {
     d?: V4DLEQTemplate;
     w?: string;
 };
+
+// @public (undocumented)
+export type ValidDecodedType = Extract<ResultValue, ResultObject>;
+
+// @public @deprecated
+export function verifyKeysetId(keys: MintKeys): boolean;
 
 // @public
 export class Wallet {

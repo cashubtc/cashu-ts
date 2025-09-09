@@ -1,6 +1,6 @@
-import { HttpResponseError, NetworkError, MintOperationError } from './model/Errors';
-import { type Logger, NULL_LOGGER } from './logger';
-import { type ApiError } from './mint/types/responses';
+import { HttpResponseError, NetworkError, MintOperationError } from '../model/Errors';
+import { type Logger, NULL_LOGGER } from '../logger';
+import { type ApiError } from '../mint/types/responses';
 
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;

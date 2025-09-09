@@ -1,6 +1,6 @@
 import { CashuAuthMint } from './CashuAuthMint';
 import { CashuAuthWallet } from './CashuAuthWallet';
-import { encodeJsonToBase64 } from '../base64';
+import { encodeJsonToBase64 } from '../utils';
 import { type Proof } from '../model/types';
 
 /**

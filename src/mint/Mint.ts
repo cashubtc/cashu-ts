@@ -10,7 +10,6 @@
  * the v3 refactor process.
  * @v3
  */
-import { ConnectionManager, type WSConnection } from '../WSConnection';
 import type {
 	GetInfoResponse,
 	PartialMintQuoteResponse,
@@ -36,7 +35,12 @@ import type {
 	Bolt12MintQuotePayload,
 } from '../wallet/types';
 import { MeltQuoteState } from './types';
-import request, { setRequestLogger, type RequestFn } from '../request';
+import request, {
+	ConnectionManager,
+	type WSConnection,
+	setRequestLogger,
+	type RequestFn,
+} from '../transport';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 import {
 	type MeltQuoteResponsePaidDeprecated,

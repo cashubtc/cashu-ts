@@ -1,4 +1,9 @@
-import { ConnectionManager, type WSConnection } from './WSConnection';
+import request, {
+	ConnectionManager,
+	type WSConnection,
+	setRequestLogger,
+	type RequestFn,
+} from './transport';
 import type {
 	ApiError,
 	// mint responses & enums
@@ -29,7 +34,6 @@ import type {
 } from './wallet/types';
 import type { SerializedBlindedMessage } from './model/types/blinded';
 import { MeltQuoteState } from './mint/types';
-import request, { setRequestLogger, type RequestFn } from './request';
 import { isObj, joinUrls, sanitizeUrl } from './utils';
 import {
 	type MeltQuoteResponsePaidDeprecated,
