@@ -93,6 +93,31 @@ describe('test split different key amount', () => {
 	});
 });
 
+describe('test splitAmount zero handling', () => {
+	test('value=0 and split of zeros passes through unchanged', () => {
+		const chunks = utils.splitAmount(0, keys, [0, 0, 0]);
+		expect(chunks).toStrictEqual([0, 0, 0]);
+	});
+
+	test('value=0 with nonzero split throws', () => {
+		expect(() => utils.splitAmount(0, keys, [2])).toThrowError(
+			/Split is greater than total amount/,
+		);
+	});
+
+	test('positive value ignores zeros in split', () => {
+		const chunks = utils.splitAmount(5, keys, [0, 1, 4, 0]);
+		// zeros are ignored, result is same as [1,4]
+		expect(chunks).toStrictEqual([1, 4]);
+	});
+
+	test('all zeros with positive value falls back to normal fill', () => {
+		const chunks = utils.splitAmount(5, keys, [0, 0]);
+		// should behave same as no custom split: [1,4] (order ascending)
+		expect(chunks).toStrictEqual([1, 4]);
+	});
+});
+
 describe('test token v3 encoding', () => {
 	test('encode a v3 token with getEncodedToken', () => {
 		const tokenObj = {

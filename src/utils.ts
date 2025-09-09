@@ -44,22 +44,43 @@ export function splitAmount(
 ): number[] {
 	if (split) {
 		const totalSplitAmount = sumArray(split);
-		if (totalSplitAmount > value) {
-			throw new Error(`Split is greater than total amount: ${totalSplitAmount} > ${value}`);
+
+		// Special case: explicit "zero-total" outputs, restore or NUT-08 blanks
+		if (value === 0 && totalSplitAmount === 0) {
+			return split;
 		}
-		if (split.some((amt) => !hasCorrespondingKey(amt, keyset))) {
+
+		// Normal positive-value paths: ignore zeros for validation and totals
+		const positive = split.filter((amt) => amt > 0);
+		const totalPositive = sumArray(positive);
+		if (totalPositive > value) {
+			throw new Error(`Split is greater than total amount: ${totalPositive} > ${value}`);
+		}
+		if (positive.some((amt) => !hasCorrespondingKey(amt, keyset))) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
-		value = value - sumArray(split);
+		// Work only with validated positive amounts from here on
+		split = positive;
+		value -= totalPositive;
 	} else {
 		split = [];
 	}
+
+	// Denomination fill for the remaining value
 	const sortedKeyAmounts = getKeysetAmounts(keyset, 'desc');
+	if (!sortedKeyAmounts || sortedKeyAmounts.length === 0) {
+		throw new Error('Cannot split amount, keyset is inactive or contains no keys');
+	}
 	sortedKeyAmounts.forEach((amt: number) => {
+		if (value <= 0 || amt <= 0) return;
 		const q = Math.floor(value / amt);
-		for (let i = 0; i < q; ++i) split?.push(amt);
+		for (let i = 0; i < q; ++i) split.push(amt);
 		value %= amt;
 	});
+	if (value !== 0) {
+		throw new Error(`Unable to split remaining amount: ${value}`);
+	}
+
 	return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 

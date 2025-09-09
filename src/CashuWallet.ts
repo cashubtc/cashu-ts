@@ -911,15 +911,10 @@ class CashuWallet {
 		if (!this._seed) {
 			throw new Error('CashuWallet must be initialized with a seed to use restore');
 		}
-		// create blank amounts for unknown restore amounts
-		const amounts = Array(count).fill(1);
-		const outputData = OutputData.createDeterministicData(
-			amounts.length,
-			this._seed,
-			start,
-			keys,
-			amounts,
-		);
+		// create deterministic blank outputs for unknown restore amounts
+		// Note: zero amount + zero denomination passes splitAmount validation
+		const zeros = Array(count).fill(0);
+		const outputData = OutputData.createDeterministicData(0, this._seed, start, keys, zeros);
 
 		const { outputs, signatures } = await this.mint.restore({
 			outputs: outputData.map((d) => d.blindedMessage),
@@ -1624,16 +1619,9 @@ class CashuWallet {
 		if (count < 0) {
 			count = 0;
 		}
-		const amounts = count ? Array(count).fill(1) : [];
-		return this.createOutputData(
-			amounts.length,
-			keyset,
-			counter,
-			undefined,
-			amounts,
-			undefined,
-			factory,
-		);
+		// Note: zero amount + zero denomination passes splitAmount validation
+		const zeros = count ? Array(count).fill(0) : [];
+		return this.createOutputData(0, keyset, counter, undefined, zeros, undefined, factory);
 	}
 
 	/**
