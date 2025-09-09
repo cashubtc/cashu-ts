@@ -41,7 +41,7 @@ export type DLEQ = {
 	r?: bigint; // optional: blinding factor
 };
 
-export type Proof = {
+export type RawProof = {
 	C: ProjPointType<bigint>;
 	secret: Uint8Array;
 	amount: number;

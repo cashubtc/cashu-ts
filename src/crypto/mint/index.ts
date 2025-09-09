@@ -6,7 +6,7 @@ import {
 	type IntRange,
 	type Keyset,
 	type MintKeys,
-	type Proof,
+	type RawProof,
 	createRandomPrivateKey,
 	deriveKeysetId,
 	hashToCurve,
@@ -67,7 +67,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 	return { pubKeys, privKeys, keysetId };
 }
 
-export function verifyProof(proof: Proof, privKey: Uint8Array): boolean {
+export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean {
 	const Y: ProjPointType<bigint> = hashToCurve(proof.secret);
 	const aY: ProjPointType<bigint> = Y.multiply(bytesToNumber(privKey));
 	return aY.equals(proof.C);

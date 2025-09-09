@@ -4,7 +4,7 @@ import { randomBytes } from '@noble/hashes/utils';
 import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
-	type Proof,
+	type RawProof,
 	type SerializedBlindedMessage,
 	type SerializedProof,
 	hashToCurve,
@@ -56,7 +56,7 @@ export function constructProofFromPromise(
 	r: bigint,
 	secret: Uint8Array,
 	key: ProjPointType<bigint>,
-): Proof {
+): RawProof {
 	const A = key;
 	const C = unblindSignature(promise.C_, r, A);
 	const proof = {
@@ -68,7 +68,7 @@ export function constructProofFromPromise(
 	return proof;
 }
 
-export const serializeProof = (proof: Proof): SerializedProof => {
+export const serializeProof = (proof: RawProof): SerializedProof => {
 	return {
 		amount: proof.amount,
 		C: proof.C.toHex(true),
@@ -78,7 +78,7 @@ export const serializeProof = (proof: Proof): SerializedProof => {
 	};
 };
 
-export const deserializeProof = (proof: SerializedProof): Proof => {
+export const deserializeProof = (proof: SerializedProof): RawProof => {
 	return {
 		amount: proof.amount,
 		C: pointFromHex(proof.C),
