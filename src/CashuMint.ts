@@ -641,6 +641,7 @@ class CashuMint {
 
 		return data;
 	}
+
 	/**
 	 * Ask mint to perform a melt operation. This pays a lightning invoice and destroys tokens
 	 * matching its amount + fees.
@@ -651,6 +652,65 @@ class CashuMint {
 	async melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse> {
 		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt11');
 		return CashuMint.melt(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
+	}
+
+	/**
+	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
+	 * The mint will respond immediately with a "pending" PartialMeltQuoteResponse. The inputs contain
+	 * the amount and the fee_reserves for a Lightning payment. The payload can also contain blank
+	 * outputs in order to receive back overpaid Lightning fees.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	public static async meltAsync(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+		logger?: Logger,
+	): Promise<PartialMeltQuoteResponse> {
+		const mintLogger = logger ?? NULL_LOGGER;
+		const requestInstance = customRequest || request;
+		const blindAuthHeader: Record<string, string> = blindAuthToken
+			? { 'Blind-auth': blindAuthToken }
+			: {};
+		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/bolt11'),
+			method: 'POST',
+			requestBody: meltPayload,
+			headers: { Prefer: 'respond-async', ...blindAuthHeader },
+		});
+
+		const data = handleMeltQuoteResponseDeprecated(response, mintLogger);
+
+		if (
+			!isObj(data) ||
+			typeof data?.state !== 'string' ||
+			!Object.values(MeltQuoteState).includes(data.state)
+		) {
+			throw new Error('bad response');
+		}
+
+		return data;
+	}
+
+	/**
+	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
+	 * The mint will respond immediately with a "pending" PartialMeltQuoteResponse. The inputs contain
+	 * the amount and the fee_reserves for a Lightning payment. The payload can also contain blank
+	 * outputs in order to receive back overpaid Lightning fees.
+	 *
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+
+	async meltAsync(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt11');
+		return CashuMint.meltAsync(this._mintUrl, meltPayload, this._customRequest, blindAuthToken);
 	}
 
 	/**
