@@ -1,4 +1,3 @@
-import { Buffer } from 'buffer';
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
 import { type DLEQ, pointFromHex } from './crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
@@ -25,6 +24,7 @@ import {
 	type V4ProofTemplate,
 } from './model/types/index';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
+import { Bytes } from './utils/Bytes';
 
 /**
  * Splits the amount into denominations of the provided @param keyset.
@@ -418,21 +418,21 @@ export function deriveKeysetId(
 	switch (versionByte) {
 		case 0:
 			hash = sha256(pubkeysConcat);
-			hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+			hashHex = Bytes.toHex(hash).slice(0,14);
 			return '00' + hashHex;
 		case 1:
 			if (!unit) {
 				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
-			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from('unit:' + unit));
+			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Bytes.fromString('unit:' + unit));
 			if (expiry) {
 				pubkeysConcat = mergeUInt8Arrays(
 					pubkeysConcat,
-					Buffer.from('final_expiry:' + expiry.toString()),
+					Bytes.fromString('final_expiry:' + expiry.toString()),
 				);
 			}
 			hash = sha256(pubkeysConcat);
-			hashHex = Buffer.from(hash).toString('hex');
+			hashHex = Bytes.toHex(hash);
 			return '01' + hashHex;
 		default:
 			throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
