@@ -2,7 +2,7 @@ import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha2';
 import { getKeysetIdInt } from '../common/index';
 import { HDKey } from '@scure/bip32';
-import { Buffer } from 'buffer';
+import { Bytes } from '../../utils/Bytes';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -39,20 +39,18 @@ const derive = (
 	counter: number,
 	secretOrBlinding: DerivationType,
 ): Uint8Array => {
-	const counterBuffer = Buffer.alloc(8);
-	counterBuffer.writeBigUInt64BE(BigInt(counter));
-	let message = Buffer.concat([
-		Buffer.from('Cashu_KDF_HMAC_SHA256'),
-		Buffer.from(keysetId, 'hex'),
-		counterBuffer,
-	]);
+	let message = Bytes.concat(
+		Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
+		Bytes.fromHex(keysetId),
+		Bytes.writeBigUint64BE(BigInt(counter))
+	);
 
 	switch (secretOrBlinding) {
 		case DerivationType.SECRET:
-			message = Buffer.concat([message, Buffer.from([0])]);
+			message = Bytes.concat(message, Bytes.fromHex("00"));
 			break;
 		case DerivationType.BLINDING_FACTOR:
-			message = Buffer.concat([message, Buffer.from([1])]);
+			message = Bytes.concat(message, Bytes.fromHex("01"));
 	}
 
 	// Step 2: Compute HMAC-SHA256
