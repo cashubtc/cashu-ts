@@ -755,6 +755,56 @@ class CashuMint {
 	}
 
 	/**
+	 * Requests the mint to pay a BOLT12 offer by providing ecash inputs to be spent. The mint will
+	 * repond immediately with a "pending" PartialMeltQuoteResponse. The inputs must cover the amount
+	 * plus fee reserves. Optional outputs can be included to receive change for overpaid Lightning
+	 * fees.
+	 *
+	 * @param mintUrl The mint's base URL.
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @param customRequest Optional custom request implementation.
+	 * @param blindAuthToken Optional authentication token for NUT-22.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	public static async meltBolt12Async(
+		mintUrl: string,
+		meltPayload: MeltPayload,
+		customRequest?: typeof request,
+		blindAuthToken?: string,
+	): Promise<Bolt12MeltQuoteResponse> {
+		const requestInstance = customRequest || request;
+		const blindAuthHeader: Record<string, string> = blindAuthToken
+			? { 'Blind-auth': blindAuthToken }
+			: {};
+		const data = await requestInstance<Bolt12MeltQuoteResponse>({
+			endpoint: joinUrls(mintUrl, '/v1/melt/bolt12'),
+			method: 'POST',
+			requestBody: meltPayload,
+			headers: { prefer: 'respond-async', ...blindAuthHeader },
+		});
+		return data;
+	}
+
+	/**
+	 * Requests the mint to pay a BOLT12 offer by providing ecash inputs to be spent. The mint will
+	 * repond immediately with a "pending" PartialMeltQuoteResponse. The inputs must cover the amount
+	 * plus fee reserves. Optional outputs can be included to receive change for overpaid Lightning
+	 * fees.
+	 *
+	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
+	 * @returns Payment result with state and optional change signatures.
+	 */
+	async meltBolt12Async(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse> {
+		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt12');
+		return CashuMint.meltBolt12Async(
+			this._mintUrl,
+			meltPayload,
+			this._customRequest,
+			blindAuthToken,
+		);
+	}
+
+	/**
 	 * Checks if specific proofs have already been redeemed.
 	 *
 	 * @param mintUrl
