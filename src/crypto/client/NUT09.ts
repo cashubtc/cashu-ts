@@ -1,6 +1,6 @@
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha2';
-import { getKeysetIdInt } from '../common/index';
+import { getKeysetIdInt } from '../common';
 import { HDKey } from '@scure/bip32';
 import { Bytes } from '../../utils/Bytes';
 
@@ -42,15 +42,15 @@ const derive = (
 	let message = Bytes.concat(
 		Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
 		Bytes.fromHex(keysetId),
-		Bytes.writeBigUint64BE(BigInt(counter))
+		Bytes.writeBigUint64BE(BigInt(counter)),
 	);
 
 	switch (secretOrBlinding) {
 		case DerivationType.SECRET:
-			message = Bytes.concat(message, Bytes.fromHex("00"));
+			message = Bytes.concat(message, Bytes.fromHex('00'));
 			break;
 		case DerivationType.BLINDING_FACTOR:
-			message = Bytes.concat(message, Bytes.fromHex("01"));
+			message = Bytes.concat(message, Bytes.fromHex('01'));
 	}
 
 	// Step 2: Compute HMAC-SHA256

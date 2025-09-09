@@ -104,8 +104,7 @@ export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array {
 	const hexStrings = pubkeys.map((p) => p.toHex(false));
 	const e_ = hexStrings.join('');
-	const e = sha256(new TextEncoder().encode(e_));
-	return e;
+	return sha256(new TextEncoder().encode(e_));
 }
 
 export function pointFromBytes(bytes: Uint8Array) {
