@@ -3,7 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
-import { Buffer } from 'buffer';
+import { Bytes } from '../../utils/Bytes';
 
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
 	? Acc[number]
@@ -86,14 +86,14 @@ export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
 
 export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
-	const msgToHash = sha256(Buffer.concat([DOMAIN_SEPARATOR, secret]));
+	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
 	const counter = new Uint32Array(1);
 	const maxIterations = 2 ** 16;
 	for (let i = 0; i < maxIterations; i++) {
 		const counterBytes = new Uint8Array(counter.buffer);
-		const hash = sha256(Buffer.concat([msgToHash, counterBytes]));
+		const hash = sha256(Bytes.concat(msgToHash, counterBytes));
 		try {
-			return pointFromHex(bytesToHex(Buffer.concat([new Uint8Array([0x02]), hash])));
+			return pointFromHex(bytesToHex(Bytes.concat(new Uint8Array([0x02]), hash)));
 		} catch {
 			counter[0]++;
 		}
@@ -158,7 +158,7 @@ export function deriveKeysetId(keys: MintKeys): string {
 		.map(([, pubKey]) => hexToBytes(pubKey))
 		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 	const hash = sha256(pubkeysConcat);
-	const hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+	const hashHex = Bytes.toHex(hash).slice(0, 14);
 	return KEYSET_VERSION + hashHex;
 }
 
