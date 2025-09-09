@@ -1,13 +1,13 @@
 export class Bytes {
 	static fromHex(hex: string): Uint8Array {
-		hex = hex.trim()
+		hex = hex.trim();
 		if (hex.length === 0) {
 			return new Uint8Array(0);
 		}
-		if(hex.length < 2 || hex.length & 1) {
-			throw new Error("Invalid hex string: odd length.")
+		if (hex.length < 2 || hex.length & 1) {
+			throw new Error('Invalid hex string: odd length.');
 		}
-		if (hex.startsWith("0x") || hex.startsWith("0X")) {
+		if (hex.startsWith('0x') || hex.startsWith('0X')) {
 			hex = hex.slice(2);
 		}
 		const match = hex.match(/^[0-9a-fA-F]*$/);
@@ -18,20 +18,20 @@ export class Bytes {
 		if (!matches) {
 			throw new Error('Invalid hex string');
 		}
-		return new Uint8Array(matches.map(byte => parseInt(byte, 16)));
+		return new Uint8Array(matches.map((byte) => parseInt(byte, 16)));
 	}
 
 	static toHex(bytes: Uint8Array): string {
-		return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+		return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 	}
 
 	static fromString(str: string): Uint8Array {
-		str = str.trim()
+		str = str.trim();
 		return new TextEncoder().encode(str);
 	}
 
 	static toString(bytes: Uint8Array): string {
-		return new TextDecoder().decode(bytes);
+		return new TextDecoder('utf-8').decode(bytes);
 	}
 
 	static concat(...arrays: Uint8Array[]): Uint8Array {
@@ -72,11 +72,16 @@ export class Bytes {
 	}
 
 	static fromBase64(base64: string): Uint8Array {
-		base64 = base64.trim()
+		base64 = base64.trim();
 		if (typeof Buffer !== 'undefined') {
 			return new Uint8Array(Buffer.from(base64, 'base64'));
 		}
-		return new Uint8Array([...atob(base64)].map(c => c.charCodeAt(0)));
+
+		let normalizedBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+		while (normalizedBase64.length % 4) {
+			normalizedBase64 += '=';
+		}
+		return new Uint8Array([...atob(normalizedBase64)].map((c) => c.charCodeAt(0)));
 	}
 
 	static equals(a: Uint8Array, b: Uint8Array): boolean {
