@@ -7,7 +7,7 @@ import {
 	type PaymentRequestTransport,
 	type PaymentRequestTransportType,
 } from './types';
-import { Buffer } from 'buffer';
+import { Bytes } from '../utils/Bytes';
 
 export class PaymentRequest {
 	constructor(
@@ -61,7 +61,7 @@ export class PaymentRequest {
 	toEncodedRequest() {
 		const rawRequest: RawPaymentRequest = this.toRawRequest();
 		const data = encodeCBOR(rawRequest);
-		const encodedData = Buffer.from(data).toString('base64');
+		const encodedData = Bytes.toBase64(data);
 		return 'creq' + 'A' + encodedData;
 	}
 
