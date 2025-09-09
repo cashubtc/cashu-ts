@@ -10,17 +10,22 @@ import { getBlindedAuthToken } from './auth.js';
 import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
 import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
+import { Keys as Keys_2 } from './model/types.js';
 import { MintContactInfo as MintContactInfo_2 } from './types';
 import { MintKeys as MintKeys_2 } from './types.js';
+import { MintKeys as MintKeys_3 } from './model/types.js';
+import { MintKeyset as MintKeyset_2 } from './model/types.js';
 import { MPPMethod as MPPMethod_2 } from './types.js';
 import { NUT10Option as NUT10Option_2 } from './types.js';
 import { PaymentRequestTransport as PaymentRequestTransport_2 } from './types.js';
 import { PaymentRequestTransportType as PaymentRequestTransportType_2 } from './types.js';
 import { Proof as Proof_2 } from './types.js';
+import { Proof as Proof_3 } from './model/types.js';
 import { RawPaymentRequest as RawPaymentRequest_2 } from './types.js';
 import { SerializedBlindedMessage as SerializedBlindedMessage_2 } from './types.js';
 import { SerializedBlindedSignature as SerializedBlindedSignature_2 } from './types.js';
 import { SwapMethod as SwapMethod_2 } from './types.js';
+import { Token as Token_2 } from './model/types.js';
 import { WebSocketSupport as WebSocketSupport_2 } from './types.js';
 
 // @public
@@ -273,29 +278,29 @@ export type DeprecatedToken = {
 };
 
 // @public
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number): string;
+export function deriveKeysetId(keys: Keys_2, unit?: string, expiry?: number, versionByte?: number): string;
 
 export { getBlindedAuthToken }
 
 // @public
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]): Token;
+export function getDecodedToken(tokenString: string, keysets?: MintKeyset_2[]): Token_2;
 
 // @public (undocumented)
-export function getDecodedTokenBinary(bytes: Uint8Array): Token;
+export function getDecodedTokenBinary(bytes: Uint8Array): Token_2;
 
 export { getEncodedAuthToken }
 
 // @public
-export function getEncodedToken(token: Token, opts?: {
+export function getEncodedToken(token: Token_2, opts?: {
     version?: 3 | 4;
     removeDleq?: boolean;
 }): string;
 
 // @public (undocumented)
-export function getEncodedTokenBinary(token: Token): Uint8Array;
+export function getEncodedTokenBinary(token: Token_2): Uint8Array;
 
 // @public (undocumented)
-export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
+export function getEncodedTokenV4(token: Token_2, removeDleq?: boolean): string;
 
 // @public
 export type GetInfoResponse = {
@@ -357,7 +362,7 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean;
+export function hasValidDleq(proof: Proof_3, keyset: MintKeys_3): boolean;
 
 // @public
 export type HTLCWitness = {
