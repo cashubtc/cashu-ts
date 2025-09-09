@@ -118,6 +118,11 @@ describe('test splitAmount zero handling', () => {
 	});
 });
 
+test('exact custom split preserves order', () => {
+	const chunks = utils.splitAmount(32, keys, [8, 4, 8, 2, 8, 2]);
+	expect(chunks).toStrictEqual([8, 4, 8, 2, 8, 2]);
+});
+
 describe('test token v3 encoding', () => {
 	test('encode a v3 token with getEncodedToken', () => {
 		const tokenObj = {

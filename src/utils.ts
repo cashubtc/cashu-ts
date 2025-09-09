@@ -45,7 +45,7 @@ export function splitAmount(
 	if (split) {
 		const totalSplitAmount = sumArray(split);
 
-		// Special case: explicit "zero-total" outputs, restore or NUT-08 blanks
+		// Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
 		if (value === 0 && totalSplitAmount === 0) {
 			return split;
 		}
@@ -59,6 +59,12 @@ export function splitAmount(
 		if (positive.some((amt) => !hasCorrespondingKey(amt, keyset))) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
+
+		// if caller supplied an exact custom split, preserve their order
+		if (totalPositive === value) {
+			return positive;
+		}
+
 		// Work only with validated positive amounts from here on
 		split = positive;
 		value -= totalPositive;
@@ -81,6 +87,7 @@ export function splitAmount(
 		throw new Error(`Unable to split remaining amount: ${value}`);
 	}
 
+	// Only sort when we performed a fill; exact custom splits returned earlier
 	return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
 }
 
