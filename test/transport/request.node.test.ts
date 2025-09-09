@@ -5,10 +5,10 @@ import {
 	HttpResponseError,
 	NetworkError,
 	MintOperationError,
-} from '../src';
+} from '../../src';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
-import { setGlobalRequestOptions } from '../src/transport';
+import { setGlobalRequestOptions } from '../../src/transport';
 
 const mintUrl = 'https://localhost:3338';
 const unit = 'sats';

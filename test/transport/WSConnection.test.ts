@@ -1,4 +1,4 @@
-import { WSConnection, injectWebSocketImpl } from '../src';
+import { WSConnection, injectWebSocketImpl } from '../../src';
 import { Client, Server, WebSocket } from 'mock-socket';
 import { vi, test, describe, expect } from 'vitest';
 

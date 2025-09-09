@@ -5,7 +5,7 @@ import {
 	PaymentRequestTransport,
 	PaymentRequestTransportType,
 	NUT10Option,
-} from '../src/index';
+} from '../../src/index';
 
 describe('payment requests', () => {
 	test('encode payment requests', async () => {

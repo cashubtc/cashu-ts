@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { ConsoleLogger, NULL_LOGGER, LogLevel } from '../src/logger';
+import { ConsoleLogger, NULL_LOGGER, LogLevel } from '../../src/logger';
 
 describe('ConsoleLogger', () => {
 	test('logs messages at or above minLevel', () => {

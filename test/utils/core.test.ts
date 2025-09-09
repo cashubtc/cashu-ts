@@ -1,13 +1,13 @@
-import { blindMessage, constructProofFromPromise, serializeProof } from '../src/crypto/client/';
+import { blindMessage, constructProofFromPromise, serializeProof } from '../../src/crypto/client/';
 import { test, describe, expect } from 'vitest';
-import { type Keys, type Proof, type Token } from '../src';
-import * as utils from '../src/utils';
-import { PUBKEYS } from './consts';
-import { createDLEQProof } from '../src/crypto/mint/NUT12';
-import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../src/utils';
+import { type Keys, type Proof, type Token } from '../../src';
+import * as utils from '../../src/utils';
+import { PUBKEYS } from '../consts';
+import { createDLEQProof } from '../../src/crypto/mint/NUT12';
+import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { createBlindSignature, getPubKeyFromPrivKey } from '../src/crypto/mint';
-import { pointFromBytes } from '../src/crypto/common';
+import { createBlindSignature, getPubKeyFromPrivKey } from '../../src/crypto/mint';
+import { pointFromBytes } from '../../src/crypto/common';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {
