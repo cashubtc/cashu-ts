@@ -237,8 +237,9 @@ class Wallet {
 		keyset: Keyset,
 		outputType: OutputType,
 	): OutputDataLike[] {
-		if (amount <= 0) {
-			this._logger.warn('Amount was invalid (zero or negative)');
+		if (amount < 0) {
+			// we can accept zero (for blanks) or positive values
+			this._logger.warn('Amount was negative');
 			return [];
 		}
 		if (
@@ -1343,15 +1344,10 @@ class Wallet {
 			this._logger.error(message);
 			throw new Error(message);
 		}
-		// create blank amounts for unknown restore amounts
-		const amounts = Array(count).fill(1);
-		const outputData = OutputData.createDeterministicData(
-			amounts.length,
-			this._seed,
-			start,
-			keyset,
-			amounts,
-		);
+		// create deterministic blank outputs for unknown restore amounts
+		// Note: zero amount + zero denomination passes splitAmount validation
+		const zeros = Array(count).fill(0);
+		const outputData = OutputData.createDeterministicData(0, this._seed, start, keyset, zeros);
 
 		const { outputs, signatures } = await this.mint.restore({
 			outputs: outputData.map((d) => d.blindedMessage),
@@ -2074,14 +2070,13 @@ class Wallet {
 		let outputData: OutputDataLike[] = [];
 
 		// Create NUT-08 blanks for return of Lightning fee change
+		// Note: zero amount + zero denomination passes splitAmount validation
 		if (feeReserve > 0) {
 			let count = Math.ceil(Math.log2(feeReserve)) || 1;
 			if (count < 0) count = 0; // Prevents: -Infinity
-			const denominations: number[] = count ? new Array<number>(count).fill(1) : [];
-			const changeAmount = denominations.reduce((sum, a) => sum + a, 0);
+			const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
 			this._logger.debug('Creating NUT-08 blanks for fee reserve', {
 				feeReserve,
-				changeAmount,
 				denominations,
 			});
 
@@ -2094,11 +2089,12 @@ class Wallet {
 			}
 			const effectiveOutputType = {
 				...outputType,
-				denominations, // Our 1-sat blanks
+				denominations, // Our 0-sat blanks
 			};
 
 			// Generate the blank outputs (no fees as we are receiving change)
-			outputData = this.configureOutputs(changeAmount, keyset, effectiveOutputType, false);
+			// Remember, zero amount + zero denomination passes splitAmount validation
+			outputData = this.configureOutputs(0, keyset, effectiveOutputType, false);
 		}
 
 		// Prepare proofs for mint
