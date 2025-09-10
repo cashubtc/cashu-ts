@@ -1,4 +1,4 @@
-import { encodeBase64toUint8, decodeCBOR, encodeCBOR } from '../utils';
+import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
 import type {
 	RawPaymentRequest,
 	RawTransport,
@@ -6,7 +6,6 @@ import type {
 	PaymentRequestTransport,
 	PaymentRequestTransportType,
 } from '../wallet/types';
-import { Bytes } from '../utils/Bytes';
 
 export class PaymentRequest {
 	constructor(

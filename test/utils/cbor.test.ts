@@ -1,7 +1,6 @@
-import { decodeCBOR, encodeCBOR } from '../../src/utils';
+import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { test, describe, expect } from 'vitest';
-import { Bytes } from '../src/utils/Bytes';
 
 // Test Polyfills for Node Buffer (which is not properly polyfilled in vite browser tests)
 // Instead of Buffer.from(encoded).toString('base64url')

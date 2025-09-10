@@ -1,5 +1,5 @@
 import { bytesToHex } from '@noble/curves/abstract/utils';
-import { Bytes } from '../../utils/Bytes';
+import { Bytes } from '../../utils';
 
 export function bytesToNumber(bytes: Uint8Array): bigint {
 	return hexToNumber(bytesToHex(bytes));

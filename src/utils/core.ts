@@ -24,7 +24,7 @@ import {
 	type V4InnerToken,
 	type V4ProofTemplate,
 } from '../model/types';
-import { Bytes } from './utils/Bytes';
+import { Bytes } from './Bytes';
 import { type Keyset } from '../wallet';
 
 /**

@@ -39,6 +39,32 @@ export type Bolt12MintQuoteResponse = {
     amount_issued: number;
 };
 
+// @public (undocumented)
+export class Bytes {
+    // (undocumented)
+    static alloc(size: number): Uint8Array;
+    // (undocumented)
+    static compare(a: Uint8Array, b: Uint8Array): number;
+    // (undocumented)
+    static concat(...arrays: Uint8Array[]): Uint8Array;
+    // (undocumented)
+    static equals(a: Uint8Array, b: Uint8Array): boolean;
+    // (undocumented)
+    static fromBase64(base64: string): Uint8Array;
+    // (undocumented)
+    static fromHex(hex: string): Uint8Array;
+    // (undocumented)
+    static fromString(str: string): Uint8Array;
+    // (undocumented)
+    static toBase64(bytes: Uint8Array): string;
+    // (undocumented)
+    static toHex(bytes: Uint8Array): string;
+    // (undocumented)
+    static toString(bytes: Uint8Array): string;
+    // (undocumented)
+    static writeBigUint64BE(value: bigint): Uint8Array;
+}
+
 // @public
 export function bytesToNumber(bytes: Uint8Array): bigint;
 
@@ -451,6 +477,9 @@ export class HttpResponseError extends Error {
 
 // @public (undocumented)
 export function injectWebSocketImpl(ws: typeof WebSocket): void;
+
+// @public (undocumented)
+export function isBase64String(s: string): boolean;
 
 // @public (undocumented)
 export function isObj(v: unknown): v is object;

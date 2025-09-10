@@ -1,4 +1,4 @@
-import { Bytes } from './utils/Bytes';
+import { Bytes } from './Bytes';
 
 function encodeUint8toBase64(uint8array: Uint8Array): string {
 	return Bytes.toBase64(uint8array);
