@@ -4,7 +4,6 @@ import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
 	type IntRange,
-	type Keyset,
 	type RawMintKeys,
 	type RawProof,
 	createRandomPrivateKey,
@@ -19,10 +18,6 @@ export type KeysetPair = {
 	keysetId: string;
 	pubKeys: RawMintKeys;
 	privKeys: RawMintKeys;
-};
-
-export type KeysetWithKeys = Keyset & {
-	pubKeys: RawMintKeys;
 };
 
 export function createBlindSignature(

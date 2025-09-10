@@ -17,12 +17,6 @@ export type SerializedMintKeys = {
 	[k: string]: string;
 };
 
-export type Keyset = {
-	id: string;
-	unit: string;
-	active: boolean;
-};
-
 export type BlindSignature = {
 	C_: ProjPointType<bigint>;
 	amount: number;
