@@ -28,12 +28,6 @@ export type RawProof = {
 	witness?: Witness;
 };
 
-export type SerializedBlindedMessage = {
-	B_: string;
-	amount: number;
-	witness?: string;
-};
-
 export type Secret = [WellKnownSecret, SecretData];
 
 export type WellKnownSecret = 'P2PK';

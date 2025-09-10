@@ -5,7 +5,6 @@ import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
 	type RawProof,
-	type SerializedBlindedMessage,
 	hashToCurve,
 	pointFromHex,
 	type Witness,
@@ -92,14 +91,5 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
 		id: proof.id,
 		secret: new TextEncoder().encode(proof.secret),
 		witness: proof.witness ? (JSON.parse(proof.witness) as Witness) : undefined,
-	};
-};
-export const serializeBlindedMessage = (
-	bm: BlindedMessage,
-	amount: number,
-): SerializedBlindedMessage => {
-	return {
-		B_: bm.B_.toHex(true),
-		amount: amount,
 	};
 };
