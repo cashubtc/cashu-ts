@@ -1,10 +1,9 @@
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
-	type IntRange,
-	type RawMintKeys,
 	type RawProof,
 	createRandomPrivateKey,
 	hashToCurve,
@@ -14,11 +13,39 @@ import { deriveKeysetId } from '../../utils';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 
+export type RawMintKeys = { [k: string]: Uint8Array };
+
+export type SerializedMintKeys = {
+	[k: string]: string;
+};
+
+export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
+	? Acc[number]
+	: Enumerate<N, [...Acc, Acc['length']]>;
+
+export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
+
 export type KeysetPair = {
 	keysetId: string;
 	pubKeys: RawMintKeys;
 	privKeys: RawMintKeys;
 };
+
+export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys {
+	const serializedMintKeys: SerializedMintKeys = {};
+	Object.keys(mintKeys).forEach((p) => {
+		serializedMintKeys[p] = bytesToHex(mintKeys[p]);
+	});
+	return serializedMintKeys;
+}
+
+export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys {
+	const mintKeys: RawMintKeys = {};
+	Object.keys(serializedMintKeys).forEach((p) => {
+		mintKeys[p] = hexToBytes(serializedMintKeys[p]);
+	});
+	return mintKeys;
+}
 
 export function createBlindSignature(
 	B_: ProjPointType<bigint>,

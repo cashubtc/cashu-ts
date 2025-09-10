@@ -2,8 +2,6 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import {
 	hashToCurve,
 	pointFromHex,
-	deserializeMintKeys,
-	serializeMintKeys,
 	SerializedMintKeys,
 } from '../../../src/crypto/common';
 import { bytesToHex } from '@noble/curves/abstract/utils';
@@ -50,14 +48,5 @@ describe('testing hash to curve', () => {
 		let Y = hashToCurve(secret);
 		let hexY = Y.toHex(true);
 		expect(hexY).toBe('022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf');
-	});
-});
-
-describe('serialize mint keys', () => {
-	test('derive', () => {
-		const keys: SerializedMintKeys = PUBKEYS;
-		const deserializedKeys = deserializeMintKeys(keys);
-		const serializedKeys = serializeMintKeys(deserializedKeys);
-		expect(serializedKeys).toEqual(keys);
 	});
 });

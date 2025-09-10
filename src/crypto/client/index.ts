@@ -6,13 +6,20 @@ import {
 	type BlindSignature,
 	type RawProof,
 	type SerializedBlindedMessage,
-	type SerializedProof,
 	hashToCurve,
 	pointFromHex,
 	type Witness,
 } from '../common/index.js';
 import { type PrivKey } from '@noble/curves/abstract/utils';
 import { getSignedOutput } from './NUT11';
+
+export type SerializedProof = {
+	C: string;
+	secret: string;
+	amount: number;
+	id: string;
+	witness?: string;
+};
 
 export type BlindedMessage = {
 	B_: ProjPointType<bigint>;

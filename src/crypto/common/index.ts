@@ -5,50 +5,27 @@ import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
 import { Bytes } from '../../utils';
 
-export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
-	? Acc[number]
-	: Enumerate<N, [...Acc, Acc['length']]>;
-
-export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
-
-export type RawMintKeys = { [k: string]: Uint8Array };
-
-export type SerializedMintKeys = {
-	[k: string]: string;
-};
-
+// Core type
 export type BlindSignature = {
 	C_: ProjPointType<bigint>;
 	amount: number;
 	id: string;
 };
 
-export type SerializedBlindSignature = {
-	C_: string;
-	amount: number;
-	id: string;
-};
-
+// Core type
 export type DLEQ = {
 	s: Uint8Array; // signature
 	e: Uint8Array; // challenge
 	r?: bigint; // optional: blinding factor
 };
 
+// Core type
 export type RawProof = {
 	C: ProjPointType<bigint>;
 	secret: Uint8Array;
 	amount: number;
 	id: string;
 	witness?: Witness;
-};
-
-export type SerializedProof = {
-	C: string;
-	secret: string;
-	amount: number;
-	id: string;
-	witness?: string;
 };
 
 export type SerializedBlindedMessage = {
@@ -122,20 +99,4 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 
 export function createRandomPrivateKey() {
 	return secp256k1.utils.randomPrivateKey();
-}
-
-export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys {
-	const serializedMintKeys: SerializedMintKeys = {};
-	Object.keys(mintKeys).forEach((p) => {
-		serializedMintKeys[p] = bytesToHex(mintKeys[p]);
-	});
-	return serializedMintKeys;
-}
-
-export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys {
-	const mintKeys: RawMintKeys = {};
-	Object.keys(serializedMintKeys).forEach((p) => {
-		mintKeys[p] = hexToBytes(serializedMintKeys[p]);
-	});
-	return mintKeys;
 }
