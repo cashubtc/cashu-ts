@@ -11,7 +11,7 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
-export type MintKeys = { [k: string]: Uint8Array };
+export type RawMintKeys = { [k: string]: Uint8Array };
 
 export type SerializedMintKeys = {
 	[k: string]: string;
@@ -130,7 +130,7 @@ export function createRandomPrivateKey() {
 	return secp256k1.utils.randomPrivateKey();
 }
 
-export function serializeMintKeys(mintKeys: MintKeys): SerializedMintKeys {
+export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys {
 	const serializedMintKeys: SerializedMintKeys = {};
 	Object.keys(mintKeys).forEach((p) => {
 		serializedMintKeys[p] = bytesToHex(mintKeys[p]);
@@ -138,15 +138,15 @@ export function serializeMintKeys(mintKeys: MintKeys): SerializedMintKeys {
 	return serializedMintKeys;
 }
 
-export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): MintKeys {
-	const mintKeys: MintKeys = {};
+export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys {
+	const mintKeys: RawMintKeys = {};
 	Object.keys(serializedMintKeys).forEach((p) => {
 		mintKeys[p] = hexToBytes(serializedMintKeys[p]);
 	});
 	return mintKeys;
 }
 
-export function deriveKeysetId(keys: MintKeys): string {
+export function deriveKeysetId(keys: RawMintKeys): string {
 	const KEYSET_VERSION = '00';
 	const mapBigInt = (k: [string, string]): [bigint, string] => {
 		return [BigInt(k[0]), k[1]];

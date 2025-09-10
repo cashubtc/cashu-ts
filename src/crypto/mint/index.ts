@@ -5,7 +5,7 @@ import {
 	type BlindSignature,
 	type IntRange,
 	type Keyset,
-	type MintKeys,
+	type RawMintKeys,
 	type RawProof,
 	createRandomPrivateKey,
 	deriveKeysetId,
@@ -17,12 +17,12 @@ const DERIVATION_PATH = "m/0'/0'/0'";
 
 export type KeysetPair = {
 	keysetId: string;
-	pubKeys: MintKeys;
-	privKeys: MintKeys;
+	pubKeys: RawMintKeys;
+	privKeys: RawMintKeys;
 };
 
 export type KeysetWithKeys = Keyset & {
-	pubKeys: MintKeys;
+	pubKeys: RawMintKeys;
 };
 
 export function createBlindSignature(
@@ -41,8 +41,8 @@ export function getPubKeyFromPrivKey(privKey: Uint8Array) {
 
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair {
 	let counter = 0n;
-	const pubKeys: MintKeys = {};
-	const privKeys: MintKeys = {};
+	const pubKeys: RawMintKeys = {};
+	const privKeys: RawMintKeys = {};
 	let masterKey;
 	if (seed) {
 		masterKey = HDKey.fromMasterSeed(seed);
