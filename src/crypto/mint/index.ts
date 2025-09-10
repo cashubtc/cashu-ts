@@ -7,10 +7,10 @@ import {
 	type RawMintKeys,
 	type RawProof,
 	createRandomPrivateKey,
-	deriveKeysetId,
 	hashToCurve,
 } from '../common/index';
 import { HDKey } from '@scure/bip32';
+import { deriveKeysetId } from '../../utils';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 
@@ -58,7 +58,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 		pubKeys[index] = getPubKeyFromPrivKey(privKeys[index]);
 		counter++;
 	}
-	const keysetId = deriveKeysetId(pubKeys);
+	const keysetId = deriveKeysetId(serializeMintKeys(pubKeys));
 	return { pubKeys, privKeys, keysetId };
 }
 

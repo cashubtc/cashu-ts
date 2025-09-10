@@ -1,6 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import {
-	deriveKeysetId,
 	hashToCurve,
 	pointFromHex,
 	deserializeMintKeys,
@@ -60,15 +59,5 @@ describe('serialize mint keys', () => {
 		const deserializedKeys = deserializeMintKeys(keys);
 		const serializedKeys = serializeMintKeys(deserializedKeys);
 		expect(serializedKeys).toEqual(keys);
-	});
-});
-
-describe('test keyset derivation', () => {
-	test('derive', () => {
-		const keys: SerializedMintKeys = PUBKEYS;
-		const deserializedKeys = deserializeMintKeys(keys);
-		const keysetId = deriveKeysetId(deserializedKeys);
-		console.log(keysetId);
-		expect(keysetId).toBe('009a1f293253e41e');
 	});
 });

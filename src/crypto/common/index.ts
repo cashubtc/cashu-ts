@@ -139,26 +139,3 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
 	});
 	return mintKeys;
 }
-
-export function deriveKeysetId(keys: RawMintKeys): string {
-	const KEYSET_VERSION = '00';
-	const mapBigInt = (k: [string, string]): [bigint, string] => {
-		return [BigInt(k[0]), k[1]];
-	};
-	const pubkeysConcat = Object.entries(serializeMintKeys(keys))
-		.map(mapBigInt)
-		.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-		.map(([, pubKey]) => hexToBytes(pubKey))
-		.reduce((prev, curr) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-	const hash = sha256(pubkeysConcat);
-	const hashHex = Bytes.toHex(hash).slice(0, 14);
-	return KEYSET_VERSION + hashHex;
-}
-
-function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
-	// sum of individual array lengths
-	const mergedArray = new Uint8Array(a1.length + a2.length);
-	mergedArray.set(a1);
-	mergedArray.set(a2, a1.length);
-	return mergedArray;
-}
