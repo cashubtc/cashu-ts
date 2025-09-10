@@ -2049,6 +2049,250 @@ describe('Test coinselection', () => {
 	});
 });
 
+describe('async melt preference header', () => {
+	test('bolt11: sends Prefer: respond-async when preferAsync is true', async () => {
+		// Arrange: quote and proofs with exact match (no change outputs needed)
+		const meltQuote = {
+			quote: 'q-async-1',
+			amount: 1,
+			unit: 'sat',
+			request: invoice,
+			state: 'UNPAID',
+			fee_reserve: 0,
+		} as MeltQuoteResponse;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+				const prefer = request.headers.get('prefer');
+				expect(prefer).toBe('respond-async');
+				return HttpResponse.json({
+					quote: meltQuote.quote,
+					amount: meltQuote.amount,
+					state: 'UNPAID',
+					change: [],
+				});
+			}),
+		);
+
+		const wallet = new CashuWallet(mint, { unit });
+		await wallet.getKeys();
+
+		// Act: preferAsync -> header should be present
+		const res = await wallet.meltProofs(meltQuote, proofs, { preferAsync: true });
+
+		// Assert: got a response and no change outputs
+		expect(res.quote.quote).toBe(meltQuote.quote);
+		expect(res.change).toHaveLength(0);
+	});
+
+	test('bolt11: does not send Prefer when preferAsync is not set', async () => {
+		const meltQuote = {
+			quote: 'q-async-1b',
+			amount: 1,
+			unit: 'sat',
+			request: invoice,
+			state: 'UNPAID',
+			fee_reserve: 0,
+		} as MeltQuoteResponse;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+				const prefer = request.headers.get('prefer');
+				expect(prefer).toBeNull();
+				return HttpResponse.json({
+					quote: meltQuote.quote,
+					amount: meltQuote.amount,
+					state: 'UNPAID',
+					change: [],
+				});
+			}),
+		);
+
+		const wallet = new CashuWallet(mint, { unit });
+		await wallet.getKeys();
+
+		const res = await wallet.meltProofs(meltQuote, proofs);
+		expect(res.quote.quote).toBe(meltQuote.quote);
+		expect(res.change).toHaveLength(0);
+	});
+
+	test('bolt12: sends Prefer: respond-async when preferAsync is true', async () => {
+		const meltQuote = {
+			quote: 'q-async-12',
+			amount: 1,
+			unit: 'sat',
+			request: 'lno1offer...',
+		} as any; // minimal shape for wallet.meltProofsBolt12
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
+				const prefer = request.headers.get('prefer');
+				expect(prefer).toBe('respond-async');
+				return HttpResponse.json({ quote: meltQuote.quote, amount: meltQuote.amount, change: [] });
+			}),
+		);
+
+		const wallet = new CashuWallet(mint, { unit });
+		await wallet.getKeys();
+
+		const res = await wallet.meltProofsBolt12(meltQuote, proofs, { preferAsync: true });
+		expect(res.quote.quote).toBe(meltQuote.quote);
+		expect(res.change).toHaveLength(0);
+	});
+
+	test('bolt12: does not send Prefer when preferAsync is not set', async () => {
+		const meltQuote = {
+			quote: 'q-async-12b',
+			amount: 1,
+			unit: 'sat',
+			request: 'lno1offer...',
+		} as any;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
+				const prefer = request.headers.get('prefer');
+				expect(prefer).toBeNull();
+				return HttpResponse.json({ quote: meltQuote.quote, amount: meltQuote.amount, change: [] });
+			}),
+		);
+
+		const wallet = new CashuWallet(mint, { unit });
+		await wallet.getKeys();
+
+		const res = await wallet.meltProofsBolt12(meltQuote, proofs);
+		expect(res.quote.quote).toBe(meltQuote.quote);
+		expect(res.change).toHaveLength(0);
+	});
+
+	test('bolt11: preferAsync with blind auth sends both Prefer and Blind-auth headers', async () => {
+		const mintInfo = {
+			name: 'Testnut mint',
+			pubkey: '02abc',
+			version: 'Nutshell/x',
+			contact: [],
+			time: 0,
+			nuts: {
+				22: {
+					protected_endpoints: [{ method: 'POST', path: '/v1/melt/bolt11' }],
+				},
+			},
+		};
+		server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfo)));
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+				const prefer = request.headers.get('prefer');
+				const blind = request.headers.get('blind-auth');
+				expect(prefer).toBe('respond-async');
+				expect(blind).toBe('test-token');
+				return HttpResponse.json({ quote: 'q-auth-1', amount: 1, state: 'UNPAID', change: [] });
+			}),
+		);
+
+		const mintWithAuth = new CashuMint(mintUrl, undefined, async () => 'test-token');
+		const wallet = new CashuWallet(mintWithAuth, { unit });
+		await wallet.getKeys();
+
+		const meltQuote = {
+			quote: 'q-auth-1',
+			amount: 1,
+			unit: 'sat',
+			request: invoice,
+			state: 'UNPAID',
+			fee_reserve: 0,
+		} as MeltQuoteResponse;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const res = await wallet.meltProofs(meltQuote, proofs, { preferAsync: true });
+		expect(res.quote.quote).toBe('q-auth-1');
+	});
+
+	test('bolt12: preferAsync with blind auth sends both Prefer and Blind-auth headers', async () => {
+		const mintInfo = {
+			name: 'Testnut mint',
+			pubkey: '02abc',
+			version: 'Nutshell/x',
+			contact: [],
+			time: 0,
+			nuts: {
+				22: {
+					protected_endpoints: [{ method: 'POST', path: '/v1/melt/bolt12' }],
+				},
+			},
+		};
+		server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfo)));
+		server.use(
+			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
+				const prefer = request.headers.get('prefer');
+				const blind = request.headers.get('blind-auth');
+				expect(prefer).toBe('respond-async');
+				expect(blind).toBe('test-token');
+				return HttpResponse.json({ quote: 'q-auth-12', amount: 1, change: [] });
+			}),
+		);
+
+		const mintWithAuth = new CashuMint(mintUrl, undefined, async () => 'test-token');
+		const wallet = new CashuWallet(mintWithAuth, { unit });
+		await wallet.getKeys();
+
+		const meltQuote = {
+			quote: 'q-auth-12',
+			amount: 1,
+			unit: 'sat',
+			request: 'lno1offer...',
+		} as any;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const res = await wallet.meltProofsBolt12(meltQuote, proofs, { preferAsync: true });
+		expect(res.quote.quote).toBe('q-auth-12');
+	});
+});
+
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	p.forEach((p) => {
 		const parsedSecret = JSON.parse(p.secret);
