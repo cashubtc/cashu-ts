@@ -71,12 +71,6 @@ export class MintInfo {
 		return isProtectedEndpoint;
 	}
 
-	supportsAsyncMelt(): boolean {
-		//TODO: This is a mock implementation until the nut is updated
-		// return this._mintInfo.nuts[5].supportsAsync || false
-		return true;
-	}
-
 	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
 		if (this._mintInfo.nuts[num]?.supported) {
 			return { supported: true };
