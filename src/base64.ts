@@ -1,28 +1,27 @@
-import { Buffer } from 'buffer';
+import { Bytes } from './utils/Bytes';
 
 function encodeUint8toBase64(uint8array: Uint8Array): string {
-	return Buffer.from(uint8array).toString('base64');
+	return Bytes.toBase64(uint8array);
 }
 
 function encodeUint8toBase64Url(bytes: Uint8Array): string {
-	return Buffer.from(bytes)
-		.toString('base64')
+	return Bytes.toBase64(bytes)
 		.replace(/\+/g, '-') // Replace + with -
 		.replace(/\//g, '_') // Replace / with _
 		.replace(/=+$/, ''); // Remove padding characters
 }
 
 function encodeBase64toUint8(base64String: string): Uint8Array {
-	return Buffer.from(base64String, 'base64');
+	return Bytes.fromBase64(base64String);
 }
 
 function encodeJsonToBase64(jsonObj: unknown): string {
 	const jsonString = JSON.stringify(jsonObj);
-	return base64urlFromBase64(Buffer.from(jsonString).toString('base64'));
+	return base64urlFromBase64(Bytes.toBase64(Bytes.fromString(jsonString)));
 }
 
 function encodeBase64ToJson<T extends object>(base64String: string): T {
-	const jsonString = Buffer.from(base64urlToBase64(base64String), 'base64').toString();
+	const jsonString = Bytes.toString(Bytes.fromBase64(base64urlToBase64(base64String)));
 	const jsonObj = JSON.parse(jsonString) as T;
 	return jsonObj;
 }

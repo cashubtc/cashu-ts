@@ -1,22 +1,18 @@
-import { Buffer } from 'buffer';
 import { decodeCBOR, encodeCBOR } from '../src/cbor';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { test, describe, expect } from 'vitest';
+import { Bytes } from '../src/utils/Bytes';
 
 // Test Polyfills for Node Buffer (which is not properly polyfilled in vite browser tests)
 // Instead of Buffer.from(encoded).toString('base64url')
 function base64urlEncode(buffer: Uint8Array): string {
-	return Buffer.from(buffer)
-		.toString('base64')
-		.replace(/\+/g, '-')
-		.replace(/\//g, '_')
-		.replace(/=+$/, '');
+	return Bytes.toBase64(buffer).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 // Instead of Buffer.from(..., 'base64url')
 function base64urlDecode(str: string): Uint8Array {
 	str = str.replace(/-/g, '+').replace(/_/g, '/');
 	while (str.length % 4) str += '=';
-	return Buffer.from(str, 'base64');
+	return Bytes.fromBase64(str);
 }
 
 const tests = [

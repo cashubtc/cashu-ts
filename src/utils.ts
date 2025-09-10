@@ -1,6 +1,5 @@
-import { Buffer } from 'buffer';
 import { verifyDLEQProof_reblind } from './crypto/client/NUT12';
-import { type DLEQ, pointFromHex } from './crypto/common/index';
+import { type DLEQ, pointFromHex } from './crypto/common';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha2';
 import {
@@ -23,8 +22,9 @@ import {
 	type V4DLEQTemplate,
 	type V4InnerToken,
 	type V4ProofTemplate,
-} from './model/types/index';
+} from './model/types';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
+import { Bytes } from './utils/Bytes';
 
 /**
  * Splits the amount into denominations of the provided @param keyset.
@@ -129,8 +129,7 @@ export function getKeepAmounts(
 			amountsWeWant.push(amt);
 		});
 	}
-	const sortedAmountsWeWant = amountsWeWant.sort((a, b) => a - b);
-	return sortedAmountsWeWant;
+	return amountsWeWant.sort((a, b) => a - b);
 }
 /**
  * Returns the amounts in the keyset sorted by the order specified.
@@ -414,8 +413,7 @@ export function handleTokens(token: string): Token {
 	} else if (version === 'B') {
 		const uInt8Token = encodeBase64toUint8(encodedToken);
 		const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
-		const decodedToken = tokenFromTemplate(tokenData);
-		return decodedToken;
+		return tokenFromTemplate(tokenData);
 	}
 	throw new Error('Token version is not supported');
 }
@@ -446,21 +444,21 @@ export function deriveKeysetId(
 	switch (versionByte) {
 		case 0:
 			hash = sha256(pubkeysConcat);
-			hashHex = Buffer.from(hash).toString('hex').slice(0, 14);
+			hashHex = Bytes.toHex(hash).slice(0, 14);
 			return '00' + hashHex;
 		case 1:
 			if (!unit) {
 				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
-			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Buffer.from('unit:' + unit));
+			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Bytes.fromString('unit:' + unit));
 			if (expiry) {
 				pubkeysConcat = mergeUInt8Arrays(
 					pubkeysConcat,
-					Buffer.from('final_expiry:' + expiry.toString()),
+					Bytes.fromString('final_expiry:' + expiry.toString()),
 				);
 			}
 			hash = sha256(pubkeysConcat);
-			hashHex = Buffer.from(hash).toString('hex');
+			hashHex = Bytes.toHex(hash);
 			return '01' + hashHex;
 		default:
 			throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
@@ -675,18 +673,12 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys): boolean {
 		throw new Error(`undefined key for amount ${proof.amount}`);
 	}
 	const key = keyset.keys[proof.amount];
-	if (
-		!verifyDLEQProof_reblind(
-			new TextEncoder().encode(proof.secret),
-			dleq,
-			pointFromHex(proof.C),
-			pointFromHex(key),
-		)
-	) {
-		return false;
-	}
-
-	return true;
+	return verifyDLEQProof_reblind(
+		new TextEncoder().encode(proof.secret),
+		dleq,
+		pointFromHex(proof.C),
+		pointFromHex(key),
+	);
 }
 
 /**
