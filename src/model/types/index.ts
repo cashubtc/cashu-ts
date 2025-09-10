@@ -179,6 +179,7 @@ export type MeltProofOptions = {
 	keysetId?: string;
 	counter?: number;
 	privkey?: string;
+	preferAsync?: boolean;
 };
 // deprecated
 

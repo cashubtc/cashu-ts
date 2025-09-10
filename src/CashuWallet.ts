@@ -1741,14 +1741,20 @@ class CashuWallet {
 			inputs: proofsToSend,
 			outputs: outputData.map((d) => d.blindedMessage),
 		};
+
 		if (method === 'bolt12') {
-			const meltResponse = await this.mint.meltBolt12(meltPayload);
+			const meltResponse = options?.preferAsync
+				? await this.mint.meltBolt12Async(meltPayload)
+				: await this.mint.meltBolt12(meltPayload);
 			return {
 				quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
 				change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
 			};
 		}
-		const meltResponse = await this.mint.melt(meltPayload);
+
+		const meltResponse = options?.preferAsync
+			? await this.mint.meltAsync(meltPayload)
+			: await this.mint.melt(meltPayload);
 		return {
 			quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request },
 			change: meltResponse.change?.map((s, i) => outputData[i].toProof(s, keys)) ?? [],
