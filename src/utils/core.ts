@@ -1,4 +1,4 @@
-import { verifyDLEQProof_reblind } from '../crypto/client/NUT12';
+import { verifyDLEQProof_reblind } from '../crypto';
 import { type DLEQ, pointFromHex } from '../crypto/common/index';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha2';

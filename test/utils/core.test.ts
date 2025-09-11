@@ -1,9 +1,9 @@
 import { blindMessage, constructProofFromPromise, serializeProof } from '../../src/crypto/client/';
+import { createDLEQProof } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
 import { type Keys, type Proof, type Token } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
-import { createDLEQProof } from '../../src/crypto/mint/NUT12';
 import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { createBlindSignature, getPubKeyFromPrivKey } from '../../src/crypto/mint';
