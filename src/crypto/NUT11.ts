@@ -225,7 +225,7 @@ export function getP2PKSigFlag(secretStr: string | Secret): string {
 	}
 	const { tags } = secret[1];
 	const sigFlagTag = tags && tags.find((tag) => tag[0] === 'sigflag');
-	return sigFlagTag && sigFlagTag.length > 1 ? sigFlagTag[1] as SigFlag : 'SIG_INPUTS';
+	return sigFlagTag && sigFlagTag.length > 1 ? (sigFlagTag[1] as SigFlag) : 'SIG_INPUTS';
 }
 
 /**

@@ -1,5 +1,4 @@
-import { signMintQuote, signP2PKProofs } from './crypto';
-import { hashToCurve } from './crypto/common/index';
+import { signMintQuote, signP2PKProofs, hashToCurve } from './crypto';
 import { type CashuMint } from './CashuMint';
 import { MintInfo } from './model/MintInfo';
 import { type Logger, NULL_LOGGER, measureTime } from './logger';

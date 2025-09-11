@@ -1,7 +1,11 @@
 import { hexToBytes } from '@noble/hashes/utils';
 import { blindMessage } from '../../../src/crypto/client';
-import { createBlindSignature, createNewMintKeys, serializeMintKeys, deserializeMintKeys } from '../../../src/crypto/mint';
-import { hexToNumber } from '../../../src/crypto/util/utils';
+import {
+	createNewMintKeys,
+	serializeMintKeys,
+	deserializeMintKeys,
+} from '../../../src/crypto/mint';
+import { hexToNumber, createBlindSignature } from '../../../src/crypto';
 import { PUBKEYS, TEST_PRIV_KEY_PUBS } from '../consts';
 import { describe, expect, test } from 'vitest';
 

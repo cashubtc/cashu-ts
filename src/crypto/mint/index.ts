@@ -1,13 +1,8 @@
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToNumber } from '../util/utils';
-import {
-	type BlindSignature,
-	type RawProof,
-	createRandomPrivateKey,
-	hashToCurve,
-} from '../common/index';
+import { bytesToNumber } from '../core';
+import { type RawProof, createRandomPrivateKey, hashToCurve } from '../core';
 import { HDKey } from '@scure/bip32';
 import { deriveKeysetId } from '../../utils';
 
@@ -45,16 +40,6 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
 		mintKeys[p] = hexToBytes(serializedMintKeys[p]);
 	});
 	return mintKeys;
-}
-
-export function createBlindSignature(
-	B_: ProjPointType<bigint>,
-	privateKey: Uint8Array,
-	amount: number,
-	id: string,
-): BlindSignature {
-	const C_: ProjPointType<bigint> = B_.multiply(bytesToNumber(privateKey));
-	return { C_, amount, id };
 }
 
 export function getPubKeyFromPrivKey(privKey: Uint8Array) {

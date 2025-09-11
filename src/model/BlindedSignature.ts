@@ -1,6 +1,6 @@
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { type SerializedBlindedSignature } from './types/index';
-import { type DLEQ } from '../crypto/common/index';
+import { type DLEQ } from '../crypto';
 import { bytesToHex } from '@noble/hashes/utils';
 import { numberToHexPadded64 } from '../utils';
 

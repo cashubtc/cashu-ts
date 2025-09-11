@@ -52,8 +52,7 @@ import {
 	type RestoreOptions,
 } from './types';
 
-import { signMintQuote, signP2PKProofs } from '../crypto';
-import { hashToCurve } from '../crypto/common/index';
+import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
 import { KeyChain } from './KeyChain';

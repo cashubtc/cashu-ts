@@ -1,8 +1,7 @@
 import { hexToBytes } from '@noble/curves/abstract/utils';
 import { describe, expect, test } from 'vitest';
 import { blindMessage, unblindSignature } from '../../../src/crypto/client';
-import { bytesToNumber } from '../../../src/crypto/util/utils';
-import { pointFromHex } from '../../../src/crypto/common';
+import { pointFromHex, bytesToNumber } from '../../../src/crypto';
 
 const SECRET_MESSAGE = 'test_message';
 

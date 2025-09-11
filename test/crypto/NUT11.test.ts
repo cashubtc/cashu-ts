@@ -1,7 +1,12 @@
 import { schnorr } from '@noble/curves/secp256k1';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { describe, expect, test, vi } from 'vitest';
-import { createP2PKsecret, signP2PKProof, signP2PKProofs, parseP2PKSecret,getP2PKWitnessPubkeys,
+import {
+	createP2PKsecret,
+	signP2PKProof,
+	signP2PKProofs,
+	parseP2PKSecret,
+	getP2PKWitnessPubkeys,
 	getP2PKWitnessRefundkeys,
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKLocktime,
@@ -10,9 +15,11 @@ import { createP2PKsecret, signP2PKProof, signP2PKProofs, parseP2PKSecret,getP2P
 	getP2PKWitnessSignatures,
 	Secret,
 	P2PKWitness,
-	verifyP2PKSig, verifyP2PKSigOutput
+	verifyP2PKSig,
+	verifyP2PKSigOutput,
+	pointFromHex,
+	Proof,
 } from '../../src/crypto';
-import { pointFromHex, Proof } from '../../src/crypto/common';
 import { getPubKeyFromPrivKey } from '../../src/crypto/mint';
 import { createRandomBlindedMessage } from '../../src/crypto/client';
 

@@ -15,9 +15,9 @@ export default defineConfig({
 					: {
 							'cashu-ts': resolve(__dirname, 'src/index.ts'),
 							'crypto/client': resolve(__dirname, 'src/crypto/client/index.ts'),
-							'crypto/common': resolve(__dirname, 'src/crypto/common/index.ts'),
+							// 'crypto/common': resolve(__dirname, 'src/crypto/common/index.ts'),
 							'crypto/mint': resolve(__dirname, 'src/crypto/mint/index.ts'),
-							'crypto/util': resolve(__dirname, 'src/crypto/util/utils.ts'),
+							// 'crypto/util': resolve(__dirname, 'src/crypto/util/utils.ts'),
 							// 'crypto/client/NUT09': resolve(__dirname, 'src/crypto/client/NUT09.ts'),
 							// 'crypto/client/NUT11': resolve(__dirname, 'src/crypto/client/NUT11.ts'),
 							// 'crypto/client/NUT12': resolve(__dirname, 'src/crypto/client/NUT12.ts'),

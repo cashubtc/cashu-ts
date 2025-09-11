@@ -1,13 +1,13 @@
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
-import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
 	type RawProof,
 	hashToCurve,
 	pointFromHex,
-} from '../common';
+	bytesToNumber,
+} from '../core';
 import { type P2PKWitness } from '../../model/types';
 import { type PrivKey } from '@noble/curves/abstract/utils';
 import { getSignedOutput } from '../NUT11';

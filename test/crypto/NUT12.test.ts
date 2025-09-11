@@ -1,13 +1,19 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '@noble/hashes/utils';
 import { describe, expect, test } from 'vitest';
-import { hash_e, pointFromBytes, pointFromHex } from '../../src/crypto/common/index';
+import {
+	createBlindSignature,
+	hash_e,
+	pointFromBytes,
+	pointFromHex,
+	createDLEQProof,
+	verifyDLEQProof,
+	verifyDLEQProof_reblind,
+} from '../../src/crypto';
 import {
 	constructProofFromPromise,
 	createRandomBlindedMessage,
 } from '../../src/crypto/client/index';
-import { createBlindSignature } from '../../src/crypto/mint/index';
-import { createDLEQProof, verifyDLEQProof, verifyDLEQProof_reblind } from '../../src/crypto';
 
 describe('test hash_e', () => {
 	test('test hash_e function', async () => {

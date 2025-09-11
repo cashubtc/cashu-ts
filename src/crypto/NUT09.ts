@@ -1,6 +1,6 @@
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha2';
-import { getKeysetIdInt } from './common';
+import { getKeysetIdInt } from './core';
 import { HDKey } from '@scure/bip32';
 import { Bytes, isBase64String } from '../utils';
 

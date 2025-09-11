@@ -3,13 +3,14 @@ import {
 	hashToCurve,
 	pointFromHex,
 	SerializedMintKeys,
-} from '../../../src/crypto/common';
+	createBlindSignature,
+} from '../../../src/crypto';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { hexToBytes } from '@noble/hashes/utils';
 import { PUBKEYS } from '../consts';
 import { describe, expect, test } from 'vitest';
 import { constructProofFromPromise, createRandomBlindedMessage } from '../../../src/crypto/client';
-import { createBlindSignature, verifyProof } from '../../../src/crypto/mint';
+import { verifyProof } from '../../../src/crypto/mint';
 describe('test crypto scheme', () => {
 	test('Test crypto scheme', async () => {
 		const mintPrivKey = secp256k1.utils.randomPrivateKey();

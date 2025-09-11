@@ -2,25 +2,21 @@ import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
-import { Bytes } from '../../utils';
-import { type P2PKWitness } from '../../model/types';
+import { Bytes } from '../utils';
+import { type P2PKWitness } from '../model/types';
 
-// Core type
 export type BlindSignature = {
 	C_: ProjPointType<bigint>;
 	amount: number;
 	id: string;
 };
 
-// Core type
 export type DLEQ = {
 	s: Uint8Array; // signature
 	e: Uint8Array; // challenge
 	r?: bigint; // optional: blinding factor
 };
 
-// Core type
 export type RawProof = {
 	C: ProjPointType<bigint>;
 	secret: Uint8Array;
@@ -29,11 +25,19 @@ export type RawProof = {
 	witness?: P2PKWitness;
 };
 
-export type Tags = {
-	[k: string]: string;
-};
-
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
+
+export function bytesToNumber(bytes: Uint8Array): bigint {
+	return hexToNumber(bytesToHex(bytes));
+}
+
+export function hexToNumber(hex: string): bigint {
+	return BigInt(`0x${hex}`);
+}
+
+export function encodeBase64toUint8(base64String: string): Uint8Array {
+	return Bytes.fromBase64(base64String);
+}
 
 export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
@@ -78,4 +82,14 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 
 export function createRandomPrivateKey() {
 	return secp256k1.utils.randomPrivateKey();
+}
+
+export function createBlindSignature(
+	B_: ProjPointType<bigint>,
+	privateKey: Uint8Array,
+	amount: number,
+	id: string,
+): BlindSignature {
+	const C_: ProjPointType<bigint> = B_.multiply(bytesToNumber(privateKey));
+	return { C_, amount, id };
 }
