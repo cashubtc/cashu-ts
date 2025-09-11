@@ -52,7 +52,7 @@ import {
 	type RestoreOptions,
 } from './types';
 
-import { signP2PKProofs } from '../crypto';
+import { signMintQuote, signP2PKProofs } from '../crypto';
 import { hashToCurve } from '../crypto/common/index';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
@@ -92,8 +92,6 @@ import {
 	sumProofs,
 	deepEqual,
 } from '../utils';
-
-import { signMintQuote } from '../crypto/client/NUT20';
 
 /**
  * Class that represents a Cashu wallet.

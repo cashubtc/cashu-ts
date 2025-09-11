@@ -1,6 +1,6 @@
 import { test, describe, expect } from 'vitest';
-import { MintPayload } from '../../../src/model/types';
-import { signMintQuote, verifyMintQuoteSignature } from '../../../src/crypto/client/NUT20';
+import { MintPayload } from '../../src/model/types';
+import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 

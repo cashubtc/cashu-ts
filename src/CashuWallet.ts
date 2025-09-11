@@ -1,4 +1,4 @@
-import { signP2PKProofs } from './crypto';
+import { signMintQuote, signP2PKProofs } from './crypto';
 import { hashToCurve } from './crypto/common/index';
 import { type CashuMint } from './CashuMint';
 import { MintInfo } from './model/MintInfo';
@@ -56,7 +56,6 @@ import {
 	sumProofs,
 	verifyKeysetId,
 } from './utils';
-import { signMintQuote } from './crypto/client/NUT20';
 import {
 	OutputData,
 	type OutputDataFactory,
