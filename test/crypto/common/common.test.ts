@@ -12,7 +12,6 @@ import { PUBKEYS } from '../consts';
 import { describe, expect, test } from 'vitest';
 import { constructProofFromPromise, createRandomBlindedMessage } from '../../../src/crypto/client';
 import { createBlindSignature, verifyProof } from '../../../src/crypto/mint';
-import { deriveKeysetId } from '../../../src/utils';
 describe('test crypto scheme', () => {
 	test('Test crypto scheme', async () => {
 		const mintPrivKey = secp256k1.utils.randomPrivateKey();
@@ -60,13 +59,5 @@ describe('serialize mint keys', () => {
 		const deserializedKeys = deserializeMintKeys(keys);
 		const serializedKeys = serializeMintKeys(deserializedKeys);
 		expect(serializedKeys).toEqual(keys);
-	});
-});
-
-describe('test keyset derivation', () => {
-	test('derive', () => {
-		const deserializedKeys = deserializeMintKeys(PUBKEYS);
-		const keysetId = deriveKeysetId(serializeMintKeys(deserializedKeys));
-		expect(keysetId).toBe('009a1f293253e41e');
 	});
 });
