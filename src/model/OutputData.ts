@@ -11,7 +11,7 @@ import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { type DLEQ, pointFromHex } from '../crypto/common/index';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
-import { deriveBlindingFactor, deriveSecret } from '../crypto/client/NUT09';
+import { deriveBlindingFactor, deriveSecret } from '../crypto';
 
 export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;

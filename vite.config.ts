@@ -18,7 +18,7 @@ export default defineConfig({
 							'crypto/common': resolve(__dirname, 'src/crypto/common/index.ts'),
 							'crypto/mint': resolve(__dirname, 'src/crypto/mint/index.ts'),
 							'crypto/util': resolve(__dirname, 'src/crypto/util/utils.ts'),
-							'crypto/client/NUT09': resolve(__dirname, 'src/crypto/client/NUT09.ts'),
+							// 'crypto/client/NUT09': resolve(__dirname, 'src/crypto/client/NUT09.ts'),
 							// 'crypto/client/NUT11': resolve(__dirname, 'src/crypto/client/NUT11.ts'),
 							'crypto/client/NUT12': resolve(__dirname, 'src/crypto/client/NUT12.ts'),
 							'crypto/client/NUT20': resolve(__dirname, 'src/crypto/client/NUT20.ts'),

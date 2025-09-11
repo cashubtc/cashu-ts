@@ -1,8 +1,8 @@
 import { hmac } from '@noble/hashes/hmac';
 import { sha256 } from '@noble/hashes/sha2';
-import { getKeysetIdInt } from '../common';
+import { getKeysetIdInt } from './common';
 import { HDKey } from '@scure/bip32';
-import { Bytes, isBase64String } from '../../utils';
+import { Bytes, isBase64String } from '../utils';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 

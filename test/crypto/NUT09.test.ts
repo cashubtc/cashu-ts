@@ -1,9 +1,8 @@
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
-import { deriveSecret } from '../../../src/crypto/client/NUT09';
-import { Bytes } from '../../../src/utils/Bytes';
-import { getKeysetIdInt } from '../../../src/crypto/common';
+import { deriveSecret, getKeysetIdInt } from '../../src/crypto';
+import { Bytes } from '../../src/utils';
 
 const seed = Uint8Array.from(
 	Bytes.fromHex(
