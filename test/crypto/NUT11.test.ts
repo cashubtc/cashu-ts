@@ -19,8 +19,8 @@ import {
 	verifyP2PKSigOutput,
 	pointFromHex,
 	Proof,
+	getPubKeyFromPrivKey,
 } from '../../src/crypto';
-import { getPubKeyFromPrivKey } from '../../src/crypto/mint';
 import { createRandomBlindedMessage } from '../../src/crypto/client';
 
 const PRIVKEY = schnorr.utils.randomPrivateKey();

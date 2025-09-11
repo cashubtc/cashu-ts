@@ -1,6 +1,10 @@
 import { blindMessage, constructProofFromPromise, serializeProof } from '../../src/crypto/client/';
-import { getPubKeyFromPrivKey } from '../../src/crypto/mint/';
-import { createDLEQProof, pointFromBytes, createBlindSignature } from '../../src/crypto';
+import {
+	createDLEQProof,
+	pointFromBytes,
+	createBlindSignature,
+	getPubKeyFromPrivKey,
+} from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
 import { type Keys, type Proof, type Token } from '../../src';
 import * as utils from '../../src/utils';
