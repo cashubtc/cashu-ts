@@ -2,10 +2,20 @@ import { type PrivKey, bytesToHex, hexToBytes } from '@noble/curves/abstract/uti
 import { sha256 } from '@noble/hashes/sha256';
 import { schnorr } from '@noble/curves/secp256k1';
 import { randomBytes } from '@noble/hashes/utils';
-import { parseP2PKSecret } from '../common/NUT11';
-import { type Secret, type Witness } from '../common/index';
-import { type P2PKWitness, type Proof } from '../../model/types/index';
-import { type BlindedMessage } from './index';
+import { type P2PKWitness, type Proof } from '../model/types';
+import { type BlindedMessage } from './client/index';
+
+export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
+
+export type Secret = [WellKnownSecret, SecretData];
+
+export type WellKnownSecret = 'P2PK';
+
+export type SecretData = {
+	nonce: string;
+	data: string;
+	tags?: string[][];
+};
 
 export const createP2PKsecret = (pubkey: string): string => {
 	const newSecret: Secret = [
@@ -16,6 +26,17 @@ export const createP2PKsecret = (pubkey: string): string => {
 		},
 	];
 	return JSON.stringify(newSecret);
+};
+
+export const parseP2PKSecret = (secret: string | Uint8Array): Secret => {
+	try {
+		if (secret instanceof Uint8Array) {
+			secret = new TextDecoder().decode(secret);
+		}
+		return JSON.parse(secret) as Secret;
+	} catch {
+		throw new Error("can't parse secret");
+	}
 };
 
 export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
@@ -204,7 +225,7 @@ export function getP2PKSigFlag(secretStr: string | Secret): string {
 	}
 	const { tags } = secret[1];
 	const sigFlagTag = tags && tags.find((tag) => tag[0] === 'sigflag');
-	return sigFlagTag && sigFlagTag.length > 1 ? sigFlagTag[1] : 'SIG_INPUTS';
+	return sigFlagTag && sigFlagTag.length > 1 ? sigFlagTag[1] as SigFlag : 'SIG_INPUTS';
 }
 
 /**
@@ -216,7 +237,7 @@ export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefin
 	if (!witness) return [];
 	if (typeof witness === 'string') {
 		try {
-			const parsed = JSON.parse(witness) as Witness;
+			const parsed = JSON.parse(witness) as P2PKWitness;
 			return parsed.signatures || [];
 		} catch (e) {
 			console.error('Failed to parse witness string:', e);
@@ -295,6 +316,50 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 	const signature = signP2PKSecret(proof.secret, privateKey);
 	signatures.push(signature);
 	return { ...proof, witness: { signatures } };
+};
+
+export const verifyP2PKSig = (proof: Proof): boolean => {
+	if (!proof.witness) {
+		throw new Error('could not verify signature, no witness provided');
+	}
+	const parsedSecret = parseP2PKSecret(proof.secret);
+	const witnesses = getP2PKExpectedKWitnessPubkeys(parsedSecret);
+	if (!witnesses.length) {
+		throw new Error('no signatures required, proof is unlocked');
+	}
+	let signatories = 0;
+	const requiredSigs = getP2PKNSigs(parsedSecret);
+	const signatures = getP2PKWitnessSignatures(proof.witness);
+	// Loop through witnesses to see if any of the signatures belong to them.
+	// We need to do this as Schnorr signatures are non-deterministic, so we
+	// count the number of valid witnesses, not the number of valid signatures
+	for (const pubkey of witnesses) {
+		const hasSigned = signatures.some((sig) => {
+			try {
+				return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
+			} catch {
+				return false; // Invalid signature, treat as not signed
+			}
+		});
+		if (hasSigned) {
+			signatories++;
+		}
+	}
+	if (signatories >= requiredSigs) {
+		return true;
+	}
+	return false;
+};
+
+export const verifyP2PKSigOutput = (output: BlindedMessage, publicKey: string): boolean => {
+	if (!output.witness?.signatures || output.witness.signatures.length === 0) {
+		throw new Error('could not verify signature, no witness signatures provided');
+	}
+	return schnorr.verify(
+		output.witness.signatures[0],
+		sha256(output.B_.toHex(true)),
+		publicKey.slice(2),
+	);
 };
 
 export const getSignedOutput = (output: BlindedMessage, privateKey: PrivKey): BlindedMessage => {

@@ -52,7 +52,7 @@ import {
 	type RestoreOptions,
 } from './types';
 
-import { signP2PKProofs } from '../crypto/client/NUT11';
+import { signP2PKProofs } from '../crypto';
 import { hashToCurve } from '../crypto/common/index';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';

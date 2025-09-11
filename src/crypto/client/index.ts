@@ -7,10 +7,10 @@ import {
 	type RawProof,
 	hashToCurve,
 	pointFromHex,
-	type Witness,
-} from '../common/index.js';
+} from '../common';
+import { type P2PKWitness } from '../../model/types';
 import { type PrivKey } from '@noble/curves/abstract/utils';
-import { getSignedOutput } from './NUT11';
+import { getSignedOutput } from '../NUT11';
 
 export type SerializedProof = {
 	C: string;
@@ -24,7 +24,7 @@ export type BlindedMessage = {
 	B_: ProjPointType<bigint>;
 	r: bigint;
 	secret: Uint8Array;
-	witness?: Witness;
+	witness?: P2PKWitness;
 };
 
 export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage {
@@ -90,6 +90,6 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
 		C: pointFromHex(proof.C),
 		id: proof.id,
 		secret: new TextEncoder().encode(proof.secret),
-		witness: proof.witness ? (JSON.parse(proof.witness) as Witness) : undefined,
+		witness: proof.witness ? (JSON.parse(proof.witness) as P2PKWitness) : undefined,
 	};
 };

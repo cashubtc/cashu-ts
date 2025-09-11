@@ -4,6 +4,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
 import { Bytes } from '../../utils';
+import { type P2PKWitness } from '../../model/types';
 
 // Core type
 export type BlindSignature = {
@@ -25,28 +26,12 @@ export type RawProof = {
 	secret: Uint8Array;
 	amount: number;
 	id: string;
-	witness?: Witness;
-};
-
-export type Secret = [WellKnownSecret, SecretData];
-
-export type WellKnownSecret = 'P2PK';
-
-export type SecretData = {
-	nonce: string;
-	data: string;
-	tags?: string[][];
-};
-
-export type Witness = {
-	signatures: string[];
+	witness?: P2PKWitness;
 };
 
 export type Tags = {
 	[k: string]: string;
 };
-
-export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
 

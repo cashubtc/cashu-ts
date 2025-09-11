@@ -1,23 +1,20 @@
 import { schnorr } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/curves/abstract/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { describe, expect, test, vi } from 'vitest';
-import { createP2PKsecret, signP2PKProof, signP2PKProofs } from '../../../src/crypto/client/NUT11';
-import { parseP2PKSecret } from '../../../src/crypto/common/NUT11';
-import {
-	getP2PKWitnessPubkeys,
+import { createP2PKsecret, signP2PKProof, signP2PKProofs, parseP2PKSecret,getP2PKWitnessPubkeys,
 	getP2PKWitnessRefundkeys,
 	getP2PKExpectedKWitnessPubkeys,
 	getP2PKLocktime,
 	getP2PKNSigs,
 	getP2PKSigFlag,
 	getP2PKWitnessSignatures,
-} from '../../../src/crypto/client/NUT11';
-import { Secret } from '../../../src/crypto/common/index';
-import { P2PKWitness } from '../../../src/model/types/index';
-import { pointFromHex, Proof } from '../../../src/crypto/common';
-import { verifyP2PKSig, verifyP2PKSigOutput } from '../../../src/crypto/mint/NUT11';
-import { getPubKeyFromPrivKey } from '../../../src/crypto/mint';
-import { createRandomBlindedMessage } from '../../../src/crypto/client';
+	Secret,
+	P2PKWitness,
+	verifyP2PKSig, verifyP2PKSigOutput
+} from '../../src/crypto';
+import { pointFromHex, Proof } from '../../src/crypto/common';
+import { getPubKeyFromPrivKey } from '../../src/crypto/mint';
+import { createRandomBlindedMessage } from '../../src/crypto/client';
 
 const PRIVKEY = schnorr.utils.randomPrivateKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
@@ -480,5 +477,23 @@ describe('test getP2PKWitnessSignatures', () => {
 			'60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
 			'70f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383',
 		]);
+	});
+});
+
+describe('test p2pk verify', () => {
+	test('test no witness', () => {
+		const proof: Proof = {
+			amount: 1,
+			id: '00000000',
+			C: pointFromHex('034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be'),
+			secret: new TextEncoder().encode(
+				`["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${bytesToHex(
+					randomBytes(32),
+				)}"}]`,
+			),
+		};
+		expect(() => verifyP2PKSig(proof)).toThrow(
+			new Error('could not verify signature, no witness provided'),
+		);
 	});
 });
