@@ -615,12 +615,13 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const isBase64 = isBase64String(keys.id);
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
+	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
 	return (
 		deriveKeysetId(
 			keys.keys,
 			keys.unit,
 			keys.final_expiry,
-			hexToBytes(keys.id)[0],
+			versionByte,
 			isBase64 && !isValidHex,
 		) === keys.id
 	);
