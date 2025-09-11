@@ -7,6 +7,7 @@ import {
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64Url,
+	isBase64String,
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from './model/PaymentRequest';
@@ -425,6 +426,7 @@ export function handleTokens(token: string): Token {
  * @param unit (optional) the unit of the keyset.
  * @param expiry (optional) expiry of the keyset.
  * @param versionByte (optional) version of the keyset ID. Default is 0.
+ * @param isDeprecatedBase64 (optional) true if the keyset ID should be derived as a deprecated v0 base64 keyset ID.
  * @returns Keyset id of the keys.
  * @throws If keyset versionByte is not valid.
  */
@@ -433,11 +435,18 @@ export function deriveKeysetId(
 	unit?: string,
 	expiry?: number,
 	versionByte: number = 0,
+  isDeprecatedBase64?: boolean,
 ) {
 	let pubkeysConcat = Object.entries(keys)
 		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
 		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
 		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
+
+	if (isDeprecatedBase64) {
+		const hash = sha256(pubkeysConcat);
+		const b64 = Bytes.toBase64(hash);
+		return b64.slice(0, 12);
+	}
 
 	let hash;
 	let hashHex;
@@ -604,7 +613,8 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const versionByte = hexToBytes(keys.id)[0];
-	return deriveKeysetId(keys.keys, keys.unit, keys.final_expiry, versionByte) === keys.id;
+	const isBase64 = isBase64String(keys.id);
+	return deriveKeysetId(keys.keys, keys.unit, keys.final_expiry, versionByte, isBase64) === keys.id;
 }
 
 /**

@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { getKeysetIdInt } from '../common';
 import { HDKey } from '@scure/bip32';
 import { Bytes } from '../../utils/Bytes';
+import { isBase64String } from '../../base64';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -12,7 +13,7 @@ enum DerivationType {
 }
 
 export const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array => {
-	if (keysetId.startsWith('00')) {
+	if (keysetId.startsWith('00') || isBase64String(keysetId)) {
 		return derive_deprecated(seed, keysetId, counter, DerivationType.SECRET);
 	} else if (keysetId.startsWith('01')) {
 		return derive(seed, keysetId, counter, DerivationType.SECRET);
@@ -25,7 +26,7 @@ export const deriveBlindingFactor = (
 	keysetId: string,
 	counter: number,
 ): Uint8Array => {
-	if (keysetId.startsWith('00')) {
+	if (keysetId.startsWith('00') || isBase64String(keysetId)) {
 		return derive_deprecated(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
 	} else if (keysetId.startsWith('01')) {
 		return derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
