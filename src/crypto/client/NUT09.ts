@@ -18,9 +18,9 @@ export const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number
 		return derive_deprecated(seed, keysetId, counter, DerivationType.SECRET);
 	}
 
-	if (keysetId.startsWith('00')) {
+	if (isValidHex && keysetId.startsWith('00')) {
 		return derive_deprecated(seed, keysetId, counter, DerivationType.SECRET);
-	} else if (keysetId.startsWith('01')) {
+	} else if (isValidHex && keysetId.startsWith('01')) {
 		return derive(seed, keysetId, counter, DerivationType.SECRET);
 	}
 	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
@@ -36,9 +36,9 @@ export const deriveBlindingFactor = (
 		return derive_deprecated(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
 	}
 
-	if (keysetId.startsWith('00')) {
+	if (isValidHex && keysetId.startsWith('00')) {
 		return derive_deprecated(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
-	} else if (keysetId.startsWith('01')) {
+	} else if (isValidHex && keysetId.startsWith('01')) {
 		return derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
 	}
 	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
