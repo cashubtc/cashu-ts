@@ -9,23 +9,10 @@ export default defineConfig({
 		outDir: 'lib',
 		target: 'es2020',
 		lib: {
-			entry:
-				process.env.BUILD_FORMAT === 'iife'
-					? resolve(__dirname, 'src/index.ts')
-					: {
-							'cashu-ts': resolve(__dirname, 'src/index.ts'),
-							// 'crypto/client': resolve(__dirname, 'src/crypto/client/index.ts'),
-							// 'crypto/common': resolve(__dirname, 'src/crypto/common/index.ts'),
-							// 'crypto/mint': resolve(__dirname, 'src/crypto/mint/index.ts'),
-							// 'crypto/util': resolve(__dirname, 'src/crypto/util/utils.ts'),
-							// 'crypto/client/NUT09': resolve(__dirname, 'src/crypto/client/NUT09.ts'),
-							// 'crypto/client/NUT11': resolve(__dirname, 'src/crypto/client/NUT11.ts'),
-							// 'crypto/client/NUT12': resolve(__dirname, 'src/crypto/client/NUT12.ts'),
-							// 'crypto/client/NUT20': resolve(__dirname, 'src/crypto/client/NUT20.ts'),
-							// 'crypto/common/NUT11': resolve(__dirname, 'src/crypto/common/NUT11.ts'),
-							// 'crypto/mint/NUT11': resolve(__dirname, 'src/crypto/mint/NUT11.ts'),
-							// 'crypto/mint/NUT12': resolve(__dirname, 'src/crypto/mint/NUT12.ts'),
-						},
+			entry: {
+				'cashu-ts': resolve(__dirname, 'src/index.ts'),
+				crypto: resolve(__dirname, 'src/crypto/index.ts'),
+			},
 			name: 'cashuts',
 			formats: process.env.BUILD_FORMAT === 'iife' ? ['iife'] : ['es', 'cjs'],
 			fileName: (format, entryName) =>
@@ -44,13 +31,7 @@ export default defineConfig({
 		},
 		sourcemap: true,
 	},
-	plugins: [
-		dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' }),
-		nodePolyfills({
-			globals: { Buffer: true },
-			include: ['buffer'],
-		}),
-	],
+	plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' })],
 	test: {
 		projects: [
 			{
