@@ -41,36 +41,6 @@
 			"types": "./lib/types/index.d.ts",
 			"require": "./lib/cashu-ts.cjs",
 			"import": "./lib/cashu-ts.es.js"
-		},
-		"./crypto": {
-			"types": "./lib/types/crypto/core.d.ts",
-			"require": "./lib/core.cjs",
-			"import": "./lib/core.es.js"
-		},
-		"./crypto/NUT01": {
-			"types": "./lib/types/crypto/NUT01.d.ts",
-			"require": "./lib/crypto/NUT01.cjs",
-			"import": "./lib/crypto/NUT01.es.js"
-		},
-		"./crypto/NUT09": {
-			"types": "./lib/types/crypto/NUT09.d.ts",
-			"require": "./lib/crypto/NUT09.cjs",
-			"import": "./lib/crypto/NUT09.es.js"
-		},
-		"./crypto/NUT11": {
-			"types": "./lib/types/crypto/NUT11.d.ts",
-			"require": "./lib/crypto/NUT11.cjs",
-			"import": "./lib/crypto/NUT11.es.js"
-		},
-		"./crypto/NUT12": {
-			"types": "./lib/types/crypto/NUT12.d.ts",
-			"require": "./lib/crypto/NUT12.cjs",
-			"import": "./lib/crypto/NUT12.es.js"
-		},
-		"./crypto/NUT20": {
-			"types": "./lib/types/crypto/NUT20.d.ts",
-			"require": "./lib/crypto/NUT20.cjs",
-			"import": "./lib/crypto/NUT20.es.js"
 		}
 	},
 	"keywords": [

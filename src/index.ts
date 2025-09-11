@@ -7,6 +7,9 @@ export { CashuWallet } from './CashuWallet';
 // Core models & primitives
 export * from './model/types';
 
+// Crypto
+export * from './crypto';
+
 // Serialization & helpers
 export * from './utils';
 

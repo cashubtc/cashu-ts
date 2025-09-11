@@ -1,9 +1,9 @@
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { type RawProof, createRandomPrivateKey, hashToCurve, bytesToNumber } from './core';
+import { type RawProof, createRandomPrivateKey, hashToCurve } from './core';
 import { HDKey } from '@scure/bip32';
-import { deriveKeysetId } from '../utils';
+import { deriveKeysetId, bytesToNumber } from '../utils';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 

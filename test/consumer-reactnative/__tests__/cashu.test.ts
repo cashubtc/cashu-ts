@@ -1,9 +1,13 @@
-import { CashuMint, CashuWallet } from '@cashu/cashu-ts';
-import { createP2PKsecret } from '@cashu/cashu-ts/crypto/NUT11';
+import { Wallet, CashuMint, CashuWallet, createP2PKsecret } from '@cashu/cashu-ts';
 
 test('Cashu library inits in RN', () => {
 	const mint = new CashuMint('http://localhost:3338');
 	const wallet = new CashuWallet(mint);
+	expect(wallet).toBeDefined();
+});
+
+test('Cashu v3 library inits in RN', () => {
+	const wallet = new Wallet('http://localhost:3338');
 	expect(wallet).toBeDefined();
 });
 

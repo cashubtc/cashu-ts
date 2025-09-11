@@ -1,11 +1,5 @@
-import {
-	type DLEQ,
-	hash_e,
-	hashToCurve,
-	createRandomPrivateKey,
-	bytesToNumber,
-	hexToNumber,
-} from './core';
+import { type DLEQ, hash_e, hashToCurve, createRandomPrivateKey } from './core';
+import { bytesToNumber, hexToNumber } from '../utils';
 import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, numberToBytesBE } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';

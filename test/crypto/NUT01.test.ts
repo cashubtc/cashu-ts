@@ -1,7 +1,6 @@
 import { hexToBytes } from '@noble/hashes/utils';
 import {
 	blindMessage,
-	hexToNumber,
 	createBlindSignature,
 	createNewMintKeys,
 	serializeMintKeys,
@@ -9,6 +8,7 @@ import {
 } from '../../src/crypto';
 import { PUBKEYS, TEST_PRIV_KEY_PUBS } from './consts';
 import { describe, expect, test } from 'vitest';
+import { hexToNumber } from '../../src/utils';
 
 describe('test blind sig', () => {
 	test('blind sig', async () => {

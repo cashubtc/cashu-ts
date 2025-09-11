@@ -9,18 +9,7 @@ export default defineConfig({
 		outDir: 'lib',
 		target: 'es2020',
 		lib: {
-			entry:
-				process.env.BUILD_FORMAT === 'iife'
-					? resolve(__dirname, 'src/index.ts')
-					: {
-							'cashu-ts': resolve(__dirname, 'src/index.ts'),
-							crypto: resolve(__dirname, 'src/crypto/core.ts'),
-							'crypto/NUT01': resolve(__dirname, 'src/crypto/NUT01.ts'),
-							'crypto/NUT09': resolve(__dirname, 'src/crypto/NUT09.ts'),
-							'crypto/NUT11': resolve(__dirname, 'src/crypto/NUT11.ts'),
-							'crypto/NUT12': resolve(__dirname, 'src/crypto/NUT12.ts'),
-							'crypto/NUT20': resolve(__dirname, 'src/crypto/NUT20.ts'),
-						},
+			entry: { 'cashu-ts': resolve(__dirname, 'src/index.ts') },
 			name: 'cashuts',
 			formats: process.env.BUILD_FORMAT === 'iife' ? ['iife'] : ['es', 'cjs'],
 			fileName: (format, entryName) =>
@@ -39,7 +28,7 @@ export default defineConfig({
 		},
 		sourcemap: true,
 	},
-	plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' })],
+	plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types', rollupTypes: true })],
 	test: {
 		projects: [
 			{

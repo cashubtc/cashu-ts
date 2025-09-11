@@ -5,6 +5,9 @@
 ```ts
 
 import { MintContactInfo as MintContactInfo_2 } from '..';
+import { PrivKey } from '@noble/curves/abstract/utils';
+import { ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public (undocumented)
 export type Amount = number;
@@ -23,6 +26,24 @@ export function bigIntStringify<T>(_key: unknown, value: T): string | T;
 export type BlindAuthMintResponse = {
     signatures: SerializedBlindedSignature[];
 } & ApiError;
+
+// @public (undocumented)
+export type BlindedMessage = {
+    B_: ProjPointType<bigint>;
+    r: bigint;
+    secret: Uint8Array;
+    witness?: P2PKWitness;
+};
+
+// @public (undocumented)
+export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage;
+
+// @public (undocumented)
+export type BlindSignature = {
+    C_: ProjPointType<bigint>;
+    amount: number;
+    id: string;
+};
 
 // @public
 export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
@@ -311,6 +332,27 @@ export class ConsoleLogger implements Logger {
 }
 
 // @public (undocumented)
+export function constructProofFromPromise(promise: BlindSignature, r: bigint, secret: Uint8Array, key: ProjPointType<bigint>): RawProof;
+
+// @public (undocumented)
+export function createBlindSignature(B_: ProjPointType<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
+
+// @public
+export const createDLEQProof: (B_: ProjPointType<bigint>, a: Uint8Array) => DLEQ;
+
+// @public (undocumented)
+export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
+
+// @public (undocumented)
+export const createP2PKsecret: (pubkey: string) => string;
+
+// @public (undocumented)
+export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage;
+
+// @public (undocumented)
+export function createRandomPrivateKey(): Uint8Array<ArrayBufferLike>;
+
+// @public (undocumented)
 export function decodeCBOR(data: Uint8Array): ResultValue;
 
 // @public (undocumented)
@@ -334,8 +376,27 @@ export type DeprecatedToken = {
     unit?: string;
 };
 
+// @public (undocumented)
+export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
+
 // @public
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
+
+// @public (undocumented)
+export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
+
+// @public (undocumented)
+export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
+
+// @public (undocumented)
+export const deserializeProof: (proof: SerializedProof) => RawProof;
+
+// @public (undocumented)
+export type DLEQ = {
+    s: Uint8Array;
+    e: Uint8Array;
+    r?: bigint;
+};
 
 // @public (undocumented)
 export function encodeBase64ToJson<T extends object>(base64String: string): T;
@@ -354,6 +415,9 @@ export function encodeUint8toBase64(uint8array: Uint8Array): string;
 
 // @public (undocumented)
 export function encodeUint8toBase64Url(bytes: Uint8Array): string;
+
+// @public (undocumented)
+export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
 
 // @public (undocumented)
 export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
@@ -447,14 +511,56 @@ export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: number, keys
 // @public
 export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[];
 
+// @public (undocumented)
+export const getKeysetIdInt: (keysetId: string) => bigint;
+
+// @public
+export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[];
+
+// @public
+export function getP2PKLocktime(secretStr: string | Secret): number;
+
+// @public
+export function getP2PKNSigs(secretStr: string | Secret): number;
+
+// @public
+export function getP2PKSigFlag(secretStr: string | Secret): string;
+
+// @public
+export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[];
+
+// @public
+export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[];
+
+// @public
+export const getP2PKWitnessSignatures: (witness: string | P2PKWitness | undefined) => string[];
+
+// @public (undocumented)
+export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
+
+// @public (undocumented)
+export const getSignedOutput: (output: BlindedMessage, privateKey: PrivKey) => BlindedMessage;
+
+// @public (undocumented)
+export const getSignedOutputs: (outputs: BlindedMessage[], privateKey: string) => BlindedMessage[];
+
 // @public
 export function handleTokens(token: string): Token;
 
 // @public
 export function hasCorrespondingKey(amount: number, keyset: Keys): boolean;
 
+// @public (undocumented)
+export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array;
+
+// @public (undocumented)
+export function hashToCurve(secret: Uint8Array): ProjPointType<bigint>;
+
 // @public
 export function hasNonHexId(p: Proof | Proof[]): boolean;
+
+// @public
+export const hasP2PKSignedProof: (pubkey: string, proof: Proof) => boolean;
 
 // @public
 export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
@@ -477,6 +583,9 @@ export class HttpResponseError extends Error {
 
 // @public (undocumented)
 export function injectWebSocketImpl(ws: typeof WebSocket): void;
+
+// @public (undocumented)
+export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
 // @public (undocumented)
 export function isBase64String(s: string): boolean;
@@ -589,6 +698,13 @@ export class Keyset {
     get unit(): string;
     verify(): boolean;
 }
+
+// @public (undocumented)
+export type KeysetPair = {
+    keysetId: string;
+    pubKeys: RawMintKeys;
+    privKeys: RawMintKeys;
+};
 
 // @public (undocumented)
 export type LockedMintQuoteResponse = MintQuoteResponse & {
@@ -997,6 +1113,9 @@ export type P2PKWitness = {
     signatures?: string[];
 };
 
+// @public (undocumented)
+export const parseP2PKSecret: (secret: string | Uint8Array) => Secret;
+
 // @public
 export type PartialMeltQuoteResponse = {
     quote: string;
@@ -1068,6 +1187,12 @@ export enum PaymentRequestTransportType {
     POST = "post"
 }
 
+// @public (undocumented)
+export function pointFromBytes(bytes: Uint8Array): WeierstrassPoint<bigint>;
+
+// @public (undocumented)
+export function pointFromHex(hex: string): WeierstrassPoint<bigint>;
+
 // @public
 export type PostRestorePayload = {
     outputs: SerializedBlindedMessage[];
@@ -1097,6 +1222,11 @@ export type ProofState = {
 };
 
 // @public (undocumented)
+export type RawMintKeys = {
+    [k: string]: Uint8Array;
+};
+
+// @public (undocumented)
 export type RawNUT10Option = {
     k: string;
     d: string;
@@ -1113,6 +1243,15 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+};
+
+// @public (undocumented)
+export type RawProof = {
+    C: ProjPointType<bigint>;
+    secret: Uint8Array;
+    amount: number;
+    id: string;
+    witness?: P2PKWitness;
 };
 
 // @public (undocumented)
@@ -1168,6 +1307,16 @@ export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_sta
 // @public (undocumented)
 export function sanitizeUrl(url: string): string;
 
+// @public (undocumented)
+export type Secret = [WellKnownSecret, SecretData];
+
+// @public (undocumented)
+export type SecretData = {
+    nonce: string;
+    data: string;
+    tags?: string[][];
+};
+
 // @public
 export type SendConfig = {
     keysetId?: string;
@@ -1203,6 +1352,26 @@ export type SerializedDLEQ = {
     r?: string;
 };
 
+// @public (undocumented)
+export type SerializedMintKeys = {
+    [k: string]: string;
+};
+
+// @public (undocumented)
+export type SerializedProof = {
+    C: string;
+    secret: string;
+    amount: number;
+    id: string;
+    witness?: string;
+};
+
+// @public (undocumented)
+export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
+
+// @public (undocumented)
+export const serializeProof: (proof: RawProof) => SerializedProof;
+
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
@@ -1210,6 +1379,24 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 export interface SharedOutputTypeProps {
     denominations?: number[];
 }
+
+// @public (undocumented)
+export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
+
+// @public (undocumented)
+export const signBlindedMessage: (B_: string, privateKey: PrivKey) => string;
+
+// @public (undocumented)
+export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
+
+// @public
+export const signP2PKProof: (proof: Proof, privateKey: string) => Proof;
+
+// @public
+export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], beStrict?: boolean) => Proof[];
+
+// @public (undocumented)
+export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)
 export function sortProofsById(proofs: Proof[]): Proof[];
@@ -1265,6 +1452,9 @@ export type TokenV4Template = {
 };
 
 // @public (undocumented)
+export function unblindSignature(C_: ProjPointType<bigint>, r: bigint, A: ProjPointType<bigint>): ProjPointType<bigint>;
+
+// @public (undocumented)
 export type Unit = 'sat' | 'msat';
 
 // @public (undocumented)
@@ -1292,8 +1482,31 @@ export type V4ProofTemplate = {
 // @public (undocumented)
 export type ValidDecodedType = Extract<ResultValue, ResultObject>;
 
+// @public (undocumented)
+export const verifyDLEQProof: (dleq: DLEQ, B_: ProjPointType<bigint>, C_: ProjPointType<bigint>, A: ProjPointType<bigint>) => boolean;
+
+// @public (undocumented)
+export const verifyDLEQProof_reblind: (secret: Uint8Array, // secret
+dleq: DLEQ, C: ProjPointType<bigint>, // unblinded e-cash signature point
+A: ProjPointType<bigint>) => boolean;
+
 // @public @deprecated
 export function verifyKeysetId(keys: MintKeys): boolean;
+
+// @public (undocumented)
+export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
+
+// @public
+export const verifyP2PKSecretSignature: (signature: string, secret: string, pubkey: string) => boolean;
+
+// @public (undocumented)
+export const verifyP2PKSig: (proof: Proof) => boolean;
+
+// @public (undocumented)
+export const verifyP2PKSigOutput: (output: BlindedMessage, publicKey: string) => boolean;
+
+// @public (undocumented)
+export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
 
 // @public
 export class Wallet {
@@ -1378,6 +1591,9 @@ export type WebSocketSupport = {
     unit: string;
     commands: string[];
 };
+
+// @public (undocumented)
+export type WellKnownSecret = 'P2PK';
 
 // @public (undocumented)
 export class WSConnection {

@@ -3,7 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 
-import { Bytes } from '../utils';
+import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 import { getSignedOutput } from './NUT11';
 
@@ -43,18 +43,6 @@ export type SerializedProof = {
 };
 
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
-
-export function bytesToNumber(bytes: Uint8Array): bigint {
-	return hexToNumber(bytesToHex(bytes));
-}
-
-export function hexToNumber(hex: string): bigint {
-	return BigInt(`0x${hex}`);
-}
-
-export function encodeBase64toUint8(base64String: string): Uint8Array {
-	return Bytes.fromBase64(base64String);
-}
 
 export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
