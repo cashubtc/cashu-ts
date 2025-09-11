@@ -20,8 +20,8 @@ import {
 	pointFromHex,
 	Proof,
 	getPubKeyFromPrivKey,
+	createRandomBlindedMessage,
 } from '../../src/crypto';
-import { createRandomBlindedMessage } from '../../src/crypto/client';
 
 const PRIVKEY = schnorr.utils.randomPrivateKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));

@@ -1,6 +1,6 @@
 import { hexToBytes } from '@noble/hashes/utils';
-import { blindMessage } from '../../src/crypto/client';
 import {
+	blindMessage,
 	hexToNumber,
 	createBlindSignature,
 	createNewMintKeys,

@@ -1,5 +1,7 @@
-import { blindMessage, constructProofFromPromise, serializeProof } from '../../src/crypto/client/';
 import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof,
 	createDLEQProof,
 	pointFromBytes,
 	createBlindSignature,

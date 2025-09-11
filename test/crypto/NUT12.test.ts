@@ -9,11 +9,9 @@ import {
 	createDLEQProof,
 	verifyDLEQProof,
 	verifyDLEQProof_reblind,
-} from '../../src/crypto';
-import {
 	constructProofFromPromise,
 	createRandomBlindedMessage,
-} from '../../src/crypto/client/index';
+} from '../../src/crypto';
 
 describe('test hash_e', () => {
 	test('test hash_e function', async () => {

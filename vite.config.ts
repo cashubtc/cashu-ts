@@ -14,7 +14,7 @@ export default defineConfig({
 					? resolve(__dirname, 'src/index.ts')
 					: {
 							'cashu-ts': resolve(__dirname, 'src/index.ts'),
-							'crypto/client': resolve(__dirname, 'src/crypto/client/index.ts'),
+							// 'crypto/client': resolve(__dirname, 'src/crypto/client/index.ts'),
 							// 'crypto/common': resolve(__dirname, 'src/crypto/common/index.ts'),
 							// 'crypto/mint': resolve(__dirname, 'src/crypto/mint/index.ts'),
 							// 'crypto/util': resolve(__dirname, 'src/crypto/util/utils.ts'),

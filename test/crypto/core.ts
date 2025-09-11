@@ -2,15 +2,21 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import {
 	hashToCurve,
 	pointFromHex,
+	bytesToNumber,
+	blindMessage,
+	unblindSignature,
 	SerializedMintKeys,
 	createBlindSignature,
 	verifyProof,
+	constructProofFromPromise,
+	createRandomBlindedMessage,
 } from '../../src/crypto';
-import { bytesToHex } from '@noble/curves/abstract/utils';
-import { hexToBytes } from '@noble/hashes/utils';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
 import { PUBKEYS } from './consts';
 import { describe, expect, test } from 'vitest';
-import { constructProofFromPromise, createRandomBlindedMessage } from '../../src/crypto/client';
+
+const SECRET_MESSAGE = 'test_message';
+
 describe('test crypto scheme', () => {
 	test('Test crypto scheme', async () => {
 		const mintPrivKey = secp256k1.utils.randomPrivateKey();
@@ -49,5 +55,33 @@ describe('testing hash to curve', () => {
 		let Y = hashToCurve(secret);
 		let hexY = Y.toHex(true);
 		expect(hexY).toBe('022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf');
+	});
+});
+
+describe('test blinding message', () => {
+	test('testing string 0000....01', async () => {
+		var enc = new TextEncoder();
+		let secretUInt8 = enc.encode(SECRET_MESSAGE);
+		let { B_ } = await blindMessage(
+			secretUInt8,
+			bytesToNumber(hexToBytes('0000000000000000000000000000000000000000000000000000000000000001')),
+		);
+		expect(B_.toHex(true)).toBe(
+			'025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b',
+		);
+	});
+});
+
+describe('test unblinding signature', () => {
+	test('testing string 0000....01', async () => {
+		let C_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
+		let r = bytesToNumber(
+			hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
+		);
+		let A = pointFromHex('020000000000000000000000000000000000000000000000000000000000000001');
+		let C = unblindSignature(C_, r, A);
+		expect(C.toHex(true)).toBe(
+			'03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd',
+		);
 	});
 });

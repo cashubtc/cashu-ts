@@ -1,5 +1,5 @@
 const { CashuWallet, CashuMint } = require('@cashu/cashu-ts');
-const { createP2PKsecret } = require('@cashu/cashu-ts/crypto/client/NUT11');
+const { createP2PKsecret } = require('@cashu/cashu-ts/crypto');
 
 const mint = new CashuMint('http://localhost:3338');
 const wallet = new CashuWallet(mint);

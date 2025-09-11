@@ -1,5 +1,5 @@
 import { CashuWallet, CashuMint } from '@cashu/cashu-ts';
-import { createP2PKsecret } from '@cashu/cashu-ts/crypto/client/NUT11';
+import { createP2PKsecret } from '@cashu/cashu-ts/crypto';
 
 const mintUrl = 'http://localhost:3338';
 const mint = new CashuMint(mintUrl);

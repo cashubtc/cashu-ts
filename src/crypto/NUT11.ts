@@ -1,9 +1,8 @@
-import { type PrivKey, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { type PrivKey, bytesToHex, hexToBytes, randomBytes } from '@noble/curves/abstract/utils';
 import { sha256 } from '@noble/hashes/sha256';
 import { schnorr } from '@noble/curves/secp256k1';
-import { randomBytes } from '@noble/hashes/utils';
 import { type P2PKWitness, type Proof } from '../model/types';
-import { type BlindedMessage } from './client/index';
+import { type BlindedMessage } from './core';
 
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
