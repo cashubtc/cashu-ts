@@ -435,7 +435,7 @@ export function deriveKeysetId(
 	unit?: string,
 	expiry?: number,
 	versionByte: number = 0,
-  isDeprecatedBase64?: boolean,
+  isDeprecatedBase64: boolean = false,
 ) {
 	let pubkeysConcat = Object.entries(keys)
 		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
@@ -612,9 +612,15 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
  * @throws Error if the keyset ID version is unrecognized.
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
-	const versionByte = hexToBytes(keys.id)[0];
 	const isBase64 = isBase64String(keys.id);
-	return deriveKeysetId(keys.keys, keys.unit, keys.final_expiry, versionByte, isBase64) === keys.id;
+	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
+	return deriveKeysetId(
+		keys.keys,
+		keys.unit,
+		keys.final_expiry,
+		hexToBytes(keys.id)[0],
+		isBase64 && !isValidHex,
+	) === keys.id;
 }
 
 /**
