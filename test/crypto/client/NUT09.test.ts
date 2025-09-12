@@ -3,6 +3,7 @@ import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 import { deriveSecret } from '../../../src/crypto/client/NUT09';
 import { Bytes } from '../../../src/utils/Bytes';
+import { getKeysetIdInt } from '../../../src/crypto/common';
 
 const seed = Uint8Array.from(
 	Bytes.fromHex(
@@ -122,5 +123,23 @@ describe('test private key derivation from derivation path -- deprecated', () =>
 		expect(derived.privateKey).not.toBeNull();
 		const privateKey = derived.privateKey || new Uint8Array();
 		expect(bytesToHex(privateKey)).toBe(expected_privatekey);
+	});
+});
+
+describe('base64 keyset id uses deprecated derivation path', () => {
+	test('deriveSecret matches manual HD derivation for base64 keyset id', () => {
+		const base64KeysetId = '0NI3TUAs1Sfy'; // legacy-style base64 keyset id from fixtures
+		const counter = 2;
+
+		// Compute expected via deprecated path definition
+		const hdkey = HDKey.fromMasterSeed(seed);
+		const keysetIdInt = getKeysetIdInt(base64KeysetId);
+		const derivationPath = `m/129372'/0'/${keysetIdInt}'/${counter}'/0`;
+		const derived = hdkey.derive(derivationPath);
+		expect(derived.privateKey).not.toBeNull();
+		const expected = derived.privateKey || new Uint8Array();
+
+		const actual = deriveSecret(seed, base64KeysetId, counter);
+		expect(bytesToHex(actual)).toBe(bytesToHex(expected));
 	});
 });

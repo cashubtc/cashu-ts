@@ -278,7 +278,7 @@ export type DeprecatedToken = {
 };
 
 // @public
-export function deriveKeysetId(keys: Keys_2, unit?: string, expiry?: number, versionByte?: number): string;
+export function deriveKeysetId(keys: Keys_2, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 export { getBlindedAuthToken }
 

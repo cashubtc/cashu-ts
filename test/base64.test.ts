@@ -3,6 +3,7 @@ import {
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64,
+	isBase64String,
 } from '../src/base64';
 import { test, describe, expect } from 'vitest';
 describe('testing uint8 encoding', () => {
@@ -96,5 +97,37 @@ describe('testing uint8 encoding', () => {
 
 		expect(encodeBase64ToJson(base64url)).toStrictEqual(obj);
 		expect(encodeJsonToBase64(obj)).toStrictEqual(base64url);
+	});
+});
+describe('isBase64String', () => {
+	// standard base64 with padding
+	test('valid: standard base64 with padding', () => {
+		expect(isBase64String('dGVzdA==')).toBe(true); // "test"
+	});
+
+	// base64url without padding
+	test('valid: base64url without padding', () => {
+		expect(isBase64String('eyJ0ZXN0Ijoi8J-QiCJ9')).toBe(true); // {"test":"😀"} url-safe, no padding
+	});
+
+	// accepts missing padding where implied
+	test('valid: missing padding but decodable', () => {
+		// "test" without padding
+		expect(isBase64String('dGVzdA')).toBe(true);
+	});
+
+	// invalid characters
+	test('invalid: contains forbidden characters', () => {
+		expect(isBase64String('abc$def')).toBe(false);
+	});
+
+	// invalid length (cannot be padded to valid base64)
+	test('invalid: undecodable sequence', () => {
+		// crafted to fail decode after padding
+		expect(isBase64String('ab?')).toBe(false);
+	});
+
+	test('invalid: empty string', () => {
+		expect(isBase64String('')).toBe(false);
 	});
 });
