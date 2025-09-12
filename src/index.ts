@@ -11,7 +11,16 @@ export * from './model/types';
 export * from './crypto';
 
 // Serialization & helpers
-export * from './utils';
+export {
+	getEncodedToken,
+	getEncodedTokenV4,
+	getDecodedToken,
+	deriveKeysetId,
+	decodePaymentRequest,
+	getDecodedTokenBinary,
+	getEncodedTokenBinary,
+	hasValidDleq,
+} from './utils';
 
 // Auth
 export { CashuAuthMint, CashuAuthWallet, getEncodedAuthToken, getBlindedAuthToken } from './auth';
@@ -54,11 +63,10 @@ export {
 	type MintProofsConfig,
 	type MeltProofsConfig,
 	type SharedOutputTypeProps,
+	type SubscriptionCanceller,
+	type MeltBlanks,
 	DEFAULT_OUTPUT,
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
 } from './wallet';
-
-// Extra DTOs used by v3 public methods but not re-exported by `./wallet`
-export type { SubscriptionCanceller, MeltBlanks } from './wallet/types';
 export * from './mint/types';
