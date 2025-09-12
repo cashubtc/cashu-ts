@@ -3,6 +3,17 @@
 // ==========================
 export { CashuMint } from './CashuMint';
 export { CashuWallet } from './CashuWallet';
+export type { MeltProofsResponse, SendResponse } from './wallet/types/responses';
+export type {
+	OutputAmounts,
+	LockedMintQuote,
+	ReceiveOptions,
+	SendOptions,
+	SwapOptions,
+	MintProofOptions,
+	MeltProofOptions,
+	InvoiceData,
+} from './wallet/types/options';
 
 // Core models & primitives
 export * from './model/types';
@@ -65,8 +76,10 @@ export {
 	type SharedOutputTypeProps,
 	type SubscriptionCanceller,
 	type MeltBlanks,
+	type RestoreOptions,
 	DEFAULT_OUTPUT,
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
 } from './wallet';
+export type * from './wallet/types/payloads';
 export * from './mint/types';

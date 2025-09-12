@@ -13,10 +13,20 @@ import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 export type Amount = number;
 
 // @public
+export type AmountlessOption = {
+    amount_msat: number;
+};
+
+// @public
 export type ApiError = {
     error?: string;
     code?: number;
     detail?: string;
+};
+
+// @public
+export type BlindAuthMintPayload = {
+    outputs: SerializedBlindedMessage[];
 };
 
 // @public
@@ -43,7 +53,16 @@ export type BlindSignature = {
 };
 
 // @public
+export type Bolt12MeltQuotePayload = MeltQuotePayload;
+
+// @public
 export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
+
+// @public
+export type Bolt12MintQuotePayload = Omit<MintQuotePayload, 'amount'> & {
+    amount?: number;
+    pubkey: string;
+};
 
 // @public
 export type Bolt12MintQuoteResponse = {
@@ -64,7 +83,6 @@ export class CashuAuthMint {
     getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
     static getKeySets(mintUrl: string, customRequest?: RequestFn): Promise<MintAllKeysets>;
     getKeySets(): Promise<MintAllKeysets>;
-    // Warning: (ae-forgotten-export) The symbol "BlindAuthMintPayload" needs to be exported by the entry point index.d.ts
     static mint(mintUrl: string, mintPayload: BlindAuthMintPayload, clearAuthToken: string, customRequest?: RequestFn): Promise<BlindAuthMintResponse>;
     mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string): Promise<BlindAuthMintResponse>;
     // (undocumented)
@@ -112,15 +130,12 @@ export class CashuMint {
     static checkMintQuoteBolt12(mintUrl: string, quote: string, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     connectWebSocket(): Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "MeltQuotePayload" needs to be exported by the entry point index.d.ts
     static createMeltQuote(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     createMeltQuote(meltQuotePayload: MeltQuotePayload): Promise<PartialMeltQuoteResponse>;
     static createMeltQuoteBolt12(mintUrl: string, meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload): Promise<Bolt12MeltQuoteResponse>;
-    // Warning: (ae-forgotten-export) The symbol "MintQuotePayload" needs to be exported by the entry point index.d.ts
     static createMintQuote(mintUrl: string, mintQuotePayload: MintQuotePayload, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMintQuoteResponse>;
     createMintQuote(mintQuotePayload: MintQuotePayload): Promise<PartialMintQuoteResponse>;
-    // Warning: (ae-forgotten-export) The symbol "Bolt12MintQuotePayload" needs to be exported by the entry point index.d.ts
     static createMintQuoteBolt12(mintUrl: string, mintQuotePayload: Bolt12MintQuotePayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MintQuoteResponse>;
     createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload): Promise<Bolt12MintQuoteResponse>;
     disconnectWebSocket(): void;
@@ -134,12 +149,10 @@ export class CashuMint {
     getLazyMintInfo(): Promise<MintInfo>;
     // (undocumented)
     handleBlindAuth(path: string): Promise<string | undefined>;
-    // Warning: (ae-forgotten-export) The symbol "MeltPayload" needs to be exported by the entry point index.d.ts
     static melt(mintUrl: string, meltPayload: MeltPayload, customRequest?: RequestFn, blindAuthToken?: string, logger?: Logger): Promise<PartialMeltQuoteResponse>;
     melt(meltPayload: MeltPayload): Promise<PartialMeltQuoteResponse>;
     static meltBolt12(mintUrl: string, meltPayload: MeltPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<Bolt12MeltQuoteResponse>;
     meltBolt12(meltPayload: MeltPayload): Promise<Bolt12MeltQuoteResponse>;
-    // Warning: (ae-forgotten-export) The symbol "MintPayload" needs to be exported by the entry point index.d.ts
     static mint(mintUrl: string, mintPayload: MintPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<MintResponse>;
     mint(mintPayload: MintPayload): Promise<MintResponse>;
     static mintBolt12(mintUrl: string, mintPayload: MintPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<MintResponse>;
@@ -152,7 +165,6 @@ export class CashuMint {
     restore(restorePayload: {
         outputs: SerializedBlindedMessage[];
     }): Promise<PostRestoreResponse>;
-    // Warning: (ae-forgotten-export) The symbol "SwapPayload" needs to be exported by the entry point index.d.ts
     static swap(mintUrl: string, swapPayload: SwapPayload, customRequest?: RequestFn, blindAuthToken?: string): Promise<SwapResponse>;
     swap(swapPayload: SwapPayload): Promise<SwapResponse>;
     // (undocumented)
@@ -210,8 +222,6 @@ export class CashuWallet {
     get keysets(): MintKeyset[];
     lazyGetMintInfo(): Promise<MintInfo>;
     loadMint(): Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "MeltProofOptions" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "MeltProofsResponse" needs to be exported by the entry point index.d.ts
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<MeltProofsResponse>;
     meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], options?: MeltProofOptions): Promise<{
         quote: Bolt12MeltQuoteResponse;
@@ -221,7 +231,6 @@ export class CashuWallet {
     mint: CashuMint;
     // (undocumented)
     get mintInfo(): MintInfo;
-    // Warning: (ae-forgotten-export) The symbol "MintProofOptions" needs to be exported by the entry point index.d.ts
     mintProofs(amount: number, quote: MintQuoteResponse, options: MintProofOptions & {
         privateKey: string;
     }): Promise<Proof[]>;
@@ -235,18 +244,13 @@ export class CashuWallet {
     onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // Warning: (ae-forgotten-export) The symbol "ReceiveOptions" needs to be exported by the entry point index.d.ts
     receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]>;
-    // Warning: (ae-forgotten-export) The symbol "RestoreOptions" needs to be exported by the entry point index.d.ts
     restore(start: number, count: number, options?: RestoreOptions): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean): SendResponse;
-    // Warning: (ae-forgotten-export) The symbol "SendOptions" needs to be exported by the entry point index.d.ts
-    // Warning: (ae-forgotten-export) The symbol "SendResponse" needs to be exported by the entry point index.d.ts
     send(amount: number, proofs: Proof[], options?: SendOptions): Promise<SendResponse>;
-    // Warning: (ae-forgotten-export) The symbol "SwapOptions" needs to be exported by the entry point index.d.ts
     swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse>;
     // (undocumented)
     get unit(): string;
@@ -504,6 +508,17 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 // @public (undocumented)
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
+// @public @deprecated (undocumented)
+export type InvoiceData = {
+    paymentRequest: string;
+    amountInSats?: number;
+    amountInMSats?: number;
+    timestamp?: number;
+    paymentHash?: string;
+    memo?: string;
+    expiry?: number;
+};
+
 // @public (undocumented)
 export type JsonRpcError = {
     jsonrpc: '2.0';
@@ -612,6 +627,12 @@ export type KeysetPair = {
 };
 
 // @public (undocumented)
+export type LockedMintQuote = {
+    id: string;
+    privkey: string;
+};
+
+// @public (undocumented)
 export type LockedMintQuoteResponse = MintQuoteResponse & {
     pubkey: string;
 };
@@ -662,9 +683,42 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
 }
 
 // @public
+export type MeltPayload = {
+    quote: string;
+    inputs: Proof[];
+    outputs: SerializedBlindedMessage[];
+};
+
+// @public
+export type MeltProofOptions = {
+    keysetId?: string;
+    counter?: number;
+    privkey?: string;
+};
+
+// @public
 export type MeltProofsConfig = {
     keysetId?: string;
     onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
+};
+
+// @public
+export type MeltProofsResponse = {
+    quote: MeltQuoteResponse;
+    change: Proof[];
+};
+
+// @public
+export type MeltQuoteOptions = {
+    mpp?: MPPOption;
+    amountless?: AmountlessOption;
+};
+
+// @public
+export type MeltQuotePayload = {
+    unit: string;
+    request: string;
+    options?: MeltQuoteOptions;
 };
 
 // @public (undocumented)
@@ -846,10 +900,42 @@ export class MintOperationError extends HttpResponseError {
 }
 
 // @public
+export type MintPayload = {
+    quote: string;
+    outputs: SerializedBlindedMessage[];
+    signature?: string;
+};
+
+// @public
+export type MintProofOptions = {
+    keysetId?: string;
+    outputAmounts?: OutputAmounts;
+    proofsWeHave?: Proof[];
+    counter?: number;
+    pubkey?: string;
+    outputData?: OutputDataLike[] | OutputDataFactory;
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+    };
+};
+
+// @public
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string;
     proofsWeHave?: Proof[];
+};
+
+// @public
+export type MintQuotePayload = {
+    unit: string;
+    amount: number;
+    description?: string;
+    pubkey?: string;
 };
 
 // @public (undocumented)
@@ -880,6 +966,11 @@ export type MPPMethod = {
 };
 
 // @public
+export type MPPOption = {
+    amount: number;
+};
+
+// @public
 export class NetworkError extends Error {
     constructor(message: string);
 }
@@ -889,6 +980,12 @@ export type NUT10Option = {
     kind: string;
     data: string;
     tags: string[][];
+};
+
+// @public (undocumented)
+export type OutputAmounts = {
+    sendAmounts: number[];
+    keepAmounts?: number[];
 };
 
 // @public
@@ -1140,6 +1237,25 @@ export type ReceiveConfig = {
 };
 
 // @public
+export type ReceiveOptions = {
+    keysetId?: string;
+    outputAmounts?: OutputAmounts;
+    proofsWeHave?: Proof[];
+    counter?: number;
+    pubkey?: string;
+    privkey?: string;
+    requireDleq?: boolean;
+    outputData?: OutputDataLike[] | OutputDataFactory;
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+    };
+};
+
+// @public
 export type ReceiveTokenEntryResponse = {
     proofs: Proof[];
 };
@@ -1157,6 +1273,11 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+
+// @public (undocumented)
+export type RestoreOptions = {
+    keysetId?: string;
+};
 
 // @public (undocumented)
 export type RpcSubId = string | number | null;
@@ -1185,6 +1306,40 @@ export type SendOfflineConfig = {
     requireDleq?: boolean;
     includeFees?: boolean;
     exactMatch?: boolean;
+};
+
+// @public
+export type SendOptions = {
+    outputAmounts?: OutputAmounts;
+    proofsWeHave?: Proof[];
+    counter?: number;
+    pubkey?: string;
+    privkey?: string;
+    keysetId?: string;
+    offline?: boolean;
+    includeFees?: boolean;
+    includeDleq?: boolean;
+    outputData?: {
+        send?: OutputDataLike[] | OutputDataFactory;
+        keep?: OutputDataLike[] | OutputDataFactory;
+    };
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+    };
+};
+
+// @public
+export type SendResponse = {
+    keep: Proof[];
+    send: Proof[];
+    serialized?: Array<{
+        proof: Proof;
+        keep: boolean;
+    }>;
 };
 
 // @public
@@ -1270,9 +1425,45 @@ export type SwapMethod = {
 };
 
 // @public
+export type SwapOptions = {
+    outputAmounts?: OutputAmounts;
+    proofsWeHave?: Proof[];
+    counter?: number;
+    pubkey?: string;
+    privkey?: string;
+    keysetId?: string;
+    includeFees?: boolean;
+    outputData?: {
+        send?: OutputDataLike[] | OutputDataFactory;
+        keep?: OutputDataLike[] | OutputDataFactory;
+    };
+    p2pk?: {
+        pubkey: string | string[];
+        locktime?: number;
+        refundKeys?: string[];
+        requiredSignatures?: number;
+        requiredRefundSignatures?: number;
+    };
+};
+
+// @public
+export type SwapPayload = {
+    inputs: Proof[];
+    outputs: SerializedBlindedMessage[];
+};
+
+// @public
 export type SwapResponse = {
     signatures: SerializedBlindedSignature[];
 } & ApiError;
+
+// @public
+export type SwapTransaction = {
+    payload: SwapPayload;
+    outputData: OutputData[];
+    keepVector: boolean[];
+    sortedIndices: number[];
+};
 
 // @public
 export type Token = {
