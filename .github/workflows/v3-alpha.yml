@@ -27,6 +27,6 @@ jobs:
           echo "Using version $VERSION"
       - run: npm run compile
       - name: Publish to npm with v3-alpha tag
-        run: npm publish --provenance --tag v3-alpha --dry-run
+        run: npm publish --provenance --tag v3-alpha
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
