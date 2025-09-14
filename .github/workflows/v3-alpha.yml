@@ -1,0 +1,32 @@
+name: Publish v3-alpha to npmjs
+permissions:
+  contents: read
+  id-token: write
+on:
+  push:
+    branches:
+      - v3-alpha
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:prepare
+      - run: npm run test
+      - name: Set prerelease version (unique per run)
+        run: |
+          BASE=$(node -p "require('./package.json').version.split('-')[0]")
+          VERSION="$BASE-alpha.${{ github.run_number }}.${{ github.run_attempt }}"
+          npm pkg set version=$VERSION
+          echo "Using version $VERSION"
+      - run: npm run compile
+      - name: Publish to npm with v3-alpha tag
+        run: npm publish --provenance --tag v3-alpha --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
