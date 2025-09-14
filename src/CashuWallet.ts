@@ -1380,9 +1380,11 @@ class CashuWallet {
 	 * @param proofs (only the `secret` field is required)
 	 * @returns
 	 */
-	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
+	async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
+			hashToCurve(enc.encode(p.secret)).toHex(true),
+		);
 		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
 		const states: ProofState[] = [];

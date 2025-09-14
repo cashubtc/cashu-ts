@@ -165,7 +165,7 @@ export class CashuWallet {
     // (undocumented)
     checkMintQuote(quote: string): Promise<PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
-    checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
