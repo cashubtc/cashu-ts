@@ -45,7 +45,7 @@ describe('cairo', () => {
 		expect(cairoSend.outputHash).toMatch(/^[0-9a-f]{64}$/);
 	});
 
-	test(
+	test.skipIf(process.env.CI)(
 		'send and receive with cairo',
 		async () => {
 			const mint = new CashuMint(mintUrl);

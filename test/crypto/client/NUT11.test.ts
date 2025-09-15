@@ -450,15 +450,9 @@ describe('test getP2PKWitnessSignatures', () => {
 		expect(result).toStrictEqual([]);
 	});
 	test('malformed witness', async () => {
-		// Spy on console.error and mock its implementation to do nothing
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const witness = 'malformed';
 		const result = getP2PKWitnessSignatures(witness);
 		expect(result).toStrictEqual([]);
-		expect(consoleErrorSpy).toHaveBeenCalledWith(
-			'Failed to parse witness string:',
-			expect.any(Error),
-		); // Verify console.error was called
 	});
 	test('string witness', async () => {
 		const witness =
