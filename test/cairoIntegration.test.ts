@@ -29,17 +29,19 @@ describe('cairo', () => {
 	test('createCairoSend helper function', () => {
 		const executable = JSON.stringify(is_prime_executable);
 		const expectedOutput = 1;
-		
+
 		const cairoSend = createCairoDataPayload(executable, expectedOutput);
-		
+
 		expect(cairoSend).toHaveProperty('programHash');
 		expect(cairoSend).toHaveProperty('outputHash');
 		expect(typeof cairoSend.programHash).toBe('string');
 		expect(typeof cairoSend.outputHash).toBe('string');
-		
-		const manualProgramHash = bytesToHex(hashExecutableBytecode(is_prime_executable.program.bytecode));
+
+		const manualProgramHash = bytesToHex(
+			hashExecutableBytecode(is_prime_executable.program.bytecode),
+		);
 		expect(cairoSend.programHash).toBe(manualProgramHash);
-		
+
 		expect(cairoSend.outputHash).toMatch(/^[0-9a-f]{64}$/);
 	});
 

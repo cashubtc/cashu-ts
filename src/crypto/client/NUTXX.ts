@@ -50,14 +50,14 @@ class Felt252 {
 
 /**
  * Helper function to create cairoSend object from executable and expected output.
- * 
- * @param cairoExecutable - JSON string representing the Cairo executable
- * @param cairoExpectedOutput - Expected output as a number or bigint
- * @returns Object with programHash and outputHash for use in wallet.send
+ *
+ * @param cairoExecutable - JSON string representing the Cairo executable.
+ * @param cairoExpectedOutput - Expected output as a number or bigint.
+ * @returns Object with programHash and outputHash for use in wallet.send.
  */
 export const createCairoDataPayload = (
 	cairoExecutable: string,
-	cairoExpectedOutput: number | bigint
+	cairoExpectedOutput: number | bigint,
 ): { programHash: string; outputHash: string } => {
 	const executable = JSON.parse(cairoExecutable) as { program: { bytecode: string[] } };
 	const bytecode = executable.program.bytecode;
@@ -71,7 +71,7 @@ export const createCairoDataPayload = (
 		temp >>= 8n;
 	}
 	const outputHash = bytesToHex(hashByteArray(outputBytes));
-	
+
 	return { programHash, outputHash };
 };
 

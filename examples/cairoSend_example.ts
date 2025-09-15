@@ -9,11 +9,11 @@ async function exampleCairoSend() {
 	const cairoExecutable = JSON.stringify({
 		program: {
 			bytecode: [
-				"0x40780017fff7fff",
-				"0x2",
+				'0x40780017fff7fff',
+				'0x2',
 				// ... more bytecode
-			]
-		}
+			],
+		},
 	});
 
 	// Expected output from the Cairo program
@@ -24,7 +24,7 @@ async function exampleCairoSend() {
 
 	// Now you can use it in wallet.send
 	const { send } = await wallet.send(64, proofs, {
-		cairoSend: cairoSend
+		cairoSend: cairoSend,
 	});
 
 	console.log('Program hash:', cairoSend.programHash);

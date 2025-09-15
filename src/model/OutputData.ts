@@ -34,7 +34,11 @@ export class OutputData implements OutputDataLike {
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array) {
+	constructor(
+		blindedMessage: SerializedBlindedMessage,
+		blindingFactor: bigint,
+		secret: Uint8Array,
+	) {
 		this.secret = secret;
 		this.blindingFactor = blindingFactor;
 		this.blindedMessage = blindedMessage;

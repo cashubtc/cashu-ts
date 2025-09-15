@@ -736,7 +736,7 @@ class CashuWallet {
 			Math.max(
 				(nInputs * (this._keysets.find((k: MintKeyset) => k.id === keysetId)?.input_fee_ppk || 0) +
 					999) /
-				1000,
+					1000,
 				0,
 			),
 		);
