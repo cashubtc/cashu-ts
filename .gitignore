@@ -1,5 +1,6 @@
 coverage
 docs
+lib/
 node_modules
 temp
 test/__screenshots__
