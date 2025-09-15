@@ -63,7 +63,7 @@ import { type Logger, NULL_LOGGER, measureTime } from '../logger';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
-import type { ProofState } from '../model/types/proof-state';
+import { CheckStateEnum, type ProofState } from '../model/types/proof-state';
 import type { MintKeys, MintKeyset } from '../model/types/keyset';
 
 // mint wire DTOs and enums
@@ -1801,7 +1801,7 @@ class Wallet {
 	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
 	 *
 	 * @param proofs (only the `secret` field is required)
-	 * @returns
+	 * @returns NUT-07 state for each proof, in same order.
 	 */
 	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
 		const enc = new TextEncoder();
@@ -1829,6 +1829,38 @@ class Wallet {
 			}
 		}
 		return states;
+	}
+
+	/**
+	 * Groups proofs by their corresponding state, preserving order within each group.
+	 *
+	 * @param proofs (only the `secret` field is required)
+	 * @returns An object with arrays of proofs grouped by CheckStateEnum state.
+	 */
+	async groupProofsByState(
+		proofs: Proof[],
+	): Promise<{ unspent: Proof[]; pending: Proof[]; spent: Proof[] }> {
+		const states: ProofState[] = await this.checkProofsStates(proofs);
+		const result = {
+			unspent: [] as Proof[],
+			pending: [] as Proof[],
+			spent: [] as Proof[],
+		};
+		for (let i = 0; i < states.length; i++) {
+			const proof = proofs[i];
+			switch (states[i].state) {
+				case CheckStateEnum.UNSPENT:
+					result.unspent.push(proof);
+					break;
+				case CheckStateEnum.PENDING:
+					result.pending.push(proof);
+					break;
+				case CheckStateEnum.SPENT:
+					result.spent.push(proof);
+					break;
+			}
+		}
+		return result;
 	}
 
 	/**

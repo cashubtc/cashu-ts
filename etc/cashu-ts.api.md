@@ -1670,6 +1670,11 @@ export class Wallet {
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
     getMintInfo(): MintInfo;
+    groupProofsByState(proofs: Proof[]): Promise<{
+        unspent: Proof[];
+        pending: Proof[];
+        spent: Proof[];
+    }>;
     readonly keyChain: KeyChain;
     loadMint(forceRefresh?: boolean): Promise<void>;
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
