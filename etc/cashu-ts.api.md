@@ -24,6 +24,9 @@ export type ApiError = {
     detail?: string;
 };
 
+// @public (undocumented)
+export function bigIntStringify<T>(_key: unknown, value: T): string | T;
+
 // @public
 export type BlindAuthMintPayload = {
     outputs: SerializedBlindedMessage[];
@@ -75,6 +78,9 @@ export type Bolt12MintQuoteResponse = {
     amount_paid: number;
     amount_issued: number;
 };
+
+// @public
+export function bytesToNumber(bytes: Uint8Array): bigint;
 
 // @public
 export class CashuAuthMint {
@@ -256,6 +262,12 @@ export class CashuWallet {
     get unit(): string;
 }
 
+// @public (undocumented)
+export function checkResponse(data: {
+    error?: string;
+    detail?: string;
+}): void;
+
 // @public
 export const CheckStateEnum: {
     readonly UNSPENT: "UNSPENT";
@@ -322,6 +334,9 @@ export function createRandomPrivateKey(): Uint8Array<ArrayBufferLike>;
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
+export function deepEqual<T>(a: T, b: T): boolean;
+
+// @public
 export const DEFAULT_OUTPUT: {
     type: "random";
 };
@@ -381,6 +396,9 @@ export function getEncodedToken(token: Token, opts?: {
 
 // @public (undocumented)
 export function getEncodedTokenBinary(token: Token): Uint8Array;
+
+// @public
+export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string;
 
 // @public (undocumented)
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
@@ -444,6 +462,12 @@ export type GetInfoResponse = {
     motd?: string;
 };
 
+// @public
+export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: number, keys: Keys, targetCount: number): number[];
+
+// @public
+export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[];
+
 // @public (undocumented)
 export const getKeysetIdInt: (keysetId: string) => bigint;
 
@@ -477,6 +501,12 @@ export const getSignedOutput: (output: BlindedMessage, privateKey: PrivKey) => B
 // @public (undocumented)
 export const getSignedOutputs: (outputs: BlindedMessage[], privateKey: string) => BlindedMessage[];
 
+// @public
+export function handleTokens(token: string): Token;
+
+// @public
+export function hasCorrespondingKey(amount: number, keyset: Keys): boolean;
+
 // @public (undocumented)
 export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array;
 
@@ -484,10 +514,16 @@ export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array;
 export function hashToCurve(secret: Uint8Array): ProjPointType<bigint>;
 
 // @public
+export function hasNonHexId(p: Proof | Proof[]): boolean;
+
+// @public
 export const hasP2PKSignedProof: (pubkey: string, proof: Proof) => boolean;
 
 // @public
 export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
+
+// @public
+export function hexToNumber(hex: string): bigint;
 
 // @public
 export type HTLCWitness = {
@@ -518,6 +554,15 @@ export type InvoiceData = {
     memo?: string;
     expiry?: number;
 };
+
+// @public (undocumented)
+export function isObj(v: unknown): v is object;
+
+// @public (undocumented)
+export function isValidHex(str: string): boolean;
+
+// @public (undocumented)
+export function joinUrls(...parts: string[]): string;
 
 // @public (undocumented)
 export type JsonRpcError = {
@@ -736,6 +781,38 @@ export const MeltQuoteState: {
 
 // @public (undocumented)
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
+
+// @public (undocumented)
+export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array;
+
+// @public (undocumented)
+export class MessageNode {
+    constructor(message: string);
+    // (undocumented)
+    get next(): MessageNode | null;
+    set next(node: MessageNode | null);
+    // (undocumented)
+    get value(): string;
+    set value(message: string);
+}
+
+// @public (undocumented)
+export class MessageQueue {
+    constructor();
+    // (undocumented)
+    dequeue(): string | null;
+    // (undocumented)
+    enqueue(message: string): boolean;
+    // (undocumented)
+    get first(): MessageNode | null;
+    set first(messageNode: MessageNode | null);
+    // (undocumented)
+    get last(): MessageNode | null;
+    set last(messageNode: MessageNode | null);
+    // (undocumented)
+    get size(): number;
+    set size(v: number);
+}
 
 // @public
 export class Mint {
@@ -974,6 +1051,9 @@ export type MPPOption = {
 export class NetworkError extends Error {
     constructor(message: string);
 }
+
+// @public
+export function numberToHexPadded64(number: bigint): string;
 
 // @public
 export type NUT10Option = {
@@ -1286,6 +1366,9 @@ export type RpcSubId = string | number | null;
 export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
 
 // @public (undocumented)
+export function sanitizeUrl(url: string): string;
+
+// @public (undocumented)
 export type Secret = [WellKnownSecret, SecretData];
 
 // @public (undocumented)
@@ -1411,7 +1494,19 @@ export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], be
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)
+export function sortProofsById(proofs: Proof[]): Proof[];
+
+// @public
+export function splitAmount(value: number, keyset: Keys, split?: number[], order?: 'desc' | 'asc'): number[];
+
+// @public
+export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
+
+// @public (undocumented)
 export type SubscriptionCanceller = () => void;
+
+// @public (undocumented)
+export function sumProofs(proofs: Proof[]): number;
 
 // @public
 export type SwapMethod = {
@@ -1522,6 +1617,9 @@ export const verifyDLEQProof: (dleq: DLEQ, B_: ProjPointType<bigint>, C_: ProjPo
 export const verifyDLEQProof_reblind: (secret: Uint8Array, // secret
 dleq: DLEQ, C: ProjPointType<bigint>, // unblinded e-cash signature point
 A: ProjPointType<bigint>) => boolean;
+
+// @public @deprecated
+export function verifyKeysetId(keys: MintKeys): boolean;
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;

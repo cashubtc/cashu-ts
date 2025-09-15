@@ -21,17 +21,8 @@ export * from './model/types';
 // Crypto
 export * from './crypto';
 
-// Serialization & helpers
-export {
-	getEncodedToken,
-	getEncodedTokenV4,
-	getDecodedToken,
-	deriveKeysetId,
-	decodePaymentRequest,
-	getDecodedTokenBinary,
-	getEncodedTokenBinary,
-	hasValidDleq,
-} from './utils';
+// Core Utils
+export * from './utils/core';
 
 // Auth
 export { CashuAuthMint, CashuAuthWallet, getEncodedAuthToken, getBlindedAuthToken } from './auth';
