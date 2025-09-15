@@ -7,6 +7,7 @@ export const parseSecret = (secret: string | Uint8Array): Secret => {
 		}
 		return JSON.parse(secret) as Secret;
 	} catch {
-		throw new Error("can't parse secret:, " + secret);
+		const secretStr = secret instanceof Uint8Array ? new TextDecoder().decode(secret) : secret;
+		throw new Error("can't parse secret:, " + secretStr);
 	}
 };

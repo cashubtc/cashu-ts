@@ -84,12 +84,12 @@ async function _request({
 			response.status === 400 &&
 			errorData &&
 			'code' in errorData &&
-			typeof (errorData as any).code === 'number' &&
+			typeof errorData.code === 'number' &&
 			'detail' in errorData &&
-			typeof (errorData as any).detail === 'string'
+			typeof errorData.detail === 'string'
 		) {
 			// Specific mint operation error
-			throw new MintOperationError((errorData as any).code, (errorData as any).detail);
+			throw new MintOperationError(errorData.code, errorData.detail);
 		}
 
 		if (errorData) {

@@ -24,6 +24,13 @@ export type BlindAuthMintResponse = {
 } & ApiError;
 
 // @public
+export type CairoWitness = {
+    cairo_proof_json: string;
+    with_pedersen: boolean;
+    with_bootloader: boolean;
+};
+
+// @public
 export class CashuAuthMint {
     // Warning: (ae-forgotten-export) The symbol "request" needs to be exported by the entry point index.d.ts
     constructor(_mintUrl: string, _customRequest?: typeof request | undefined);
@@ -224,6 +231,12 @@ export class ConsoleLogger implements Logger {
     // (undocumented)
     warn(message: string, context?: Record<string, unknown>): void;
 }
+
+// @public
+export const createCairoDataPayload: (cairoExecutable: string, cairoExpectedOutput: number | bigint) => {
+    programHash: string;
+    outputHash: string;
+};
 
 // @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
@@ -534,6 +547,10 @@ export type MintProofOptions = {
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     };
+    cairo?: {
+        programHash: string;
+        outputsHash: string;
+    };
 };
 
 // @public
@@ -596,11 +613,16 @@ export type OutputAmounts = {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
     blindingFactor: bigint;
+    // (undocumented)
+    static createCairoData(cairoSend: {
+        executable: string;
+        expectedOutput: bigint;
+    }, amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     // (undocumented)
@@ -613,6 +635,11 @@ export class OutputData implements OutputDataLike {
     }, amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createRandomData(amount: number, keyset: MintKeys, customSplit?: number[]): OutputData[];
+    // (undocumented)
+    static createSingleCairoData(cairoDataPayload: {
+        programHash: string;
+        outputHash: string;
+    }, amount: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -740,7 +767,7 @@ export type Proof = {
     secret: string;
     C: string;
     dleq?: SerializedDLEQ;
-    witness?: string | P2PKWitness | HTLCWitness;
+    witness?: string | P2PKWitness | HTLCWitness | CairoWitness;
 };
 
 // @public
@@ -793,6 +820,10 @@ export type ReceiveOptions = {
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
     };
+    cairoReceive?: {
+        executable: string;
+        programInput: bigint[];
+    };
 };
 
 // @public
@@ -835,6 +866,10 @@ export type SendOptions = {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
+    };
+    cairoSend?: {
+        executable: string;
+        expectedOutput: bigint;
     };
 };
 
@@ -902,6 +937,14 @@ export type SwapOptions = {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
+    };
+    cairoSend?: {
+        executable: string;
+        expectedOutput: bigint;
+    };
+    cairoReceive?: {
+        executable: string;
+        programInput: bigint[];
     };
 };
 
@@ -981,9 +1024,9 @@ export type WebSocketSupport = {
 // Warnings were encountered during analysis:
 //
 // lib/types/CashuWallet.d.ts:41:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:150:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:190:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:218:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:166:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:210:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:238:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

@@ -20,6 +20,7 @@ export default tseslint.config(
 			'examples/**',
 			'vite.config.ts',
 			'vitest.workspace.ts',
+			'vitest.browser.config.ts',
 			'eslint.config.js',
 		],
 	},
