@@ -327,7 +327,7 @@ export const createP2PKsecret: (pubkey: string) => string;
 export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage;
 
 // @public (undocumented)
-export function createRandomPrivateKey(): Uint8Array<ArrayBufferLike>;
+export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
 
 // @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;

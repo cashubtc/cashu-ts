@@ -85,7 +85,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 	return keysetIdInt;
 };
 
-export function createRandomPrivateKey() {
+export function createRandomSecretKey() {
 	return secp256k1.utils.randomSecretKey();
 }
 

@@ -17,7 +17,7 @@ const SECRET_MESSAGE = 'test_message';
 
 describe('test crypto scheme', () => {
 	test('Test crypto scheme', async () => {
-		const mintPrivKey = secp256k1.utils.randomPrivateKey();
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
 		const mintPubKey = secp256k1.getPublicKey(mintPrivKey, true);
 
 		//Wallet(Bob)

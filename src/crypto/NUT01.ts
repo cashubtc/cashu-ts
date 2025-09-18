@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { type RawProof, createRandomPrivateKey, hashToCurve } from './core';
+import { type RawProof, createRandomSecretKey, hashToCurve } from './core';
 import { HDKey } from '@scure/bip32';
 import { deriveKeysetId, bytesToNumber } from '../utils';
 
@@ -63,7 +63,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 				throw new Error(`Could not derive Private key from: ${DERIVATION_PATH}/${counter}`);
 			}
 		} else {
-			privKeys[index] = createRandomPrivateKey();
+			privKeys[index] = createRandomSecretKey();
 		}
 
 		pubKeys[index] = getPubKeyFromPrivKey(privKeys[index]);

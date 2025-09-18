@@ -1,4 +1,4 @@
-import { type DLEQ, hash_e, hashToCurve, createRandomPrivateKey } from './core';
+import { type DLEQ, hash_e, hashToCurve, createRandomSecretKey } from './core';
 import { bytesToNumber } from '../utils';
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { numberToBytesBE } from '@noble/curves/abstract/utils';
@@ -48,7 +48,7 @@ export const verifyDLEQProof_reblind = (
  * https://en.wikipedia.org/wiki/Timing_attack for information about timing attacks.
  */
 export const createDLEQProof = (B_: WeierstrassPoint<bigint>, a: Uint8Array): DLEQ => {
-	const r = secp256k1.Point.Fn.fromBytes(createRandomPrivateKey()); // r <- random (Uint8Array)
+	const r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey()); // r <- random (Uint8Array)
 	const R_1 = secp256k1.Point.BASE.multiply(r); // R1 = rG
 	const R_2 = B_.multiply(r); // R2 = rB_
 	const scalar_a = secp256k1.Point.Fn.fromBytes(a);

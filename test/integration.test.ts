@@ -1,7 +1,7 @@
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
 import { vi } from 'vitest';
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import {
 	CashuMint,
 	CashuWallet,
@@ -24,7 +24,6 @@ import {
 	getEncodedTokenV4,
 	hexToNumber,
 	numberToHexPadded64,
-	splitAmount,
 	sumProofs,
 } from '../src/utils';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
@@ -33,11 +32,10 @@ dns.setDefaultResultOrder('ipv4first');
 const externalInvoice =
 	'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
 
-let request: Record<string, string> | undefined;
 const mintUrl = 'http://localhost:3338';
 const unit = 'sat';
 
-injectWebSocketImpl(ws);
+injectWebSocketImpl(ws as unknown as typeof WebSocket);
 
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	p.forEach((p) => {
@@ -237,10 +235,10 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 
-		const privKeyAlice = secp256k1.utils.randomPrivateKey();
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
 		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice);
 
-		const privKeyBob = secp256k1.utils.randomPrivateKey();
+		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const request = await wallet.createMintQuote(128);
@@ -267,7 +265,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 
-		const privKeyBob = secp256k1.utils.randomPrivateKey();
+		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const mintRequest = await wallet.createMintQuote(3000);
