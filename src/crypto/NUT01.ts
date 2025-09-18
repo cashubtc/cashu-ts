@@ -1,4 +1,4 @@
-import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { type RawProof, createRandomPrivateKey, hashToCurve } from './core';
@@ -74,7 +74,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 }
 
 export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean {
-	const Y: ProjPointType<bigint> = hashToCurve(proof.secret);
-	const aY: ProjPointType<bigint> = Y.multiply(bytesToNumber(privKey));
+	const Y: WeierstrassPoint<bigint> = hashToCurve(proof.secret);
+	const aY: WeierstrassPoint<bigint> = Y.multiply(bytesToNumber(privKey));
 	return aY.equals(proof.C);
 }

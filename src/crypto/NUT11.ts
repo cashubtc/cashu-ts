@@ -1,5 +1,5 @@
 import { type PrivKey, bytesToHex, hexToBytes, randomBytes } from '@noble/curves/abstract/utils';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';
 import { type BlindedMessage } from './core';
@@ -230,7 +230,8 @@ export function getP2PKSigFlag(secretStr: string | Secret): string {
 /**
  * Gets witness signatures as an array.
  *
- * @type {array} of Signatures.
+ * @param witness From Proof.
+ * @returns Array of witness signatures.
  */
 export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefined): string[] => {
 	if (!witness) return [];

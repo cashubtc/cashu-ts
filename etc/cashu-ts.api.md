@@ -6,7 +6,6 @@
 
 import { MintContactInfo as MintContactInfo_2 } from '..';
 import { PrivKey } from '@noble/curves/abstract/utils';
-import { ProjPointType } from '@noble/curves/abstract/weierstrass';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public (undocumented)
@@ -39,7 +38,7 @@ export type BlindAuthMintResponse = {
 
 // @public (undocumented)
 export type BlindedMessage = {
-    B_: ProjPointType<bigint>;
+    B_: WeierstrassPoint<bigint>;
     r: bigint;
     secret: Uint8Array;
     witness?: P2PKWitness;
@@ -50,7 +49,7 @@ export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKe
 
 // @public (undocumented)
 export type BlindSignature = {
-    C_: ProjPointType<bigint>;
+    C_: WeierstrassPoint<bigint>;
     amount: number;
     id: string;
 };
@@ -310,13 +309,13 @@ export class ConsoleLogger implements Logger {
 }
 
 // @public (undocumented)
-export function constructProofFromPromise(promise: BlindSignature, r: bigint, secret: Uint8Array, key: ProjPointType<bigint>): RawProof;
+export function constructProofFromPromise(promise: BlindSignature, r: bigint, secret: Uint8Array, key: WeierstrassPoint<bigint>): RawProof;
 
 // @public (undocumented)
-export function createBlindSignature(B_: ProjPointType<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
+export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
 
 // @public
-export const createDLEQProof: (B_: ProjPointType<bigint>, a: Uint8Array) => DLEQ;
+export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
 
 // @public (undocumented)
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
@@ -508,10 +507,10 @@ export function handleTokens(token: string): Token;
 export function hasCorrespondingKey(amount: number, keyset: Keys): boolean;
 
 // @public (undocumented)
-export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array;
+export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array;
 
 // @public (undocumented)
-export function hashToCurve(secret: Uint8Array): ProjPointType<bigint>;
+export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint>;
 
 // @public
 export function hasNonHexId(p: Proof | Proof[]): boolean;
@@ -1294,7 +1293,7 @@ export type RawPaymentRequest = {
 
 // @public (undocumented)
 export type RawProof = {
-    C: ProjPointType<bigint>;
+    C: WeierstrassPoint<bigint>;
     secret: Uint8Array;
     amount: number;
     id: string;
@@ -1583,7 +1582,7 @@ export type TokenV4Template = {
 };
 
 // @public (undocumented)
-export function unblindSignature(C_: ProjPointType<bigint>, r: bigint, A: ProjPointType<bigint>): ProjPointType<bigint>;
+export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
 // @public (undocumented)
 export type Unit = 'sat' | 'msat';
@@ -1611,12 +1610,12 @@ export type V4ProofTemplate = {
 };
 
 // @public (undocumented)
-export const verifyDLEQProof: (dleq: DLEQ, B_: ProjPointType<bigint>, C_: ProjPointType<bigint>, A: ProjPointType<bigint>) => boolean;
+export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
 
 // @public (undocumented)
 export const verifyDLEQProof_reblind: (secret: Uint8Array, // secret
-dleq: DLEQ, C: ProjPointType<bigint>, // unblinded e-cash signature point
-A: ProjPointType<bigint>) => boolean;
+dleq: DLEQ, C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
+A: WeierstrassPoint<bigint>) => boolean;
 
 // @public @deprecated
 export function verifyKeysetId(keys: MintKeys): boolean;

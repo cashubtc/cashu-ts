@@ -2,17 +2,15 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import {
 	hashToCurve,
 	pointFromHex,
-	bytesToNumber,
 	blindMessage,
 	unblindSignature,
-	SerializedMintKeys,
 	createBlindSignature,
 	verifyProof,
 	constructProofFromPromise,
 	createRandomBlindedMessage,
 } from '../../src/crypto';
+import { bytesToNumber } from '../../src/utils';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
-import { PUBKEYS } from './consts';
 import { describe, expect, test } from 'vitest';
 
 const SECRET_MESSAGE = 'test_message';
@@ -62,7 +60,7 @@ describe('test blinding message', () => {
 	test('testing string 0000....01', async () => {
 		var enc = new TextEncoder();
 		let secretUInt8 = enc.encode(SECRET_MESSAGE);
-		let { B_ } = await blindMessage(
+		let { B_ } = blindMessage(
 			secretUInt8,
 			bytesToNumber(hexToBytes('0000000000000000000000000000000000000000000000000000000000000001')),
 		);
