@@ -12,6 +12,7 @@ import {
 	MeltQuoteState,
 	type MintQuoteResponse,
 	MintQuoteState,
+	type MintKeys,
 	deriveKeysetId,
 	getDecodedToken,
 	injectWebSocketImpl,
@@ -19,12 +20,16 @@ import {
 	OutputData,
 	ConsoleLogger,
 	type Logger,
+	OutputConfig,
+	MeltProofsConfig,
+	MeltBlanks,
+	Bolt12MeltQuoteResponse,
 } from '../../src';
 
 import { bytesToNumber, sumProofs } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { hexToBytes } from '@noble/curves/abstract/utils';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { randomBytes } from '@noble/hashes/utils';
 
 injectWebSocketImpl(WebSocket);
 
@@ -106,7 +111,7 @@ afterAll(() => {
 });
 
 describe('test wallet init', () => {
-	it('should initialize with mint instance and load mint info, keys, and keysets', async () => {
+	test('should initialize with mint instance and load mint info, keys, and keysets', async () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
@@ -154,7 +159,7 @@ describe('test wallet init', () => {
 		expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
 	});
 
-	it('should initialize with mint URL string and load mint info, keys, and keysets', async () => {
+	test('should initialize with mint URL string and load mint info, keys, and keysets', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
@@ -202,7 +207,7 @@ describe('test wallet init', () => {
 		expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
 	});
 
-	it('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
+	test('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
 		const wallet = new Wallet(mintUrl, {
 			unit,
 			mintInfo: mintInfoResp,
@@ -267,7 +272,7 @@ describe('test wallet init', () => {
 		spyKeys.mockRestore();
 	});
 
-	it('should throw when retrieving an invalid keyset ID', async () => {
+	test('should throw when retrieving an invalid keyset ID', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
@@ -276,14 +281,14 @@ describe('test wallet init', () => {
 		);
 	});
 
-	it('should throw when accessing getters before loadMint', () => {
+	test('should throw when accessing getters before loadMint', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
 		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
 		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
 	});
 
-	it('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
+	test('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
 		const wallet = new Wallet(mintUrl, {
 			unit,
 			mintInfo: mintInfoResp,
@@ -407,6 +412,55 @@ describe('test fees', () => {
 describe('receive', () => {
 	const tokenInput =
 		'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgaNhYQFhc3hAMDFmOTEwNmQxNWMwMWI5NDBjOThlYTdlOTY4YTA2ZTNhZjY5NjE4ZWRiOGJlOGU1MWI1MTJkMDhlOTA3OTIxNmFjWCEC-F3YSw-EGENmy2kUYQavfA8m8u4K0oej5fqFJSi7Kd8';
+
+	test('test receive token from wrong mint', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		// Token from http://localhost/Bitcoin:3338
+		const foreignToken =
+			'cashuBo2FteB1odHRwOi8vbG9jYWxob3N0L0JpdGNvaW46MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgaNhYQFhc3hAMDFmOTEwNmQxNWMwMWI5NDBjOThlYTdlOTY4YTA2ZTNhZjY5NjE4ZWRiOGJlOGU1MWI1MTJkMDhlOTA3OTIxNmFjWCEC-F3YSw-EGENmy2kUYQavfA8m8u4K0oej5fqFJSi7Kd8';
+		await expect(wallet.receive(foreignToken)).rejects.toThrow('Token belongs to a different mint');
+	});
+
+	test('test receive token with wrong unit', async () => {
+		const wallet = new Wallet(mint, { unit, logger });
+		await wallet.loadMint();
+
+		// Token in usd
+		const foreignToken =
+			'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3VzZGF0gaJhaUgAvQM1Wd4n0GFwgaNhYQFhc3hAMDFmOTEwNmQxNWMwMWI5NDBjOThlYTdlOTY4YTA2ZTNhZjY5NjE4ZWRiOGJlOGU1MWI1MTJkMDhlOTA3OTIxNmFjWCEC-F3YSw-EGENmy2kUYQavfA8m8u4K0oej5fqFJSi7Kd8';
+		await expect(wallet.receive(foreignToken)).rejects.toThrow('Token is not in wallet unit');
+	});
+
+	test('test receive token with unsanitized mint url', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		// Token from http://localhost:3338/ (<-- has trailing slash)
+		const unsanitizedToken =
+			'cashuBo2Ftdmh0dHA6Ly9sb2NhbGhvc3Q6MzMzOC9hdWNzYXRhdIGiYWlIAL0DNVneJ9BhcIGjYWEBYXN4QDAxZjkxMDZkMTVjMDFiOTQwYzk4ZWE3ZTk2OGEwNmUzYWY2OTYxOGVkYjhiZThlNTFiNTEyZDA4ZTkwNzkyMTZhY1ghAvhd2EsPhBhDZstpFGEGr3wPJvLuCtKHo-X6hSUouynf';
+		const proofs = await wallet.receive(unsanitizedToken);
+
+		expect(proofs).toHaveLength(1);
+		expect(proofs).toMatchObject([{ amount: 1, id: '00bd033559de27d0' }]);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
+	});
+
 	test('test receive encoded token', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
@@ -1500,7 +1554,7 @@ describe('send', () => {
 
 describe('deterministic', () => {
 	test('no seed', async () => {
-		const wallet = new Wallet(mint, logger);
+		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const result = await wallet
 			.send(
@@ -2014,15 +2068,17 @@ describe('restore', () => {
 	test('sends zero-amount blanks and maps signatures to proofs', async () => {
 		const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32), logger });
 		await wallet.loadMint();
-
-		let seenBody: any | undefined;
+		interface RestoreBody {
+			outputs: Array<unknown>;
+		}
+		let seenBody: RestoreBody = { outputs: [] };
 
 		// valid compressed secp point (any well-formed 33-byte point will do)
 		const VALID_POINT = '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422';
 
 		server.use(
 			http.post(mintUrl + '/v1/restore', async ({ request }) => {
-				const body = await request.json();
+				const body = (await request.json()) as RestoreBody;
 				seenBody = body;
 
 				// echo outputs, return one signature per output
@@ -2862,7 +2918,7 @@ describe('melt proofs', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
 					state: MeltQuoteState.PAID,
-					preimage: 'preimage',
+					payment_preimage: 'preimage',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -2888,6 +2944,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -2907,7 +2964,7 @@ describe('melt proofs', () => {
 		const response = await wallet.meltProofs(meltQuote, proofsToSend);
 
 		expect(response.quote.state).toBe(MeltQuoteState.PAID);
-		expect(response.quote.preimage).toBe('preimage');
+		expect(response.quote.payment_preimage).toBe('preimage');
 		expect(response.change).toHaveLength(2);
 		expect(response.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 		expect(response.change[1]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
@@ -2920,7 +2977,7 @@ describe('melt proofs', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
 					state: MeltQuoteState.PAID,
-					preimage: 'preimage',
+					payment_preimage: 'preimage',
 					change: [],
 				});
 			}),
@@ -2935,6 +2992,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -2954,7 +3012,7 @@ describe('melt proofs', () => {
 		const response = await wallet.meltProofs(meltQuote, proofsToSend);
 
 		expect(response.quote.state).toBe(MeltQuoteState.PAID);
-		expect(response.quote.preimage).toBe('preimage');
+		expect(response.quote.payment_preimage).toBe('preimage');
 		expect(response.change).toHaveLength(0);
 	});
 
@@ -2963,7 +3021,7 @@ describe('melt proofs', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
 					paid: false,
-					preimage: null,
+					payment_preimage: null,
 					change: null,
 				});
 			}),
@@ -2978,6 +3036,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -2996,8 +3055,8 @@ describe('melt proofs', () => {
 		];
 		const response = await wallet.meltProofs(meltQuote, proofsToSend);
 
-		expect(response.quote.paid).toBe(false);
-		expect(response.quote.preimage).toBeNull();
+		expect(response.quote.state).toBe(MeltQuoteState.UNPAID);
+		expect(response.quote.payment_preimage).toBeNull();
 		expect(response.change).toHaveLength(0);
 	});
 
@@ -3006,7 +3065,7 @@ describe('melt proofs', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
 					state: MeltQuoteState.PAID,
-					preimage: 'preimage',
+					payment_preimage: 'preimage',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -3032,6 +3091,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -3077,13 +3137,13 @@ describe('melt proofs', () => {
 				if (callCount === 1) {
 					return HttpResponse.json({
 						state: MeltQuoteState.UNPAID,
-						preimage: null,
+						payment_preimage: null,
 						change: null,
 					});
 				}
 				return HttpResponse.json({
 					state: MeltQuoteState.PAID,
-					preimage: 'preimage',
+					payment_preimage: 'preimage',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -3109,6 +3169,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -3146,7 +3207,7 @@ describe('melt proofs', () => {
 		const completedResponse = await wallet.completeMelt(capturedBlanks!);
 
 		expect(completedResponse.quote.state).toBe(MeltQuoteState.PAID);
-		expect(completedResponse.quote.preimage).toBe('preimage');
+		expect(completedResponse.quote.payment_preimage).toBe('preimage');
 		expect(completedResponse.change).toHaveLength(2);
 		expect(completedResponse.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
@@ -3162,6 +3223,7 @@ describe('melt proofs', () => {
 				request: 'bolt11...',
 				state: MeltQuoteState.UNPAID,
 				expiry: 1234567890,
+				payment_preimage: null,
 				unit,
 			};
 			const proofsToSend: Proof[] = [
@@ -3225,6 +3287,7 @@ describe('melt proofs', () => {
 				request: 'bolt12request',
 				state: MeltQuoteState.UNPAID,
 				expiry: 1234567890,
+				payment_preimage: null,
 				unit: 'sat',
 			};
 			const proofsToSend: Proof[] = [
@@ -3248,7 +3311,7 @@ describe('melt proofs', () => {
 					seenBody = body;
 					return HttpResponse.json({
 						state: MeltQuoteState.PAID,
-						preimage: 'preimage',
+						payment_preimage: 'preimage',
 						change: [
 							{
 								id: '00bd033559de27d0',
@@ -3283,7 +3346,7 @@ describe('melt proofs', () => {
 			http.post(mintUrl + '/v1/melt/bolt12', () => {
 				return HttpResponse.json({
 					state: MeltQuoteState.PAID,
-					preimage: 'preimage',
+					payment_preimage: 'preimage',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -3309,6 +3372,7 @@ describe('melt proofs', () => {
 			request: 'bolt12request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -3328,7 +3392,7 @@ describe('melt proofs', () => {
 		const response = await wallet.meltProofsBolt12(meltQuote, proofsToSend);
 
 		expect(response.quote.state).toBe(MeltQuoteState.PAID);
-		expect(response.quote.preimage).toBe('preimage');
+		expect(response.quote.payment_preimage).toBe('preimage');
 		expect(response.change).toHaveLength(2);
 		expect(response.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
@@ -3349,6 +3413,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [
@@ -3375,7 +3440,7 @@ describe('melt proofs', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
 					state: MeltQuoteState.PAID,
-					preimage: 'preimage',
+					payment_preimage: 'preimage',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -3406,6 +3471,7 @@ describe('melt proofs', () => {
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
+			payment_preimage: null,
 			unit: 'sat',
 		};
 		const proofsToSend: Proof[] = [

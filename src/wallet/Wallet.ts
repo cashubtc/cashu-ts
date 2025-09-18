@@ -90,6 +90,7 @@ import {
 	stripDleq,
 	sumProofs,
 	deepEqual,
+	sanitizeUrl,
 } from '../utils';
 
 /**
@@ -578,19 +579,26 @@ class Wallet {
 	): Promise<Proof[]> {
 		let proofs: Proof[] = [];
 		const keysets = this.keyChain.getKeysets();
-		// Decode token
+		// Decode and validate token
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
-		if (decodedToken.mint !== this.mint.mintUrl) {
+		const tokenMintUrl = sanitizeUrl(decodedToken.mint);
+		if (tokenMintUrl !== this.mint.mintUrl) {
 			const message = 'Token belongs to a different mint';
-			this._logger.error(message);
+			this._logger.error(message, { token: tokenMintUrl, wallet: this.mint.mintUrl });
 			throw new Error(message);
 		}
+		if (decodedToken.unit !== this._unit) {
+			const message = 'Token is not in wallet unit';
+			this._logger.error(message, { token: decodedToken.unit, wallet: this._unit });
+			throw new Error(message);
+		}
+		// Extract token proofs
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		if (totalAmount === 0) {
 			return [];
 		}
-		// Sign token if needed
+		// Sign proofs if needed
 		if (config?.privkey) {
 			proofs = this.signP2PKProofs(proofs, config?.privkey);
 		}
