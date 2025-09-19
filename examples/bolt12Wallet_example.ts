@@ -1,8 +1,5 @@
-import { Wallet } from '../src/wallet';
 import dns from 'node:dns';
-import { MintQuoteState, Bolt12MintQuoteResponse } from '../src/mint/types';
-import { Proof } from '../src/model/types';
-import { sumProofs } from '../src/utils';
+import { Wallet, MintQuoteState, Bolt12MintQuoteResponse, Proof, sumProofs } from '../src';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 

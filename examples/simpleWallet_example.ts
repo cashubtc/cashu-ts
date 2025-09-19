@@ -18,9 +18,9 @@ const externalInvoice =
 const mintUrl = 'http://localhost:3338';
 
 // +++++++++++++++++++++ Example of a simple wallet implementation ++++++++++++++++++
-// run the example with the following command: `npx examples/_simpleWallet.ts`
 // a local mint instance should be running on port 3338. Startup command:
 // docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_INPUT_FEE_PPK=100 -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.0 poetry run mint
+// run the example with the following command: `npx tsx examples/simpleWallet_example.ts`
 
 const mintAmount = 2050;
 
@@ -228,4 +228,6 @@ const runWalletExample = async () => {
 	}
 };
 
-runWalletExample();
+(async () => {
+	await runWalletExample();
+})();
