@@ -1,7 +1,8 @@
 /**
- * Cashu Wallet Class
+ * Cashu Wallet Class.
  *
- * @remarks This is the instantiation point for the Cashu-TS library
+ * @remarks
+ * This is the instantiation point for the Cashu-TS library.
  */
 
 import {
