@@ -1,5 +1,5 @@
 import { test, describe, expect } from 'vitest';
-import { CashuWallet, CashuMint, getBlindedAuthToken } from '../src';
+import { Wallet, Mint, getBlindedAuthToken } from '../src';
 
 async function getClearAuthToken() {
 	const res = await fetch(process.env.OICD_TOKEN_ENDPOINT!, {
@@ -46,7 +46,7 @@ describe('NUT-22', () => {
 
 		expect(blindedAuthToken.length).toBe(20);
 
-		const wallet = new CashuWallet(new CashuMint(mintUrl, undefined, db.getTokenFromDb.bind(db)));
+		const wallet = new Wallet(new Mint(mintUrl, undefined, db.getTokenFromDb.bind(db)));
 		const quote = await wallet.createMintQuote(1);
 		await new Promise((r) => setTimeout(r, 1000));
 		const proofs = await wallet.mintProofs(1, quote.quote);
