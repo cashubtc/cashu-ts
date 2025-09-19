@@ -1,15 +1,13 @@
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
-
 import dns from 'node:dns';
 import {
-	MeltQuoteResponse,
+	PartialMeltQuoteResponse,
 	MeltQuoteState,
 	MintQuoteResponse,
 	MintQuoteState,
 	Proof,
 	Token,
-} from '../src/model/types/index';
+	Wallet,
+} from '../src';
 import { getEncodedTokenV4, sumProofs } from '../src/utils';
 dns.setDefaultResultOrder('ipv4first');
 
@@ -28,20 +26,16 @@ const mintAmount = 2050;
 
 const runWalletExample = async () => {
 	try {
-		// instantiate a mint. It is used later by the CashuWallet to create api calls to the mint
-		const mint = new CashuMint(mintUrl);
-
 		// create a wallet with the keys loaded from the mint.
 		// The wallet is used as an interface for all cashu specific interactions
-		const wallet = new CashuWallet(mint);
+		const wallet = new Wallet(mintUrl);
 
-		// In order to load mint keys and other information about the mint, we should call this method
+		// In order to load mint keys and other information about the mint, we MUST call this method
 		await wallet.loadMint();
 
 		//we can store the mint information, in case we later want to initialize the wallet without requesting the mint info again.
-		const mintInfo = wallet.mintInfo;
-		const keys = wallet.keys;
-		const keysets = wallet.keysets;
+		const mintInfo = wallet.getMintInfo();
+		const keyCache = wallet.keyChain.getCache();
 
 		// ++++++++ Minting some ecash +++++++++++++
 
@@ -114,7 +108,7 @@ const runWalletExample = async () => {
 			// If the amount of the accumulated proofs we provide do not match exactly the amount we want to send,
 			// a split will have to be performed.
 			// this will burn the current proofs at the mint, and return a fresh set of proofs, matching the amount we want to send
-			const { keep, send } = await wallet.send(amount, proofs, { includeFees: true });
+			const { keep, send } = await wallet.sendAsDefault(amount, proofs, { includeFees: true });
 
 			console.log(
 				`sending ${send.reduce((a, b) => a + b.amount, 0)} keeping ${keep.reduce(
@@ -178,7 +172,9 @@ const runWalletExample = async () => {
 			console.log(`Total quote amount: ${amountToMelt}`);
 
 			// in order to get the correct amount of proofs for the melt request, we can use the `send` function we used before
-			const { keep, send } = await wallet.send(amountToMelt, proofs, { includeFees: true });
+			const { keep, send } = await wallet.sendAsDefault(amountToMelt, proofs, {
+				includeFees: true,
+			});
 
 			// once again, we update the proofs we have to keep.
 			proofs = keep;
@@ -200,7 +196,7 @@ const runWalletExample = async () => {
 			// we can check on the status
 			setTimeout(async () => await checkMeltQuote(quote), 1000);
 
-			const checkMeltQuote = async (q: MeltQuoteResponse) => {
+			const checkMeltQuote = async (q: PartialMeltQuoteResponse) => {
 				// we can check on the status of the quote.
 				const quote = await wallet.checkMeltQuote(q.quote);
 

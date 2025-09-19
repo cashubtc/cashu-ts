@@ -1,4 +1,4 @@
-import { CashuMint, CashuWallet, getDecodedToken, getEncodedTokenV4 } from '@cashu/cashu-ts';
+import { Wallet, getDecodedToken, getEncodedTokenV4 } from '@cashu/cashu-ts';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import admin from 'firebase-admin';
@@ -75,8 +75,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	const mint = new CashuMint(mintUrl);
-	const wallet = new CashuWallet(mint);
+	const wallet = new Wallet(mintUrl);
 	await wallet.loadMint();
 
 	let receiveProofs;

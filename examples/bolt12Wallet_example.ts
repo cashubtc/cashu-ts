@@ -1,7 +1,7 @@
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
+import { Wallet } from '../src/wallet';
 import dns from 'node:dns';
-import { MintQuoteState, Proof, Bolt12MintQuoteResponse } from '../src/model/types/index';
+import { MintQuoteState, Bolt12MintQuoteResponse } from '../src/mint/types';
+import { Proof } from '../src/model/types';
 import { sumProofs } from '../src/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
@@ -23,8 +23,7 @@ const runBolt12WalletExample = async () => {
 		console.log('========================\n');
 
 		// Initialize wallet
-		const mint = new CashuMint(MINT_URL);
-		const wallet = new CashuWallet(mint);
+		const wallet = new Wallet(MINT_URL);
 		await wallet.loadMint();
 
 		// Create reusable BOLT12 offer
@@ -84,7 +83,7 @@ const runBolt12WalletExample = async () => {
 runBolt12WalletExample();
 
 // Helper functions
-const waitForMintQuote = async (wallet: CashuWallet, quoteId: string): Promise<Proof[]> => {
+const waitForMintQuote = async (wallet: Wallet, quoteId: string): Promise<Proof[]> => {
 	while (true) {
 		const quote = await wallet.checkMintQuote(quoteId);
 
@@ -98,7 +97,7 @@ const waitForMintQuote = async (wallet: CashuWallet, quoteId: string): Promise<P
 	}
 };
 
-const mintInitialProofs = async (wallet: CashuWallet): Promise<Proof[]> => {
+const mintInitialProofs = async (wallet: Wallet): Promise<Proof[]> => {
 	console.log(`💰 Minting ${INITIAL_MINT_AMOUNT} sats via BOLT11...`);
 
 	const bolt11Quote = await wallet.createMintQuote(INITIAL_MINT_AMOUNT);
@@ -111,7 +110,7 @@ const mintInitialProofs = async (wallet: CashuWallet): Promise<Proof[]> => {
 };
 
 const payBolt12Offer = async (
-	wallet: CashuWallet,
+	wallet: Wallet,
 	offer: string,
 	amount: number,
 	proofs: Proof[],
@@ -125,7 +124,7 @@ const payBolt12Offer = async (
 	}
 
 	// Send payment
-	const { keep, send } = await wallet.send(totalNeeded, proofs, { includeFees: true });
+	const { keep, send } = await wallet.sendAsDefault(totalNeeded, proofs, { includeFees: true });
 	const { change } = await wallet.meltProofsBolt12(meltQuote, send);
 
 	console.log(`💸 Paid ${amount} sats to BOLT12 offer (fee: ${meltQuote.fee_reserve} sats)`);
@@ -137,7 +136,7 @@ const payBolt12Offer = async (
 };
 
 const mintFromBolt12Quote = async (
-	wallet: CashuWallet,
+	wallet: Wallet,
 	quote: Bolt12MintQuoteResponse,
 ): Promise<Proof[]> => {
 	const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);
