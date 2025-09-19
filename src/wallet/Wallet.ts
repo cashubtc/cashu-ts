@@ -91,8 +91,6 @@ import {
  * const proofs = [...]; // your array of unspent proofs
  * const { keep, send } = await wallet.send(32, proofs);
  * ```
- *
- * @v3
  */
 class Wallet {
 	/**
@@ -428,7 +426,6 @@ class Wallet {
 	 * @param proofs The proofs to sign.
 	 * @param privkey The private key for signing.
 	 * @returns Signed proofs.
-	 * @v3
 	 */
 	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
 		return signP2PKProofs(proofs, privkey);
@@ -442,7 +439,6 @@ class Wallet {
 	 * @param token Cashu token.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using random secrets.
-	 * @v3
 	 */
 	async receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]> {
 		const outputType: OutputType = { type: 'random' }; // Pure default: no splits/proofs
@@ -459,7 +455,6 @@ class Wallet {
 	 * @param denominations Optional custom amounts for splitting outputs.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using deterministic secrets.
-	 * @v3
 	 */
 	async receiveAsDeterministic(
 		token: Token | string,
@@ -485,7 +480,6 @@ class Wallet {
 	 * @param denominations Optional custom amounts for splitting outputs.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, P2PK-locked.
-	 * @v3
 	 */
 	async receiveAsP2PK(
 		token: Token | string,
@@ -509,7 +503,6 @@ class Wallet {
 	 * @param denominations Optional custom amounts for splitting outputs.
 	 * @param config Optional parameters.
 	 * @returns The proofs received from the token, using factory-generated secrets.
-	 * @v3
 	 */
 	async receiveAsFactory(
 		token: Token | string,
@@ -2168,7 +2161,6 @@ class Wallet {
 	 * @param blanks The blanks from onChangeOutputsCreated.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
-	 * @v3
 	 */
 	async completeMelt<T extends MeltQuoteResponse>(
 		blanks: MeltBlanks<T>,

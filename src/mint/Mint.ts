@@ -54,7 +54,6 @@ import { type Logger, NULL_LOGGER } from '../logger';
  *
  * @remarks
  * This class contains lower-level functions that are implemented by Wallet.
- * @v3
  */
 class Mint {
 	private ws?: WSConnection;

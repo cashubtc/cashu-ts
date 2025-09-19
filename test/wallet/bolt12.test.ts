@@ -328,7 +328,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		]);
 		// Test missing privkey
 		await expect(
-			wallet.mintProofsBolt12(21, { quote: 'q1', request: 'lno1offer...'} as any, '' ),
+			wallet.mintProofsBolt12(21, { quote: 'q1', request: 'lno1offer...' } as any, ''),
 		).rejects.toThrow('Can not sign locked quote without private key');
 		// Test successful path with privkey (valid secp256k1 private key)
 		const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
