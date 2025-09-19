@@ -382,7 +382,7 @@ describe('mint api', () => {
 			'proofs',
 			proofs.map((p) => p.amount),
 		);
-		const data = await new Promise<ProofState>((res) => {
+		await new Promise<ProofState>((res) => {
 			wallet.onProofStateUpdates(
 				proofs,
 				(p) => {

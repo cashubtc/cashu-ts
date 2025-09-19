@@ -104,7 +104,7 @@ Wallet no longer manages keysets and keys itself. Instead, these are delegated t
 
 The following wallet methods are affected:
 
-- `wallet.getKeys(id)` -> `wallet.keyChain.getKeyset(id)`
+- `wallet.getKeys(id?)` -> `wallet.keyChain.getKeyset(id?)`
 - `wallet.getActiveKeyset()` -> `wallet.keyChain.getCheapestKeyset()`
 - `wallet.getKeySets()` -> `wallet.keyChain.getKeysets()`
 - `wallet.getAllKeys()` -> `wallet.keyChain.getCache().keys`

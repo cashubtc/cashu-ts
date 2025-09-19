@@ -250,6 +250,7 @@ export class CashuWallet {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     receive(token: string | Token, options?: ReceiveOptions): Promise<Proof[]>;
+    // Warning: (ae-forgotten-export) The symbol "RestoreOptions" needs to be exported by the entry point index.d.ts
     restore(start: number, count: number, options?: RestoreOptions): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
@@ -1354,7 +1355,7 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
 
 // @public (undocumented)
-export type RestoreOptions = {
+export type RestoreConfig = {
     keysetId?: string;
 };
 
@@ -1701,7 +1702,7 @@ export class Wallet {
     receiveAsDeterministic(token: Token | string, counter: number, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsFactory(token: Token | string, factory: OutputDataFactory, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsP2PK(token: Token | string, options: P2PKOptions, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
-    restore(start: number, count: number, options?: RestoreOptions): Promise<{
+    restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
