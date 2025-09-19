@@ -1,4 +1,20 @@
 // ==========================
+// v2 (stable) surface
+// ==========================
+export { CashuMint } from './CashuMint';
+export { CashuWallet } from './CashuWallet';
+export type {
+	OutputAmounts,
+	LockedMintQuote,
+	ReceiveOptions,
+	SendOptions,
+	SwapOptions,
+	MintProofOptions,
+	MeltProofOptions,
+	InvoiceData,
+} from './wallet/types/options';
+
+// ==========================
 // v3 (new API) surface
 // ==========================
 export { Mint } from './mint';
