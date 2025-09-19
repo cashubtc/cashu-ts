@@ -1,26 +1,7 @@
 /**
- * Cashu Wallet "v3"
+ * Cashu Wallet Class
  *
- * A Cashu wallet under active refactoring and development. This class is a work-in-progress
- * redesign of the CashuWallet, aiming for improved separation of concerns, simplified options
- * handling, and a cleaner API through the use of tagged unions and pipeline optimization. It is not
- * yet stable or production-ready.
- *
- * @remarks
- * Not for production use: Continue using the {@link CashuWallet} class, which provides the
- * established and tested implementation. This Wallet class is experimental and subject to breaking
- * changes during the v3 refactor process.
- * @example
- *
- *     import { Wallet } from '@cashu/cashu-ts';
- *     const mintUrl = 'http://localhost:3338';
- *     const wallet = new Wallet(mintUrl, { unit: 'sat' });
- *     await wallet.loadMint(); // Initialize mint info, keysets, and keys
- *     // Wallet is now ready to use, eg:
- *     const proofs = [...]; // your array of unspent proofs
- *     const { keep, send } = await wallet.send(32, proofs);
- *
- * @v3
+ * @remarks This is the instantiation point for the Cashu-TS library
  */
 
 import {
@@ -49,7 +30,7 @@ import {
 	type SendResponse,
 	// websocket types are part of wallet seam too
 	type SubscriptionCanceller,
-	type RestoreOptions,
+	type RestoreConfig,
 } from './types';
 
 import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
@@ -1340,12 +1321,12 @@ class Wallet {
 	async restore(
 		start: number,
 		count: number,
-		options?: RestoreOptions,
+		config?: RestoreConfig,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-		const { keysetId } = options || {};
+		const { keysetId } = config || {};
 		const keyset = this.keyChain.getKeyset(keysetId);
 		if (!this._seed) {
-			const message = 'CashuWallet must be initialized with a seed to use restore';
+			const message = 'Cashu Wallet must be initialized with a seed to use restore';
 			this._logger.error(message);
 			throw new Error(message);
 		}

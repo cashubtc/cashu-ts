@@ -8,8 +8,11 @@ import {
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
 
+export type RestoreConfig = {
+	keysetId?: string;
+};
+
 /**
- * @v3
  * Blanks for completing a melt operation asynchronously.
  */
 export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
@@ -22,8 +25,6 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
 
 /**
  * Shared properties for most `OutputType` variants (except 'custom').
- *
- * @v3
  */
 export interface SharedOutputTypeProps {
 	/**
@@ -38,16 +39,13 @@ export interface SharedOutputTypeProps {
  * Configuration for generating blinded message outputs.
  *
  * @remarks
- * A discriminated union based on the `type` field. Experimental; may change. For production, use
- * CashuWallet's main API.
+ * A discriminated union based on the `type` field.
  * @example
  *
  *     // Random with custom splits
  *     const random: OutputType = { type: 'random', denominations: [1, 2, 4] };
  *     // Deterministic
  *     const deterministic: OutputType = { type: 'deterministic', counter: 0 };
- *
- * @v3
  */
 export type OutputType =
 	| ({
@@ -107,8 +105,6 @@ export type OutputType =
  *     	keep: { type: 'deterministic', counter: 0 },
  *     };
  *     await wallet.send(3, proofs, config, { includeFees: true });
- *
- * @v3
  */
 export interface OutputConfig {
 	send: OutputType;
@@ -127,8 +123,6 @@ export interface OutputConfig {
  *     await wallet.receive('cashuB...', DEFAULT_OUTPUT, { requireDleq: true });
  *     // Customized
  *     const custom: OutputType = { ...DEFAULT_OUTPUT, denominations: [1, 2, 4] };
- *
- * @v3
  */
 export const DEFAULT_OUTPUT = { type: 'random' } satisfies Extract<OutputType, { type: 'random' }>;
 
@@ -146,8 +140,6 @@ export const DEFAULT_OUTPUT = { type: 'random' } satisfies Extract<OutputType, {
  *     	keep: { type: 'deterministic', counter: 0 },
  *     };
  *     await wallet.send(5, proofs, customKeep, { includeFees: true });
- *
- * @v3
  */
 export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
 	send: DEFAULT_OUTPUT,
@@ -155,9 +147,7 @@ export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
 };
 
 /**
- * @v3
- * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11. This type
- * represents a stable data structure used in the original CashuWallet API.
+ * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11.
  */
 export type P2PKOptions = {
 	pubkey: string | string[];
@@ -168,7 +158,6 @@ export type P2PKOptions = {
 };
 
 /**
- * @v3
  * Configuration for send operations.
  */
 export type SendConfig = {
@@ -177,7 +166,6 @@ export type SendConfig = {
 };
 
 /**
- * @v3
  * Configuration for offline send operations.
  */
 export type SendOfflineConfig = {
@@ -187,7 +175,6 @@ export type SendOfflineConfig = {
 };
 
 /**
- * @v3
  * Configuration for receive operations.
  */
 export type ReceiveConfig = {
@@ -198,7 +185,6 @@ export type ReceiveConfig = {
 };
 
 /**
- * @v3
  * Configuration for minting operations.
  */
 export type MintProofsConfig = {
@@ -208,7 +194,6 @@ export type MintProofsConfig = {
 };
 
 /**
- * @v3
  * Configuration for melting operations.
  */
 export type MeltProofsConfig = {
