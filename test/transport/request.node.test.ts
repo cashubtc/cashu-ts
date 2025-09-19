@@ -1,5 +1,5 @@
 import { beforeAll, test, describe, expect, afterAll, afterEach } from 'vitest';
-import { Mint, Wallet, HttpResponseError, NetworkError, MintOperationError } from '../../src';
+import { Wallet, HttpResponseError, NetworkError, MintOperationError } from '../../src';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../../src/transport';
