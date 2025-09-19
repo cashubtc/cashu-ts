@@ -1,4 +1,3 @@
-import { test, expect } from 'vitest';
 import { Wallet, createP2PKsecret } from '@cashu/cashu-ts';
 
 test('Cashu library inits in RN', () => {
