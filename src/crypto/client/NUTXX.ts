@@ -76,6 +76,8 @@ export const createCairoDataPayload = (
 };
 
 /**
+ * Helper function to create a Cairo secret.
+ *
  * @param programHash - The BLAKE2s hash of the Cairo program's bytecode.
  * @returns A JSON string representing the Cairo secret.
  */
@@ -122,9 +124,12 @@ export const hashByteArray = (a: Uint8Array): Uint8Array => {
 };
 
 /**
- * @param proofs
- * @param executable
- * @param programInputs
+ * Execute and Cairo program and generate a proof-of-execution for the provided (Cashu) proof.
+ *
+ * @param proofs - An array of proofs to sign.
+ * @param executable - A JSON compiled Cairo executable for which we want to generate a
+ *   proof-of-execution.
+ * @param programInputs - The inputs to the Cairo program.
  */
 export const cairoProveProofs = async (
 	proofs: Proof[],

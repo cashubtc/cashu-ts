@@ -50,8 +50,8 @@ export const verifyP2PKSecretSignature = (
 		if (schnorr.verify(signature, msghash, hexToBytes(pubkeyX))) {
 			return true;
 		}
-	} catch {
-		// Invalid signature, ignore error
+	} catch (e) {
+		console.error('verifyP2PKsecret error:', e);
 	}
 	return false; // no bueno
 };
