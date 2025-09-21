@@ -56,16 +56,16 @@ export default defineConfig({
 					environment: 'node',
 					include: ['test/**/*.test.ts'],
 					exclude: [
-						'test/{auth,integration}.test.ts',
-						'test/**.browser.test.ts',
+						'test/{auth,integration,cairoIntegration}.test.ts',
+						'test/**/*.browser.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
 						exclude: [
-							'test/{auth,integration, cairoIntegration}.test.ts',
-							'test/**.browser.test.ts',
+							'test/{auth,integration,cairoIntegration}.test.ts',
+							'test/**/*.browser.test.ts',
 						],
 					},
 				},
@@ -83,13 +83,13 @@ export default defineConfig({
 					include: ['test/**/*.test.ts'],
 					exclude: [
 						'test/{auth,integration,cairoIntegration}.test.ts',
-						'test/**.node.test.ts',
+						'test/**/*.node.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
 						provider: 'v8',
 						include: ['test/**/*.test.ts'],
-						exclude: ['test/{auth,integration}.test.ts', 'test/**.node.test.ts'],
+						exclude: ['test/{auth,integration,cairoIntegration}.test.ts', 'test/**/*.node.test.ts'],
 					},
 				},
 			},
@@ -103,7 +103,7 @@ export default defineConfig({
 					coverage: {
 						provider: 'v8',
 						include: ['test/integration.test.ts'],
-						exclude: [...configDefaults.exclude],
+						exclude: ['test/cairoIntegration.test.ts', ...configDefaults.exclude],
 					},
 				},
 			},
