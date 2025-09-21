@@ -5,6 +5,7 @@ import {
 	createNewMintKeys,
 	serializeMintKeys,
 	deserializeMintKeys,
+	SerializedMintKeys,
 } from '../../src/crypto';
 import { PUBKEYS, TEST_PRIV_KEY_PUBS } from './consts';
 import { describe, expect, test } from 'vitest';

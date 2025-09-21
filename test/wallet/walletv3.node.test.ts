@@ -19,7 +19,6 @@ import {
 	MintInfo,
 	OutputData,
 	ConsoleLogger,
-	type Logger,
 	OutputConfig,
 	MeltProofsConfig,
 	MeltBlanks,
@@ -658,7 +657,6 @@ describe('receive', () => {
 			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
 		]);
-		const decoder = new TextDecoder();
 		const allSecrets = proofs.map((d) => JSON.parse(d.secret));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
@@ -761,7 +759,7 @@ describe('receive', () => {
 
 	test('test receive proofsWeHave optimization', async () => {
 		server.use(
-			http.post(mintUrl + '/v1/swap', async ({ request }) => {
+			http.post(mintUrl + '/v1/swap', async () => {
 				return HttpResponse.json({
 					signatures: [
 						{
@@ -834,7 +832,7 @@ describe('receive', () => {
 
 	test('test receive privkey signing', async () => {
 		server.use(
-			http.post(mintUrl + '/v1/swap', async ({ request }) => {
+			http.post(mintUrl + '/v1/swap', async () => {
 				return HttpResponse.json({
 					signatures: [
 						{
@@ -1678,7 +1676,7 @@ describe('WebSocket Updates', () => {
 					res(p);
 				}
 			};
-			const test = await wallet.onMintQuoteUpdates(['123'], callback, () => {
+			await wallet.onMintQuoteUpdates(['123'], callback, () => {
 				rej();
 				console.log('error');
 			});
@@ -1718,7 +1716,7 @@ describe('WebSocket Updates', () => {
 					res(p);
 				}
 			};
-			const test = await wallet.onMeltQuoteUpdates(['123'], callback, (e) => {
+			await wallet.onMeltQuoteUpdates(['123'], callback, (e) => {
 				console.log(e);
 				rej();
 				console.log('error');
@@ -1763,8 +1761,6 @@ describe('multi mint', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 
-		const invoice =
-			'lnbc20u1p3u27nppp5pm074ffk6m42lvae8c6847z7xuvhyknwgkk7pzdce47grf2ksqwsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzpgxqyz5vqsp5sw6n7cztudpl5m5jv3z6dtqpt2zhd3q6dwgftey9qxv09w82rgjq9qyyssqhtfl8wv7scwp5flqvmgjjh20nf6utvv5daw5h43h69yqfwjch7wnra3cn94qkscgewa33wvfh7guz76rzsfg9pwlk8mqd27wavf2udsq3yeuju';
 		const meltQuote = await wallet.createMultiPathMeltQuote(invoice, 1000);
 		expect(meltQuote.amount).toBe(1);
 		expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
@@ -2019,7 +2015,7 @@ describe('Restoring deterministic proofs', () => {
 		let rounds = 0;
 		const mockRestore = vi
 			.spyOn(wallet, 'restore')
-			.mockImplementation(async (start, count, options?): Promise<{ proofs: Array<Proof> }> => {
+			.mockImplementation(async (): Promise<{ proofs: Array<Proof> }> => {
 				if (rounds === 0) {
 					rounds++;
 					return { proofs: Array(21).fill(1) as Array<Proof> };
@@ -2039,11 +2035,7 @@ describe('Restoring deterministic proofs', () => {
 		const mockRestore = vi
 			.spyOn(wallet, 'restore')
 			.mockImplementation(
-				async (
-					start,
-					count,
-					options?,
-				): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> => {
+				async (): Promise<{ proofs: Array<Proof>; lastCounterWithSignature?: number }> => {
 					if (rounds === 0) {
 						rounds++;
 						return { proofs: Array(42).fill(1) as Array<Proof>, lastCounterWithSignature: 41 };
@@ -2171,11 +2163,11 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 		const targetAmount = 25;
-		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: false });
+		const { send } = wallet.sendOffline(targetAmount, notes, { includeFees: false });
 		expect(send).toHaveLength(3);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(25);
-		const { send: sendFeesInc } = await wallet.sendOffline(targetAmount, notes, {
+		const { send: sendFeesInc } = wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
 		});
 		expect(sendFeesInc).toHaveLength(3);
@@ -2211,7 +2203,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const targetAmount = 31;
-		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
+		const { send } = wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
 		// Fee = ceil(3 * 1000 / 1000) = 3, net = 34 - 3 = 31
@@ -2232,7 +2224,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const targetAmount = 31;
-		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
+		const { send } = wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
 		const fee = wallet.getFeesForProofs(send);
 		// Fee = ceil(3 * 600 / 1000) = 2, net = 33 - 2 = 31
@@ -2357,7 +2349,7 @@ describe('Test coinselection', () => {
 		await wallet.loadMint();
 		const targetAmount = 0;
 		// Exact match (offline)
-		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
+		const { send } = wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		// No proofs needed, fee = 0, net = 0 >= 0
 		expect(send).toHaveLength(0);
 		// try using selectProofsToSend directly
@@ -2388,7 +2380,7 @@ describe('Test coinselection', () => {
 		];
 		const targetAmount = 15;
 		// Exact match (offline)
-		const { send } = await wallet.sendOffline(targetAmount, smallNotes, {
+		const { send } = wallet.sendOffline(targetAmount, smallNotes, {
 			includeFees: true,
 		});
 		const amountSend = sumProofs(send);
@@ -2451,7 +2443,7 @@ describe('Test coinselection', () => {
 			{ id: '00bd033559de27d0', amount: 2, secret: 's3', C: 'C3' },
 		];
 		const targetAmount = 5;
-		const { send } = await wallet.sendOffline(targetAmount, proofs, {
+		const { send } = wallet.sendOffline(targetAmount, proofs, {
 			includeFees: true,
 			exactMatch: false,
 		});
@@ -2501,7 +2493,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const targetAmount = 25;
-		const { send } = await wallet.sendOffline(targetAmount, notes, { includeFees: true });
+		const { send } = wallet.sendOffline(targetAmount, notes, { includeFees: true });
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(25); // No fee adjustment
 	});
@@ -2511,7 +2503,7 @@ describe('Test coinselection', () => {
 		await wallet.loadMint();
 		const dupNotes = Array(10).fill({ id: '00bd033559de27d0', amount: 8, secret: 's', C: 'C' });
 		const targetAmount = 24;
-		const { send } = await wallet.sendOffline(targetAmount, dupNotes, {
+		const { send } = wallet.sendOffline(targetAmount, dupNotes, {
 			includeFees: false,
 		});
 		expect(send).toHaveLength(3); // 3 * 8 = 24
@@ -2668,7 +2660,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 		const targetAmount = 25;
-		const { send } = await wallet.sendOffline(targetAmount, notes);
+		const { send } = wallet.sendOffline(targetAmount, notes);
 		expect(send).toHaveLength(3);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(25);
@@ -2677,7 +2669,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 		const targetAmount = 23;
-		const { send } = await wallet.sendOffline(targetAmount, notes, { exactMatch: false });
+		const { send } = wallet.sendOffline(targetAmount, notes, { exactMatch: false });
 		expect(send).toHaveLength(2);
 		const amountSend = sumProofs(send);
 		expect(amountSend).toBe(24);
@@ -2703,7 +2695,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const targetAmount = 31;
-		const { send } = await wallet.sendOffline(targetAmount, notes, {
+		const { send } = wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
 		});
 		expect(send).toHaveLength(3);
@@ -2733,7 +2725,7 @@ describe('Test coinselection', () => {
 		const wallet = new Wallet(mint, { unit, keysets: keysets.keysets });
 		await wallet.loadMint();
 		const targetAmount = 31;
-		const { send } = await wallet.sendOffline(targetAmount, notes, {
+		const { send } = wallet.sendOffline(targetAmount, notes, {
 			includeFees: true,
 		});
 		console.log(send.map((p) => p.amount));
@@ -2780,11 +2772,11 @@ describe('Test coinselection', () => {
 		const amountToSend = Math.floor((Math.random() * totalAmount) / 2 + totalAmount / 2);
 
 		// Reusable vars
-		let amountSend;
-		let amountKeep;
-		let send;
-		let keep;
-		let fee;
+		let amountSend: number;
+		let amountKeep: number;
+		let send: Proof[];
+		let keep: Proof[];
+		let fee: number;
 
 		// Close match with fees test
 		console.time('selectProofs-fees');
@@ -2856,11 +2848,9 @@ describe('Test coinselection', () => {
 		const amountToSend = Math.floor((Math.random() * totalAmount) / numProofs);
 
 		// Reusable vars
-		let amountSend;
-		let amountKeep;
-		let send;
-		let keep;
-		let fee;
+		let amountSend: number;
+		let send: Proof[];
+		let fee: number;
 
 		// Close match with fees test
 		console.time('selectProofs-fees');
@@ -2876,13 +2866,12 @@ describe('Test coinselection', () => {
 
 		// Close match no fees test
 		console.time('selectProofs-no-fees');
-		({ send, keep } = wallet.selectProofsToSend(
+		({ send } = wallet.selectProofsToSend(
 			proofs,
 			amountToSend,
 			false, // includeFees
 		));
 		console.timeEnd('selectProofs-no-fees');
-		amountKeep = sumProofs(keep);
 		amountSend = sumProofs(send);
 
 		if (send.length > 0) {

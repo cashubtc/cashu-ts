@@ -36,6 +36,7 @@ const runWalletExample = async () => {
 		//we can store the mint information, in case we later want to initialize the wallet without requesting the mint info again.
 		const mintInfo = wallet.getMintInfo();
 		const keyCache = wallet.keyChain.getCache();
+		console.log(mintInfo, keyCache);
 
 		// ++++++++ Minting some ecash +++++++++++++
 

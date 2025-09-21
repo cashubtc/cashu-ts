@@ -489,7 +489,7 @@ describe('test zero-knowledge utilities', () => {
 			unit: 'sat',
 			keys: { [2]: pubkey.toHex(true) },
 		};
-		let exc;
+		let exc: Error | undefined = undefined;
 		try {
 			hasValidDleq(serializedProof, keyset);
 		} catch (e) {
