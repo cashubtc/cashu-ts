@@ -14,10 +14,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm' # Caches node_modules for faster runs
+          cache: npm # Caches node_modules for faster runs
       - name: Install dependencies
         run: npm ci
       - name: Prepare Playwright (for iife test)
+        if: ${{ matrix['test-type'] == 'iife' }}
         run: npm run test:prepare # Installs Chromium and deps
-      - name: Run ${{ matrix.test-type }} Test
-        run: npm run test:${{ matrix.test-type }}
+      - name: Run ${{ matrix['test-type'] }} Test
+        run: npm run test:${{ matrix['test-type'] }}

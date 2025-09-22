@@ -1,11 +1,12 @@
 {
 	"compilerOptions": {
 		"target": "ES2020",
-		"module": "CommonJS",
-		"moduleResolution": "node",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"noEmit": false
-	}
+		"noEmit": true
+	},
+	"include": ["**/*.ts"]
 }
