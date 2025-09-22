@@ -45,7 +45,12 @@ export default defineConfig({
 		sourcemap: true,
 	},
 	plugins: [
-		dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types' }),
+		dts({
+			tsconfigPath: './tsconfig.json',
+			outDir: 'lib/types',
+			rollupTypes: true,
+			insertTypesEntry: true,
+		}),
 		nodePolyfills({
 			globals: { Buffer: true },
 			include: ['buffer'],
