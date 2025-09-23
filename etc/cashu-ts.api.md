@@ -545,6 +545,7 @@ export type MintKeyset = {
     unit: string;
     active: boolean;
     input_fee_ppk?: number;
+    final_expiry?: number;
 };
 
 // @public
