@@ -268,7 +268,7 @@ export class WalletEvents {
 	 * Resolve once a melt quote transitions to PAID, with automatic unsubscription, optional abort
 	 * signal, and optional timeout.
 	 *
-	 * Mirrors {@link onceMintPaid} but for melts.
+	 * Mirrors onceMintPaid, but for melts.
 	 *
 	 * @example
 	 *

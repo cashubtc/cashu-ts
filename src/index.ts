@@ -19,6 +19,8 @@ export {
 	type RestoreConfig,
 	type MeltProofsResponse,
 	type SendResponse,
+	WalletEvents,
+	WalletOps,
 	DEFAULT_OUTPUT,
 	DEFAULT_OUTPUT_CONFIG,
 	Wallet,
