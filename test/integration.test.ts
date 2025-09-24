@@ -280,9 +280,9 @@ describe('mint api', () => {
 
 		const mintRequest = await wallet.createMintQuote(3000);
 
-		const proofs = await wallet.mintProofsAsP2PK(3000, mintRequest.quote, {
+		const proofs = await wallet.ops.mint(3000, mintRequest.quote).p2pk({
 			pubkey: bytesToHex(pubKeyBob),
-		});
+		}).run();
 
 		const meltRequest = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltRequest.fee_reserve;
@@ -702,7 +702,7 @@ describe('Wallet Restore', () => {
 
 		const mintQuote = await wallet.createMintQuote(70);
 		await new Promise((r) => setTimeout(r, 1000));
-		const proofs = await wallet.mintProofsAsDeterministic(70, mintQuote.quote, 5);
+		const proofs = await wallet.ops.mint(70, mintQuote.quote).deterministic(5).run();
 
 		const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
 		expect(restoredProofs).toEqual(proofs);
