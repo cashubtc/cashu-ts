@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-	EphemeralCounterSource,
-	type CounterRange,
-} from '../../src/wallet/counters';
+import { EphemeralCounterSource, type CounterRange } from '../../src/wallet/counters';
 
 describe('EphemeralCounterSource', () => {
 	it('constructor seeds initial next values', async () => {
@@ -25,9 +22,7 @@ describe('EphemeralCounterSource', () => {
 
 	it('reserve throws on negative count', async () => {
 		const src = new EphemeralCounterSource();
-		await expect(src.reserve('k', -1 as unknown as number)).rejects.toThrow(
-			/negative count/,
-		);
+		await expect(src.reserve('k', -1 as unknown as number)).rejects.toThrow(/negative count/);
 	});
 
 	it('reserve increments monotonically per keyset', async () => {
@@ -44,17 +39,11 @@ describe('EphemeralCounterSource', () => {
 
 	it('independent keysets do not interfere', async () => {
 		const src = new EphemeralCounterSource();
-		const [a1, b1] = await Promise.all([
-			src.reserve('A', 1),
-			src.reserve('B', 2),
-		]);
+		const [a1, b1] = await Promise.all([src.reserve('A', 1), src.reserve('B', 2)]);
 		expect(a1).toEqual({ start: 0, count: 1 });
 		expect(b1).toEqual({ start: 0, count: 2 });
 
-		const [a2, b2] = await Promise.all([
-			src.reserve('A', 3),
-			src.reserve('B', 1),
-		]);
+		const [a2, b2] = await Promise.all([src.reserve('A', 3), src.reserve('B', 1)]);
 		expect(a2).toEqual({ start: 1, count: 3 });
 		expect(b2).toEqual({ start: 2, count: 1 });
 
@@ -68,7 +57,7 @@ describe('EphemeralCounterSource', () => {
 		const calls = Array.from({ length: 10 }, () => src.reserve('x', 1));
 		const results = await Promise.all(calls);
 		const starts = results.map((r) => r.start).sort((u, v) => u - v);
-		expect(starts).toEqual([0,1,2,3,4,5,6,7,8,9]);
+		expect(starts).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 		const snap = await src.snapshot();
 		expect(snap).toEqual({ x: 10 });
 	});
