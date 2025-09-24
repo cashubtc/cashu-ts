@@ -148,21 +148,19 @@ export type CheckStateResponse = {
 export class ConsoleLogger implements Logger {
     constructor(minLevel?: LogLevel);
     // (undocumented)
-    debug(message: string, context?: Record<string, unknown>): void;
+    debug(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
-    error(message: string, context?: Record<string, unknown>): void;
+    error(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
-    fatal(message: string, context?: Record<string, unknown>): void;
+    fatal(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
-    info(message: string, context?: Record<string, unknown>): void;
+    info(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
     log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    static readonly SEVERITY: Record<LogLevel, number>;
+    trace(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
-    trace(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
-    warn(message: string, context?: Record<string, unknown>): void;
+    warn(msg: string, ctx?: Record<string, unknown>): void;
 }
 
 // @public (undocumented)
@@ -540,17 +538,7 @@ export interface Logger {
 }
 
 // @public
-export const LogLevel: {
-    readonly FATAL: "FATAL";
-    readonly ERROR: "ERROR";
-    readonly WARN: "WARN";
-    readonly INFO: "INFO";
-    readonly DEBUG: "DEBUG";
-    readonly TRACE: "TRACE";
-};
-
-// @public
-export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
 // @public
 export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
@@ -577,6 +565,7 @@ export type MeltPayload = {
 export type MeltProofsConfig = {
     keysetId?: string;
     onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
+    onCountersReserved?: OnCountersReserved;
 };
 
 // @public
@@ -820,6 +809,7 @@ export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string;
     proofsWeHave?: Proof[];
+    onCountersReserved?: OnCountersReserved;
 };
 
 // @public
@@ -1123,6 +1113,7 @@ export type ReceiveConfig = {
     privkey?: string | string[];
     requireDleq?: boolean;
     proofsWeHave?: Proof[];
+    onCountersReserved?: OnCountersReserved;
 };
 
 // @public
@@ -1172,6 +1163,7 @@ export type SecretData = {
 export type SendConfig = {
     keysetId?: string;
     includeFees?: boolean;
+    onCountersReserved?: OnCountersReserved;
 };
 
 // @public
@@ -1384,10 +1376,14 @@ export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
 export class Wallet {
     constructor(mint: Mint | string, options?: {
         unit?: string;
+        keysetId?: string;
+        bip39seed?: Uint8Array;
+        secretsPolicy?: SecretsPolicy;
+        counterSource?: CounterSource;
+        initialCounter?: number;
         keys?: MintKeys[] | MintKeys;
         keysets?: MintKeyset[];
         mintInfo?: GetInfoResponse;
-        bip39seed?: Uint8Array;
         denominationTarget?: number;
         keepFactory?: OutputDataFactory;
         logger?: Logger;
@@ -1411,6 +1407,8 @@ export class Wallet {
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
+    // (undocumented)
+    defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
     getMintInfo(): MintInfo;
@@ -1420,19 +1418,23 @@ export class Wallet {
         spent: Proof[];
     }>;
     readonly keyChain: KeyChain;
+    // (undocumented)
+    get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
     meltProofsAsDefault(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig): Promise<MeltProofsResponse>;
     meltProofsAsDeterministic(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], counter: number, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
     meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
     readonly mint: Mint;
-    mintProofs(amount: number, quote: string | MintQuoteResponse, outputType?: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
+    mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
+    mintProofs(amount: number, quote: string | MintQuoteResponse, outputType: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsAsP2PK(amount: number, quote: string | MintQuoteResponse, p2pkOptions: P2PKOptions, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, outputType?: OutputType, config?: {
         keysetId?: string;
     }): Promise<Proof[]>;
+    readonly on: WalletEvents;
     onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
@@ -1440,7 +1442,9 @@ export class Wallet {
     onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    receive(token: Token | string, outputType?: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
+    readonly ops: WalletOps;
+    receive(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
+    receive(token: Token | string, outputType: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsCustom(token: Token | string, data: OutputData[], config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
     receiveAsDeterministic(token: Token | string, counter: number, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
@@ -1451,15 +1455,82 @@ export class Wallet {
         lastCounterWithSignature?: number;
     }>;
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
-    send(amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig): Promise<SendResponse>;
+    send(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
+    send(amount: number, proofs: Proof[], outputConfig: OutputConfig, config?: SendConfig): Promise<SendResponse>;
     sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
     sendAsDeterministic(amount: number, proofs: Proof[], counter: number, config?: SendConfig): Promise<SendResponse>;
     sendAsP2PK(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, counter?: number, config?: SendConfig): Promise<SendResponse>;
     sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     sendWithP2PKChange(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, config?: SendConfig): Promise<SendResponse>;
     signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[];
-    readonly swap: (amount: number, proofs: Proof[], outputConfig?: OutputConfig, config?: SendConfig) => Promise<SendResponse>;
+    readonly swap: {
+        (amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
+        (amount: number, proofs: Proof[], outputConfig: OutputConfig, config?: SendConfig): Promise<SendResponse>;
+    };
     get unit(): string;
+    // (undocumented)
+    withKeyset(id: string, opts?: {
+        initialCounter?: number;
+        counterSource?: CounterSource;
+    }): Wallet;
+}
+
+// @public (undocumented)
+export class WalletEvents {
+    constructor(wallet: Wallet);
+    group(): SubscriptionCanceller & {
+        add: (c: CancellerLike) => CancellerLike;
+        cancelled: boolean;
+    };
+    // (undocumented)
+    meltPaid(id: string, cb: (p: MeltQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // (undocumented)
+    meltUpdates(ids: string[], cb: (p: MeltQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // (undocumented)
+    mintPaid(id: string, cb: (p: MintQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // (undocumented)
+    mintQuotes(ids: string[], cb: (p: MintQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    onceAnyMintPaid(ids: string[], opts?: {
+        signal?: AbortSignal;
+        timeoutMs?: number;
+        failOnError?: boolean;
+    }): Promise<{
+        id: string;
+        quote: MintQuoteResponse;
+    }>;
+    onceMeltPaid(id: string, opts?: {
+        signal?: AbortSignal;
+        timeoutMs?: number;
+    }): Promise<MeltQuoteResponse>;
+    onceMintPaid(id: string, opts?: {
+        signal?: AbortSignal;
+        timeoutMs?: number;
+    }): Promise<MintQuoteResponse>;
+    // (undocumented)
+    proofStates(proofs: Proof[], cb: (payload: unknown) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    proofStatesStream<T = unknown>(proofs: Proof[], opts?: {
+        signal?: AbortSignal;
+        maxBuffer?: number;
+        drop?: 'oldest' | 'newest';
+        onDrop?: (payload: T) => void;
+    }): AsyncIterable<T>;
+}
+
+// @public
+export class WalletOps {
+    constructor(wallet: Wallet);
+    // Warning: (ae-forgotten-export) The symbol "MintBuilder" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    mint(amount: number, quote: string | MintQuoteResponse): MintBuilder;
+    // Warning: (ae-forgotten-export) The symbol "ReceiveBuilder" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    receive(token: Token | string): ReceiveBuilder;
+    // Warning: (ae-forgotten-export) The symbol "SendBuilder" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    send(amount: number, proofs: Proof[]): SendBuilder;
 }
 
 // @public
@@ -1501,6 +1572,13 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
+
+// Warnings were encountered during analysis:
+//
+// lib/types/index.d.ts:968:5 - (ae-forgotten-export) The symbol "OnCountersReserved" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:2712:9 - (ae-forgotten-export) The symbol "SecretsPolicy" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:2713:9 - (ae-forgotten-export) The symbol "CounterSource" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3572:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

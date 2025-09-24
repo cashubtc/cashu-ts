@@ -286,7 +286,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const wallet = new Wallet(mint, mintCache);
 		await wallet.loadMint();
 		vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(mintCache.keys[0] as any);
-		vi.spyOn(wallet as any, 'configureOutputs').mockReturnValue([]);
+		vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
 		const meltQuote = { quote: 'm1', amount: 100, unit: 'sat', request: 'lno1offer...' };
 		const res = await wallet.meltProofsBolt12(meltQuote as any, [] as any);
 		expect(res.quote.quote).toEqual('m1');
@@ -312,7 +312,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const wallet = new Wallet(mint, mintCache);
 		await wallet.loadMint();
 		vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(mintCache.keys[0] as any);
-		vi.spyOn(wallet as any, 'configureOutputs').mockReturnValue([
+		vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
 			{
 				blindedMessage: { amount: 16, B_: 'B1' },
 				toProof: () => ({ amount: 16, secret: 'secret1', C: 'C1' }),

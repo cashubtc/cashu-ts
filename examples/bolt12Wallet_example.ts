@@ -121,7 +121,7 @@ const payBolt12Offer = async (
 	}
 
 	// Send payment
-	const { keep, send } = await wallet.sendAsDefault(totalNeeded, proofs, { includeFees: true });
+	const { keep, send } = await wallet.send(totalNeeded, proofs, { includeFees: true });
 	const { change } = await wallet.meltProofsBolt12(meltQuote, send);
 
 	console.log(`💸 Paid ${amount} sats to BOLT12 offer (fee: ${meltQuote.fee_reserve} sats)`);

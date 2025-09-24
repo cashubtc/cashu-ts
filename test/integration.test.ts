@@ -125,7 +125,7 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(quote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.sendAsDefault(10, proofs, { includeFees: true });
+		const sendResponse = await wallet.send(10, proofs, { includeFees: true });
 		const response = await wallet.meltProofs(quote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have received the fee back, since it was internal
@@ -161,7 +161,7 @@ describe('mint api', () => {
 		const quote_ = await wallet.checkMeltQuote(meltQuote.quote);
 		expect(quote_).toBeDefined();
 
-		const sendResponse = await wallet.sendAsDefault(2000 + fee, proofs, { includeFees: true });
+		const sendResponse = await wallet.send(2000 + fee, proofs, { includeFees: true });
 		const response = await wallet.meltProofs(meltQuote, sendResponse.send);
 
 		expect(response).toBeDefined();
@@ -203,7 +203,7 @@ describe('mint api', () => {
 		await wallet.loadMint();
 		const request = await wallet.createMintQuote(100);
 		const proofs = await wallet.mintProofs(100, request.quote); // 4,32,64
-		const sendResponse = await wallet.sendAsDefault(10, proofs, { includeFees: false });
+		const sendResponse = await wallet.send(10, proofs, { includeFees: false });
 		expect(sendResponse).toBeDefined();
 		expect(sendResponse.send).toBeDefined();
 		expect(sendResponse.keep).toBeDefined();
@@ -258,12 +258,12 @@ describe('mint api', () => {
 
 		// Try and receive them with Alice's secret key (should fail)
 		const result = await wallet
-			.receiveAsDefault(encoded, { privkey: bytesToHex(privKeyAlice) })
+			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
 		expect(result).toEqual(new MintOperationError(0, 'Witness is missing for p2pk signature'));
 
 		// Try and receive them with Bob's secret key (should suceed)
-		const proofs = await wallet.receiveAsDefault(encoded, { privkey: bytesToHex(privKeyBob) });
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 		expect(
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;
@@ -288,7 +288,7 @@ describe('mint api', () => {
 		const fee = meltRequest.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
 		const signedProofs = wallet.signP2PKProofs(proofs, bytesToHex(privKeyBob));
-		const response = await wallet.meltProofsAsDefault(meltRequest, signedProofs);
+		const response = await wallet.meltProofs(meltRequest, signedProofs);
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
@@ -398,7 +398,7 @@ describe('mint api', () => {
 			// Wallet will try to avoid a swap if possible, so
 			// let's give it a keysetID to force one.
 			const keysetId = wallet.keyChain.getCheapestKeyset().id;
-			wallet.sendAsDefault(21, proofs, { keysetId }); // fire and forget
+			wallet.send(21, proofs, { keysetId }); // fire and forget
 		});
 		mint.disconnectWebSocket();
 	}, 10000);
@@ -410,7 +410,7 @@ describe('mint api', () => {
 		const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey)));
 
 		const quote = await wallet.createLockedMintQuote(63, pubkey);
-		const proofs = await wallet.mintProofsAsDefault(63, quote, { privkey });
+		const proofs = await wallet.mintProofs(63, quote, { privkey });
 
 		expect(proofs).toBeDefined();
 		expect(proofs.length).toBeGreaterThan(0);
@@ -459,7 +459,7 @@ describe('dleq', () => {
 			proofs: send,
 		} as Token;
 		const encodedToken = getEncodedTokenV4(token);
-		const newProofs = await wallet.receiveAsDefault(encodedToken, { requireDleq: true });
+		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 		expect(newProofs).toBeDefined();
 	});
 	test('send strip dleq', async () => {
@@ -524,7 +524,7 @@ describe('dleq', () => {
 			unit: wallet.unit,
 		} as Token;
 
-		const exc = await wallet.receiveAsDefault(token, { requireDleq: true }).catch((e) => e);
+		const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
 		expect(exc).toEqual(new Error('Token contains proofs with invalid or missing DLEQ'));
 	});
 });
@@ -668,7 +668,7 @@ describe('Keep Vector and Reordering', () => {
 		const testOutputAmounts = [8, 4, 8, 2, 8, 2];
 		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
 
-		const { send } = await wallet.sendAsDefault(32, testProofs, { includeFees: true });
+		const { send } = await wallet.send(32, testProofs, { includeFees: true });
 		const receiveProofs = await wallet.receive(
 			{ mint: mintUrl, proofs: send, unit: wallet.unit }, // "token"
 			{ type: 'random', denominations: testOutputAmounts },

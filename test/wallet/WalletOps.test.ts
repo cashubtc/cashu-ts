@@ -175,11 +175,11 @@ describe('WalletOps builders', () => {
 		});
 
 		it('offlineCloseMatch honours includeFees: true', async () => {
-				await ops.send(5, proofs).includeFees(true).offlineCloseMatch().run();
+			await ops.send(5, proofs).includeFees(true).offlineCloseMatch().run();
 
-				const [, , cfg] = wallet.sendOffline.mock.calls[0];
-				expect(cfg).toEqual({ includeFees: true, exactMatch: false, requireDleq: false });
-			});
+			const [, , cfg] = wallet.sendOffline.mock.calls[0];
+			expect(cfg).toEqual({ includeFees: true, exactMatch: false, requireDleq: false });
+		});
 	});
 
 	describe('ReceiveBuilder', () => {

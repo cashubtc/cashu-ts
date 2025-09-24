@@ -84,18 +84,6 @@ const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(
 );
 ```
 
-Helper methods are also available to make migration easier:
-
-```ts
-const { keep: proofsToKeep, send: proofsToSend } = await wallet.sendAsDefault(
-	amountToSend,
-	proofs,
-	{
-		includeFees: true,
-	},
-);
-```
-
 See the README for more examples.
 
 #### Keyset methods delegated to KeyChain class

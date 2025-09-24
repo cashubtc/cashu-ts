@@ -109,7 +109,7 @@ const runWalletExample = async () => {
 			// If the amount of the accumulated proofs we provide do not match exactly the amount we want to send,
 			// a split will have to be performed.
 			// this will burn the current proofs at the mint, and return a fresh set of proofs, matching the amount we want to send
-			const { keep, send } = await wallet.sendAsDefault(amount, proofs, { includeFees: true });
+			const { keep, send } = await wallet.send(amount, proofs, { includeFees: true });
 
 			console.log(
 				`sending ${send.reduce((a, b) => a + b.amount, 0)} keeping ${keep.reduce(
@@ -173,7 +173,7 @@ const runWalletExample = async () => {
 			console.log(`Total quote amount: ${amountToMelt}`);
 
 			// in order to get the correct amount of proofs for the melt request, we can use the `send` function we used before
-			const { keep, send } = await wallet.sendAsDefault(amountToMelt, proofs, {
+			const { keep, send } = await wallet.send(amountToMelt, proofs, {
 				includeFees: true,
 			});
 
