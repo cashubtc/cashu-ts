@@ -483,7 +483,6 @@ export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
 	return mergedArray;
 }
 
-
 export function sortProofsById(proofs: Proof[]) {
 	return proofs.sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
 }
