@@ -7,6 +7,14 @@ import {
 } from '../../model/OutputData';
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
+import { type OperationCounters } from '../counters';
+
+export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
+
+export type OutputSpec = {
+	newAmount: number;
+	newOutputType: OutputType;
+};
 
 export type RestoreConfig = {
 	keysetId?: string;
@@ -57,6 +65,10 @@ export type OutputType =
 	| ({
 			/**
 			 * Deterministic outputs based on a counter.
+			 *
+			 * @remarks
+			 * Counter: 0 means “auto-assign from wallet’s CounterSource”. Any positive value is used as
+			 * the exact starting counter without reservation. Negative values are invalid.
 			 */
 			type: 'deterministic';
 			counter: number;
@@ -96,7 +108,7 @@ export type OutputType =
  * Defines types for sent and kept proofs.
  *
  * - `send`: Required for recipient proofs.
- * - `keep`: Optional; defaults to random.
+ * - `keep`: Optional; defaults to wallet defaultOutputType policy.
  *
  * @example
  *
@@ -157,12 +169,15 @@ export type P2PKOptions = {
 	requiredRefundSignatures?: number;
 };
 
+export type OnCountersReserved = (info: OperationCounters) => void;
+
 /**
  * Configuration for send operations.
  */
 export type SendConfig = {
 	keysetId?: string;
 	includeFees?: boolean;
+	onCountersReserved?: OnCountersReserved;
 };
 
 /**
@@ -182,6 +197,7 @@ export type ReceiveConfig = {
 	privkey?: string | string[];
 	requireDleq?: boolean;
 	proofsWeHave?: Proof[];
+	onCountersReserved?: OnCountersReserved;
 };
 
 /**
@@ -191,6 +207,7 @@ export type MintProofsConfig = {
 	keysetId?: string;
 	privkey?: string;
 	proofsWeHave?: Proof[];
+	onCountersReserved?: OnCountersReserved;
 };
 
 /**
@@ -199,4 +216,5 @@ export type MintProofsConfig = {
 export type MeltProofsConfig = {
 	keysetId?: string;
 	onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
+	onCountersReserved?: OnCountersReserved;
 };

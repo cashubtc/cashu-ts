@@ -10,14 +10,12 @@ import {
 	type OutputType,
 	type OutputConfig,
 	DEFAULT_OUTPUT,
-	DEFAULT_OUTPUT_CONFIG,
 	type P2PKOptions,
 	type SendConfig,
 	type SendOfflineConfig,
 	type ReceiveConfig,
 	type MintProofsConfig,
 	type MeltProofsConfig,
-	// wallet-constructed DTOs and wallet responses
 	type MeltPayload,
 	type MeltQuotePayload,
 	type MintPayload,
@@ -29,19 +27,28 @@ import {
 	type SwapPayload,
 	type MeltProofsResponse,
 	type SendResponse,
-	// websocket types are part of wallet seam too
 	type SubscriptionCanceller,
 	type RestoreConfig,
+	type SecretsPolicy,
+	type OutputSpec,
 } from './types';
+import {
+	type CounterSource,
+	EphemeralCounterSource,
+	type OperationCounters,
+	type CounterRange,
+} from './counters';
 
 import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
-import { type Logger, NULL_LOGGER, measureTime } from '../logger';
+import { WalletOps } from './WalletOps';
+import { WalletEvents } from './WalletEvents';
+import { type Logger, NULL_LOGGER, measureTime, fail, failIf, failIfNullish } from '../logger';
 
-// shared primitives and shared options
+// shared primitives and options
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
@@ -71,7 +78,6 @@ import {
 	splitAmount,
 	stripDleq,
 	sumProofs,
-	deepEqual,
 	sanitizeUrl,
 } from '../utils';
 
@@ -96,15 +102,41 @@ class Wallet {
 	/**
 	 * Mint instance - allows direct calls to the mint.
 	 */
-	readonly mint: Mint;
+	public readonly mint: Mint;
 	/**
 	 * KeyChain instance - contains wallet keysets/keys.
 	 */
-	readonly keyChain: KeyChain;
+	public readonly keyChain: KeyChain;
+	/**
+	 * Entry point for the builder.
+	 *
+	 * @example
+	 *
+	 *     const { keep, send } = await wallet.ops
+	 *     	.send(5, proofs)
+	 *     	.sendDeterministic() // counter: 0 = auto
+	 *     	.keepRandom()
+	 *     	.includeFees(true)
+	 *     	.run();
+	 *
+	 *     const proofs = await wallet.ops
+	 *     	.receive(token)
+	 *     	.deterministic()
+	 *     	.keyset(wallet.keysetId)
+	 *     	.run();
+	 */
+	public readonly ops: WalletOps;
+	/**
+	 * Convenience wrapper for events.
+	 */
+	public readonly on: WalletEvents;
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';
 	private _mintInfo: MintInfo | undefined = undefined;
 	private _denominationTarget = 3;
+	private _secretsPolicy: SecretsPolicy = 'auto';
+	private _counterSource: CounterSource;
+	private _boundKeysetId: string = '__PENDING__';
 	private _logger: Logger;
 
 	/**
@@ -124,15 +156,21 @@ class Wallet {
 		mint: Mint | string,
 		options?: {
 			unit?: string;
+			keysetId?: string; // if omitted, wallet binds to cheapest in loadMint
+			bip39seed?: Uint8Array;
+			secretsPolicy?: SecretsPolicy; // optional, auto
+			counterSource?: CounterSource; // optional, otherwise ephemeral
+			initialCounter?: number; // only used by EphemeralCounterSource
 			keys?: MintKeys[] | MintKeys;
 			keysets?: MintKeyset[];
 			mintInfo?: GetInfoResponse;
-			bip39seed?: Uint8Array;
 			denominationTarget?: number;
 			keepFactory?: OutputDataFactory;
 			logger?: Logger;
 		},
 	) {
+		this.ops = new WalletOps(this);
+		this.on = new WalletEvents(this);
 		this._logger = options?.logger ?? NULL_LOGGER;
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._unit = options?.unit ?? this._unit;
@@ -141,13 +179,45 @@ class Wallet {
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
 		// Validate and set seed
 		if (options?.bip39seed) {
-			if (!(options.bip39seed instanceof Uint8Array)) {
-				const message = 'bip39seed must be a valid Uint8Array';
-				this._logger.error(message, { bip39seed: options.bip39seed });
-				throw new Error(message);
-			}
+			this.failIf(
+				!(options.bip39seed instanceof Uint8Array),
+				'bip39seed must be a valid Uint8Array',
+				{
+					bip39seed: options.bip39seed,
+				},
+			);
 			this._seed = options.bip39seed;
 		}
+		this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
+		this._boundKeysetId = options?.keysetId ?? '__PENDING__';
+		if (options?.counterSource) {
+			this._counterSource = options.counterSource;
+		} else {
+			const initial =
+				options?.keysetId && options.initialCounter != null
+					? { [options.keysetId]: options.initialCounter }
+					: undefined;
+			this._counterSource = new EphemeralCounterSource(initial);
+		}
+	}
+
+	// Convenience wrappers for "log and throw"
+	private fail(message: string, context?: Record<string, unknown>): never {
+		return fail(message, this._logger, context);
+	}
+	private failIf(
+		condition: boolean,
+		message: string,
+		context?: Record<string, unknown>,
+	): asserts condition is false {
+		return failIf(condition, message, this._logger, context);
+	}
+	private failIfNullish<T>(
+		value: T,
+		message: string,
+		context?: Record<string, unknown>,
+	): asserts value is Exclude<T, null | undefined> {
+		return failIfNullish(value, message, this._logger, context);
 	}
 
 	/**
@@ -174,6 +244,10 @@ class Wallet {
 
 		await Promise.all(promises);
 		this._logger.debug('KeyChain', { keychain: this.keyChain.getCache() });
+
+		if (this._boundKeysetId === '__PENDING__') {
+			this._boundKeysetId = this.keyChain.getCheapestKeyset().id;
+		}
 	}
 
 	/**
@@ -194,12 +268,71 @@ class Wallet {
 	 * @throws If mint info is not initialized.
 	 */
 	getMintInfo(): MintInfo {
-		if (!this._mintInfo) {
-			const message = 'Mint info not initialized; call loadMint first';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIfNullish(this._mintInfo, 'Mint info not initialized; call loadMint first');
 		return this._mintInfo;
+	}
+
+	get keysetId(): string {
+		this.failIf(this._boundKeysetId === '__PENDING__', 'Wallet not initialised, call loadMint');
+		return this._boundKeysetId;
+	}
+
+	private async reserveFor(keysetId: string, totalOutputs: number): Promise<CounterRange> {
+		if (totalOutputs <= 0) return { start: 0, count: 0 };
+		return this._counterSource.reserve(keysetId, totalOutputs);
+	}
+
+	private countersNeeded(spec: OutputSpec): number {
+		const ot = spec.newOutputType;
+		if (ot.type !== 'deterministic' || ot.counter !== 0) return 0;
+		const denoms = ot.denominations ?? [];
+		return denoms.length;
+	}
+
+	private async setAutoCounters(
+		keysetId: string,
+		...specs: OutputSpec[]
+	): Promise<{ specs: OutputSpec[]; used?: OperationCounters }> {
+		const total = specs.reduce((n, s) => n + this.countersNeeded(s), 0);
+		if (total === 0) return { specs };
+
+		const range = await this.reserveFor(keysetId, total);
+		let cursor = range.start;
+
+		const patched = specs.map((s) => {
+			const need = this.countersNeeded(s);
+			if (need === 0) return s;
+			const ot = s.newOutputType as Extract<OutputType, { type: 'deterministic' }>;
+			const patchedOT: OutputType = { ...ot, counter: cursor };
+			cursor += need;
+			return { ...s, newOutputType: patchedOT };
+		});
+
+		return { specs: patched, used: { keysetId, start: range.start, count: range.count } };
+	}
+
+	withKeyset(
+		id: string,
+		opts?: { initialCounter?: number; counterSource?: CounterSource },
+	): Wallet {
+		return new Wallet(this.mint, {
+			keysetId: id,
+			bip39seed: this._seed,
+			secretsPolicy: this._secretsPolicy,
+			logger: this._logger,
+			counterSource: opts?.counterSource ?? this._counterSource,
+			initialCounter: opts?.initialCounter,
+			...this.keyChain.getCache(),
+		});
+	}
+
+	public defaultOutputType(): OutputType {
+		if (this._secretsPolicy === 'random') return { type: 'random' };
+		if (this._secretsPolicy === 'deterministic') {
+			if (!this._seed) throw new Error('Deterministic policy requires a seed');
+			return { type: 'deterministic', counter: 0 }; // 0 = auto sentinel
+		}
+		return this._seed ? { type: 'deterministic', counter: 0 } : { type: 'random' };
 	}
 
 	/**
@@ -226,10 +359,10 @@ class Wallet {
 			outputType.denominations.length > 0
 		) {
 			const splitSum = outputType.denominations.reduce((sum, a) => sum + a, 0);
-			if (splitSum !== amount) {
-				this._logger.error('Custom denominations sum mismatch', { splitSum, expected: amount });
-				throw new Error(`Custom denominations sum to ${splitSum}, expected ${amount}`);
-			}
+			this.failIf(splitSum !== amount, 'Custom denominations sum mismatch', {
+				splitSum,
+				expected: amount,
+			});
 		}
 		let outputData: OutputDataLike[];
 		switch (outputType.type) {
@@ -237,11 +370,10 @@ class Wallet {
 				outputData = OutputData.createRandomData(amount, keyset, outputType.denominations);
 				break;
 			case 'deterministic':
-				if (!this._seed) {
-					const message = 'Deterministic outputs require a seed configured in the wallet';
-					this._logger.error(message);
-					throw new Error(message);
-				}
+				this.failIfNullish(
+					this._seed,
+					'Deterministic outputs require a seed configured in the wallet',
+				);
 				outputData = OutputData.createDeterministicData(
 					amount,
 					this._seed,
@@ -266,31 +398,33 @@ class Wallet {
 			case 'custom': {
 				outputData = outputType.data;
 				const customTotal = OutputData.sumOutputAmounts(outputData);
-				if (customTotal !== amount) {
-					const message = `Custom output data total (${customTotal}) does not match amount (${amount})`;
-					this._logger.error(message);
-					throw new Error(message);
-				}
+				this.failIf(
+					customTotal !== amount,
+					`Custom output data total (${customTotal}) does not match amount (${amount})`,
+				);
+
 				break;
 			}
 			default: {
-				const message = `Invalid OutputType`;
-				this._logger.error(message);
-				throw new Error(message);
+				this.fail('Invalid OutputType');
 			}
 		}
 		return outputData;
 	}
 
 	/**
-	 * Configures outputs with fee adjustments and optimization.
+	 * Configures output denominations with fee adjustments and optimization.
 	 *
+	 * @remarks
+	 * If outputType has denominations or custom data, this MUST sum to the amount. If no
+	 * denominations specified, these will be calculated based on proofsWeHave or the default split.
+	 * Additional denominations to cover fees will then be added if required.
 	 * @param amount The total amount for outputs.
 	 * @param keyset The mint keyset.
 	 * @param outputType The output configuration.
 	 * @param includeFees Whether to include swap fees in the output amount.
 	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
-	 * @returns Prepared output data.
+	 * @returns OutputType with required denominations.
 	 */
 	private configureOutputs(
 		amount: number,
@@ -298,28 +432,38 @@ class Wallet {
 		outputType: OutputType,
 		includeFees: boolean = false,
 		proofsWeHave: Proof[] = [],
-	): OutputDataLike[] {
-		let adjustedAmount = amount;
+	): OutputSpec {
+		let newAmount = amount;
 
 		// Custom outputs don't have automatic optimizations or fee inclusion)
 		if (outputType.type === 'custom') {
-			if (includeFees) {
-				const message = 'The custom OutputType does not support automatic fee inclusion';
-				this._logger.error(message);
-				throw new Error(message);
-			}
-			return this.createOutputData(adjustedAmount, keyset, outputType);
+			this.failIf(includeFees, 'The custom OutputType does not support automatic fee inclusion');
+
+			// Validate sum early, as no denominations to fill
+			const customTotal = OutputData.sumOutputAmounts(outputType.data);
+			this.failIf(
+				customTotal !== amount,
+				`Custom output data total (${customTotal}) does not match amount (${amount})`,
+			);
+			return { newOutputType: outputType, newAmount };
 		}
 
-		// Use denominations provided
+		// Use denominations provided?
 		let denominations = outputType.denominations ?? [];
+		if (denominations.length > 0) {
+			const splitSum = denominations.reduce((sum, a) => sum + a, 0);
+			this.failIf(splitSum !== amount, 'Custom denominations sum mismatch', {
+				splitSum,
+				expected: amount,
+			});
+		}
 
-		// If proofsWeHave was provided - we will try to optimize the outputs so
-		// that we only keep around _denominationTarget proofs of each amount.
+		// If no denominations, but proofsWeHave was provided - optimize
+		// to keep around _denominationTarget proofs of each denomination.
 		if (denominations.length === 0 && proofsWeHave.length > 0) {
 			denominations = getKeepAmounts(
 				proofsWeHave,
-				adjustedAmount,
+				newAmount,
 				keyset.keys,
 				this._denominationTarget,
 			);
@@ -328,7 +472,7 @@ class Wallet {
 		// If no denominations were provided or optimized, compute the default split
 		// before calculating fees to ensure accurate output count.
 		if (denominations.length === 0) {
-			denominations = splitAmount(adjustedAmount, keyset.keys);
+			denominations = splitAmount(newAmount, keyset.keys);
 		}
 
 		// With includeFees, we create additional output amounts to cover the
@@ -343,12 +487,11 @@ class Wallet {
 				receiveFee++;
 				receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
 			}
-			adjustedAmount += receiveFee;
+			newAmount += receiveFee;
 			denominations = [...denominations, ...receiveFeeAmounts];
 		}
-
-		const effectiveOutputType: OutputType = { ...outputType, denominations };
-		return this.createOutputData(adjustedAmount, keyset, effectiveOutputType);
+		const newOutputType: OutputType = { ...outputType, denominations };
+		return { newOutputType, newAmount };
 	}
 
 	/**
@@ -539,62 +682,100 @@ class Wallet {
 	}
 
 	/**
-	 * Receives a cashu token and returns proofs that sum up to the amount of the token minus fees.
+	 * Receive with wallet-chosen defaults (policy-driven).
 	 *
-	 * @remarks
-	 * For common cases, use `receiveAs...` helpers (eg receiveAsDefault, receiveAsP2PK etc).
-	 * @param token Cashu token.
-	 * @param config Optional parameters for configuring the Receive operation.
-	 * @returns The proofs received from the token.
+	 * @example Await wallet.receive(token);
+	 *
+	 * @param token Token string or decoded token.
+	 * @param config Optional receive config.
+	 * @returns Newly minted proofs.
+	 */
+	receive(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
+
+	/**
+	 * Receive with an explicit output type (e.g., deterministic or p2pk).
+	 *
+	 * @example Await wallet.receive(token, { type: 'deterministic', counter: 0 });
+	 *
+	 * @param token Token string or decoded token.
+	 * @param outputType Output type to use for the new proofs.
+	 * @param config Optional receive config.
+	 * @returns Newly minted proofs.
+	 */
+	receive(token: Token | string, outputType: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
+
+	/**
+	 * @internal
 	 */
 	async receive(
 		token: Token | string,
-		outputType: OutputType = DEFAULT_OUTPUT,
-		config?: ReceiveConfig,
+		outputTypeOrConfig?: OutputType | ReceiveConfig,
+		maybeConfig?: ReceiveConfig,
 	): Promise<Proof[]> {
+		const hasOutputType = outputTypeOrConfig && 'type' in (outputTypeOrConfig as OutputType);
+		const outputType: OutputType = hasOutputType
+			? (outputTypeOrConfig as OutputType)
+			: this.defaultOutputType();
+		const config: ReceiveConfig = hasOutputType
+			? (maybeConfig ?? {})
+			: ((outputTypeOrConfig as ReceiveConfig) ?? {});
+
 		let proofs: Proof[] = [];
 		const keysets = this.keyChain.getKeysets();
+
 		// Decode and validate token
 		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
 		const tokenMintUrl = sanitizeUrl(decodedToken.mint);
-		if (tokenMintUrl !== this.mint.mintUrl) {
-			const message = 'Token belongs to a different mint';
-			this._logger.error(message, { token: tokenMintUrl, wallet: this.mint.mintUrl });
-			throw new Error(message);
-		}
-		if (decodedToken.unit !== this._unit) {
-			const message = 'Token is not in wallet unit';
-			this._logger.error(message, { token: decodedToken.unit, wallet: this._unit });
-			throw new Error(message);
-		}
+		this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
+			token: tokenMintUrl,
+			wallet: this.mint.mintUrl,
+		});
+		this.failIf(decodedToken.unit !== this._unit, 'Token is not in wallet unit', {
+			token: decodedToken.unit,
+			wallet: this._unit,
+		});
+
 		// Extract token proofs
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		if (totalAmount === 0) {
 			return [];
 		}
+
 		// Sign proofs if needed
 		if (config?.privkey) {
 			proofs = this.signP2PKProofs(proofs, config?.privkey);
 		}
+
 		// Check DLEQs if needed
 		const keyset = this.keyChain.getKeyset(config?.keysetId);
 		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keyset))) {
-			const message = 'Token contains proofs with invalid or missing DLEQ';
-			this._logger.error(message);
-			throw new Error(message);
+			this.fail('Token contains proofs with invalid or missing DLEQ');
 		}
-		// Create outputs and swap for new proofs
+
+		// Shape receive output type and denominations
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
-		const outputs = this.configureOutputs(
+		let receive = this.configureOutputs(
 			netAmount,
 			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
 			config?.proofsWeHave,
 		);
+
+		// Assign counter atomically if OutputType is deterministic
+		// and the counter is zero (auto-assign)
+		const autoCounters = await this.setAutoCounters(keyset.id, receive);
+		[receive] = autoCounters.specs;
+		if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+		this._logger.debug('receive counter', { counter: autoCounters.used, receive });
+
+		// Create outputs and execute swap
+		const outputs = this.createOutputData(receive.newAmount, keyset, receive.newOutputType);
 		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
+
+		// Construct and return proofs
 		const proofsReceived = swapTransaction.outputData.map((d, i) =>
 			d.toProof(signatures[i], keyset),
 		);
@@ -625,11 +806,8 @@ class Wallet {
 			// Only use proofs that have a DLEQ
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
-		if (sumProofs(proofs) < amount) {
-			const message = 'Not enough funds available to send';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIf(sumProofs(proofs) < amount, 'Not enough funds available to send');
+
 		const { keep, send } = this.selectProofsToSend(proofs, amount, includeFees, exactMatch);
 		// Ensure witnesses are serialized, strip DLEQ if not required
 		const sendPrepared = this._prepareInputsForMint(send, requireDleq);
@@ -648,7 +826,7 @@ class Wallet {
 	 * @returns SendResponse with keep/send proofs.
 	 */
 	async sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse> {
-		return this.send(amount, proofs, { send: DEFAULT_OUTPUT }, config);
+		return this.send(amount, proofs, { send: this.defaultOutputType() }, config);
 	}
 
 	/**
@@ -702,13 +880,26 @@ class Wallet {
 		counter?: number,
 		config?: SendConfig,
 	): Promise<SendResponse> {
-		const keepOutput: OutputType = counter ? { type: 'deterministic', counter } : DEFAULT_OUTPUT;
-		return this.send(
-			amount,
-			proofs,
-			{ send: { type: 'p2pk', options: p2pkOptions }, keep: keepOutput },
-			config,
-		);
+		const op = this.ops.send(amount, proofs).sendP2PK(p2pkOptions);
+		if (counter) {
+			op.sendDeterministic(counter);
+		}
+		if (config?.includeFees) {
+			op.includeFees();
+		}
+		if (config?.keysetId) {
+			op.keyset(config?.keysetId);
+		}
+		return op.run();
+		// const keepOutput: OutputType = counter
+		// 	? { type: 'deterministic', counter }
+		// 	: this.defaultOutputType();
+		// return this.send(
+		// 	amount,
+		// 	proofs,
+		// 	{ send: { type: 'p2pk', options: p2pkOptions }, keep: keepOutput },
+		// 	config,
+		// );
 	}
 
 	/**
@@ -731,37 +922,51 @@ class Wallet {
 		return this.send(
 			amount,
 			proofs,
-			{ send: DEFAULT_OUTPUT, keep: { type: 'p2pk', options: p2pkOptions } },
+			{ send: this.defaultOutputType(), keep: { type: 'p2pk', options: p2pkOptions } },
 			config,
 		);
 	}
 
 	/**
-	 * Splits and creates sendable tokens.
+	 * Send with wallet-chosen defaults for both sides (send/keep).
 	 *
 	 * @remarks
-	 * This method performs an online swap if necessary. The `outputConfig` defaults to
-	 * `DEFAULT_OUTPUT_CONFIG`, which uses random blinding factors for both `send` and `keep` outputs.
-	 * For common cases, use `sendAs...` helpers (eg sendAsDefault, sendAsP2PK etc). If proofs are
+	 * This method performs an online swap if necessary. The wallet defaults to deterministic secrets
+	 * for both `send` and `keep` outputs if you have provided a seed, random otherwise. If proofs are
 	 * P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
-	 * // Simple send (uses DEFAULT_OUTPUT_CONFIG)
+	 * // Simple send
 	 * const result = await wallet.send(5, proofs);
 	 *
-	 * // Use default output configuration
-	 * const result = await wallet.send(5, proofs, undefined, { includeFees: true });
+	 * // Or with a SendConfig
+	 * const result = await wallet.send(5, proofs, { includeFees: true });
 	 *
-	 * // Or explicitly use DEFAULT_OUTPUT_CONFIG
-	 * const result = await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
+	 * @param amount Amount to send (receiver gets this net amount).
+	 * @param proofs Array of proofs to split.
+	 * @param config Optional parameters for the swap.
+	 * @returns SendResponse with keep/send proofs.
+	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
+	 * ```
+	 */
+	send(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
+
+	/**
+	 * Send with explicit output config (send/keep types).
 	 *
+	 * @remarks
+	 * This method performs an online swap if necessary. P2PK-locked to your public key, call
+	 * signP2PKProofs first to sign them.
+	 * @example
+	 *
+	 * ```typescript
 	 * // Custom output configuration
 	 * const customConfig: OutputConfig = {
 	 * 	send: { type: 'p2pk', options: { pubkey: '...' } },
 	 * 	keep: { type: 'deterministic', counter: 0 },
 	 * };
-	 * const customResult = await wallet.send(5, proofs, customConfig);
+	 * const customResult = await wallet.send(5, proofs, customConfig, { includeFees: true });
 	 * ```
 	 *
 	 * @param amount Amount to send (receiver gets this net amount).
@@ -771,41 +976,74 @@ class Wallet {
 	 * @returns SendResponse with keep/send proofs.
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
+	send(
+		amount: number,
+		proofs: Proof[],
+		outputConfig: OutputConfig,
+		config?: SendConfig,
+	): Promise<SendResponse>;
+
+	/**
+	 * @internal
+	 */
 	async send(
 		amount: number,
 		proofs: Proof[],
-		outputConfig: OutputConfig = DEFAULT_OUTPUT_CONFIG,
-		config?: SendConfig,
+		outputConfigOrConfig?: OutputConfig | SendConfig,
+		maybeConfig?: SendConfig,
 	): Promise<SendResponse> {
+		// Make defaults policy-driven for BOTH send and keep
+		const defaultSend = this.defaultOutputType();
+		const defaultKeep = this.defaultOutputType();
+
+		// Decide which overload we’re in and init vars
+		const isOutputConfig = (arg: OutputConfig | SendConfig | undefined): arg is OutputConfig => {
+			return !!arg && typeof arg === 'object' && 'send' in arg;
+		};
+		const hasOutputConfig = isOutputConfig(outputConfigOrConfig);
+		const outputConfig: OutputConfig = hasOutputConfig
+			? outputConfigOrConfig
+			: { send: defaultSend, keep: defaultKeep };
+		const config: SendConfig = hasOutputConfig
+			? (maybeConfig ?? {})
+			: ((outputConfigOrConfig as SendConfig) ?? {});
 		const { keysetId, includeFees = false } = config || {};
+
 		// First, let's see if we can avoid a swap (and fees)
 		// by trying an exact match offline selection, including fees if
 		// we are giving the receiver the amount + their fee to receive
+		// In Wallet.ts, near send()
+
 		try {
+			const wantsDeterministicByPolicy = this.defaultOutputType().type === 'deterministic';
+			const isPlainRandom = (ot?: OutputType) =>
+				!ot || (ot.type === 'random' && (!ot.denominations || ot.denominations.length === 0));
+
 			if (
-				!deepEqual(outputConfig.send, DEFAULT_OUTPUT) ||
-				(outputConfig.keep && !deepEqual(outputConfig.keep, DEFAULT_OUTPUT)) ||
-				keysetId
+				keysetId ||
+				wantsDeterministicByPolicy ||
+				!isPlainRandom(outputConfig.send) ||
+				(outputConfig.keep && !isPlainRandom(outputConfig.keep))
 			) {
-				// Trigger swap only if non-default configs or custom keyset are used
-				const issues = [
-					!deepEqual<OutputType>(outputConfig.send, DEFAULT_OUTPUT) &&
-						'non-default send outputConfig',
-					outputConfig.keep &&
-						!deepEqual(outputConfig.keep, DEFAULT_OUTPUT) &&
-						'non-default keep outputConfig',
-					keysetId && 'keysetId',
-				]
-					.filter(Boolean)
-					.join(', ');
-				throw new Error(`Options require a swap: ${issues}`);
+				// Explain why we must fall back to swap
+				const reasons: string[] = [];
+				if (keysetId) reasons.push('keysetId override');
+				if (wantsDeterministicByPolicy) reasons.push('wallet default is deterministic');
+				if (!isPlainRandom(outputConfig.send)) reasons.push('non-default send output type');
+				if (outputConfig.keep && !isPlainRandom(outputConfig.keep))
+					reasons.push('non-default keep output type');
+
+				throw new Error(`Options require a swap: ${reasons.join(', ')}`);
 			}
+
+			// Proceed with offline exact-match attempt
 			const { keep, send } = this.sendOffline(amount, proofs, {
 				includeFees,
 				exactMatch: true,
 				requireDleq: false, // safety
 			});
 			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
+
 			if (sumProofs(send) === amount + expectedFee) {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
@@ -818,15 +1056,18 @@ class Wallet {
 		// Fetch keys
 		const keyset = this.keyChain.getKeyset(keysetId);
 
-		// Shape SEND output type and create outputs
-		const sendType: OutputType = outputConfig.send ?? DEFAULT_OUTPUT;
-		const sendOutputs = this.configureOutputs(amount, keyset, sendType, includeFees);
-		const sendTarget = OutputData.sumOutputAmounts(sendOutputs);
+		// Shape SEND output type and denominations
+		let send = this.configureOutputs(
+			amount,
+			keyset,
+			outputConfig.send ?? this.defaultOutputType(),
+			includeFees,
+		);
 
 		// Select the subset of proofs needed to cover the swap (sendTarget + swap fee)
 		const { keep: unselectedProofs, send: selectedProofs } = this.selectProofsToSend(
 			proofs,
-			sendTarget,
+			send.newAmount,
 			true, // Include fees to cover swap fee
 		);
 		// this._logger.debug('PROOFS SELECTED', {
@@ -840,39 +1081,35 @@ class Wallet {
 		// Calculate our expected change from the swap (and sanity check!)
 		const selectedSum = sumProofs(selectedProofs);
 		const swapFee = this.getFeesForProofs(selectedProofs);
-		const changeAmount = selectedSum - swapFee - sendTarget;
-		if (changeAmount < 0) {
-			const message = 'Not enough funds available for swap';
-			this._logger.error(message, {
-				selectedSum,
-				swapFee,
-				sendTarget,
-				changeAmount,
-			});
-			throw new Error(message);
-		}
+		const changeAmount = selectedSum - swapFee - send.newAmount;
+		this.failIf(changeAmount < 0, 'Not enough funds available for swap', {
+			selectedSum,
+			swapFee,
+			sendTarget: send.newAmount,
+			changeAmount,
+		});
 
-		// Shape KEEP (change) output type and create outputs.
-		// We auto-offset the counter if both send and receive are deterministic
-		let keepType = outputConfig.keep ?? DEFAULT_OUTPUT;
-		if (keepType.type === 'deterministic' && sendType.type === 'deterministic') {
-			const oldKeepCounter = keepType.counter;
-			keepType = { ...keepType, counter: keepType.counter + sendOutputs.length };
-			this._logger.info('Auto-offsetting keep counter by send outputs length to avoid overlap', {
-				oldKeepCounter: oldKeepCounter,
-				sendLength: sendOutputs.length,
-				newKeepCounter: keepType.counter,
-			});
-		}
+		// Shape KEEP (change) output type and denominations
 		// No includeFees, as we are the receiver of the change
-		// Use unselectedProofs to optimize denominations if needed
-		const keepOutputs = this.configureOutputs(
+		// Uses unselectedProofs to optimize denominations if needed
+		let keep = this.configureOutputs(
 			changeAmount,
 			keyset,
-			keepType,
+			outputConfig.keep ?? this.defaultOutputType(),
 			false,
 			unselectedProofs,
 		);
+
+		// Assign counters atomically if either/both OutputTypes are deterministic
+		// and the counter is zero (auto-assign)
+		const autoCounters = await this.setAutoCounters(keyset.id, send, keep);
+		[send, keep] = autoCounters.specs;
+		if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+		this._logger.debug('send counters', { counter: autoCounters.used, send, keep });
+
+		// Create the output data
+		const sendOutputs = this.createOutputData(send.newAmount, keyset, send.newOutputType);
+		const keepOutputs = this.createOutputData(keep.newAmount, keyset, keep.newOutputType);
 
 		// Execute swap
 		const swapTransaction = this.createSwapTransaction(selectedProofs, keepOutputs, sendOutputs);
@@ -1047,11 +1284,7 @@ class Wallet {
 				if (biggerIndex !== null) {
 					const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
 					const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
-					if (rightIndex === null) {
-						const message = 'Unexpected null rightIndex in binary search';
-						this._logger.error(message);
-						throw new Error(message);
-					}
+					this.failIfNullish(rightIndex, 'Unexpected null rightIndex in binary search');
 					endIndex = rightIndex + 1;
 				} else {
 					// Keep all proofs if all exFee < amountToSend
@@ -1158,8 +1391,7 @@ class Wallet {
 			const delta = calculateDelta(amount, feePPK);
 			if (delta < bestDelta) {
 				this._logger.debug(
-					'selectProofsToSend: best solution found in trial #{trial} - amount: {amount}, delta: {delta}',
-					{ trial, amount, delta },
+					`selectProofsToSend: best solution found in trial #${trial} - amount: ${amount}, delta: ${delta}`,
 				);
 				bestSubset = [...S].sort((a, b) => b.exFee - a.exFee); // copy & sort
 				bestDelta = delta;
@@ -1199,14 +1431,12 @@ class Wallet {
 			}
 			// Time limit reached?
 			if (timer.elapsed() > MAX_TIMEMS) {
-				if (exactMatch) {
-					const message = 'Proof selection took too long. Try again with a smaller proof set.';
-					this._logger.error(message);
-					throw new Error(message);
-				} else {
-					this._logger.warn('Proof selection took too long. Returning best selection so far.');
-					break;
-				}
+				this.failIf(
+					exactMatch,
+					'Proof selection took too long. Try again with a smaller proof set.',
+				);
+				this._logger.warn('Proof selection took too long. Returning best selection so far.');
+				break;
 			}
 		}
 		// Return Result
@@ -1214,7 +1444,7 @@ class Wallet {
 			const bestProofs = bestSubset.map((obj) => obj.proof);
 			const bestSubsetSet = new Set(bestProofs);
 			const keep = proofs.filter((p) => !bestSubsetSet.has(p));
-			this._logger.info('Proof selection took {time}ms', { time: timer.elapsed() });
+			this._logger.info(`Proof selection took ${timer.elapsed()}ms`);
 			return { keep, send: bestProofs };
 		}
 		return { keep: proofs, send: [] };
@@ -1243,9 +1473,10 @@ class Wallet {
 		try {
 			return this.keyChain.getKeyset(proof.id).fee;
 		} catch (e) {
-			const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
-			this._logger.error(message, { e, keychain: this.keyChain.getKeysets() });
-			throw new Error(message);
+			this.fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, {
+				e,
+				keychain: this.keyChain.getKeysets(),
+			});
 		}
 	}
 
@@ -1261,9 +1492,7 @@ class Wallet {
 			const feePPK = this.keyChain.getKeyset(keysetId).fee;
 			return Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0));
 		} catch (e) {
-			const message = `No keyset found with ID ${keysetId}`;
-			this._logger.error(message, { e });
-			throw new Error(message);
+			this.fail(`No keyset found with ID ${keysetId}`, { e });
 		}
 	}
 
@@ -1319,11 +1548,8 @@ class Wallet {
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const { keysetId } = config || {};
 		const keyset = this.keyChain.getKeyset(keysetId);
-		if (!this._seed) {
-			const message = 'Cashu Wallet must be initialized with a seed to use restore';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
+
 		// create deterministic blank outputs for unknown restore amounts
 		// Note: zero amount + zero denomination passes splitAmount validation
 		const zeros = Array(count).fill(0);
@@ -1389,11 +1615,7 @@ class Wallet {
 		description?: string,
 	): Promise<LockedMintQuoteResponse> {
 		const { supported } = this.getMintInfo().isSupported(20);
-		if (!supported) {
-			const message = 'Mint does not support NUT-20';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIf(!supported, 'Mint does not support NUT-20');
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -1401,14 +1623,14 @@ class Wallet {
 			pubkey: pubkey,
 		};
 		const res = await this.mint.createMintQuote(mintQuotePayload);
-		if (typeof res.pubkey !== 'string') {
-			const message = 'Mint returned unlocked mint quote';
-			this._logger.error(message);
-			throw new Error(message);
-		} else {
-			const pubkey = res.pubkey;
-			return { ...res, pubkey, amount: res.amount || amount, unit: res.unit || this._unit };
-		}
+		this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
+		const resPubkey = res.pubkey!;
+		return {
+			...res,
+			pubkey: resPubkey,
+			amount: res.amount || amount,
+			unit: res.unit || this._unit,
+		};
 	}
 
 	/**
@@ -1432,9 +1654,7 @@ class Wallet {
 		// Check if mint supports description for bolt12
 		const mintInfo = this.getMintInfo();
 		if (options?.description && !mintInfo.supportsBolt12Description) {
-			const message = 'Mint does not support description for bolt12';
-			this._logger.error(message);
-			throw new Error(message);
+			this.fail('Mint does not support description for bolt12');
 		}
 
 		const mintQuotePayload: Bolt12MintQuotePayload = {
@@ -1475,10 +1695,22 @@ class Wallet {
 	}
 
 	/**
-	 * Mint proofs for a bolt11 quote for a given mint quote.
+	 * Mint proofs with wallet-chosen defaults (policy-driven).
 	 *
-	 * @remarks
-	 * For common cases, use `mintProofsAs...` helpers (eg mintProofsAsDefault, mintProofsAsP2PK etc).
+	 * @param amount Amount to mint.
+	 * @param quote Mint quote ID or object (bolt11/bolt12).
+	 * @param config Optional parameters (e.g. privkey for locked quotes).
+	 * @returns Minted proofs.
+	 */
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		config?: MintProofsConfig,
+	): Promise<Proof[]>;
+
+	/**
+	 * Mint proofs for a bolt11 quote with an explicit output type.
+	 *
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object (bolt11/bolt12).
 	 * @param outputType Configuration for proof generation. Defaults to 'random'.
@@ -1488,9 +1720,26 @@ class Wallet {
 	async mintProofs(
 		amount: number,
 		quote: string | MintQuoteResponse,
-		outputType: OutputType = DEFAULT_OUTPUT,
+		outputType: OutputType,
 		config?: MintProofsConfig,
+	): Promise<Proof[]>;
+
+	/**
+	 * @internal
+	 */
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		outputTypeOrConfig?: OutputType | MintProofsConfig,
+		maybeConfig?: MintProofsConfig,
 	): Promise<Proof[]> {
+		const hasOutputType = outputTypeOrConfig && 'type' in (outputTypeOrConfig as OutputType);
+		const outputType: OutputType = hasOutputType
+			? (outputTypeOrConfig as OutputType)
+			: this.defaultOutputType();
+		const config: MintProofsConfig = hasOutputType
+			? (maybeConfig ?? {})
+			: ((outputTypeOrConfig as MintProofsConfig) ?? {});
 		return this._mintProofs('bolt11', amount, quote, outputType, config);
 	}
 
@@ -1509,7 +1758,7 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
-		return this.mintProofs(amount, quote, DEFAULT_OUTPUT, config);
+		return this.mintProofs(amount, quote, this.defaultOutputType(), config);
 	}
 
 	/**
@@ -1647,16 +1896,11 @@ class Wallet {
 		millisatPartialAmount: number,
 	): Promise<MeltQuoteResponse> {
 		const { supported, params } = this.getMintInfo().isSupported(15);
-		if (!supported) {
-			const message = 'Mint does not support NUT-15';
-			this._logger.error(message);
-			throw new Error(message);
-		}
-		if (!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit)) {
-			const message = `Mint does not support MPP for bolt11 and ${this._unit}`;
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIf(!supported, 'Mint does not support NUT-15');
+		this.failIf(
+			!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit),
+			`Mint does not support MPP for bolt11 and ${this._unit}`,
+		);
 		const mppOption: MPPOption = {
 			amount: millisatPartialAmount,
 		};
@@ -1803,11 +2047,7 @@ class Wallet {
 			});
 			for (let j = 0; j < YsSlice.length; j++) {
 				const state = stateMap[YsSlice[j]];
-				if (!state) {
-					const message = 'Could not find state for proof with Y: ' + YsSlice[j];
-					this._logger.error(message);
-					throw new Error(message);
-				}
+				this.failIfNullish(state, 'Could not find state for proof with Y: ' + YsSlice[j]);
 				states.push(state);
 			}
 		}
@@ -1860,11 +2100,7 @@ class Wallet {
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
-		if (!this.mint.webSocketConnection) {
-			const message = 'failed to establish WebSocket connection.';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIfNullish(this.mint.webSocketConnection, 'failed to establish WebSocket connection.');
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_mint_quote', filters: quoteIds },
 			callback,
@@ -1937,11 +2173,7 @@ class Wallet {
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
-		if (!this.mint.webSocketConnection) {
-			const message = 'failed to establish WebSocket connection.';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIfNullish(this.mint.webSocketConnection, 'failed to establish WebSocket connection.');
 		const subId = this.mint.webSocketConnection.createSubscription(
 			{ kind: 'bolt11_melt_quote', filters: quoteIds },
 			callback,
@@ -1966,11 +2198,7 @@ class Wallet {
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
 		await this.mint.connectWebSocket();
-		if (!this.mint.webSocketConnection) {
-			const message = 'failed to establish WebSocket connection.';
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIfNullish(this.mint.webSocketConnection, 'failed to establish WebSocket connection.');
 		const enc = new TextEncoder();
 		const proofMap: { [y: string]: Proof } = {};
 		for (let i = 0; i < proofs.length; i++) {
@@ -2012,13 +2240,28 @@ class Wallet {
 		config?: MintProofsConfig,
 	): Promise<Proof[]> {
 		const { privkey, keysetId, proofsWeHave } = config ?? {};
-		if (amount <= 0) {
-			this._logger.warn('Invalid mint amount: must be positive', { amount });
-			throw new Error('Amount must be positive');
-		}
-		// Create outputs for our proofs (we are receiving, so no includeFees)
+		this.failIf(amount <= 0, 'Invalid mint amount: must be positive', { amount });
+
+		// Shape output type and denominations for our proofs
+		// we are receiving, so no includeFees
 		const keyset = this.keyChain.getKeyset(keysetId);
-		const outputs = this.configureOutputs(amount, keyset, outputType, false, proofsWeHave);
+		let mintProofs = this.configureOutputs(
+			amount,
+			keyset,
+			outputType,
+			false, // no fees
+			proofsWeHave,
+		);
+
+		// Assign counters atomically if OutputType is deterministic
+		// and the counter is zero (auto-assign)
+		const autoCounters = await this.setAutoCounters(keyset.id, mintProofs);
+		[mintProofs] = autoCounters.specs;
+		if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+		this._logger.debug('mint counter', { counter: autoCounters.used, mintProofs });
+
+		// Create outputs and mint payload
+		const outputs = this.createOutputData(mintProofs.newAmount, keyset, mintProofs.newOutputType);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
 		if (typeof quote === 'string') {
@@ -2027,29 +2270,27 @@ class Wallet {
 				quote: quote,
 			};
 		} else {
-			if (!privkey) {
-				const message = 'Can not sign locked quote without private key';
-				this._logger.error(message);
-				throw new Error(message);
-			}
-			const mintQuoteSignature = signMintQuote(privkey, quote.quote, blindedMessages);
+			this.failIf(!privkey, 'Can not sign locked quote without private key');
+			const mintQuoteSignature = signMintQuote(privkey!, quote.quote, blindedMessages);
 			mintPayload = {
 				outputs: blindedMessages,
 				quote: quote.quote,
 				signature: mintQuoteSignature,
 			};
 		}
+
+		// Mint proofs
 		let signatures;
 		if (method === 'bolt12') {
 			({ signatures } = await this.mint.mintBolt12(mintPayload));
 		} else {
 			({ signatures } = await this.mint.mint(mintPayload));
 		}
-		if (signatures.length !== outputs.length) {
-			const message = `Mint returned ${signatures.length} signatures, expected ${outputs.length}`;
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIf(
+			signatures.length !== outputs.length,
+			`Mint returned ${signatures.length} signatures, expected ${outputs.length}`,
+		);
+
 		this._logger.debug('MINT COMPLETED', { amounts: outputs.map((o) => o.blindedMessage.amount) });
 		return outputs.map((d, i) => d.toProof(signatures[i], keyset));
 	}
@@ -2094,19 +2335,26 @@ class Wallet {
 
 			// Build effective OutputType and merge denominations
 			if (outputType.type === 'custom') {
-				const message =
-					'Custom OutputType not supported for melt change (must enforce 1-sat blanks)';
-				this._logger.error(message);
-				throw new Error(message);
+				this.fail('Custom OutputType not supported for melt change (must be 0-sat blanks)');
 			}
-			const effectiveOutputType = {
-				...outputType,
-				denominations, // Our 0-sat blanks
+			let melt: OutputSpec = {
+				newAmount: 0,
+				newOutputType: {
+					...outputType,
+					denominations, // Our 0-sat blanks
+				},
 			};
+
+			// Assign counter atomically if OutputType is deterministic
+			// and the counter is zero (auto-assign)
+			const autoCounters = await this.setAutoCounters(keyset.id, melt);
+			[melt] = autoCounters.specs;
+			if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+			this._logger.debug('melt counter', { counter: autoCounters.used, melt });
 
 			// Generate the blank outputs (no fees as we are receiving change)
 			// Remember, zero amount + zero denomination passes splitAmount validation
-			outputData = this.configureOutputs(0, keyset, effectiveOutputType, false);
+			outputData = this.createOutputData(0, keyset, melt.newOutputType);
 		}
 
 		// Prepare proofs for mint
@@ -2140,11 +2388,10 @@ class Wallet {
 
 		// Sanity check mint didn't send too many signatures before mapping
 		// Should not happen, except in case of a broken or malicious mint
-		if (meltResponse.change && meltResponse.change.length > outputData.length) {
-			const message = `Mint returned ${meltResponse.change.length} signatures, but only ${outputData.length} blanks were provided`;
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIf(
+			(meltResponse.change?.length ?? 0) > outputData.length,
+			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${outputData.length} blanks were provided`,
+		);
 
 		// Construct change if provided (empty if pending/not paid; shorter ok if less overfee)
 		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
@@ -2171,11 +2418,10 @@ class Wallet {
 				: await this.mint.melt(blanks.payload);
 
 		// Check for too many signatures before mapping
-		if (meltResponse.change && meltResponse.change.length > blanks.outputData.length) {
-			const message = `Mint returned ${meltResponse.change.length} signatures, but only ${blanks.outputData.length} blanks were provided`;
-			this._logger.error(message);
-			throw new Error(message);
-		}
+		this.failIf(
+			(meltResponse.change?.length ?? 0) > blanks.outputData.length,
+			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${blanks.outputData.length} blanks were provided`,
+		);
 
 		// Construct change (shorter ok)
 		const change =
