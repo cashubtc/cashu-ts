@@ -72,7 +72,7 @@ const invoice =
 const token3sat =
 	'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgqNhYQFhc3hAZTdjMWI3NmQxYjMxZTJiY2EyYjIyOWQxNjBiZGY2MDQ2ZjMzYmM0NTcwMjIyMzA0YjY1MTEwZDkyNmY3YWY4OWFjWCEDic2fT5iOOAp5idTUiKfJHFJ3-5MEfnoswe2OM5a4VP-jYWECYXN4QGRlNTVjMTVmYWVmZGVkN2Y5Yzk5OWMzZDRjNjJmODFiMGM2ZmUyMWE3NTJmZGVmZjZiMDg0Y2YyZGYyZjVjZjNhY1ghAt5AxZ2QODuIU8zzpLIIZKyDunWPzj2VnbuJNhAC6M5H';
 const server = setupServer();
-const logger = new ConsoleLogger('DEBUG');
+const logger = new ConsoleLogger('debug');
 
 beforeAll(() => {
 	server.listen({ onUnhandledRequest: 'error' });
@@ -586,7 +586,76 @@ describe('receive', () => {
 			status: 400,
 		});
 	});
-	test('test receive deterministic', async () => {
+	test('test receive deterministic - autocounter', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
+						},
+					],
+				});
+			}),
+		);
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+		const wallet = new Wallet(mint, { unit, bip39seed: seed });
+		await wallet.loadMint();
+
+		const proofs = await wallet.receive(token3sat, { type: 'deterministic', counter: 0 });
+		expect(proofs).toHaveLength(2);
+		expect(proofs).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(proofs[0].secret).toBe(
+			'8e0ad268631046765b570f85fe0951710c6e0e13c81b3df50ddfee21d235d132', // counter:0
+		);
+		expect(proofs[1].secret).toBe(
+			'0b59dbc968effd7f5ab4649c0d91ab160cbd58e3aa3490d060701f44dd62e52c', // counter:1
+		);
+		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
+
+		// get next secrets too
+		const proofs2 = await wallet.receive(token3sat, { type: 'deterministic', counter: 0 });
+		expect(proofs2).toHaveLength(2);
+		expect(proofs2).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(proofs2[0].secret).toBe(
+			'c756ae91cf316eaa4b845edcca35f04ee9d1732c10e7205b0ef30123bcbbc1b8', // counter:2
+		);
+		expect(proofs2[1].secret).toBe(
+			'7ceefb4d471163bd155649285c140e7647be996d1d38d4b02a9ff92bfb424cbf', // counter:3
+		);
+		expect(/[0-9a-f]{64}/.test(proofs2[0].C)).toBe(true);
+
+		// get next secrets too
+		const proofs3 = await wallet.receive(token3sat, { type: 'deterministic', counter: 0 });
+		expect(proofs3).toHaveLength(2);
+		expect(proofs3).toMatchObject([
+			{ amount: 1, id: '00bd033559de27d0' },
+			{ amount: 2, id: '00bd033559de27d0' },
+		]);
+		expect(proofs3[0].secret).toBe(
+			'f6305874d89704b77de6fcf94c796cd274154cdbf824d35cbc72bfdc6ed60414', // counter:4
+		);
+		expect(proofs3[1].secret).toBe(
+			'c3cad2ac3da43f84995a7ea362bd5509a992ef3684c151f5f3945b1a1f026efd', // counter:5
+		);
+		expect(/[0-9a-f]{64}/.test(proofs3[0].C)).toBe(true);
+	});
+	test('test receive deterministic - defined counter', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
 				return HttpResponse.json({
@@ -618,10 +687,10 @@ describe('receive', () => {
 			{ amount: 2, id: '00bd033559de27d0' },
 		]);
 		expect(proofs[0].secret).toBe(
-			'c3cad2ac3da43f84995a7ea362bd5509a992ef3684c151f5f3945b1a1f026efd',
+			'c3cad2ac3da43f84995a7ea362bd5509a992ef3684c151f5f3945b1a1f026efd', // counter:5
 		);
 		expect(proofs[1].secret).toBe(
-			'bd31ac247f79cc72c0c6ba2793a44d006c57fd98ff4a982e357e48c12cf47f02',
+			'bd31ac247f79cc72c0c6ba2793a44d006c57fd98ff4a982e357e48c12cf47f02', // counter:6
 		);
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 	});
@@ -752,7 +821,7 @@ describe('receive', () => {
 			'Token contains proofs with invalid or missing DLEQ',
 		);
 		// Try using a receive helper too
-		await expect(wallet.receiveAsDefault(token3sat, { requireDleq: true })).rejects.toThrow(
+		await expect(wallet.receive(token3sat, { requireDleq: true })).rejects.toThrow(
 			'Token contains proofs with invalid or missing DLEQ',
 		);
 	});
@@ -1459,7 +1528,7 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			},
 		];
-		const result = await wallet.send(3, overpayProofs, undefined, { includeFees: true });
+		const result = await wallet.send(3, overpayProofs, { includeFees: true });
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
 		// Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
@@ -2922,7 +2991,7 @@ describe('melt proofs', () => {
 				});
 			}),
 		);
-		const wallet = new Wallet(mint, { unit });
+		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
 
 		const meltQuote: MeltQuoteResponse = {
