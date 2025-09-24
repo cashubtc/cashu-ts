@@ -252,7 +252,7 @@ describe('mint api', () => {
 		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
 		// Send them P2PK locked to Bob
-		const { send } = await wallet.sendAsP2PK(64, mintedProofs, { pubkey: pubKeyBob });
+		const { send } = await wallet.ops.send(64, mintedProofs).sendP2PK({ pubkey: pubKeyBob }).run();
 		expectNUT10SecretDataToEqual(send, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
 

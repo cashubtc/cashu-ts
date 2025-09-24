@@ -1444,11 +1444,6 @@ export class Wallet {
     readonly ops: WalletOps;
     receive(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
     receive(token: Token | string, outputType: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsCustom(token: Token | string, data: OutputData[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsDefault(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsDeterministic(token: Token | string, counter: number, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsFactory(token: Token | string, factory: OutputDataFactory, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
-    receiveAsP2PK(token: Token | string, options: P2PKOptions, denominations?: number[], config?: ReceiveConfig): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
@@ -1456,11 +1451,7 @@ export class Wallet {
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
     send(amount: number, proofs: Proof[], outputConfig: OutputConfig, config?: SendConfig): Promise<SendResponse>;
-    sendAsDefault(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
-    sendAsDeterministic(amount: number, proofs: Proof[], counter: number, config?: SendConfig): Promise<SendResponse>;
-    sendAsP2PK(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, counter?: number, config?: SendConfig): Promise<SendResponse>;
     sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
-    sendWithP2PKChange(amount: number, proofs: Proof[], p2pkOptions: P2PKOptions, config?: SendConfig): Promise<SendResponse>;
     signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[];
     readonly swap: {
         (amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
@@ -1576,7 +1567,7 @@ export class WSConnection {
 // lib/types/index.d.ts:968:5 - (ae-forgotten-export) The symbol "OnCountersReserved" needs to be exported by the entry point index.d.ts
 // lib/types/index.d.ts:2712:9 - (ae-forgotten-export) The symbol "SecretsPolicy" needs to be exported by the entry point index.d.ts
 // lib/types/index.d.ts:2713:9 - (ae-forgotten-export) The symbol "CounterSource" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3601:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3495:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
