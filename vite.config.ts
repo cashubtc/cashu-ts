@@ -1,7 +1,6 @@
 import { resolve } from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { configDefaults } from 'vitest/config';
 
 export default defineConfig({
@@ -46,7 +45,7 @@ export default defineConfig({
 					exclude: [
 						'test/{auth,integration}.test.ts',
 						'test/**.browser.test.ts',
-						'test/consumer-*/**/*.test.ts',
+						'test/consumer/**/*.test.ts',
 						...configDefaults.exclude,
 					],
 					coverage: {
@@ -54,7 +53,7 @@ export default defineConfig({
 						include: ['test/**/*.test.ts'],
 						exclude: [
 							'test/{auth,integration}.test.ts',
-							'test/consumer-*/**/*.test.ts',
+							'test/consumer/**/*.test.ts',
 							'test/**/**.browser.test.ts',
 						],
 					},
@@ -69,11 +68,12 @@ export default defineConfig({
 						enabled: true,
 						headless: true,
 						instances: [{ browser: 'chromium' }],
+						screenshotFailures: false,
 					},
 					include: ['test/**/*.test.ts'],
 					exclude: [
 						'test/{auth,integration}.test.ts',
-						'test/consumer-*/**/*.test.ts',
+						'test/consumer/**/*.test.ts',
 						'test/**/**.node.test.ts',
 						...configDefaults.exclude,
 					],
@@ -82,7 +82,7 @@ export default defineConfig({
 						include: ['test/**/*.test.ts'],
 						exclude: [
 							'test/{auth,integration}.test.ts',
-							'test/consumer-*/**/*.test.ts',
+							'test/consumer/**/*.test.ts',
 							'test/**.node.test.ts',
 						],
 					},
