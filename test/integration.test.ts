@@ -280,9 +280,12 @@ describe('mint api', () => {
 
 		const mintRequest = await wallet.createMintQuote(3000);
 
-		const proofs = await wallet.ops.mint(3000, mintRequest.quote).p2pk({
-			pubkey: bytesToHex(pubKeyBob),
-		}).run();
+		const proofs = await wallet.ops
+			.mint(3000, mintRequest.quote)
+			.p2pk({
+				pubkey: bytesToHex(pubKeyBob),
+			})
+			.run();
 
 		const meltRequest = await wallet.createMeltQuote(externalInvoice);
 		const fee = meltRequest.fee_reserve;

@@ -10,7 +10,6 @@ import {
 	type OutputType,
 	type OutputConfig,
 	DEFAULT_OUTPUT,
-	type P2PKOptions,
 	type SendConfig,
 	type SendOfflineConfig,
 	type ReceiveConfig,

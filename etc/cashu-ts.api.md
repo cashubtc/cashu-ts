@@ -1427,9 +1427,6 @@ export class Wallet {
     readonly mint: Mint;
     mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
     mintProofs(amount: number, quote: string | MintQuoteResponse, outputType: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsDefault(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsDeterministic(amount: number, quote: string | MintQuoteResponse, counter: number, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsAsP2PK(amount: number, quote: string | MintQuoteResponse, p2pkOptions: P2PKOptions, denominations?: number[], config?: MintProofsConfig): Promise<Proof[]>;
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, outputType?: OutputType, config?: {
         keysetId?: string;
     }): Promise<Proof[]>;
@@ -1567,7 +1564,7 @@ export class WSConnection {
 // lib/types/index.d.ts:968:5 - (ae-forgotten-export) The symbol "OnCountersReserved" needs to be exported by the entry point index.d.ts
 // lib/types/index.d.ts:2712:9 - (ae-forgotten-export) The symbol "SecretsPolicy" needs to be exported by the entry point index.d.ts
 // lib/types/index.d.ts:2713:9 - (ae-forgotten-export) The symbol "CounterSource" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3495:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3458:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
