@@ -275,6 +275,58 @@ describe('WalletEvents', () => {
 			expect(h2.cancelInner).toHaveBeenCalled();
 			vi.useRealTimers();
 		});
+
+		it('rejects when ids is empty', async () => {
+			await expect(events.onceAnyMintPaid([])).rejects.toThrow(/No quote ids provided/);
+		});
+
+		it('failOnError=true rejects on first error and cancels the rest', async () => {
+			const p = events.onceAnyMintPaid(['f1', 'f2', 'f3'], { failOnError: true });
+			const h1 = mock.mintPaidHandlers.get('f1')!;
+			const h2 = mock.mintPaidHandlers.get('f2')!;
+			const h3 = mock.mintPaidHandlers.get('f3')!;
+			h2.err(new Error('bad'));
+			await expect(p).rejects.toThrow(/bad/);
+			await flushMicrotasks();
+			expect(h1.cancelInner).toHaveBeenCalled();
+			expect(h2.cancelInner).toHaveBeenCalled();
+			expect(h3.cancelInner).toHaveBeenCalled();
+		});
+
+		it('dedupes ids, resolves on first unique winner', async () => {
+			const p = events.onceAnyMintPaid(['dup', 'dup', 'other']);
+			const hd = mock.mintPaidHandlers.get('dup')!;
+			hd.cb({ quote: 'dup', state: 'PAID' });
+			const res = await p;
+			expect(res.id).toBe('dup');
+			expect(mock.mintPaidHandlers.size).toBe(2); // dup + other
+		});
+
+		it('normalizes non-Error objects when all subs error after registration', async () => {
+			const p = events.onceAnyMintPaid(['e1', 'e2']);
+			const h1 = mock.mintPaidHandlers.get('e1')!;
+			const h2 = mock.mintPaidHandlers.get('e2')!;
+			h1.err({ code: 1, msg: 'x' } as any);
+			h2.err({ code: 2, msg: 'y' } as any);
+			await expect(p).rejects.toThrow(/"code":\s*2/); // last object stringified
+		});
+
+		it('safeStringify fallback path via object containing BigInt', async () => {
+			const p = events.onceMintPaid('bigobj');
+			const h = mock.mintPaidHandlers.get('bigobj')!;
+			// Trigger error with a non-Error object that contains a BigInt => JSON.stringify throws
+			h.err({ n: 10n } as any);
+			// normalizeError uses safeStringify, which falls back to Object.prototype.toString => "[object Object]"
+			await expect(p).rejects.toThrow(/\[object Object\]/);
+		});
+
+		it('primitive BigInt errors normalize to "Unknown error"', async () => {
+			const p = events.onceMintPaid('big-prim');
+			const h = mock.mintPaidHandlers.get('big-prim')!;
+			// @ts-expect-error deliberate primitive BigInt
+			h.err(10n);
+			await expect(p).rejects.toThrow(/Unknown error/);
+		});
 	});
 
 	describe('onceMeltPaid', () => {
@@ -288,6 +340,57 @@ describe('WalletEvents', () => {
 			expect(h.cancelInner).toHaveBeenCalled();
 		});
 	});
+
+	describe('onceMeltPaid extra branches', () => {
+  it('rejects with AbortError and unsubscribes', async () => {
+    const ac = new AbortController();
+    // spy on cleanup path (removeEventListener is part of coverage gap)
+    const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+    const p = events.onceMeltPaid('m-abort', { signal: ac.signal });
+    ac.abort();
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+
+    const h = mock.meltPaidHandlers.get('m-abort');
+    if (h) {
+      await flushMicrotasks();
+      expect(h.cancelInner).toHaveBeenCalled();
+    }
+    expect(rmSpy).toHaveBeenCalled(); // covers removeEventListener line
+  });
+
+  it('rejects on timeout and unsubscribes', async () => {
+    vi.useFakeTimers();
+    const p = events.onceMeltPaid('m-timeout', { timeoutMs: 10 });
+    vi.advanceTimersByTime(11);
+    await expect(p).rejects.toThrow(/Timeout waiting for melt paid/);
+    const h = mock.meltPaidHandlers.get('m-timeout')!;
+    await flushMicrotasks();
+    expect(h.cancelInner).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('propagates underlying error and unsubscribes', async () => {
+    const p = events.onceMeltPaid('m-error');
+    const h = mock.meltPaidHandlers.get('m-error')!;
+    h.err(new Error('melt-boom'));
+    await expect(p).rejects.toThrow('melt-boom');
+    await flushMicrotasks();
+    expect(h.cancelInner).toHaveBeenCalled();
+  });
+
+  it('resolves and removes listener when a signal was provided', async () => {
+    const ac = new AbortController();
+    const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+    const p = events.onceMeltPaid('m-ok', { signal: ac.signal });
+    const h = mock.meltPaidHandlers.get('m-ok')!;
+    h.cb({ quote: 'm-ok', state: 'PAID', amount: 1 });
+    await expect(p).resolves.toMatchObject({ quote: 'm-ok' });
+    await flushMicrotasks();
+    expect(h.cancelInner).toHaveBeenCalled();
+    expect(rmSpy).toHaveBeenCalled(); // exercises the success-path cleanup too
+  });
+});
+
 
 	describe('proofStatesStream', () => {
 		it('yields payloads until error completes the stream, then cancels', async () => {
@@ -362,6 +465,80 @@ describe('WalletEvents', () => {
 			expect(h.cancelInner).toHaveBeenCalled();
 			void hPromise; // silence unused
 		});
+		it('buffers with maxBuffer, drops oldest by default, calls onDrop', async () => {
+			const proofs: Proof[] = [{ amount: 1, id: 'i', secret: 's', C: 'c' }];
+			const dropped: any[] = [];
+			const iter = events.proofStatesStream(proofs, {
+				maxBuffer: 2,
+				onDrop: (p) => dropped.push(p),
+			});
+
+			const out: any[] = [];
+			const consumer = (async () => {
+				for await (const x of iter) out.push(x);
+				return out;
+			})();
+
+			const h = mock.proofStateHandlers!;
+			h.cb({ n: 1 });
+			h.cb({ n: 2 });
+			h.cb({ n: 3 }); // triggers drop of {n:1}
+			h.err(new Error('end'));
+
+			const result = await consumer;
+			expect(dropped).toEqual([{ n: 1 }]);
+			expect(result).toEqual([{ n: 2 }, { n: 3 }]);
+		});
+
+		it('drop:newest discards incoming payload and reports it via onDrop', async () => {
+			const proofs: Proof[] = [{ amount: 1, id: 'i', secret: 's', C: 'c' }];
+			const dropped: any[] = [];
+			const iter = events.proofStatesStream(proofs, {
+				maxBuffer: 2,
+				drop: 'newest',
+				onDrop: (p) => dropped.push(p),
+			});
+
+			const out: any[] = [];
+			const consumer = (async () => {
+				for await (const x of iter) out.push(x);
+				return out;
+			})();
+
+			const h = mock.proofStateHandlers!;
+			h.cb({ n: 1 });
+			h.cb({ n: 2 });
+			h.cb({ n: 3 }); // dropped (incoming)
+			h.err(new Error('end'));
+
+			const result = await consumer;
+			expect(dropped).toEqual([{ n: 3 }]);
+			expect(result).toEqual([{ n: 1 }, { n: 2 }]);
+		});
+
+		it('onDrop exceptions are swallowed', async () => {
+			const proofs: Proof[] = [{ amount: 1, id: 'i', secret: 's', C: 'c' }];
+			const iter = events.proofStatesStream(proofs, {
+				maxBuffer: 1,
+				onDrop: () => {
+					throw new Error('ignore');
+				},
+			});
+
+			const out: any[] = [];
+			const consumer = (async () => {
+				for await (const x of iter) out.push(x);
+				return out;
+			})();
+
+			const h = mock.proofStateHandlers!;
+			h.cb({ n: 1 });
+			h.cb({ n: 2 }); // drops n:1 and onDrop throws, but ignored
+			h.err(new Error('end'));
+
+			const result = await consumer;
+			expect(result).toEqual([{ n: 2 }]);
+		});
 	});
 
 	describe('group()', () => {
@@ -395,6 +572,102 @@ describe('WalletEvents', () => {
 			g.add(postCancel);
 			await flushMicrotasks();
 			expect(postCancel).toHaveBeenCalled();
+		});
+
+		it('group canceller is idempotent, only cancels once', async () => {
+			const g = events.group();
+			const c = vi.fn();
+			g.add(c);
+			g();
+			g(); // second call no-op
+			await flushMicrotasks();
+			expect(c).toHaveBeenCalledTimes(1);
+		});
+
+		it('group handles rejected Promise<SubscriptionCanceller> without throwing', async () => {
+			const g = events.group();
+			g.add(Promise.reject(new Error('reject-me')));
+			g();
+			await flushMicrotasks();
+			expect(g.cancelled).toBe(true);
+		});
+
+		it('adding after cancelled cancels immediately, even if canceller throws', async () => {
+			const g = events.group();
+			g();
+			const throws = vi.fn(() => {
+				throw new Error('boom');
+			});
+			g.add(throws);
+			await flushMicrotasks();
+			expect(throws).toHaveBeenCalled();
+		});
+
+		it('group exposes .cancelled as enumerable', () => {
+			const g = events.group();
+			const keys = Object.keys(g);
+			expect(keys).toContain('cancelled');
+		});
+	});
+
+	describe('proofStatesStream immediate abort', () => {
+		it('does not emit and cancels immediately when signal is already aborted', async () => {
+			const proofs: Proof[] = [{ amount: 1, id: 'z', secret: 's', C: 'c' }];
+			const ac = new AbortController();
+			ac.abort(); // aborted before creating the stream
+
+			const iter = events.proofStatesStream(proofs, { signal: ac.signal });
+
+			const out: unknown[] = [];
+			for await (const x of iter) out.push(x);
+
+			// stream ended synchronously, nothing yielded
+			expect(out).toEqual([]);
+
+			// subscription was created but then immediately cancelled
+			expect(mock.proofStateHandlers).toBeDefined();
+			await flushMicrotasks();
+			expect(mock.proofStateHandlers!.cancelInner).toHaveBeenCalled();
+		});
+	});
+
+	describe("proofStatesStream drop:'newest' without onDrop", () => {
+		it('drops the incoming payload and does not enqueue it (no onDrop provided)', async () => {
+			const proofs: Proof[] = [{ amount: 1, id: 'd', secret: 's', C: 'c' }];
+			// maxBuffer=1, so second push should be dropped (newest) without a callback
+			const iter = events.proofStatesStream(proofs, { maxBuffer: 1, drop: 'newest' });
+
+			const out: any[] = [];
+			const consumer = (async () => {
+				for await (const x of iter) out.push(x);
+				return out;
+			})();
+
+			const h = mock.proofStateHandlers!;
+			h.cb({ n: 1 }); // queued
+			h.cb({ n: 2 }); // should be dropped immediately (no onDrop)
+			h.err(new Error('done'));
+
+			const collected = await consumer;
+			expect(collected).toEqual([{ n: 1 }]); // n:2 did not appear
+			await flushMicrotasks();
+			expect(h.cancelInner).toHaveBeenCalled();
+		});
+	});
+
+	describe('group() add after cancellation, rejected promise canceller', () => {
+		it('immediately attempts to cancel and ignores rejection', async () => {
+			const g = events.group();
+			g(); // cancel first
+
+			// Add a promised canceller that rejects; cancelSafely should await and swallow it
+			const rejected = Promise.reject(new Error('nope'));
+			g.add(rejected);
+
+			// Let microtasks flush (cancelSafely runs async)
+			await flushMicrotasks();
+			expect(g.cancelled).toBe(true);
+			// nothing to assert beyond "no throw" and branch execution, coverage will tick these lines
 		});
 	});
 });
