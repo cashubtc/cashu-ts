@@ -2,20 +2,7 @@
  * Defines the available log levels for the logger. Log levels are ordered from most severe (FATAL)
  * to least severe (TRACE).
  */
-export const LogLevel = {
-	FATAL: 'FATAL',
-	ERROR: 'ERROR',
-	WARN: 'WARN',
-	INFO: 'INFO',
-	DEBUG: 'DEBUG',
-	TRACE: 'TRACE',
-} as const;
-
-/**
- * Defines the available log levels for the logger. Log levels are ordered from most severe (FATAL)
- * to least severe (TRACE).
- */
-export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
 export interface Logger {
 	fatal(message: string, context?: Record<string, unknown>): void;

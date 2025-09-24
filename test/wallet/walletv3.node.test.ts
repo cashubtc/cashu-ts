@@ -1568,9 +1568,8 @@ describe('deterministic', () => {
 				{ send: { type: 'deterministic', counter: 1 } },
 			)
 			.catch((e) => e);
-		expect(result).toEqual(
-			new Error('Deterministic outputs require a seed configured in the wallet'),
-		);
+		expect(result).toBeInstanceOf(Error);
+		expect(result.message).toBe('Deterministic outputs require a seed configured in the wallet');
 	});
 	test.each([
 		[

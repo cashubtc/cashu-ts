@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { ConsoleLogger, NULL_LOGGER, LogLevel } from '../../src/logger';
+import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
 
 describe('ConsoleLogger', () => {
 	test('logs messages at or above minLevel', () => {
@@ -7,7 +7,7 @@ describe('ConsoleLogger', () => {
 		const warnSpy = vi.spyOn(console, 'warn');
 		const infoSpy = vi.spyOn(console, 'info');
 
-		const logger = new ConsoleLogger(LogLevel.WARN);
+		const logger = new ConsoleLogger('warn');
 
 		logger.fatal('Fatal message');
 		logger.error('Error message');
@@ -27,7 +27,7 @@ describe('ConsoleLogger', () => {
 		const debugSpy = vi.spyOn(console, 'debug');
 		const traceSpy = vi.spyOn(console, 'trace');
 
-		const logger = new ConsoleLogger(LogLevel.TRACE);
+		const logger = new ConsoleLogger('trace');
 
 		logger.fatal('Fatal');
 		logger.error('Error');
@@ -44,37 +44,31 @@ describe('ConsoleLogger', () => {
 		expect(traceSpy).toHaveBeenCalledWith('[TRACE] Trace');
 	});
 
-	test('interpolates message with context', () => {
+	test('Message with context', () => {
 		const infoSpy = vi.spyOn(console, 'info');
-
-		const logger = new ConsoleLogger(LogLevel.INFO);
-
-		logger.info('User {username} logged in', { username: 'alice' });
-
-		expect(infoSpy).toHaveBeenCalledWith('[INFO] User alice logged in');
-	});
-
-	test('appends unused context to the log', () => {
-		const infoSpy = vi.spyOn(console, 'info');
-
-		const logger = new ConsoleLogger(LogLevel.INFO);
+		const logger = new ConsoleLogger('info');
 
 		// Context in object
-		logger.info('User {username} logged in', { username: 'alice', ip: '127.0.0.1' });
+		logger.info('User logged in', { username: 'alice', ip: '127.0.0.1' });
 
-		expect(infoSpy).toHaveBeenCalledWith('[INFO] User alice logged in', { ip: '127.0.0.1' });
+		expect(infoSpy).toHaveBeenCalledWith('[INFO] User logged in', {
+			username: 'alice',
+			ip: '127.0.0.1',
+		});
 
 		// Context as variable
 		const ip = '127.0.0.1';
-		logger.info('User {username} logged in', { username: 'alice', ip });
+		logger.info('User logged in', { username: 'alice', ip });
 
-		expect(infoSpy).toHaveBeenCalledWith('[INFO] User alice logged in', { ip: '127.0.0.1' });
+		expect(infoSpy).toHaveBeenCalledWith('[INFO] User logged in', {
+			username: 'alice',
+			ip: '127.0.0.1',
+		});
 	});
 
 	test('handles Error objects in context', () => {
 		const errorSpy = vi.spyOn(console, 'error');
-
-		const logger = new ConsoleLogger(LogLevel.ERROR);
+		const logger = new ConsoleLogger('error');
 		const err = new Error('Test error');
 
 		logger.error('Error occurred', { error: err });
@@ -84,24 +78,13 @@ describe('ConsoleLogger', () => {
 		});
 	});
 
-	test('leaves placeholders unchanged if context key is missing', () => {
-		const infoSpy = vi.spyOn(console, 'info');
-
-		const logger = new ConsoleLogger(LogLevel.INFO);
-
-		logger.info('User {username} logged in', { other: 'data' });
-
-		expect(infoSpy).toHaveBeenCalledWith('[INFO] User {username} logged in', { other: 'data' });
-	});
-
 	test('generic log method works correctly', () => {
 		const infoSpy = vi.spyOn(console, 'info');
 		const debugSpy = vi.spyOn(console, 'debug');
+		const logger = new ConsoleLogger('info');
 
-		const logger = new ConsoleLogger(LogLevel.INFO);
-
-		logger.log(LogLevel.INFO, 'Info message');
-		logger.log(LogLevel.DEBUG, 'Debug message');
+		logger.log('info', 'Info message');
+		logger.log('debug', 'Debug message');
 
 		expect(infoSpy).toHaveBeenCalledWith('[INFO] Info message');
 		expect(debugSpy).not.toHaveBeenCalled();

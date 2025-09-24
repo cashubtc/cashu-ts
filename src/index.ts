@@ -50,7 +50,7 @@ export type {
 } from './wallet/types';
 
 // Logging & errors
-export { LogLevel, ConsoleLogger, type Logger } from './logger';
+export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export { MintOperationError, NetworkError, HttpResponseError } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces

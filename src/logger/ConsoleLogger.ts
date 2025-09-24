@@ -1,4 +1,13 @@
-import { type Logger, LogLevel } from './Logger';
+import { type Logger, type LogLevel } from './Logger';
+
+const LEVEL_ORDER: Record<LogLevel, number> = {
+	fatal: 0,
+	error: 1,
+	warn: 2,
+	info: 3,
+	debug: 4,
+	trace: 5,
+};
 
 /**
  * Outputs messages to the console based on the specified log level.
@@ -13,95 +22,72 @@ import { type Logger, LogLevel } from './Logger';
  */
 export class ConsoleLogger implements Logger {
 	private minLevel: LogLevel;
-	public static readonly SEVERITY: Record<LogLevel, number> = {
-		[LogLevel.FATAL]: 0,
-		[LogLevel.ERROR]: 1,
-		[LogLevel.WARN]: 2,
-		[LogLevel.INFO]: 3,
-		[LogLevel.DEBUG]: 4,
-		[LogLevel.TRACE]: 5,
-	};
-	constructor(minLevel: LogLevel = LogLevel.INFO) {
+
+	constructor(minLevel: LogLevel = 'info') {
 		this.minLevel = minLevel;
 	}
 
-	private logToConsole(level: LogLevel, message: string, context?: Record<string, unknown>): void {
-		if (ConsoleLogger.SEVERITY[level] > ConsoleLogger.SEVERITY[this.minLevel]) return;
-		const levelPrefix = `[${level}] `;
-		let interpolatedMessage = message;
-		const usedKeys = new Set<string>();
-		if (context) {
-			const processedContext = Object.fromEntries(
-				Object.entries(context).map(([key, value]) => [
-					key,
-					value instanceof Error ? { message: value.message, stack: value.stack } : value,
-				]),
-			);
-			interpolatedMessage = message.replace(/\{(\w+)\}/g, (match: string, key: string) => {
-				if (key in processedContext && processedContext[key] !== undefined) {
-					usedKeys.add(key);
-					const value: unknown = processedContext[key];
-					if (typeof value === 'string') return value;
-					if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
-					if (value == null) return '';
-					return JSON.stringify(value);
-				}
-				return match;
-			});
-			const filteredContext = Object.fromEntries(
-				Object.entries(processedContext).filter(([key]) => !usedKeys.has(key)),
-			);
-			const consoleMethod = this.getConsoleMethod(level);
-			if (Object.keys(filteredContext).length > 0) {
-				consoleMethod(levelPrefix + interpolatedMessage, filteredContext);
-			} else {
-				consoleMethod(levelPrefix + interpolatedMessage);
-			}
-		} else {
-			this.getConsoleMethod(level)(levelPrefix + interpolatedMessage);
-		}
+	private should(level: LogLevel): boolean {
+		return LEVEL_ORDER[level] <= LEVEL_ORDER[this.minLevel];
 	}
-	// Note: NOT static as test suite needs to spy on the output
-	private getConsoleMethod(level: LogLevel): (message: string, ...args: unknown[]) => void {
+	private method(level: LogLevel): (msg: string, ...rest: unknown[]) => void {
 		switch (level) {
-			case LogLevel.FATAL:
-			case LogLevel.ERROR:
+			case 'fatal':
+			case 'error':
 				return console.error;
-			case LogLevel.WARN:
+			case 'warn':
 				return console.warn;
-			case LogLevel.INFO:
+			case 'info':
 				return console.info;
-			case LogLevel.DEBUG:
+			case 'debug':
 				return console.debug;
-			case LogLevel.TRACE:
+			case 'trace':
 				return console.trace;
 			default:
-				// We could throw, but that's a bit aggressive for a logging class
-				// so just use a regular console.log()
 				return console.log;
 		}
 	}
-	// Interface methods
-	fatal(message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(LogLevel.FATAL, message, context);
+	private header(level: LogLevel, message: string): string {
+		return `[${level.toUpperCase()}] ${message}`;
 	}
-	error(message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(LogLevel.ERROR, message, context);
+	private flattenContext(ctx?: Record<string, unknown>): Record<string, unknown> | undefined {
+		if (!ctx) return undefined;
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(ctx)) {
+			out[k] = v instanceof Error ? { message: v.message, stack: v.stack } : v;
+		}
+		return out;
 	}
-	warn(message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(LogLevel.WARN, message, context);
+	private emit(level: LogLevel, message: string, context?: Record<string, unknown>) {
+		if (!this.should(level)) return;
+		const line = this.header(level, message);
+		const ctx = this.flattenContext(context);
+		const fn = this.method(level);
+		if (ctx && Object.keys(ctx).length) fn(line, ctx);
+		else fn(line);
 	}
-	info(message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(LogLevel.INFO, message, context);
+
+	fatal(msg: string, ctx?: Record<string, unknown>) {
+		this.emit('fatal', msg, ctx);
 	}
-	debug(message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(LogLevel.DEBUG, message, context);
+	error(msg: string, ctx?: Record<string, unknown>) {
+		this.emit('error', msg, ctx);
 	}
-	trace(message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(LogLevel.TRACE, message, context);
+	warn(msg: string, ctx?: Record<string, unknown>) {
+		this.emit('warn', msg, ctx);
 	}
-	log(level: LogLevel, message: string, context?: Record<string, unknown>): void {
-		this.logToConsole(level, message, context);
+	info(msg: string, ctx?: Record<string, unknown>) {
+		this.emit('info', msg, ctx);
+	}
+	debug(msg: string, ctx?: Record<string, unknown>) {
+		this.emit('debug', msg, ctx);
+	}
+	trace(msg: string, ctx?: Record<string, unknown>) {
+		this.emit('trace', msg, ctx);
+	}
+
+	log(level: LogLevel, message: string, context?: Record<string, unknown>) {
+		this.emit(level, message, context);
 	}
 }
 
