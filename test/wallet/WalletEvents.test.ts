@@ -342,55 +342,54 @@ describe('WalletEvents', () => {
 	});
 
 	describe('onceMeltPaid extra branches', () => {
-  it('rejects with AbortError and unsubscribes', async () => {
-    const ac = new AbortController();
-    // spy on cleanup path (removeEventListener is part of coverage gap)
-    const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
-    const p = events.onceMeltPaid('m-abort', { signal: ac.signal });
-    ac.abort();
-    await expect(p).rejects.toMatchObject({ name: 'AbortError' });
+		it('rejects with AbortError and unsubscribes', async () => {
+			const ac = new AbortController();
+			// spy on cleanup path (removeEventListener is part of coverage gap)
+			const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+			const p = events.onceMeltPaid('m-abort', { signal: ac.signal });
+			ac.abort();
+			await expect(p).rejects.toMatchObject({ name: 'AbortError' });
 
-    const h = mock.meltPaidHandlers.get('m-abort');
-    if (h) {
-      await flushMicrotasks();
-      expect(h.cancelInner).toHaveBeenCalled();
-    }
-    expect(rmSpy).toHaveBeenCalled(); // covers removeEventListener line
-  });
+			const h = mock.meltPaidHandlers.get('m-abort');
+			if (h) {
+				await flushMicrotasks();
+				expect(h.cancelInner).toHaveBeenCalled();
+			}
+			expect(rmSpy).toHaveBeenCalled(); // covers removeEventListener line
+		});
 
-  it('rejects on timeout and unsubscribes', async () => {
-    vi.useFakeTimers();
-    const p = events.onceMeltPaid('m-timeout', { timeoutMs: 10 });
-    vi.advanceTimersByTime(11);
-    await expect(p).rejects.toThrow(/Timeout waiting for melt paid/);
-    const h = mock.meltPaidHandlers.get('m-timeout')!;
-    await flushMicrotasks();
-    expect(h.cancelInner).toHaveBeenCalled();
-    vi.useRealTimers();
-  });
+		it('rejects on timeout and unsubscribes', async () => {
+			vi.useFakeTimers();
+			const p = events.onceMeltPaid('m-timeout', { timeoutMs: 10 });
+			vi.advanceTimersByTime(11);
+			await expect(p).rejects.toThrow(/Timeout waiting for melt paid/);
+			const h = mock.meltPaidHandlers.get('m-timeout')!;
+			await flushMicrotasks();
+			expect(h.cancelInner).toHaveBeenCalled();
+			vi.useRealTimers();
+		});
 
-  it('propagates underlying error and unsubscribes', async () => {
-    const p = events.onceMeltPaid('m-error');
-    const h = mock.meltPaidHandlers.get('m-error')!;
-    h.err(new Error('melt-boom'));
-    await expect(p).rejects.toThrow('melt-boom');
-    await flushMicrotasks();
-    expect(h.cancelInner).toHaveBeenCalled();
-  });
+		it('propagates underlying error and unsubscribes', async () => {
+			const p = events.onceMeltPaid('m-error');
+			const h = mock.meltPaidHandlers.get('m-error')!;
+			h.err(new Error('melt-boom'));
+			await expect(p).rejects.toThrow('melt-boom');
+			await flushMicrotasks();
+			expect(h.cancelInner).toHaveBeenCalled();
+		});
 
-  it('resolves and removes listener when a signal was provided', async () => {
-    const ac = new AbortController();
-    const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
-    const p = events.onceMeltPaid('m-ok', { signal: ac.signal });
-    const h = mock.meltPaidHandlers.get('m-ok')!;
-    h.cb({ quote: 'm-ok', state: 'PAID', amount: 1 });
-    await expect(p).resolves.toMatchObject({ quote: 'm-ok' });
-    await flushMicrotasks();
-    expect(h.cancelInner).toHaveBeenCalled();
-    expect(rmSpy).toHaveBeenCalled(); // exercises the success-path cleanup too
-  });
-});
-
+		it('resolves and removes listener when a signal was provided', async () => {
+			const ac = new AbortController();
+			const rmSpy = vi.spyOn(ac.signal, 'removeEventListener');
+			const p = events.onceMeltPaid('m-ok', { signal: ac.signal });
+			const h = mock.meltPaidHandlers.get('m-ok')!;
+			h.cb({ quote: 'm-ok', state: 'PAID', amount: 1 });
+			await expect(p).resolves.toMatchObject({ quote: 'm-ok' });
+			await flushMicrotasks();
+			expect(h.cancelInner).toHaveBeenCalled();
+			expect(rmSpy).toHaveBeenCalled(); // exercises the success-path cleanup too
+		});
+	});
 
 	describe('proofStatesStream', () => {
 		it('yields payloads until error completes the stream, then cancels', async () => {
