@@ -28,7 +28,13 @@ export default defineConfig({
 		},
 		sourcemap: true,
 	},
-	plugins: [dts({ tsconfigPath: './tsconfig.json', outDir: 'lib/types', rollupTypes: true })],
+	plugins: [
+		dts({
+			tsconfigPath: './tsconfig.json',
+			outDir: 'lib/types',
+			rollupTypes: true,
+		}),
+	],
 	test: {
 		projects: [
 			{
