@@ -560,7 +560,7 @@ describe('Custom Outputs', () => {
 		// Use our keepFactory for the change (keep) outputs
 		const customConfig: OutputConfig = {
 			keep: keepFactory,
-			send: DEFAULT_OUTPUT,
+			send: wallet.defaultOutputType(),
 		};
 		// We need to sign our proofs before sending because they are locked
 		const signedProofs = wallet.signP2PKProofs(proofs, hexSk);

@@ -311,6 +311,20 @@ class Wallet {
 		return { specs: patched, used: { keysetId, start: range.start, count: range.count } };
 	}
 
+	/**
+	 * Creates a new Wallet instance bound to a specific keyset.
+	 *
+	 * The new wallet inherits this wallet’s mint connection, seed, secrets policy, logger, and key
+	 * cache. You can override the counter source or initial counter via `opts` param.
+	 *
+	 * @param id The keyset identifier to associate with the new wallet.
+	 * @param opts Optional overrides:
+	 *
+	 *   - InitialCounter: Starting counter value for deterministic outputs.
+	 *   - CounterSource: Custom counter source implementation to use instead of the default.
+	 *
+	 * @returns A new Wallet configured with the given keyset and inherited state.
+	 */
 	withKeyset(
 		id: string,
 		opts?: { initialCounter?: number; counterSource?: CounterSource },
@@ -326,11 +340,26 @@ class Wallet {
 		});
 	}
 
+	/**
+	 * Returns the default OutputType for this wallet, based on its configured secrets policy
+	 * (options?.secretsPolicy) and seed state.
+	 *
+	 * - If the secrets policy is 'random', returns { type: 'random' }.
+	 * - If the policy is 'deterministic', requires a seed and returns { type: 'deterministic', counter:
+	 *   0 }. Counter 0 is a flag meaning "auto-increment from current state".
+	 * - If no explicit policy is set, falls back to:
+	 *
+	 *   - Deterministic if a seed is present.
+	 *   - Random if no seed is present.
+	 *
+	 * @returns An OutputType object describing the default output strategy.
+	 * @throws Error if the policy is 'deterministic' but no seed has been set.
+	 */
 	public defaultOutputType(): OutputType {
 		if (this._secretsPolicy === 'random') return { type: 'random' };
 		if (this._secretsPolicy === 'deterministic') {
 			if (!this._seed) throw new Error('Deterministic policy requires a seed');
-			return { type: 'deterministic', counter: 0 }; // 0 = auto sentinel
+			return { type: 'deterministic', counter: 0 }; // 0 = auto flag
 		}
 		return this._seed ? { type: 'deterministic', counter: 0 } : { type: 'random' };
 	}

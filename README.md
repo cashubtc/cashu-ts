@@ -52,8 +52,6 @@ Supported token formats:
 
 Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
-If you want to experiment with v3-alpha, see the [v3 README](./READMEv3.md)
-
 ### Install
 
 ```shell
@@ -93,9 +91,9 @@ By default, cashu-ts does not log to the console. If you want to enable logging 
 ```typescript
 import { Mint, Wallet, ConsoleLogger, LogLevel } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338';
-const mintLogger = new ConsoleLogger(LogLevel.ERROR);
+const mintLogger = new ConsoleLogger('error');
 const mint = new Mint(mintUrl, undefined, { logger: mintLogger }); // Enable logging for the mint
-const walletLogger = new ConsoleLogger(LogLevel.DEBUG);
+const walletLogger = new ConsoleLogger('debug');
 const wallet = new Wallet(mint, { logger: walletLogger }); // Enable logging for the wallet
 await wallet.loadMint(); // wallet with logging is now ready to use
 ```
@@ -122,7 +120,7 @@ if (mintQuoteChecked.state == MintQuoteState.PAID) {
 #### Melt tokens
 
 ```typescript
-import { Wallet, DEFAULT_OUTPUT_CONFIG } from '@cashu/cashu-ts';
+import { Wallet } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338';
 const wallet = new Wallet(mintUrl);
 await wallet.loadMint(); // wallet is now ready to use
@@ -135,16 +133,9 @@ const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 // if no appropriate amount can be selected offline. When selecting coins for a
 // melt, we must include the mint and/or lightning fees to ensure there are
 // sufficient funds to cover the invoice.
-// NB: send has helpers for different output types (eg: sendAsDefault, sendAsP2PK)
-// but for this example, we are using the full, flexible version for maximum control.
-const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(
-	amountToSend,
-	proofs,
-	DEFAULT_OUTPUT_CONFIG, // uses random proof secrets
-	{
-		includeFees: true,
-	},
-);
+const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs, {
+	includeFees: true,
+});
 const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 // store proofsToKeep and meltResponse.change in your app ..
 ```
@@ -172,14 +163,14 @@ const receiveProofs = await wallet2.receive(token);
 // or you fetched existing proofs from your app database
 const proofs = [...]; // array of proofs
 const pubkey = '02...'; // Your public key
-const { keep, send } = await wallet.sendAsP2PK(32, proofs, {pubkey});
+const { keep, send } = await wallet.ops.send(32, proofs).sendP2PK({pubkey}).run();
 const token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
 console.log(token);
 
 const wallet2 = new Wallet(mintUrl); // receiving wallet
 await wallet2.loadMint(); // wallet2 is now ready to use
 const privkey = '5d...'; // private key for pubkey
-const receiveProofs = await wallet2.receiveAsDefault(token, {privkey});
+const receiveProofs = await wallet2.receive(token, {privkey});
 // store receiveProofs in your app ..
 ```
 
@@ -222,6 +213,220 @@ if (availableAmount > 0) {
 		updatedQuote,
 		bytesToHex(privateKey),
 	);
+}
+```
+
+## WalletOps – Transaction Builder Usage Recipes
+
+Cashu-TS offers a flexible `WalletOps` builder that makes it simple to construct transactions in a readable and intuitive way.
+
+You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or instantiate your own `WalletOps` instance.
+
+> Fluent, single-use builders for **send**, **receive**, and **mint**.
+> If you don’t customize an output side, the wallet’s policy defaults apply.
+
+---
+
+### Send
+
+#### 1) Smallest possible send (policy defaults)
+
+```ts
+const { keep, send } = await wallet.ops.send(5, myProofs).run();
+```
+
+- Uses wallet policy for both `send` and `keep`.
+- If you only customize **send**, `keep` is omitted so the wallet may still attempt an **offline exact match** where possible.
+
+#### 2) Deterministic send, random change
+
+```ts
+const { keep, send } = await wallet.ops
+	.send(5, myProofs)
+	.sendDeterministic(0, [5]) // counter=0 => auto-reserve; split must sum to 5
+	.keepRandom() // policy-driven split unless you pass denominations
+	.run();
+```
+
+> **Note**
+> Passing `counter = 0` means “reserve counters automatically using the wallet’s CounterSource”.
+
+#### 3) P2PK send with sender-pays fees
+
+```ts
+const { keep, send } = await wallet.ops
+	.send(10, myProofs)
+	.sendP2PK({ pubkey, locktime: 1712345678 })
+	.includeFees(true) // sender covers receiver’s future spend fee
+	.run();
+```
+
+#### 4) Use a factory for custom OutputData
+
+```ts
+const { keep, send } = await wallet.ops
+	.send(20, myProofs)
+	.sendFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
+	.keepDeterministic(0) // deterministic change
+	.keyset('0123456')
+	.onCountersReserved((info) => {
+		console.log('Reserved counters', info);
+	})
+	.run();
+```
+
+#### 5) Fully custom OutputData (prebuilt)
+
+```ts
+const mySendData: OutputData[] = [
+	/* amounts must sum to 15 */
+];
+
+const { keep, send } = await wallet.ops.send(15, myProofs).sendCustom(mySendData).run();
+```
+
+#### 6) Force pure offline (no mint calls)
+
+**Exact match only (throws on no exact match):**
+
+```ts
+const { keep, send } = await wallet.ops
+	.send(7, myProofs)
+	.offlineExactOnly(/* requireDleq? */ false)
+	.includeFees(true) // optional; applied to the offline selection rules
+	.run();
+```
+
+**Close match allowed (overspend permitted by wallet RGLI):**
+
+```ts
+const { keep, send } = await wallet.ops
+	.send(7, myProofs)
+	.offlineCloseMatch(/* requireDleq? */ true)
+	.run();
+```
+
+> **Important**
+> Offline modes **cannot** be combined with custom output types (`sendX/keepX`).
+> The builder will throw:
+> `Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.`
+
+---
+
+### Receive
+
+#### 1) Default receive
+
+```ts
+const proofs = await wallet.ops.receive(token).run();
+```
+
+#### 2) Deterministic receive with DLEQ requirement
+
+```ts
+const proofs = await wallet.ops
+	.receive(token)
+	.deterministic(0) // counter=0 => auto-reserve
+	.requireDleq(true) // reject incoming proofs without DLEQ for the selected keyset
+	.keyset('0123456')
+	.onCountersReserved((c) => console.log('RX counters', c))
+	.run();
+```
+
+#### 3) P2PK locked receive (multisig)
+
+```ts
+const proofs = await wallet.ops
+	.receive(token)
+	.p2pk({ pubkey, locktime }) // NUT-11 options for new proofs
+	.privkey(['k1', 'k2', 'k3']) // sign incoming P2PK proofs
+	.proofsWeHave(myExistingProofs) // helps denomination selection
+	.run();
+```
+
+#### 4) Receive with factory/custom splits
+
+```ts
+const proofsA = await wallet.ops
+	.receive(tokenA)
+	.factory(makeOutputData, [5, 5, 10]) // amounts must sum to final received amount after fees
+	.run();
+
+const proofsB = await wallet.ops
+	.receive(tokenB)
+	.custom(prebuiltRxOutputs) // amounts must sum to final received amount after fees
+	.run();
+```
+
+---
+
+### Mint
+
+#### 1) Default mint (policy outputs)
+
+```ts
+const newProofs = await wallet.ops
+	.mint(100, quote) // quote: string | MintQuoteResponse
+	.run();
+```
+
+#### 2) Deterministic mint with keyset + callback
+
+```ts
+const newProofs = await wallet.ops
+	.mint(250, quote)
+	.deterministic(0, [100, 100, 50]) // counter=0 => auto-reserve
+	.keyset('0123456')
+	.onCountersReserved((info) => console.log(info))
+	.run();
+```
+
+#### 3) Locked quote signing (P2PK)
+
+```ts
+const newProofs = await wallet.ops
+	.mint(50, quote)
+	.p2pk({ pubkey }) // NUT-11 lock on outputs
+	.privkey('user-secret-key') // sign locked mint quote
+	.run();
+```
+
+---
+
+### Notes & gotchas
+
+- **Denominations must add up**
+  Wherever you pass `denominations` (or `OutputData[]`) you’re choosing a custom split.
+  Amounts must sum to the **send amount** (for `sendX`) or the **final amount after fees** (for `receive`/`mint`) — otherwise the wallet will throw.
+
+- **Counter `0`**
+  `deterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
+
+- **Two sides in send**
+  `send` has **send** and **keep** branches.
+  If you only set **send**, the builder omits **keep** so the wallet may still do offline exact-match optimization.
+
+- **Offline modes vs custom outputs**
+  `offlineExactOnly` / `offlineCloseMatch` work **only** with existing proofs.
+  They cannot honor new output types (p2pk/factory/custom/etc.) and the builder enforces this.
+
+- **Keysets**
+  `.keyset(id)` pins all key material and fee lookups to that keyset. If you don’t specify it, the wallet uses its policy default.
+
+---
+
+### Error handling patterns
+
+```ts
+try {
+	const res = await wallet.ops.send(5, proofs).offlineExactOnly().run();
+	console.log('Sent:', res.send.length, 'Kept:', res.keep.length);
+} catch (e) {
+	// e is a proper Error (WalletOps normalizes unknowns internally)
+	if ((e as Error).message.includes('Timeout')) {
+		// …
+	}
+	throw e;
 }
 ```
 

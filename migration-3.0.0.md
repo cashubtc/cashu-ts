@@ -46,45 +46,49 @@ Some crypto types have been deduplicated to the main library types:
 
 ### `CashuWallet` to `Wallet` API changes
 
-#### New `OutputType` and `OutputConfig` types
+#### New `OutputType` and `OutputConfig`
 
-`Wallet` now gives you flexibility over how you shape your mint, melt, send and receive outputs.
+The output model for `send`, `receive`, `mintProofs`, and `meltProofs` has been simplified.
 
-The `keepFactory` and `outputData` options have been removed, as have the confusing jumble of output options (`SendOptions`, `ReceiveOptions`, etc).
+Instead of juggling `keepFactory`, `outputData`, and multiple option types, you now use:
 
-These are replaced with a tagged union parameter called `OutputType`, which defines the shape of outputs (random, deterministic, p2pk, etc).
+- **`OutputType`** — a tagged union describing one output strategy (`random`, `deterministic`, `p2pk`, etc).
+- **`OutputConfig`** — combines `keep` and `send` `OutputType`s when sending.
 
-The `OutputConfig` type combines keep/send OutputTypes for `send` operations.
+These are passed as the third parameter where needed, or expressed more naturally via the new `WalletOps` builder API.
 
-The `receive`, `send`, `mintProofs`, and `meltProofs` method signatures have therefore changed to accept the output type you wish to use as the THIRD parameter.
-
-Two new constants have been added for convenience:
-
-`DEFAULT_OUTPUT` - specifies default output for receive, mint and melt.
-`DEFAULT_OUTPUT_CONFIG` - specifies send/keep outputs for send
-
-example send:
+Example:
 
 ```ts
-const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs, {
+// before
+const { keep, send } = await wallet.send(amount, proofs, {
 	includeFees: true,
 });
+
+// after (clearer with builder)
+const { keep, send } = await ops.send(amount, proofs).includeFees(true).run();
 ```
 
-is now:
+The builder makes intent explicit and eliminates the need for extra boilerplate.
+
+See the README for more usage examples.
+
+### Logger
+
+`LogLevel` is no longer exported as a `const` object with uppercase values.
+It is now a simple string union of **lowercase** level names:
 
 ```ts
-const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(
-	amountToSend,
-	proofs,
-	DEFAULT_OUTPUT_CONFIG, // uses random proof secrets
-	{
-		includeFees: true,
-	},
-);
+// before
+const logger = new ConsoleLogger(LogLevel.DEBUG);
+
+// after
+const logger = new ConsoleLogger('debug');
 ```
 
-See the README for more examples.
+This change simplifies the API by removing the enum-like wrapper, avoids the need for extra imports, and makes configuration easier when log levels are provided from JSON or environment variables (which are typically lowercase).
+
+Update any code that referenced LogLevel.XYZ to pass the lowercase string literal instead.
 
 #### Keyset methods delegated to KeyChain class
 

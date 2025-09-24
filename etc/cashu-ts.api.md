@@ -1407,7 +1407,6 @@ export class Wallet {
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
-    // (undocumented)
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
@@ -1468,7 +1467,6 @@ export class Wallet {
         (amount: number, proofs: Proof[], outputConfig: OutputConfig, config?: SendConfig): Promise<SendResponse>;
     };
     get unit(): string;
-    // (undocumented)
     withKeyset(id: string, opts?: {
         initialCounter?: number;
         counterSource?: CounterSource;
@@ -1578,7 +1576,7 @@ export class WSConnection {
 // lib/types/index.d.ts:968:5 - (ae-forgotten-export) The symbol "OnCountersReserved" needs to be exported by the entry point index.d.ts
 // lib/types/index.d.ts:2712:9 - (ae-forgotten-export) The symbol "SecretsPolicy" needs to be exported by the entry point index.d.ts
 // lib/types/index.d.ts:2713:9 - (ae-forgotten-export) The symbol "CounterSource" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3572:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:3601:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
