@@ -1481,7 +1481,7 @@ export class Wallet {
         keysets?: MintKeyset[];
         mintInfo?: GetInfoResponse;
         denominationTarget?: number;
-        keepFactory?: OutputDataFactory;
+        selectProofs?: SelectProofs;
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
@@ -1657,6 +1657,10 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
+
+// Warnings were encountered during analysis:
+//
+// lib/types/index.d.ts:2706:9 - (ae-forgotten-export) The symbol "SelectProofs" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
