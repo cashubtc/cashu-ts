@@ -2773,6 +2773,92 @@ describe('melt proofs', () => {
 	});
 });
 
+describe('bindKeyset & withKeyset', () => {
+	function ks(id: string, unitStr = unit, hasKeys = true, fee = 0) {
+		return { id, unit: unitStr, hasKeys, fee } as any;
+	}
+
+	test('binds to a valid keyset id and updates defaults', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const otherId = '00aa000000000000';
+		const spy = vi
+			.spyOn(wallet.keyChain, 'getKeyset')
+			.mockImplementation((id?: string) => (id === otherId ? ks(otherId) : ks('00bd033559de27d0')));
+
+		wallet.bindKeyset(otherId);
+
+		expect(wallet.keysetId).toBe(otherId);
+		expect(wallet.getKeyset().id).toBe(otherId);
+		expect(spy).toHaveBeenCalledWith(otherId);
+	});
+
+	test('throws if the keyset has no keys', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const badId = '00bb000000000000';
+		const spy = vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValueOnce(ks(badId, unit, false));
+		expect(() => wallet.bindKeyset(badId)).toThrow('Keyset has no keys loaded');
+		expect(spy).toHaveBeenCalledWith(badId);
+	});
+
+	test('throws if the keyset unit differs from the wallet unit', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const eurId = '00cc000000000000';
+		const spy = vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValueOnce(ks(eurId, 'eur', true));
+		expect(() => wallet.bindKeyset(eurId)).toThrow('Keyset unit does not match wallet unit');
+		expect(spy).toHaveBeenCalledWith(eurId);
+	});
+
+	test('withKeyset returns a new wallet without mutating the original', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const current = wallet.keysetId;
+		const w2 = wallet.withKeyset(current);
+		expect(w2).not.toBe(wallet);
+		expect(w2.keysetId).toBe(current);
+
+		// mutate original binding; w2 should remain unchanged
+		const otherId = '00dd000000000000';
+		vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValueOnce(ks(otherId));
+		wallet.bindKeyset(otherId);
+
+		expect(wallet.keysetId).toBe(otherId);
+		expect(w2.keysetId).toBe(current);
+	});
+
+	test('getKeyset() without an id returns the bound keyset', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const bound = wallet.keysetId;
+		const k = wallet.getKeyset();
+		expect(k.id).toBe(bound);
+	});
+
+	test('loadMint fails if the bound keyset has no keys after refresh', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const boundId = '00ef000000000000';
+		const spy = vi.spyOn(wallet.keyChain, 'getKeyset');
+
+		// First call for bindKeyset -> has keys
+		spy.mockReturnValueOnce(ks(boundId, unit, true));
+		wallet.bindKeyset(boundId);
+
+		// Next call during loadMint(true) -> loses keys
+		spy.mockReturnValueOnce(ks(boundId, unit, false));
+
+		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys after refresh');
+	});
+});
+
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	p.forEach((p) => {
 		const parsedSecret = JSON.parse(p.secret);

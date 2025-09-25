@@ -468,7 +468,7 @@ export type JsonRpcSuccess<T = unknown> = {
     id: RpcSubId;
 };
 
-// @public (undocumented)
+// @public
 export class KeyChain {
     constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
     getCache(): {
@@ -1234,6 +1234,9 @@ export type SecretData = {
 // @public (undocumented)
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
+// @public (undocumented)
+export type SelectProofs = (proofs: Proof[], amountToSend: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+
 // @public
 export class SendBuilder {
     constructor(wallet: Wallet, amount: number, proofs: Proof[]);
@@ -1488,6 +1491,7 @@ export class Wallet {
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
+    bindKeyset(id: string): void;
     // @deprecated (undocumented)
     checkMeltQuote(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
     checkMeltQuoteBolt11(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
@@ -1514,6 +1518,7 @@ export class Wallet {
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
+    getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
     groupProofsByState(proofs: Proof[]): Promise<{
         unspent: Proof[];
@@ -1657,10 +1662,6 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
-
-// Warnings were encountered during analysis:
-//
-// lib/types/index.d.ts:2706:9 - (ae-forgotten-export) The symbol "SelectProofs" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

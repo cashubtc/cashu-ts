@@ -25,6 +25,7 @@ export {
 	type CancellerLike,
 	type CounterRange,
 	type OperationCounters,
+	type SelectProofs,
 	SendBuilder,
 	ReceiveBuilder,
 	MintBuilder,

@@ -139,17 +139,34 @@ class Wallet {
 	private _logger: Logger;
 
 	/**
-	 * @remarks
-	 * Mint data will be fetched if not supplied. Note: to preload keys and keysets, both must be
-	 * provided. If only one is provided, it will be ignored.
-	 * @param mint Cashu mint instance or mint url (e.g. 'http://localhost:3338').
-	 * @param options.unit Optional. Set unit (default: 'sat')
-	 * @param options.keys Optional. Cached public keys.
-	 * @param options.keysets Optional. Cached keysets.
-	 * @param options.mintInfo Optional. Mint info from the mint.
-	 * @param options.denominationTarget Target number proofs per denomination (default: 3)
-	 * @param options.bip39seed Optional. BIP39 seed for deterministic secrets.
-	 * @param options.logger Custom logger instance. Defaults to a null logger.
+	 * Create a wallet for a given mint and unit. Call `loadMint` before use.
+	 *
+	 * Binding, if `options.keysetId` is omitted, the wallet binds to the cheapest active keyset for
+	 * this unit during `loadMint`. The keychain only loads keysets for this unit.
+	 *
+	 * Caching, to preload, provide both `keysets` and `keys`, otherwise the cache is ignored.
+	 *
+	 * Deterministic secrets, pass `bip39seed` and optionally `secretsPolicy`. Deterministic outputs
+	 * reserve counters from `counterSource`, or an ephemeral in memory source if not supplied.
+	 * `initialCounter` applies only with a supplied `keysetId` and the ephemeral source.
+	 *
+	 * Splitting, `denominationTarget` guides proof splits, default is 3. Override coin selection with
+	 * `selectProofs` if needed. Logging defaults to a null logger.
+	 *
+	 * @param mint Mint instance or URL.
+	 * @param options Optional settings.
+	 * @param options.unit Wallet unit, default 'sat'.
+	 * @param options.keysetId Bind to this keyset id, else bind on `loadMint`.
+	 * @param options.bip39seed BIP39 seed for deterministic secrets.
+	 * @param options.secretsPolicy Secrets policy, default 'auto'.
+	 * @param options.counterSource Counter source for deterministic outputs.
+	 * @param options.initialCounter Starting counter for that keyset with the ephemeral source.
+	 * @param options.keys Cached keys for this unit, only used when `keysets` is also provided.
+	 * @param options.keysets Cached keysets for this unit, only used when `keys` is also provided.
+	 * @param options.mintInfo Optional cached mint info.
+	 * @param options.denominationTarget Target proofs per denomination, default 3.
+	 * @param options.selectProofs Custom proof selection function.
+	 * @param options.logger Logger instance, default null logger.
 	 */
 	constructor(
 		mint: Mint | string,
@@ -247,6 +264,10 @@ class Wallet {
 
 		if (this._boundKeysetId === '__PENDING__') {
 			this._boundKeysetId = this.keyChain.getCheapestKeyset().id;
+		} else {
+			// Ensure the bound id is still present and keyed
+			const k = this.keyChain.getKeyset(this._boundKeysetId);
+			this.failIf(!k.hasKeys, 'Wallet keyset has no keys after refresh', { keyset: k.id });
 		}
 	}
 
@@ -278,6 +299,34 @@ class Wallet {
 	get keysetId(): string {
 		this.failIf(this._boundKeysetId === '__PENDING__', 'Wallet not initialised, call loadMint');
 		return this._boundKeysetId;
+	}
+
+	/**
+	 * Gets the requested keyset or the keyset bound to the wallet.
+	 *
+	 * @remarks
+	 * This method enforces wallet policies. If `id` is omitted, it returns the keyset bound to this
+	 * wallet, including validation that:
+	 *
+	 * - The keyset exists in the keychain,
+	 * - The unit matches the wallet's unit,
+	 * - Keys are loaded for that keyset.
+	 *
+	 * Contrast with `keyChain.getKeyset(id?)`, which, when called without an id, returns the cheapest
+	 * active keyset for the unit, ignoring the wallet binding.
+	 * @param id Optional keyset id to resolve. If omitted, the wallet's bound keyset is used.
+	 * @returns The resolved `Keyset`.
+	 * @throws If the keyset is not found, has no keys, or its unit differs from the wallet.
+	 */
+	public getKeyset(id?: string): Keyset {
+		const keyset = this.keyChain.getKeyset(id ?? this.keysetId);
+		this.failIf(keyset.unit !== this._unit, 'Keyset unit does not match wallet unit', {
+			keyset: keyset.id,
+			unit: keyset.unit,
+			walletUnit: this._unit,
+		});
+		this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
+		return keyset;
 	}
 
 	private async reserveFor(keysetId: string, totalOutputs: number): Promise<CounterRange> {
@@ -315,11 +364,46 @@ class Wallet {
 	}
 
 	/**
+	 * Bind this wallet to a specific keyset id.
+	 *
+	 * @remarks
+	 * This changes the default keyset used by all operations that do not explicitly pass a keysetId.
+	 * The method validates that the keyset exists in the keychain, matches the wallet unit, and has
+	 * keys loaded.
+	 *
+	 * Typical uses:
+	 *
+	 * 1. After loadMint, to pin the wallet to a particular active keyset.
+	 * 2. After a refresh, to rebind deliberately rather than falling back to cheapest.
+	 *
+	 * @param id The keyset identifier to bind to.
+	 * @throws If the keyset is not found, if it has no keys loaded, or if its unit does not match the
+	 *   wallet unit.
+	 */
+	public bindKeyset(id: string): void {
+		const ks = this.keyChain.getKeyset(id);
+		this.failIf(ks.unit !== this._unit, 'Keyset unit does not match wallet unit', {
+			keyset: ks.id,
+			unit: ks.unit,
+			walletUnit: this._unit,
+		});
+		this.failIf(!ks.hasKeys, 'Keyset has no keys loaded', { keyset: ks.id });
+		this._boundKeysetId = ks.id;
+		this._logger.debug('Wallet bound to keyset', {
+			keysetId: ks.id,
+			unit: ks.unit,
+			feePPK: ks.fee,
+		});
+	}
+
+	/**
 	 * Creates a new Wallet instance bound to a specific keyset.
 	 *
-	 * The new wallet inherits this wallet’s mint connection, seed, secrets policy, logger, and key
-	 * cache. You can override the counter source or initial counter via `opts` param.
-	 *
+	 * @remarks
+	 * This is a non mutating alternative to bindKeyset. The new wallet inherits the mint connection,
+	 * seed, logger, and key cache from this wallet. Use this when you want to operate on multiple
+	 * keysets concurrently with separate state.
+	 * Note: Does NOT change the keyset binding in your existing instance.
 	 * @param id The keyset identifier to associate with the new wallet.
 	 * @param opts Optional overrides:
 	 *
@@ -328,7 +412,7 @@ class Wallet {
 	 *
 	 * @returns A new Wallet configured with the given keyset and inherited state.
 	 */
-	withKeyset(
+	public withKeyset(
 		id: string,
 		opts?: { initialCounter?: number; counterSource?: CounterSource },
 	): Wallet {
@@ -660,7 +744,7 @@ class Wallet {
 		}
 
 		// Check DLEQs if needed
-		const keyset = this.keyChain.getKeyset(keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		if (requireDleq && proofs.some((p) => !hasValidDleq(p, keyset))) {
 			this.fail('Token contains proofs with invalid or missing DLEQ');
 		}
@@ -813,7 +897,7 @@ class Wallet {
 		}
 
 		// Fetch keys
-		const keyset = this.keyChain.getKeyset(keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
 		// Shape SEND output type and denominations
 		let send = this.configureOutputs(
@@ -957,6 +1041,8 @@ class Wallet {
 	 */
 	private getProofFeePPK(proof: Proof): number {
 		try {
+			// We need the proof's keyset so use keyChain here
+			// We must NOT fallback to wallet's keyset
 			return this.keyChain.getKeyset(proof.id).fee;
 		} catch (e) {
 			this.fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, {
@@ -975,6 +1061,7 @@ class Wallet {
 	 */
 	getFeesForKeyset(nInputs: number, keysetId: string): number {
 		try {
+			// We must NOT fallback to wallet's keyset
 			const feePPK = this.keyChain.getKeyset(keysetId).fee;
 			return Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0));
 		} catch (e) {
@@ -1037,7 +1124,7 @@ class Wallet {
 		config?: RestoreConfig,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
 		const { keysetId } = config || {};
-		const keyset = this.keyChain.getKeyset(keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
 
 		// create deterministic blank outputs for unknown restore amounts
@@ -1075,7 +1162,7 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
-	 * @deprecated - Use createMintQuoteBolt11()
+	 * @deprecated Use createMintQuoteBolt11()
 	 */
 	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
 		return this.createMintQuoteBolt11(amount, description);
@@ -1173,7 +1260,7 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
-	 * @deprecated - Use checkMintQuoteBolt11()
+	 * @deprecated Use checkMintQuoteBolt11()
 	 */
 	async checkMintQuote(
 		quote: string | MintQuoteResponse,
@@ -1213,7 +1300,7 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
-	 * @deprecated - Use mintProofsBolt11()
+	 * @deprecated Use mintProofsBolt11()
 	 */
 	async mintProofs(
 		amount: number,
@@ -1288,8 +1375,8 @@ class Wallet {
 		this.failIf(amount <= 0, 'Invalid mint amount: must be positive', { amount });
 
 		// Shape output type and denominations for our proofs
-		// we are receiving, so no includeFees
-		const keyset = this.keyChain.getKeyset(keysetId);
+		// we are receiving, so no includeFees.
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		let mintProofs = this.configureOutputs(
 			amount,
 			keyset,
@@ -1345,7 +1432,7 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
-	 * @deprecated - Use createMeltQuoteBolt11.
+	 * @deprecated Use createMeltQuoteBolt11.
 	 */
 	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
 		return this.createMeltQuoteBolt11(invoice);
@@ -1440,7 +1527,7 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
-	 * @deprecated - Use checkMeltQuoteBolt11()
+	 * @deprecated Use checkMeltQuoteBolt11()
 	 */
 	async checkMeltQuote(
 		quote: string | MeltQuoteResponse,
@@ -1480,7 +1567,7 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
-	 * @deprecated - Use meltProofsBolt11()
+	 * @deprecated Use meltProofsBolt11()
 	 */
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
@@ -1557,7 +1644,7 @@ class Wallet {
 	): Promise<MeltProofsResponse> {
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
-		const keyset = this.keyChain.getKeyset(keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
 

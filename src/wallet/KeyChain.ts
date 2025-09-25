@@ -2,11 +2,16 @@ import { Keyset } from './Keyset';
 import { type Mint } from '../mint';
 import type { MintKeyset, MintKeys, MintAllKeysets, MintActiveKeys } from '../model/types/keyset';
 
+/**
+ * Manages the unit-specific keysets for a Mint.
+ *
+ * @remarks
+ * Will ONLY load keysets in the Keychain unit.
+ */
 export class KeyChain {
 	private mint: Mint;
 	private unit: string;
 	private keysets: { [id: string]: Keyset } = {};
-	private _activeKeysetId: string | undefined;
 
 	constructor(
 		mint: Mint,
@@ -41,6 +46,9 @@ export class KeyChain {
 			await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
 		this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
+
+		// Smoke test (will throw if init was unsuccessful)
+		this.getCheapestKeyset();
 	}
 
 	/**
@@ -76,13 +84,10 @@ export class KeyChain {
 				}
 			}
 		});
-
-		// Set active ID
-		this._activeKeysetId = this.getCheapestKeyset().id;
 	}
 
 	/**
-	 * Get a keyset by ID or the active keyset if no ID is provided.
+	 * Get a keyset by ID or the cheapest keyset if no ID is provided.
 	 *
 	 * @param id Optional keyset ID.
 	 * @returns Keyset with keys.
@@ -97,7 +102,7 @@ export class KeyChain {
 	}
 
 	/**
-	 * Get the active keyset.
+	 * Get the cheapest active keyset.
 	 *
 	 * @remarks
 	 * Selects active keyset with lowest fee and hex ID.
@@ -108,7 +113,9 @@ export class KeyChain {
 		if (Object.keys(this.keysets).length === 0) {
 			throw new Error('KeyChain not initialized');
 		}
-		const activeKeysets = Object.values(this.keysets).filter((k) => k.isActive && k.hasHexId);
+		const activeKeysets = Object.values(this.keysets).filter(
+			(k) => k.isActive && k.hasHexId && k.hasKeys,
+		);
 		if (activeKeysets.length === 0) {
 			throw new Error('No active keyset found');
 		}
