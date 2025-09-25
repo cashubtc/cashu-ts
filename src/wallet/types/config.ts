@@ -11,11 +11,6 @@ import { type OperationCounters } from '../counters';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
-export type OutputSpec = {
-	newAmount: number;
-	newOutputType: OutputType;
-};
-
 export type RestoreConfig = {
 	keysetId?: string;
 };

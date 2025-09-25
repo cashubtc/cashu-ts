@@ -28,7 +28,6 @@ import {
 	type SubscriptionCanceller,
 	type RestoreConfig,
 	type SecretsPolicy,
-	type OutputSpec,
 } from './types';
 import {
 	type CounterSource,
@@ -334,33 +333,34 @@ class Wallet {
 		return this._counterSource.reserve(keysetId, totalOutputs);
 	}
 
-	private countersNeeded(spec: OutputSpec): number {
-		const ot = spec.newOutputType;
+	private countersNeeded(ot: OutputType): number {
 		if (ot.type !== 'deterministic' || ot.counter !== 0) return 0;
-		const denoms = ot.denominations ?? [];
-		return denoms.length;
+		return (ot.denominations ?? []).length;
 	}
 
 	private async setAutoCounters(
 		keysetId: string,
-		...specs: OutputSpec[]
-	): Promise<{ specs: OutputSpec[]; used?: OperationCounters }> {
-		const total = specs.reduce((n, s) => n + this.countersNeeded(s), 0);
-		if (total === 0) return { specs };
+		...outputTypes: OutputType[]
+	): Promise<{ outputTypes: OutputType[]; used?: OperationCounters }> {
+		const total = outputTypes.reduce((n, ot) => n + this.countersNeeded(ot), 0);
+		if (total === 0) return { outputTypes };
 
 		const range = await this.reserveFor(keysetId, total);
 		let cursor = range.start;
 
-		const patched = specs.map((s) => {
-			const need = this.countersNeeded(s);
-			if (need === 0) return s;
-			const ot = s.newOutputType as Extract<OutputType, { type: 'deterministic' }>;
-			const patchedOT: OutputType = { ...ot, counter: cursor };
-			cursor += need;
-			return { ...s, newOutputType: patchedOT };
+		const patched = outputTypes.map((ot): OutputType => {
+			if (ot.type === 'deterministic' && ot.counter === 0) {
+				const need = (ot.denominations ?? []).length;
+				if (need > 0) {
+					const patched: typeof ot = { ...ot, counter: cursor };
+					cursor += need;
+					return patched;
+				}
+			}
+			return ot;
 		});
 
-		return { specs: patched, used: { keysetId, start: range.start, count: range.count } };
+		return { outputTypes: patched, used: { keysetId, start: range.start, count: range.count } };
 	}
 
 	/**
@@ -402,8 +402,8 @@ class Wallet {
 	 * @remarks
 	 * This is a non mutating alternative to bindKeyset. The new wallet inherits the mint connection,
 	 * seed, logger, and key cache from this wallet. Use this when you want to operate on multiple
-	 * keysets concurrently with separate state.
-	 * Note: Does NOT change the keyset binding in your existing instance.
+	 * keysets concurrently with separate state. Note: Does NOT change the keyset binding in your
+	 * existing instance.
 	 * @param id The keyset identifier to associate with the new wallet.
 	 * @param opts Optional overrides:
 	 *
@@ -449,6 +449,15 @@ class Wallet {
 			return { type: 'deterministic', counter: 0 }; // 0 = auto flag
 		}
 		return this._seed ? { type: 'deterministic', counter: 0 } : { type: 'random' };
+	}
+
+	/**
+	 * Sum total implied by a prepared OutputType.
+	 */
+	private preparedTotal(ot: OutputType): number {
+		if (ot.type === 'custom') return OutputData.sumOutputAmounts(ot.data);
+		const denoms = ot.denominations ?? [];
+		return denoms.reduce((a, b) => a + b, 0);
 	}
 
 	/**
@@ -548,7 +557,7 @@ class Wallet {
 		outputType: OutputType,
 		includeFees: boolean = false,
 		proofsWeHave: Proof[] = [],
-	): OutputSpec {
+	): OutputType {
 		let newAmount = amount;
 
 		// Custom outputs don't have automatic optimizations or fee inclusion)
@@ -561,7 +570,7 @@ class Wallet {
 				customTotal !== amount,
 				`Custom output data total (${customTotal}) does not match amount (${amount})`,
 			);
-			return { newOutputType: outputType, newAmount };
+			return outputType;
 		}
 
 		// Use denominations provided?
@@ -606,8 +615,7 @@ class Wallet {
 			newAmount += receiveFee;
 			denominations = [...denominations, ...receiveFeeAmounts];
 		}
-		const newOutputType: OutputType = { ...outputType, denominations };
-		return { newOutputType, newAmount };
+		return { ...outputType, denominations };
 	}
 
 	/**
@@ -751,7 +759,7 @@ class Wallet {
 
 		// Shape receive output type and denominations
 		const netAmount = totalAmount - this.getFeesForProofs(proofs);
-		let receive = this.configureOutputs(
+		let receiveOT = this.configureOutputs(
 			netAmount,
 			keyset,
 			outputType,
@@ -761,13 +769,13 @@ class Wallet {
 
 		// Assign counter atomically if OutputType is deterministic
 		// and the counter is zero (auto-assign)
-		const autoCounters = await this.setAutoCounters(keyset.id, receive);
-		[receive] = autoCounters.specs;
+		const autoCounters = await this.setAutoCounters(keyset.id, receiveOT);
+		[receiveOT] = autoCounters.outputTypes;
 		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
-		this._logger.debug('receive counter', { counter: autoCounters.used, receive });
+		this._logger.debug('receive counter', { counter: autoCounters.used, receiveOT });
 
 		// Create outputs and execute swap
-		const outputs = this.createOutputData(receive.newAmount, keyset, receive.newOutputType);
+		const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
 		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
@@ -900,17 +908,18 @@ class Wallet {
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
 		// Shape SEND output type and denominations
-		let send = this.configureOutputs(
+		let sendOT = this.configureOutputs(
 			amount,
 			keyset,
 			outputConfig.send ?? this.defaultOutputType(),
 			includeFees,
 		);
+		const sendAmount = this.preparedTotal(sendOT);
 
 		// Select the subset of proofs needed to cover the swap (sendTarget + swap fee)
 		const { keep: unselectedProofs, send: selectedProofs } = this.selectProofsToSend(
 			proofs,
-			send.newAmount,
+			sendAmount,
 			true, // Include fees to cover swap fee
 		);
 		// this._logger.debug('PROOFS SELECTED', {
@@ -924,35 +933,36 @@ class Wallet {
 		// Calculate our expected change from the swap (and sanity check!)
 		const selectedSum = sumProofs(selectedProofs);
 		const swapFee = this.getFeesForProofs(selectedProofs);
-		const changeAmount = selectedSum - swapFee - send.newAmount;
+		const changeAmount = selectedSum - swapFee - sendAmount;
 		this.failIf(changeAmount < 0, 'Not enough funds available for swap', {
 			selectedSum,
 			swapFee,
-			sendTarget: send.newAmount,
+			sendAmount,
 			changeAmount,
 		});
 
 		// Shape KEEP (change) output type and denominations
 		// No includeFees, as we are the receiver of the change
 		// Uses unselectedProofs to optimize denominations if needed
-		let keep = this.configureOutputs(
+		let keepOT = this.configureOutputs(
 			changeAmount,
 			keyset,
 			outputConfig.keep ?? this.defaultOutputType(),
 			false,
 			unselectedProofs,
 		);
+		const keepAmount = this.preparedTotal(keepOT);
 
 		// Assign counters atomically if either/both OutputTypes are deterministic
 		// and the counter is zero (auto-assign)
-		const autoCounters = await this.setAutoCounters(keyset.id, send, keep);
-		[send, keep] = autoCounters.specs;
+		const autoCounters = await this.setAutoCounters(keyset.id, sendOT, keepOT);
+		[sendOT, keepOT] = autoCounters.outputTypes;
 		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
-		this._logger.debug('send counters', { counter: autoCounters.used, send, keep });
+		this._logger.debug('send counters', { counter: autoCounters.used, sendOT, keepOT });
 
 		// Create the output data
-		const sendOutputs = this.createOutputData(send.newAmount, keyset, send.newOutputType);
-		const keepOutputs = this.createOutputData(keep.newAmount, keyset, keep.newOutputType);
+		const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
+		const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
 		// Execute swap
 		const swapTransaction = this.createSwapTransaction(selectedProofs, keepOutputs, sendOutputs);
@@ -1377,23 +1387,24 @@ class Wallet {
 		// Shape output type and denominations for our proofs
 		// we are receiving, so no includeFees.
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
-		let mintProofs = this.configureOutputs(
+		let mintOT = this.configureOutputs(
 			amount,
 			keyset,
 			outputType,
 			false, // no fees
 			proofsWeHave,
 		);
+		const mintAmount = this.preparedTotal(mintOT);
 
 		// Assign counters atomically if OutputType is deterministic
 		// and the counter is zero (auto-assign)
-		const autoCounters = await this.setAutoCounters(keyset.id, mintProofs);
-		[mintProofs] = autoCounters.specs;
+		const autoCounters = await this.setAutoCounters(keyset.id, mintOT);
+		[mintOT] = autoCounters.outputTypes;
 		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
-		this._logger.debug('mint counter', { counter: autoCounters.used, mintProofs });
+		this._logger.debug('mint counter', { counter: autoCounters.used, mintOT });
 
 		// Create outputs and mint payload
-		const outputs = this.createOutputData(mintProofs.newAmount, keyset, mintProofs.newOutputType);
+		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		let mintPayload: MintPayload;
 		if (typeof quote === 'string') {
@@ -1663,24 +1674,17 @@ class Wallet {
 			if (outputType.type === 'custom') {
 				this.fail('Custom OutputType not supported for melt change (must be 0-sat blanks)');
 			}
-			let melt: OutputSpec = {
-				newAmount: 0,
-				newOutputType: {
-					...outputType,
-					denominations, // Our 0-sat blanks
-				},
-			};
-
+			let meltOT: OutputType = { ...outputType, denominations };
 			// Assign counter atomically if OutputType is deterministic
 			// and the counter is zero (auto-assign)
-			const autoCounters = await this.setAutoCounters(keyset.id, melt);
-			[melt] = autoCounters.specs;
+			const autoCounters = await this.setAutoCounters(keyset.id, meltOT);
+			[meltOT] = autoCounters.outputTypes;
 			if (autoCounters.used) onCountersReserved?.(autoCounters.used);
-			this._logger.debug('melt counter', { counter: autoCounters.used, melt });
+			this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
 
 			// Generate the blank outputs (no fees as we are receiving change)
 			// Remember, zero amount + zero denomination passes splitAmount validation
-			outputData = this.createOutputData(0, keyset, melt.newOutputType);
+			outputData = this.createOutputData(0, keyset, meltOT);
 		}
 
 		// Prepare proofs for mint
