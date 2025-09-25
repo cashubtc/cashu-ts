@@ -186,14 +186,9 @@ class Wallet {
 	) {
 		this.ops = new WalletOps(this);
 		this.on = new WalletEvents(this);
-		this._logger = options?.logger ?? NULL_LOGGER;
-		this._selectProofs = options?.selectProofs ?? selectProofsRGLI;
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._unit = options?.unit ?? this._unit;
-		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
-		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
-		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
-		// Validate and set seed
+		this._boundKeysetId = options?.keysetId ?? '__PENDING__';
 		if (options?.bip39seed) {
 			this.failIf(
 				!(options.bip39seed instanceof Uint8Array),
@@ -205,7 +200,6 @@ class Wallet {
 			this._seed = options.bip39seed;
 		}
 		this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
-		this._boundKeysetId = options?.keysetId ?? '__PENDING__';
 		if (options?.counterSource) {
 			this._counterSource = options.counterSource;
 		} else {
@@ -215,6 +209,11 @@ class Wallet {
 					: undefined;
 			this._counterSource = new EphemeralCounterSource(initial);
 		}
+		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
+		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
+		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
+		this._selectProofs = options?.selectProofs ?? selectProofsRGLI;
+		this._logger = options?.logger ?? NULL_LOGGER;
 	}
 
 	// Convenience wrappers for "log and throw"
