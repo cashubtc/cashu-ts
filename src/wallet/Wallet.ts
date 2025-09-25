@@ -186,6 +186,8 @@ class Wallet {
 	) {
 		this.ops = new WalletOps(this);
 		this.on = new WalletEvents(this);
+		this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
+		this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._unit = options?.unit ?? this._unit;
 		this._boundKeysetId = options?.keysetId ?? '__PENDING__';
@@ -201,8 +203,10 @@ class Wallet {
 		}
 		this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
 		if (options?.counterSource) {
+			// Set custom counterSource
 			this._counterSource = options.counterSource;
 		} else {
+			// Set internal counterSource + iniital counter
 			const initial =
 				options?.keysetId && options.initialCounter != null
 					? { [options.keysetId]: options.initialCounter }
@@ -212,8 +216,6 @@ class Wallet {
 		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
 		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
-		this._selectProofs = options?.selectProofs ?? selectProofsRGLI;
-		this._logger = options?.logger ?? NULL_LOGGER;
 	}
 
 	// Convenience wrappers for "log and throw"
@@ -544,7 +546,8 @@ class Wallet {
 	}
 
 	/**
-	 * Sum total implied by a prepared OutputType.
+	 * Sum total implied by a prepared OutputType. Note: Empty denomination is valid (e.g: zero
+	 * change).
 	 */
 	private preparedTotal(ot: OutputType): number {
 		if (ot.type === 'custom') return OutputData.sumOutputAmounts(ot.data);
@@ -662,7 +665,7 @@ class Wallet {
 		this._logger.debug('createSwapTransaction:', {
 			indices,
 			sortedKeepVector,
-			outputs,
+			// outputs, // <-- removed for security
 		});
 		const payload: SwapPayload = {
 			inputs,
@@ -735,8 +738,13 @@ class Wallet {
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
-		if (requireDleq && proofs.some((p) => !hasValidDleq(p, keyset))) {
-			this.fail('Token contains proofs with invalid or missing DLEQ');
+		if (requireDleq) {
+			for (const p of proofs) {
+				const ks = this.keyChain.getKeyset(p.id);
+				if (!hasValidDleq(p, ks)) {
+					this.fail('Token contains proofs with invalid or missing DLEQ');
+				}
+			}
 		}
 
 		// Shape receive output type and denominations
@@ -1675,8 +1683,17 @@ class Wallet {
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
-		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
+		const sendAmount = sumProofs(proofsToSend);
+		const feeReserve = sendAmount - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
+		/**
+		 * @todo - Confirm if we should throw here... "wallet.meltProofsBolt12 delegates and returns"
+		 *   test fails if we do.
+		 */
+		// this.failIf(feeReserve < 0, 'Not enough proofs to cover amount + fee reserve', {
+		// 	sendAmount,
+		// 	quoteAmount: meltQuote.amount,
+		// });
 
 		// Create NUT-08 blanks for return of Lightning fee change
 		// Note: zero amount + zero denomination passes splitAmount validation

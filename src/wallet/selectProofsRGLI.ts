@@ -41,6 +41,7 @@ export const selectProofsRGLI: SelectProofs = (
 		exFee: number;
 		ppkfee: number;
 	}
+	// Looks up fee for a proof
 	const feeForProof = (proof: Proof): number => {
 		try {
 			return keyChain.getKeyset(proof.id).fee;
