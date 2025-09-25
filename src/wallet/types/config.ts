@@ -124,41 +124,6 @@ export interface OutputConfig {
 }
 
 /**
- * Default `OutputType` ({ type: 'random' }).
- *
- * @remarks
- * Use for default random outputs in methods like `wallet.receive`. Narrowly typed for easy
- * spreading/customization.
- * @example
- *
- *     // Basic usage
- *     await wallet.receive('cashuB...', DEFAULT_OUTPUT, { requireDleq: true });
- *     // Customized
- *     const custom: OutputType = { ...DEFAULT_OUTPUT, denominations: [1, 2, 4] };
- */
-export const DEFAULT_OUTPUT = { type: 'random' } satisfies Extract<OutputType, { type: 'random' }>;
-
-/**
- * Default config for send/swap operations.
- *
- * @remarks
- * Simplifies calls; spread for customization.
- * @example
- *
- *     await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
- *
- *     const customKeep = {
- *     	...DEFAULT_OUTPUT_CONFIG,
- *     	keep: { type: 'deterministic', counter: 0 },
- *     };
- *     await wallet.send(5, proofs, customKeep, { includeFees: true });
- */
-export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
-	send: DEFAULT_OUTPUT,
-	keep: DEFAULT_OUTPUT,
-};
-
-/**
  * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11.
  */
 export type P2PKOptions = {

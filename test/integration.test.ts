@@ -17,7 +17,6 @@ import {
 	OutputData,
 	OutputDataFactory,
 	OutputConfig,
-	DEFAULT_OUTPUT,
 	OutputType,
 } from '../src';
 import ws from 'ws';
@@ -305,7 +304,7 @@ describe('mint api', () => {
 		const data = OutputData.createSingleDeterministicData(1, hexToBytes(hexSeed), 1, keys.id);
 		const quote = await wallet.createMintQuote(1);
 		await new Promise((r) => setTimeout(r, 1500));
-		const proof = await wallet.mintProofs(1, quote.quote, { type: 'custom', data: [data] });
+		const proof = await wallet.mintProofs(1, quote.quote, {}, { type: 'custom', data: [data] });
 		expect(proof).toBeDefined();
 	});
 	test('websocket updates', async () => {
@@ -552,7 +551,7 @@ describe('Custom Outputs', () => {
 		// Lets mint some fresh proofs, using our p2pKFactory as the outputType
 		const quoteRes = await wallet.createMintQuote(32);
 		await new Promise((res) => setTimeout(res, 2000));
-		const proofs = await wallet.mintProofs(32, quoteRes.quote, keepFactory);
+		const proofs = await wallet.mintProofs(32, quoteRes.quote, {}, keepFactory);
 
 		// Because of the keepFactory we expect these proofs to be locked to our public key
 		expectNUT10SecretDataToEqual(proofs, hexPk);
@@ -570,16 +569,16 @@ describe('Custom Outputs', () => {
 		const { keep: meltKeep, send: meltSend } = await wallet.send(
 			meltAmount,
 			signedProofs,
-			customConfig,
 			{
 				includeFees: true,
 			},
+			customConfig,
 		);
 		// Again the change we get from the swap are expected to be locked to our public key
 		expectNUT10SecretDataToEqual(meltKeep, hexPk);
 
 		// We then pay the melt. In this case no private key is required, as our factory only applies to keep Proofs, not send Proofs
-		const meltRes = await wallet.meltProofs(meltQuote, meltSend, keepFactory);
+		const meltRes = await wallet.meltProofs(meltQuote, meltSend, {}, keepFactory);
 		// Even the change we receive from the fee reserve is expected to be locked
 		if (meltRes.change && meltRes.change.length > 0) {
 			expectNUT10SecretDataToEqual(meltRes.change, hexPk);
@@ -596,6 +595,7 @@ describe('Custom Outputs', () => {
 		};
 		const newProofs = await wallet.receive(
 			{ proofs: unlockedProofs.send, mint: mintUrl, unit: wallet.unit },
+			{},
 			newFactory,
 		);
 		// We expect all received proofs to be locked using newFactory
@@ -615,7 +615,7 @@ describe('Custom Outputs', () => {
 
 		const quote = await wallet.createMintQuote(21);
 		await new Promise((res) => setTimeout(res, 1000));
-		const proofs = await wallet.mintProofs(21, quote.quote, manualFactory);
+		const proofs = await wallet.mintProofs(21, quote.quote, {}, manualFactory);
 		expectNUT10SecretDataToEqual(proofs, 'mintTest');
 	});
 	test('Manual Factory Send', async () => {
@@ -633,10 +633,15 @@ describe('Custom Outputs', () => {
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(21, quote.quote);
 		const amount = sumProofs(proofs) - wallet.getFeesForProofs(proofs);
-		const { send, keep } = await wallet.send(amount, proofs, {
-			send: { type: 'factory', factory: createFactory('send') },
-			keep: { type: 'factory', factory: createFactory('keep') },
-		});
+		const { send, keep } = await wallet.send(
+			amount,
+			proofs,
+			{},
+			{
+				send: { type: 'factory', factory: createFactory('send') },
+				keep: { type: 'factory', factory: createFactory('keep') },
+			},
+		);
 		expectNUT10SecretDataToEqual(send, 'send');
 		expectNUT10SecretDataToEqual(keep, 'keep');
 	});
@@ -651,10 +656,10 @@ describe('Custom Outputs', () => {
 		const data1 = OutputData.createP2PKData({ pubkey: 'key1' }, 10, keys);
 		const data2 = OutputData.createP2PKData({ pubkey: 'key2' }, 10, keys);
 		const customConfig: OutputConfig = {
-			keep: DEFAULT_OUTPUT,
+			keep: wallet.defaultOutputType(),
 			send: { type: 'custom', data: [...data1, ...data2] },
 		};
-		const { send } = await wallet.send(20, proofs, customConfig);
+		const { send } = await wallet.send(20, proofs, {}, customConfig);
 		const key1Sends = send.slice(0, data1.length);
 		const key2Sends = send.slice(data1.length);
 		expectNUT10SecretDataToEqual(key1Sends, 'key1');
@@ -674,7 +679,8 @@ describe('Keep Vector and Reordering', () => {
 		const { send } = await wallet.send(32, testProofs, { includeFees: true });
 		const receiveProofs = await wallet.receive(
 			{ mint: mintUrl, proofs: send, unit: wallet.unit }, // "token"
-			{ type: 'random', denominations: testOutputAmounts },
+			{}, // config
+			{ type: 'random', denominations: testOutputAmounts }, // outputType
 		);
 		receiveProofs.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
 	});
@@ -693,7 +699,7 @@ describe('Keep Vector and Reordering', () => {
 			keep: { type: 'random', denominations: [16, 8, ...Array(8 - fees).fill(1)] },
 			send: { type: 'random', denominations: testOutputAmounts },
 		};
-		const { send } = await wallet.send(32, testProofs, customConfig);
+		const { send } = await wallet.send(32, testProofs, {}, customConfig);
 		send.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
 	});
 });

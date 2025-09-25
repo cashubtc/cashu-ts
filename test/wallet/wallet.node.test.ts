@@ -5,7 +5,6 @@ import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi 
 import {
 	Mint,
 	Wallet,
-	DEFAULT_OUTPUT,
 	CheckStateEnum,
 	type Proof,
 	type MeltQuoteResponse,
@@ -539,7 +538,11 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, { type: 'random', denominations: [1, 1, 1] });
+		const proofs = await wallet.receive(
+			token3sat,
+			{},
+			{ type: 'random', denominations: [1, 1, 1] },
+		);
 
 		expect(proofs).toHaveLength(3);
 		expect(proofs).toMatchObject([
@@ -611,7 +614,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit, bip39seed: seed });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, { type: 'deterministic', counter: 0 });
+		const proofs = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -626,7 +629,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 
 		// get next secrets too
-		const proofs2 = await wallet.receive(token3sat, { type: 'deterministic', counter: 0 });
+		const proofs2 = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
 		expect(proofs2).toHaveLength(2);
 		expect(proofs2).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -641,7 +644,7 @@ describe('receive', () => {
 		expect(/[0-9a-f]{64}/.test(proofs2[0].C)).toBe(true);
 
 		// get next secrets too
-		const proofs3 = await wallet.receive(token3sat, { type: 'deterministic', counter: 0 });
+		const proofs3 = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
 		expect(proofs3).toHaveLength(2);
 		expect(proofs3).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -680,7 +683,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit, bip39seed: seed });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, { type: 'deterministic', counter: 5 });
+		const proofs = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 5 });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -717,10 +720,14 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, {
-			type: 'p2pk',
-			options: { pubkey: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4' },
-		});
+		const proofs = await wallet.receive(
+			token3sat,
+			{},
+			{
+				type: 'p2pk',
+				options: { pubkey: '02a9acc1e594c8d2f91fbd5664973aaef2ff2b8c2f6cf5f419c17a35755a6ab5c4' },
+			},
+		);
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -760,7 +767,7 @@ describe('receive', () => {
 		const customFactory = (amount: number, keyset: MintKeys): OutputData => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
-		const proofs = await wallet.receive(token3sat, { type: 'factory', factory: customFactory });
+		const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -802,7 +809,7 @@ describe('receive', () => {
 			wallet.keyChain.getKeyset('00bd033559de27d0')!,
 			[1, 1, 1],
 		);
-		const proofs = await wallet.receive(token3sat, { type: 'custom', data: customData });
+		const proofs = await wallet.receive(token3sat, {}, { type: 'custom', data: customData });
 		expect(proofs).toHaveLength(3);
 		expect(proofs).toMatchObject([
 			{ amount: 1, id: '00bd033559de27d0' },
@@ -817,7 +824,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		await expect(wallet.receive(token3sat, DEFAULT_OUTPUT, { requireDleq: true })).rejects.toThrow(
+		await expect(wallet.receive(token3sat, { requireDleq: true })).rejects.toThrow(
 			'Token contains proofs with invalid or missing DLEQ',
 		);
 		// Try using a receive helper too
@@ -887,7 +894,7 @@ describe('receive', () => {
 			],
 			unit: 'sat',
 		};
-		const proofs = await wallet.receive(tok, DEFAULT_OUTPUT, { proofsWeHave: existingProofs });
+		const proofs = await wallet.receive(tok, { proofsWeHave: existingProofs });
 		// receiving 5 with a target count of 3, we expect three 1s, and one 2
 		// as we already have the target amount of 2s
 		expect(proofs).toHaveLength(4);
@@ -921,7 +928,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, DEFAULT_OUTPUT, {
+		const proofs = await wallet.receive(token3sat, {
 			privkey: '5d41402abc4b2a76b9719d911017c592',
 		});
 		expect(proofs).toHaveLength(2);
@@ -955,7 +962,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const proofs = await wallet.receive(token3sat, DEFAULT_OUTPUT, {
+		const proofs = await wallet.receive(token3sat, {
 			keysetId: '00bd033559de27d0',
 		});
 		expect(proofs).toHaveLength(2);
@@ -1240,10 +1247,10 @@ describe('send', () => {
 				},
 			],
 			{
-				send: { type: 'p2pk', options: { pubkey: 'pk' } },
+				// p2pk: { pubkey: 'pk' }
 			},
 			{
-				// p2pk: { pubkey: 'pk' }
+				send: { type: 'p2pk', options: { pubkey: 'pk' } },
 			},
 		);
 
@@ -1342,12 +1349,12 @@ describe('send', () => {
 			4,
 			overpayProofs,
 			{
-				send: { type: 'random', denominations: [1, 1, 1, 1] },
-				keep: { type: 'random', denominations: [] },
-			},
-			{
 				// preference: { sendPreference: [{ amount: 1, count: 4 }] }
 				// outputAmounts: { sendAmounts: [1, 1, 1, 1], keepAmounts: [] },
+			},
+			{
+				send: { type: 'random', denominations: [1, 1, 1, 1] },
+				keep: { type: 'random', denominations: [] },
 			},
 		);
 
@@ -1410,11 +1417,11 @@ describe('send', () => {
 		const result = await wallet.send(
 			3,
 			overpayProofs,
+			{},
 			{
 				send: { type: 'random', denominations: [1, 1, 1] },
 				keep: { type: 'random', denominations: [1] },
 			},
-			{},
 		);
 
 		expect(result.send).toHaveLength(3);
@@ -1612,7 +1619,7 @@ describe('send', () => {
 			send: { type: 'deterministic', counter: 0 },
 			keep: { type: 'deterministic', counter: 0 }, // Should auto-offset to send.length
 		};
-		const result = await wallet.send(3, overpayProofs, outputConfig, { includeFees: true });
+		const result = await wallet.send(3, overpayProofs, { includeFees: true }, outputConfig);
 		// Assert no overlap (e.g., secrets are unique)
 		const allSecrets = [...result.keep, ...result.send].map((p) => p.secret);
 		expect(new Set(allSecrets).size).toBe(allSecrets.length); // No duplicates
@@ -1634,6 +1641,7 @@ describe('deterministic', () => {
 						C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 					},
 				],
+				{},
 				{ send: { type: 'deterministic', counter: 1 } },
 			)
 			.catch((e) => e);
@@ -3171,7 +3179,7 @@ describe('melt proofs', () => {
 				capturedBlanks = blanks;
 			},
 		};
-		const response = await wallet.meltProofs(meltQuote, proofsToSend, DEFAULT_OUTPUT, config);
+		const response = await wallet.meltProofs(meltQuote, proofsToSend, config);
 
 		expect(capturedBlanks).toBeDefined();
 		expect(capturedBlanks!.method).toBe('bolt11');
@@ -3249,12 +3257,7 @@ describe('melt proofs', () => {
 				capturedBlanks = blanks;
 			},
 		};
-		const initialResponse = await wallet.meltProofs(
-			meltQuote,
-			proofsToSend,
-			DEFAULT_OUTPUT,
-			config,
-		);
+		const initialResponse = await wallet.meltProofs(meltQuote, proofsToSend, config);
 
 		expect(initialResponse.quote.state).toBe(MeltQuoteState.UNPAID);
 		expect(initialResponse.change).toHaveLength(0);

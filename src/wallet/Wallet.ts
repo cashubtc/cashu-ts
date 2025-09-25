@@ -9,7 +9,6 @@ import {
 	type MeltBlanks,
 	type OutputType,
 	type OutputConfig,
-	DEFAULT_OUTPUT,
 	type SendConfig,
 	type SendOfflineConfig,
 	type ReceiveConfig,
@@ -271,6 +270,9 @@ class Wallet {
 		return this._mintInfo;
 	}
 
+	/**
+	 * The keyset ID bound to this wallet instance.
+	 */
 	get keysetId(): string {
 		this.failIf(this._boundKeysetId === '__PENDING__', 'Wallet not initialised, call loadMint');
 		return this._boundKeysetId;
@@ -603,43 +605,30 @@ class Wallet {
 	}
 
 	/**
-	 * Receive with wallet-chosen defaults (policy-driven).
+	 * Receive a token (swaps with mint for new proofs)
 	 *
-	 * @example Await wallet.receive(token);
+	 * @example
+	 *
+	 * ```typescript
+	 * const result = await wallet.receive(
+	 * 	token,
+	 * 	{ includeFees: true },
+	 * 	{ type: 'deterministic', counter: 0 },
+	 * );
+	 * ```
 	 *
 	 * @param token Token string or decoded token.
 	 * @param config Optional receive config.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns Newly minted proofs.
-	 */
-	receive(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
-
-	/**
-	 * Receive with an explicit output type (e.g., deterministic or p2pk).
-	 *
-	 * @example Await wallet.receive(token, { type: 'deterministic', counter: 0 });
-	 *
-	 * @param token Token string or decoded token.
-	 * @param outputType Output type to use for the new proofs.
-	 * @param config Optional receive config.
-	 * @returns Newly minted proofs.
-	 */
-	receive(token: Token | string, outputType: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
-
-	/**
-	 * @internal
 	 */
 	async receive(
 		token: Token | string,
-		outputTypeOrConfig?: OutputType | ReceiveConfig,
-		maybeConfig?: ReceiveConfig,
+		config?: ReceiveConfig,
+		outputType?: OutputType,
 	): Promise<Proof[]> {
-		const hasOutputType = outputTypeOrConfig && 'type' in (outputTypeOrConfig as OutputType);
-		const outputType: OutputType = hasOutputType
-			? (outputTypeOrConfig as OutputType)
-			: this.defaultOutputType();
-		const config: ReceiveConfig = hasOutputType
-			? (maybeConfig ?? {})
-			: ((outputTypeOrConfig as ReceiveConfig) ?? {});
+		const { keysetId, privkey, requireDleq, proofsWeHave, onCountersReserved } = config || {};
+		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
 		let proofs: Proof[] = [];
 		const keysets = this.keyChain.getKeysets();
@@ -664,13 +653,13 @@ class Wallet {
 		}
 
 		// Sign proofs if needed
-		if (config?.privkey) {
-			proofs = this.signP2PKProofs(proofs, config?.privkey);
+		if (privkey) {
+			proofs = this.signP2PKProofs(proofs, privkey);
 		}
 
 		// Check DLEQs if needed
-		const keyset = this.keyChain.getKeyset(config?.keysetId);
-		if (config?.requireDleq && proofs.some((p) => !hasValidDleq(p, keyset))) {
+		const keyset = this.keyChain.getKeyset(keysetId);
+		if (requireDleq && proofs.some((p) => !hasValidDleq(p, keyset))) {
 			this.fail('Token contains proofs with invalid or missing DLEQ');
 		}
 
@@ -681,14 +670,14 @@ class Wallet {
 			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
-			config?.proofsWeHave,
+			proofsWeHave,
 		);
 
 		// Assign counter atomically if OutputType is deterministic
 		// and the counter is zero (auto-assign)
 		const autoCounters = await this.setAutoCounters(keyset.id, receive);
 		[receive] = autoCounters.specs;
-		if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
 		this._logger.debug('receive counter', { counter: autoCounters.used, receive });
 
 		// Create outputs and execute swap
@@ -736,86 +725,45 @@ class Wallet {
 	}
 
 	/**
-	 * Send with wallet-chosen defaults for both sides (send/keep).
+	 * Send proofs with online swap if necessary.
 	 *
 	 * @remarks
-	 * This method performs an online swap if necessary. The wallet defaults to deterministic secrets
-	 * for both `send` and `keep` outputs if you have provided a seed, random otherwise. If proofs are
-	 * P2PK-locked to your public key, call signP2PKProofs first to sign them.
+	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
 	 * // Simple send
 	 * const result = await wallet.send(5, proofs);
 	 *
-	 * // Or with a SendConfig
+	 * // With a SendConfig
 	 * const result = await wallet.send(5, proofs, { includeFees: true });
 	 *
-	 * @param amount Amount to send (receiver gets this net amount).
-	 * @param proofs Array of proofs to split.
-	 * @param config Optional parameters for the swap.
-	 * @returns SendResponse with keep/send proofs.
-	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
-	 * ```
-	 */
-	send(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
-
-	/**
-	 * Send with explicit output config (send/keep types).
-	 *
-	 * @remarks
-	 * This method performs an online swap if necessary. P2PK-locked to your public key, call
-	 * signP2PKProofs first to sign them.
-	 * @example
-	 *
-	 * ```typescript
-	 * // Custom output configuration
+	 * // With Custom output configuration
 	 * const customConfig: OutputConfig = {
 	 * 	send: { type: 'p2pk', options: { pubkey: '...' } },
 	 * 	keep: { type: 'deterministic', counter: 0 },
 	 * };
-	 * const customResult = await wallet.send(5, proofs, customConfig, { includeFees: true });
+	 * const customResult = await wallet.send(5, proofs, { includeFees: true }, customConfig);
 	 * ```
 	 *
 	 * @param amount Amount to send (receiver gets this net amount).
 	 * @param proofs Array of proofs to split.
-	 * @param outputConfig Configuration for send and keep (change) outputs.
 	 * @param config Optional parameters for the swap.
 	 * @returns SendResponse with keep/send proofs.
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
-	send(
-		amount: number,
-		proofs: Proof[],
-		outputConfig: OutputConfig,
-		config?: SendConfig,
-	): Promise<SendResponse>;
-
-	/**
-	 * @internal
-	 */
 	async send(
 		amount: number,
 		proofs: Proof[],
-		outputConfigOrConfig?: OutputConfig | SendConfig,
-		maybeConfig?: SendConfig,
+		config?: SendConfig,
+		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
-		// Make defaults policy-driven for BOTH send and keep
-		const defaultSend = this.defaultOutputType();
-		const defaultKeep = this.defaultOutputType();
-
-		// Decide which overload we’re in and init vars
-		const isOutputConfig = (arg: OutputConfig | SendConfig | undefined): arg is OutputConfig => {
-			return !!arg && typeof arg === 'object' && 'send' in arg;
+		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+		// Fallback to policy defaults if no outputConfig
+		outputConfig = outputConfig ?? {
+			send: this.defaultOutputType(),
+			keep: this.defaultOutputType(),
 		};
-		const hasOutputConfig = isOutputConfig(outputConfigOrConfig);
-		const outputConfig: OutputConfig = hasOutputConfig
-			? outputConfigOrConfig
-			: { send: defaultSend, keep: defaultKeep };
-		const config: SendConfig = hasOutputConfig
-			? (maybeConfig ?? {})
-			: ((outputConfigOrConfig as SendConfig) ?? {});
-		const { keysetId, includeFees = false } = config || {};
 
 		// First, let's see if we can avoid a swap (and fees)
 		// by trying an exact match offline selection, including fees if
@@ -823,6 +771,7 @@ class Wallet {
 		// In Wallet.ts, near send()
 
 		try {
+			// Offline exact-match only allowed for plain-random defaults; deterministic implies swap.
 			const wantsDeterministicByPolicy = this.defaultOutputType().type === 'deterministic';
 			const isPlainRandom = (ot?: OutputType) =>
 				!ot || (ot.type === 'random' && (!ot.denominations || ot.denominations.length === 0));
@@ -912,7 +861,7 @@ class Wallet {
 		// and the counter is zero (auto-assign)
 		const autoCounters = await this.setAutoCounters(keyset.id, send, keep);
 		[send, keep] = autoCounters.specs;
-		if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
 		this._logger.debug('send counters', { counter: autoCounters.used, send, keep });
 
 		// Create the output data
@@ -1449,7 +1398,7 @@ class Wallet {
 	 * @param options.amount BOLT12 offer amount requesting for mint. If not specified, the offer will
 	 *   be amountless.
 	 * @param options.description Description for the mint quote.
-	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
+	 * @returns The mint will return a mint quote with a BOLT12 offer for minting tokens of the
 	 *   specified amount and unit.
 	 */
 	async createMintQuoteBolt12(
@@ -1503,72 +1452,41 @@ class Wallet {
 	}
 
 	/**
-	 * Mint proofs with wallet-chosen defaults (policy-driven).
+	 * Mint proofs for a bolt11 quote.
 	 *
 	 * @param amount Amount to mint.
-	 * @param quote Mint quote ID or object (bolt11/bolt12).
+	 * @param quote Mint quote ID or object (bolt11).
 	 * @param config Optional parameters (e.g. privkey for locked quotes).
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns Minted proofs.
 	 */
 	async mintProofs(
 		amount: number,
 		quote: string | MintQuoteResponse,
 		config?: MintProofsConfig,
-	): Promise<Proof[]>;
-
-	/**
-	 * Mint proofs for a bolt11 quote with an explicit output type.
-	 *
-	 * @param amount Amount to mint.
-	 * @param quote Mint quote ID or object (bolt11/bolt12).
-	 * @param outputType Configuration for proof generation. Defaults to 'random'.
-	 * @param config Optional parameters (e.g. privkey for locked quotes).
-	 * @returns Minted proofs.
-	 */
-	async mintProofs(
-		amount: number,
-		quote: string | MintQuoteResponse,
-		outputType: OutputType,
-		config?: MintProofsConfig,
-	): Promise<Proof[]>;
-
-	/**
-	 * @internal
-	 */
-	async mintProofs(
-		amount: number,
-		quote: string | MintQuoteResponse,
-		outputTypeOrConfig?: OutputType | MintProofsConfig,
-		maybeConfig?: MintProofsConfig,
+		outputType?: OutputType,
 	): Promise<Proof[]> {
-		const hasOutputType = outputTypeOrConfig && 'type' in (outputTypeOrConfig as OutputType);
-		const outputType: OutputType = hasOutputType
-			? (outputTypeOrConfig as OutputType)
-			: this.defaultOutputType();
-		const config: MintProofsConfig = hasOutputType
-			? (maybeConfig ?? {})
-			: ((outputTypeOrConfig as MintProofsConfig) ?? {});
-		return this._mintProofs('bolt11', amount, quote, outputType, config);
+		return this._mintProofs('bolt11', amount, quote, config, outputType);
 	}
 
 	/**
-	 * Mints proofs for a bolt12 quote using specified output configuration.
+	 * Mints proofs for a bolt12 quote.
 	 *
 	 * @param amount Amount to mint.
 	 * @param quote Bolt12 mint quote.
 	 * @param privkey Private key to unlock the quote.
-	 * @param outputType Configuration for proof generation. Defaults to random.
 	 * @param config Optional parameters (e.g. keysetId).
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns Minted proofs.
 	 */
 	async mintProofsBolt12(
 		amount: number,
 		quote: Bolt12MintQuoteResponse,
 		privkey: string,
-		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: { keysetId?: string },
+		outputType?: OutputType,
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt12', amount, quote, outputType, { ...config, privkey });
+		return this._mintProofs('bolt12', amount, quote, { ...config, privkey }, outputType);
 	}
 
 	/**
@@ -1680,63 +1598,24 @@ class Wallet {
 	}
 
 	/**
-	 * Melt proofs for a bolt11 melt quote, returns change proofs using using Default (random)
-	 * secrets.
-	 *
-	 * @remarks
-	 * Beginner-friendly default for privacy-focused melting.
-	 * @param meltQuote ID of the melt quote.
-	 * @param proofsToSend Proofs to melt.
-	 * @param config Optional parameters.
-	 * @returns MeltProofsResponse with quote and change proofs.
-	 */
-	async meltProofsAsDefault(
-		meltQuote: MeltQuoteResponse,
-		proofsToSend: Proof[],
-		config?: MeltProofsConfig,
-	): Promise<MeltProofsResponse> {
-		return this.meltProofs(meltQuote, proofsToSend, DEFAULT_OUTPUT, config);
-	}
-
-	/**
-	 * Melt proofs for a bolt11 melt quote, returns change proofs using deterministic secrets.
-	 *
-	 * @remarks
-	 * Beginner-friendly for receiving recoverable change proofs. Requires wallet seed.
-	 * @param meltQuote ID of the melt quote.
-	 * @param proofsToSend Proofs to melt.
-	 * @param counter Starting counter for deterministic secrets.
-	 * @param config Optional parameters.
-	 * @returns MeltProofsResponse with quote and change proofs.
-	 */
-	async meltProofsAsDeterministic(
-		meltQuote: MeltQuoteResponse,
-		proofsToSend: Proof[],
-		counter: number,
-		config?: MeltProofsConfig,
-	): Promise<MeltProofsResponse> {
-		return this.meltProofs(meltQuote, proofsToSend, { type: 'deterministic', counter }, config);
-	}
-
-	/**
-	 * Melt proofs for a bolt11 melt quote, returns change proofs using specified outputType.
+	 * Melt proofs for a bolt11 melt quote.
 	 *
 	 * @remarks
 	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
 	 * perform coin selection!.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
-	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
 	 * @param config Optional parameters.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofs(
 		meltQuote: MeltQuoteResponse,
 		proofsToSend: Proof[],
-		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MeltProofsConfig,
+		outputType?: OutputType,
 	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, outputType, config);
+		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
 	}
 
 	/**
@@ -1747,17 +1626,17 @@ class Wallet {
 	 * perform coin selection!.
 	 * @param meltQuote ID of the melt quote.
 	 * @param proofsToSend Proofs to melt.
-	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
 	 * @param config Optional parameters.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofsBolt12(
 		meltQuote: Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
-		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MeltProofsConfig,
+		outputType?: OutputType,
 	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, outputType, config);
+		return this._meltProofs('bolt12', meltQuote, proofsToSend, config, outputType);
 	}
 
 	/**
@@ -1848,7 +1727,7 @@ class Wallet {
 	}
 
 	/**
-	 * Register a callback to be called whenever a melt quote's state changes.
+	 * Register a callback to be called when a single melt quote gets paid.
 	 *
 	 * @param quoteIds List of melt quote IDs that should be subscribed to.
 	 * @param callback Callback function that will be called whenever a melt quote state changes.
@@ -1896,7 +1775,7 @@ class Wallet {
 	}
 
 	/**
-	 * Register a callback to be called when a single melt quote gets paid.
+	 * Register a callback to be called whenever a melt quote’s state changes.
 	 *
 	 * @param quoteId Melt quote id that should be subscribed to.
 	 * @param callback Callback function that will be called when this melt quote gets paid.
@@ -1963,8 +1842,8 @@ class Wallet {
 	 * @param method 'bolt11' or 'bolt12'.
 	 * @param amount Amount to mint (must be positive).
 	 * @param quote Quote ID or object.
-	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
 	 * @param config Optional (privkey, keysetId).
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns Minted proofs.
 	 * @throws If params are invalid or mint returns errors.
 	 */
@@ -1972,10 +1851,11 @@ class Wallet {
 		method: T,
 		amount: number,
 		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
-		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MintProofsConfig,
+		outputType?: OutputType,
 	): Promise<Proof[]> {
-		const { privkey, keysetId, proofsWeHave } = config ?? {};
+		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
+		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 		this.failIf(amount <= 0, 'Invalid mint amount: must be positive', { amount });
 
 		// Shape output type and denominations for our proofs
@@ -1993,7 +1873,7 @@ class Wallet {
 		// and the counter is zero (auto-assign)
 		const autoCounters = await this.setAutoCounters(keyset.id, mintProofs);
 		[mintProofs] = autoCounters.specs;
-		if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
 		this._logger.debug('mint counter', { counter: autoCounters.used, mintProofs });
 
 		// Create outputs and mint payload
@@ -2040,8 +1920,8 @@ class Wallet {
 	 * @param method Payment method of the quote.
 	 * @param meltQuote The bolt11 or bolt12 melt quote.
 	 * @param proofsToSend Proofs to melt.
-	 * @param outputType Proof generation config (random, deterministic, p2pk, etc.).
 	 * @param config Optional (keysetId, onChangeOutputsCreated).
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns MeltProofsResponse.
 	 * @throws If params are invalid or mint returns errors.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
@@ -2050,10 +1930,11 @@ class Wallet {
 		method: T,
 		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
 		proofsToSend: Proof[],
-		outputType: OutputType = DEFAULT_OUTPUT,
 		config?: MeltProofsConfig,
+		outputType?: OutputType,
 	): Promise<MeltProofsResponse> {
-		const { keysetId, onChangeOutputsCreated } = config || {};
+		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
+		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
 		const keyset = this.keyChain.getKeyset(keysetId);
 		const feeReserve = sumProofs(proofsToSend) - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
@@ -2085,7 +1966,7 @@ class Wallet {
 			// and the counter is zero (auto-assign)
 			const autoCounters = await this.setAutoCounters(keyset.id, melt);
 			[melt] = autoCounters.specs;
-			if (autoCounters.used) config?.onCountersReserved?.(autoCounters.used);
+			if (autoCounters.used) onCountersReserved?.(autoCounters.used);
 			this._logger.debug('melt counter', { counter: autoCounters.used, melt });
 
 			// Generate the blank outputs (no fees as we are receiving change)

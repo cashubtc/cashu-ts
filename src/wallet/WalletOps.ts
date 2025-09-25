@@ -1,4 +1,8 @@
-import { type MintQuoteResponse } from '../mint/types';
+import {
+	type MeltQuoteResponse,
+	type MintQuoteResponse,
+	type Bolt12MeltQuoteResponse,
+} from '../mint/types';
 import { type OutputData, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
@@ -10,6 +14,7 @@ import {
 	type MintProofsConfig,
 	type P2PKOptions,
 	type OnCountersReserved,
+	type MeltProofsConfig,
 } from './types';
 import type { Wallet } from './Wallet';
 
@@ -31,6 +36,12 @@ export class WalletOps {
 	mint(amount: number, quote: string | MintQuoteResponse) {
 		return new MintBuilder(this.wallet, amount, quote);
 	}
+	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
+		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
+	}
+	meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]) {
+		return new MeltBuilder(this.wallet, 'bolt12', quote, proofs);
+	}
 }
 
 /**
@@ -48,7 +59,7 @@ export class WalletOps {
  *     	.includeFees(true) // sender pays receiver’s future spend fee
  *     	.run();
  */
-class SendBuilder {
+export class SendBuilder {
 	private sendOT?: OutputType;
 	private keepOT?: OutputType;
 	private config: SendConfig = {};
@@ -256,7 +267,7 @@ class SendBuilder {
 				send: this.sendOT ?? this.wallet.defaultOutputType(),
 				...(this.keepOT ? { keep: this.keepOT } : {}),
 			};
-			return this.wallet.send(this.amount, this.proofs, outputConfig, this.config);
+			return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
 		}
 		// Nothing customized: rely on wallet overload to apply policy defaults.
 		return this.wallet.send(this.amount, this.proofs, this.config);
@@ -276,7 +287,7 @@ class SendBuilder {
  *     	.requireDleq(true)
  *     	.run();
  */
-class ReceiveBuilder {
+export class ReceiveBuilder {
 	private outputType?: OutputType;
 	private config: ReceiveConfig = {};
 
@@ -387,7 +398,7 @@ class ReceiveBuilder {
 
 	async run() {
 		if (this.outputType) {
-			return this.wallet.receive(this.token, this.outputType, this.config);
+			return this.wallet.receive(this.token, this.config, this.outputType);
 		}
 		return this.wallet.receive(this.token, this.config);
 	}
@@ -404,7 +415,7 @@ class ReceiveBuilder {
  *     	.onCountersReserved((info) => console.log(info))
  *     	.run();
  */
-class MintBuilder {
+export class MintBuilder {
 	private outputType?: OutputType;
 	private config: MintProofsConfig = {};
 
@@ -512,8 +523,60 @@ class MintBuilder {
 	 */
 	async run() {
 		if (this.outputType) {
-			return this.wallet.mintProofs(this.amount, this.quote, this.outputType, this.config);
+			return this.wallet.mintProofs(this.amount, this.quote, this.config, this.outputType);
 		}
 		return this.wallet.mintProofs(this.amount, this.quote, this.config);
+	}
+}
+
+export class MeltBuilder {
+	private outputType?: OutputType;
+	private config: MeltProofsConfig = {};
+
+	constructor(
+		private wallet: Wallet,
+		private method: 'bolt11' | 'bolt12',
+		private quote: MeltQuoteResponse,
+		private proofs: Proof[],
+	) {}
+
+	random(denoms?: number[]) {
+		this.outputType = { type: 'random', denominations: denoms };
+		return this;
+	}
+	deterministic(counter = 0, denoms?: number[]) {
+		this.outputType = { type: 'deterministic', counter, denominations: denoms };
+		return this;
+	}
+	p2pk(options: P2PKOptions, denoms?: number[]) {
+		this.outputType = { type: 'p2pk', options, denominations: denoms };
+		return this;
+	}
+	factory(factory: OutputDataFactory, denoms?: number[]) {
+		this.outputType = { type: 'factory', factory, denominations: denoms };
+		return this;
+	}
+	custom(data: OutputData[]) {
+		this.outputType = { type: 'custom', data };
+		return this;
+	}
+	keyset(id: string) {
+		this.config.keysetId = id;
+		return this;
+	}
+	onCountersReserved(cb: OnCountersReserved) {
+		this.config.onCountersReserved = cb;
+		return this;
+	}
+
+	async run() {
+		if (this.method === 'bolt12') {
+			return this.outputType
+				? this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType)
+				: this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config);
+		}
+		return this.outputType
+			? this.wallet.meltProofs(this.quote, this.proofs, this.config, this.outputType)
+			: this.wallet.meltProofs(this.quote, this.proofs, this.config);
 	}
 }

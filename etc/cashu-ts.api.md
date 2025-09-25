@@ -80,6 +80,9 @@ export type Bolt12MintQuoteResponse = {
 // @public
 export function bytesToNumber(bytes: Uint8Array): bigint;
 
+// @public (undocumented)
+export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
+
 // @public
 export class CashuAuthMint {
     constructor(_mintUrl: string, _customRequest?: RequestFn | undefined);
@@ -166,6 +169,20 @@ export class ConsoleLogger implements Logger {
 // @public (undocumented)
 export function constructProofFromPromise(promise: BlindSignature, r: bigint, secret: Uint8Array, key: WeierstrassPoint<bigint>): RawProof;
 
+// @public
+export interface CounterRange {
+    // (undocumented)
+    count: number;
+    // (undocumented)
+    start: number;
+}
+
+// @public (undocumented)
+export interface CounterSource {
+    reserve(keysetId: string, n: number): Promise<CounterRange>;
+    snapshot?(): Promise<Record<string, number>>;
+}
+
 // @public (undocumented)
 export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
 
@@ -189,14 +206,6 @@ export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
 export function deepEqual<T>(a: T, b: T): boolean;
-
-// @public
-export const DEFAULT_OUTPUT: {
-    type: "random";
-};
-
-// @public
-export const DEFAULT_OUTPUT_CONFIG: OutputConfig;
 
 // @public
 export type DeprecatedToken = {
@@ -554,6 +563,27 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
     quote: T;
 }
 
+// @public (undocumented)
+export class MeltBuilder {
+    constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', quote: MeltQuoteResponse, proofs: Proof[]);
+    // (undocumented)
+    custom(data: OutputData[]): this;
+    // (undocumented)
+    deterministic(counter?: number, denoms?: number[]): this;
+    // (undocumented)
+    factory(factory: OutputDataFactory, denoms?: number[]): this;
+    // (undocumented)
+    keyset(id: string): this;
+    // (undocumented)
+    onCountersReserved(cb: OnCountersReserved): this;
+    // (undocumented)
+    p2pk(options: P2PKOptions, denoms?: number[]): this;
+    // (undocumented)
+    random(denoms?: number[]): this;
+    // (undocumented)
+    run(): Promise<MeltProofsResponse>;
+}
+
 // @public
 export type MeltPayload = {
     quote: string;
@@ -677,6 +707,21 @@ export type MintActiveKeys = {
 export type MintAllKeysets = {
     keysets: MintKeyset[];
 };
+
+// @public
+export class MintBuilder {
+    constructor(wallet: Wallet, amount: number, quote: string | MintQuoteResponse);
+    custom(data: OutputData[]): this;
+    deterministic(counter?: number, denoms?: number[]): this;
+    factory(factory: OutputDataFactory, denoms?: number[]): this;
+    keyset(id: string): this;
+    onCountersReserved(cb: OnCountersReserved): this;
+    p2pk(options: P2PKOptions, denoms?: number[]): this;
+    privkey(k: string): this;
+    proofsWeHave(p: Proof[]): this;
+    random(denoms?: number[]): this;
+    run(): Promise<Proof[]>;
+}
 
 // @public (undocumented)
 export type MintContactInfo = {
@@ -865,6 +910,16 @@ export type NUT10Option = {
     kind: string;
     data: string;
     tags: string[][];
+};
+
+// @public (undocumented)
+export type OnCountersReserved = (info: OperationCounters) => void;
+
+// @public (undocumented)
+export type OperationCounters = {
+    keysetId: string;
+    start: number;
+    count: number;
 };
 
 // @public
@@ -1108,6 +1163,23 @@ export type RawTransport = {
 };
 
 // @public
+export class ReceiveBuilder {
+    constructor(wallet: Wallet, token: Token | string);
+    custom(data: OutputData[]): this;
+    deterministic(counter?: number, denoms?: number[]): this;
+    factory(factory: OutputDataFactory, denoms?: number[]): this;
+    keyset(id: string): this;
+    onCountersReserved(cb: OnCountersReserved): this;
+    p2pk(options: P2PKOptions, denoms?: number[]): this;
+    privkey(k: string | string[]): this;
+    proofsWeHave(p: Proof[]): this;
+    random(denoms?: number[]): this;
+    requireDleq(on?: boolean): this;
+    // (undocumented)
+    run(): Promise<Proof[]>;
+}
+
+// @public
 export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
@@ -1158,6 +1230,30 @@ export type SecretData = {
     data: string;
     tags?: string[][];
 };
+
+// @public (undocumented)
+export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
+
+// @public
+export class SendBuilder {
+    constructor(wallet: Wallet, amount: number, proofs: Proof[]);
+    includeFees(on?: boolean): this;
+    keepCustom(data: OutputData[]): this;
+    keepDeterministic(counter?: number, denoms?: number[]): this;
+    keepFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    keepP2PK(options: P2PKOptions, denoms?: number[]): this;
+    keepRandom(denoms?: number[]): this;
+    keyset(id: string): this;
+    offlineCloseMatch(requireDleq?: boolean): this;
+    offlineExactOnly(requireDleq?: boolean): this;
+    onCountersReserved(cb: OnCountersReserved): this;
+    run(): Promise<SendResponse>;
+    sendCustom(data: OutputData[]): this;
+    sendDeterministic(counter?: number, denoms?: number[]): this;
+    sendFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    sendP2PK(options: P2PKOptions, denoms?: number[]): this;
+    sendRandom(denoms?: number[]): this;
+}
 
 // @public
 export type SendConfig = {
@@ -1417,19 +1513,15 @@ export class Wallet {
         spent: Proof[];
     }>;
     readonly keyChain: KeyChain;
-    // (undocumented)
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
-    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    meltProofsAsDefault(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    meltProofsAsDeterministic(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], counter: number, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
-    meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], outputType?: OutputType, config?: MeltProofsConfig): Promise<MeltProofsResponse>;
+    meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
+    meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     readonly mint: Mint;
-    mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofs(amount: number, quote: string | MintQuoteResponse, outputType: OutputType, config?: MintProofsConfig): Promise<Proof[]>;
-    mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, outputType?: OutputType, config?: {
+    mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, config?: {
         keysetId?: string;
-    }): Promise<Proof[]>;
+    }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
@@ -1439,21 +1531,16 @@ export class Wallet {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     readonly ops: WalletOps;
-    receive(token: Token | string, config?: ReceiveConfig): Promise<Proof[]>;
-    receive(token: Token | string, outputType: OutputType, config?: ReceiveConfig): Promise<Proof[]>;
+    receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
-    send(amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
-    send(amount: number, proofs: Proof[], outputConfig: OutputConfig, config?: SendConfig): Promise<SendResponse>;
+    send(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[];
-    readonly swap: {
-        (amount: number, proofs: Proof[], config?: SendConfig): Promise<SendResponse>;
-        (amount: number, proofs: Proof[], outputConfig: OutputConfig, config?: SendConfig): Promise<SendResponse>;
-    };
+    readonly swap: (amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         initialCounter?: number;
@@ -1505,16 +1592,14 @@ export class WalletEvents {
 // @public
 export class WalletOps {
     constructor(wallet: Wallet);
-    // Warning: (ae-forgotten-export) The symbol "MintBuilder" needs to be exported by the entry point index.d.ts
-    //
+    // (undocumented)
+    meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
+    // (undocumented)
+    meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
     // (undocumented)
     mint(amount: number, quote: string | MintQuoteResponse): MintBuilder;
-    // Warning: (ae-forgotten-export) The symbol "ReceiveBuilder" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
-    // Warning: (ae-forgotten-export) The symbol "SendBuilder" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     send(amount: number, proofs: Proof[]): SendBuilder;
 }
@@ -1558,13 +1643,6 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
-
-// Warnings were encountered during analysis:
-//
-// lib/types/index.d.ts:968:5 - (ae-forgotten-export) The symbol "OnCountersReserved" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:2712:9 - (ae-forgotten-export) The symbol "SecretsPolicy" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:2713:9 - (ae-forgotten-export) The symbol "CounterSource" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3458:9 - (ae-forgotten-export) The symbol "CancellerLike" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

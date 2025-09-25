@@ -3,7 +3,7 @@ import type { Proof } from '../model/types/proof';
 import type { MintQuoteResponse, MeltQuoteResponse } from '../mint/types';
 import type { SubscriptionCanceller } from './types';
 
-type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
+export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 interface ErrorWithCause extends Error {
 	cause?: unknown;
