@@ -269,6 +269,10 @@ class Wallet {
 		}
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Getters
+	// -----------------------------------------------------------------
+
 	/**
 	 * Get the wallet's unit.
 	 *
@@ -326,6 +330,10 @@ class Wallet {
 		this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
 		return keyset;
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Counters
+	// -----------------------------------------------------------------
 
 	private async reserveFor(keysetId: string, totalOutputs: number): Promise<CounterRange> {
 		if (totalOutputs <= 0) return { start: 0, count: 0 };
@@ -450,6 +458,91 @@ class Wallet {
 		return this._seed ? { type: 'deterministic', counter: 0 } : { type: 'random' };
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Output Creation
+	// -----------------------------------------------------------------
+
+	/**
+	 * Configures output denominations with fee adjustments and optimization.
+	 *
+	 * @remarks
+	 * If outputType has denominations or custom data, this MUST sum to the amount. If no
+	 * denominations specified, these will be calculated based on proofsWeHave or the default split.
+	 * Additional denominations to cover fees will then be added if required.
+	 * @param amount The total amount for outputs.
+	 * @param keyset The mint keyset.
+	 * @param outputType The output configuration.
+	 * @param includeFees Whether to include swap fees in the output amount.
+	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
+	 * @returns OutputType with required denominations.
+	 */
+	private configureOutputs(
+		amount: number,
+		keyset: Keyset,
+		outputType: OutputType,
+		includeFees: boolean = false,
+		proofsWeHave: Proof[] = [],
+	): OutputType {
+		let newAmount = amount;
+
+		// Custom outputs don't have automatic optimizations or fee inclusion)
+		if (outputType.type === 'custom') {
+			this.failIf(includeFees, 'The custom OutputType does not support automatic fee inclusion');
+
+			// Validate sum early, as no denominations to fill
+			const customTotal = OutputData.sumOutputAmounts(outputType.data);
+			this.failIf(
+				customTotal !== amount,
+				`Custom output data total (${customTotal}) does not match amount (${amount})`,
+			);
+			return outputType;
+		}
+
+		// Use denominations provided?
+		let denominations = outputType.denominations ?? [];
+		if (denominations.length > 0) {
+			const splitSum = denominations.reduce((sum, a) => sum + a, 0);
+			this.failIf(splitSum !== amount, 'Custom denominations sum mismatch', {
+				splitSum,
+				expected: amount,
+			});
+		}
+
+		// If no denominations, but proofsWeHave was provided - optimize
+		// to keep around _denominationTarget proofs of each denomination.
+		if (denominations.length === 0 && proofsWeHave.length > 0) {
+			denominations = getKeepAmounts(
+				proofsWeHave,
+				newAmount,
+				keyset.keys,
+				this._denominationTarget,
+			);
+		}
+
+		// If no denominations were provided or optimized, compute the default split
+		// before calculating fees to ensure accurate output count.
+		if (denominations.length === 0) {
+			denominations = splitAmount(newAmount, keyset.keys);
+		}
+
+		// With includeFees, we create additional output amounts to cover the
+		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
+		if (includeFees) {
+			let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
+			let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+			while (
+				this.getFeesForKeyset(denominations.length + receiveFeeAmounts.length, keyset.id) >
+				receiveFee
+			) {
+				receiveFee++;
+				receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
+			}
+			newAmount += receiveFee;
+			denominations = [...denominations, ...receiveFeeAmounts];
+		}
+		return { ...outputType, denominations };
+	}
+
 	/**
 	 * Sum total implied by a prepared OutputType.
 	 */
@@ -537,87 +630,6 @@ class Wallet {
 	}
 
 	/**
-	 * Configures output denominations with fee adjustments and optimization.
-	 *
-	 * @remarks
-	 * If outputType has denominations or custom data, this MUST sum to the amount. If no
-	 * denominations specified, these will be calculated based on proofsWeHave or the default split.
-	 * Additional denominations to cover fees will then be added if required.
-	 * @param amount The total amount for outputs.
-	 * @param keyset The mint keyset.
-	 * @param outputType The output configuration.
-	 * @param includeFees Whether to include swap fees in the output amount.
-	 * @param proofsWeHave Optional proofs for optimizing denomination splitting.
-	 * @returns OutputType with required denominations.
-	 */
-	private configureOutputs(
-		amount: number,
-		keyset: Keyset,
-		outputType: OutputType,
-		includeFees: boolean = false,
-		proofsWeHave: Proof[] = [],
-	): OutputType {
-		let newAmount = amount;
-
-		// Custom outputs don't have automatic optimizations or fee inclusion)
-		if (outputType.type === 'custom') {
-			this.failIf(includeFees, 'The custom OutputType does not support automatic fee inclusion');
-
-			// Validate sum early, as no denominations to fill
-			const customTotal = OutputData.sumOutputAmounts(outputType.data);
-			this.failIf(
-				customTotal !== amount,
-				`Custom output data total (${customTotal}) does not match amount (${amount})`,
-			);
-			return outputType;
-		}
-
-		// Use denominations provided?
-		let denominations = outputType.denominations ?? [];
-		if (denominations.length > 0) {
-			const splitSum = denominations.reduce((sum, a) => sum + a, 0);
-			this.failIf(splitSum !== amount, 'Custom denominations sum mismatch', {
-				splitSum,
-				expected: amount,
-			});
-		}
-
-		// If no denominations, but proofsWeHave was provided - optimize
-		// to keep around _denominationTarget proofs of each denomination.
-		if (denominations.length === 0 && proofsWeHave.length > 0) {
-			denominations = getKeepAmounts(
-				proofsWeHave,
-				newAmount,
-				keyset.keys,
-				this._denominationTarget,
-			);
-		}
-
-		// If no denominations were provided or optimized, compute the default split
-		// before calculating fees to ensure accurate output count.
-		if (denominations.length === 0) {
-			denominations = splitAmount(newAmount, keyset.keys);
-		}
-
-		// With includeFees, we create additional output amounts to cover the
-		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
-		if (includeFees) {
-			let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
-			let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
-			while (
-				this.getFeesForKeyset(denominations.length + receiveFeeAmounts.length, keyset.id) >
-				receiveFee
-			) {
-				receiveFee++;
-				receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
-			}
-			newAmount += receiveFee;
-			denominations = [...denominations, ...receiveFeeAmounts];
-		}
-		return { ...outputType, denominations };
-	}
-
-	/**
 	 * Creates a swap transaction with sorted outputs for mint compatibility.
 	 *
 	 * @param inputs Prepared input proofs.
@@ -664,38 +676,9 @@ class Wallet {
 		};
 	}
 
-	/**
-	 * Prepares inputs for a mint operation.
-	 *
-	 * @remarks
-	 * Internal method; strips DLEQ for privacy and serializes witnesses.
-	 * @param proofs The proofs to prepare.
-	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
-	 * @returns Prepared proofs for mint payload.
-	 */
-	private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
-		if (!keepDleq) {
-			proofs = stripDleq(proofs);
-		}
-		return proofs.map((p) => ({
-			...p,
-			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
-		}));
-	}
-
-	/**
-	 * Prepares proofs for sending by signing P2PK-locked proofs.
-	 *
-	 * @remarks
-	 * Call this method before operations like send if the proofs are P2PK-locked and need unlocking.
-	 * This is a public wrapper for signing.
-	 * @param proofs The proofs to sign.
-	 * @param privkey The private key for signing.
-	 * @returns Signed proofs.
-	 */
-	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
-		return signP2PKProofs(proofs, privkey);
-	}
+	// -----------------------------------------------------------------
+	// Section: Send and Receive
+	// -----------------------------------------------------------------
 
 	/**
 	 * Receive a token (swaps with mint for new proofs)
@@ -999,6 +982,10 @@ class Wallet {
 	 */
 	public readonly swap = this.send.bind(this);
 
+	// -----------------------------------------------------------------
+	// Section: Transaction Helpers
+	// -----------------------------------------------------------------
+
 	/**
 	 * Selects proofs to send based on amount and fee inclusion.
 	 *
@@ -1027,6 +1014,20 @@ class Wallet {
 			exactMatch,
 		);
 		return { keep, send };
+	}
+
+	/**
+	 * Prepares proofs for sending by signing P2PK-locked proofs.
+	 *
+	 * @remarks
+	 * Call this method before operations like send if the proofs are P2PK-locked and need unlocking.
+	 * This is a public wrapper for signing.
+	 * @param proofs The proofs to sign.
+	 * @param privkey The private key for signing.
+	 * @returns Signed proofs.
+	 */
+	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
+		return signP2PKProofs(proofs, privkey);
 	}
 
 	/**
@@ -1076,6 +1077,25 @@ class Wallet {
 		} catch (e) {
 			this.fail(`No keyset found with ID ${keysetId}`, { e });
 		}
+	}
+
+	/**
+	 * Prepares inputs for a mint operation.
+	 *
+	 * @remarks
+	 * Internal method; strips DLEQ for privacy and serializes witnesses.
+	 * @param proofs The proofs to prepare.
+	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
+	 * @returns Prepared proofs for mint payload.
+	 */
+	private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
+		if (!keepDleq) {
+			proofs = stripDleq(proofs);
+		}
+		return proofs.map((p) => ({
+			...p,
+			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
+		}));
 	}
 
 	// -----------------------------------------------------------------
