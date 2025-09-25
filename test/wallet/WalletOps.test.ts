@@ -492,5 +492,35 @@ describe('WalletOps builders', () => {
 				denominations: [],
 			});
 		});
+
+		it('bolt11: forwards onChangeOutputsCreated callback', async () => {
+			const cb = vi.fn();
+			await ops.meltBolt11(melt11, proofs).onChangeOutputsCreated(cb).run();
+
+			expect(wallet.meltProofs).toHaveBeenCalledTimes(1);
+			const [, , cfg] = wallet.meltProofs.mock.calls[0];
+			expect(cfg).toBeDefined();
+			expect(cfg!.onChangeOutputsCreated).toBe(cb);
+		});
+
+		it('bolt12: forwards onChangeOutputsCreated callback', async () => {
+			const cb = vi.fn();
+			await ops.meltBolt12(melt12, proofs).onChangeOutputsCreated(cb).run();
+
+			expect(wallet.meltProofsBolt12).toHaveBeenCalledTimes(1);
+			const [, , cfg] = wallet.meltProofsBolt12.mock.calls[0];
+			expect(cfg).toBeDefined();
+			expect(cfg!.onChangeOutputsCreated).toBe(cb);
+		});
+
+		it('bolt12: forwards onCountersReserved callback', async () => {
+			const cb = vi.fn();
+			await ops.meltBolt12(melt12, proofs).onCountersReserved(cb).run();
+
+			expect(wallet.meltProofsBolt12).toHaveBeenCalledTimes(1);
+			const [, , cfg] = wallet.meltProofsBolt12.mock.calls[0];
+			expect(cfg).toBeDefined();
+			expect(typeof cfg!.onCountersReserved).toBe('function');
+		});
 	});
 });

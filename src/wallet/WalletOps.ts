@@ -529,6 +529,29 @@ export class MintBuilder {
 	}
 }
 
+/**
+ * Builder for melting proofs to pay a Lightning invoice or BOLT12 offer.
+ *
+ * @remarks
+ * Supports both BOLT11 and BOLT12. You can optionally receive a callback when NUT-08 blanks are
+ * created for async melts.
+ * @example
+ *
+ * ```typescript
+ * // Basic BOLT11 melt
+ * await wallet.ops.meltBolt11(quote, proofs).run();
+ *
+ * // BOLT12 melt with deterministic change and NUT-08 blanks callback
+ * await wallet.ops
+ * 	.meltBolt12(quote12, proofs)
+ * 	.deterministic(0)
+ * 	.onChangeOutputsCreated((blanks) => {
+ * 		// Persist blanks and retry later with wallet.completeMelt(blanks)
+ * 	})
+ * 	.onCountersReserved((info) => console.log('Reserved', info))
+ * 	.run();
+ * ```
+ */
 export class MeltBuilder {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
@@ -540,41 +563,104 @@ export class MeltBuilder {
 		private proofs: Proof[],
 	) {}
 
+	/**
+	 * Use random blinding for change outputs.
+	 *
+	 * @param denoms Optional custom split. If provided, amounts must sum to the change amount.
+	 */
 	random(denoms?: number[]) {
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
+
+	/**
+	 * Use deterministic outputs for change.
+	 *
+	 * @param counter Starting counter. Zero means auto-reserve using the wallet’s CounterSource.
+	 * @param denoms Optional custom split. If provided, amounts must sum to the change amount.
+	 */
 	deterministic(counter = 0, denoms?: number[]) {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
+	/**
+	 * Use P2PK-locked change (NUT-11).
+	 *
+	 * @param options NUT-11 locking options (e.g., pubkey, locktime).
+	 * @param denoms Optional custom split. If provided, amounts must sum to the change amount.
+	 */
 	p2pk(options: P2PKOptions, denoms?: number[]) {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
+	/**
+	 * Use a factory to generate OutputData for change.
+	 *
+	 * @param factory Factory used to produce blinded messages.
+	 * @param denoms Optional custom split. If provided, amounts must sum to the change amount.
+	 */
 	factory(factory: OutputDataFactory, denoms?: number[]) {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
+	/**
+	 * Provide pre-created OutputData for change.
+	 *
+	 * @param data Fully formed OutputData for the change amount.
+	 */
 	custom(data: OutputData[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}
+
+	/**
+	 * Use a specific keyset for the melt operation.
+	 *
+	 * @param id Keyset id to use for mint keys and fee lookup.
+	 */
 	keyset(id: string) {
 		this.config.keysetId = id;
 		return this;
 	}
+
+	/**
+	 * Receive a callback once counters are atomically reserved for deterministic outputs.
+	 *
+	 * @param cb Called with OperationCounters when counters are reserved.
+	 */
 	onCountersReserved(cb: OnCountersReserved) {
 		this.config.onCountersReserved = cb;
 		return this;
 	}
 
+	/**
+	 * Receive a callback when NUT-08 blanks (0-sat change outputs) are created for async melts.
+	 *
+	 * @remarks
+	 * You can persist these blanks and later call `wallet.completeMelt(blanks)` to finalize and
+	 * recover change once the invoice/offer is paid.
+	 * @param cb Callback invoked with the created blanks payload.
+	 */
+	onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>) {
+		this.config.onChangeOutputsCreated = cb;
+		return this;
+	}
+
+	/**
+	 * Execute the melt against the quote.
+	 *
+	 * @returns The melt result: `{ quote, change }`.
+	 */
 	async run() {
 		if (this.method === 'bolt12') {
 			return this.outputType
 				? this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType)
 				: this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config);
 		}
+		// BOLT11
 		return this.outputType
 			? this.wallet.meltProofs(this.quote, this.proofs, this.config, this.outputType)
 			: this.wallet.meltProofs(this.quote, this.proofs, this.config);

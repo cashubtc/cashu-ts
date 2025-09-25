@@ -563,24 +563,17 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
     quote: T;
 }
 
-// @public (undocumented)
+// @public
 export class MeltBuilder {
     constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', quote: MeltQuoteResponse, proofs: Proof[]);
-    // (undocumented)
     custom(data: OutputData[]): this;
-    // (undocumented)
     deterministic(counter?: number, denoms?: number[]): this;
-    // (undocumented)
     factory(factory: OutputDataFactory, denoms?: number[]): this;
-    // (undocumented)
     keyset(id: string): this;
-    // (undocumented)
+    onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    // (undocumented)
     p2pk(options: P2PKOptions, denoms?: number[]): this;
-    // (undocumented)
     random(denoms?: number[]): this;
-    // (undocumented)
     run(): Promise<MeltProofsResponse>;
 }
 
