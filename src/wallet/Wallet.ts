@@ -1252,6 +1252,10 @@ class Wallet {
 		}
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Restore
+	// -----------------------------------------------------------------
+
 	/**
 	 * Restores batches of deterministic proofs until no more signatures are returned from the mint.
 	 *
@@ -1336,6 +1340,17 @@ class Wallet {
 		};
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Create Mint Quote
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated - Use createMintQuoteBolt11()
+	 */
+	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+		return this.createMintQuoteBolt11(amount, description);
+	}
+
 	/**
 	 * Requests a mint quote from the mint. Response returns a Lightning payment request for the
 	 * requested given amount and unit.
@@ -1346,7 +1361,7 @@ class Wallet {
 	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
 	 *   specified amount and unit.
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse> {
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -1423,13 +1438,26 @@ class Wallet {
 		return this.mint.createMintQuoteBolt12(mintQuotePayload);
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Check Mint Quote
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated - Use checkMintQuoteBolt11()
+	 */
+	async checkMintQuote(
+		quote: string | MintQuoteResponse,
+	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+		return this.checkMintQuoteBolt11(quote);
+	}
+
 	/**
 	 * Gets an existing mint quote from the mint.
 	 *
 	 * @param quote Quote ID.
 	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
-	async checkMintQuote(
+	async checkMintQuoteBolt11(
 		quote: string | MintQuoteResponse,
 	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
@@ -1450,6 +1478,22 @@ class Wallet {
 		return this.mint.checkMintQuoteBolt12(quote);
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Mint Proofs
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated - Use mintProofsBolt11()
+	 */
+	async mintProofs(
+		amount: number,
+		quote: string | MintQuoteResponse,
+		config?: MintProofsConfig,
+		outputType?: OutputType,
+	): Promise<Proof[]> {
+		return this._mintProofs('bolt11', amount, quote, config, outputType);
+	}
+
 	/**
 	 * Mint proofs for a bolt11 quote.
 	 *
@@ -1459,7 +1503,7 @@ class Wallet {
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns Minted proofs.
 	 */
-	async mintProofs(
+	async mintProofsBolt11(
 		amount: number,
 		quote: string | MintQuoteResponse,
 		config?: MintProofsConfig,
@@ -1486,273 +1530,6 @@ class Wallet {
 		outputType?: OutputType,
 	): Promise<Proof[]> {
 		return this._mintProofs('bolt12', amount, quote, { ...config, privkey }, outputType);
-	}
-
-	/**
-	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
-	 * to pay a Lightning invoice.
-	 *
-	 * @param invoice LN invoice that needs to get a fee estimate.
-	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
-	 *   reserve.
-	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
-		const meltQuotePayload: MeltQuotePayload = {
-			unit: this._unit,
-			request: invoice,
-		};
-		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
-		return {
-			...meltQuote,
-			unit: meltQuote.unit || this._unit,
-			request: meltQuote.request || invoice,
-		};
-	}
-
-	/**
-	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
-	 * to pay a BOLT12 offer.
-	 *
-	 * @param offer BOLT12 offer that needs to get a fee estimate.
-	 * @param amountMsat Amount in millisatoshis for amount-less offers. If this is defined and the
-	 *   offer has an amount, they **MUST** be equal.
-	 * @returns The mint will create and return a melt quote for the offer with an amount and fee
-	 *   reserve.
-	 */
-	async createMeltQuoteBolt12(
-		offer: string,
-		amountMsat?: number,
-	): Promise<Bolt12MeltQuoteResponse> {
-		return this.mint.createMeltQuoteBolt12({
-			unit: this._unit,
-			request: offer,
-			options: amountMsat
-				? {
-						amountless: {
-							amount_msat: amountMsat,
-						},
-					}
-				: undefined,
-		});
-	}
-
-	/**
-	 * Requests a multi path melt quote from the mint.
-	 *
-	 * @param invoice LN invoice that needs to get a fee estimate.
-	 * @param partialAmount The partial amount of the invoice's total to be paid by this instance.
-	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
-	 *   reserve.
-	 */
-	async createMultiPathMeltQuote(
-		invoice: string,
-		millisatPartialAmount: number,
-	): Promise<MeltQuoteResponse> {
-		const { supported, params } = this.getMintInfo().isSupported(15);
-		this.failIf(!supported, 'Mint does not support NUT-15');
-		this.failIf(
-			!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit),
-			`Mint does not support MPP for bolt11 and ${this._unit}`,
-		);
-		const mppOption: MPPOption = {
-			amount: millisatPartialAmount,
-		};
-		const meltOptions: MeltQuoteOptions = {
-			mpp: mppOption,
-		};
-		const meltQuotePayload: MeltQuotePayload = {
-			unit: this._unit,
-			request: invoice,
-			options: meltOptions,
-		};
-		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
-		return { ...meltQuote, request: invoice, unit: this._unit };
-	}
-
-	/**
-	 * Returns an existing bolt11 melt quote from the mint.
-	 *
-	 * @param quote ID of the melt quote.
-	 * @returns The mint will return an existing melt quote.
-	 */
-	async checkMeltQuote(
-		quote: string | MeltQuoteResponse,
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
-		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const meltQuote = await this.mint.checkMeltQuote(quoteId);
-		if (typeof quote === 'string') {
-			return meltQuote;
-		}
-		return { ...meltQuote, request: quote.request, unit: quote.unit };
-	}
-
-	/**
-	 * Returns an existing bolt12 melt quote from the mint.
-	 *
-	 * @param quote ID of the melt quote.
-	 * @returns The mint will return an existing melt quote.
-	 */
-	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
-		return this.mint.checkMeltQuoteBolt12(quote);
-	}
-
-	/**
-	 * Melt proofs for a bolt11 melt quote.
-	 *
-	 * @remarks
-	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
-	 * perform coin selection!.
-	 * @param meltQuote ID of the melt quote.
-	 * @param proofsToSend Proofs to melt.
-	 * @param config Optional parameters.
-	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns MeltProofsResponse with quote and change proofs.
-	 */
-	async meltProofs(
-		meltQuote: MeltQuoteResponse,
-		proofsToSend: Proof[],
-		config?: MeltProofsConfig,
-		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
-	}
-
-	/**
-	 * Melt proofs for a bolt12 melt quote, returns change proofs using specified outputType.
-	 *
-	 * @remarks
-	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
-	 * perform coin selection!.
-	 * @param meltQuote ID of the melt quote.
-	 * @param proofsToSend Proofs to melt.
-	 * @param config Optional parameters.
-	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns MeltProofsResponse with quote and change proofs.
-	 */
-	async meltProofsBolt12(
-		meltQuote: Bolt12MeltQuoteResponse,
-		proofsToSend: Proof[],
-		config?: MeltProofsConfig,
-		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, config, outputType);
-	}
-
-	/**
-	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
-	 *
-	 * @param proofs (only the `secret` field is required)
-	 * @returns NUT-07 state for each proof, in same order.
-	 */
-	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
-		const enc = new TextEncoder();
-		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
-		// TODO: Replace this with a value from the info endpoint of the mint eventually
-		const BATCH_SIZE = 100;
-		const states: ProofState[] = [];
-		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
-			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
-			const { states: batchStates } = await this.mint.check({
-				Ys: YsSlice,
-			});
-			const stateMap: { [y: string]: ProofState } = {};
-			batchStates.forEach((s) => {
-				stateMap[s.Y] = s;
-			});
-			for (let j = 0; j < YsSlice.length; j++) {
-				const state = stateMap[YsSlice[j]];
-				this.failIfNullish(state, 'Could not find state for proof with Y: ' + YsSlice[j]);
-				states.push(state);
-			}
-		}
-		return states;
-	}
-
-	/**
-	 * Groups proofs by their corresponding state, preserving order within each group.
-	 *
-	 * @param proofs (only the `secret` field is required)
-	 * @returns An object with arrays of proofs grouped by CheckStateEnum state.
-	 */
-	async groupProofsByState(
-		proofs: Proof[],
-	): Promise<{ unspent: Proof[]; pending: Proof[]; spent: Proof[] }> {
-		const states: ProofState[] = await this.checkProofsStates(proofs);
-		const result = {
-			unspent: [] as Proof[],
-			pending: [] as Proof[],
-			spent: [] as Proof[],
-		};
-		for (let i = 0; i < states.length; i++) {
-			const proof = proofs[i];
-			switch (states[i].state) {
-				case CheckStateEnum.UNSPENT:
-					result.unspent.push(proof);
-					break;
-				case CheckStateEnum.PENDING:
-					result.pending.push(proof);
-					break;
-				case CheckStateEnum.SPENT:
-					result.spent.push(proof);
-					break;
-			}
-		}
-		return result;
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.mintQuoteUpdates`
-	 */
-	async onMintQuoteUpdates(
-		quoteIds: string[],
-		callback: (payload: MintQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.mintQuoteUpdates(quoteIds, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.meltQuotePaid`
-	 */
-	async onMeltQuotePaid(
-		quoteId: string,
-		callback: (payload: MeltQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.meltQuotePaid(quoteId, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.mintQuotePaid`
-	 */
-	async onMintQuotePaid(
-		quoteId: string,
-		callback: (payload: MintQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.mintQuotePaid(quoteId, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.meltQuoteUpdates`
-	 */
-	async onMeltQuoteUpdates(
-		quoteIds: string[],
-		callback: (payload: MeltQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.meltQuoteUpdates(quoteIds, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.proofStateUpdates`
-	 */
-	async onProofStateUpdates(
-		proofs: Proof[],
-		callback: (payload: ProofState & { proof: Proof }) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.proofStateUpdates(proofs, callback, errorCallback);
 	}
 
 	/**
@@ -1831,6 +1608,199 @@ class Wallet {
 
 		this._logger.debug('MINT COMPLETED', { amounts: outputs.map((o) => o.blindedMessage.amount) });
 		return outputs.map((d, i) => d.toProof(signatures[i], keyset));
+	}
+
+	// -----------------------------------------------------------------
+	// Section: Create Melt Quote
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated - Use createMeltQuoteBolt11.
+	 */
+	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+		return this.createMeltQuoteBolt11(invoice);
+	}
+
+	/**
+	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
+	 * to pay a Lightning invoice.
+	 *
+	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
+	 *   reserve.
+	 */
+	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse> {
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice,
+		};
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		return {
+			...meltQuote,
+			unit: meltQuote.unit || this._unit,
+			request: meltQuote.request || invoice,
+		};
+	}
+
+	/**
+	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
+	 * to pay a BOLT12 offer.
+	 *
+	 * @param offer BOLT12 offer that needs to get a fee estimate.
+	 * @param amountMsat Amount in millisatoshis for amount-less offers. If this is defined and the
+	 *   offer has an amount, they **MUST** be equal.
+	 * @returns The mint will create and return a melt quote for the offer with an amount and fee
+	 *   reserve.
+	 */
+	async createMeltQuoteBolt12(
+		offer: string,
+		amountMsat?: number,
+	): Promise<Bolt12MeltQuoteResponse> {
+		return this.mint.createMeltQuoteBolt12({
+			unit: this._unit,
+			request: offer,
+			options: amountMsat
+				? {
+						amountless: {
+							amount_msat: amountMsat,
+						},
+					}
+				: undefined,
+		});
+	}
+
+	/**
+	 * Requests a multi path melt quote from the mint.
+	 *
+	 * @remarks
+	 * Uses NUT-15 Partial multi-path payments for BOLT11.
+	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @param partialAmount The partial amount of the invoice's total to be paid by this instance.
+	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
+	 *   reserve.
+	 * @see https://github.com/cashubtc/nuts/blob/main/15.md
+	 */
+	async createMultiPathMeltQuote(
+		invoice: string,
+		millisatPartialAmount: number,
+	): Promise<MeltQuoteResponse> {
+		const { supported, params } = this.getMintInfo().isSupported(15);
+		this.failIf(!supported, 'Mint does not support NUT-15');
+		this.failIf(
+			!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit),
+			`Mint does not support MPP for bolt11 and ${this._unit}`,
+		);
+		const mppOption: MPPOption = {
+			amount: millisatPartialAmount,
+		};
+		const meltOptions: MeltQuoteOptions = {
+			mpp: mppOption,
+		};
+		const meltQuotePayload: MeltQuotePayload = {
+			unit: this._unit,
+			request: invoice,
+			options: meltOptions,
+		};
+		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		return { ...meltQuote, request: invoice, unit: this._unit };
+	}
+
+	// -----------------------------------------------------------------
+	// Section: Check Melt Quote
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated - Use checkMeltQuoteBolt11()
+	 */
+	async checkMeltQuote(
+		quote: string | MeltQuoteResponse,
+	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+		return this.checkMeltQuoteBolt11(quote);
+	}
+
+	/**
+	 * Returns an existing bolt11 melt quote from the mint.
+	 *
+	 * @param quote ID of the melt quote.
+	 * @returns The mint will return an existing melt quote.
+	 */
+	async checkMeltQuoteBolt11(
+		quote: string | MeltQuoteResponse,
+	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+		const quoteId = typeof quote === 'string' ? quote : quote.quote;
+		const meltQuote = await this.mint.checkMeltQuote(quoteId);
+		if (typeof quote === 'string') {
+			return meltQuote;
+		}
+		return { ...meltQuote, request: quote.request, unit: quote.unit };
+	}
+
+	/**
+	 * Returns an existing bolt12 melt quote from the mint.
+	 *
+	 * @param quote ID of the melt quote.
+	 * @returns The mint will return an existing melt quote.
+	 */
+	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
+		return this.mint.checkMeltQuoteBolt12(quote);
+	}
+
+	// -----------------------------------------------------------------
+	// Section: Melt Proofs
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated - Use meltProofsBolt11()
+	 */
+	async meltProofs(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Proof[],
+		config?: MeltProofsConfig,
+		outputType?: OutputType,
+	): Promise<MeltProofsResponse> {
+		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+	}
+
+	/**
+	 * Melt proofs for a bolt11 melt quote.
+	 *
+	 * @remarks
+	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
+	 * perform coin selection!.
+	 * @param meltQuote ID of the melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param config Optional parameters.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns MeltProofsResponse with quote and change proofs.
+	 */
+	async meltProofsBolt11(
+		meltQuote: MeltQuoteResponse,
+		proofsToSend: Proof[],
+		config?: MeltProofsConfig,
+		outputType?: OutputType,
+	): Promise<MeltProofsResponse> {
+		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+	}
+
+	/**
+	 * Melt proofs for a bolt12 melt quote, returns change proofs using specified outputType.
+	 *
+	 * @remarks
+	 * ProofsToSend must be at least amount+fee_reserve from the melt quote. This function does not
+	 * perform coin selection!.
+	 * @param meltQuote ID of the melt quote.
+	 * @param proofsToSend Proofs to melt.
+	 * @param config Optional parameters.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns MeltProofsResponse with quote and change proofs.
+	 */
+	async meltProofsBolt12(
+		meltQuote: Bolt12MeltQuoteResponse,
+		proofsToSend: Proof[],
+		config?: MeltProofsConfig,
+		outputType?: OutputType,
+	): Promise<MeltProofsResponse> {
+		return this._meltProofs('bolt12', meltQuote, proofsToSend, config, outputType);
 	}
 
 	/**
@@ -1971,6 +1941,131 @@ class Wallet {
 			quote: { ...meltResponse, unit: blanks.quote.unit, request: blanks.quote.request },
 			change,
 		};
+	}
+
+	// -----------------------------------------------------------------
+	// Section: Proof States
+	// -----------------------------------------------------------------
+
+	/**
+	 * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
+	 *
+	 * @param proofs (only the `secret` field is required)
+	 * @returns NUT-07 state for each proof, in same order.
+	 */
+	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
+		const enc = new TextEncoder();
+		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		// TODO: Replace this with a value from the info endpoint of the mint eventually
+		const BATCH_SIZE = 100;
+		const states: ProofState[] = [];
+		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
+			const YsSlice = Ys.slice(i, i + BATCH_SIZE);
+			const { states: batchStates } = await this.mint.check({
+				Ys: YsSlice,
+			});
+			const stateMap: { [y: string]: ProofState } = {};
+			batchStates.forEach((s) => {
+				stateMap[s.Y] = s;
+			});
+			for (let j = 0; j < YsSlice.length; j++) {
+				const state = stateMap[YsSlice[j]];
+				this.failIfNullish(state, 'Could not find state for proof with Y: ' + YsSlice[j]);
+				states.push(state);
+			}
+		}
+		return states;
+	}
+
+	/**
+	 * Groups proofs by their corresponding state, preserving order within each group.
+	 *
+	 * @param proofs (only the `secret` field is required)
+	 * @returns An object with arrays of proofs grouped by CheckStateEnum state.
+	 */
+	async groupProofsByState(
+		proofs: Proof[],
+	): Promise<{ unspent: Proof[]; pending: Proof[]; spent: Proof[] }> {
+		const states: ProofState[] = await this.checkProofsStates(proofs);
+		const result = {
+			unspent: [] as Proof[],
+			pending: [] as Proof[],
+			spent: [] as Proof[],
+		};
+		for (let i = 0; i < states.length; i++) {
+			const proof = proofs[i];
+			switch (states[i].state) {
+				case CheckStateEnum.UNSPENT:
+					result.unspent.push(proof);
+					break;
+				case CheckStateEnum.PENDING:
+					result.pending.push(proof);
+					break;
+				case CheckStateEnum.SPENT:
+					result.spent.push(proof);
+					break;
+			}
+		}
+		return result;
+	}
+
+	// -----------------------------------------------------------------
+	// Section: Websocket Events (Deprecated: Now in WalletEvents)
+	// -----------------------------------------------------------------
+
+	/**
+	 * @deprecated Use `wallet.on.mintQuoteUpdates`
+	 */
+	async onMintQuoteUpdates(
+		quoteIds: string[],
+		callback: (payload: MintQuoteResponse) => void,
+		errorCallback: (e: Error) => void,
+	): Promise<SubscriptionCanceller> {
+		return this.on.mintQuoteUpdates(quoteIds, callback, errorCallback);
+	}
+
+	/**
+	 * @deprecated Use `wallet.on.meltQuotePaid`
+	 */
+	async onMeltQuotePaid(
+		quoteId: string,
+		callback: (payload: MeltQuoteResponse) => void,
+		errorCallback: (e: Error) => void,
+	): Promise<SubscriptionCanceller> {
+		return this.on.meltQuotePaid(quoteId, callback, errorCallback);
+	}
+
+	/**
+	 * @deprecated Use `wallet.on.mintQuotePaid`
+	 */
+	async onMintQuotePaid(
+		quoteId: string,
+		callback: (payload: MintQuoteResponse) => void,
+		errorCallback: (e: Error) => void,
+	): Promise<SubscriptionCanceller> {
+		return this.on.mintQuotePaid(quoteId, callback, errorCallback);
+	}
+
+	/**
+	 * @deprecated Use `wallet.on.meltQuoteUpdates`
+	 */
+	async onMeltQuoteUpdates(
+		quoteIds: string[],
+		callback: (payload: MeltQuoteResponse) => void,
+		errorCallback: (e: Error) => void,
+	): Promise<SubscriptionCanceller> {
+		return this.on.meltQuoteUpdates(quoteIds, callback, errorCallback);
+	}
+
+	/**
+	 * @deprecated Use `wallet.on.proofStateUpdates`
+	 */
+	async onProofStateUpdates(
+		proofs: Proof[],
+		callback: (payload: ProofState & { proof: Proof }) => void,
+		errorCallback: (e: Error) => void,
+	): Promise<SubscriptionCanceller> {
+		return this.on.proofStateUpdates(proofs, callback, errorCallback);
 	}
 }
 

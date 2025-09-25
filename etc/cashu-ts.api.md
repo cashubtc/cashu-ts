@@ -1488,16 +1488,24 @@ export class Wallet {
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
+    // @deprecated (undocumented)
     checkMeltQuote(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
+    checkMeltQuoteBolt11(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
     checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse>;
+    // @deprecated (undocumented)
     checkMintQuote(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
+    checkMintQuoteBolt11(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
+    // @deprecated (undocumented)
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
+    createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
+    // @deprecated (undocumented)
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
+    createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: number;
         description?: string;
@@ -1515,10 +1523,14 @@ export class Wallet {
     readonly keyChain: KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
+    // @deprecated (undocumented)
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
+    meltProofsBolt11(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     readonly mint: Mint;
+    // @deprecated (undocumented)
     mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt11(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
