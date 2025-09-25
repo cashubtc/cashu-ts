@@ -315,7 +315,7 @@ describe('mint api', () => {
 		const mintQuote = await wallet.createMintQuote(21);
 		const callback = vi.fn();
 		const res = await new Promise(async (res, rej) => {
-			const unsub = await wallet.onMintQuoteUpdates(
+			const unsub = await wallet.on.mintQuoteUpdates(
 				[mintQuote.quote],
 				(p) => {
 					if (p.state === MintQuoteState.PAID) {
@@ -346,7 +346,7 @@ describe('mint api', () => {
 		const callbackRef = vi.fn();
 		const res = await new Promise(async (res, rej) => {
 			let counter = 0;
-			const unsub = await wallet.onMintQuoteUpdates(
+			const unsub = await wallet.on.mintQuoteUpdates(
 				[mintQuote1.quote, mintQuote2.quote],
 				() => {
 					counter++;
@@ -377,7 +377,7 @@ describe('mint api', () => {
 
 		const quote = await wallet.createMintQuote(63);
 		await new Promise((res, rej) => {
-			wallet.onMintQuotePaid(quote.quote, res, rej);
+			wallet.on.mintQuotePaid(quote.quote, res, rej);
 		});
 		const proofs = await wallet.mintProofs(63, quote.quote);
 		console.log(
@@ -385,7 +385,7 @@ describe('mint api', () => {
 			proofs.map((p) => p.amount),
 		);
 		await new Promise<ProofState>((res) => {
-			wallet.onProofStateUpdates(
+			wallet.on.proofStateUpdates(
 				proofs,
 				(p) => {
 					// console.log(p);

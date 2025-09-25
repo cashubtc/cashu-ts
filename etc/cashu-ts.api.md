@@ -1523,10 +1523,15 @@ export class Wallet {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
+    // @deprecated (undocumented)
     onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // @deprecated (undocumented)
     onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // @deprecated (undocumented)
     onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // @deprecated (undocumented)
     onMintQuoteUpdates(quoteIds: string[], callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
+    // @deprecated (undocumented)
     onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
         proof: Proof;
     }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
@@ -1555,14 +1560,10 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
-    // (undocumented)
-    meltPaid(id: string, cb: (p: MeltQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // (undocumented)
-    meltUpdates(ids: string[], cb: (p: MeltQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // (undocumented)
-    mintPaid(id: string, cb: (p: MintQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // (undocumented)
-    mintQuotes(ids: string[], cb: (p: MintQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    meltQuotePaid(id: string, cb: (p: MeltQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    mintQuotePaid(id: string, cb: (p: MintQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
+    mintQuoteUpdates(ids: string[], cb: (p: MintQuoteResponse) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
     onceAnyMintPaid(ids: string[], opts?: {
         signal?: AbortSignal;
         timeoutMs?: number;
@@ -1579,14 +1580,15 @@ export class WalletEvents {
         signal?: AbortSignal;
         timeoutMs?: number;
     }): Promise<MintQuoteResponse>;
-    // (undocumented)
-    proofStates(proofs: Proof[], cb: (payload: unknown) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
     proofStatesStream<T = unknown>(proofs: Proof[], opts?: {
         signal?: AbortSignal;
         maxBuffer?: number;
         drop?: 'oldest' | 'newest';
         onDrop?: (payload: T) => void;
     }): AsyncIterable<T>;
+    proofStateUpdates(proofs: Proof[], cb: (payload: ProofState & {
+        proof: Proof;
+    }) => void, err: (e: Error) => void): Promise<SubscriptionCanceller>;
 }
 
 // @public

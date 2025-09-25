@@ -1752,7 +1752,7 @@ describe('WebSocket Updates', () => {
 					res(p);
 				}
 			};
-			await wallet.onMintQuoteUpdates(['123'], callback, () => {
+			await wallet.on.mintQuoteUpdates(['123'], callback, () => {
 				rej();
 				console.log('error');
 			});
@@ -1792,7 +1792,7 @@ describe('WebSocket Updates', () => {
 					res(p);
 				}
 			};
-			await wallet.onMeltQuoteUpdates(['123'], callback, (e) => {
+			await wallet.on.meltQuoteUpdates(['123'], callback, (e) => {
 				console.log(e);
 				rej();
 				console.log('error');

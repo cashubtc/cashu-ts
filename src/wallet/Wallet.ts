@@ -64,7 +64,6 @@ import type {
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
 } from '../mint/types';
-import { MintQuoteState, MeltQuoteState } from '../mint/types';
 
 // model helpers
 import { OutputData, type OutputDataFactory, type OutputDataLike } from '../model/OutputData';
@@ -1702,135 +1701,58 @@ class Wallet {
 	}
 
 	/**
-	 * Register a callback to be called whenever a mint quote's state changes.
-	 *
-	 * @param quoteIds List of mint quote IDs that should be subscribed to.
-	 * @param callback Callback function that will be called whenever a mint quote state changes.
-	 * @param errorCallback
-	 * @returns
+	 * @deprecated Use `wallet.on.mintQuoteUpdates`
 	 */
 	async onMintQuoteUpdates(
 		quoteIds: string[],
 		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		await this.mint.connectWebSocket();
-		this.failIfNullish(this.mint.webSocketConnection, 'failed to establish WebSocket connection.');
-		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'bolt11_mint_quote', filters: quoteIds },
-			callback,
-			errorCallback,
-		);
-		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
-		};
+		return this.on.mintQuoteUpdates(quoteIds, callback, errorCallback);
 	}
 
 	/**
-	 * Register a callback to be called when a single melt quote gets paid.
-	 *
-	 * @param quoteIds List of melt quote IDs that should be subscribed to.
-	 * @param callback Callback function that will be called whenever a melt quote state changes.
-	 * @param errorCallback
-	 * @returns
+	 * @deprecated Use `wallet.on.meltQuotePaid`
 	 */
 	async onMeltQuotePaid(
 		quoteId: string,
 		callback: (payload: MeltQuoteResponse) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.onMeltQuoteUpdates(
-			[quoteId],
-			(p) => {
-				if (p.state === MeltQuoteState.PAID) {
-					callback(p);
-				}
-			},
-			errorCallback,
-		);
+		return this.on.meltQuotePaid(quoteId, callback, errorCallback);
 	}
 
 	/**
-	 * Register a callback to be called when a single mint quote gets paid.
-	 *
-	 * @param quoteId Mint quote id that should be subscribed to.
-	 * @param callback Callback function that will be called when this mint quote gets paid.
-	 * @param errorCallback
-	 * @returns
+	 * @deprecated Use `wallet.on.mintQuotePaid`
 	 */
 	async onMintQuotePaid(
 		quoteId: string,
 		callback: (payload: MintQuoteResponse) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.onMintQuoteUpdates(
-			[quoteId],
-			(p) => {
-				if (p.state === MintQuoteState.PAID) {
-					callback(p);
-				}
-			},
-			errorCallback,
-		);
+		return this.on.mintQuotePaid(quoteId, callback, errorCallback);
 	}
 
 	/**
-	 * Register a callback to be called whenever a melt quote’s state changes.
-	 *
-	 * @param quoteId Melt quote id that should be subscribed to.
-	 * @param callback Callback function that will be called when this melt quote gets paid.
-	 * @param errorCallback
-	 * @returns
+	 * @deprecated Use `wallet.on.meltQuoteUpdates`
 	 */
 	async onMeltQuoteUpdates(
 		quoteIds: string[],
 		callback: (payload: MeltQuoteResponse) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		await this.mint.connectWebSocket();
-		this.failIfNullish(this.mint.webSocketConnection, 'failed to establish WebSocket connection.');
-		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'bolt11_melt_quote', filters: quoteIds },
-			callback,
-			errorCallback,
-		);
-		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
-		};
+		return this.on.meltQuoteUpdates(quoteIds, callback, errorCallback);
 	}
 
 	/**
-	 * Register a callback to be called whenever a subscribed proof state changes.
-	 *
-	 * @param proofs List of proofs that should be subscribed to.
-	 * @param callback Callback function that will be called whenever a proof's state changes.
-	 * @param errorCallback
-	 * @returns
+	 * @deprecated Use `wallet.on.proofStateUpdates`
 	 */
 	async onProofStateUpdates(
 		proofs: Proof[],
 		callback: (payload: ProofState & { proof: Proof }) => void,
 		errorCallback: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		await this.mint.connectWebSocket();
-		this.failIfNullish(this.mint.webSocketConnection, 'failed to establish WebSocket connection.');
-		const enc = new TextEncoder();
-		const proofMap: { [y: string]: Proof } = {};
-		for (let i = 0; i < proofs.length; i++) {
-			const y = hashToCurve(enc.encode(proofs[i].secret)).toHex(true);
-			proofMap[y] = proofs[i];
-		}
-		const ys = Object.keys(proofMap);
-		const subId = this.mint.webSocketConnection.createSubscription(
-			{ kind: 'proof_state', filters: ys },
-			(p: ProofState) => {
-				callback({ ...p, proof: proofMap[p.Y] });
-			},
-			errorCallback,
-		);
-		return () => {
-			this.mint.webSocketConnection?.cancelSubscription(subId, callback);
-		};
+		return this.on.proofStateUpdates(proofs, callback, errorCallback);
 	}
 
 	/**

@@ -1,13 +1,17 @@
 import type { Wallet } from './Wallet';
-import type { Proof } from '../model/types/proof';
-import type { MintQuoteResponse, MeltQuoteResponse } from '../mint/types';
+import type { Proof, ProofState } from '../model/types';
+import {
+	MintQuoteState,
+	MeltQuoteState,
+	type MintQuoteResponse,
+	type MeltQuoteResponse,
+} from '../mint/types';
 import type { SubscriptionCanceller } from './types';
+import { hashToCurve } from '../crypto';
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
-interface ErrorWithCause extends Error {
-	cause?: unknown;
-}
+type ErrorWithCause = Error & { cause?: unknown };
 
 function safeStringify(obj: unknown): string {
 	const seen = new WeakSet<object>();
@@ -26,13 +30,10 @@ function safeStringify(obj: unknown): string {
 
 function normalizeError(err: unknown): Error {
 	if (err instanceof Error) return err;
-	if (typeof err === 'string') return new Error(err);
-	if (err && typeof err === 'object') {
-		const e: ErrorWithCause = new Error(safeStringify(err));
-		e.cause = err;
-		return e;
-	}
-	return new Error('Unknown error');
+	const message = typeof err === 'string' ? err : safeStringify(err);
+	const e: ErrorWithCause = new Error(message);
+	e.cause = err;
+	return e;
 }
 
 function makeAbortError(): Error {
@@ -60,41 +61,125 @@ function cancelSafely(c: CancellerLike | null | undefined): void {
 export class WalletEvents {
 	constructor(private wallet: Wallet) {}
 
-	// passthroughs (whatever the wallet returns, typically Promise<SubscriptionCanceller>)
-	mintQuotes(
+	/**
+	 * Register a callback to be called whenever a mint quote's state changes.
+	 *
+	 * @param quoteIds List of mint quote IDs that should be subscribed to.
+	 * @param callback Callback function that will be called whenever a mint quote state changes.
+	 * @param errorCallback
+	 * @returns
+	 */
+	async mintQuoteUpdates(
 		ids: string[],
 		cb: (p: MintQuoteResponse) => void,
 		err: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.wallet.onMintQuoteUpdates(ids, cb, err);
+		await this.wallet.mint.connectWebSocket();
+		const ws = this.wallet.mint.webSocketConnection;
+		if (!ws) throw new Error('failed to establish WebSocket connection.');
+
+		const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: ids }, cb, err);
+		return () => ws.cancelSubscription(subId, cb);
 	}
-	mintPaid(
+
+	/**
+	 * Register a callback to be called when a single mint quote gets paid.
+	 *
+	 * @param quoteId Mint quote id that should be subscribed to.
+	 * @param callback Callback function that will be called when this mint quote gets paid.
+	 * @param errorCallback
+	 * @returns
+	 */
+	async mintQuotePaid(
 		id: string,
 		cb: (p: MintQuoteResponse) => void,
 		err: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.wallet.onMintQuotePaid(id, cb, err);
+		return this.mintQuoteUpdates(
+			[id],
+			(p) => {
+				if (p.state === MintQuoteState.PAID) cb(p);
+			},
+			err,
+		);
 	}
-	meltUpdates(
+
+	/**
+	 * Register a callback to be called whenever a melt quote’s state changes.
+	 *
+	 * @param quoteId Melt quote id that should be subscribed to.
+	 * @param callback Callback function that will be called when this melt quote gets paid.
+	 * @param errorCallback
+	 * @returns
+	 */
+	async meltQuoteUpdates(
 		ids: string[],
 		cb: (p: MeltQuoteResponse) => void,
 		err: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.wallet.onMeltQuoteUpdates(ids, cb, err);
+		await this.wallet.mint.connectWebSocket();
+		const ws = this.wallet.mint.webSocketConnection;
+		if (!ws) throw new Error('failed to establish WebSocket connection.');
+
+		const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: ids }, cb, err);
+		return () => ws.cancelSubscription(subId, cb);
 	}
-	meltPaid(
+
+	/**
+	 * Register a callback to be called when a single melt quote gets paid.
+	 *
+	 * @param quoteIds List of melt quote IDs that should be subscribed to.
+	 * @param callback Callback function that will be called whenever a melt quote state changes.
+	 * @param errorCallback
+	 * @returns
+	 */
+	async meltQuotePaid(
 		id: string,
 		cb: (p: MeltQuoteResponse) => void,
 		err: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.wallet.onMeltQuotePaid(id, cb, err);
+		return this.meltQuoteUpdates(
+			[id],
+			(p) => {
+				if (p.state === MeltQuoteState.PAID) cb(p);
+			},
+			err,
+		);
 	}
-	proofStates(
+
+	/**
+	 * Register a callback to be called whenever a subscribed proof state changes.
+	 *
+	 * @param proofs List of proofs that should be subscribed to.
+	 * @param callback Callback function that will be called whenever a proof's state changes.
+	 * @param errorCallback
+	 * @returns
+	 */
+	async proofStateUpdates(
 		proofs: Proof[],
-		cb: (payload: unknown) => void,
+		cb: (payload: ProofState & { proof: Proof }) => void,
 		err: (e: Error) => void,
 	): Promise<SubscriptionCanceller> {
-		return this.wallet.onProofStateUpdates(proofs, cb, err);
+		await this.wallet.mint.connectWebSocket();
+		const ws = this.wallet.mint.webSocketConnection;
+		if (!ws) throw new Error('failed to establish WebSocket connection.');
+
+		const enc = new TextEncoder();
+		const proofMap: Record<string, Proof> = {};
+		for (const p of proofs) {
+			const y = hashToCurve(enc.encode(p.secret)).toHex(true);
+			proofMap[y] = p;
+		}
+		const ys = Object.keys(proofMap);
+
+		const subId = ws.createSubscription(
+			{ kind: 'proof_state', filters: ys },
+			(payload: ProofState) => {
+				cb({ ...payload, proof: proofMap[payload.Y] });
+			},
+			err,
+		);
+		return () => ws.cancelSubscription(subId, cb);
 	}
 
 	/**
@@ -160,7 +245,7 @@ export class WalletEvents {
 				to = setTimeout(() => cleanup(new Error('Timeout waiting for mint paid')), opts.timeoutMs);
 			}
 
-			cancelP = this.wallet.onMintQuotePaid(
+			cancelP = this.mintQuotePaid(
 				id,
 				(p) => {
 					cleanup();
@@ -235,7 +320,7 @@ export class WalletEvents {
 			if (unique.length === 0) return cleanup(new Error('No quote ids provided'));
 
 			for (const quoteId of unique) {
-				const c = this.wallet.onMintQuotePaid(
+				const c = this.mintQuotePaid(
 					quoteId,
 					(p) => {
 						cleanup();
@@ -315,7 +400,7 @@ export class WalletEvents {
 				to = setTimeout(() => cleanup(new Error('Timeout waiting for melt paid')), opts.timeoutMs);
 			}
 
-			cancelP = this.wallet.onMeltQuotePaid(
+			cancelP = this.meltQuotePaid(
 				id,
 				(p) => {
 					cleanup();
@@ -373,8 +458,7 @@ export class WalletEvents {
 			onDrop?: (payload: T) => void;
 		},
 	): AsyncIterable<T> {
-		const w = this.wallet;
-		return (async function* () {
+		return async function* (this: WalletEvents) {
 			const queue: T[] = [];
 			let done = false;
 			let notify: (() => void) | null = null;
@@ -391,7 +475,6 @@ export class WalletEvents {
 			const push = (payload: T) => {
 				if (queue.length >= max) {
 					if (dropMode === 'oldest') {
-						// Drop the oldest queued item and report it
 						const dropped = queue.shift();
 						if (dropped !== undefined) {
 							try {
@@ -402,13 +485,12 @@ export class WalletEvents {
 						}
 						queue.push(payload);
 					} else {
-						// 'newest': intentionally drop the incoming payload and report it
 						try {
 							opts?.onDrop?.(payload);
 						} catch {
 							/* noop */
 						}
-						return; // don't enqueue
+						return; // drop newest
 					}
 				} else {
 					queue.push(payload);
@@ -416,12 +498,11 @@ export class WalletEvents {
 				wake();
 			};
 
-			const cancelP = w.onProofStateUpdates(
+			const cancelP: Promise<SubscriptionCanceller> = this.proofStateUpdates(
 				proofs,
-				(payload) => {
-					// We accept the wallet’s unknown here and treat the stream as T.
-					// Consumers opt into T via the generic parameter.
-					push(payload as T);
+				(payload: ProofState & { proof: Proof }) => {
+					// Accept wallet payload type and expose as generic T to consumer
+					push(payload as unknown as T);
 				},
 				() => {
 					done = true;
@@ -448,7 +529,7 @@ export class WalletEvents {
 				cancelSafely(cancelP);
 				if (opts?.signal) opts.signal.removeEventListener('abort', onAbort);
 			}
-		})();
+		}.call(this);
 	}
 
 	/**
