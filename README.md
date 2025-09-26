@@ -470,12 +470,16 @@ if (lastCounterWithSignature != null) {
 // 5) Parallel keysets without mutation
 const wA = wallet; // bound to keysetId
 const wB = wallet.withKeyset(otherId); // bound to otherId, same CounterSource
+wA.keysetId; // keysetId
+wB.keysetId; // otherId
 await wA.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
 await wB.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
 
 // 6) Switch wallet default keyset and bump counter
 wallet.counters.snapshot(); // { 'keysetId': 137 }
+wallet.keysetId; // keysetId
 wallet.bindKeyset(otherId); // bound to otherId, same CounterSource
+wallet.keysetId; // otherId
 await wallet.counters.advanceToAtLeast(wallet.keysetId, 123);
 // Counters persist per keyset, so rebinding doesn’t reset the old one
 wallet.counters.snapshot(); // now { 'keysetId': 137, 'otherId': 123 }
