@@ -468,9 +468,10 @@ class Wallet {
 	 * Configures output denominations with fee adjustments and optimization.
 	 *
 	 * @remarks
-	 * If outputType has denominations or custom data, this MUST sum to the amount. If no
-	 * denominations specified, these will be calculated based on proofsWeHave or the default split.
-	 * Additional denominations to cover fees will then be added if required.
+	 * If 'custom' outputType, data outputs MUST sum to the amount. Other outputTypes may supply
+	 * denominations. If no denominations are passed in, they will be calculated based on proofsWeHave
+	 * or the default split. If partial denominations are passed in, the balance will be added using
+	 * default split. Additional denominations to cover fees will then be added if required.
 	 * @param amount The total amount for outputs.
 	 * @param keyset The mint keyset.
 	 * @param outputType The output configuration.
@@ -500,18 +501,13 @@ class Wallet {
 			return outputType;
 		}
 
-		// Use denominations provided?
+		// Start with any denominations provided.
+		// Note: These MAY be partial ("give me a [16,8], anything for the rest")
+		// We will complete the denomination set before we are done.
 		let denominations = outputType.denominations ?? [];
-		if (denominations.length > 0) {
-			const splitSum = denominations.reduce((sum, a) => sum + a, 0);
-			this.failIf(splitSum !== amount, 'Denominations do not sum to the expected amount', {
-				splitSum,
-				expected: amount,
-			});
-		}
 
 		// If no denominations, but proofsWeHave was provided - optimize
-		// to keep around _denominationTarget proofs of each denomination.
+		// to get around _denominationTarget proofs of each denomination.
 		if (denominations.length === 0 && proofsWeHave.length > 0) {
 			denominations = getKeepAmounts(
 				proofsWeHave,
@@ -521,13 +517,12 @@ class Wallet {
 			);
 		}
 
-		// If no denominations were provided or optimized, compute the default split
-		// before calculating fees to ensure accurate output count.
-		if (denominations.length === 0) {
-			denominations = splitAmount(newAmount, keyset.keys);
-		}
+		// Fill in any missing denominations with default split.
+		// NOTE: If we have to fill, the result will be in ASC order.
+		// Original order is only maintained for exact denomination sets.
+		denominations = splitAmount(newAmount, keyset.keys, denominations);
 
-		// With includeFees, we create additional output amounts to cover the
+		// If includeFees, we create additional output amounts to cover the
 		// fee the receiver will pay when they spend the proofs (ie sender pays fees)
 		if (includeFees) {
 			let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
@@ -574,8 +569,8 @@ class Wallet {
 			return [];
 		}
 		if (
-			// Custom has no denominations. Every other type does.
-			// so let's sanity check they were filled properly (eg: in configureOutputs)
+			// 'custom' OutputType has no denominations. Every other OutputType does.
+			// so let's sanity check those were filled properly (eg: configureOutputs)
 			'custom' != outputType.type &&
 			outputType.denominations &&
 			outputType.denominations.length > 0

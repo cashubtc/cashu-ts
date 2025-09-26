@@ -395,10 +395,6 @@ const newProofs = await wallet.ops
 
 ### Notes & gotchas
 
-- **Denominations must add up**
-  Wherever you pass `denominations` (or `OutputData[]`) you’re choosing a custom split.
-  Amounts must sum to the **send amount** (for `sendX`) or the **final amount after fees** (for `receive`/`mint`) — otherwise the wallet will throw.
-
 - **Counter `0`**
   `deterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
 
@@ -411,7 +407,7 @@ const newProofs = await wallet.ops
   They cannot honor new output types (p2pk/factory/custom/etc.) and the builder enforces this.
 
 - **Keysets**
-  `.keyset(id)` pins all key material and fee lookups to that keyset. If you don’t specify it, the wallet uses its policy default.
+  `.keyset(id)` pins all key material and fee lookups to that keyset. If you don’t specify it, the wallet uses its policy default keyset (either supplied at init or cheapest).
 
 ---
 

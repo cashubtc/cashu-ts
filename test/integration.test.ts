@@ -702,6 +702,58 @@ describe('Keep Vector and Reordering', () => {
 		const { send } = await wallet.send(32, testProofs, {}, customConfig);
 		send.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
 	});
+	test('Send with partial keep denominations (wants 16,8 but the rest can be anything)', async () => {
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+
+		const mintQuote = await wallet.createMintQuote(64);
+		await new Promise((res) => setTimeout(res, 1000));
+		const testSendAmounts = [8, 4, 8, 2, 8, 2]; // complete (32), defined order
+		const testKeepAmounts = [16, 8]; // incomplete (24 vs 31), ascending order, so...
+		const expectedKeep = [1, 2, 4, 8, 16]; // expect ascending order with 8,16 + split rest
+		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
+
+		const fees = wallet.getFeesForProofs(testProofs);
+
+		const customConfig: OutputConfig = {
+			keep: { type: 'random', denominations: testKeepAmounts },
+			send: { type: 'random', denominations: testSendAmounts },
+		};
+		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
+		console.log(send.map((p) => p.amount));
+		console.log(keep.map((p) => p.amount));
+		send.forEach((p, i) => expect(p.amount).toBe(testSendAmounts[i]));
+		keep.forEach((p, i) => expect(p.amount).toBe(expectedKeep[i]));
+	});
+	test('Send with partial send denominations (wants 16,8 but the rest can be anything)', async () => {
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+
+		const mintQuote = await wallet.createMintQuote(64);
+		await new Promise((res) => setTimeout(res, 1000));
+		const testSendAmounts = [16, 8]; // incomplete (24 vs 32), so we expect...
+		const expectedSend = [8, 8, 16]; // ascending order with 8,16 + split rest
+		const testKeepAmounts = [8, 4, 8, 1, 8, 2]; // complete (31), defined order
+		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
+
+		const fees = wallet.getFeesForProofs(testProofs);
+
+		const customConfig: OutputConfig = {
+			keep: { type: 'random', denominations: testKeepAmounts },
+			send: { type: 'random', denominations: testSendAmounts },
+		};
+		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
+		console.log(
+			'send',
+			send.map((p) => p.amount),
+		);
+		console.log(
+			'keep',
+			keep.map((p) => p.amount),
+		);
+		send.forEach((p, i) => expect(p.amount).toBe(expectedSend[i]));
+		keep.forEach((p, i) => expect(p.amount).toBe(testKeepAmounts[i]));
+	});
 });
 describe('Wallet Restore', () => {
 	test('Using batch restore', async () => {
