@@ -427,7 +427,7 @@ try {
 }
 ```
 
-### Deterministic counters (persist, inspect, bump)
+## Deterministic counters (persist, inspect, bump)
 
 Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the “next” value in your storage.
 
@@ -472,6 +472,13 @@ const wA = wallet; // bound to keysetId
 const wB = wallet.withKeyset(otherId); // bound to otherId, same CounterSource
 await wA.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
 await wB.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
+
+// 6) Switch wallet default keyset and bump counter
+wallet.counters.snapshot(); // { 'keysetId': 137 }
+wallet.bindKeyset(otherId); // bound to otherId, same CounterSource
+await wallet.counters.advanceToAtLeast(wallet.keysetId, 123);
+// Counters persist per keyset, so rebinding doesn’t reset the old one
+wallet.counters.snapshot(); // now { 'keysetId': 137, 'otherId': 123 }
 ```
 
 > **Note** The wallet does not await your callback.
