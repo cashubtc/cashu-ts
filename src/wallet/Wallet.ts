@@ -635,8 +635,8 @@ class Wallet {
 	}
 
 	/**
-	 * Creates a swap transaction with sorted outputs for privacy.
-	 * This prevents a mint working out which proofs will be sent or kept.
+	 * Creates a swap transaction with sorted outputs for privacy. This prevents a mint working out
+	 * which proofs will be sent or kept.
 	 *
 	 * @param inputs Prepared input proofs.
 	 * @param keepOutputs Outputs to keep (change or receiver's proofs).
