@@ -43,6 +43,7 @@ import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
 import { WalletOps } from './WalletOps';
 import { WalletEvents } from './WalletEvents';
+import { WalletCounters } from './WalletCounters';
 import { selectProofsRGLI, type SelectProofs } from './selectProofsRGLI';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish } from '../logger';
 
@@ -127,6 +128,10 @@ class Wallet {
 	 * Convenience wrapper for events.
 	 */
 	public readonly on: WalletEvents;
+	/**
+	 * Developer-friendly counters API.
+	 */
+	public readonly counters: WalletCounters;
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';
 	private _mintInfo: MintInfo | undefined = undefined;
@@ -158,8 +163,10 @@ class Wallet {
 	 * @param options.keysetId Bind to this keyset id, else bind on `loadMint`.
 	 * @param options.bip39seed BIP39 seed for deterministic secrets.
 	 * @param options.secretsPolicy Secrets policy, default 'auto'.
-	 * @param options.counterSource Counter source for deterministic outputs.
-	 * @param options.initialCounter Starting counter for that keyset with the ephemeral source.
+	 * @param options.counterSource Counter source for deterministic outputs. If provided, this takes
+	 *   precedence over counterInit. Use when you need persistence across processes or devices.
+	 * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
+	 *   counterSource is also provided.
 	 * @param options.keys Cached keys for this unit, only used when `keysets` is also provided.
 	 * @param options.keysets Cached keysets for this unit, only used when `keys` is also provided.
 	 * @param options.mintInfo Optional cached mint info.
@@ -175,7 +182,7 @@ class Wallet {
 			bip39seed?: Uint8Array;
 			secretsPolicy?: SecretsPolicy; // optional, auto
 			counterSource?: CounterSource; // optional, otherwise ephemeral
-			initialCounter?: number; // only used by EphemeralCounterSource
+			counterInit?: Record<string, number>; // optional, starting "next" per keyset
 			keys?: MintKeys[] | MintKeys;
 			keysets?: MintKeyset[];
 			mintInfo?: GetInfoResponse;
@@ -203,16 +210,11 @@ class Wallet {
 		}
 		this._secretsPolicy = options?.secretsPolicy ?? this._secretsPolicy;
 		if (options?.counterSource) {
-			// Set custom counterSource
 			this._counterSource = options.counterSource;
 		} else {
-			// Set internal counterSource + iniital counter
-			const initial =
-				options?.keysetId && options.initialCounter != null
-					? { [options.keysetId]: options.initialCounter }
-					: undefined;
-			this._counterSource = new EphemeralCounterSource(initial);
+			this._counterSource = new EphemeralCounterSource(options?.counterInit);
 		}
+		this.counters = new WalletCounters(this._counterSource);
 		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
 		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
@@ -369,7 +371,14 @@ class Wallet {
 			return ot;
 		});
 
-		return { outputTypes: patched, used: { keysetId, start: range.start, count: range.count } };
+		// Fire event after successful reservation (wallet does not await handlers)
+		const used = { keysetId, start: range.start, count: range.count } as OperationCounters;
+		try {
+			this.on._emitCountersReserved?.(used);
+		} catch {
+			/* noop */
+		}
+		return { outputTypes: patched, used };
 	}
 
 	/**
@@ -386,8 +395,7 @@ class Wallet {
 	 * 2. After a refresh, to rebind deliberately rather than falling back to cheapest.
 	 *
 	 * @param id The keyset identifier to bind to.
-	 * @throws If the keyset is not found, if it has no keys loaded, or if its unit does not match the
-	 *   wallet unit.
+	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
 	public bindKeyset(id: string): void {
 		const ks = this.keyChain.getKeyset(id);
@@ -406,32 +414,24 @@ class Wallet {
 	}
 
 	/**
-	 * Creates a new Wallet instance bound to a specific keyset.
+	 * Creates a new Wallet bound to a different keyset, sharing the same CounterSource.
 	 *
-	 * @remarks
-	 * This is a non mutating alternative to bindKeyset. The new wallet inherits the mint connection,
-	 * seed, logger, and key cache from this wallet. Use this when you want to operate on multiple
-	 * keysets concurrently with separate state. Note: Does NOT change the keyset binding in your
-	 * existing instance.
-	 * @param id The keyset identifier to associate with the new wallet.
-	 * @param opts Optional overrides:
+	 * Use this to operate on multiple keysets concurrently without mutating your original wallet.
+	 * Counters remain monotonic across instances because the same CounterSource is reused.
 	 *
-	 *   - InitialCounter: Starting counter value for deterministic outputs.
-	 *   - CounterSource: Custom counter source implementation to use instead of the default.
+	 * Do NOT pass a fresh CounterSource for the same seed unless you know exactly why. Reusing
+	 * counters can recreate secrets that a mint will reject.
 	 *
-	 * @returns A new Wallet configured with the given keyset and inherited state.
+	 * @param id The keyset identifier to bind to.
+	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
-	public withKeyset(
-		id: string,
-		opts?: { initialCounter?: number; counterSource?: CounterSource },
-	): Wallet {
+	public withKeyset(id: string, opts?: { counterSource?: CounterSource }): Wallet {
 		return new Wallet(this.mint, {
 			keysetId: id,
 			bip39seed: this._seed,
 			secretsPolicy: this._secretsPolicy,
 			logger: this._logger,
 			counterSource: opts?.counterSource ?? this._counterSource,
-			initialCounter: opts?.initialCounter,
 			...this.keyChain.getCache(),
 		});
 	}

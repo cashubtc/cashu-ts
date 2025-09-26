@@ -1472,7 +1472,7 @@ export class Wallet {
         bip39seed?: Uint8Array;
         secretsPolicy?: SecretsPolicy;
         counterSource?: CounterSource;
-        initialCounter?: number;
+        counterInit?: Record<string, number>;
         keys?: MintKeys[] | MintKeys;
         keysets?: MintKeyset[];
         mintInfo?: GetInfoResponse;
@@ -1495,6 +1495,7 @@ export class Wallet {
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
+    readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     // @deprecated (undocumented)
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
@@ -1558,14 +1559,25 @@ export class Wallet {
     readonly swap: (amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {
-        initialCounter?: number;
         counterSource?: CounterSource;
     }): Wallet;
+}
+
+// @public
+export class WalletCounters {
+    constructor(src: CounterSource);
+    // (undocumented)
+    advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
+    // (undocumented)
+    setNext(keysetId: string, next: number): Promise<void>;
+    // (undocumented)
+    snapshot(): Promise<Record<string, number>>;
 }
 
 // @public (undocumented)
 export class WalletEvents {
     constructor(wallet: Wallet);
+    countersReserved(cb: (payload: OperationCounters) => void): SubscriptionCanceller;
     group(): SubscriptionCanceller & {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;

@@ -8,6 +8,7 @@ import {
 } from '../mint/types';
 import type { SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
+import { type OperationCounters } from './counters';
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -60,6 +61,52 @@ function cancelSafely(c: CancellerLike | null | undefined): void {
 
 export class WalletEvents {
 	constructor(private wallet: Wallet) {}
+
+	// Global counters reservation event
+	private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
+
+	/**
+	 * Register a callback that fires whenever deterministic counters are reserved.
+	 *
+	 * Timing: the callback is invoked synchronously _after_ a successful reservation and _before_ the
+	 * enclosing wallet method returns. The wallet does **not** await your callback, it is
+	 * fire-and-forget.
+	 *
+	 * Responsibility for async work is on the consumer. If your handler calls an async function (e.g.
+	 * persisting `start + count` to storage), make sure to handle errors inside it to avoid unhandled
+	 * rejections.
+	 *
+	 * Typical use: persist `start + count` for the `keysetId` so counters survive restarts.
+	 *
+	 * @example
+	 *
+	 * ```ts
+	 * wallet.on.countersReserved(({ keysetId, start, count }) => {
+	 * 	saveNextToDb(keysetId, start + count); // handle async errors inside saveNextToDb
+	 * });
+	 * ```
+	 *
+	 * @param cb Handler called with { keysetId, start, count }.
+	 * @returns A function that unsubscribes the handler.
+	 */
+	public countersReserved(cb: (payload: OperationCounters) => void): SubscriptionCanceller {
+		this.countersReservedHandlers.add(cb);
+		return () => {
+			this.countersReservedHandlers.delete(cb);
+		};
+	}
+	/**
+	 * @internal
+	 */
+	_emitCountersReserved(payload: OperationCounters) {
+		for (const h of this.countersReservedHandlers) {
+			try {
+				h(payload);
+			} catch {
+				/* noop */
+			}
+		}
+	}
 
 	/**
 	 * Register a callback to be called whenever a mint quote's state changes.

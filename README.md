@@ -22,6 +22,7 @@ Wallet Features:
 - [x] melting tokens
 - [x] check if tokens are spent
 - [x] payment methods: bolt11, bolt12
+- [x] deterministic counters (with callbacks for persistence)
 - [ ] ...
 
 Implemented [NUTs](https://github.com/cashubtc/nuts/):
@@ -393,7 +394,7 @@ const newProofs = await wallet.ops
 
 ---
 
-### Notes & gotchas
+### Notes
 
 - **Counter `0`**
   `deterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
@@ -425,6 +426,56 @@ try {
 	throw e;
 }
 ```
+
+### Deterministic counters (persist, inspect, bump)
+
+Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the “next” value in your storage.
+
+API at a glance:
+
+- `wallet.counters.snapshot()` – inspect current state
+- `wallet.counters.advanceToAtLeast(id, n)` – bump forward if behind
+- `wallet.counters.setNext(id, n)` – hard-set for migrations/tests
+- `wallet.on.countersReserved(cb)` – subscribe to reservations
+
+```ts
+// 1) Seed once at app start, if you have previously saved "next" per keyset
+const wallet = new Wallet(mintUrl, {
+	unit: 'sat',
+	bip39seed,
+	secretsPolicy: 'deterministic',
+	keysetId: preferredKeysetId,
+	counterInit: {
+		[preferredKeysetId]: await loadNextFromDb(preferredKeysetId), // e.g. 128
+	},
+});
+await wallet.loadMint();
+
+// 2) Subscribe once, persist future reservations
+wallet.on.countersReserved(({ keysetId, start, count }) => {
+	saveNextToDb(keysetId, start + count);
+});
+
+// 3) Inspect current state (what will be reserved next)
+const snap = await wallet.counters.snapshot(); // { 'keysetId': 137 }
+
+// 4) After a restore or cross-device sync, bump the cursor forward
+const { lastCounterWithSignature } = await wallet.batchRestore();
+if (lastCounterWithSignature != null) {
+	const next = lastCounterWithSignature + 1;
+	await wallet.counters.advanceToAtLeast(wallet.keysetId, next);
+	await saveNextToDb(wallet.keysetId, next);
+}
+
+// 5) Parallel keysets without mutation
+const wA = wallet; // bound to keysetId
+const wB = wallet.withKeyset(otherId); // bound to otherId, same CounterSource
+await wA.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
+await wB.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
+```
+
+> **Note** The wallet does not await your callback.
+> If saveNextToDb (or similar) is async, handle errors to avoid unhandled rejections
 
 ## Contribute
 

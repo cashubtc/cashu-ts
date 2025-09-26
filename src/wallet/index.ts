@@ -4,5 +4,6 @@ export * from './KeyChain';
 export * from './Keyset';
 export * from './selectProofsRGLI';
 export * from './Wallet';
+export * from './WalletCounters';
 export * from './WalletEvents';
 export * from './WalletOps';

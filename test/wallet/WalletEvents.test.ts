@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WalletEvents } from '../../src/wallet/WalletEvents';
 import type { Proof } from '../../src/model/types';
 import { hashToCurve } from '../../src/crypto';
+import { OperationCounters } from '../../src/wallet';
 
 // Helper: flush microtasks (needed because cancelSafely runs them async)
 const flushMicrotasks = async (n = 2) => {
@@ -666,6 +667,41 @@ describe('WalletEvents', () => {
 			g.add(rejected);
 			await flushMicrotasks();
 			expect(g.cancelled).toBe(true);
+		});
+	});
+
+	describe('WalletEvents.countersReserved', () => {
+		it('invokes handler with payload and supports unsubscribe', () => {
+			const we = new WalletEvents({} as any);
+
+			const payload: OperationCounters = { keysetId: 'K', start: 10, count: 3 };
+			let seen: OperationCounters | null = null;
+
+			const cancel = we.countersReserved((p) => {
+				// should not throw if handler throws later; we test that after
+				seen = p;
+			});
+
+			(we as any)._emitCountersReserved(payload);
+			expect(seen).toEqual(payload);
+
+			// unsubscribe and ensure no further calls
+			seen = null;
+			cancel();
+			(we as any)._emitCountersReserved(payload);
+			expect(seen).toBeNull();
+		});
+
+		it('swallows handler errors (does not throw from _emitCountersReserved)', () => {
+			const we = new WalletEvents({} as any);
+
+			we.countersReserved(() => {
+				throw new Error('boom');
+			});
+
+			expect(() =>
+				(we as any)._emitCountersReserved({ keysetId: 'K', start: 0, count: 1 }),
+			).not.toThrow();
 		});
 	});
 });

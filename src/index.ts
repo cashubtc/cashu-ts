@@ -26,6 +26,7 @@ export {
 	type CounterRange,
 	type OperationCounters,
 	type SelectProofs,
+	WalletCounters,
 	SendBuilder,
 	ReceiveBuilder,
 	MintBuilder,
