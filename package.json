@@ -36,7 +36,7 @@
 		"typedoc": "typedoc src/index.ts",
 		"api:check": "npm run compile && api-extractor run",
 		"api:update": "npm run compile && api-extractor run --local",
-		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test"
+		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status"
 	},
 	"exports": {
 		".": {
