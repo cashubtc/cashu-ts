@@ -504,7 +504,7 @@ class Wallet {
 		let denominations = outputType.denominations ?? [];
 		if (denominations.length > 0) {
 			const splitSum = denominations.reduce((sum, a) => sum + a, 0);
-			this.failIf(splitSum !== amount, 'Custom denominations sum mismatch', {
+			this.failIf(splitSum !== amount, 'Denominations do not sum to the expected amount', {
 				splitSum,
 				expected: amount,
 			});
@@ -574,12 +574,14 @@ class Wallet {
 			return [];
 		}
 		if (
+			// Custom has no denominations. Every other type does.
+			// so let's sanity check they were filled properly (eg: in configureOutputs)
 			'custom' != outputType.type &&
 			outputType.denominations &&
 			outputType.denominations.length > 0
 		) {
 			const splitSum = outputType.denominations.reduce((sum, a) => sum + a, 0);
-			this.failIf(splitSum !== amount, 'Custom denominations sum mismatch', {
+			this.failIf(splitSum !== amount, 'Denominations do not sum to the expected amount', {
 				splitSum,
 				expected: amount,
 			});
@@ -633,7 +635,8 @@ class Wallet {
 	}
 
 	/**
-	 * Creates a swap transaction with sorted outputs for mint compatibility.
+	 * Creates a swap transaction with sorted outputs for privacy.
+	 * This prevents a mint working out which proofs will be sent or kept.
 	 *
 	 * @param inputs Prepared input proofs.
 	 * @param keepOutputs Outputs to keep (change or receiver's proofs).
