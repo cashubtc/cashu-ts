@@ -439,50 +439,53 @@ API at a glance:
 - `wallet.on.countersReserved(cb)` – subscribe to reservations
 
 ```ts
-// 1) Seed once at app start, if you have previously saved "next" per keyset
+// 1) Seed once at app start if you have previously saved “next” per keyset
 const wallet = new Wallet(mintUrl, {
 	unit: 'sat',
 	bip39seed,
-	secretsPolicy: 'deterministic',
-	keysetId: preferredKeysetId,
-	counterInit: {
-		[preferredKeysetId]: await loadNextFromDb(preferredKeysetId), // e.g. 128
-	},
+	keysetId: preferredKeysetId, // e.g. '0111111'
+	counterInit: loadCountersFromDb(), // e.g. { '0111111': 128 }
 });
 await wallet.loadMint();
 
+// Alternative to using counterInit for individual keyset allocation
+await wallet.counters.advanceToAtLeast('0111111', 128);
+
 // 2) Subscribe once, persist future reservations
 wallet.on.countersReserved(({ keysetId, start, count }) => {
-	saveNextToDb(keysetId, start + count);
+	// next is start + count
+	saveNextToDb(keysetId, start + count); // do an atomic upsert per keysetId
 });
 
-// 3) Inspect current state (what will be reserved next)
-const snap = await wallet.counters.snapshot(); // { 'keysetId': 137 }
+// 3) Inspect current state, what will be reserved next
+const snap = await wallet.counters.snapshot(); // { '0111111': 128 }
 
-// 4) After a restore or cross-device sync, bump the cursor forward
+// 4) After a restore or cross device sync, bump the cursor forward
 const { lastCounterWithSignature } = await wallet.batchRestore();
 if (lastCounterWithSignature != null) {
-	const next = lastCounterWithSignature + 1;
-	await wallet.counters.advanceToAtLeast(wallet.keysetId, next);
-	await saveNextToDb(wallet.keysetId, next);
+	const next = lastCounterWithSignature + 1; // e.g. 137
+	await wallet.counters.advanceToAtLeast('0111111', next);
+	await saveNextToDb('0111111', next);
 }
 
 // 5) Parallel keysets without mutation
-const wA = wallet; // bound to keysetId
-const wB = wallet.withKeyset(otherId); // bound to otherId, same CounterSource
-wA.keysetId; // keysetId
-wB.keysetId; // otherId
-await wA.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
-await wB.counters.snapshot(); // { 'keysetId': 137, 'otherId': 0 }
+const wA = wallet; // bound to '0111111'
+const wB = wallet.withKeyset('0122222'); // bound to '0122222', same CounterSource
+wA.keysetId; // '0111111'
+wB.keysetId; // '0122222'
+await wA.counters.snapshot(); // { '0111111': 137, '0122222': 0 }
+await wB.counters.snapshot(); // { '0111111': 137, '0122222': 0 }
 
 // 6) Switch wallet default keyset and bump counter
-wallet.counters.snapshot(); // { 'keysetId': 137 }
-wallet.keysetId; // keysetId
-wallet.bindKeyset(otherId); // bound to otherId, same CounterSource
-wallet.keysetId; // otherId
-await wallet.counters.advanceToAtLeast(wallet.keysetId, 123);
-// Counters persist per keyset, so rebinding doesn’t reset the old one
-wallet.counters.snapshot(); // now { 'keysetId': 137, 'otherId': 123 }
+await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 0 }
+wallet.keysetId; // '0111111'
+wallet.bindKeyset('0133333'); // bound to '0133333', same CounterSource
+wallet.keysetId; // '0133333'
+await wallet.counters.advanceToAtLeast('0133333', 456);
+
+// Counters persist per keyset, so rebinding does not reset the old one
+await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 0, '0133333': 456 }
+await wB.counters.snapshot(); // { '0111111': 137, '0122222': 0, '0133333': 456 }
 ```
 
 > **Note** The wallet does not await your callback.
