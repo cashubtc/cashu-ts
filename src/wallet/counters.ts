@@ -31,7 +31,22 @@ export interface MutableCounterSource extends CounterSource {
 	setNext?(keysetId: string, next: number): Promise<void>;
 }
 
-export type OperationCounters = { keysetId: string; start: number; count: number };
+/**
+ * Counter for a transaction.
+ *
+ * - KeysetID: of the transaction.
+ * - Start: of reservation.
+ * - Count: of reservations.
+ * - Next: counter available.
+ *
+ * @example // Start: 5, Count: 3 => 5,6,7. Next: 8.
+ */
+export type OperationCounters = {
+	keysetId: string;
+	start: number;
+	count: number;
+	next: number;
+};
 
 export class EphemeralCounterSource implements MutableCounterSource {
 	private next = new Map<string, number>();

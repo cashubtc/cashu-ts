@@ -452,9 +452,9 @@ await wallet.loadMint();
 await wallet.counters.advanceToAtLeast('0111111', 128);
 
 // 2) Subscribe once, persist future reservations
-wallet.on.countersReserved(({ keysetId, start, count }) => {
-	// next is start + count
-	saveNextToDb(keysetId, start + count); // do an atomic upsert per keysetId
+wallet.on.countersReserved(({ keysetId, start, count, next }) => {
+	// next is start + count (i.e: next available)
+	saveNextToDb(keysetId, next); // do an atomic upsert per keysetId
 });
 
 // 3) Inspect current state, what will be reserved next

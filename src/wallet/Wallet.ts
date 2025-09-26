@@ -372,7 +372,12 @@ class Wallet {
 		});
 
 		// Fire event after successful reservation (wallet does not await handlers)
-		const used = { keysetId, start: range.start, count: range.count } as OperationCounters;
+		const used = {
+			keysetId,
+			start: range.start,
+			count: range.count,
+			next: range.start + range.count,
+		} as OperationCounters;
 		try {
 			this.on._emitCountersReserved?.(used);
 		} catch {

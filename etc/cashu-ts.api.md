@@ -908,11 +908,12 @@ export type NUT10Option = {
 // @public (undocumented)
 export type OnCountersReserved = (info: OperationCounters) => void;
 
-// @public (undocumented)
+// @public
 export type OperationCounters = {
     keysetId: string;
     start: number;
     count: number;
+    next: number;
 };
 
 // @public
