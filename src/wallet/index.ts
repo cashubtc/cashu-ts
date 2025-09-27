@@ -1,5 +1,5 @@
 export * from './types';
-export * from './counters';
+export * from './EphemeralCounterSource';
 export * from './KeyChain';
 export * from './Keyset';
 export * from './selectProofsRGLI';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EphemeralCounterSource, type CounterRange } from '../../src/wallet/counters';
+import { EphemeralCounterSource, type CounterRange } from '../../src/wallet';
 
 describe('EphemeralCounterSource', () => {
 	it('constructor seeds initial next values', async () => {
@@ -18,6 +18,16 @@ describe('EphemeralCounterSource', () => {
 		expect(r2).toEqual({ start: 0, count: 3 });
 		const snap = await src.snapshot();
 		expect(snap).toEqual({ k: 3 });
+
+		// Try another reserve n=0, now the counter is >0
+		const r3 = await src.reserve('k', 0);
+		expect(r3).toEqual({ start: 0, count: 0 });
+
+		// follow-up reserve(3) should still start at 3 if n=0 was a no-op
+		const r4 = await src.reserve('k', 3);
+		expect(r4).toEqual({ start: 3, count: 3 });
+		const snap2 = await src.snapshot();
+		expect(snap2).toEqual({ k: 6 });
 	});
 
 	it('reserve throws on negative count', async () => {
@@ -77,6 +87,13 @@ describe('EphemeralCounterSource', () => {
 		expect(r).toEqual({ start: 5, count: 2 });
 		snap = await src.snapshot();
 		expect(snap.k).toBe(7);
+	});
+
+	it('advanceToAtLeast handles previously unset counter', async () => {
+		const src = new EphemeralCounterSource();
+		await src.advanceToAtLeast('k', 3); // k not set yet
+		let snap = await src.snapshot();
+		expect(snap.k).toBe(3);
 	});
 
 	it('setNext sets absolute next and rejects negatives', async () => {

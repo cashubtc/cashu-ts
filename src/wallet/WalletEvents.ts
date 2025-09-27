@@ -8,7 +8,7 @@ import {
 } from '../mint/types';
 import type { SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
-import { type OperationCounters } from './counters';
+import { type OperationCounters } from './EphemeralCounterSource';
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 

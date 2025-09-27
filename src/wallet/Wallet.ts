@@ -34,7 +34,7 @@ import {
 	EphemeralCounterSource,
 	type OperationCounters,
 	type CounterRange,
-} from './counters';
+} from './EphemeralCounterSource';
 
 import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
 import { Mint } from '../mint';

@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { WalletCounters } from '../../src/wallet/WalletCounters';
 import {
+	WalletCounters,
 	EphemeralCounterSource,
 	type CounterSource,
 	type MutableCounterSource,
 	type CounterRange,
-} from '../../src/wallet/counters';
+} from '../../src/wallet';
 
 //
 // Test doubles
