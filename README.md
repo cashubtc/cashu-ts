@@ -479,7 +479,6 @@ await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10 }
 wA.keysetId; // '0111111'
 wB.keysetId; // '0122222'
 
-
 // 6) Switch wallet default keyset and bump counter
 await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 10 }
 wallet.keysetId; // '0111111'
