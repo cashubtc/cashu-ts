@@ -22,6 +22,8 @@ Wallet Features:
 - [x] melting tokens
 - [x] check if tokens are spent
 - [x] payment methods: bolt11, bolt12
+- [x] transaction builder (WalletOps)
+- [x] wallet event subscriptions (WalletEvents)
 - [x] deterministic counters (with callbacks for persistence)
 - [ ] ...
 
@@ -44,10 +46,10 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 
 Supported token formats:
 
-- [x] v1 read
-- [x] v2 read (deprecated)
-- [x] v3 read/write
-- [x] v4 read/write
+- [] v1 obsolete
+- [] v2 obsolete
+- [x] v3 (cashuA) read/write (deprecated)
+- [x] v4 (cashuB) read/write
 
 ## Usage
 
@@ -237,20 +239,20 @@ const { keep, send } = await wallet.ops.send(5, myProofs).run();
 ```
 
 - Uses wallet policy for both `send` and `keep`.
-- If you only customize **send**, `keep` is omitted so the wallet may still attempt an **offline exact match** where possible.
+- If you only customize **send**, `keep` is omitted so the wallet may still attempt an **offline exact match** where possible. This avoids mint fees.
 
 #### 2) Deterministic send, random change
 
 ```ts
 const { keep, send } = await wallet.ops
-	.send(5, myProofs)
-	.sendDeterministic(0, [5]) // counter=0 => auto-reserve; split must sum to 5
-	.keepRandom() // policy-driven split unless you pass denominations
+	.send(15, myProofs)
+	.sendDeterministic(0, [4, 4]) // counter=0 => auto-reserve; split must include 2x 4's
+	.keepRandom() // change proofs must have random secrets
 	.run();
 ```
 
 > **Note**
-> Passing `counter = 0` means “reserve counters automatically using the wallet’s CounterSource”.
+> Passing `counter=0` means “reserve counters automatically" using wallet CounterSource.
 
 #### 3) P2PK send with sender-pays fees
 
@@ -268,7 +270,7 @@ const { keep, send } = await wallet.ops
 const { keep, send } = await wallet.ops
 	.send(20, myProofs)
 	.sendFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
-	.keepDeterministic(0) // deterministic change
+	.keepDeterministic(0) // deterministic change, auto-reserve
 	.keyset('0123456')
 	.onCountersReserved((info) => {
 		console.log('Reserved counters', info);
@@ -303,7 +305,7 @@ const { keep, send } = await wallet.ops
 ```ts
 const { keep, send } = await wallet.ops
 	.send(7, myProofs)
-	.offlineCloseMatch(/* requireDleq? */ true)
+	.offlineCloseMatch(/* requireDleq? */ true) // only proofs with valid DLEQ
 	.run();
 ```
 
@@ -350,7 +352,7 @@ const proofs = await wallet.ops
 ```ts
 const proofsA = await wallet.ops
 	.receive(tokenA)
-	.factory(makeOutputData, [5, 5, 10]) // amounts must sum to final received amount after fees
+	.factory(makeOutputData, [8, 4, 16]) // split must include these denoms
 	.run();
 
 const proofsB = await wallet.ops
@@ -376,7 +378,7 @@ const newProofs = await wallet.ops
 ```ts
 const newProofs = await wallet.ops
 	.mint(250, quote)
-	.deterministic(0, [100, 100, 50]) // counter=0 => auto-reserve
+	.deterministic(0, [128, 64]) // counter=0 => auto-reserve, split must include denoms
 	.keyset('0123456')
 	.onCountersReserved((info) => console.log(info))
 	.run();
@@ -401,14 +403,14 @@ const newProofs = await wallet.ops
 
 - **Two sides in send**
   `send` has **send** and **keep** branches.
-  If you only set **send**, the builder omits **keep** so the wallet may still do offline exact-match optimization.
+  If you only set **send**, the builder omits **keep** so the wallet may still do offline exact-match selection.
 
 - **Offline modes vs custom outputs**
   `offlineExactOnly` / `offlineCloseMatch` work **only** with existing proofs.
-  They cannot honor new output types (p2pk/factory/custom/etc.) and the builder enforces this.
+  They cannot honor new output types (p2pk/factory/custom/etc). The builder enforces this.
 
 - **Keysets**
-  `.keyset(id)` pins all key material and fee lookups to that keyset. If you don’t specify it, the wallet uses its policy default keyset (either supplied at init or cheapest).
+  `.keyset(id)` pins all fee lookups to that keyset. If you don’t specify it, the wallet uses its policy default keyset (either supplied at init or cheapest).
 
 ---
 
@@ -471,21 +473,24 @@ if (lastCounterWithSignature != null) {
 // 5) Parallel keysets without mutation
 const wA = wallet; // bound to '0111111'
 const wB = wallet.withKeyset('0122222'); // bound to '0122222', same CounterSource
+await wB.counters.advanceToAtLeast('0122222', 10);
+await wA.counters.snapshot(); // { '0111111': 137, '0122222': 10 }
+await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10 }
 wA.keysetId; // '0111111'
 wB.keysetId; // '0122222'
-await wA.counters.snapshot(); // { '0111111': 137, '0122222': 0 }
-await wB.counters.snapshot(); // { '0111111': 137, '0122222': 0 }
+
 
 // 6) Switch wallet default keyset and bump counter
-await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 0 }
+await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 10 }
 wallet.keysetId; // '0111111'
 wallet.bindKeyset('0133333'); // bound to '0133333', same CounterSource
 wallet.keysetId; // '0133333'
 await wallet.counters.advanceToAtLeast('0133333', 456);
 
 // Counters persist per keyset, so rebinding does not reset the old one
-await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 0, '0133333': 456 }
-await wB.counters.snapshot(); // { '0111111': 137, '0122222': 0, '0133333': 456 }
+await wallet.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456 }
+await wA.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456 }
+await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456 }
 ```
 
 > **Note** The wallet does not await your callback.
