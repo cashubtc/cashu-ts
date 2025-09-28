@@ -251,7 +251,7 @@ describe('mint api', () => {
 		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
 		// Send them P2PK locked to Bob
-		const { send } = await wallet.ops.send(64, mintedProofs).sendP2PK({ pubkey: pubKeyBob }).run();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK({ pubkey: pubKeyBob }).run();
 		expectNUT10SecretDataToEqual(send, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
 
@@ -281,7 +281,7 @@ describe('mint api', () => {
 
 		const proofs = await wallet.ops
 			.mint(3000, mintRequest.quote)
-			.p2pk({
+			.asP2PK({
 				pubkey: bytesToHex(pubKeyBob),
 			})
 			.run();
@@ -763,7 +763,7 @@ describe('Wallet Restore', () => {
 
 		const mintQuote = await wallet.createMintQuote(70);
 		await new Promise((r) => setTimeout(r, 1000));
-		const proofs = await wallet.ops.mint(70, mintQuote.quote).deterministic(5).run();
+		const proofs = await wallet.ops.mint(70, mintQuote.quote).asDeterministic(5).run();
 
 		const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
 		expect(restoredProofs).toEqual(proofs);

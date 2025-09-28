@@ -127,7 +127,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('builds OutputConfig with send only and omits keep when keep not set', async () => {
-			await ops.send(5, proofs).sendDeterministic(0, [5]).run();
+			await ops.send(5, proofs).asDeterministic(0, [5]).run();
 
 			const [, , config, outputConfig] = wallet.send.mock.calls[0];
 			expect(config).toEqual({});
@@ -139,8 +139,8 @@ describe('WalletOps builders', () => {
 		it('includes keep when keep OutputType is provided', async () => {
 			await ops
 				.send(5, proofs)
-				.sendRandom([5])
-				.keepDeterministic(0, [])
+				.asRandom([5])
+				.keepAsDeterministic(0, [])
 				.includeFees(true)
 				.onCountersReserved(() => {})
 				.run();
@@ -177,11 +177,11 @@ describe('WalletOps builders', () => {
 		});
 
 		it('throws if offline mode is combined with any OutputType', async () => {
-			await expect(ops.send(5, proofs).sendRandom().offlineExactOnly().run()).rejects.toThrow(
+			await expect(ops.send(5, proofs).asRandom().offlineExactOnly().run()).rejects.toThrow(
 				/Offline selection cannot be combined/i,
 			);
 
-			await expect(ops.send(5, proofs).keepRandom().offlineCloseMatch().run()).rejects.toThrow(
+			await expect(ops.send(5, proofs).keepAsRandom().offlineCloseMatch().run()).rejects.toThrow(
 				/Offline selection cannot be combined/i,
 			);
 		});
@@ -189,8 +189,8 @@ describe('WalletOps builders', () => {
 		it('supports sendP2PK and keepP2PK OutputTypes', async () => {
 			await ops
 				.send(7, proofs)
-				.sendP2PK({ pubkey: 'pub', locktime: 123 }, [7])
-				.keepP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
+				.asP2PK({ pubkey: 'pub', locktime: 123 }, [7])
+				.keepAsP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
 				.run();
 
 			const [, , , outputConfig] = wallet.send.mock.calls[0];
@@ -206,7 +206,7 @@ describe('WalletOps builders', () => {
 
 		it('supports sendFactory and keepFactory OutputTypes', async () => {
 			const factory = vi.fn();
-			await ops.send(9, proofs).sendFactory(factory, [9]).keepFactory(factory, []).run();
+			await ops.send(9, proofs).asFactory(factory, [9]).keepAsFactory(factory, []).run();
 
 			const [, , , outputConfig] = wallet.send.mock.calls[0];
 			expect(outputConfig).toEqual({
@@ -219,7 +219,7 @@ describe('WalletOps builders', () => {
 			const mockData = [{ blindedMessage: { amount: 4 } }] as OutputData[];
 			const mockKeep = [{ blindedMessage: { amount: 1 } }] as OutputData[];
 
-			await ops.send(4, proofs).sendCustom(mockData).keepCustom(mockKeep).run();
+			await ops.send(4, proofs).asCustom(mockData).keepAsCustom(mockKeep).run();
 
 			const [, , , outputConfig] = wallet.send.mock.calls[0];
 			expect(outputConfig).toEqual({
@@ -230,7 +230,7 @@ describe('WalletOps builders', () => {
 
 		it('when only keep is set, send defaults via wallet.defaultOutputType()', async () => {
 			const defaultSpy = vi.spyOn(wallet, 'defaultOutputType');
-			await ops.send(5, proofs).keepDeterministic(0, []).run();
+			await ops.send(5, proofs).keepAsDeterministic(0, []).run();
 
 			expect(defaultSpy).toHaveBeenCalled(); // send side filled by policy
 			const [, , , outputConfig] = wallet.send.mock.calls[0];
@@ -276,7 +276,7 @@ describe('WalletOps builders', () => {
 			const cb = vi.fn();
 			await ops
 				.receive(token)
-				.deterministic(0, [5])
+				.asDeterministic(0, [5])
 				.privkey(['k1', 'k2'])
 				.onCountersReserved(cb)
 				.run();
@@ -295,7 +295,7 @@ describe('WalletOps builders', () => {
 
 		it('supports factory() OutputType for receive', async () => {
 			const factory = vi.fn();
-			await ops.receive(token).factory(factory, [3, 2]).run();
+			await ops.receive(token).asFactory(factory, [3, 2]).run();
 
 			const [, , outputType] = wallet.receive.mock.calls[0];
 			expect(outputType).toEqual({ type: 'factory', factory, denominations: [3, 2] });
@@ -303,28 +303,28 @@ describe('WalletOps builders', () => {
 
 		it('supports custom() OutputType for receive', async () => {
 			const data = [{ blindedMessage: { amount: 5 } }] as OutputData[];
-			await ops.receive(token).custom(data).run();
+			await ops.receive(token).asCustom(data).run();
 
 			const [, , outputType] = wallet.receive.mock.calls[0];
 			expect(outputType).toEqual({ type: 'custom', data });
 		});
 
 		it('privkey accepts string as well as string[]', async () => {
-			await ops.receive(token).deterministic(0).privkey('single-key').run();
+			await ops.receive(token).asDeterministic(0).privkey('single-key').run();
 
 			const [, config] = wallet.receive.mock.calls[0];
 			expect(config).toMatchObject({ privkey: 'single-key' });
 		});
 
 		it('random() OutputType for receive with denominations', async () => {
-			await ops.receive(token).random([1, 2, 3]).run();
+			await ops.receive(token).asRandom([1, 2, 3]).run();
 
 			const [, , outputType] = wallet.receive.mock.calls[0];
 			expect(outputType).toEqual({ type: 'random', denominations: [1, 2, 3] });
 		});
 
 		it('p2pk() OutputType for receive', async () => {
-			await ops.receive(token).p2pk({ pubkey: 'PUB', locktime: 42 }, [7]).run();
+			await ops.receive(token).asP2PK({ pubkey: 'PUB', locktime: 42 }, [7]).run();
 
 			const [, , outputType] = wallet.receive.mock.calls[0];
 			expect(outputType).toEqual({
@@ -336,7 +336,7 @@ describe('WalletOps builders', () => {
 
 		it('proofsWeHave() is forwarded in receive config', async () => {
 			const some = [{ amount: 1 } as Proof, { amount: 2 } as Proof];
-			await ops.receive(token).deterministic(0).proofsWeHave(some).run();
+			await ops.receive(token).asDeterministic(0).proofsWeHave(some).run();
 
 			const [, config] = wallet.receive.mock.calls[0];
 			expect(config).toMatchObject({ proofsWeHave: some });
@@ -368,7 +368,7 @@ describe('WalletOps builders', () => {
 		it('calls wallet.mintProofs with custom OutputType and config', async () => {
 			await ops
 				.mint(10, quote)
-				.p2pk({ pubkey: 'P' }, [10])
+				.asP2PK({ pubkey: 'P' }, [10])
 				.privkey('sk')
 				.onCountersReserved(() => {})
 				.run();
@@ -388,7 +388,7 @@ describe('WalletOps builders', () => {
 
 		it('supports factory() OutputType for mint', async () => {
 			const factory = vi.fn();
-			await ops.mint(8, quote).factory(factory, [8]).run();
+			await ops.mint(8, quote).asFactory(factory, [8]).run();
 
 			const [, , , ot] = wallet.mintProofs.mock.calls[0];
 			expect(ot).toEqual({ type: 'factory', factory, denominations: [8] });
@@ -396,14 +396,14 @@ describe('WalletOps builders', () => {
 
 		it('supports custom() OutputType for mint', async () => {
 			const data = [{ blindedMessage: { amount: 8 } }] as OutputData[];
-			await ops.mint(8, quote).custom(data).run();
+			await ops.mint(8, quote).asCustom(data).run();
 
 			const [, , , ot] = wallet.mintProofs.mock.calls[0];
 			expect(ot).toEqual({ type: 'custom', data });
 		});
 
 		it('random() OutputType for mint with denominations', async () => {
-			await ops.mint(12, quote).random([12]).run();
+			await ops.mint(12, quote).asRandom([12]).run();
 
 			const [, , , outputType] = wallet.mintProofs.mock.calls[0];
 			expect(outputType).toEqual({ type: 'random', denominations: [12] });
@@ -411,7 +411,7 @@ describe('WalletOps builders', () => {
 
 		it('proofsWeHave() is forwarded in mint config', async () => {
 			const some = [{ amount: 3 } as Proof];
-			await ops.mint(3, quote).deterministic(0).proofsWeHave(some).run();
+			await ops.mint(3, quote).asDeterministic(0).proofsWeHave(some).run();
 
 			const [, , cfg] = wallet.mintProofs.mock.calls[0];
 			expect(cfg).toMatchObject({ proofsWeHave: some });
@@ -437,7 +437,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt11: supports OutputType (random) and passes as 4th arg', async () => {
-			await ops.meltBolt11(melt11, proofs).random([1, 1, 1]).run();
+			await ops.meltBolt11(melt11, proofs).asRandom([1, 1, 1]).run();
 
 			const [, , , ot] = wallet.meltProofs.mock.calls[0];
 			expect(ot).toEqual({ type: 'random', denominations: [1, 1, 1] });
@@ -445,7 +445,7 @@ describe('WalletOps builders', () => {
 
 		it('bolt11: supports custom OutputType', async () => {
 			const data = [{ blindedMessage: { amount: 0 } }] as OutputData[];
-			await ops.meltBolt11(melt11, proofs).custom(data).run();
+			await ops.meltBolt11(melt11, proofs).asCustom(data).run();
 
 			const [, , , ot] = wallet.meltProofs.mock.calls[0];
 			expect(ot).toEqual({ type: 'custom', data });
@@ -464,14 +464,14 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt12: supports deterministic OutputType', async () => {
-			await ops.meltBolt12(melt12, proofs).deterministic(0, []).run();
+			await ops.meltBolt12(melt12, proofs).asDeterministic(0, []).run();
 
 			const [, , , ot] = wallet.meltProofsBolt12.mock.calls[0];
 			expect(ot).toEqual({ type: 'deterministic', counter: 0, denominations: [] });
 		});
 
 		it('bolt11: supports P2PK OutputType', async () => {
-			await ops.meltBolt11(melt11, proofs).p2pk({ pubkey: 'X', locktime: 99 }, []).run();
+			await ops.meltBolt11(melt11, proofs).asP2PK({ pubkey: 'X', locktime: 99 }, []).run();
 
 			const [, , , ot] = wallet.meltProofs.mock.calls[0];
 			expect(ot).toEqual({
@@ -483,7 +483,7 @@ describe('WalletOps builders', () => {
 
 		it('bolt12: supports factory() OutputType', async () => {
 			const factory = vi.fn();
-			await ops.meltBolt12(melt12, proofs).factory(factory, []).run();
+			await ops.meltBolt12(melt12, proofs).asFactory(factory, []).run();
 
 			const [, , , ot] = wallet.meltProofsBolt12.mock.calls[0];
 			expect(ot).toEqual({

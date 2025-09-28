@@ -112,14 +112,14 @@ class Wallet {
 	 *
 	 *     const { keep, send } = await wallet.ops
 	 *     	.send(5, proofs)
-	 *     	.sendDeterministic() // counter: 0 = auto
-	 *     	.keepRandom()
+	 *     	.asDeterministic() // counter: 0 = auto
+	 *     	.keepAsRandom()
 	 *     	.includeFees(true)
 	 *     	.run();
 	 *
 	 *     const proofs = await wallet.ops
 	 *     	.receive(token)
-	 *     	.deterministic()
+	 *     	.asDeterministic()
 	 *     	.keyset(wallet.keysetId)
 	 *     	.run();
 	 */

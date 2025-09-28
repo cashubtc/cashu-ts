@@ -566,14 +566,14 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
 // @public
 export class MeltBuilder {
     constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', quote: MeltQuoteResponse, proofs: Proof[]);
-    custom(data: OutputData[]): this;
-    deterministic(counter?: number, denoms?: number[]): this;
-    factory(factory: OutputDataFactory, denoms?: number[]): this;
+    asCustom(data: OutputData[]): this;
+    asDeterministic(counter?: number, denoms?: number[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    asP2PK(options: P2PKOptions, denoms?: number[]): this;
+    asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    p2pk(options: P2PKOptions, denoms?: number[]): this;
-    random(denoms?: number[]): this;
     run(): Promise<MeltProofsResponse>;
 }
 
@@ -704,15 +704,15 @@ export type MintAllKeysets = {
 // @public
 export class MintBuilder {
     constructor(wallet: Wallet, amount: number, quote: string | MintQuoteResponse);
-    custom(data: OutputData[]): this;
-    deterministic(counter?: number, denoms?: number[]): this;
-    factory(factory: OutputDataFactory, denoms?: number[]): this;
+    asCustom(data: OutputData[]): this;
+    asDeterministic(counter?: number, denoms?: number[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    asP2PK(options: P2PKOptions, denoms?: number[]): this;
+    asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    p2pk(options: P2PKOptions, denoms?: number[]): this;
     privkey(k: string): this;
     proofsWeHave(p: Proof[]): this;
-    random(denoms?: number[]): this;
     run(): Promise<Proof[]>;
 }
 
@@ -1159,15 +1159,15 @@ export type RawTransport = {
 // @public
 export class ReceiveBuilder {
     constructor(wallet: Wallet, token: Token | string);
-    custom(data: OutputData[]): this;
-    deterministic(counter?: number, denoms?: number[]): this;
-    factory(factory: OutputDataFactory, denoms?: number[]): this;
+    asCustom(data: OutputData[]): this;
+    asDeterministic(counter?: number, denoms?: number[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    asP2PK(options: P2PKOptions, denoms?: number[]): this;
+    asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    p2pk(options: P2PKOptions, denoms?: number[]): this;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
-    random(denoms?: number[]): this;
     requireDleq(on?: boolean): this;
     // (undocumented)
     run(): Promise<Proof[]>;
@@ -1234,22 +1234,22 @@ export type SelectProofs = (proofs: Proof[], amountToSend: number, keyChain: Key
 // @public
 export class SendBuilder {
     constructor(wallet: Wallet, amount: number, proofs: Proof[]);
+    asCustom(data: OutputData[]): this;
+    asDeterministic(counter?: number, denoms?: number[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    asP2PK(options: P2PKOptions, denoms?: number[]): this;
+    asRandom(denoms?: number[]): this;
     includeFees(on?: boolean): this;
-    keepCustom(data: OutputData[]): this;
-    keepDeterministic(counter?: number, denoms?: number[]): this;
-    keepFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    keepP2PK(options: P2PKOptions, denoms?: number[]): this;
-    keepRandom(denoms?: number[]): this;
+    keepAsCustom(data: OutputData[]): this;
+    keepAsDeterministic(counter?: number, denoms?: number[]): this;
+    keepAsFactory(factory: OutputDataFactory, denoms?: number[]): this;
+    keepAsP2PK(options: P2PKOptions, denoms?: number[]): this;
+    keepAsRandom(denoms?: number[]): this;
     keyset(id: string): this;
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
     run(): Promise<SendResponse>;
-    sendCustom(data: OutputData[]): this;
-    sendDeterministic(counter?: number, denoms?: number[]): this;
-    sendFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    sendP2PK(options: P2PKOptions, denoms?: number[]): this;
-    sendRandom(denoms?: number[]): this;
 }
 
 // @public

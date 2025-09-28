@@ -166,7 +166,7 @@ const receiveProofs = await wallet2.receive(token);
 // or you fetched existing proofs from your app database
 const proofs = [...]; // array of proofs
 const pubkey = '02...'; // Your public key
-const { keep, send } = await wallet.ops.send(32, proofs).sendP2PK({pubkey}).run();
+const { keep, send } = await wallet.ops.send(32, proofs).asP2PK({pubkey}).run();
 const token = getEncodedTokenV4({ mint: mintUrl, proofs: send });
 console.log(token);
 
@@ -225,7 +225,7 @@ Cashu-TS offers a flexible `WalletOps` builder that makes it simple to construct
 
 You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or instantiate your own `WalletOps` instance.
 
-> Fluent, single-use builders for **send**, **receive**, and **mint**.
+> Fluent, single-use builders for **send**, **receive**, **mint** and **melt**.
 > If you don’t customize an output side, the wallet’s policy defaults apply.
 
 ---
@@ -246,8 +246,8 @@ const { keep, send } = await wallet.ops.send(5, myProofs).run();
 ```ts
 const { keep, send } = await wallet.ops
 	.send(15, myProofs)
-	.sendDeterministic(0, [4, 4]) // counter=0 => auto-reserve; split must include 2x 4's
-	.keepRandom() // change proofs must have random secrets
+	.asDeterministic(0, [4, 4]) // counter=0 => auto-reserve; split must include 2x 4's
+	.keepAsRandom() // change proofs must have random secrets
 	.run();
 ```
 
@@ -259,7 +259,7 @@ const { keep, send } = await wallet.ops
 ```ts
 const { keep, send } = await wallet.ops
 	.send(10, myProofs)
-	.sendP2PK({ pubkey, locktime: 1712345678 })
+	.asP2PK({ pubkey, locktime: 1712345678 })
 	.includeFees(true) // sender covers receiver’s future spend fee
 	.run();
 ```
@@ -269,8 +269,8 @@ const { keep, send } = await wallet.ops
 ```ts
 const { keep, send } = await wallet.ops
 	.send(20, myProofs)
-	.sendFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
-	.keepDeterministic(0) // deterministic change, auto-reserve
+	.asFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
+	.keepAsDeterministic(0) // deterministic change, auto-reserve
 	.keyset('0123456')
 	.onCountersReserved((info) => {
 		console.log('Reserved counters', info);
@@ -285,7 +285,7 @@ const mySendData: OutputData[] = [
 	/* amounts must sum to 15 */
 ];
 
-const { keep, send } = await wallet.ops.send(15, myProofs).sendCustom(mySendData).run();
+const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).run();
 ```
 
 #### 6) Force pure offline (no mint calls)
@@ -310,7 +310,7 @@ const { keep, send } = await wallet.ops
 ```
 
 > **Important**
-> Offline modes **cannot** be combined with custom output types (`sendX/keepX`).
+> Offline modes **cannot** be combined with custom output types (`asXXXX/keepAsXXXX`).
 > The builder will throw:
 > `Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.`
 
@@ -329,7 +329,7 @@ const proofs = await wallet.ops.receive(token).run();
 ```ts
 const proofs = await wallet.ops
 	.receive(token)
-	.deterministic(0) // counter=0 => auto-reserve
+	.asDeterministic(0) // counter=0 => auto-reserve
 	.requireDleq(true) // reject incoming proofs without DLEQ for the selected keyset
 	.keyset('0123456')
 	.onCountersReserved((c) => console.log('RX counters', c))
@@ -341,7 +341,7 @@ const proofs = await wallet.ops
 ```ts
 const proofs = await wallet.ops
 	.receive(token)
-	.p2pk({ pubkey, locktime }) // NUT-11 options for new proofs
+	.asP2PK({ pubkey, locktime }) // NUT-11 options for new proofs
 	.privkey(['k1', 'k2', 'k3']) // sign incoming P2PK proofs
 	.proofsWeHave(myExistingProofs) // helps denomination selection
 	.run();
@@ -352,12 +352,12 @@ const proofs = await wallet.ops
 ```ts
 const proofsA = await wallet.ops
 	.receive(tokenA)
-	.factory(makeOutputData, [8, 4, 16]) // split must include these denoms
+	.asFactory(makeOutputData, [8, 4, 16]) // split must include these denoms
 	.run();
 
 const proofsB = await wallet.ops
 	.receive(tokenB)
-	.custom(prebuiltRxOutputs) // amounts must sum to final received amount after fees
+	.asCustom(prebuiltRxOutputs) // amounts must sum to final received amount after fees
 	.run();
 ```
 
@@ -378,7 +378,7 @@ const newProofs = await wallet.ops
 ```ts
 const newProofs = await wallet.ops
 	.mint(250, quote)
-	.deterministic(0, [128, 64]) // counter=0 => auto-reserve, split must include denoms
+	.asDeterministic(0, [128, 64]) // counter=0 => auto-reserve, split must include denoms
 	.keyset('0123456')
 	.onCountersReserved((info) => console.log(info))
 	.run();
@@ -389,17 +389,47 @@ const newProofs = await wallet.ops
 ```ts
 const newProofs = await wallet.ops
 	.mint(50, quote)
-	.p2pk({ pubkey }) // NUT-11 lock on outputs
+	.asP2PK({ pubkey }) // NUT-11 lock on outputs
 	.privkey('user-secret-key') // sign locked mint quote
 	.run();
 ```
 
 ---
 
+### Melt
+
+#### 1) Basic BOLT11 melt
+
+```ts
+const { quote, change } = await wallet.ops.meltBolt11(quote, myProofs).run();
+```
+
+- Pays the Lightning invoice in the `quote`.
+- Any change is returned using wallet policy defaults.
+
+#### 2) BOLT12 melt with deterministic change + callback
+
+```ts
+const { quote, change } = await wallet.ops
+	.meltBolt12(quote12, myProofs)
+	.asDeterministic(0) // counter=0 => auto-reserve
+	.onChangeOutputsCreated((blanks) => {
+		// Persist blanks and later call wallet.completeMelt(blanks)
+	})
+	.onCountersReserved((info) => console.log('Reserved', info))
+	.run();
+```
+
+- Supports async completion with NUT-08 blanks.
+- Change outputs are deterministic.
+- Callback hooks let you persist state for retry later.
+
+---
+
 ### Notes
 
 - **Counter `0`**
-  `deterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
+  `asDeterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
 
 - **Two sides in send**
   `send` has **send** and **keep** branches.
