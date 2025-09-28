@@ -710,7 +710,7 @@ describe('Keep Vector and Reordering', () => {
 		await new Promise((res) => setTimeout(res, 1000));
 		const testSendAmounts = [8, 4, 8, 2, 8, 2]; // complete (32), defined order
 		const testKeepAmounts = [16, 8]; // incomplete (24 vs 31), , so we expect...
-		const expectedKeep = [1, 2, 4, 8, 16]; // ascending order with 8,16 + split
+		const expectedKeep = [16, 8, 4, 2, 1]; // ascending order with 8,16 + split
 		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
 
 		const fees = wallet.getFeesForProofs(testProofs);
@@ -732,7 +732,7 @@ describe('Keep Vector and Reordering', () => {
 		const mintQuote = await wallet.createMintQuote(64);
 		await new Promise((res) => setTimeout(res, 1000));
 		const testSendAmounts = [16, 8]; // incomplete (24 vs 32), so we expect...
-		const expectedSend = [8, 8, 16]; // ascending order with 8,16 + split rest
+		const expectedSend = [16, 8, 8]; // ascending order with 8,16 + split rest
 		const testKeepAmounts = [8, 4, 8, 1, 8, 2]; // complete (31), defined order
 		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
 

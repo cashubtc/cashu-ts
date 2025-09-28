@@ -651,6 +651,7 @@ class Wallet {
 		// Prepare inputs for mint
 		inputs = this._prepareInputsForMint(inputs);
 
+		// Sort ASC by amount for privacy, but keep indices to return order afterwards
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
 		const indices = mergedBlindingData
 			.map((_, i) => i)

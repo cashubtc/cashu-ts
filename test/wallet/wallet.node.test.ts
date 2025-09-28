@@ -617,8 +617,8 @@ describe('receive', () => {
 		const proofs = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(proofs[0].secret).toBe(
 			'8e0ad268631046765b570f85fe0951710c6e0e13c81b3df50ddfee21d235d132', // counter:0
@@ -632,8 +632,8 @@ describe('receive', () => {
 		const proofs2 = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
 		expect(proofs2).toHaveLength(2);
 		expect(proofs2).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(proofs2[0].secret).toBe(
 			'c756ae91cf316eaa4b845edcca35f04ee9d1732c10e7205b0ef30123bcbbc1b8', // counter:2
@@ -647,8 +647,8 @@ describe('receive', () => {
 		const proofs3 = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
 		expect(proofs3).toHaveLength(2);
 		expect(proofs3).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(proofs3[0].secret).toBe(
 			'f6305874d89704b77de6fcf94c796cd274154cdbf824d35cbc72bfdc6ed60414', // counter:4
@@ -686,8 +686,8 @@ describe('receive', () => {
 		const proofs = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 5 });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(proofs[0].secret).toBe(
 			'c3cad2ac3da43f84995a7ea362bd5509a992ef3684c151f5f3945b1a1f026efd', // counter:5
@@ -730,8 +730,8 @@ describe('receive', () => {
 		);
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		const allSecrets = proofs.map((d) => JSON.parse(d.secret));
 		allSecrets.forEach((s) => {
@@ -770,8 +770,8 @@ describe('receive', () => {
 		const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -933,8 +933,8 @@ describe('receive', () => {
 		});
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -967,8 +967,8 @@ describe('receive', () => {
 		});
 		expect(proofs).toHaveLength(2);
 		expect(proofs).toMatchObject([
-			{ amount: 1, id: '00bd033559de27d0' },
 			{ amount: 2, id: '00bd033559de27d0' },
+			{ amount: 1, id: '00bd033559de27d0' },
 		]);
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -1538,14 +1538,14 @@ describe('send', () => {
 		const result = await wallet.send(3, overpayProofs, { includeFees: true });
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
-		// Send 3 [1,2] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
+		// Send 3 [2,1] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
 		// Total unselected = [1]
-		// Total send = [1, 2, 2]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
+		// Total send = [2, 2, 1]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
 		// Total change = [1, 1] because proofs are optimized to target (3)
 		// Total keep = [1, 1, 1]
 		expect(result.send).toHaveLength(3);
-		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-		expect(result.send[1]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.send[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 		expect(result.send[2]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);

@@ -32,7 +32,7 @@ for (let i = 1; i <= 0x10000; i *= 16) {
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
 		const chunks = utils.splitAmount(2561, keys);
-		expect(chunks).toStrictEqual([1, 512, 2048]);
+		expect(chunks).toStrictEqual([2048, 512, 1]);
 	});
 	test('testing amount 0', async () => {
 		const chunks = utils.splitAmount(0, keys);
@@ -76,7 +76,7 @@ describe('test split custom amounts ', () => {
 	const undef = undefined;
 	test('testing undefined', async () => {
 		const chunks = utils.splitAmount(5, keys, undef);
-		expect(chunks).toStrictEqual([1, 4]);
+		expect(chunks).toStrictEqual([4, 1]);
 	});
 });
 
@@ -91,8 +91,8 @@ describe('test split different key amount', () => {
 	test('testing amount 1917', async () => {
 		const chunks = utils.splitAmount(1917, keys_base16);
 		expect(chunks).toStrictEqual([
-			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 16, 16, 16, 16, 16, 16, 16, 256, 256, 256, 256, 256,
-			256, 256,
+			256, 256, 256, 256, 256, 256, 256, 16, 16, 16, 16, 16, 16, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+			1, 1, 1,
 		]);
 	});
 });
@@ -117,8 +117,8 @@ describe('test splitAmount zero handling', () => {
 
 	test('all zeros with positive value falls back to normal fill', () => {
 		const chunks = utils.splitAmount(5, keys, [0, 0]);
-		// should behave same as no custom split: [1,4] (order ascending)
-		expect(chunks).toStrictEqual([1, 4]);
+		// should behave same as no custom split: [4,1]
+		expect(chunks).toStrictEqual([4, 1]);
 	});
 });
 

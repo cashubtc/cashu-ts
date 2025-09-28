@@ -27,14 +27,17 @@ import { Bytes } from './Bytes';
 import { type Keyset } from '../wallet';
 
 /**
- * Splits the amount into denominations of the provided @param keyset.
+ * Splits the amount into denominations of the provided keyset.
  *
+ * @remarks
+ * Partial splits will be filled up to value using minimum splits required. Sorting is only applied
+ * if a fill was made - exact custom splits are always returned in the same order.
  * @param value Amount to split.
  * @param keyset Keys to look up split amounts.
  * @param split? Optional custom split amounts.
- * @param order? Optional order for split amounts (default: "asc")
+ * @param order? Optional order for split amounts (if fill was required)
  * @returns Array of split amounts.
- * @throws Error if @param split amount is greater than @param value amount.
+ * @throws Error if split sum is greater than value or mint does not have keys for requested split.
  */
 export function splitAmount(
 	value: number,
@@ -87,8 +90,12 @@ export function splitAmount(
 		throw new Error(`Unable to split remaining amount: ${value}`);
 	}
 
-	// Only sort when we performed a fill; exact custom splits returned earlier
-	return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
+	// Only sort when we performed a fill and it was requested
+	// Exact custom splits were returned unsorted earlier
+	if (order) {
+		return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
+	}
+	return split;
 }
 
 /**
