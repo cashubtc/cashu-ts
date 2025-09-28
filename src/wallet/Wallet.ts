@@ -1689,14 +1689,13 @@ class Wallet {
 		const sendAmount = sumProofs(proofsToSend);
 		const feeReserve = sendAmount - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
-		/**
-		 * @todo - Confirm if we should throw here... "wallet.meltProofsBolt12 delegates and returns"
-		 *   test fails if we do.
-		 */
-		// this.failIf(feeReserve < 0, 'Not enough proofs to cover amount + fee reserve', {
-		// 	sendAmount,
-		// 	quoteAmount: meltQuote.amount,
-		// });
+
+		// bolt11 does not allow partial payment, and although bolt12 could, mints
+		// like CDK forbids it. So let's fail loudly up front...
+		this.failIf(feeReserve < 0, 'Not enough proofs to cover amount + fee reserve', {
+			sendAmount,
+			quoteAmount: meltQuote.amount,
+		});
 
 		// Create NUT-08 blanks for return of Lightning fee change
 		// Note: zero amount + zero denomination passes splitAmount validation

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Mint, Wallet, type MintKeys, type MintKeyset, Keyset } from '../../src';
+import { Mint, Wallet, type MintKeys, type MintKeyset, Keyset, Proof } from '../../src';
 
 type ReqArgs = {
 	endpoint: string;
@@ -295,13 +295,14 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
 		vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
 		const meltQuote = { quote: 'm1', amount: 100, unit: 'sat', request: 'lno1offer...' };
-		const res = await wallet.meltProofsBolt12(meltQuote as any, [] as any);
+		const proof: Proof = { amount: 128, secret: 'secret1', C: 'C1', id: 'foo' };
+		const res = await wallet.meltProofsBolt12(meltQuote as any, [proof]);
 		expect(res.quote.quote).toEqual('m1');
 		expect(res.change).toEqual([]);
 		expect(calls).toHaveLength(1);
 		expect(calls[0].requestBody).toMatchObject({
 			quote: 'm1',
-			inputs: [],
+			inputs: [proof],
 			outputs: [],
 		});
 	});
