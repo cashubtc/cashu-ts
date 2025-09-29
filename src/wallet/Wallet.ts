@@ -45,7 +45,7 @@ import { WalletOps } from './WalletOps';
 import { WalletEvents } from './WalletEvents';
 import { WalletCounters } from './WalletCounters';
 import { selectProofsRGLI, type SelectProofs } from './selectProofsRGLI';
-import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish } from '../logger';
+import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 
 // shared primitives and options
 import type { Proof } from '../model/types/proof';
@@ -238,6 +238,13 @@ class Wallet {
 	): asserts value is Exclude<T, null | undefined> {
 		return failIfNullish(value, message, this._logger, context);
 	}
+	private safeCallback<T>(
+		cb: ((p: T) => void) | undefined,
+		payload: T,
+		context?: Record<string, unknown>,
+	): void {
+		safeCallback(cb, payload, this._logger, context);
+	}
 
 	/**
 	 * Load mint information, keysets, and keys. Must be called before using other methods.
@@ -333,6 +340,10 @@ class Wallet {
 		});
 		this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
 		return keyset;
+	}
+
+	public get logger(): Logger {
+		return this._logger;
 	}
 
 	// -----------------------------------------------------------------
@@ -459,7 +470,7 @@ class Wallet {
 	public defaultOutputType(): OutputType {
 		if (this._secretsPolicy === 'random') return { type: 'random' };
 		if (this._secretsPolicy === 'deterministic') {
-			if (!this._seed) throw new Error('Deterministic policy requires a seed');
+			this.failIfNullish(this._seed, 'Deterministic policy requires a seed');
 			return { type: 'deterministic', counter: 0 }; // 0 = auto flag
 		}
 		return this._seed ? { type: 'deterministic', counter: 0 } : { type: 'random' };
@@ -568,11 +579,8 @@ class Wallet {
 		keyset: Keyset,
 		outputType: OutputType,
 	): OutputDataLike[] {
-		if (amount < 0) {
-			// we can accept zero (for blanks) or positive values
-			this._logger.warn('Amount was negative');
-			return [];
-		}
+		// we can accept zero (for blanks) or positive values
+		this.failIf(amount < 0, 'Amount was negative', { amount });
 		if (
 			// 'custom' OutputType has no denominations. Every other OutputType does.
 			// so let's sanity check those were filled properly (eg: configureOutputs)
@@ -765,7 +773,9 @@ class Wallet {
 		// and the counter is zero (auto-assign)
 		const autoCounters = await this.setAutoCounters(keyset.id, receiveOT);
 		[receiveOT] = autoCounters.outputTypes;
-		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
+		if (autoCounters.used) {
+			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'receive' });
+		}
 		this._logger.debug('receive counter', { counter: autoCounters.used, receiveOT });
 
 		// Create outputs and execute swap
@@ -951,7 +961,9 @@ class Wallet {
 		// and the counter is zero (auto-assign)
 		const autoCounters = await this.setAutoCounters(keyset.id, sendOT, keepOT);
 		[sendOT, keepOT] = autoCounters.outputTypes;
-		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
+		if (autoCounters.used) {
+			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'send' });
+		}
 		this._logger.debug('send counters', { counter: autoCounters.used, sendOT, keepOT });
 
 		// Create the output data
@@ -1431,7 +1443,9 @@ class Wallet {
 		// and the counter is zero (auto-assign)
 		const autoCounters = await this.setAutoCounters(keyset.id, mintOT);
 		[mintOT] = autoCounters.outputTypes;
-		if (autoCounters.used) onCountersReserved?.(autoCounters.used);
+		if (autoCounters.used) {
+			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'mintProofs' });
+		}
 		this._logger.debug('mint counter', { counter: autoCounters.used, mintOT });
 
 		// Create outputs and mint payload
@@ -1688,6 +1702,11 @@ class Wallet {
 		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		const sendAmount = sumProofs(proofsToSend);
+
+		// feeReserve is the overage above the invoice/offer amount.
+		// In the common case where selected proofs = amount + fee_reserve,
+		// this equals the quote’s fee_reserve. If you overshoot more,
+		// the extra also becomes NUT-08 lightning fee change.
 		const feeReserve = sendAmount - meltQuote.amount;
 		let outputData: OutputDataLike[] = [];
 
@@ -1718,7 +1737,9 @@ class Wallet {
 			// and the counter is zero (auto-assign)
 			const autoCounters = await this.setAutoCounters(keyset.id, meltOT);
 			[meltOT] = autoCounters.outputTypes;
-			if (autoCounters.used) onCountersReserved?.(autoCounters.used);
+			if (autoCounters.used) {
+				this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
+			}
 			this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
 
 			// Generate the blank outputs (no fees as we are receiving change)
@@ -1735,16 +1756,21 @@ class Wallet {
 			outputs: outputData.map((d) => d.blindedMessage),
 		};
 
-		// Fire callback with blanks (if provided)
+		// Fire event(s) after blanks creation
+		const blanks: MeltBlanks = {
+			method,
+			payload: meltPayload,
+			outputData,
+			keyset,
+			quote: meltQuote,
+		};
 		if (onChangeOutputsCreated) {
-			const blanks: MeltBlanks = {
-				method,
-				payload: meltPayload,
-				outputData,
-				keyset,
-				quote: meltQuote,
-			};
-			onChangeOutputsCreated(blanks);
+			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
+		}
+		try {
+			this.on._emitMeltBlanksCreated?.(blanks); // global callback
+		} catch {
+			/* noop */
 		}
 
 		// Proceed with melt

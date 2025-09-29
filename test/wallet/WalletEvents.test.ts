@@ -674,7 +674,7 @@ describe('WalletEvents', () => {
 		it('invokes handler with payload and supports unsubscribe', () => {
 			const we = new WalletEvents({} as any);
 
-			const payload: OperationCounters = { keysetId: 'K', start: 10, count: 3 };
+			const payload: OperationCounters = { keysetId: 'K', start: 10, count: 3, next: 13 };
 			let seen: OperationCounters | null = null;
 
 			const cancel = we.countersReserved((p) => {
@@ -702,6 +702,62 @@ describe('WalletEvents', () => {
 			expect(() =>
 				(we as any)._emitCountersReserved({ keysetId: 'K', start: 0, count: 1 }),
 			).not.toThrow();
+		});
+	});
+
+	describe('WalletEvents.meltBlanksCreated', () => {
+		it('invokes handler with payload and supports unsubscribe', () => {
+			const we = new WalletEvents({} as any);
+
+			// Shape is intentionally loose ("any") to decouple the test
+			const payload: any = {
+				method: 'bolt12',
+				quoteId: 'Q123',
+				keysetId: 'KSET',
+				blanks: [{ Y: 'y-blank-1' }, { Y: 'y-blank-2' }],
+			};
+
+			let seen: any | null = null;
+
+			// Register and emit
+			const cancel = (we as any).meltBlanksCreated((p: any) => {
+				seen = p;
+			});
+
+			(we as any)._emitMeltBlanksCreated(payload);
+			expect(seen).toEqual(payload);
+
+			// Unsubscribe and ensure no further calls
+			seen = null;
+			cancel();
+			(we as any)._emitMeltBlanksCreated(payload);
+			expect(seen).toBeNull();
+		});
+
+		it('swallows handler errors (does not throw from _emitMeltBlanksCreated)', () => {
+			const we = new WalletEvents({} as any);
+
+			(we as any).meltBlanksCreated(() => {
+				throw new Error('boom!');
+			});
+
+			expect(() => (we as any)._emitMeltBlanksCreated({} as any)).not.toThrow();
+		});
+
+		it('multiple handlers all receive; one throwing does not prevent others', () => {
+			const we = new WalletEvents({} as any);
+
+			const ok = vi.fn();
+
+			(we as any).meltBlanksCreated(() => {
+				throw new Error('bad handler');
+			});
+			(we as any).meltBlanksCreated(ok);
+
+			const payload: any = { n: 1 };
+			(we as any)._emitMeltBlanksCreated(payload);
+
+			expect(ok).toHaveBeenCalledWith(payload);
 		});
 	});
 });

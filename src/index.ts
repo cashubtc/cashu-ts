@@ -26,6 +26,7 @@ export {
 	type CounterRange,
 	type OperationCounters,
 	type SelectProofs,
+	type SubscribeOpts,
 	WalletCounters,
 	SendBuilder,
 	ReceiveBuilder,

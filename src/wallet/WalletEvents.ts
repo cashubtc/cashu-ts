@@ -6,11 +6,14 @@ import {
 	type MintQuoteResponse,
 	type MeltQuoteResponse,
 } from '../mint/types';
-import type { SubscriptionCanceller } from './types';
+import type { MeltBlanks, SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './EphemeralCounterSource';
+import { safeCallback } from '../logger';
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
+
+export type SubscribeOpts = { signal?: AbortSignal };
 
 type ErrorWithCause = Error & { cause?: unknown };
 
@@ -45,25 +48,104 @@ function makeAbortError(): Error {
 
 function cancelSafely(c: CancellerLike | null | undefined): void {
 	if (!c) return;
-	void (async () => {
-		try {
-			const fn = await c;
+	void Promise.resolve(c)
+		.then((fn) => {
 			try {
 				fn();
 			} catch {
 				/* ignore canceller errors */
 			}
-		} catch {
+			return;
+		})
+		.catch(() => {
 			/* ignore awaiting-canceller errors */
-		}
-	})();
+		});
 }
 
 export class WalletEvents {
 	constructor(private wallet: Wallet) {}
 
-	// Global counters reservation event
+	// Callbacks registered for Counters Reserved events
 	private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
+
+	// Callbacks registered for Melt blanks created events
+	private meltBlanksHandlers = new Set<(payload: MeltBlanks) => void>();
+
+	// Binds an abort signal to each subscription canceller
+	private withAbort(
+		signal: AbortSignal | undefined,
+		cancel: SubscriptionCanceller,
+	): SubscriptionCanceller {
+		if (!signal) return cancel;
+		if (signal.aborted) {
+			cancel();
+			return () => {
+				/* noop */
+			};
+		}
+		const onAbort = () => cancel();
+		signal.addEventListener('abort', onAbort, { once: true });
+		return () => {
+			signal.removeEventListener('abort', onAbort);
+			cancel();
+		};
+	}
+
+	// Subscribe to a quote-paid event and resolve when it fires.
+	// Supports AbortSignal and timeout, and always cleans up.
+	private waitUntilPaid<T>(
+		subscribeFn: (
+			id: string,
+			cb: (p: T) => void, // called when the entity becomes PAID
+			err: (e: Error) => void, // called if the subscription itself errors
+			opts?: { signal?: AbortSignal },
+		) => Promise<SubscriptionCanceller>,
+		id: string, // identifier of the mint/melt/etc. to watch
+		opts?: SubscribeOpts & { timeoutMs?: number },
+		timeoutMsg = 'Timeout waiting for paid',
+	): Promise<T> {
+		return new Promise((resolve, reject) => {
+			let cancelP: Promise<SubscriptionCanceller> | null = null; // handle to unsub later
+			let to: ReturnType<typeof setTimeout> | null = null; // optional timeout timer
+
+			// Common cleanup: cancels subscription, clears timer, detaches abort listener.
+			// If an error is provided, rejects the promise with it.
+			const cleanup = (err?: unknown) => {
+				cancelSafely(cancelP);
+				if (to) {
+					clearTimeout(to);
+					to = null;
+				}
+				if (opts?.signal) opts.signal.removeEventListener('abort', onAbort);
+				if (err) reject(normalizeError(err));
+			};
+
+			// Abort handler produces a standardized AbortError and rejects.
+			const onAbort = () => cleanup(makeAbortError());
+
+			// Hook up AbortSignal if provided.
+			if (opts?.signal) {
+				if (opts.signal.aborted) return onAbort(); // already aborted
+				opts.signal.addEventListener('abort', onAbort, { once: true });
+			}
+
+			// Start a timeout if requested.
+			if (opts?.timeoutMs && opts.timeoutMs > 0) {
+				to = setTimeout(() => cleanup(new Error(timeoutMsg)), opts.timeoutMs);
+			}
+
+			// Subscribe to the actual event. Canceller returned is saved to cancelP.
+			cancelP = subscribeFn(
+				id,
+				(p) => {
+					cleanup(); // clean up resources
+					resolve(p); // resolve promise with payload
+				},
+				(e) => cleanup(e), // reject if subscription itself errors
+				{ signal: opts?.signal }, // delegate abort to subscription as well
+			);
+		});
+	}
 
 	/**
 	 * Register a callback that fires whenever deterministic counters are reserved.
@@ -81,7 +163,7 @@ export class WalletEvents {
 	 * @example
 	 *
 	 * ```ts
-	 * wallet.on.countersReserved(({ keysetId, start, count }) => {
+	 * wallet.on.countersReserved(({ keysetId, start, count, next }) => {
 	 * 	saveNextToDb(keysetId, start + count); // handle async errors inside saveNextToDb
 	 * });
 	 * ```
@@ -89,22 +171,46 @@ export class WalletEvents {
 	 * @param cb Handler called with { keysetId, start, count }.
 	 * @returns A function that unsubscribes the handler.
 	 */
-	public countersReserved(cb: (payload: OperationCounters) => void): SubscriptionCanceller {
+	public countersReserved(
+		cb: (payload: OperationCounters) => void,
+		opts?: SubscribeOpts,
+	): SubscriptionCanceller {
 		this.countersReservedHandlers.add(cb);
-		return () => {
-			this.countersReservedHandlers.delete(cb);
-		};
+		const cancel = () => this.countersReservedHandlers.delete(cb);
+		return this.withAbort(opts?.signal, cancel);
 	}
 	/**
 	 * @internal
 	 */
 	_emitCountersReserved(payload: OperationCounters) {
 		for (const h of this.countersReservedHandlers) {
-			try {
-				h(payload);
-			} catch {
-				/* noop */
-			}
+			safeCallback(h, payload, this.wallet.logger, { event: 'countersReserved' });
+		}
+	}
+
+	/**
+	 * Register a callback fired whenever NUT-08 blanks are created during a melt.
+	 *
+	 * Called synchronously right after blanks are prepared (before the melt request), and the wallet
+	 * does not await your handler.
+	 *
+	 * Typical use: persist `payload` so you can later call `wallet.completeMelt(payload)`.
+	 */
+	public meltBlanksCreated(
+		cb: (payload: MeltBlanks) => void,
+		opts?: SubscribeOpts,
+	): SubscriptionCanceller {
+		this.meltBlanksHandlers.add(cb);
+		const cancel = () => this.meltBlanksHandlers.delete(cb);
+		return this.withAbort(opts?.signal, cancel);
+	}
+
+	/**
+	 * @internal
+	 */
+	_emitMeltBlanksCreated(payload: MeltBlanks) {
+		for (const h of this.meltBlanksHandlers) {
+			safeCallback(h, payload, this.wallet.logger, { event: 'meltBlanksCreated' });
 		}
 	}
 
@@ -120,13 +226,15 @@ export class WalletEvents {
 		ids: string[],
 		cb: (p: MintQuoteResponse) => void,
 		err: (e: Error) => void,
+		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
 		await this.wallet.mint.connectWebSocket();
 		const ws = this.wallet.mint.webSocketConnection;
-		if (!ws) throw new Error('failed to establish WebSocket connection.');
+		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
 		const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: ids }, cb, err);
-		return () => ws.cancelSubscription(subId, cb);
+		const cancel = () => ws.cancelSubscription(subId, cb);
+		return this.withAbort(opts?.signal, cancel);
 	}
 
 	/**
@@ -141,6 +249,7 @@ export class WalletEvents {
 		id: string,
 		cb: (p: MintQuoteResponse) => void,
 		err: (e: Error) => void,
+		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
 		return this.mintQuoteUpdates(
 			[id],
@@ -148,6 +257,7 @@ export class WalletEvents {
 				if (p.state === MintQuoteState.PAID) cb(p);
 			},
 			err,
+			opts,
 		);
 	}
 
@@ -163,13 +273,15 @@ export class WalletEvents {
 		ids: string[],
 		cb: (p: MeltQuoteResponse) => void,
 		err: (e: Error) => void,
+		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
 		await this.wallet.mint.connectWebSocket();
 		const ws = this.wallet.mint.webSocketConnection;
-		if (!ws) throw new Error('failed to establish WebSocket connection.');
+		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
 		const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: ids }, cb, err);
-		return () => ws.cancelSubscription(subId, cb);
+		const cancel = () => ws.cancelSubscription(subId, cb);
+		return this.withAbort(opts?.signal, cancel);
 	}
 
 	/**
@@ -184,6 +296,7 @@ export class WalletEvents {
 		id: string,
 		cb: (p: MeltQuoteResponse) => void,
 		err: (e: Error) => void,
+		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
 		return this.meltQuoteUpdates(
 			[id],
@@ -191,6 +304,7 @@ export class WalletEvents {
 				if (p.state === MeltQuoteState.PAID) cb(p);
 			},
 			err,
+			opts,
 		);
 	}
 
@@ -206,10 +320,11 @@ export class WalletEvents {
 		proofs: Proof[],
 		cb: (payload: ProofState & { proof: Proof }) => void,
 		err: (e: Error) => void,
+		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
 		await this.wallet.mint.connectWebSocket();
 		const ws = this.wallet.mint.webSocketConnection;
-		if (!ws) throw new Error('failed to establish WebSocket connection.');
+		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
 		const enc = new TextEncoder();
 		const proofMap: Record<string, Proof> = {};
@@ -226,7 +341,8 @@ export class WalletEvents {
 			},
 			err,
 		);
-		return () => ws.cancelSubscription(subId, cb);
+		const cancel = () => ws.cancelSubscription(subId, cb);
+		return this.withAbort(opts?.signal, cancel);
 	}
 
 	/**
@@ -268,39 +384,12 @@ export class WalletEvents {
 		id: string,
 		opts?: { signal?: AbortSignal; timeoutMs?: number },
 	): Promise<MintQuoteResponse> {
-		return new Promise((resolve, reject) => {
-			let cancelP: Promise<SubscriptionCanceller> | null = null;
-			let to: ReturnType<typeof setTimeout> | null = null;
-
-			const cleanup = (err?: unknown) => {
-				cancelSafely(cancelP);
-				if (to) {
-					clearTimeout(to);
-					to = null;
-				}
-				if (opts?.signal) opts.signal.removeEventListener('abort', onAbort);
-				if (err) reject(normalizeError(err));
-			};
-
-			const onAbort = () => cleanup(makeAbortError());
-
-			if (opts?.signal) {
-				if (opts.signal.aborted) return onAbort();
-				opts.signal.addEventListener('abort', onAbort, { once: true });
-			}
-			if (opts?.timeoutMs && opts.timeoutMs > 0) {
-				to = setTimeout(() => cleanup(new Error('Timeout waiting for mint paid')), opts.timeoutMs);
-			}
-
-			cancelP = this.mintQuotePaid(
-				id,
-				(p) => {
-					cleanup();
-					resolve(p);
-				},
-				(e) => cleanup(e),
-			);
-		});
+		return this.waitUntilPaid<MintQuoteResponse>(
+			this.mintQuotePaid.bind(this),
+			id,
+			opts,
+			'Timeout waiting for mint paid',
+		);
 	}
 
 	/**
@@ -423,39 +512,12 @@ export class WalletEvents {
 		id: string,
 		opts?: { signal?: AbortSignal; timeoutMs?: number },
 	): Promise<MeltQuoteResponse> {
-		return new Promise((resolve, reject) => {
-			let cancelP: Promise<SubscriptionCanceller> | null = null;
-			let to: ReturnType<typeof setTimeout> | null = null;
-
-			const cleanup = (err?: unknown) => {
-				cancelSafely(cancelP);
-				if (to) {
-					clearTimeout(to);
-					to = null;
-				}
-				if (opts?.signal) opts.signal.removeEventListener('abort', onAbort);
-				if (err) reject(normalizeError(err));
-			};
-
-			const onAbort = () => cleanup(makeAbortError());
-
-			if (opts?.signal) {
-				if (opts.signal.aborted) return onAbort();
-				opts.signal.addEventListener('abort', onAbort, { once: true });
-			}
-			if (opts?.timeoutMs && opts.timeoutMs > 0) {
-				to = setTimeout(() => cleanup(new Error('Timeout waiting for melt paid')), opts.timeoutMs);
-			}
-
-			cancelP = this.meltQuotePaid(
-				id,
-				(p) => {
-					cleanup();
-					resolve(p);
-				},
-				(e) => cleanup(e),
-			);
-		});
+		return this.waitUntilPaid<MeltQuoteResponse>(
+			this.meltQuotePaid.bind(this),
+			id,
+			opts,
+			'Timeout waiting for melt paid',
+		);
 	}
 
 	/**
@@ -555,6 +617,7 @@ export class WalletEvents {
 					done = true;
 					wake();
 				},
+				{ signal: opts?.signal },
 			);
 
 			const onAbort = () => {

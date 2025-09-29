@@ -19,23 +19,6 @@ export function fail(
 }
 
 /**
- * Log at FATAL and throw. Always throws.
- *
- * @param message - Error message to log and throw.
- * @param logger - Logger to use, defaults to NULL_LOGGER.
- * @param context - Optional structured context for the log.
- * @throws {Error} Always throws with the given message.
- */
-export function panic(
-	message: string,
-	logger: Logger = NULL_LOGGER,
-	context?: Record<string, unknown>,
-): never {
-	logger.fatal(message, context);
-	throw new Error(message);
-}
-
-/**
  * Throw if a Boolean condition is true. On return, the compiler knows the condition is false.
  *
  * @param condition - Condition that must be false to continue.
@@ -54,8 +37,7 @@ export function failIf(
 }
 
 /**
- * Throw if a value is null or undefined. On return, narrows away null and undefined from the value
- * type.
+ * Throw if a value is null or undefined. Value is narrowed thereafter.
  *
  * @typeParam T - The value type to check.
  * @param value - The value to validate.
@@ -71,4 +53,49 @@ export function failIfNullish<T>(
 	context?: Record<string, unknown>,
 ): asserts value is Exclude<T, null | undefined> {
 	if (value == null) fail(message, logger, context);
+}
+
+/**
+ * Invoke a user-supplied callback safely in a fire-and-forget manner.
+ *
+ * Used for per-operation hooks (e.g. `onCountersReserved`, `onChangeOutputsCreated`) where user
+ * code must never break the wallet’s control flow. The callback is invoked synchronously,
+ * exceptions are caught and logged (as a warning), and then swallowed.
+ *
+ * The wallet never `await`s the callback.
+ *
+ * @example
+ *
+ * ```ts
+ * if (autoCounters.used) {
+ * 	safeCallback(onCountersReserved, autoCounters.used, _logger, { keysetId });
+ * }
+ * ```
+ *
+ * @typeParam T Type of the payload passed to the callback.
+ * @param cb The callback to invoke, or `undefined`.
+ * @param payload The payload to pass to the callback.
+ * @param logger Logger to use (defaults to NULL_LOGGER).
+ * @param context Optional structured context for the log.
+ */
+export function safeCallback<T>(
+	cb: ((p: T) => void) | undefined,
+	payload: T,
+	logger: Logger = NULL_LOGGER,
+	context?: Record<string, unknown>,
+): void {
+	if (!cb) return;
+	try {
+		cb(payload);
+	} catch (error) {
+		try {
+			logger.warn?.('callback failed', {
+				...(context ?? {}),
+				error,
+				cb: cb.name, // always defined (may be "")
+			});
+		} catch {
+			/* ignore logger errors */
+		}
+	}
 }
