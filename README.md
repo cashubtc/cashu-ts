@@ -255,7 +255,7 @@ const { keep, send } = await wallet.ops
 ```
 
 > **Note**
-> Passing `counter=0` means “reserve counters automatically" using wallet CounterSource.
+> Passing `counter=0` means "reserve counters automatically" using wallet CounterSource.
 
 #### 3) P2PK send with sender-pays fees
 
@@ -441,7 +441,7 @@ const { quote, change } = await wallet.ops
 ### Notes
 
 - **Counter `0`**
-  `asDeterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
+  `asDeterministic(0)` means "reserve counters automatically" using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
   For lifecycle management, see WalletEvents.
 
 - **Two sides in send**
@@ -474,7 +474,7 @@ try {
 
 ## Deterministic counters (persist, inspect, bump)
 
-Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the “next” value in your storage.
+Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage.
 
 API at a glance:
 
@@ -484,7 +484,7 @@ API at a glance:
 - `wallet.on.countersReserved(cb)` – subscribe to reservations (see WalletEvents for subscription patterns)
 
 ```ts
-// 1) Seed once at app start if you have previously saved “next” per keyset
+// 1) Seed once at app start if you have previously saved "next" per keyset
 const wallet = new Wallet(mintUrl, {
 	unit: 'sat',
 	bip39seed,
@@ -610,15 +610,16 @@ Async iterator with buffer control:
 ```ts
 import { CheckStateEnum } from '@cashu/cashu-ts';
 const ac = new AbortController();
-for await (const u of wallet.on.proofStatesStream(proofs, {
-	signal: ac.signal,
-	maxBuffer: 100,
-	drop: 'oldest',
-})) {
-	if (u.state === CheckStateEnum.SPENT) {
-		console.log('Spent proof', u.proof.id);
-	}
-}
+(async () => {
+  for await (const u of wallet.on.proofStatesStream(proofs, { signal: ac.signal })) {
+    if (u.state === CheckStateEnum.SPENT) {
+      console.log('Spent proof', u.proof.id);
+    }
+  }
+})();
+
+// later
+ac.abort();
 ```
 
 ### Grouped cancellers
@@ -631,13 +632,14 @@ cancelAll();
 // safe to call multiple times
 ```
 
-> **Note:** Builder hooks vs Global events
->
-> WalletOps builders include per-operation hooks (onCountersReserved, onChangeOutputsCreated) that fire during a single transaction build.
->
-> WalletEvents provides global subscriptions `(wallet.on.*)` that can outlive a single builder call.
->
-> Use the builder hooks for transaction-local callbacks, and WalletEvents for app-wide subscriptions.
+---
+### Note: Builder hooks vs Global events
+
+`WalletOps` builders include per-operation hooks (onCountersReserved, onChangeOutputsCreated) that fire during a single transaction build.
+
+`WalletEvents` provides global subscriptions `(wallet.on.*)` that can outlive a single builder call.
+
+Use the builder hooks for transaction-local callbacks, and WalletEvents for app-wide subscriptions.
 
 ---
 
