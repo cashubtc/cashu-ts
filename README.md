@@ -10,7 +10,7 @@
 
 ⚠️ **Don't be reckless:** This project is in early development, it does however work with real sats! Always use amounts you don't mind losing.
 
-Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in Typescript.
+Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallets written in TypeScript.
 
 Wallet Features:
 
@@ -23,8 +23,8 @@ Wallet Features:
 - [x] check if tokens are spent
 - [x] payment methods: bolt11, bolt12
 - [x] transaction builder (WalletOps)
-- [x] wallet event subscriptions (WalletEvents)
 - [x] deterministic counters (with callbacks for persistence)
+- [x] wallet event subscriptions (WalletEvents)
 - [ ] ...
 
 Implemented [NUTs](https://github.com/cashubtc/nuts/):
@@ -72,7 +72,7 @@ NB: You must always call `loadMint()` after instantiating a wallet.
 ```typescript
 import { Wallet } from '@cashu/cashu-ts';
 
-// Simplest: With a  mint url
+// Simplest: With a mint URL
 const mintUrl = 'http://localhost:3338';
 const wallet1 = new Wallet(mintUrl); // unit is 'sat'
 await wallet1.loadMint(); // wallet is now ready to use
@@ -114,7 +114,7 @@ await wallet.loadMint(); // wallet is now ready to use
 const mintQuote = await wallet.createMintQuote(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
-if (mintQuoteChecked.state == MintQuoteState.PAID) {
+if (mintQuoteChecked.state === MintQuoteState.PAID) {
 	const proofs = await wallet.mintProofs(64, mintQuote.quote);
 }
 // store proofs in your app ..
@@ -146,6 +146,7 @@ const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 #### Create a token and receive it
 
 ```typescript
+import { getEncodedTokenV4 } from '@cashu/cashu-ts';
 // we assume that `wallet` already minted `proofs`, as above
 // or you fetched existing proofs from your app database
 const proofs = [...]; // array of proofs
@@ -162,6 +163,7 @@ const receiveProofs = await wallet2.receive(token);
 #### Create a P2PK locked token and receive it
 
 ```typescript
+import { getEncodedTokenV4 } from '@cashu/cashu-ts';
 // we assume that `wallet` already minted `proofs`, as above
 // or you fetched existing proofs from your app database
 const proofs = [...]; // array of proofs
@@ -180,6 +182,7 @@ const receiveProofs = await wallet2.receive(token, {privkey});
 #### Get token data
 
 ```typescript
+import { getDecodedToken } from '@cashu/cashu-ts';
 try {
 	const decodedToken = getDecodedToken(token);
 	console.log(decodedToken); // { mint: "https://mint.0xchat.com", unit: "sat", proofs: [...] }
@@ -405,17 +408,19 @@ const newProofs = await wallet.ops
 #### 1) Basic BOLT11 melt
 
 ```ts
-const { quote, change } = await wallet.ops.meltBolt11(quote, myProofs).run();
+// given a bolt11 meltQuote...
+const { quote, change } = await wallet.ops.meltBolt11(meltQuote, myProofs).run();
 ```
 
-- Pays the Lightning invoice in the `quote` using `myProofs`
+- Pays the Lightning invoice in the `meltQuote` using `myProofs`
 - Any change is returned using wallet policy defaults.
 
 #### 2) BOLT12 melt with deterministic change + callback
 
 ```ts
+// given a bolt12 meltQuote...
 const { quote, change } = await wallet.ops
-	.meltBolt12(quote12, myProofs)
+	.meltBolt12(meltQuote, myProofs)
 	.asDeterministic() // counter=0 => auto-reserve
 	.onChangeOutputsCreated((blanks) => {
 		// Persist blanks and later call wallet.completeMelt(blanks)
@@ -427,6 +432,9 @@ const { quote, change } = await wallet.ops
 - Supports async completion with NUT-08 blanks.
 - Change outputs are deterministic.
 - Callback hooks let you persist state for retry later.
+- If you prefer global subscriptions, use:
+  - onChangeOutputsCreated -> wallet.on.meltBlanksCreated()
+  - onCountersReserved -> wallet.on.countersReserved()
 
 ---
 
@@ -434,6 +442,7 @@ const { quote, change } = await wallet.ops
 
 - **Counter `0`**
   `asDeterministic(0)` means “reserve counters automatically” using the wallet’s `CounterSource`. You’ll receive `onCountersReserved` when they’re atomically reserved.
+  For lifecycle management, see WalletEvents.
 
 - **Two sides in send**
   `send` has **send** and **keep** branches.
@@ -472,7 +481,7 @@ API at a glance:
 - `wallet.counters.snapshot()` – inspect current state
 - `wallet.counters.advanceToAtLeast(id, n)` – bump forward if behind
 - `wallet.counters.setNext(id, n)` – hard-set for migrations/tests
-- `wallet.on.countersReserved(cb)` – subscribe to reservations
+- `wallet.on.countersReserved(cb)` – subscribe to reservations (see WalletEvents for subscription patterns)
 
 ```ts
 // 1) Seed once at app start if you have previously saved “next” per keyset
@@ -528,6 +537,109 @@ await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456
 
 > **Note** The wallet does not await your callback.
 > If saveNextToDb (or similar) is async, handle errors to avoid unhandled rejections
+> For more on lifecycle management, see WalletEvents
+
+## WalletEvents – Event Subscriptions
+
+`wallet.on` exposes event subscriptions for counters, quotes, melts, and proof states. Each method returns a canceller function. You can bind an `AbortSignal`, set a timeout, or group cancellers and dispose them together.
+
+**Subscriptions:**
+
+- `wallet.on.countersReserved(cb, { signal })` – deterministic counter reservations
+- `wallet.on.meltBlanksCreated(cb, { signal })` – NUT-08 blanks before melt
+- `wallet.on.mintQuoteUpdates(ids, onUpdate, onErr, { signal })` – live mint quote updates
+- `wallet.on.meltQuoteUpdates(ids, onUpdate, onErr, { signal })` – live melt quote updates
+- `wallet.on.proofStateUpdates(proofs, onUpdate, onErr, { signal })` – push updates
+- `wallet.on.proofStatesStream(proofs, opts)` – async iterator with bounded buffer
+
+> **Note:** The first quote subscription auto-establishes a mint WebSocket and errors surface via the onErr callback.
+
+**One-shot helpers:**
+
+- `wallet.on.onceMintPaid(id, { signal, timeoutMs })` – resolve once quote paid
+- `wallet.on.onceMeltPaid(id, { signal, timeoutMs })` – resolve once melt paid
+- `wallet.on.onceAnyMintPaid(ids, { signal, timeoutMs })` – resolve when any paid
+
+**Grouping:**
+
+- `wallet.on.group()` – collect many cancellers, dispose all at once
+
+### Cancel and Abort
+
+The simplest way to cancel a subscription is to call its cancel handle.
+
+```ts
+const cancelSub = wallet.on.countersReserved(({ keysetId, next }) => {
+	void saveNextToDb(keysetId, next).catch(console.error);
+});
+
+// later
+cancelSub();
+```
+
+Subscriptions accept an `AbortSignal`. Aborting stops the stream and cleans up.
+
+```ts
+const ac = new AbortController();
+wallet.on.countersReserved(
+	({ keysetId, next }) => {
+		void saveNextToDb(keysetId, next).catch(console.error);
+	},
+	{ signal: ac.signal },
+);
+
+// later
+ac.abort();
+```
+
+Timeouts are built into the `once*` helpers:
+
+```ts
+try {
+	const paid = await wallet.on.onceMintPaid(quoteId, { timeoutMs: 60_000 });
+	console.log('Paid', paid.amount);
+} catch (e) {
+	console.warn('Not paid in time or aborted', e);
+}
+```
+
+### Proof state streams
+
+Async iterator with buffer control:
+
+```ts
+import { CheckStateEnum } from '@cashu/cashu-ts';
+const ac = new AbortController();
+for await (const u of wallet.on.proofStatesStream(proofs, {
+	signal: ac.signal,
+	maxBuffer: 100,
+	drop: 'oldest',
+})) {
+	if (u.state === CheckStateEnum.SPENT) {
+		console.log('Spent proof', u.proof.id);
+	}
+}
+```
+
+### Grouped cancellers
+
+```ts
+const cancelAll = wallet.on.group();
+cancelAll.add(wallet.on.meltBlanksCreated((b) => cacheBlanks(b)));
+cancelAll.add(wallet.on.mintQuoteUpdates(ids, onMint, onErr));
+cancelAll();
+// safe to call multiple times
+```
+
+> **Note:** Builder hooks vs Global events
+>
+> WalletOps builders include per-operation hooks (onCountersReserved, onChangeOutputsCreated) that fire during a single transaction build.
+>
+> WalletEvents provides global subscriptions `(wallet.on.*)` that can outlive a single builder call.
+>
+> Use the builder hooks for transaction-local callbacks, and WalletEvents for app-wide subscriptions.
+
+---
 
 ## Contribute
 
