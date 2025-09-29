@@ -28,6 +28,7 @@ export {
 	type SelectProofs,
 	type SubscribeOpts,
 	WalletCounters,
+	P2PKBuilder,
 	SendBuilder,
 	ReceiveBuilder,
 	MintBuilder,

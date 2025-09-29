@@ -994,6 +994,24 @@ export type OutputType = ({
     data: OutputData[];
 };
 
+// @public (undocumented)
+export class P2PKBuilder {
+    // (undocumented)
+    addLockPubkey(pk: string | string[]): this;
+    // (undocumented)
+    addRefundPubkey(pk: string | string[]): this;
+    // (undocumented)
+    static fromOptions(opts: P2PKOptions): P2PKBuilder;
+    // (undocumented)
+    lockUntil(when: Date | number): this;
+    // (undocumented)
+    requireLockSignatures(n: number): this;
+    // (undocumented)
+    requireRefundSignatures(n: number): this;
+    // (undocumented)
+    toOptions(): P2PKOptions;
+}
+
 // @public
 export type P2PKOptions = {
     pubkey: string | string[];
