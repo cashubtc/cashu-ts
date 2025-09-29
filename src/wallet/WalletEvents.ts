@@ -182,7 +182,7 @@ export class WalletEvents {
 	/**
 	 * @internal
 	 */
-	_emitCountersReserved(payload: OperationCounters) {
+	public _emitCountersReserved(payload: OperationCounters) {
 		for (const h of this.countersReservedHandlers) {
 			safeCallback(h, payload, this.wallet.logger, { event: 'countersReserved' });
 		}
@@ -208,7 +208,7 @@ export class WalletEvents {
 	/**
 	 * @internal
 	 */
-	_emitMeltBlanksCreated(payload: MeltBlanks) {
+	public _emitMeltBlanksCreated(payload: MeltBlanks) {
 		for (const h of this.meltBlanksHandlers) {
 			safeCallback(h, payload, this.wallet.logger, { event: 'meltBlanksCreated' });
 		}

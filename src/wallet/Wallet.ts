@@ -389,11 +389,7 @@ class Wallet {
 			count: range.count,
 			next: range.start + range.count,
 		} as OperationCounters;
-		try {
-			this.on._emitCountersReserved?.(used);
-		} catch {
-			/* noop */
-		}
+		this.on._emitCountersReserved(used);
 		return { outputTypes: patched, used };
 	}
 
@@ -1757,20 +1753,16 @@ class Wallet {
 		};
 
 		// Fire event(s) after blanks creation
-		const blanks: MeltBlanks = {
-			method,
-			payload: meltPayload,
-			outputData,
-			keyset,
-			quote: meltQuote,
-		};
-		if (onChangeOutputsCreated) {
+		if (outputData.length > 0) {
+			const blanks: MeltBlanks = {
+				method,
+				payload: meltPayload,
+				outputData,
+				keyset,
+				quote: meltQuote,
+			};
 			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
-		}
-		try {
-			this.on._emitMeltBlanksCreated?.(blanks); // global callback
-		} catch {
-			/* noop */
+			this.on._emitMeltBlanksCreated(blanks); // global callback
 		}
 
 		// Proceed with melt
