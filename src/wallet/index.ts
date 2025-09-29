@@ -2,7 +2,7 @@ export * from './types';
 export * from './EphemeralCounterSource';
 export * from './KeyChain';
 export * from './Keyset';
-export * from './selectProofsRGLI';
+export * from './SelectProofs';
 export * from './Wallet';
 export * from './WalletCounters';
 export * from './WalletEvents';

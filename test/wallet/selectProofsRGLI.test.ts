@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { selectProofsRGLI } from '../../src/wallet/selectProofsRGLI';
+import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
 import { Proof } from '../../src/model/types';
 
 // -----------------------------------------------------------------
@@ -105,7 +105,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
 			};
 		});
 
-		const { selectProofsRGLI: timed } = await import('../../src/wallet/selectProofsRGLI');
+		const { selectProofsRGLI: timed } = await import('../../src/wallet/SelectProofs');
 
 		// Use only even amounts so an odd exact target is impossible.
 		// total = 2 + 4 + 6 + 8 = 20; target = 7 (feasible range, but exact impossible)

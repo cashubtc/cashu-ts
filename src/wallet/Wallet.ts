@@ -44,7 +44,7 @@ import { type Keyset } from './Keyset';
 import { WalletOps } from './WalletOps';
 import { WalletEvents } from './WalletEvents';
 import { WalletCounters } from './WalletCounters';
-import { selectProofsRGLI, type SelectProofs } from './selectProofsRGLI';
+import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 
 // shared primitives and options
