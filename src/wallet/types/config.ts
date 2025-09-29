@@ -7,7 +7,7 @@ import {
 } from '../../model/OutputData';
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
-import { type OperationCounters } from '../EphemeralCounterSource';
+import { type OperationCounters } from '../CounterSource';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 

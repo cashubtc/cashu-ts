@@ -8,7 +8,7 @@ import {
 } from '../mint/types';
 import type { MeltBlanks, SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
-import { type OperationCounters } from './EphemeralCounterSource';
+import { type OperationCounters } from './CounterSource';
 import { safeCallback } from '../logger';
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;

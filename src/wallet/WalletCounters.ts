@@ -1,4 +1,4 @@
-import type { CounterSource, MutableCounterSource } from './EphemeralCounterSource';
+import type { CounterSource, MutableCounterSource } from './CounterSource';
 
 // Type guards to avoid `any`
 function hasSnapshot(

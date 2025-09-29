@@ -1,5 +1,5 @@
 export * from './types';
-export * from './EphemeralCounterSource';
+export * from './CounterSource';
 export * from './KeyChain';
 export * from './Keyset';
 export * from './SelectProofs';
