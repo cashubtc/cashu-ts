@@ -55,7 +55,7 @@ Instead of juggling `keepFactory`, `outputData`, and multiple option types, you 
 - **`OutputType`** — a tagged union describing one output strategy (`random`, `deterministic`, `p2pk`, etc).
 - **`OutputConfig`** — combines `keep` and `send` `OutputType`s when sending.
 
-These are passed as the third parameter where needed, or expressed more naturally via the new `WalletOps` builder API.
+These are passed as the FOURTH parameter where needed, or expressed more naturally via the new `WalletOps` fluent builder API.
 
 Example:
 
@@ -63,10 +63,21 @@ Example:
 // before
 const { keep, send } = await wallet.send(amount, proofs, {
 	includeFees: true,
+	pubkey: bytesToHex(pubKeyBob),
 });
 
-// after (clearer with builder)
-const { keep, send } = await ops.send(amount, proofs).includeFees(true).run();
+// after (using fluent builder)
+const { keep, send } = await wallet.ops
+	.send(amount, proofs)
+	.asP2PK({ pubkey: bytesToHex(pubKeyBob) })
+	.includeFees(true)
+	.run();
+
+// or using the forth param directly
+const customConfig: OutputConfig = {
+	send: { type: 'p2pk', options: { pubkey: bytesToHex(pubKeyBob) } },
+};
+const { keep, send } = await wallet.send(amount, proofs, { includeFees: true }, customConfig);
 ```
 
 The builder makes intent explicit and eliminates the need for extra boilerplate.
