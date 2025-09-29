@@ -46,8 +46,8 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 
 Supported token formats:
 
-- [] v1 obsolete
-- [] v2 obsolete
+- [ ] v1 obsolete
+- [ ] v2 obsolete
 - [x] v3 (cashuA) read/write (deprecated)
 - [x] v4 (cashuB) read/write
 
@@ -270,7 +270,7 @@ const { keep, send } = await wallet.ops
 const { keep, send } = await wallet.ops
 	.send(20, myProofs)
 	.asFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
-	.keepAsDeterministic(0) // deterministic change, auto-reserve
+	.keepAsDeterministic() // deterministic change, auto-reserve
 	.keyset('0123456')
 	.onCountersReserved((info) => {
 		console.log('Reserved counters', info);
@@ -329,7 +329,7 @@ const proofs = await wallet.ops.receive(token).run();
 ```ts
 const proofs = await wallet.ops
 	.receive(token)
-	.asDeterministic(0) // counter=0 => auto-reserve
+	.asDeterministic() // counter=0 => auto-reserve
 	.requireDleq(true) // reject incoming proofs without DLEQ for the selected keyset
 	.keyset('0123456')
 	.onCountersReserved((c) => console.log('RX counters', c))
@@ -384,12 +384,16 @@ const newProofs = await wallet.ops
 	.run();
 ```
 
-#### 3) Locked quote signing (P2PK)
+#### 3) Locked quote signing
 
 ```ts
+// Create a locked mint quote
+const pubkey = '02...'; // Your public key
+const quote = await wallet.createLockedMintQuote(64, pubkey);
+
+// Sign and mint
 const newProofs = await wallet.ops
 	.mint(50, quote)
-	.asP2PK({ pubkey }) // NUT-11 lock on outputs
 	.privkey('user-secret-key') // sign locked mint quote
 	.run();
 ```
@@ -404,7 +408,7 @@ const newProofs = await wallet.ops
 const { quote, change } = await wallet.ops.meltBolt11(quote, myProofs).run();
 ```
 
-- Pays the Lightning invoice in the `quote`.
+- Pays the Lightning invoice in the `quote` using `myProofs`
 - Any change is returned using wallet policy defaults.
 
 #### 2) BOLT12 melt with deterministic change + callback
@@ -412,7 +416,7 @@ const { quote, change } = await wallet.ops.meltBolt11(quote, myProofs).run();
 ```ts
 const { quote, change } = await wallet.ops
 	.meltBolt12(quote12, myProofs)
-	.asDeterministic(0) // counter=0 => auto-reserve
+	.asDeterministic() // counter=0 => auto-reserve
 	.onChangeOutputsCreated((blanks) => {
 		// Persist blanks and later call wallet.completeMelt(blanks)
 	})

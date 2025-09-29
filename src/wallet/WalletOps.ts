@@ -54,7 +54,7 @@ export class WalletOps {
  *
  *     const { keep, send } = await wallet.ops
  *     	.send(5, proofs)
- *     	.asDeterministic(0) // counter 0 means auto reserve via CounterSource
+ *     	.asDeterministic() // counter 0 means auto reserve via CounterSource
  *     	.keepAsRandom()
  *     	.includeFees(true) // sender pays receiver’s future spend fee
  *     	.run();
@@ -275,7 +275,7 @@ export class SendBuilder {
  *
  *     const proofs = await wallet.ops
  *     	.receive(token)
- *     	.asDeterministic(0) // counter 0 auto reserves
+ *     	.asDeterministic() // counter 0 auto reserves
  *     	.requireDleq(true)
  *     	.run();
  */
@@ -408,7 +408,7 @@ export class ReceiveBuilder {
  *
  *     const proofs = await wallet.ops
  *     	.mint(100, quote)
- *     	.asDeterministic(0)
+ *     	.asDeterministic() // counter 0 auto reserves
  *     	.onCountersReserved((info) => console.log(info))
  *     	.run();
  */
@@ -546,7 +546,7 @@ export class MintBuilder {
  * // BOLT12 melt with deterministic change and NUT-08 blanks callback
  * await wallet.ops
  * 	.meltBolt12(quote12, proofs)
- * 	.asDeterministic(0)
+ * 	.asDeterministic() // counter 0 auto reserves
  * 	.onChangeOutputsCreated((blanks) => {
  * 		// Persist blanks and retry later with wallet.completeMelt(blanks)
  * 	})
