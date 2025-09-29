@@ -611,11 +611,11 @@ Async iterator with buffer control:
 import { CheckStateEnum } from '@cashu/cashu-ts';
 const ac = new AbortController();
 (async () => {
-  for await (const u of wallet.on.proofStatesStream(proofs, { signal: ac.signal })) {
-    if (u.state === CheckStateEnum.SPENT) {
-      console.log('Spent proof', u.proof.id);
-    }
-  }
+	for await (const u of wallet.on.proofStatesStream(proofs, { signal: ac.signal })) {
+		if (u.state === CheckStateEnum.SPENT) {
+			console.log('Spent proof', u.proof.id);
+		}
+	}
 })();
 
 // later
@@ -633,6 +633,7 @@ cancelAll();
 ```
 
 ---
+
 ### Note: Builder hooks vs Global events
 
 `WalletOps` builders include per-operation hooks (onCountersReserved, onChangeOutputsCreated) that fire during a single transaction build.
