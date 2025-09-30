@@ -4,7 +4,6 @@ import type { Logger } from '../../src/logger';
 
 function stubLogger(): Logger {
 	return {
-		fatal: vi.fn(),
 		error: vi.fn(),
 		warn: vi.fn(),
 		info: vi.fn(),
@@ -35,9 +34,6 @@ describe('logger helpers', () => {
 
 	test('helpers do not crash if logger logging throws', () => {
 		const logger: Logger = {
-			fatal: () => {
-				throw new Error('console broken');
-			},
 			error: () => {
 				throw new Error('console broken');
 			},
@@ -127,7 +123,6 @@ describe('safeCallback', () => {
 
 	test('swallows errors thrown by the logger itself', () => {
 		const logger: Logger = {
-			fatal: vi.fn(),
 			error: vi.fn(),
 			warn: vi.fn(() => {
 				throw new Error('logger broken');

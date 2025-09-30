@@ -55,7 +55,7 @@ Instead of juggling `keepFactory`, `outputData`, and multiple option types, you 
 - **`OutputType`** — a tagged union describing one output strategy (`random`, `deterministic`, `p2pk`, etc).
 - **`OutputConfig`** — combines `keep` and `send` `OutputType`s when sending.
 
-These are passed as the FOURTH parameter where needed, or expressed more naturally via the new `WalletOps` fluent builder API.
+These are passed as the **FOURTH** parameter where needed, or expressed more naturally via the new `WalletOps` fluent builder API.
 
 Example:
 
@@ -82,14 +82,19 @@ const { keep, send } = await wallet.send(amount, proofs, { includeFees: true }, 
 
 The builder makes intent explicit and eliminates the need for extra boilerplate.
 
-See the README for more usage examples.
+See the [README](./README.md) and [integration tests](./test/integration.test.ts) for more usage examples.
 
 ### Logger
 
 `LogLevel` is no longer exported as a `const` object with uppercase values.
-It is now a simple string union of **lowercase** level names:
+It is now a simple string union of **lowercase** level names.
+
+Fatal level has also been removed:
 
 ```ts
+// New LogLevel shape (lowercase, no 'fatal' level)
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
+
 // before
 const logger = new ConsoleLogger(LogLevel.DEBUG);
 

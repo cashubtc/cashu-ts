@@ -9,12 +9,10 @@ describe('ConsoleLogger', () => {
 
 		const logger = new ConsoleLogger('warn');
 
-		logger.fatal('Fatal message');
 		logger.error('Error message');
 		logger.warn('Warn message');
 		logger.info('Info message');
 
-		expect(errorSpy).toHaveBeenCalledWith('[FATAL] Fatal message');
 		expect(errorSpy).toHaveBeenCalledWith('[ERROR] Error message');
 		expect(warnSpy).toHaveBeenCalledWith('[WARN] Warn message');
 		expect(infoSpy).not.toHaveBeenCalled();
@@ -29,14 +27,12 @@ describe('ConsoleLogger', () => {
 
 		const logger = new ConsoleLogger('trace');
 
-		logger.fatal('Fatal');
 		logger.error('Error');
 		logger.warn('Warn');
 		logger.info('Info');
 		logger.debug('Debug');
 		logger.trace('Trace');
 
-		expect(errorSpy).toHaveBeenCalledWith('[FATAL] Fatal');
 		expect(errorSpy).toHaveBeenCalledWith('[ERROR] Error');
 		expect(warnSpy).toHaveBeenCalledWith('[WARN] Warn');
 		expect(infoSpy).toHaveBeenCalledWith('[INFO] Info');
@@ -96,7 +92,7 @@ describe('NullLogger', () => {
 		const nullLogger = NULL_LOGGER;
 		const errorSpy = vi.spyOn(console, 'error');
 
-		nullLogger.fatal('Should not log');
+		nullLogger.error('Should not log');
 
 		expect(errorSpy).not.toHaveBeenCalled();
 	});

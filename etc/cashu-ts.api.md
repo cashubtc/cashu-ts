@@ -155,8 +155,6 @@ export class ConsoleLogger implements Logger {
     // (undocumented)
     error(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
-    fatal(msg: string, ctx?: Record<string, unknown>): void;
-    // (undocumented)
     info(msg: string, ctx?: Record<string, unknown>): void;
     // (undocumented)
     log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
@@ -535,8 +533,6 @@ export interface Logger {
     // (undocumented)
     error(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
-    fatal(message: string, context?: Record<string, unknown>): void;
-    // (undocumented)
     info(message: string, context?: Record<string, unknown>): void;
     // (undocumented)
     log(level: LogLevel, message: string, context?: Record<string, unknown>): void;
@@ -547,7 +543,7 @@ export interface Logger {
 }
 
 // @public
-export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace';
+export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
 // @public
 export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {

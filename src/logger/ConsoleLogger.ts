@@ -1,12 +1,11 @@
 import { type Logger, type LogLevel } from './Logger';
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
-	fatal: 0,
-	error: 1,
-	warn: 2,
-	info: 3,
-	debug: 4,
-	trace: 5,
+	error: 0,
+	warn: 1,
+	info: 2,
+	debug: 3,
+	trace: 4,
 };
 
 /**
@@ -32,7 +31,6 @@ export class ConsoleLogger implements Logger {
 	}
 	private method(level: LogLevel): (msg: string, ...rest: unknown[]) => void {
 		switch (level) {
-			case 'fatal':
 			case 'error':
 				return console.error;
 			case 'warn':
@@ -67,9 +65,6 @@ export class ConsoleLogger implements Logger {
 		else fn(line);
 	}
 
-	fatal(msg: string, ctx?: Record<string, unknown>) {
-		this.emit('fatal', msg, ctx);
-	}
 	error(msg: string, ctx?: Record<string, unknown>) {
 		this.emit('error', msg, ctx);
 	}

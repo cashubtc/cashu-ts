@@ -468,7 +468,7 @@ Small helper that only shapes `P2PKOptions`, it does not create secrets.
 new P2PKBuilder()
   .addLockPubkey(k: string | string[])    // accepts 02|03 compressed, or x only (Nostr)
   .addRefundPubkey(k: string | string[])  // requires lockUntil(...) to be set
-  .lockUntil(when: number | Date)      		// unix seconds, unix ms, or Date
+  .lockUntil(when: number | Date)         // unix seconds, unix ms, or Date
   .requireLockSignatures(n: number)       // n of m for lock keys
   .requireRefundSignatures(n: number)     // n of m for refund keys
   .toOptions(): P2PKOptions;
