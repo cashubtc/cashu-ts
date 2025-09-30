@@ -76,8 +76,14 @@ const { keep, send } = await wallet.ops
 // or using the forth param directly
 const customConfig: OutputConfig = {
 	send: { type: 'p2pk', options: { pubkey: bytesToHex(pubKeyBob) } },
+	keep: { type: 'deterministic', counter: 0 }, // optional keep shaping
 };
-const { keep, send } = await wallet.send(amount, proofs, { includeFees: true }, customConfig);
+const { keep, send } = await wallet.send(
+	amount,
+	proofs,
+	{ includeFees: true },
+	customConfig, // forth param
+);
 ```
 
 The builder makes intent explicit and eliminates the need for extra boilerplate.
@@ -108,7 +114,7 @@ Update any code that referenced LogLevel.XYZ to pass the lowercase string litera
 
 #### Keyset methods delegated to KeyChain class
 
-Wallet no longer manages keysets and keys itself. Instead, these are delegated to the KeyChain class.
+Wallet no longer manages keysets and keys itself. Instead, these are delegated to the KeyChain class, accessed via `wallet.keyChain`.
 
 The following wallet methods are affected:
 
@@ -116,6 +122,20 @@ The following wallet methods are affected:
 - `wallet.getActiveKeyset()` -> `wallet.keyChain.getCheapestKeyset()`
 - `wallet.getKeySets()` -> `wallet.keyChain.getKeysets()`
 - `wallet.getAllKeys()` -> `wallet.keyChain.getCache().keys`
+
+#### on[Mint|Melt|Proof]\* events
+
+Wallet no longer manages subscription events itself. Instead, these are delegated to the `WalletEvents` class, accessed via `wallet.on`.
+
+The following wallet methods are affected:
+
+- `wallet.onMintQuoteUpdates()` -> `wallet.on.mintQuoteUpdates()`
+- `wallet.onMeltQuotePaid()` -> `wallet.on.meltQuotePaid()`
+- `wallet.onMintQuotePaid()` -> `wallet.on.mintQuotePaid()`
+- `wallet.onMeltQuoteUpdates()` -> `wallet.on.meltQuoteUpdates()`
+- `wallet.onProofStateUpdates()` -> `wallet.on.proofStateUpdates()`
+
+See the [README](./README.md) for full details of the `WalletEvents` API.
 
 #### Removed constants
 

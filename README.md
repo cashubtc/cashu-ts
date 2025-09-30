@@ -585,7 +585,7 @@ await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456
 - `wallet.on.proofStateUpdates(proofs, onUpdate, onErr, { signal })` – push updates
 - `wallet.on.proofStatesStream(proofs, opts)` – async iterator with bounded buffer
 
-> **Note:** The first quote subscription auto-establishes a mint WebSocket and errors surface via the onErr callback.
+> **Note:** For the 'Updates' subscriptions, the first call auto-establishes a mint WebSocket and errors surface via the onErr callback.
 
 **One-shot helpers:**
 

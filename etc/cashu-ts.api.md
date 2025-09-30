@@ -1556,18 +1556,6 @@ export class Wallet {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
-    // @deprecated (undocumented)
-    onMeltQuotePaid(quoteId: string, callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // @deprecated (undocumented)
-    onMeltQuoteUpdates(quoteIds: string[], callback: (payload: MeltQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // @deprecated (undocumented)
-    onMintQuotePaid(quoteId: string, callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // @deprecated (undocumented)
-    onMintQuoteUpdates(quoteIds: string[], callback: (payload: MintQuoteResponse) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
-    // @deprecated (undocumented)
-    onProofStateUpdates(proofs: Proof[], callback: (payload: ProofState & {
-        proof: Proof;
-    }) => void, errorCallback: (e: Error) => void): Promise<SubscriptionCanceller>;
     readonly ops: WalletOps;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{

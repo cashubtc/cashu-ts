@@ -25,7 +25,6 @@ import {
 	type SwapPayload,
 	type MeltProofsResponse,
 	type SendResponse,
-	type SubscriptionCanceller,
 	type RestoreConfig,
 	type SecretsPolicy,
 } from './types';
@@ -1885,65 +1884,6 @@ class Wallet {
 			}
 		}
 		return result;
-	}
-
-	// -----------------------------------------------------------------
-	// Section: Websocket Events (Deprecated: Now in WalletEvents)
-	// -----------------------------------------------------------------
-
-	/**
-	 * @deprecated Use `wallet.on.mintQuoteUpdates`
-	 */
-	async onMintQuoteUpdates(
-		quoteIds: string[],
-		callback: (payload: MintQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.mintQuoteUpdates(quoteIds, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.meltQuotePaid`
-	 */
-	async onMeltQuotePaid(
-		quoteId: string,
-		callback: (payload: MeltQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.meltQuotePaid(quoteId, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.mintQuotePaid`
-	 */
-	async onMintQuotePaid(
-		quoteId: string,
-		callback: (payload: MintQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.mintQuotePaid(quoteId, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.meltQuoteUpdates`
-	 */
-	async onMeltQuoteUpdates(
-		quoteIds: string[],
-		callback: (payload: MeltQuoteResponse) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.meltQuoteUpdates(quoteIds, callback, errorCallback);
-	}
-
-	/**
-	 * @deprecated Use `wallet.on.proofStateUpdates`
-	 */
-	async onProofStateUpdates(
-		proofs: Proof[],
-		callback: (payload: ProofState & { proof: Proof }) => void,
-		errorCallback: (e: Error) => void,
-	): Promise<SubscriptionCanceller> {
-		return this.on.proofStateUpdates(proofs, callback, errorCallback);
 	}
 }
 
