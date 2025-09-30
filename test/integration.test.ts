@@ -230,7 +230,6 @@ describe('mint api', () => {
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
-		// todo uncomment after cdk error code fix
 		expect(result).toEqual(new MintOperationError(20008, 'Witness signatures not provided. P2PK signatures are required but not provided'));
 
 		// Try and receive them with Bob's secret key (should suceed)
@@ -377,6 +376,7 @@ describe('mint api', () => {
 		});
 		mint.disconnectWebSocket();
 		// todo - it should be uncommented if/once cdk mints will be closing quicker than now (6000ms). Also we should close connection after every test
+		await sleep(50);
 		expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
 	}, 10000);
 	test('mint with signed quote and payload', async () => {

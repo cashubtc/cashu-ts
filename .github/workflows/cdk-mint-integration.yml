@@ -18,7 +18,7 @@ jobs:
           -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0 \
           -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0 \
           -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-          cashubtc/mintd:latest-amd64 \
+          cashubtc/mintd:0.13-arm64 \
 
       - name: Check running containers
         run: docker ps
