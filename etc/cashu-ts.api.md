@@ -177,7 +177,9 @@ export interface CounterRange {
 
 // @public (undocumented)
 export interface CounterSource {
+    advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
     reserve(keysetId: string, n: number): Promise<CounterRange>;
+    setNext?(keysetId: string, next: number): Promise<void>;
     snapshot?(): Promise<Record<string, number>>;
 }
 
@@ -1576,11 +1578,9 @@ export class Wallet {
 // @public
 export class WalletCounters {
     constructor(src: CounterSource);
-    // (undocumented)
     advanceToAtLeast(keysetId: string, minNext: number): Promise<void>;
-    // (undocumented)
+    peekNext(keysetId: string): Promise<number>;
     setNext(keysetId: string, next: number): Promise<void>;
-    // (undocumented)
     snapshot(): Promise<Record<string, number>>;
 }
 

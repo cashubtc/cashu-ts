@@ -513,10 +513,16 @@ Deterministic outputs use per-keyset counters. The wallet reserves them atomical
 
 API at a glance:
 
-- `wallet.counters.snapshot()` – inspect current state
+- `wallet.counters.peekNext(id)` – returns the current "next" for a keyset
 - `wallet.counters.advanceToAtLeast(id, n)` – bump forward if behind
-- `wallet.counters.setNext(id, n)` – hard-set for migrations/tests
 - `wallet.on.countersReserved(cb)` – subscribe to reservations (see WalletEvents for subscription patterns)
+
+** Optional:** - Depends on CounterSource:
+
+These methods will throw if the CounterSource does not support them.
+
+- `wallet.counters.snapshot()` – inspect current overall state
+- `wallet.counters.setNext(id, n)` – hard-set for migrations/tests
 
 ```ts
 // 1) Seed once at app start if you have previously saved "next" per keyset
@@ -538,7 +544,7 @@ wallet.on.countersReserved(({ keysetId, start, count, next }) => {
 });
 
 // 3) Inspect current state, what will be reserved next
-const snap = await wallet.counters.snapshot(); // { '0111111': 128 }
+const nextCounter = await wallet.counters.peekNext('0111111'); // 128
 
 // 4) After a restore or cross device sync, bump the cursor forward
 const { lastCounterWithSignature } = await wallet.batchRestore();

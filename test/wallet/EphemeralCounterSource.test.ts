@@ -21,7 +21,7 @@ describe('EphemeralCounterSource', () => {
 
 		// Try another reserve n=0, now the counter is >0
 		const r3 = await src.reserve('k', 0);
-		expect(r3).toEqual({ start: 0, count: 0 });
+		expect(r3).toEqual({ start: 3, count: 0 });
 
 		// follow-up reserve(3) should still start at 3 if n=0 was a no-op
 		const r4 = await src.reserve('k', 3);
