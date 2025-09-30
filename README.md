@@ -601,6 +601,8 @@ await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456
 
 ### Cancel and Abort
 
+Subscriptions should be cancelled when no longer needed to avoid leaks and keep your app tidy.
+
 The simplest way to cancel a subscription is to call its cancel handle.
 
 ```ts
@@ -612,26 +614,36 @@ const cancelSub = wallet.on.countersReserved(({ keysetId, next }) => {
 cancelSub();
 ```
 
-Subscriptions accept an `AbortSignal`. Aborting stops the stream and cleans up.
+Subscriptions also accept an `AbortSignal`. Aborting stops the stream and cleans up.
 
 ```ts
+// Create an abort controller
 const ac = new AbortController();
+
+// Setup subscriptions to use abort signal
 wallet.on.countersReserved(
 	({ keysetId, next }) => {
 		void saveNextToDb(keysetId, next).catch(console.error);
 	},
-	{ signal: ac.signal },
+	{ signal: ac.signal }, // abort controller
 );
 
-// later
+// when done... trigger the abort signal
 ac.abort();
+
+// eg: via DOM events:
+window.addEventListener('pagehide', () => ac.abort(), { once: true });
+window.addEventListener('beforeunload', () => ac.abort(), { once: true });
 ```
 
-Timeouts are built into the `once*` helpers:
+The `once*` helpers are always cancelled automatically after resolution or rejection, as well as on timeout or abort:
 
 ```ts
 try {
-	const paid = await wallet.on.onceMintPaid(quoteId, { timeoutMs: 60_000 });
+	const paid = await wallet.on.onceMintPaid(quoteId, {
+		signal: ac.signal,
+		timeoutMs: 60_000,
+	});
 	console.log('Paid', paid.amount);
 } catch (e) {
 	console.warn('Not paid in time or aborted', e);
