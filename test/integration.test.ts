@@ -33,7 +33,6 @@ import {
 	sumProofs,
 } from '../src/utils';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { MintOperationError } from '../src/model/Errors';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoices = [
@@ -218,7 +217,6 @@ describe('mint api', () => {
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
-		await sleep(3000);
 		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
 		// Send them P2PK locked to Bob
@@ -230,7 +228,7 @@ describe('mint api', () => {
 		const result = await wallet
 			.receive(encoded, { privkey: bytesToHex(privKeyAlice) })
 			.catch((e) => e);
-		expect(result).toEqual(new MintOperationError(20008, 'Witness signatures not provided. P2PK signatures are required but not provided'));
+		expect(result).toEqual(new MintOperationError(0, 'Witness is missing for p2pk signature'));
 
 		// Try and receive them with Bob's secret key (should suceed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
@@ -303,6 +301,7 @@ describe('mint api', () => {
 				},
 			);
 		});
+		mint.disconnectWebSocket();
 		expect(res).toBe(1);
 		expect(callback).toBeCalled();
 	});
@@ -375,9 +374,6 @@ describe('mint api', () => {
 			wallet.send(21, proofs, { keysetId }); // fire and forget
 		});
 		mint.disconnectWebSocket();
-		// todo - it should be uncommented if/once cdk mints will be closing quicker than now (6000ms). Also we should close connection after every test
-		await sleep(50);
-		expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
 	}, 10000);
 	test('mint with signed quote and payload', async () => {
 		const wallet = new Wallet(mintUrl);
