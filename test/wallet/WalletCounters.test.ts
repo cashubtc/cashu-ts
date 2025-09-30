@@ -53,7 +53,7 @@ describe('WalletCounters', () => {
 
 	it('snapshot throws when source does not support snapshot', async () => {
 		const src = new ReserveOnlySource();
-		const counters = new WalletCounters(src as unknown as CounterSource);
+		const counters = new WalletCounters(src);
 		await expect(counters.snapshot()).rejects.toThrow(/snapshot\(\)/);
 	});
 
@@ -72,7 +72,7 @@ describe('WalletCounters', () => {
 
 	it('advanceToAtLeast throws when source is immutable', async () => {
 		const src = new ReserveOnlySource();
-		const counters = new WalletCounters(src as unknown as CounterSource);
+		const counters = new WalletCounters(src);
 		await expect(counters.advanceToAtLeast('X', 7)).rejects.toThrow(/advanceToAtLeast\(\)/);
 	});
 
