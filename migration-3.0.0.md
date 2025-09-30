@@ -11,7 +11,9 @@ Version 3 uses new class names:
 `CashuWallet` is now `Wallet`
 `CashuMint` is now `Mint`
 
-A wallet can be instantiated by passig a `Mint` instance, as before, or simply by passing in a mintUrl. You MUST now call the `loadMint()` method to complete wallet init.
+A wallet can be instantiated by passing a `Mint` instance, as before, or simply by passing in a mintUrl.
+
+You MUST now call the `loadMint()` method to complete wallet init.
 
 example:
 
@@ -44,9 +46,7 @@ Some crypto types have been deduplicated to the main library types:
 - `MintKeys` is now `RawMintKeys`
 - `Keyset` and `KeysetWithKeys` have been removed as unused
 
-### `CashuWallet` to `Wallet` API changes
-
-#### New `OutputType` and `OutputConfig`
+### New `OutputType` and `OutputConfig`
 
 The output model for `send`, `receive`, `mintProofs`, and `meltProofs` has been simplified.
 
@@ -112,7 +112,7 @@ This change simplifies the API by removing the enum-like wrapper, avoids the nee
 
 Update any code that referenced LogLevel.XYZ to pass the lowercase string literal instead.
 
-#### Keyset methods delegated to KeyChain class
+### Keyset methods delegated to KeyChain class
 
 Wallet no longer manages keysets and keys itself. Instead, these are delegated to the KeyChain class, accessed via `wallet.keyChain`.
 
@@ -123,7 +123,7 @@ The following wallet methods are affected:
 - `wallet.getKeySets()` -> `wallet.keyChain.getKeysets()`
 - `wallet.getAllKeys()` -> `wallet.keyChain.getCache().keys`
 
-#### on[Mint|Melt|Proof]\* events
+### on[Mint|Melt|Proof]\* events
 
 Wallet no longer manages subscription events itself. Instead, these are delegated to the `WalletEvents` class, accessed via `wallet.on`.
 
@@ -137,7 +137,7 @@ The following wallet methods are affected:
 
 See the [README](./README.md) for full details of the `WalletEvents` API.
 
-#### Removed constants
+### Removed constants
 
 The following constants are no longer available:
 
@@ -146,7 +146,7 @@ The following constants are no longer available:
 - `TOKEN_VERSION`
 - `TOKEN_PREFIX`
 
-#### Removed static methods in `Mint`
+### Removed static methods in `Mint`
 
 The `Mint` class no longer has static methods. If you wish to call a mint method, simply instantiate a mint first, then call the instance method.
 

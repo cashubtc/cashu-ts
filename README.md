@@ -476,7 +476,9 @@ new P2PKBuilder()
 P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 ```
 
-**Behaviour** Keys are normalised and de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
+**Behaviour**
+
+Keys are normalised and de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
 
 Example usage:
 
