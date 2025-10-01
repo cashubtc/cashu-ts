@@ -34,6 +34,10 @@ export type V4ProofTemplate = {
 	 */
 	d?: V4DLEQTemplate;
 	/**
+	 * P2BK E.
+	 */
+	pe?: Uint8Array;
+	/**
 	 * Witness.
 	 */
 	w?: string;

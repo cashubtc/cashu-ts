@@ -83,7 +83,8 @@ export class Bytes {
 		}
 		return new Uint8Array([...atob(normalizedBase64)].map((c) => c.charCodeAt(0)));
 	}
-
+	// NOTE: MUST remain a constant-time implementation (full byte check)
+	// because callers rely on it (e.g. deriveBlindedSecretKey).
 	static equals(a: Uint8Array, b: Uint8Array): boolean {
 		if (a.length !== b.length) return false;
 		let result = 0;

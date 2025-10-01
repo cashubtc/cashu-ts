@@ -19,8 +19,9 @@
 // docker rm -f -v nutshell
 
 import dns from 'node:dns';
-import { vi, test, describe, expect, afterEach } from 'vitest';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { test, describe, expect } from 'vitest';
+import { vi } from 'vitest';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1';
 import {
 	Mint,
 	Wallet,
@@ -38,6 +39,7 @@ import {
 	OutputConfig,
 	OutputType,
 	P2PKBuilder,
+	ConsoleLogger,
 } from '../src';
 import ws from 'ws';
 import {
@@ -49,6 +51,7 @@ import {
 	sumProofs,
 } from '../src/utils';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { sha256 } from '@noble/hashes/sha2';
 dns.setDefaultResultOrder('ipv4first');
 
 const mintUrl = 'http://localhost:3338';
@@ -79,6 +82,38 @@ function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 		const parsedSecret = JSON.parse(p.secret);
 		expect(parsedSecret[1].data).toBe(s);
 	});
+}
+
+function expectBlindedSecretDataToEqualECDH(
+	proofs: Array<Proof>,
+	bobPrivHex: Uint8Array, // receiver’s private key
+	bobPubHex: string, // receiver’s SEC1-compressed pubkey P
+) {
+	for (const p of proofs) {
+		expect(p.p2pk_e).toBeDefined();
+
+		const E = secp256k1.Point.fromHex(p.p2pk_e as string);
+		const parsed = JSON.parse(p.secret) as ['P2PK', { data: string; tags?: string[][] }];
+		const blindedData = parsed[1].data; // this is P′ for slot 0
+
+		// Z = p · E
+		const pBig = secp256k1.Point.Fn.fromBytes(bobPrivHex);
+		const Z = E.multiply(pBig);
+		const Zx = Z.toBytes(false).slice(1, 33); // 32-byte X
+
+		// r = SHA-256(DST || Zx || kid || i=0) mod n, retry once if zero
+		const DST = new TextEncoder().encode('Cashu_P2BK_v1');
+		const kid = hexToBytes(p.id);
+		let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, ...kid, 0x00])));
+		if (r === 0n) {
+			r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, ...kid, 0x00, 0xff])));
+			if (r === 0n) throw new Error('P2BK: tweak derivation failed in test');
+		}
+
+		const P = secp256k1.Point.fromHex(bobPubHex);
+		const Pprime = P.add(secp256k1.Point.BASE.multiply(r)).toHex(true);
+		expect(blindedData).toBe(Pprime);
+	}
 }
 
 describe('mint api', () => {
@@ -260,7 +295,6 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
-
 	test('send and receive p2pk with additional tags', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
@@ -297,6 +331,79 @@ describe('mint api', () => {
 
 		// Try and receive them with Alice's secret key (should succeed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) });
+
+		expect(
+			proofs.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(63);
+	});
+
+	test('send and receive p2bk', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+
+		const privKeyBob = secp256k1.utils.randomSecretKey();
+		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
+		console.log('pubKeyAlice:', pubKeyAlice);
+		console.log('pubKeyBob:', pubKeyBob);
+		console.log('privKeyAlice:', bytesToHex(privKeyAlice));
+		console.log('privKeyBob:', bytesToHex(privKeyBob));
+
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
+
+		// Send them P2BK locked to Bob
+		const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
+		console.log('P2BK SEND', send);
+		expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+		console.log('P2BK token', encoded);
+
+		// Try and receive them with Bob's secret key (should suceed)
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
+		console.log('P2BK RECEIVE', proofs);
+		expect(
+			proofs.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(63);
+	});
+
+	test('send and receive p2bk SCHNORR', async () => {
+		const wallet = new Wallet(mintUrl, { unit, logger: new ConsoleLogger('debug') });
+		await wallet.loadMint();
+
+		const privKeyAlice = schnorr.utils.randomSecretKey();
+		const pubKeyAlice = '02' + bytesToHex(schnorr.getPublicKey(privKeyAlice));
+		const privKeyBob = schnorr.utils.randomSecretKey();
+		const pubKeyBob = '02' + bytesToHex(schnorr.getPublicKey(privKeyBob));
+		console.log('pubKeyAlice:', pubKeyAlice);
+		console.log('pubKeyBob:', pubKeyBob);
+		console.log('privKeyAlice:', bytesToHex(privKeyAlice));
+		console.log('privKeyBob:', bytesToHex(privKeyBob));
+
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
+
+		// Send them P2BK locked to Bob
+		const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
+		console.log('P2BK SEND', send);
+		expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+		console.log('P2BK token', encoded);
+
+		// Try and receive them with Bob's secret key (should suceed)
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
+		console.log('P2BK RECEIVE', proofs);
+
 		expect(
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;

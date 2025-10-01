@@ -28,6 +28,7 @@ describe('payment requests', () => {
 				data: 'pubkey',
 				tags: [['tag', 'tag-value']],
 			} as NUT10Option,
+			true, // NUT26 (P2BK)
 		);
 		const pr = request.toEncodedRequest();
 		expect(pr).toBeDefined();
@@ -48,9 +49,16 @@ describe('payment requests', () => {
 		expect(decodedRequest.nut10?.kind).toBe('P2PK');
 		expect(decodedRequest.nut10?.data).toBe('pubkey');
 		expect(decodedRequest.nut10?.tags).toStrictEqual([['tag', 'tag-value']]);
+		expect(decodedRequest.nut26).toBe(true);
 
 		const decodedRequestClassConstructor = PaymentRequest.fromEncodedRequest(pr);
 		expect(decodedRequestClassConstructor).toStrictEqual(decodedRequest);
+
+		// Handle no transport fromRawRequest
+		decodedRequest.transport = undefined;
+		const raw = decodedRequest.toRawRequest();
+		const req = PaymentRequest.fromRawRequest(raw);
+		expect(req).toStrictEqual(decodedRequest);
 	});
 	test('test decoding payment requests with no amount', async () => {
 		const prWithoutAmount =
@@ -65,8 +73,21 @@ describe('payment requests', () => {
 		expect(request.transport).toBeDefined();
 		expect(request.transport?.length).toBe(1);
 		expect(request.transport?.[0].type).toBe(PaymentRequestTransportType.NOSTR);
+		expect(request.getTransport(PaymentRequestTransportType.NOSTR)?.target).toBe(
+			'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgymdex3gvfsfujp3xyn7e7qrs8yyq9d8zsu2zqujxuxcapfqvzc8grqdkts',
+		);
 		expect(request.transport?.[0].target).toBe(
 			'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgymdex3gvfsfujp3xyn7e7qrs8yyq9d8zsu2zqujxuxcapfqvzc8grqdkts',
 		);
+	});
+	test('test unsupported prefix/version', async () => {
+		const prWithoutInvalidPrefix =
+			'croqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
+		const prWithoutInvalidVersion =
+			'creqZpGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
+		expect(() => decodePaymentRequest(prWithoutInvalidPrefix)).toThrow(
+			'unsupported pr: invalid prefix',
+		);
+		expect(() => decodePaymentRequest(prWithoutInvalidVersion)).toThrow('unsupported pr version');
 	});
 });

@@ -26,6 +26,7 @@ export class P2PKBuilder {
 	private nSigs?: number;
 	private nSigsRefund?: number;
 	private extraTags: P2PKTag[] = [];
+	private _blindKeys?: boolean;
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
@@ -66,6 +67,11 @@ export class P2PKBuilder {
 		return this;
 	}
 
+	blindKeys() {
+		this._blindKeys = true;
+		return this;
+	}
+
 	toOptions(): P2PKOptions {
 		const locks = Array.from(this.lockSet);
 		const refunds = Array.from(this.refundSet);
@@ -96,6 +102,7 @@ export class P2PKBuilder {
 			...(reqLock && reqLock > 1 ? { requiredSignatures: reqLock } : {}),
 			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
 			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
+			...(this._blindKeys ? { blindKeys: true } : {}),
 		};
 
 		// Ensure the secret is valid (not too long etc)
@@ -115,6 +122,7 @@ export class P2PKBuilder {
 		if (opts.requiredRefundSignatures !== undefined)
 			b.requireRefundSignatures(opts.requiredRefundSignatures);
 		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
+		if (opts.blindKeys) b.blindKeys();
 		return b;
 	}
 }

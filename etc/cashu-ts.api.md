@@ -91,6 +91,12 @@ export type BlindedMessage = {
 };
 
 // @public (undocumented)
+export type BlindedPubkey = {
+    P_: string;
+    r: bigint;
+};
+
+// @public (undocumented)
 export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage;
 
 // @public (undocumented)
@@ -213,6 +219,12 @@ export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => D
 // @public (undocumented)
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
 
+// @public
+export function createP2BKBlindedPubkeys(pubkeys: string[], keysetId: string): {
+    blinded: string[];
+    Ehex: string;
+};
+
 // @public (undocumented)
 export const createP2PKsecret: (pubkey: string) => string;
 
@@ -228,11 +240,20 @@ export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 // @public
 export function deepEqual<T>(a: T, b: T): boolean;
 
+// @public
+export function deriveBlindedSecretKey(privkey: string | bigint, rBlind: string | bigint, expectedPub?: string): string;
+
+// @public
+export function deriveBlindedSecretKeysForProof(privateKey: string | string[], proof: Proof): string[];
+
 // @public (undocumented)
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
+
+// @public
+export function deriveP2BKBlindingFactor(Ehex: string, privHex: string, keysetIdHex: string, slotIndex: number): bigint;
 
 // @public (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
@@ -983,7 +1004,7 @@ export interface OutputConfig {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1040,6 +1061,9 @@ export type OutputType = ({
 };
 
 // @public (undocumented)
+export const P2BK_DST: Uint8Array<ArrayBufferLike>;
+
+// @public (undocumented)
 export class P2PKBuilder {
     // (undocumented)
     addLockPubkey(pk: string | string[]): this;
@@ -1049,6 +1073,8 @@ export class P2PKBuilder {
     addTag(key: string, values?: string[] | string): this;
     // (undocumented)
     addTags(tags: P2PKTag[]): this;
+    // (undocumented)
+    blindKeys(): this;
     // (undocumented)
     static fromOptions(opts: P2PKOptions): P2PKBuilder;
     // (undocumented)
@@ -1069,6 +1095,7 @@ export type P2PKOptions = {
     requiredSignatures?: number;
     requiredRefundSignatures?: number;
     additionalTags?: P2PKTag[];
+    blindKeys?: boolean;
 };
 
 // @public (undocumented)
@@ -1108,7 +1135,7 @@ export type PartialMintQuoteResponse = {
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, nut26?: boolean);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -1125,6 +1152,8 @@ class PaymentRequest_2 {
     mints?: string[] | undefined;
     // (undocumented)
     nut10?: NUT10Option | undefined;
+    // (undocumented)
+    nut26: boolean;
     // (undocumented)
     singleUse: boolean;
     // (undocumented)
@@ -1177,6 +1206,7 @@ export type Proof = {
     secret: string;
     C: string;
     dleq?: SerializedDLEQ;
+    p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
 };
 
@@ -1209,6 +1239,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+    nut26?: boolean;
 };
 
 // @public (undocumented)
@@ -1410,7 +1441,7 @@ export const signP2PKProof: (proof: Proof, privateKey: string) => Proof;
 // @public
 export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger) => Proof[];
 
-// @public (undocumented)
+// @public
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)
