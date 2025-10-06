@@ -361,7 +361,7 @@ class Wallet {
 		return (ot.denominations ?? []).length;
 	}
 
-	private async setAutoCounters(
+	private async addCountersToOutputTypes(
 		keysetId: string,
 		...outputTypes: OutputType[]
 	): Promise<{ outputTypes: OutputType[]; used?: OperationCounters }> {
@@ -768,7 +768,7 @@ class Wallet {
 
 		// Assign counter atomically if OutputType is deterministic
 		// and the counter is zero (auto-assign)
-		const autoCounters = await this.setAutoCounters(keyset.id, receiveOT);
+		const autoCounters = await this.addCountersToOutputTypes(keyset.id, receiveOT);
 		[receiveOT] = autoCounters.outputTypes;
 		if (autoCounters.used) {
 			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'receive' });
@@ -956,7 +956,7 @@ class Wallet {
 
 		// Assign counters atomically if either/both OutputTypes are deterministic
 		// and the counter is zero (auto-assign)
-		const autoCounters = await this.setAutoCounters(keyset.id, sendOT, keepOT);
+		const autoCounters = await this.addCountersToOutputTypes(keyset.id, sendOT, keepOT);
 		[sendOT, keepOT] = autoCounters.outputTypes;
 		if (autoCounters.used) {
 			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'send' });
@@ -1438,7 +1438,7 @@ class Wallet {
 
 		// Assign counters atomically if OutputType is deterministic
 		// and the counter is zero (auto-assign)
-		const autoCounters = await this.setAutoCounters(keyset.id, mintOT);
+		const autoCounters = await this.addCountersToOutputTypes(keyset.id, mintOT);
 		[mintOT] = autoCounters.outputTypes;
 		if (autoCounters.used) {
 			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'mintProofs' });
@@ -1732,7 +1732,7 @@ class Wallet {
 			let meltOT: OutputType = { ...outputType, denominations };
 			// Assign counter atomically if OutputType is deterministic
 			// and the counter is zero (auto-assign)
-			const autoCounters = await this.setAutoCounters(keyset.id, meltOT);
+			const autoCounters = await this.addCountersToOutputTypes(keyset.id, meltOT);
 			[meltOT] = autoCounters.outputTypes;
 			if (autoCounters.used) {
 				this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
