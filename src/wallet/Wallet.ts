@@ -78,6 +78,8 @@ import {
 	sanitizeUrl,
 } from '../utils';
 
+const PENDING_KEYSET_ID = '__PENDING__';
+
 /**
  * Class that represents a Cashu wallet.
  *
@@ -137,7 +139,7 @@ class Wallet {
 	private _denominationTarget = 3;
 	private _secretsPolicy: SecretsPolicy = 'auto';
 	private _counterSource: CounterSource;
-	private _boundKeysetId: string = '__PENDING__';
+	private _boundKeysetId: string = PENDING_KEYSET_ID;
 	private _selectProofs: SelectProofs;
 	private _logger: Logger;
 
@@ -196,7 +198,7 @@ class Wallet {
 		this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this._unit = options?.unit ?? this._unit;
-		this._boundKeysetId = options?.keysetId ?? '__PENDING__';
+		this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
 		if (options?.bip39seed) {
 			this.failIf(
 				!(options.bip39seed instanceof Uint8Array),
@@ -270,7 +272,7 @@ class Wallet {
 		await Promise.all(promises);
 		this._logger.debug('KeyChain', { keychain: this.keyChain.getCache() });
 
-		if (this._boundKeysetId === '__PENDING__') {
+		if (this._boundKeysetId === PENDING_KEYSET_ID) {
 			this._boundKeysetId = this.keyChain.getCheapestKeyset().id;
 		} else {
 			// Ensure the bound id is still present and keyed
@@ -309,7 +311,7 @@ class Wallet {
 	 * The keyset ID bound to this wallet instance.
 	 */
 	get keysetId(): string {
-		this.failIf(this._boundKeysetId === '__PENDING__', 'Wallet not initialised, call loadMint');
+		this.failIf(this._boundKeysetId === PENDING_KEYSET_ID, 'Wallet not initialised, call loadMint');
 		return this._boundKeysetId;
 	}
 
