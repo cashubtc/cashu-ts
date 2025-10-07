@@ -1,47 +1,39 @@
 // ==========================
-// v3 (new API) surface
+// Public API Surface
 // ==========================
 export { Mint } from './mint';
 export { KeyChain } from './wallet/KeyChain';
 export { Keyset } from './wallet/Keyset';
+export { P2PKBuilder } from './wallet/P2PKBuilder';
+export { type SelectProofs, selectProofsRGLI } from './wallet/SelectProofs';
+export { Wallet } from './wallet/Wallet';
+export { WalletCounters } from './wallet/WalletCounters';
+export { WalletEvents } from './wallet/WalletEvents';
 export {
-	type P2PKOptions,
-	type OutputType,
-	type OutputConfig,
-	type SendConfig,
-	type SendOfflineConfig,
-	type ReceiveConfig,
-	type MintProofsConfig,
-	type MeltProofsConfig,
-	type SharedOutputTypeProps,
-	type SubscriptionCanceller,
-	type MeltBlanks,
-	type RestoreConfig,
-	type MeltProofsResponse,
-	type SendResponse,
-	type OnCountersReserved,
-	type SecretsPolicy,
-	type CounterSource,
-	type CancellerLike,
-	type CounterRange,
-	type OperationCounters,
-	type SelectProofs,
-	type SubscribeOpts,
-	WalletCounters,
-	P2PKBuilder,
 	SendBuilder,
 	ReceiveBuilder,
 	MintBuilder,
 	MeltBuilder,
-	WalletEvents,
 	WalletOps,
-	Wallet,
-} from './wallet';
-export type * from './wallet/types/payloads';
-export * from './mint/types';
+} from './wallet/WalletOps';
 
-// Core models & primitives
-export * from './model/types';
+// Wallet/Mint types used in the public API surface
+export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
+export type { SubscribeOpts, CancellerLike } from './wallet/WalletEvents';
+export type * from './wallet/types/config';
+export type * from './wallet/types/payloads';
+export type * from './wallet/types/responses';
+export type { SubscriptionCanceller } from './wallet/types/websocket';
+export type * from './mint/types/payloads';
+export * from './mint/types/responses';
+
+// Shared models & primitives
+export type * from './model/types/blinded';
+export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
+export type * from './model/types/keyset';
+export * from './model/types/proof-state';
+export type * from './model/types/proof';
+export type { Token } from './model/types/token';
 
 // Crypto
 export * from './crypto';

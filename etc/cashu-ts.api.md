@@ -7,9 +7,6 @@
 import { PrivKey } from '@noble/curves/abstract/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
-// @public (undocumented)
-export type Amount = number;
-
 // @public
 export type AmountlessOption = {
     amount_msat: number;
@@ -206,13 +203,6 @@ export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
 export function deepEqual<T>(a: T, b: T): boolean;
-
-// @public
-export type DeprecatedToken = {
-    token: TokenEntry[];
-    memo?: string;
-    unit?: string;
-};
 
 // @public (undocumented)
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
@@ -417,55 +407,10 @@ export function isValidHex(str: string): boolean;
 export function joinUrls(...parts: string[]): string;
 
 // @public (undocumented)
-export type JsonRpcError = {
-    jsonrpc: '2.0';
-    error: JsonRpcErrorObject;
-    id: RpcSubId;
-};
-
-// @public (undocumented)
-export type JsonRpcErrorObject = {
-    code: number;
-    message: string;
-    data?: unknown;
-};
-
-// @public (undocumented)
-export type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcSuccess | JsonRpcError;
-
-// @public (undocumented)
-export type JsonRpcNotification = {
-    jsonrpc: '2.0';
-    method: string;
-    params?: JsonRpcParams;
-};
-
-// @public (undocumented)
-export type JsonRpcParams = {
-    subId?: string;
-    payload?: unknown;
-};
-
-// @public (undocumented)
 export type JsonRpcReqParams = {
     kind: RpcSubKinds;
     filters: string[];
     subId: string;
-};
-
-// @public (undocumented)
-export type JsonRpcRequest = {
-    jsonrpc: '2.0';
-    method: 'sub';
-    params: JsonRpcReqParams;
-    id: Exclude<RpcSubId, null>;
-};
-
-// @public (undocumented)
-export type JsonRpcSuccess<T = unknown> = {
-    jsonrpc: '2.0';
-    result: T;
-    id: RpcSubId;
 };
 
 // @public
@@ -1198,11 +1143,6 @@ export type ReceiveConfig = {
     onCountersReserved?: OnCountersReserved;
 };
 
-// @public
-export type ReceiveTokenEntryResponse = {
-    proofs: Proof[];
-};
-
 // @public (undocumented)
 export type RequestArgs = {
     endpoint: string;
@@ -1221,9 +1161,6 @@ export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>
 export type RestoreConfig = {
     keysetId?: string;
 };
-
-// @public (undocumented)
-export type RpcSubId = string | number | null;
 
 // @public (undocumented)
 export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
@@ -1246,6 +1183,9 @@ export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 // @public (undocumented)
 export type SelectProofs = (proofs: Proof[], amountToSend: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+
+// @public (undocumented)
+export const selectProofsRGLI: SelectProofs;
 
 // @public
 export class SendBuilder {
@@ -1418,47 +1358,8 @@ export type Token = {
     unit?: string;
 };
 
-// @public
-export type TokenEntry = {
-    proofs: Proof[];
-    mint: string;
-};
-
-// @public
-export type TokenV4Template = {
-    t: V4InnerToken[];
-    d: string;
-    m: string;
-    u: string;
-};
-
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
-
-// @public (undocumented)
-export type Unit = 'sat' | 'msat';
-
-// @public (undocumented)
-export type V4DLEQTemplate = {
-    e: Uint8Array;
-    s: Uint8Array;
-    r: Uint8Array;
-};
-
-// @public
-export type V4InnerToken = {
-    i: Uint8Array;
-    p: V4ProofTemplate[];
-};
-
-// @public
-export type V4ProofTemplate = {
-    a: number;
-    s: string;
-    c: Uint8Array;
-    d?: V4DLEQTemplate;
-    w?: string;
-};
 
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;

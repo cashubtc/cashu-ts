@@ -1,4 +1,3 @@
-export type * from './amount';
 export type * from './blinded';
 export type * from './jsonrpc';
 export type * from './keyset';
