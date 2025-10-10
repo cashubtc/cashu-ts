@@ -53,13 +53,3 @@ export type HTLCWitness = {
 	 */
 	signatures?: string[];
 };
-
-/**
- * Response when after receiving a single TokenEntry.
- */
-export type ReceiveTokenEntryResponse = {
-	/**
-	 * Received proofs.
-	 */
-	proofs: Proof[];
-};

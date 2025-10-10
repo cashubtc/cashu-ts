@@ -1,6 +1,6 @@
-import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
+import { sha256 } from '@noble/hashes/sha2';
 import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
 
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
@@ -8,13 +8,13 @@ import { type P2PKWitness } from '../model/types';
 import { getSignedOutput } from './NUT11';
 
 export type BlindSignature = {
-	C_: ProjPointType<bigint>;
+	C_: WeierstrassPoint<bigint>;
 	amount: number;
 	id: string;
 };
 
 export type BlindedMessage = {
-	B_: ProjPointType<bigint>;
+	B_: WeierstrassPoint<bigint>;
 	r: bigint;
 	secret: Uint8Array;
 	witness?: P2PKWitness;
@@ -27,7 +27,7 @@ export type DLEQ = {
 };
 
 export type RawProof = {
-	C: ProjPointType<bigint>;
+	C: WeierstrassPoint<bigint>;
 	secret: Uint8Array;
 	amount: number;
 	id: string;
@@ -44,7 +44,7 @@ export type SerializedProof = {
 
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
 
-export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
+export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
 	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
 	const counter = new Uint32Array(1);
 	const maxIterations = 2 ** 16;
@@ -60,18 +60,18 @@ export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 	throw new Error('No valid point found');
 }
 
-export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array {
+export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array {
 	const hexStrings = pubkeys.map((p) => p.toHex(false));
 	const e_ = hexStrings.join('');
 	return sha256(new TextEncoder().encode(e_));
 }
 
 export function pointFromBytes(bytes: Uint8Array) {
-	return secp256k1.ProjectivePoint.fromHex(bytesToHex(bytes));
+	return secp256k1.Point.fromHex(bytesToHex(bytes));
 }
 
 export function pointFromHex(hex: string) {
-	return secp256k1.ProjectivePoint.fromHex(hex);
+	return secp256k1.Point.fromHex(hex);
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
@@ -85,24 +85,24 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 	return keysetIdInt;
 };
 
-export function createRandomPrivateKey() {
-	return secp256k1.utils.randomPrivateKey();
+export function createRandomSecretKey() {
+	return secp256k1.utils.randomSecretKey();
 }
 
 export function createBlindSignature(
-	B_: ProjPointType<bigint>,
+	B_: WeierstrassPoint<bigint>,
 	privateKey: Uint8Array,
 	amount: number,
 	id: string,
 ): BlindSignature {
-	const C_: ProjPointType<bigint> = B_.multiply(bytesToNumber(privateKey));
+	const C_: WeierstrassPoint<bigint> = B_.multiply(bytesToNumber(privateKey));
 	return { C_, amount, id };
 }
 
 export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage {
 	return blindMessage(
 		randomBytes(32),
-		bytesToNumber(secp256k1.utils.randomPrivateKey()),
+		bytesToNumber(secp256k1.utils.randomSecretKey()),
 		privateKey,
 	);
 }
@@ -110,9 +110,9 @@ export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage
 export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
-		r = bytesToNumber(secp256k1.utils.randomPrivateKey());
+		r = bytesToNumber(secp256k1.utils.randomSecretKey());
 	}
-	const rG = secp256k1.ProjectivePoint.BASE.multiply(r);
+	const rG = secp256k1.Point.BASE.multiply(r);
 	const B_ = Y.add(rG);
 	if (privateKey !== undefined) {
 		return getSignedOutput({ B_, r, secret }, privateKey);
@@ -121,10 +121,10 @@ export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKe
 }
 
 export function unblindSignature(
-	C_: ProjPointType<bigint>,
+	C_: WeierstrassPoint<bigint>,
 	r: bigint,
-	A: ProjPointType<bigint>,
-): ProjPointType<bigint> {
+	A: WeierstrassPoint<bigint>,
+): WeierstrassPoint<bigint> {
 	const C = C_.subtract(A.multiply(r));
 	return C;
 }
@@ -133,7 +133,7 @@ export function constructProofFromPromise(
 	promise: BlindSignature,
 	r: bigint,
 	secret: Uint8Array,
-	key: ProjPointType<bigint>,
+	key: WeierstrassPoint<bigint>,
 ): RawProof {
 	const A = key;
 	const C = unblindSignature(promise.C_, r, A);

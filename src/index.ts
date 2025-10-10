@@ -1,37 +1,45 @@
 // ==========================
-// v2 (stable) surface
+// Public API Surface
 // ==========================
-export { CashuMint } from './CashuMint';
-export { CashuWallet } from './CashuWallet';
-export type { MeltProofsResponse, SendResponse } from './wallet/types/responses';
-export type {
-	OutputAmounts,
-	LockedMintQuote,
-	ReceiveOptions,
-	SendOptions,
-	SwapOptions,
-	MintProofOptions,
-	MeltProofOptions,
-	InvoiceData,
-} from './wallet/types/options';
+export { Mint } from './mint';
+export { KeyChain } from './wallet/KeyChain';
+export { Keyset } from './wallet/Keyset';
+export { P2PKBuilder } from './wallet/P2PKBuilder';
+export { type SelectProofs, selectProofsRGLI } from './wallet/SelectProofs';
+export { Wallet } from './wallet/Wallet';
+export { WalletCounters } from './wallet/WalletCounters';
+export { WalletEvents } from './wallet/WalletEvents';
+export {
+	SendBuilder,
+	ReceiveBuilder,
+	MintBuilder,
+	MeltBuilder,
+	WalletOps,
+} from './wallet/WalletOps';
 
-// Core models & primitives
-export * from './model/types';
+// Wallet/Mint types used in the public API surface
+export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
+export type { SubscribeOpts, CancellerLike } from './wallet/WalletEvents';
+export type * from './wallet/types/config';
+export type * from './wallet/types/payloads';
+export type * from './wallet/types/responses';
+export type { SubscriptionCanceller } from './wallet/types/websocket';
+export type * from './mint/types/payloads';
+export * from './mint/types/responses';
+
+// Shared models & primitives
+export type * from './model/types/blinded';
+export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
+export type * from './model/types/keyset';
+export * from './model/types/proof-state';
+export type * from './model/types/proof';
+export type { Token } from './model/types/token';
 
 // Crypto
 export * from './crypto';
 
-// Serialization & helpers
-export {
-	getEncodedToken,
-	getEncodedTokenV4,
-	getDecodedToken,
-	deriveKeysetId,
-	decodePaymentRequest,
-	getDecodedTokenBinary,
-	getEncodedTokenBinary,
-	hasValidDleq,
-} from './utils';
+// Core Utils
+export * from './utils/core';
 
 // Auth
 export { CashuAuthMint, CashuAuthWallet, getEncodedAuthToken, getBlindedAuthToken } from './auth';
@@ -48,7 +56,7 @@ export type {
 } from './wallet/types';
 
 // Logging & errors
-export { LogLevel, ConsoleLogger, type Logger } from './logger';
+export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export { MintOperationError, NetworkError, HttpResponseError } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
@@ -57,29 +65,3 @@ export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
 export type { RequestFn, RequestArgs, RequestOptions } from './transport';
-
-// ==========================
-// v3 (new API) surface
-// ==========================
-export { Mint } from './mint';
-export { KeyChain } from './wallet/KeyChain';
-export { Keyset } from './wallet/Keyset';
-export {
-	type P2PKOptions,
-	type OutputType,
-	type OutputConfig,
-	type SendConfig,
-	type SendOfflineConfig,
-	type ReceiveConfig,
-	type MintProofsConfig,
-	type MeltProofsConfig,
-	type SharedOutputTypeProps,
-	type SubscriptionCanceller,
-	type MeltBlanks,
-	type RestoreOptions,
-	DEFAULT_OUTPUT,
-	DEFAULT_OUTPUT_CONFIG,
-	Wallet,
-} from './wallet';
-export type * from './wallet/types/payloads';
-export * from './mint/types';

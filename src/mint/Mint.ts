@@ -1,14 +1,9 @@
 /**
- * Cashu Mint "v3"
- *
- * This class is a work-in-progress "alpha" version. It is not yet stable or production-ready and is
- * subject to change.
+ * Cashu Mint Class.
  *
  * @remarks
- * Not for production use: Continue using the {@link CashuMint} class, which provides the established
- * and tested implementation. This Mint class is experimental and subject to breaking changes during
- * the v3 refactor process.
- * @v3
+ * You should ordinarily not need to instantiate a Mint, as it will be auto-instantiated by the
+ * Wallet class when you pass in the mint url.
  */
 import type {
 	GetInfoResponse,
@@ -58,8 +53,7 @@ import { type Logger, NULL_LOGGER } from '../logger';
  * Class represents Cashu Mint API.
  *
  * @remarks
- * This class contains lower-level functions that are implemented by CashuWallet.
- * @v3
+ * This class contains lower-level functions that are implemented by Wallet.
  */
 class Mint {
 	private ws?: WSConnection;

@@ -29,7 +29,7 @@ describe('test hash_e', () => {
 
 describe('test DLEQ scheme', () => {
 	test('test DLEQ scheme: Alice verifies', async () => {
-		const mintPrivKey = secp256k1.utils.randomPrivateKey();
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
 		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
 
 		// Wallet(Alice)
@@ -44,7 +44,7 @@ describe('test DLEQ scheme', () => {
 		expect(isValid).toBe(true);
 	});
 	test('test DLEQ scheme: Carol verifies', async () => {
-		const mintPrivKey = secp256k1.utils.randomPrivateKey();
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
 		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
 
 		// Wallet(Alice)

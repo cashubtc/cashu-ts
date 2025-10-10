@@ -1,8 +1,0 @@
-{
-	"extends": "@tsconfig/react-native/tsconfig.json", // Assumes we install this in the temp project
-	"compilerOptions": {
-		"strict": true,
-		"skipLibCheck": true,
-		"noEmit": true
-	}
-}

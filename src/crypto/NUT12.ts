@@ -1,7 +1,7 @@
-import { type DLEQ, hash_e, hashToCurve, createRandomPrivateKey } from './core';
-import { bytesToNumber, hexToNumber } from '../utils';
-import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { bytesToHex, numberToBytesBE } from '@noble/curves/abstract/utils';
+import { type DLEQ, hash_e, hashToCurve, createRandomSecretKey } from './core';
+import { bytesToNumber } from '../utils';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
+import { numberToBytesBE } from '@noble/curves/abstract/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
 
 function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
@@ -14,11 +14,11 @@ function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
 
 export const verifyDLEQProof = (
 	dleq: DLEQ,
-	B_: ProjPointType<bigint>,
-	C_: ProjPointType<bigint>,
-	A: ProjPointType<bigint>,
+	B_: WeierstrassPoint<bigint>,
+	C_: WeierstrassPoint<bigint>,
+	A: WeierstrassPoint<bigint>,
 ) => {
-	const sG = secp256k1.ProjectivePoint.fromPrivateKey(bytesToHex(dleq.s));
+	const sG = secp256k1.Point.BASE.multiply(secp256k1.Point.Fn.fromBytes(dleq.s));
 	const eA = A.multiply(bytesToNumber(dleq.e));
 	const sB_ = B_.multiply(bytesToNumber(dleq.s));
 	const eC_ = C_.multiply(bytesToNumber(dleq.e));
@@ -31,13 +31,13 @@ export const verifyDLEQProof = (
 export const verifyDLEQProof_reblind = (
 	secret: Uint8Array, // secret
 	dleq: DLEQ,
-	C: ProjPointType<bigint>, // unblinded e-cash signature point
-	A: ProjPointType<bigint>, // mint public key point
+	C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
+	A: WeierstrassPoint<bigint>, // mint public key point
 ) => {
 	if (dleq.r === undefined) throw new Error('verifyDLEQProof_reblind: Undefined blinding factor');
 	const Y = hashToCurve(secret);
 	const C_ = C.add(A.multiply(dleq.r)); // Re-blind the e-cash signature
-	const bG = secp256k1.ProjectivePoint.fromPrivateKey(dleq.r);
+	const bG = secp256k1.Point.BASE.multiply(dleq.r);
 	const B_ = Y.add(bG); // Re-blind the message
 	return verifyDLEQProof(dleq, B_, C_, A);
 };
@@ -47,17 +47,17 @@ export const verifyDLEQProof_reblind = (
  * https://github.com/cashubtc/cashu-crypto-ts/pull/2 for more details See:
  * https://en.wikipedia.org/wiki/Timing_attack for information about timing attacks.
  */
-export const createDLEQProof = (B_: ProjPointType<bigint>, a: Uint8Array): DLEQ => {
-	const r = bytesToHex(createRandomPrivateKey()); // r <- random
-	const R_1 = secp256k1.ProjectivePoint.fromPrivateKey(r); // R1 = rG
-	const R_2 = B_.multiply(hexToNumber(r)); // R2 = rB_
-	const C_ = B_.multiply(bytesToNumber(a)); // C_ = aB_
-	const A = secp256k1.ProjectivePoint.fromPrivateKey(bytesToHex(a)); // A = aG
+export const createDLEQProof = (B_: WeierstrassPoint<bigint>, a: Uint8Array): DLEQ => {
+	const r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey()); // r <- random (Uint8Array)
+	const R_1 = secp256k1.Point.BASE.multiply(r); // R1 = rG
+	const R_2 = B_.multiply(r); // R2 = rB_
+	const scalar_a = secp256k1.Point.Fn.fromBytes(a);
+	const C_ = B_.multiply(scalar_a); // C_ = aB_
+	const A = secp256k1.Point.BASE.multiply(scalar_a); // A = aG
 	const e = hash_e([R_1, R_2, A, C_]); // e = hash(R1, R2, A, C_)
-	const n_r = hexToNumber(r);
-	const n_e = bytesToNumber(e);
-	const n_a = bytesToNumber(a);
-	// WARNING: NON-CONSTANT TIME OPERATIONS?
-	const s = numberToBytesBE((n_r + n_e * n_a) % secp256k1.CURVE.n, 32); // (r + ea) mod n
+	const scalar_e = secp256k1.Point.Fn.fromBytes(e);
+	// Use field operations for constant-time addition and multiplication
+	const s_scalar = secp256k1.Point.Fn.add(r, secp256k1.Point.Fn.mul(scalar_e, scalar_a));
+	const s = numberToBytesBE(s_scalar, 32); // s = (r + e * a) mod n
 	return { s, e };
 };

@@ -4,3 +4,5 @@ docs
 node_modules
 temp
 test/__screenshots__
+.DS_Store
+*.tgz

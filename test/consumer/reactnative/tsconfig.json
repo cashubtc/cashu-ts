@@ -1,0 +1,10 @@
+{
+	"extends": "@tsconfig/react-native/tsconfig.json",
+	"compilerOptions": {
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"types": ["react-native"]
+	},
+	"include": ["**/*.ts"]
+}

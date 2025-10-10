@@ -7,9 +7,15 @@ import {
 } from '../../model/OutputData';
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
+import { type OperationCounters } from '../CounterSource';
+
+export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
+
+export type RestoreConfig = {
+	keysetId?: string;
+};
 
 /**
- * @v3
  * Blanks for completing a melt operation asynchronously.
  */
 export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
@@ -22,8 +28,6 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
 
 /**
  * Shared properties for most `OutputType` variants (except 'custom').
- *
- * @v3
  */
 export interface SharedOutputTypeProps {
 	/**
@@ -38,16 +42,13 @@ export interface SharedOutputTypeProps {
  * Configuration for generating blinded message outputs.
  *
  * @remarks
- * A discriminated union based on the `type` field. Experimental; may change. For production, use
- * CashuWallet's main API.
+ * A discriminated union based on the `type` field.
  * @example
  *
  *     // Random with custom splits
  *     const random: OutputType = { type: 'random', denominations: [1, 2, 4] };
  *     // Deterministic
  *     const deterministic: OutputType = { type: 'deterministic', counter: 0 };
- *
- * @v3
  */
 export type OutputType =
 	| ({
@@ -59,6 +60,10 @@ export type OutputType =
 	| ({
 			/**
 			 * Deterministic outputs based on a counter.
+			 *
+			 * @remarks
+			 * Counter: 0 means “auto-assign from wallet’s CounterSource”. Any positive value is used as
+			 * the exact starting counter without reservation. Negative values are invalid.
 			 */
 			type: 'deterministic';
 			counter: number;
@@ -98,7 +103,7 @@ export type OutputType =
  * Defines types for sent and kept proofs.
  *
  * - `send`: Required for recipient proofs.
- * - `keep`: Optional; defaults to random.
+ * - `keep`: Optional; defaults to wallet defaultOutputType policy.
  *
  * @example
  *
@@ -107,8 +112,6 @@ export type OutputType =
  *     	keep: { type: 'deterministic', counter: 0 },
  *     };
  *     await wallet.send(3, proofs, config, { includeFees: true });
- *
- * @v3
  */
 export interface OutputConfig {
 	send: OutputType;
@@ -116,48 +119,7 @@ export interface OutputConfig {
 }
 
 /**
- * Default `OutputType` ({ type: 'random' }).
- *
- * @remarks
- * Use for default random outputs in methods like `wallet.receive`. Narrowly typed for easy
- * spreading/customization.
- * @example
- *
- *     // Basic usage
- *     await wallet.receive('cashuB...', DEFAULT_OUTPUT, { requireDleq: true });
- *     // Customized
- *     const custom: OutputType = { ...DEFAULT_OUTPUT, denominations: [1, 2, 4] };
- *
- * @v3
- */
-export const DEFAULT_OUTPUT = { type: 'random' } satisfies Extract<OutputType, { type: 'random' }>;
-
-/**
- * Default config for send/swap operations.
- *
- * @remarks
- * Simplifies calls; spread for customization.
- * @example
- *
- *     await wallet.send(5, proofs, DEFAULT_OUTPUT_CONFIG, { includeFees: true });
- *
- *     const customKeep = {
- *     	...DEFAULT_OUTPUT_CONFIG,
- *     	keep: { type: 'deterministic', counter: 0 },
- *     };
- *     await wallet.send(5, proofs, customKeep, { includeFees: true });
- *
- * @v3
- */
-export const DEFAULT_OUTPUT_CONFIG: OutputConfig = {
-	send: DEFAULT_OUTPUT,
-	keep: DEFAULT_OUTPUT,
-};
-
-/**
- * @v3
- * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11. This type
- * represents a stable data structure used in the original CashuWallet API.
+ * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11.
  */
 export type P2PKOptions = {
 	pubkey: string | string[];
@@ -167,17 +129,18 @@ export type P2PKOptions = {
 	requiredRefundSignatures?: number;
 };
 
+export type OnCountersReserved = (info: OperationCounters) => void;
+
 /**
- * @v3
  * Configuration for send operations.
  */
 export type SendConfig = {
 	keysetId?: string;
 	includeFees?: boolean;
+	onCountersReserved?: OnCountersReserved;
 };
 
 /**
- * @v3
  * Configuration for offline send operations.
  */
 export type SendOfflineConfig = {
@@ -187,7 +150,6 @@ export type SendOfflineConfig = {
 };
 
 /**
- * @v3
  * Configuration for receive operations.
  */
 export type ReceiveConfig = {
@@ -195,23 +157,24 @@ export type ReceiveConfig = {
 	privkey?: string | string[];
 	requireDleq?: boolean;
 	proofsWeHave?: Proof[];
+	onCountersReserved?: OnCountersReserved;
 };
 
 /**
- * @v3
  * Configuration for minting operations.
  */
 export type MintProofsConfig = {
 	keysetId?: string;
 	privkey?: string;
 	proofsWeHave?: Proof[];
+	onCountersReserved?: OnCountersReserved;
 };
 
 /**
- * @v3
  * Configuration for melting operations.
  */
 export type MeltProofsConfig = {
 	keysetId?: string;
 	onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
+	onCountersReserved?: OnCountersReserved;
 };
