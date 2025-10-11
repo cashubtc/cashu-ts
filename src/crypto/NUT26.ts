@@ -13,6 +13,8 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
 /**
  * Blind a sequence of public keys using ECDH derived tweaks, one tweak per slot.
  *
+ * Security note: "Ehex" must never be reused. Doing so would create linkability and leak privacy.
+ *
  * @param pubkeys Ordered SEC1 compressed pubkeys, [data, ...pubkeys, ...refund]
  * @param keysetId Hex keyset identifier, bound into the tweak.
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
