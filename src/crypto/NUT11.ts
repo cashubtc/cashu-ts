@@ -3,7 +3,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';
 import { type BlindedMessage } from './core';
-import { deriveBlindedSecretKey, deriveP2BKBlindingFactor } from './NUT26';
+import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
 
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
@@ -271,7 +271,7 @@ export const signP2PKProofs = (
 ): Proof[] => {
 	return proofs.map((proof, index) => {
 		try {
-			const privateKeys: string[] = deriveBlindedSecretKeysForProof(privateKey, proof);
+			const privateKeys: string[] = deriveP2BKSecretsForProof(privateKey, proof);
 			let signedProof = proof;
 			for (const priv of privateKeys) {
 				try {
@@ -285,7 +285,7 @@ export const signP2PKProofs = (
 			}
 			return signedProof;
 		} catch (error: unknown) {
-			// General errors (eg from deriveBlindedSecretKey)
+			// General errors (eg from deriveP2BKSecretKey)
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			logger.error(`Proof #${index + 1}: ${message}`);
 			throw new Error(`Failed signing proof #${index + 1}: ${message}`);
@@ -390,17 +390,16 @@ export const getSignedOutputs = (
 };
 
 /**
- * Derives blinded secret keys for a P2BK proof by calculating the deterministic blinding factor for
- * each P2PK pubkey (data, pubkeys, refund) and calling our parity-aware derivation.
+ * Derives blinded secret keys for a P2BK proof.
  *
+ * @remarks
+ * Calculates the deterministic blinding factor for each P2PK pubkey (data, pubkeys, refund) and
+ * calling our parity-aware derivation.
  * @param privateKey Secret key (or array of secret keys)
  * @param proof The proof.
  * @returns Deduplicated list of derived secret keys (hex, 64 chars)
  */
-export function deriveBlindedSecretKeysForProof(
-	privateKey: string | string[],
-	proof: Proof,
-): string[] {
+export function deriveP2BKSecretsForProof(privateKey: string | string[], proof: Proof): string[] {
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
 	const Ehex: string | undefined = proof?.p2pk_e;
 	if (!Ehex) {
@@ -410,15 +409,5 @@ export function deriveBlindedSecretKeysForProof(
 	const secret = parseP2PKSecret(proof.secret);
 	const pubs = [...getP2PKWitnessPubkeys(secret), ...getP2PKWitnessRefundkeys(secret)];
 	const kid = proof.id; // keyset id is hex
-	// Derive blinded secret keys
-	const out = new Set<string>();
-	for (const pHex of privs) {
-		pubs.forEach((P_, i) => {
-			// Calculate the deterministic blinding factor (r)
-			const r = deriveP2BKBlindingFactor(Ehex, pHex, kid, i);
-			// Derive parity-aware blinded secret key that matches P′_i
-			out.add(deriveBlindedSecretKey(pHex, r, P_));
-		});
-	}
-	return Array.from(out);
+	return deriveP2BKSecretKeys(Ehex, privs, pubs, kid);
 }

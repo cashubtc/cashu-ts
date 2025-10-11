@@ -91,12 +91,6 @@ export type BlindedMessage = {
 };
 
 // @public (undocumented)
-export type BlindedPubkey = {
-    P_: string;
-    r: bigint;
-};
-
-// @public (undocumented)
 export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage;
 
 // @public (undocumented)
@@ -219,12 +213,6 @@ export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => D
 // @public (undocumented)
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
 
-// @public
-export function createP2BKBlindedPubkeys(pubkeys: string[], keysetId: string): {
-    blinded: string[];
-    Ehex: string;
-};
-
 // @public (undocumented)
 export const createP2PKsecret: (pubkey: string) => string;
 
@@ -240,12 +228,6 @@ export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 // @public
 export function deepEqual<T>(a: T, b: T): boolean;
 
-// @public
-export function deriveBlindedSecretKey(privkey: string | bigint, rBlind: string | bigint, expectedPub?: string): string;
-
-// @public
-export function deriveBlindedSecretKeysForProof(privateKey: string | string[], proof: Proof): string[];
-
 // @public (undocumented)
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
@@ -253,7 +235,22 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 // @public
-export function deriveP2BKBlindingFactor(Ehex: string, privHex: string, keysetIdHex: string, slotIndex: number): bigint;
+export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string): {
+    blinded: string[];
+    Ehex: string;
+};
+
+// @public
+export function deriveP2BKBlindingTweak(Ehex: string, privHex: string, keysetIdHex: string, slotIndex: number): bigint;
+
+// @public
+export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, expectedPub?: string): string;
+
+// @public
+export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], pubKeys: string | string[], keysetIdHex: string): string[];
+
+// @public
+export function deriveP2BKSecretsForProof(privateKey: string | string[], proof: Proof): string[];
 
 // @public (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
@@ -1060,7 +1057,7 @@ export type OutputType = ({
     data: OutputData[];
 };
 
-// @public (undocumented)
+// @public
 export const P2BK_DST: Uint8Array<ArrayBufferLike>;
 
 // @public (undocumented)

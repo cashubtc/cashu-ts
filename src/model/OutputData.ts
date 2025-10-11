@@ -9,7 +9,7 @@ import { type P2PKOptions, type Keyset } from '../wallet';
 import {
 	blindMessage,
 	constructProofFromPromise,
-	createP2BKBlindedPubkeys,
+	deriveP2BKBlindedPubkeys,
 	deriveBlindingFactor,
 	deriveSecret,
 	pointFromHex,
@@ -159,16 +159,15 @@ export class OutputData implements OutputDataLike {
 		let pubkeys = lockKeys.slice(1);
 		let refund = refundKeys;
 
-		// Optional key blinding
 		// Optional key blinding (P2BK)
 		let Ehex: string | undefined;
 		if (p2pk.blindKeys) {
 			const ordered = [data, ...pubkeys, ...refundKeys];
-			const { blinded, Ehex: _E } = createP2BKBlindedPubkeys(ordered, keysetId);
+			const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, keysetId);
 			data = blinded[0];
 			pubkeys = blinded.slice(1, lockKeys.length);
 			refund = blinded.slice(lockKeys.length);
-			Ehex = _E; // stash to attach later in toProof()
+			Ehex = _E;
 		}
 
 		// build P2PK Tags (NUT-11)
@@ -232,7 +231,7 @@ export class OutputData implements OutputDataLike {
 			secretBytes,
 		);
 
-		// attach E once per proof if we blinded
+		// stash Ehex - we add it to Proof later @see: toProof()
 		if (p2pk.blindKeys && Ehex) setEphemeralE(od, Ehex);
 
 		return od;

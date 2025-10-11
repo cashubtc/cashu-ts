@@ -24,7 +24,7 @@ import {
 	hasP2PKSignedProof,
 	signP2PKSecret,
 	verifyP2PKSecretSignature,
-	createP2BKBlindedPubkeys,
+	deriveP2BKBlindedPubkeys,
 	P2BK_DST,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
@@ -564,7 +564,7 @@ describe('P2BK fixed-vector ECDH tweak', () => {
 	});
 });
 
-describe('P2BK roundtrips (createP2BKBlindedPubkeys in secret -> signP2PKProofs)', () => {
+describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)', () => {
 	const pAlice = bytesToHex(createRandomSecretKey());
 	const pBob = bytesToHex(createRandomSecretKey());
 	const PAlice = bytesToHex(getPubKeyFromPrivKey(hexToBytes(pAlice))); // 33-byte SEC1 hex
@@ -575,7 +575,7 @@ describe('P2BK roundtrips (createP2BKBlindedPubkeys in secret -> signP2PKProofs)
 		const {
 			blinded: [P0_],
 			Ehex: E,
-		} = createP2BKBlindedPubkeys([PBob], kidHex);
+		} = deriveP2BKBlindedPubkeys([PBob], kidHex);
 
 		// Minimal P2PK secret with the blinded data key
 		const secret = JSON.stringify(['P2PK', { nonce: 'aa', data: P0_, tags: [] }]);
@@ -594,7 +594,7 @@ describe('P2BK roundtrips (createP2BKBlindedPubkeys in secret -> signP2PKProofs)
 		const {
 			blinded: [P0_, P1_],
 			Ehex: E,
-		} = createP2BKBlindedPubkeys([PAlice, PBob], kidHex);
+		} = deriveP2BKBlindedPubkeys([PAlice, PBob], kidHex);
 
 		// P2PK secret: lock requires 2 signatures across [P0_, P1_]
 		const secret = JSON.stringify([

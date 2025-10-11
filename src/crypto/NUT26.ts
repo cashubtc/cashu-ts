@@ -5,23 +5,20 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha2';
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
-export type BlindedPubkey = {
-	P_: string;
-	r: bigint;
-};
-
-// BIP340-style tag for domain separation
+/**
+ * BIP340-style domain separation tag (DST) for P2BK.
+ */
 export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
 
 /**
- * P2BK blinding via ECDH tweaks (one E per proof).
+ * Blind a sequence of public keys using ECDH derived tweaks, one tweak per slot.
  *
- * @param pubkeys Ordered SEC1-compressed pubkeys: [data, ...pubkeys, ...refund]
- * @param keysetId Hex keyset id (bound into the message to be hashed)
- * @returns {blinded, Ehex} Blinded pubkeys in the same order, and the single ephemeral E.
- * @throws If inputs are out of range or derived secret key is zero.
+ * @param pubkeys Ordered SEC1 compressed pubkeys, [data, ...pubkeys, ...refund]
+ * @param keysetId Hex keyset identifier, bound into the tweak.
+ * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
+ * @throws If a blinded key is at infinity.
  */
-export function createP2BKBlindedPubkeys(
+export function deriveP2BKBlindedPubkeys(
 	pubkeys: string[],
 	keysetId: string,
 ): { blinded: string[]; Ehex: string } {
@@ -34,7 +31,7 @@ export function createP2BKBlindedPubkeys(
 	// Blind each pubkey in turn
 	const blinded = pubkeys.map((pubkey, i) => {
 		const P = pointFromHex(pubkey);
-		const r = deriveDeterministicBlindingFactor(P, e, kid, i);
+		const r = deriveP2BKBlindingTweakFromECDH(P, e, kid, i);
 		const P_ = P.add(secp256k1.Point.BASE.multiply(r));
 		if (P_.equals(secp256k1.Point.ZERO)) throw new Error('Blinded key at infinity');
 		return P_.toHex(true);
@@ -43,27 +40,26 @@ export function createP2BKBlindedPubkeys(
 }
 
 /**
- * Derives the "per slot" deterministic P2BK blinding factor from an ephemeral public key and a
- * private key.
+ * Derive the per slot P2BK blinding factor from ECDH.
  *
- * @remarks
- * Computes rᵢ = SHA-256(P2BK_DST || Zx || keysetId || i) mod n, where Zx is the 32 byte x
- * coordinate of the shared point Z = p·E. If r reduces to zero, retries once with an extra 0xff
- * byte appended to the message. Throws if the retry also reduces to zero.
+ * This is the receiver side API.
  *
  * Input values are provided as hex at the edges for ergonomics, the function converts them to
  * concrete types for computation.
  * @example Const r = deriveP2BKBlindingFactor(Ehex, privHex, keysetIdHex, i); // Apply to a public
  * key, P′ = P + r·G const P_ = P.add(secp256k1.Point.BASE.multiply(r));
  *
- * @param Ehex Ephemeral public key E as SEC1 encoded hex, compressed or uncompressed.
- * @param privHex Private key p as 64 character hex, big endian.
- * @param keysetIdHex Keyset identifier as hex, bound into the derivation.
- * @param slotIndex Zero based slot index, only the low 8 bits are used.
- * @returns Blinding factor r as a bigint in the range [1, n − 1]
- * @throws Error If the derived scalar is zero after the single retry.
+ * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
+ * guaranteed constant time. Do not expose this function on a server that holds private keys.
+ *
+ * @param Ehex Ephemeral public key (E) as SEC1 hex, compressed or uncompressed.
+ * @param privHex Receiver private key (p) as 64 char hex, big endian.
+ * @param keysetIdHex Keyset identifier as hex.
+ * @param slotIndex Zero based index within the batch. Only the lowest 8 bits (0–255) are hashed.
+ * @returns Tweak (r) in [1, n − 1]
+ * @throws If r reduces to zero after the retry.
  */
-export function deriveP2BKBlindingFactor(
+export function deriveP2BKBlindingTweak(
 	Ehex: string,
 	privHex: string,
 	keysetIdHex: string,
@@ -72,29 +68,62 @@ export function deriveP2BKBlindingFactor(
 	const E = secp256k1.Point.fromHex(Ehex);
 	const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
 	const kid = hexToBytes(keysetIdHex);
-	return deriveDeterministicBlindingFactor(E, p, kid, slotIndex);
+	return deriveP2BKBlindingTweakFromECDH(E, p, kid, slotIndex);
+}
+
+/**
+ * Derive blinded secret keys that correspond to given P2BK blinded pubkeys.
+ *
+ * Pubkeys are processed in order, for a proof that is [data, ...pubkeys, ...refund]. Private key
+ * order does not matter.
+ *
+ * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
+ * guaranteed constant time. Do not expose this function on a server that holds private keys.
+ *
+ * @param Ehex Ephemeral public key (E) as SEC1 hex.
+ * @param privateKey Secret key or array of secret keys, hex.
+ * @param pubKeys Blinded public key or array of blinded public keys, hex.
+ * @param keysetIdHex Keyset identifier as hex.
+ * @returns Array of derived secret keys as 64 char hex.
+ */
+export function deriveP2BKSecretKeys(
+	Ehex: string,
+	privateKey: string | string[],
+	pubKeys: string | string[],
+	keysetIdHex: string,
+): string[] {
+	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
+	const pubs = Array.isArray(pubKeys) ? pubKeys : [pubKeys];
+	const out = new Set<string>();
+	for (const privHex of privs) {
+		pubs.forEach((P_, i) => {
+			// Calculate the deterministic blinding factor (r)
+			const r = deriveP2BKBlindingTweak(Ehex, privHex, keysetIdHex, i);
+			// Derive parity-aware blinded secret key that matches P′_i
+			out.add(deriveP2BKSecretKey(privHex, r, P_));
+		});
+	}
+	return Array.from(out);
 }
 
 /**
  * Derive a blinded secret key per NUT-26.
  *
- * Warning: Operates on long-lived secrets. This function targets algorithmic constant time, but
- * JavaScript BigInt and JIT compilers are not truly constant time. It is OK for browser and app use
- * where keys remain on the user’s device, but it should NOT be exposed in a public service that
- * holds private keys on the server.
- *
- * @remarks
  * Computes two candidates: standard (sk1 = p + r mod n) and negated (sk2 = -p + r mod n). If
- * expectedPub is provided, both candidates are encoded as both SEC1 (compressed) and Schnorr ('02'
- * prefixed x-only), and compared using constant-structure byte equality, there is no early return.
- * @param privkey The unblinded private key (64-character hex string or bigint).
- * @param rBlind The random blinding scalar (64-character hex string or bigint).
- * @param expectedPub Optional blinded public key (hex string) to match.
- * @returns The derived blinded secret key (64-character hex string).
- * @throws If inputs are out of range or derived secret key is zero.
- * @see https://github.com/cashubtc/nuts/pull/291
+ * expectedPub is given, both are encoded as SEC1 compressed and as Schnorr x only with 0x02 prefix,
+ * then compared with constant structure byte equality. Returns the matching one, or sk1 if both
+ * match or if no expectedPub is provided.
+ *
+ * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
+ * guaranteed constant time. Do not expose this function on a server that holds private keys.
+ *
+ * @param privkey Unblinded private key (p), hex or bigint.
+ * @param rBlind Blinding scalar (r), hex or bigint.
+ * @param expectedPub Optional blinded pubkey (P_) to match, 33 byte hex.
+ * @returns Derived blinded secret key as 64 char hex.
+ * @throws If inputs are out of range, or the derived key would be zero.
  */
-export function deriveBlindedSecretKey(
+export function deriveP2BKSecretKey(
 	privkey: string | bigint,
 	rBlind: string | bigint,
 	expectedPub?: string,
@@ -109,7 +138,7 @@ export function deriveBlindedSecretKey(
 	// Derive standard blinded secret key: (p + r) mod n
 	const sk1: bigint = (p + r) % n;
 	if (sk1 === 0n) throw new Error('Derived secret key is zero');
-	// Derive Schnorr negated blinded secret key for even y: (-p + r) mod n
+	// Derive the negated candidate to account for x only even y convention: (-p + r) mod n
 	const sk2: bigint = (n - p + r) % n; // may be 0n (handled below)
 	// Validate expectedPub if provided, else return sk1
 	if (!expectedPub) return numberToHexPadded64(sk1);
@@ -132,44 +161,41 @@ export function deriveBlindedSecretKey(
 }
 
 /**
- * Gets Schnorr '02' prefixed x-only pubkey.
+ * Get a Schnorr x only public key with 0x02 prefix, 33 bytes.
  */
 function getSchnorrPublicKeyWithPrefix(secretKey: bigint): Uint8Array {
 	const pubkey = schnorr.getPublicKey(numberToHexPadded64(secretKey));
 	const pk = new Uint8Array(33);
-	pk[0] = 0x02;
+	pk[0] = 0x02; // '02' in bytes
 	pk.set(pubkey, 1);
 	return pk;
 }
 
 /**
- * Internal helper to deterministically derive the P2BK blinding factor using ECDH.
+ * Internal helper, derive P2BK blinding tweak using ECDH.
  *
  * @remarks
- * Computes the shared point Z = scalar·point, takes its 32 byte x coordinate Zx, then derives rᵢ =
- * SHA-256(P2BK_DST || Zx || keysetId || i) mod n. If the result reduces to zero, retries once with
- * an extra 0xff byte appended to the message. Throws if the retry also reduces to zero.
+ * Computes the shared point Z = scalar·point, takes its 32 byte x coordinate Zx, then derives:
+ *
+ *     rᵢ = SHA-256(P2BK_DST || Zx || keysetId || i) mod n.
+ *
+ * If the result reduces to zero, retries once with an extra 0xff byte appended to the message.
+ * Throws if the retry also reduces to zero.
  *
  * This function is symmetric. It can be called with either.
  *
  * - The receiver's private key (p) and the sender's ephemeral public key (E)
- * - The sender's ephemeral secret (e) and the receiver's public key (P) Both yield the same Z and
- *   therefore the same r thanks to the magic of ECDH!
+ * - The sender's ephemeral secret (e) and the receiver's public key (P)
  *
- * @example // Receiver side const r = deriveDeterministicBlindingFactor(E, p, kidBytes, i);
- *
- * // Sender side const r2 = deriveDeterministicBlindingFactor(P, e, kidBytes, i); // r === r2.
- *
- * @param point A valid secp256k1 point, either the ephemeral public key E or a recipient public key
- *   P.
- * @param scalar A valid secp256k1 scalar in [1, n − 1], either the long lived private key p or the
- *   ephemeral secret e.
- * @param keysetId Keyset identifier as raw bytes, bound into the derivation.
- * @param slotIndex Zero based slot index, only the low 8 bits are used.
- * @returns Blinding factor r as a bigint in the range [1, n − 1]
- * @throws Error If the derived scalar is zero after the single retry.
+ * Both yield the same Z and therefore the same r thanks to the magic of ECDH!
+ * @param point Ephemeral public key (E) or recipient public key (P)
+ * @param scalar Private scalar (p) or ephemeral scalar (e) in [1, n − 1]
+ * @param keysetId Keyset identifier as raw bytes.
+ * @param slotIndex Zero based slot index, only lowest 8 bits (0–255) are used.
+ * @returns Tweak (r) in [1, n − 1]
+ * @throws If r reduces to zero after the retry.
  */
-function deriveDeterministicBlindingFactor(
+function deriveP2BKBlindingTweakFromECDH(
 	point: WeierstrassPoint<bigint>, // E or P
 	scalar: bigint, // p or e
 	keysetId: Uint8Array, // kid
