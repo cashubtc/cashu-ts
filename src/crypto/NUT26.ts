@@ -143,15 +143,19 @@ function getSchnorrPublicKeyWithPrefix(secretKey: bigint): Uint8Array {
 }
 
 /**
- * Internal helper that deterministically derives the P2BK blinding factor from a scalar·point ECDH.
+ * Internal helper to deterministically derive the P2BK blinding factor using ECDH.
  *
  * @remarks
  * Computes the shared point Z = scalar·point, takes its 32 byte x coordinate Zx, then derives rᵢ =
  * SHA-256(P2BK_DST || Zx || keysetId || i) mod n. If the result reduces to zero, retries once with
  * an extra 0xff byte appended to the message. Throws if the retry also reduces to zero.
  *
- * This function is symmetric. It can be called with either • point = E and scalar = p, or • point =
- * P and scalar = e Both yield the same Z and therefore the same r.
+ * This function is symmetric. It can be called with either.
+ *
+ * - The receiver's private key (p) and the sender's ephemeral public key (E)
+ * - The sender's ephemeral secret (e) and the receiver's public key (P) Both yield the same Z and
+ *   therefore the same r thanks to the magic of ECDH!
+ *
  * @example // Receiver side const r = deriveDeterministicBlindingFactor(E, p, kidBytes, i);
  *
  * // Sender side const r2 = deriveDeterministicBlindingFactor(P, e, kidBytes, i); // r === r2.
@@ -171,14 +175,10 @@ function deriveDeterministicBlindingFactor(
 	keysetId: Uint8Array, // kid
 	slotIndex: number, // i
 ): bigint {
-	// Calculate ECDH shared point (Z) using either:
-	// - the receiver's private key (p) and the sender's ephemeral public key (E)
-	// - the sender's ephemeral secret (e) and the receiver's public key (P)
-	// Both will resolve to the same point thanks to the magic of ECDH!
+	// Calculate ECDH shared point (Z)
 	const Zx = point.multiply(scalar).toBytes(false).slice(1, 33);
 	const iByte = new Uint8Array([slotIndex & 0xff]);
 	// Derive deterministic blinding factor (r):
-	// r_i = SHA-256(P2BK_DST || Zx || kid || i) mod n; retry once if zero
 	let r = secp256k1.Point.Fn.fromBytes(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte)));
 	if (r === 0n) {
 		// Very unlikely to get here (1/n)!
