@@ -13,8 +13,10 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
 /**
  * Blind a sequence of public keys using ECDH derived tweaks, one tweak per slot.
  *
+ * @remarks
  * Security note: "Ehex" must never be reused. Doing so would create linkability and leak privacy.
  *
+ * This is the Sender side API.
  * @param pubkeys Ordered SEC1 compressed pubkeys, [data, ...pubkeys, ...refund]
  * @param keysetId Hex keyset identifier, bound into the tweak.
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
@@ -42,46 +44,16 @@ export function deriveP2BKBlindedPubkeys(
 }
 
 /**
- * Derive the per slot P2BK blinding factor from ECDH.
- *
- * This is the receiver side API.
- *
- * Input values are provided as hex at the edges for ergonomics, the function converts them to
- * concrete types for computation.
- * @example Const r = deriveP2BKBlindingFactor(Ehex, privHex, keysetIdHex, i); // Apply to a public
- * key, P′ = P + r·G const P_ = P.add(secp256k1.Point.BASE.multiply(r));
- *
- * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
- * guaranteed constant time. Do not expose this function on a server that holds private keys.
- *
- * @param Ehex Ephemeral public key (E) as SEC1 hex, compressed or uncompressed.
- * @param privHex Receiver private key (p) as 64 char hex, big endian.
- * @param keysetIdHex Keyset identifier as hex.
- * @param slotIndex Zero based index within the batch. Only the lowest 8 bits (0–255) are hashed.
- * @returns Tweak (r) in [1, n − 1]
- * @throws If r reduces to zero after the retry.
- */
-export function deriveP2BKBlindingTweak(
-	Ehex: string,
-	privHex: string,
-	keysetIdHex: string,
-	slotIndex: number,
-): bigint {
-	const E = secp256k1.Point.fromHex(Ehex);
-	const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
-	const kid = hexToBytes(keysetIdHex);
-	return deriveP2BKBlindingTweakFromECDH(E, p, kid, slotIndex);
-}
-
-/**
  * Derive blinded secret keys that correspond to given P2BK blinded pubkeys.
  *
  * Pubkeys are processed in order, for a proof that is [data, ...pubkeys, ...refund]. Private key
  * order does not matter.
  *
+ * @remarks
  * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
  * guaranteed constant time. Do not expose this function on a server that holds private keys.
  *
+ * This is the Receiver side API.
  * @param Ehex Ephemeral public key (E) as SEC1 hex.
  * @param privateKey Secret key or array of secret keys, hex.
  * @param pubKeys Blinded public key or array of blinded public keys, hex.
@@ -97,11 +69,12 @@ export function deriveP2BKSecretKeys(
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
 	const pubs = Array.isArray(pubKeys) ? pubKeys : [pubKeys];
 	const out = new Set<string>();
+	const E = secp256k1.Point.fromHex(Ehex);
+	const kid = hexToBytes(keysetIdHex);
 	for (const privHex of privs) {
+		const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
 		pubs.forEach((P_, i) => {
-			// Calculate the deterministic blinding factor (r)
-			const r = deriveP2BKBlindingTweak(Ehex, privHex, keysetIdHex, i);
-			// Derive parity-aware blinded secret key that matches P′_i
+			const r = deriveP2BKBlindingTweakFromECDH(E, p, kid, i);
 			out.add(deriveP2BKSecretKey(privHex, r, P_));
 		});
 	}
@@ -116,9 +89,9 @@ export function deriveP2BKSecretKeys(
  * then compared with constant structure byte equality. Returns the matching one, or sk1 if both
  * match or if no expectedPub is provided.
  *
+ * @remarks
  * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
  * guaranteed constant time. Do not expose this function on a server that holds private keys.
- *
  * @param privkey Unblinded private key (p), hex or bigint.
  * @param rBlind Blinding scalar (r), hex or bigint.
  * @param expectedPub Optional blinded pubkey (P_) to match, 33 byte hex.

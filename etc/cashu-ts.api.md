@@ -241,9 +241,6 @@ export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string): {
 };
 
 // @public
-export function deriveP2BKBlindingTweak(Ehex: string, privHex: string, keysetIdHex: string, slotIndex: number): bigint;
-
-// @public
 export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, expectedPub?: string): string;
 
 // @public
