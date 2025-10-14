@@ -1432,6 +1432,7 @@ export class Wallet {
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
+    decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
