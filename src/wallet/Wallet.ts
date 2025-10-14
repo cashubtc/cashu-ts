@@ -718,11 +718,8 @@ class Wallet {
 		const { keysetId, privkey, requireDleq, proofsWeHave, onCountersReserved } = config || {};
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
-		let proofs: Proof[] = [];
-		const keysets = this.keyChain.getKeysets();
-
 		// Decode and validate token
-		const decodedToken = typeof token === 'string' ? getDecodedToken(token, keysets) : token;
+		const decodedToken = typeof token === 'string' ? this.decodeToken(token) : token;
 		const tokenMintUrl = sanitizeUrl(decodedToken.mint);
 		this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
 			token: tokenMintUrl,
@@ -734,6 +731,7 @@ class Wallet {
 		});
 
 		// Extract token proofs
+		let proofs: Proof[] = [];
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		if (totalAmount === 0) {
@@ -1117,6 +1115,20 @@ class Wallet {
 			...p,
 			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
 		}));
+	}
+
+	/**
+	 * Decodes a string token.
+	 *
+	 * @remarks
+	 * Rehydrates a token from the space-saving CBOR format, including mapping short keyset ids to
+	 * their full representation.
+	 * @param token The token in string format (cashuB...)
+	 * @returns Token object.
+	 */
+	public decodeToken(token: string): Token {
+		const keysets = this.keyChain.getKeysets();
+		return getDecodedToken(token, keysets);
 	}
 
 	// -----------------------------------------------------------------
