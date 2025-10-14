@@ -205,8 +205,10 @@ class CashuWallet {
 	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
 
-		// we only consider keyset IDs that start with "00"
-		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
+		// we only consider keyset IDs that start with "00" or "01"
+		activeKeysets = activeKeysets.filter(
+			(k: MintKeyset) => k.id.startsWith('00') || k.id.startsWith('01'),
+		);
 
 		const activeKeyset = activeKeysets.sort(
 			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
