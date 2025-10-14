@@ -221,7 +221,7 @@ class CashuWallet {
 		// Only consider keysets that are hex
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => isValidHex(k.id));
 
-		// we only consider keyset IDs that start with "00"
+		// we only consider keyset IDs that start with "00" or "01"
 		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00') || k.id.startsWith('01'));
 
 		const activeKeyset = activeKeysets.sort(
