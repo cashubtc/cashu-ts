@@ -18,7 +18,7 @@ export type TokenResponse = {
 	error_description?: string;
 };
 
-type DeviceStartResponse = {
+export type DeviceStartResponse = {
 	device_code: string;
 	user_code: string;
 	verification_uri: string;

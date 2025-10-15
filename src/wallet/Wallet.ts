@@ -77,7 +77,7 @@ import {
 	sumProofs,
 	sanitizeUrl,
 } from '../utils';
-import { type AuthProvider } from './AuthProvider';
+import { type AuthProvider } from '../auth/AuthProvider';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 

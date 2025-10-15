@@ -49,7 +49,8 @@ import {
 import { handleMintInfoContactFieldDeprecated } from '../legacy/nut-06';
 import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER } from '../logger';
-import type { AuthProvider, HttpMethod } from '../wallet/AuthProvider';
+import type { AuthProvider, HttpMethod } from '../auth/AuthProvider';
+import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 
 /**
  * Class represents Cashu Mint API.
@@ -88,6 +89,61 @@ class Mint {
 
 	get mintUrl() {
 		return this._mintUrl;
+	}
+
+	/**
+	 * Create an OIDC client using this mint’s NUT-21 metadata.
+	 *
+	 * @example
+	 *
+	 * ```ts
+	 * const oidc = await mint.oidcAuth({ onTokens: (t) => authMgr.setCAT(t.access_token!) });
+	 * const start = await oidc.deviceStart();
+	 * // show start.user_code / start.verification_uri to the user
+	 * const token = await oidc.devicePoll(start.device_code, start.interval ?? 5);
+	 * // token.access_token is your CAT
+	 * ```
+	 */
+	async oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth> {
+		const n21 = (await this.getLazyMintInfo()).nuts['21'];
+		if (!n21?.openid_discovery) {
+			throw new Error('Mint: no NUT-21 openid_discovery');
+		}
+		return new OIDCAuth(n21.openid_discovery, {
+			...opts,
+			clientId: opts?.clientId ?? n21.client_id ?? 'cashu-client',
+		});
+	}
+
+	/**
+	 * Convenience for the OIDC Device Code flow.
+	 *
+	 * Returns the device start fields and a bound poll() that resolves to the token response.
+	 *
+	 * @example
+	 *
+	 * ```ts
+	 * const auth = await mint.startDeviceAuth({
+	 * 	onTokens: ({ access_token }) => authMgr.setCAT(access_token!),
+	 * });
+	 * console.log(auth.verification_uri, auth.user_code);
+	 * const token = await auth.poll();
+	 * ```
+	 */
+	async startDeviceAuth(opts?: OIDCAuthOptions & { intervalSec?: number }): Promise<
+		Awaited<ReturnType<OIDCAuth['deviceStart']>> & {
+			poll: () => ReturnType<OIDCAuth['devicePoll']>;
+		}
+	> {
+		const oidc = await this.oidcAuth(opts);
+		const start = await oidc.deviceStart();
+		const interval = start.interval ?? opts?.intervalSec ?? 5;
+
+		return {
+			...start,
+			// when you’re ready, call this to finish the flow
+			poll: () => oidc.devicePoll(start.device_code, interval),
+		};
 	}
 
 	/**
