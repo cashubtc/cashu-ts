@@ -79,20 +79,34 @@ export function failIfNullish<T>(
  * @param context Optional structured context for the log.
  */
 export function safeCallback<T>(
-	cb: ((p: T) => void) | undefined,
+	cb: ((p: T) => void | Promise<void>) | undefined,
 	payload: T,
 	logger: Logger = NULL_LOGGER,
 	context?: Record<string, unknown>,
 ): void {
 	if (!cb) return;
+
 	try {
-		cb(payload);
+		const maybePromise = cb(payload);
+		if (maybePromise && typeof maybePromise.then === 'function') {
+			maybePromise.catch((error) => {
+				try {
+					logger.warn?.('callback failed', {
+						...(context ?? {}),
+						error,
+						cb: cb.name ?? '',
+					});
+				} catch {
+					/* ignore logger errors */
+				}
+			});
+		}
 	} catch (error) {
 		try {
 			logger.warn?.('callback failed', {
 				...(context ?? {}),
 				error,
-				cb: cb.name, // always defined (may be "")
+				cb: cb.name ?? '',
 			});
 		} catch {
 			/* ignore logger errors */
