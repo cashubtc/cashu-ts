@@ -199,7 +199,9 @@ class Wallet {
 		this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
 		this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
 		this.mint =
-			typeof mint === 'string' ? new Mint(mint, { authProvider: options?.authProvider }) : mint;
+			typeof mint === 'string'
+				? new Mint(mint, { authProvider: options?.authProvider, logger: this._logger })
+				: mint;
 		this._unit = options?.unit ?? this._unit;
 		this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
 		if (options?.bip39seed) {
