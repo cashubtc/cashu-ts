@@ -7,6 +7,8 @@ export { Keyset } from './wallet/Keyset';
 export { P2PKBuilder } from './wallet/P2PKBuilder';
 export { type SelectProofs, selectProofsRGLI } from './wallet/SelectProofs';
 export { Wallet } from './wallet/Wallet';
+export { AuthManager, type AuthManagerOptions } from './wallet/AuthManager';
+export type { AuthProvider, HttpMethod } from './wallet/AuthProvider';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {

@@ -19,6 +19,47 @@ export type ApiError = {
     detail?: string;
 };
 
+// @public
+export class AuthManager implements AuthProvider {
+    constructor(mintUrl: string, opts?: AuthManagerOptions);
+    // (undocumented)
+    get activeAuthKeysetId(): string | undefined;
+    ensure(minTokens: number): Promise<void>;
+    exportPool(): Proof[];
+    getBlindAuthToken({ method, path }: {
+        method: HttpMethod;
+        path: string;
+    }): Promise<string>;
+    // (undocumented)
+    getCAT(): string | undefined;
+    // (undocumented)
+    get hasCAT(): boolean;
+    importPool(proofs: Proof[], mode?: 'replace' | 'merge'): void;
+    // (undocumented)
+    get poolSize(): number;
+    // (undocumented)
+    get poolTarget(): number;
+    // (undocumented)
+    setCAT(cat: string | undefined): void;
+}
+
+// @public (undocumented)
+export type AuthManagerOptions = {
+    maxPerMint?: number;
+    desiredPoolSize?: number;
+    request?: RequestFn;
+    logger?: Logger;
+};
+
+// @public (undocumented)
+export interface AuthProvider {
+    ensure?(minTokens: number): Promise<void>;
+    getBlindAuthToken(input: {
+        method: HttpMethod;
+        path: string;
+    }): Promise<string>;
+}
+
 // @public (undocumented)
 export function bigIntStringify<T>(_key: unknown, value: T): string | T;
 
@@ -304,6 +345,14 @@ export type GetInfoResponse = {
         '20'?: {
             supported: boolean;
         };
+        '21'?: {
+            openid_discovery: string;
+            client_id: string;
+            protected_endpoints?: Array<{
+                method: 'GET' | 'POST';
+                path: string;
+            }>;
+        };
         '22'?: {
             bat_max_mint: number;
             protected_endpoints: Array<{
@@ -383,6 +432,9 @@ export type HTLCWitness = {
     preimage: string;
     signatures?: string[];
 };
+
+// @public (undocumented)
+export type HttpMethod = 'GET' | 'POST';
 
 // @public
 export class HttpResponseError extends Error {
@@ -603,7 +655,9 @@ export class MessageQueue {
 
 // @public
 export class Mint {
-    constructor(_mintUrl: string, customRequest?: RequestFn, authTokenGetter?: () => Promise<string>, options?: {
+    constructor(mintUrl: string, options?: {
+        customRequest?: RequestFn;
+        authProvider?: AuthProvider;
         logger?: Logger;
     });
     check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
@@ -621,7 +675,6 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
-    handleBlindAuth(path: string): Promise<string | undefined>;
     melt(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     meltBolt12(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
     mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
@@ -737,6 +790,14 @@ export class MintInfo {
         '20'?: {
             supported: boolean;
         };
+        '21'?: {
+            openid_discovery: string;
+            client_id: string;
+            protected_endpoints?: Array<{
+                method: "GET" | "POST";
+                path: string;
+            }>;
+        };
         '22'?: {
             bat_max_mint: number;
             protected_endpoints: Array<{
@@ -748,7 +809,7 @@ export class MintInfo {
     // (undocumented)
     get pubkey(): string;
     // (undocumented)
-    requiresBlindAuthToken(path: string): boolean;
+    requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     get supportsBolt12Description(): boolean;
     // (undocumented)
     get version(): string;
@@ -1391,6 +1452,7 @@ export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
 export class Wallet {
     constructor(mint: Mint | string, options?: {
         unit?: string;
+        authProvider?: AuthProvider;
         keysetId?: string;
         bip39seed?: Uint8Array;
         secretsPolicy?: SecretsPolicy;

@@ -2189,8 +2189,8 @@ describe('Blind Authentication', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const info = wallet.getMintInfo();
-		const mintRequiresAuth = info.requiresBlindAuthToken('/v1/mint/bolt11');
-		const restoreRequiresAuth = info.requiresBlindAuthToken('v1/restore');
+		const mintRequiresAuth = info.requiresBlindAuthToken('POST', '/v1/mint/bolt11');
+		const restoreRequiresAuth = info.requiresBlindAuthToken('POST', '/v1/restore');
 		expect(mintRequiresAuth).toBeTruthy();
 		expect(restoreRequiresAuth).toBeFalsy();
 	});

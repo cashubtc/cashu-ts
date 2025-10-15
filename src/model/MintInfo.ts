@@ -7,17 +7,15 @@ import {
 
 export class MintInfo {
 	private readonly _mintInfo: GetInfoResponse;
-	private readonly _protectedEnpoints?: {
-		cache: {
-			[url: string]: boolean;
-		};
-		apiReturn: Array<{ method: 'GET' | 'POST'; regex: RegExp; cachedValue?: boolean }>;
+	private readonly _protectedEndpoints?: {
+		cache: { [key: string]: boolean }; // "METHOD /v1/foo"
+		apiReturn: Array<{ method: 'GET' | 'POST'; regex: RegExp }>;
 	};
 
 	constructor(info: GetInfoResponse) {
 		this._mintInfo = info;
 		if (info.nuts[22]) {
-			this._protectedEnpoints = {
+			this._protectedEndpoints = {
 				cache: {},
 				apiReturn: info.nuts[22].protected_endpoints.map((o) => ({
 					method: o.method,
@@ -59,16 +57,20 @@ export class MintInfo {
 		}
 	}
 
-	requiresBlindAuthToken(path: string) {
-		if (!this._protectedEnpoints) {
-			return false;
+	requiresBlindAuthToken(method: 'GET' | 'POST', path: string) {
+		if (!this._protectedEndpoints) return false;
+
+		const cacheKey = `${method} ${path}`;
+		if (typeof this._protectedEndpoints.cache[cacheKey] === 'boolean') {
+			return this._protectedEndpoints.cache[cacheKey];
 		}
-		if (typeof this._protectedEnpoints.cache[path] === 'boolean') {
-			return this._protectedEnpoints.cache[path];
-		}
-		const isProtectedEndpoint = this._protectedEnpoints.apiReturn.some((e) => e.regex.test(path));
-		this._protectedEnpoints.cache[path] = isProtectedEndpoint;
-		return isProtectedEndpoint;
+
+		const isProtected = this._protectedEndpoints.apiReturn.some(
+			(e) => e.method === method && e.regex.test(path),
+		);
+
+		this._protectedEndpoints.cache[cacheKey] = isProtected;
+		return isProtected;
 	}
 
 	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
