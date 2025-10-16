@@ -1,5 +1,8 @@
+import { randomBytes } from '@noble/curves/abstract/utils';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import type { GetInfoResponse } from '../mint/types';
+import { Bytes, encodeUint8toBase64Url } from '../utils';
+import { sha256 } from '@noble/hashes/sha2';
 
 export type OIDCConfig = {
 	issuer: string;
@@ -101,6 +104,73 @@ export class OIDCAuth {
 		return cfg;
 	}
 
+	// --- Authorization Code with PKCE ---
+
+	/**
+	 * Generate a PKCE verifier and S256 challenge.
+	 *
+	 * - Verifier: base64url of random bytes, length >= 43, RFC 7636 compliant.
+	 * - Challenge: base64url(sha256(verifier))
+	 */
+	generatePKCE(): { verifier: string; challenge: string } {
+		// 48 bytes->base64url is typically 64 chars without padding, comfortably >= 43
+		const rnd = randomBytes(48);
+		const verifier = encodeUint8toBase64Url(rnd);
+
+		// RFC 7636, challenge = BASE64URL-ENCODE( SHA256( ASCII(verifier) ) )
+		const vBytes = Bytes.fromString(verifier);
+		const chBytes = sha256(vBytes);
+		const challenge = encodeUint8toBase64Url(chBytes);
+
+		return { verifier, challenge };
+	}
+
+	/**
+	 * Build an Authorization Code + PKCE URL.
+	 */
+	async buildAuthCodeUrl(input: {
+		redirectUri: string;
+		codeChallenge: string;
+		codeChallengeMethod?: 'S256' | 'plain'; // default S256
+		state?: string; // optional state to pass back to redirectUrl
+		scope?: string; // default this.scope
+	}): Promise<string> {
+		const cfg = await this.loadConfig();
+		const scope = input.scope ?? this.scope;
+		const params = new URLSearchParams({
+			response_type: 'code',
+			client_id: this.clientId,
+			redirect_uri: input.redirectUri,
+			scope,
+			code_challenge_method: input.codeChallengeMethod ?? 'S256',
+			code_challenge: input.codeChallenge,
+		});
+		if (input.state) params.set('state', input.state);
+
+		const anyCfg = cfg as unknown as { authorization_endpoint?: string };
+		if (!anyCfg.authorization_endpoint) {
+			throw new Error('OIDCAuth: discovery lacks authorization_endpoint');
+		}
+		return `${anyCfg.authorization_endpoint}?${params.toString()}`;
+	}
+
+	/**
+	 * Exchange an auth code for tokens, using the PKCE verifier.
+	 */
+	async exchangeAuthCode(input: { code: string; redirectUri: string; codeVerifier: string }) {
+		const cfg = await this.loadConfig();
+		const form = this.toForm({
+			grant_type: 'authorization_code',
+			code: input.code,
+			redirect_uri: input.redirectUri,
+			client_id: this.clientId,
+			code_verifier: input.codeVerifier,
+		});
+		const tok = await this.postFormStrict<TokenResponse>(cfg.token_endpoint, form);
+		this.handleTokens(tok);
+		return tok;
+	}
+
 	// ---- Device Code (recommended for CLIs) ----
 
 	async deviceStart(): Promise<DeviceStartResponse> {
@@ -140,17 +210,21 @@ export class OIDCAuth {
 	}
 
 	/**
-	 * One call convenience for Device Code flow. Returns the start fields and helpers to poll or
-	 * cancel.
+	 * One call convenience for Device Code flow.
+	 *
+	 * @remarks
+	 * Polling interval will be the MAX of intervalSec and Mint interval.
+	 * @param intervalSec Desired polling interval in seconds.
+	 * @returns The start fields and helpers to poll or cancel.
 	 */
-	async startDeviceAuth(opts?: { intervalSec?: number }): Promise<
+	async startDeviceAuth(intervalSec: number = 5): Promise<
 		DeviceStartResponse & {
 			poll: () => Promise<TokenResponse>;
 			cancel: () => void;
 		}
 	> {
 		const start = await this.deviceStart();
-		const interval = start.interval ?? opts?.intervalSec ?? 5;
+		const interval = Math.max(start.interval ?? 1, intervalSec);
 		let aborted = false;
 
 		const poll = async (): Promise<TokenResponse> => {

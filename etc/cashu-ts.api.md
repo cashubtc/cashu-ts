@@ -899,14 +899,30 @@ export type NUT10Option = {
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
     addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    buildAuthCodeUrl(input: {
+        redirectUri: string;
+        codeChallenge: string;
+        codeChallengeMethod?: 'S256' | 'plain';
+        state?: string;
+        scope?: string;
+    }): Promise<string>;
     // (undocumented)
     devicePoll(device_code: string, intervalSec?: number): Promise<TokenResponse>;
     // (undocumented)
     deviceStart(): Promise<DeviceStartResponse>;
+    exchangeAuthCode(input: {
+        code: string;
+        redirectUri: string;
+        codeVerifier: string;
+    }): Promise<TokenResponse>;
     // (undocumented)
     static fromMintInfo(info: {
         nuts: GetInfoResponse['nuts'];
     }, opts?: OIDCAuthOptions): OIDCAuth;
+    generatePKCE(): {
+        verifier: string;
+        challenge: string;
+    };
     // (undocumented)
     loadConfig(): Promise<OIDCConfig>;
     // (undocumented)
@@ -917,9 +933,7 @@ export class OIDCAuth {
     setClient(id: string): void;
     // (undocumented)
     setScope(scope?: string): void;
-    startDeviceAuth(opts?: {
-        intervalSec?: number;
-    }): Promise<DeviceStartResponse & {
+    startDeviceAuth(intervalSec?: number): Promise<DeviceStartResponse & {
         poll: () => Promise<TokenResponse>;
         cancel: () => void;
     }>;
