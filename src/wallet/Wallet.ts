@@ -1460,22 +1460,17 @@ class Wallet {
 		// Create outputs and mint payload
 		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
-		let mintPayload: MintPayload;
-		if (typeof quote === 'string') {
-			mintPayload = {
-				outputs: blindedMessages,
-				quote: quote,
-			};
-		} else {
+		const mintPayload: MintPayload = {
+			outputs: blindedMessages,
+			quote: typeof quote === 'string' ? quote : quote.quote,
+		};
+
+		// Sign payload if the quote carries a public key
+		if (typeof quote !== 'string' && quote.pubkey) {
 			this.failIf(!privkey, 'Can not sign locked quote without private key');
 			const mintQuoteSignature = signMintQuote(privkey!, quote.quote, blindedMessages);
-			mintPayload = {
-				outputs: blindedMessages,
-				quote: quote.quote,
-				signature: mintQuoteSignature,
-			};
+			mintPayload.signature = mintQuoteSignature;
 		}
-
 		// Mint proofs
 		let signatures;
 		if (method === 'bolt12') {
