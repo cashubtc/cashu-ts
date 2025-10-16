@@ -1,3 +1,4 @@
+import { Logger } from '../logger';
 import { Mint } from '../mint/Mint';
 import { Wallet } from '../wallet/Wallet';
 import { AuthManager } from './AuthManager';
@@ -19,13 +20,14 @@ export async function createAuthWallet(
 	options?: {
 		authPool?: number;
 		oidc?: OIDCAuthOptions;
+		logger?: Logger;
 	},
 ): Promise<{ mint: Mint; auth: AuthManager; oidc: OIDCAuth; wallet: Wallet }> {
 	// 1. Create a Mint instance
-	const mint = new Mint(mintUrl);
+	const mint = new Mint(mintUrl, {logger: options?.logger});
 
 	// 2. Create an AuthManager for both BAT and CAT handling
-	const auth = new AuthManager(mintUrl, { desiredPoolSize: options?.authPool ?? 10 });
+	const auth = new AuthManager(mintUrl, { desiredPoolSize: options?.authPool ?? 10 , logger: options?.logger});
 
 	// 3. Discover and configure OIDCAuth from the mint
 	const oidc = await mint.oidcAuth({
@@ -37,7 +39,7 @@ export async function createAuthWallet(
 	auth.attachOIDC(oidc);
 
 	// 5. Hydrate wallet using the same mint and auth provider
-	const wallet = new Wallet(mint, { authProvider: auth });
+	const wallet = new Wallet(mint, { authProvider: auth, logger: options?.logger });
 	await wallet.loadMint();
 
 	return { mint, auth, oidc, wallet };

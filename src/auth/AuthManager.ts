@@ -188,6 +188,10 @@ export class AuthManager implements AuthProvider {
 		path: string;
 	}): Promise<string> {
 		this.logger.debug('AuthManager: BAT requested', { method, path });
+		if (this.info && !this.info.requiresBlindAuthToken(method, path)) {
+		  this.logger.warn('Endpoint is not marked as protected by NUT-22; still issuing BAT', { method, path });
+		}
+
 		return this.withLock(async () => {
 			await this.ensure(1);
 			if (this.pool.length === 0) {
