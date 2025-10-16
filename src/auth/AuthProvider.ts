@@ -1,14 +1,15 @@
-export type HttpMethod = 'GET' | 'POST';
-
 export interface AuthProvider {
-	/**
-	 * Return a serialized BAT string to put in the `Blind-auth` header for the given HTTP method and
-	 * path (path only, no origin). Should throw a clear error if a BAT cannot be produced.
-	 */
-	getBlindAuthToken(input: { method: HttpMethod; path: string }): Promise<string>;
+	// Blind-auth, NUT-22
+	getBlindAuthToken(input: { method: 'GET' | 'POST'; path: string }): Promise<string>;
+	ensure?(minTokens: number): Promise<void>;
+
+	// Clear-auth, NUT-21
+	getCAT(): string | undefined;
+	setCAT(cat: string | undefined): void;
 
 	/**
-	 * Optional hint to pre-warm the BAT pool.
+	 * Ensure a valid CAT is available, refreshing if expiring soon. Return a token that is safe to
+	 * send right now, or undefined if not obtainable.
 	 */
-	ensure?(minTokens: number): Promise<void>;
+	ensureCAT?(minValiditySec?: number): Promise<string | undefined>;
 }

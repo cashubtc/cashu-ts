@@ -28,8 +28,8 @@ export type DeviceStartResponse = {
 };
 
 export type OIDCAuthOptions = {
-	clientId?: string; // default: mint’s nut21.client_id or "cashu-client"
-	scope?: string; // default: "openid"
+	clientId?: string;
+	scope?: string;
 	logger?: Logger;
 	onTokens?: (t: TokenResponse) => void | Promise<void>;
 };
@@ -42,6 +42,9 @@ export class OIDCAuth {
 	private scope: string;
 	private config?: OIDCConfig;
 	private onTokens?: (t: TokenResponse) => void | Promise<void>;
+
+	// External listeners, notified after onTokens fires
+	private tokenListeners: Array<(t: TokenResponse) => void | Promise<void>> = [];
 
 	static fromMintInfo(info: { nuts: GetInfoResponse['nuts'] }, opts?: OIDCAuthOptions): OIDCAuth {
 		const n21 = info?.nuts?.['21'];
@@ -60,14 +63,23 @@ export class OIDCAuth {
 		this.onTokens = opts?.onTokens;
 	}
 
-	setClient(id: string) {
+	setClient(id: string): void {
 		this.clientId = id;
 	}
-	setScope(scope?: string) {
+
+	setScope(scope?: string): void {
 		this.scope = scope ?? 'openid';
 	}
 
+	/**
+	 * Subscribe to token updates. Listeners are called after the primary onTokens callback.
+	 */
+	addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void {
+		this.tokenListeners.push(fn);
+	}
+
 	// ---- Discovery ----
+
 	async loadConfig(): Promise<OIDCConfig> {
 		if (this.config) return this.config;
 		const res = await fetch(this.discoveryUrl, {
@@ -75,7 +87,7 @@ export class OIDCAuth {
 			headers: { Accept: 'application/json' },
 		});
 		const text = await res.text();
-		let json: unknown = undefined;
+		let json: unknown;
 		try {
 			json = text ? JSON.parse(text) : undefined;
 		} catch (err) {
@@ -84,11 +96,13 @@ export class OIDCAuth {
 		if (!res.ok || !json || typeof (json as OIDCConfig).token_endpoint !== 'string') {
 			throw new Error('OIDCAuth: invalid discovery document (missing token_endpoint)');
 		}
-		this.config = json as OIDCConfig;
-		return this.config;
+		const cfg = json as OIDCConfig;
+		this.config = cfg;
+		return cfg;
 	}
 
 	// ---- Device Code (recommended for CLIs) ----
+
 	async deviceStart(): Promise<DeviceStartResponse> {
 		const cfg = await this.loadConfig();
 		const ep = cfg.device_authorization_endpoint;
@@ -100,8 +114,10 @@ export class OIDCAuth {
 
 	async devicePoll(device_code: string, intervalSec = 5): Promise<TokenResponse> {
 		const cfg = await this.loadConfig();
+		// Clamp to a sensible minimum to avoid hot loops
+		let delay = Math.max(1, intervalSec);
 		while (true) {
-			await this.sleep(intervalSec * 1000);
+			await this.sleep(delay * 1000);
 			const form = this.toForm({
 				grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
 				device_code,
@@ -115,7 +131,7 @@ export class OIDCAuth {
 			const err = (res.error ?? '').toString();
 			if (err === 'authorization_pending') continue;
 			if (err === 'slow_down') {
-				intervalSec = Math.max(intervalSec + 5, intervalSec * 2);
+				delay = Math.max(delay + 5, delay * 2);
 				continue;
 			}
 			const msg = res.error_description || err || 'device authorization failed';
@@ -123,7 +139,56 @@ export class OIDCAuth {
 		}
 	}
 
+	/**
+	 * One call convenience for Device Code flow. Returns the start fields and helpers to poll or
+	 * cancel.
+	 */
+	async startDeviceAuth(opts?: { intervalSec?: number }): Promise<
+		DeviceStartResponse & {
+			poll: () => Promise<TokenResponse>;
+			cancel: () => void;
+		}
+	> {
+		const start = await this.deviceStart();
+		const interval = start.interval ?? opts?.intervalSec ?? 5;
+		let aborted = false;
+
+		const poll = async (): Promise<TokenResponse> => {
+			const cfg = await this.loadConfig();
+			let delay = Math.max(1, interval);
+			while (true) {
+				if (aborted) throw new Error('OIDCAuth: device polling cancelled');
+				await this.sleep(delay * 1000);
+				const form = this.toForm({
+					grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+					device_code: start.device_code,
+					client_id: this.clientId,
+				});
+				const res = await this.postFormLoose<TokenResponse>(cfg.token_endpoint, form);
+				if (res.access_token) {
+					this.handleTokens(res);
+					return res;
+				}
+				const err = (res.error ?? '').toString();
+				if (err === 'authorization_pending') continue;
+				if (err === 'slow_down') {
+					delay = Math.max(delay + 5, delay * 2);
+					continue;
+				}
+				const msg = res.error_description || err || 'device authorization failed';
+				throw new Error(`OIDCAuth: ${msg}`);
+			}
+		};
+
+		const cancel = (): void => {
+			aborted = true;
+		};
+
+		return { ...start, poll, cancel };
+	}
+
 	// ---- Refresh ----
+
 	async refresh(refresh_token: string): Promise<TokenResponse> {
 		const cfg = await this.loadConfig();
 		const form = this.toForm({
@@ -137,6 +202,7 @@ export class OIDCAuth {
 	}
 
 	// ---- ROPC (discouraged, but some mints allow it) ----
+
 	async passwordGrant(username: string, password: string): Promise<TokenResponse> {
 		const cfg = await this.loadConfig();
 		const form = this.toForm({
@@ -152,12 +218,16 @@ export class OIDCAuth {
 	}
 
 	// ---- internals ----
+
 	private handleTokens(t: TokenResponse): void {
 		if (!t.access_token) {
 			const msg = t.error_description || t.error || 'token response missing access_token';
 			throw new Error(`OIDCAuth: ${msg}`);
 		}
 		safeCallback(this.onTokens, t, this.logger, { where: 'OIDCAuth.handleTokens' });
+		for (const listener of this.tokenListeners) {
+			safeCallback(listener, t, this.logger, { where: 'OIDCAuth.handleTokens.listener' });
+		}
 	}
 
 	private toForm(params: Record<string, string>): string {
@@ -167,7 +237,7 @@ export class OIDCAuth {
 			.join('&');
 	}
 
-	// Strict: throws on non-2xx
+	// Strict, throws on non 2xx
 	private async postFormStrict<TSuccess extends object>(
 		endpoint: string,
 		formBody: string,
@@ -182,13 +252,12 @@ export class OIDCAuth {
 				body: formBody,
 			});
 			const text = await res.text();
-			let json: unknown = undefined;
+			let json: unknown;
 			try {
 				json = text ? JSON.parse(text) : undefined;
 			} catch (err) {
 				this.logger.warn?.('OIDCAuth: bad JSON (strict)', { err });
 			}
-
 			if (!res.ok) {
 				const err = (json ?? {}) as TokenResponse;
 				const msg = err.error_description || err.error || `HTTP ${res.status}`;
@@ -201,7 +270,7 @@ export class OIDCAuth {
 		}
 	}
 
-	// Loose: returns JSON (success or error payload) even on non-2xx
+	// Loose, returns JSON payload even on non 2xx
 	private async postFormLoose<T extends object>(
 		endpoint: string,
 		formBody: string,
@@ -216,7 +285,7 @@ export class OIDCAuth {
 				body: formBody,
 			});
 			const text = await res.text();
-			let json: unknown = undefined;
+			let json: unknown;
 			try {
 				json = text ? JSON.parse(text) : undefined;
 			} catch (err) {

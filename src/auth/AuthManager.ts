@@ -1,21 +1,21 @@
-import type { AuthProvider, HttpMethod } from './AuthProvider';
+import type { AuthProvider } from './AuthProvider';
 import request, { type RequestFn } from '../transport';
 import { joinUrls, hasValidDleq, encodeJsonToBase64 } from '../utils';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
 import type { MintActiveKeys, MintAllKeysets, MintKeys, MintKeyset, Proof } from '../model/types';
 import { type GetInfoResponse, type BlindAuthMintResponse } from '../mint/types';
-import type { BlindAuthMintPayload } from '../wallet/types';
 import { type Logger, NULL_LOGGER } from '../logger';
+import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
 
 export type AuthManagerOptions = {
 	/**
 	 * Hard limit to target when minting BATs in one request. If omitted, we'll read
-	 * `nuts['22'].bat_max_mint` from /v1/info.
+	 * `nuts['22'].bat_max_mint` from the mint "/v1/info" endpoint.
 	 */
 	maxPerMint?: number;
 	/**
-	 * Desired pool size to maintain. We’ll top-up to min(desiredPoolSize, bat_max_mint) on demand.
+	 * Desired BAT pool size. We’ll top-up to min(desiredPoolSize, bat_max_mint) on demand.
 	 */
 	desiredPoolSize?: number;
 	/**
@@ -28,13 +28,22 @@ export type AuthManagerOptions = {
 	logger?: Logger;
 };
 
+type StoredTokens = {
+	accessToken?: string;
+	refreshToken?: string;
+	/**
+	 * Epoch timestamp (ms).
+	 */
+	expiresAt?: number;
+};
+
 /**
- * A minimal AuthManager that:
+ * AuthManager.
  *
- * - Stores CAT (Clear-auth token) set by the host.
- * - Mints BATs (Auth Proofs) using the mint's NUT-22 endpoints.
- * - Validates DLEQs.
- * - Returns serialized BATs for 'Blind-auth' requests.
+ * - Owns CAT lifecycle (stores, optional refresh via attached OIDCAuth)
+ * - Mints and serves BATs (NUT-22)
+ * - Validates DLEQs for BATs per NUT-12.
+ * - Supplies serialized BATs for 'Blind-auth' and CAT for 'Clear-auth'
  */
 export class AuthManager implements AuthProvider {
 	private readonly mintUrl: string;
@@ -43,13 +52,14 @@ export class AuthManager implements AuthProvider {
 	private info?: MintInfo;
 	private lockChain?: Promise<void>;
 
-	// Clear Auth Token (CAT), set by host app
-	private cat?: string;
+	// Open ID Connect (OIDC)
+	private oidc?: OIDCAuth;
+	private tokens: StoredTokens = {};
 
 	// Blind Auth Token (BAT) pool
 	private pool: Proof[] = [];
-	private desiredPoolSize: number = 10;
-	private maxPerMint: number = 10;
+	private desiredPoolSize = 10;
+	private maxPerMint = 10;
 
 	// Key cache for 'auth' unit
 	private keysets: MintKeyset[] = [];
@@ -61,62 +71,93 @@ export class AuthManager implements AuthProvider {
 		this.req = opts?.request ?? request;
 		this.logger = opts?.logger ?? NULL_LOGGER;
 		this.desiredPoolSize = Math.max(1, opts?.desiredPoolSize ?? this.desiredPoolSize);
-		this.maxPerMint = Math.max(1, opts?.maxPerMint || this.maxPerMint);
+		this.maxPerMint = Math.max(1, opts?.maxPerMint ?? this.maxPerMint);
 	}
 
 	// ------------------------------
 	// Public API
 	// ------------------------------
 
-	get poolSize() {
+	/**
+	 * Attach an OIDCAuth instance so this manager can refresh CATs. Registers a listener to update
+	 * internal CAT/refresh state on new tokens.
+	 */
+	attachOIDC(oidc: OIDCAuth): this {
+		this.oidc = oidc;
+		this.oidc.addTokenListener((t) => this.updateFromOIDC(t));
+		return this;
+	}
+
+	get poolSize(): number {
 		return this.pool.length;
 	}
-	get poolTarget() {
+	get poolTarget(): number {
 		return this.desiredPoolSize;
 	}
-	get activeAuthKeysetId() {
+	get activeAuthKeysetId(): string | undefined {
 		return this.activeKeysetId;
 	}
-	get hasCAT() {
-		return !!this.cat;
+	get hasCAT(): boolean {
+		return !!this.tokens.accessToken;
 	}
 
-	setCAT(cat: string | undefined) {
-		this.cat = cat;
-	}
+	// ------------------------------
+	// AuthProvider (NUT-21, Clear-auth)
+	// ------------------------------
 
 	getCAT(): string | undefined {
-		return this.cat;
+		return this.tokens.accessToken;
+	}
+
+	setCAT(cat: string | undefined): void {
+		this.tokens.accessToken = cat;
+		if (!cat) {
+			this.tokens.refreshToken = undefined;
+			this.tokens.expiresAt = undefined;
+		}
 	}
 
 	/**
-	 * Replace or merge the current pool with previously persisted BATs.
-	 *
-	 * @param proofs BAT proofs to import.
-	 * @param mode Replace or Merge (default: replace)
+	 * Ensure a valid CAT is available (refresh if expiring soon). Returns a token safe to send right
+	 * now, or undefined if unobtainable.
 	 */
-	importPool(proofs: Proof[], mode: 'replace' | 'merge' = 'replace'): void {
-		if (mode === 'replace') {
-			this.pool = [];
+	async ensureCAT(minValidSecs = 30): Promise<string | undefined> {
+		if (this.validForAtLeast(minValidSecs)) {
+			return this.tokens.accessToken;
 		}
-		const seen = new Map(this.pool.map((p) => [p.secret, p]));
-		for (const p of proofs) {
-			if (!p || !p.secret || !p.C || !p.id) continue; // shape check
-			const existing = seen.get(p.secret);
-			if (!existing) {
-				this.pool.push(p);
-				seen.set(p.secret, p);
+		if (this.oidc && this.tokens.refreshToken) {
+			try {
+				const tok = await this.oidc.refresh(this.tokens.refreshToken);
+				this.updateFromOIDC(tok);
+				if (this.validForAtLeast(0)) return this.tokens.accessToken;
+			} catch (err) {
+				this.logger.warn?.('AuthManager: CAT refresh failed', { err });
 			}
 		}
+		return this.tokens.accessToken;
 	}
 
-	/**
-	 * Return a deep-copied snapshot of the current BAT pool (full Proofs, including dleq).
-	 */
-	exportPool(): Proof[] {
-		// defensive copy to avoid external mutation
-		return this.pool.map((p) => ({ ...p, dleq: p.dleq ? { ...p.dleq } : undefined }));
+	// Returns true if expiry date is >minValidSecs away
+	private validForAtLeast(minValidSecs: number): boolean {
+		const { accessToken, expiresAt } = this.tokens;
+		if (!accessToken) return false;
+		if (!expiresAt) return true; // Unknown expiry, allow and rely on server to reject if invalid
+		return Date.now() + minValidSecs * 1000 < expiresAt;
 	}
+
+	private updateFromOIDC(t: TokenResponse): void {
+		if (!t.access_token) return;
+		const now = Date.now();
+		this.tokens.accessToken = t.access_token;
+		// prefer new refresh token if provided, else keep existing
+		if (t.refresh_token) this.tokens.refreshToken = t.refresh_token;
+		this.tokens.expiresAt = t.expires_in ? now + t.expires_in * 1000 : undefined;
+		this.logger.debug('AuthManager: OIDC tokens updated', { expiresAt: this.tokens.expiresAt });
+	}
+
+	// ------------------------------
+	// AuthProvider (NUT-22, Blind-auth)
+	// ------------------------------
 
 	/**
 	 * Ensure there are enough BAT tokens (topping up if needed)
@@ -139,7 +180,13 @@ export class AuthManager implements AuthProvider {
 	 * @param {method, path} to Call (not used in our implementation)
 	 * @returns The serialized BAT ready to insert into request header.
 	 */
-	async getBlindAuthToken({ method, path }: { method: HttpMethod; path: string }): Promise<string> {
+	async getBlindAuthToken({
+		method,
+		path,
+	}: {
+		method: 'GET' | 'POST';
+		path: string;
+	}): Promise<string> {
 		this.logger.debug('AuthManager: BAT requested', { method, path });
 		return this.withLock(async () => {
 			await this.ensure(1);
@@ -153,6 +200,30 @@ export class AuthManager implements AuthProvider {
 		});
 	}
 
+	/**
+	 * Replace or merge the current BAT pool with previously persisted BATs.
+	 */
+	importPool(proofs: Proof[], mode: 'replace' | 'merge' = 'replace'): void {
+		if (mode === 'replace') {
+			this.pool = [];
+		}
+		const seen = new Map(this.pool.map((p) => [p.secret, p]));
+		for (const p of proofs) {
+			if (!p || !p.secret || !p.C || !p.id) continue; // shape check
+			if (!seen.has(p.secret)) {
+				this.pool.push(p);
+				seen.set(p.secret, p);
+			}
+		}
+	}
+
+	/**
+	 * Return a deep-copied snapshot of the current BAT pool (full Proofs, including dleq).
+	 */
+	exportPool(): Proof[] {
+		return this.pool.map((p) => ({ ...p, dleq: p.dleq ? { ...p.dleq } : undefined }));
+	}
+
 	// ------------------------------
 	// Internals
 	// ------------------------------
@@ -163,22 +234,22 @@ export class AuthManager implements AuthProvider {
 	private async withLock<T>(fn: () => T | Promise<T>): Promise<T> {
 		const prev = this.lockChain ?? Promise.resolve();
 		let release!: () => void;
-		const lock = new Promise<void>((resolve) => (release = resolve));
+		const lock = new Promise<void>((resolve) => {
+			release = resolve;
+		});
 
-		// chain our lock so next callers queue behind us
 		this.lockChain = prev.then(() => lock);
 		try {
-			await prev; // wait for the previous lock to release
-			return await fn(); // run our action
+			await prev;
+			return await fn();
 		} finally {
-			release(); // release our lock
-			// tidy up if we're the last lock
+			release();
 			if (this.lockChain === lock) this.lockChain = undefined;
 		}
 	}
 
 	/**
-	 * Gets mint info and keysets.
+	 * Initialise mint info and auth keysets/keys as needed.
 	 */
 	private async init(): Promise<void> {
 		if (!this.info) {
@@ -191,27 +262,20 @@ export class AuthManager implements AuthProvider {
 		if (this.keysets.length === 0 || !this.activeKeysetId) {
 			await this.refreshKeysets();
 		}
-		if (!this.cat) {
-			throw new Error('AuthManager: Clear-auth token (CAT) not set');
-		}
 	}
 
 	/**
-	 * Gets the BAT minting limit.
-	 *
-	 * @returns The lower of AuthManager limit and Mint limit.
+	 * Gets the BAT minting limit: lower of manager limit and Mint’s NUT-22 limit.
 	 */
 	private getBatMaxMint(): number {
 		if (!this.info) throw new Error('AuthManager: mint info not loaded');
-		const max = this.maxPerMint;
 		const n22 = this.info.nuts['22'];
-		return n22 && n22.bat_max_mint < max ? n22.bat_max_mint : max;
+		const mintMax = n22?.bat_max_mint ?? this.maxPerMint;
+		return Math.max(1, Math.min(this.maxPerMint, mintMax));
 	}
 
 	/**
-	 * Refreshes AUTH keysets from mint, choosing cheapest.
-	 *
-	 * @returns {Promise<void> | undefined} Description.
+	 * Refreshes AUTH (unit 'auth') keysets from mint, choosing cheapest active keyset.
 	 */
 	private async refreshKeysets(): Promise<void> {
 		const allKeysets = await this.req<MintAllKeysets>({
@@ -221,7 +285,7 @@ export class AuthManager implements AuthProvider {
 		const unitKeysets = allKeysets.keysets.filter((k) => k.unit === 'auth');
 		this.keysets = unitKeysets;
 
-		// Choose cheapest active keyset (with tiebreaker on id for determinism)
+		// Choose cheapest active keyset (tie-breaker by id for determinism)
 		const active = unitKeysets
 			.filter((k) => k.active)
 			.sort(
@@ -231,7 +295,7 @@ export class AuthManager implements AuthProvider {
 		if (!active) throw new Error('AuthManager: no active auth keyset found');
 		this.activeKeysetId = active.id;
 
-		// Get keys for this keyset
+		// Fetch keys for active keyset
 		const resp = await this.req<MintActiveKeys>({
 			endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys', this.activeKeysetId),
 			method: 'GET',
@@ -250,38 +314,48 @@ export class AuthManager implements AuthProvider {
 		return k;
 	}
 
+	/**
+	 * Mint a batch of BATs using the current CAT if the endpoint is protected by NUT-21.
+	 */
 	private async topUp(n: number): Promise<void> {
-		if (!this.cat) throw new Error('AuthManager: cannot mint BATs without CAT');
+		if (!this.info) throw new Error('AuthManager: mint info not loaded');
 
+		// Check NUT-21 protection of the BAT mint endpoint
+		const needsCAT = this.info.requiresClearAuthToken('POST', '/v1/auth/blind/mint');
+		let cat: string | undefined;
+		if (needsCAT) {
+			cat = await this.ensureCAT(30);
+			if (!cat) {
+				throw new Error(
+					'AuthManager: Clear-auth token required for /v1/auth/blind/mint but not available. Authenticate with the mint to obtain a CAT first.',
+				);
+			}
+		}
+		// Create blinded messages for amount n in unit 'auth' (supports only 1s)
 		const keys = this.getActiveKeys();
-
-		// Create blinded messages for amount n in unit 'auth' (which only supports 1s)
 		const outputs = OutputData.createRandomData(n, keys);
-		const payload: BlindAuthMintPayload = {
-			outputs: outputs.map((d) => d.blindedMessage),
-		};
-
+		const payload = { outputs: outputs.map((d) => d.blindedMessage) };
+		// Set CAT header if needed
+		const headers: Record<string, string> = {};
+		if (cat) headers['Clear-auth'] = cat;
+		// Do the topup
 		const res = await this.req<BlindAuthMintResponse>({
 			endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/mint'),
 			method: 'POST',
-			headers: { 'Clear-auth': this.cat },
+			headers,
 			requestBody: payload as unknown as Record<string, unknown>,
 		});
-
 		if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
 			throw new Error('AuthManager: bad BAT mint response');
 		}
-
+		// Create BAT proofs and check DLEQ
 		const proofs = outputs.map((d, i) => d.toProof(res.signatures[i], keys));
-
-		// Validate dleq on receipt (NUT-22)
 		for (const p of proofs) {
 			if (!hasValidDleq(p, keys)) {
 				throw new Error('AuthManager: mint returned BAT with invalid DLEQ');
 			}
 		}
-
-		// Push into pool
+		// Add BAT proofs to pool
 		this.pool.push(...proofs);
 		this.logger.debug('AuthManager: performed topUp', {
 			minted: proofs.length,

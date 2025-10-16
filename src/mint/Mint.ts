@@ -49,7 +49,7 @@ import {
 import { handleMintInfoContactFieldDeprecated } from '../legacy/nut-06';
 import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER } from '../logger';
-import type { AuthProvider, HttpMethod } from '../auth/AuthProvider';
+import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 
 /**
@@ -113,37 +113,6 @@ class Mint {
 			...opts,
 			clientId: opts?.clientId ?? n21.client_id ?? 'cashu-client',
 		});
-	}
-
-	/**
-	 * Convenience for the OIDC Device Code flow.
-	 *
-	 * Returns the device start fields and a bound poll() that resolves to the token response.
-	 *
-	 * @example
-	 *
-	 * ```ts
-	 * const auth = await mint.startDeviceAuth({
-	 * 	onTokens: ({ access_token }) => authMgr.setCAT(access_token!),
-	 * });
-	 * console.log(auth.verification_uri, auth.user_code);
-	 * const token = await auth.poll();
-	 * ```
-	 */
-	async startDeviceAuth(opts?: OIDCAuthOptions & { intervalSec?: number }): Promise<
-		Awaited<ReturnType<OIDCAuth['deviceStart']>> & {
-			poll: () => ReturnType<OIDCAuth['devicePoll']>;
-		}
-	> {
-		const oidc = await this.oidcAuth(opts);
-		const start = await oidc.deviceStart();
-		const interval = start.interval ?? opts?.intervalSec ?? 5;
-
-		return {
-			...start,
-			// when you’re ready, call this to finish the flow
-			poll: () => oidc.devicePoll(start.device_code, interval),
-		};
 	}
 
 	/**
@@ -625,7 +594,7 @@ class Mint {
 	 * @param path The API path to check for blind auth requirement.
 	 * @returns The blind auth token if required, otherwise undefined.
 	 */
-	private async handleBlindAuth(method: HttpMethod, path: string): Promise<string | undefined> {
+	private async handleBlindAuth(method: 'GET' | 'POST', path: string): Promise<string | undefined> {
 		if (!this._authProvider) return undefined;
 		const info = await this.getLazyMintInfo();
 		if (!info.requiresBlindAuthToken(method, path)) return undefined;

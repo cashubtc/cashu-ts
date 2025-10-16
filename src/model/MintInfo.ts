@@ -66,11 +66,11 @@ export class MintInfo {
 		}
 	}
 
-	requiresBlindAuthToken(method: Method, path: string): boolean {
+	requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean {
 		return this.matchesProtected(this._protected22, method, path);
 	}
 
-	requiresClearAuthToken(method: Method, path: string): boolean {
+	requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean {
 		return this.matchesProtected(this._protected21, method, path);
 	}
 

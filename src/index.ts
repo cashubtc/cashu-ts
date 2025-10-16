@@ -7,7 +7,6 @@ export { Keyset } from './wallet/Keyset';
 export { P2PKBuilder } from './wallet/P2PKBuilder';
 export { type SelectProofs, selectProofsRGLI } from './wallet/SelectProofs';
 export { Wallet } from './wallet/Wallet';
-export { OIDCAuth, AuthManager, type AuthProvider } from './auth';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {
@@ -17,6 +16,19 @@ export {
 	MeltBuilder,
 	WalletOps,
 } from './wallet/WalletOps';
+
+// AUTH module
+export {
+	OIDCAuth,
+	AuthManager,
+	createAuthWallet,
+	type AuthProvider,
+	type AuthManagerOptions,
+	type TokenResponse,
+	type DeviceStartResponse,
+	type OIDCConfig,
+	type OIDCAuthOptions,
+} from './auth';
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
