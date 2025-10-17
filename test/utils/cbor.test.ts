@@ -1,5 +1,5 @@
 import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils';
 import { test, describe, expect } from 'vitest';
 
 // Test Polyfills for Node Buffer (which is not properly polyfilled in vite browser tests)

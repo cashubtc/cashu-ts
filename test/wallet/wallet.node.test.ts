@@ -26,7 +26,7 @@ import {
 
 import { bytesToNumber, sumProofs } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
-import { hexToBytes } from '@noble/curves/abstract/utils';
+import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
 
 injectWebSocketImpl(WebSocket);

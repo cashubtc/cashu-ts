@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/curves/abstract/utils';
+import { randomBytes } from '@noble/curves/utils';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import type { GetInfoResponse } from '../mint/types';
 import { Bytes, encodeUint8toBase64Url } from '../utils';

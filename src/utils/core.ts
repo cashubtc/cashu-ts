@@ -1,5 +1,5 @@
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils';
 import { sha256 } from '@noble/hashes/sha2';
 import {
 	encodeBase64ToJson,

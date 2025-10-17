@@ -4,7 +4,7 @@
 
 ```ts
 
-import { PrivKey } from '@noble/curves/abstract/utils';
+import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public
