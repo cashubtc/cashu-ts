@@ -951,6 +951,7 @@ export type OIDCAuthOptions = {
 // @public (undocumented)
 export type OIDCConfig = {
     issuer: string;
+    authorization_endpoint?: string;
     token_endpoint: string;
     device_authorization_endpoint?: string;
 };

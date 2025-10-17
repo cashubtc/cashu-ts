@@ -57,16 +57,14 @@ describe('OIDCAuth: discovery & caching', () => {
 		server.use(http.get(DISCOVERY, () => HttpResponse.json({ issuer: ISSUER })));
 		const oidc = new OIDCAuth(DISCOVERY);
 		await expect(oidc.loadConfig()).rejects.toThrow(
-			'invalid discovery document (missing token_endpoint)',
+			'OIDCAuth: invalid discovery document, missing token_endpoint',
 		);
 	});
 
 	test('loadConfig throws on non-JSON', async () => {
 		server.use(http.get(DISCOVERY, () => HttpResponse.text('not-json', { status: 200 })));
 		const oidc = new OIDCAuth(DISCOVERY);
-		await expect(oidc.loadConfig()).rejects.toThrow(
-			'invalid discovery document (missing token_endpoint)',
-		);
+		await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: invalid discovery document');
 	});
 });
 
@@ -286,9 +284,7 @@ describe('OIDCAuth: misc coverage', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const oidc = new OIDCAuth(DISCOVERY, { logger: console as any });
 
-		await expect(oidc.loadConfig()).rejects.toThrow(
-			'invalid discovery document (missing token_endpoint)',
-		);
+		await expect(oidc.loadConfig()).rejects.toThrow('OIDCAuth: invalid discovery document');
 		expect(warn).toHaveBeenCalled(); // "OIDCAuth: bad discovery JSON"
 		warn.mockRestore();
 	});

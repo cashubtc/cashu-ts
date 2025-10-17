@@ -6,6 +6,7 @@ import { sha256 } from '@noble/hashes/sha2';
 
 export type OIDCConfig = {
 	issuer: string;
+	authorization_endpoint?: string;
 	token_endpoint: string;
 	device_authorization_endpoint?: string;
 };
@@ -96,10 +97,13 @@ export class OIDCAuth {
 		} catch (err) {
 			this.logger.warn('OIDCAuth: bad discovery JSON', { err });
 		}
-		if (!res.ok || !json || typeof (json as OIDCConfig).token_endpoint !== 'string') {
-			throw new Error('OIDCAuth: invalid discovery document (missing token_endpoint)');
+		if (!res.ok || !json) {
+			throw new Error('OIDCAuth: invalid discovery document');
 		}
 		const cfg = json as OIDCConfig;
+		if (typeof cfg.token_endpoint !== 'string' || cfg.token_endpoint.length === 0) {
+			throw new Error('OIDCAuth: invalid discovery document, missing token_endpoint');
+		}
 		this.config = cfg;
 		return cfg;
 	}
@@ -147,11 +151,10 @@ export class OIDCAuth {
 		});
 		if (input.state) params.set('state', input.state);
 
-		const anyCfg = cfg as unknown as { authorization_endpoint?: string };
-		if (!anyCfg.authorization_endpoint) {
+		if (!cfg.authorization_endpoint) {
 			throw new Error('OIDCAuth: discovery lacks authorization_endpoint');
 		}
-		return `${anyCfg.authorization_endpoint}?${params.toString()}`;
+		return `${cfg.authorization_endpoint}?${params.toString()}`;
 	}
 
 	/**
@@ -293,14 +296,26 @@ export class OIDCAuth {
 
 	// ---- internals ----
 
+	/**
+	 * Fire and forget token fan out. Any listener errors are logged inside safeCallback. Nothing
+	 * thrown here will come from listeners.
+	 */
 	private handleTokens(t: TokenResponse): void {
 		if (!t.access_token) {
 			const msg = t.error_description || t.error || 'token response missing access_token';
 			throw new Error(`OIDCAuth: ${msg}`);
 		}
-		safeCallback(this.onTokens, t, this.logger, { where: 'OIDCAuth.handleTokens' });
+		// Schedule on microtask queue so we never block the caller and we avoid sync throws leaking.
+		queueMicrotask(() =>
+			safeCallback(this.onTokens, t, this.logger, { where: 'OIDCAuth.handleTokens' }),
+		);
+
 		for (const listener of this.tokenListeners) {
-			safeCallback(listener, t, this.logger, { where: 'OIDCAuth.handleTokens.listener' });
+			queueMicrotask(() =>
+				safeCallback(listener, t, this.logger, {
+					where: 'OIDCAuth.handleTokens.listener',
+				}),
+			);
 		}
 	}
 
