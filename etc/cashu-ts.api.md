@@ -196,6 +196,7 @@ export interface CounterSource {
 export function createAuthWallet(mintUrl: string, options?: {
     authPool?: number;
     oidc?: OIDCAuthOptions;
+    logger?: Logger;
 }): Promise<{
     mint: Mint;
     auth: AuthManager;

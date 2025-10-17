@@ -2,6 +2,9 @@
 
 COMPOSE = docker compose
 DEMO_CMD = npx tsx auth_password_example.ts
+DEMO_DEVA = npx tsx auth_device_example.ts
+DEMO_PKCE = npx tsx auth_pkce_example.ts
+
 
 # Default target
 .PHONY: demo-ci
@@ -26,8 +29,16 @@ logs:
 	$(COMPOSE) logs -f
 
 demo:
-	@echo "🧪 Running Auth BATs demo..."
+	@echo "🧪 Running PASSWORD Auth demo..."
 	$(DEMO_CMD)
+
+demo-device:
+	@echo "🧪 Running DEVICE Auth demo..."
+	$(DEMO_DEVA)
+
+demo-pkce:
+	@echo "🧪 Running PKCE Auth demo..."
+	$(DEMO_PKCE)
 
 clean: down
 	@echo "🧽 Removing any leftover volumes..."

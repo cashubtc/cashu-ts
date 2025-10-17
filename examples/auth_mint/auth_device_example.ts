@@ -1,14 +1,10 @@
 // +++++++++ Example of an auth wallet implementation with DEVICE CODE AUTH +++++++++
 // Run the example with the following commands:
 //
-// 	# Start the auth mint:
 // 	make up
-//
-//  # Run the demo:
-//  npx tsx auth_device_example.ts
-//
-// 	# When finished, tear down the auth mint with:
+//  make demo-device
 //  make down
+//
 
 import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');

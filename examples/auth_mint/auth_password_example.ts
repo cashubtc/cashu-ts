@@ -1,19 +1,15 @@
 // +++++++++ Example of an auth wallet implementation with PASSWORD AUTH +++++++++
 // Run the example with the following commands:
 //
-// 	# Start the auth mint:
 // 	make up
-//
-//  # Run the demo:
 //  make demo
+//  make down
 //
 //	# Experiment with different users:
 // 	OIDC_USER="your-pass" \
 // 	OIDC_PASSWORD="your-pass" \
-// 	npx tsx auth_password_example.ts
+// 	make demo
 //
-// 	# When finished, tear down the auth mint with:
-//  make down
 
 import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');
