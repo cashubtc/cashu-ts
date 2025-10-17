@@ -94,7 +94,7 @@ export class OIDCAuth {
 		try {
 			json = text ? JSON.parse(text) : undefined;
 		} catch (err) {
-			this.logger.warn?.('OIDCAuth: bad discovery JSON', { err });
+			this.logger.warn('OIDCAuth: bad discovery JSON', { err });
 		}
 		if (!res.ok || !json || typeof (json as OIDCConfig).token_endpoint !== 'string') {
 			throw new Error('OIDCAuth: invalid discovery document (missing token_endpoint)');
@@ -330,16 +330,17 @@ export class OIDCAuth {
 			try {
 				json = text ? JSON.parse(text) : undefined;
 			} catch (err) {
-				this.logger.warn?.('OIDCAuth: bad JSON (strict)', { err });
+				this.logger.warn('OIDCAuth: bad JSON (strict)', { err });
 			}
 			if (!res.ok) {
 				const err = (json ?? {}) as TokenResponse;
 				const msg = err.error_description || err.error || `HTTP ${res.status}`;
 				throw new Error(`OIDCAuth: ${msg}`);
 			}
+			this.logger.debug('OIDCAuth Response', { json });
 			return (json ?? {}) as TSuccess;
 		} catch (err) {
-			this.logger.error?.('OIDCAuth: postFormStrict failed', { err });
+			this.logger.error('OIDCAuth: postFormStrict failed', { err });
 			throw err;
 		}
 	}
@@ -363,11 +364,12 @@ export class OIDCAuth {
 			try {
 				json = text ? JSON.parse(text) : undefined;
 			} catch (err) {
-				this.logger.warn?.('OIDCAuth: bad JSON (loose)', { err });
+				this.logger.warn('OIDCAuth: bad JSON (loose)', { err });
 			}
+			this.logger.debug('OIDCAuth Response', { json });
 			return (json ?? {}) as T | TokenResponse;
 		} catch (err) {
-			this.logger.error?.('OIDCAuth: postFormLoose network error', { err });
+			this.logger.error('OIDCAuth: postFormLoose network error', { err });
 			return { error: 'network_error', error_description: String(err) };
 		}
 	}

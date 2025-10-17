@@ -91,7 +91,7 @@ export function safeCallback<T>(
 		if (maybePromise && typeof maybePromise.then === 'function') {
 			maybePromise.catch((error) => {
 				try {
-					logger.warn?.('callback failed', {
+					logger.warn('callback failed', {
 						...(context ?? {}),
 						error,
 						cb: cb.name ?? '',
@@ -103,7 +103,7 @@ export function safeCallback<T>(
 		}
 	} catch (error) {
 		try {
-			logger.warn?.('callback failed', {
+			logger.warn('callback failed', {
 				...(context ?? {}),
 				error,
 				cb: cb.name ?? '',

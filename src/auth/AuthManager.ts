@@ -131,7 +131,7 @@ export class AuthManager implements AuthProvider {
 				this.updateFromOIDC(tok);
 				if (this.validForAtLeast(0)) return this.tokens.accessToken;
 			} catch (err) {
-				this.logger.warn?.('AuthManager: CAT refresh failed', { err });
+				this.logger.warn('AuthManager: CAT refresh failed', { err });
 			}
 		}
 		return this.tokens.accessToken;
@@ -187,9 +187,11 @@ export class AuthManager implements AuthProvider {
 		method: 'GET' | 'POST';
 		path: string;
 	}): Promise<string> {
-		this.logger.debug('AuthManager: BAT requested', { method, path });
 		if (this.info && !this.info.requiresBlindAuthToken(method, path)) {
-		  this.logger.warn('Endpoint is not marked as protected by NUT-22; still issuing BAT', { method, path });
+			this.logger.warn('Endpoint is not marked as protected by NUT-22; still issuing BAT', {
+				method,
+				path,
+			});
 		}
 
 		return this.withLock(async () => {
@@ -200,6 +202,11 @@ export class AuthManager implements AuthProvider {
 			// Pop one BAT and serialize without DLEQ for the header. Per NUT-22, wallets
 			// SHOULD delete BAT even on error, so no need to track it in-flight.
 			const proof = this.pool.pop()!;
+			this.logger.debug('AuthManager: BAT requested', {
+				method,
+				path,
+				remaining: this.pool.length,
+			});
 			return serializeBAT(proof);
 		});
 	}
