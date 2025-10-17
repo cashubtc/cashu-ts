@@ -52,12 +52,12 @@ async function main() {
 	console.log('  ', authUrl);
 
 	const pasted = await prompt(
-		'\nPaste either the full redirected URL or just the code value, then press Enter:\n> ',
+		'\nPaste the full redirected URL, then press Enter:\n> ',
 	);
 	const { code, gotState } = extractCodeAndState(pasted);
 
 	if (!code) {
-		throw new Error('No authorisation code found, paste the full redirected URL or the code value');
+		throw new Error('No authorisation code found, paste the full redirected URL');
 	}
 	if (gotState && gotState !== state) {
 		throw new Error('PKCE state mismatch, possible CSRF');
@@ -94,7 +94,7 @@ async function main() {
 	// 6) Mint some proofs and receive them
 	console.log('\nObtain a mint quote for 100 sats...');
 	const request = await wallet.createMintQuoteBolt11(100);
-	await new Promise((res) => setTimeout(res, 1000));
+	await new Promise((res) => setTimeout(res, 3000));
 	console.log('\nMint the proofs...');
 	const proofs = await wallet.mintProofs(100, request.quote);
 	console.log(
@@ -122,17 +122,14 @@ async function main() {
 // -------- helpers --------
 
 function extractCodeAndState(input: string): { code?: string; gotState?: string } {
-	// If the user pasted the raw code, return it directly.
-	if (!input.includes('://') && !input.includes('?')) {
-		return { code: input.trim() || undefined };
-	}
 	try {
 		const url = new URL(input.trim());
-		const code = url.searchParams.get('code') ?? undefined;
-		const gotState = url.searchParams.get('state') ?? undefined;
-		return { code, gotState };
+		return {
+			code: url.searchParams.get('code') ?? undefined,
+			gotState: url.searchParams.get('state') ?? undefined,
+		};
 	} catch {
-		return { code: undefined, gotState: undefined };
+		throw new Error('Please paste the full redirected URL including ?code=…');
 	}
 }
 

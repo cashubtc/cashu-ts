@@ -76,7 +76,7 @@ async function main() {
 	// 6) Mint some proofs and receive them
 	console.log('\nObtain a mint quote for 100 sats...');
 	const request = await wallet.createMintQuoteBolt11(100);
-	await new Promise((res) => setTimeout(res, 1000));
+	await new Promise((res) => setTimeout(res, 3000));
 	console.log('\nMint the proofs...');
 	const proofs = await wallet.mintProofs(100, request.quote);
 	console.log(
