@@ -191,28 +191,31 @@ describe('OIDCAuth: device flow', () => {
 
 	test('devicePoll loops until access_token (authorization_pending → success)', async () => {
 		vi.useFakeTimers();
-		let polls = 0;
-		server.use(
-			http.post(TOKEN_EP, () => {
-				polls++;
-				if (polls < 3) {
-					return HttpResponse.json({
-						error: 'authorization_pending',
-						error_description: 'pending',
-					});
-				}
-				return HttpResponse.json(accessOk);
-			}),
-		);
-		const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
-		const p = oidc.devicePoll('dev-123', 1);
-		await vi.advanceTimersByTimeAsync(1000);
-		await vi.advanceTimersByTimeAsync(1000);
-		await vi.advanceTimersByTimeAsync(1000);
-		const tok = await p;
-		expect(tok.access_token).toBe('access.ok');
-		expect(polls).toBe(3);
-		vi.useRealTimers();
+		try {
+			let polls = 0;
+			server.use(
+				http.post(TOKEN_EP, () => {
+					polls++;
+					if (polls < 3) {
+						return HttpResponse.json({
+							error: 'authorization_pending',
+							error_description: 'pending',
+						});
+					}
+					return HttpResponse.json(accessOk);
+				}),
+			);
+			const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client' });
+			const p = oidc.devicePoll('dev-123', 1);
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(1000);
+			await vi.advanceTimersByTimeAsync(1000);
+			const tok = await p;
+			expect(tok.access_token).toBe('access.ok');
+			expect(polls).toBe(3);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	test('startDeviceAuth: cancel() aborts polling', async () => {
@@ -224,7 +227,8 @@ describe('OIDCAuth: device flow', () => {
 		const start = await oidc.startDeviceAuth(5);
 		const promise = start.poll();
 		start.cancel();
-		await expect(promise).rejects.toThrow('device polling cancelled'); // IMPORTANT: await the rejection
+		// loop checks "aborted" before sleeping, no timers needed
+		await expect(promise).rejects.toThrow('device polling cancelled');
 	});
 
 	test('deviceStart throws if provider lacks device_authorization_endpoint', async () => {
@@ -331,53 +335,65 @@ test('setClient + setScope update internals', async () => {
 // --- devicePoll: slow_down branch expands interval
 test('devicePoll handles slow_down by increasing delay', async () => {
 	vi.useFakeTimers();
-	const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
-	const TOKEN = 'http://oidc/token';
-	server.use(http.get(DISCOVERY, () => HttpResponse.json({ token_endpoint: TOKEN })));
-	let polls = 0;
-	server.use(
-		http.post(TOKEN, () => {
-			polls++;
-			if (polls === 1) {
-				return HttpResponse.json({ error: 'slow_down', error_description: 'too fast' });
-			}
-			if (polls === 2) {
-				return HttpResponse.json({ error: 'authorization_pending', error_description: 'wait' });
-			}
-			return HttpResponse.json({ access_token: 'ok' });
-		}),
-	);
-	const oidc = new OIDCAuth(DISCOVERY);
-	const p = oidc.devicePoll('dev-code', 1);
-	// initial delay = 1s
-	await vi.advanceTimersByTimeAsync(1000); // -> slow_down
-	// delay bumps to 6s, next loop waits 6s
-	await vi.advanceTimersByTimeAsync(6000); // -> authorization_pending
-	// still 6s
-	await vi.advanceTimersByTimeAsync(6000); // -> success
-	const tok = await p;
-	expect(tok.access_token).toBe('ok');
-	expect(polls).toBe(3);
-	vi.useRealTimers();
-}, 20000); // (optional) extend just in case
+	try {
+		const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
+		const TOKEN = 'http://oidc/token';
+		server.use(http.get(DISCOVERY, () => HttpResponse.json({ token_endpoint: TOKEN })));
+		let polls = 0;
+		server.use(
+			http.post(TOKEN, () => {
+				polls++;
+				if (polls === 1) {
+					return HttpResponse.json({ error: 'slow_down', error_description: 'too fast' });
+				}
+				if (polls === 2) {
+					return HttpResponse.json({ error: 'authorization_pending', error_description: 'wait' });
+				}
+				return HttpResponse.json({ access_token: 'ok' });
+			}),
+		);
+		const oidc = new OIDCAuth(DISCOVERY);
+		const p = oidc.devicePoll('dev-code', 1);
+		// initial delay = 1s
+		await vi.advanceTimersByTimeAsync(1000); // -> slow_down
+		// delay bumps to 6s, next loop waits 6s
+		await vi.advanceTimersByTimeAsync(6000); // -> authorization_pending
+		// still 6s
+		await vi.advanceTimersByTimeAsync(6000); // -> success
+		const tok = await p;
+		expect(tok.access_token).toBe('ok');
+		expect(polls).toBe(3);
+	} finally {
+		vi.useRealTimers();
+	}
+}, 20000);
 
 // --- devicePoll: unexpected error bubble
 test('devicePoll throws on provider error (not pending/slow_down)', async () => {
 	vi.useFakeTimers();
-	const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
-	const TOKEN = 'http://oidc/token';
-	server.use(
-		http.get(DISCOVERY, () => HttpResponse.json({ token_endpoint: TOKEN })),
-		http.post(TOKEN, () =>
-			HttpResponse.json({ error: 'access_denied', error_description: 'nope' }),
-		),
-	);
-	const oidc = new OIDCAuth(DISCOVERY);
-	const promise = oidc.devicePoll('dev', 1);
-	// first sleep(1s) then immediate provider error
-	await vi.advanceTimersByTimeAsync(1000);
-	await expect(promise).rejects.toThrow('nope');
-	vi.useRealTimers();
+	try {
+		const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
+		const TOKEN = 'http://oidc/token';
+		server.use(
+			http.get(DISCOVERY, () => HttpResponse.json({ token_endpoint: TOKEN })),
+			http.post(TOKEN, () =>
+				HttpResponse.json({ error: 'access_denied', error_description: 'nope' }),
+			),
+		);
+		const oidc = new OIDCAuth(DISCOVERY);
+		const promise = oidc.devicePoll('dev', 1);
+		// attach a guard catch so Node/Vitest never sees this as "unhandled"
+		// while we advance timers and only await the expect below
+		// (the expect still observes the rejection)
+		promise.catch(() => {});
+		// first sleep(1s) then immediate provider error
+		await vi.advanceTimersByTimeAsync(1000);
+		// settle microtasks on this tick
+		await Promise.resolve();
+		await expect(promise).rejects.toThrow('nope');
+	} finally {
+		vi.useRealTimers();
+	}
 }, 10000);
 
 // --- postFormStrict: 200 but bad JSON (warn path) returns {}
@@ -418,47 +434,50 @@ test('postFormLoose logs warn on bad JSON and returns {}', async () => {
 
 test('startDeviceAuth.poll handles slow_down by increasing delay', async () => {
 	vi.useFakeTimers();
-	const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
-	const TOKEN = 'http://oidc/token';
-	const DEVICE = 'http://oidc/device';
-	let polls = 0;
-	server.use(
-		http.get(DISCOVERY, () =>
-			HttpResponse.json({
-				token_endpoint: TOKEN,
-				device_authorization_endpoint: DEVICE,
-				authorization_endpoint: 'http://oidc/auth',
+	try {
+		const DISCOVERY = 'http://oidc/.well-known/openid-configuration';
+		const TOKEN = 'http://oidc/token';
+		const DEVICE = 'http://oidc/device';
+		let polls = 0;
+		server.use(
+			http.get(DISCOVERY, () =>
+				HttpResponse.json({
+					token_endpoint: TOKEN,
+					device_authorization_endpoint: DEVICE,
+					authorization_endpoint: 'http://oidc/auth',
+				}),
+			),
+			http.post(DEVICE, () =>
+				HttpResponse.json({
+					device_code: 'dev-xyz',
+					user_code: 'UCODE-1',
+					verification_uri: 'http://oidc/device',
+					interval: 2, // start interval
+					expires_in: 600,
+				}),
+			),
+			http.post(TOKEN, () => {
+				polls++;
+				if (polls === 1) {
+					// first POST -> slow_down
+					return HttpResponse.json({ error: 'slow_down', error_description: 'too fast' });
+				}
+				// second POST -> success
+				return HttpResponse.json({ access_token: 'ok', token_type: 'Bearer', expires_in: 300 });
 			}),
-		),
-		http.post(DEVICE, () =>
-			HttpResponse.json({
-				device_code: 'dev-xyz',
-				user_code: 'UCODE-1',
-				verification_uri: 'http://oidc/device',
-				interval: 2, // start interval
-				expires_in: 600,
-			}),
-		),
-		http.post(TOKEN, () => {
-			polls++;
-			if (polls === 1) {
-				// first POST -> slow_down
-				return HttpResponse.json({ error: 'slow_down', error_description: 'too fast' });
-			}
-			// second POST -> success
-			return HttpResponse.json({ access_token: 'ok', token_type: 'Bearer', expires_in: 300 });
-		}),
-	);
-	const o = new OIDCAuth(DISCOVERY);
-	const start = await o.startDeviceAuth(1); // max(2,1)=2 initial delay
-	const p = start.poll();
-	// 1st sleep: 2s → POST → slow_down
-	await vi.advanceTimersByTimeAsync(2000);
-	// slow_down bumps delay to max(2+5, 2*2) = 7s
-	// 2nd sleep: 7s → POST → success
-	await vi.advanceTimersByTimeAsync(7000);
-	const tok = await p;
-	expect(tok.access_token).toBe('ok');
-	expect(polls).toBe(2);
-	vi.useRealTimers();
+		);
+		const o = new OIDCAuth(DISCOVERY);
+		const start = await o.startDeviceAuth(1); // max(2,1)=2 initial delay
+		const p = start.poll();
+		// 1st sleep: 2s → POST → slow_down
+		await vi.advanceTimersByTimeAsync(2000);
+		// slow_down bumps delay to max(2+5, 2*2) = 7s
+		// 2nd sleep: 7s → POST → success
+		await vi.advanceTimersByTimeAsync(7000);
+		const tok = await p;
+		expect(tok.access_token).toBe('ok');
+		expect(polls).toBe(2);
+	} finally {
+		vi.useRealTimers();
+	}
 });
