@@ -9,7 +9,7 @@
 import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');
 
-import { createAuthWallet, getEncodedToken } from '../../src';
+import { ConsoleLogger, createAuthWallet, getEncodedToken } from '../../src';
 const MINT_URL = 'http://localhost:3338';
 const DESIRED_BATS = 2;
 
@@ -20,6 +20,7 @@ async function main() {
 	const { auth, wallet, oidc } = await createAuthWallet(MINT_URL, {
 		authPool: DESIRED_BATS,
 		oidc: { scope: 'openid offline_access' },
+		logger: new ConsoleLogger('debug'),
 	});
 
 	// 2) Start the device authorization flow

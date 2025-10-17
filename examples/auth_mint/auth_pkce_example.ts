@@ -51,9 +51,7 @@ async function main() {
 	);
 	console.log('  ', authUrl);
 
-	const pasted = await prompt(
-		'\nPaste the full redirected URL, then press Enter:\n> ',
-	);
+	const pasted = await prompt('\nPaste the full redirected URL, then press Enter:\n> ');
 	const { code, gotState } = extractCodeAndState(pasted);
 
 	if (!code) {

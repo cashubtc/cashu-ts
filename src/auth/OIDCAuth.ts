@@ -317,6 +317,7 @@ export class OIDCAuth {
 		formBody: string,
 	): Promise<TSuccess> {
 		try {
+			this.logger.debug('OIDCAuth Request', { formBody });
 			const res = await fetch(endpoint, {
 				method: 'POST',
 				headers: {
@@ -351,6 +352,7 @@ export class OIDCAuth {
 		formBody: string,
 	): Promise<T | TokenResponse> {
 		try {
+			this.logger.debug('OIDCAuth Request', { formBody });
 			const res = await fetch(endpoint, {
 				method: 'POST',
 				headers: {
