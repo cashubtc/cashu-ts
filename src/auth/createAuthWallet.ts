@@ -1,4 +1,4 @@
-import { Logger } from '../logger';
+import { type Logger } from '../logger';
 import { Mint } from '../mint/Mint';
 import { Wallet } from '../wallet/Wallet';
 import { AuthManager } from './AuthManager';
@@ -8,7 +8,7 @@ import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
  * High-level helper to create a fully authenticated wallet session.
  *
  * @remarks
- * Like a dependency injector, it wires Mint->OIDCAuth->AuthManager->Wallet in the correct order.
+ * Like a dependency injector, it wires AuthManager->Mint->OIDCAuth->Wallet in the correct order.
  * Wallet is returned ready to use.
  * @param mintUrl URL of the mint to connect to.
  * @param options.authPool Optional. Desired BAT pool size (default 10)
@@ -23,15 +23,19 @@ export async function createAuthWallet(
 		logger?: Logger;
 	},
 ): Promise<{ mint: Mint; auth: AuthManager; oidc: OIDCAuth; wallet: Wallet }> {
-	// 1. Create a Mint instance
-	const mint = new Mint(mintUrl, {logger: options?.logger});
+	// 1. Create an AuthManager for both BAT and CAT handling
+	const auth = new AuthManager(mintUrl, {
+		desiredPoolSize: options?.authPool ?? 10,
+		logger: options?.logger,
+	});
 
-	// 2. Create an AuthManager for both BAT and CAT handling
-	const auth = new AuthManager(mintUrl, { desiredPoolSize: options?.authPool ?? 10 , logger: options?.logger});
+	// 2. Create a Mint instance using the AuthManager
+	const mint = new Mint(mintUrl, { authProvider: auth, logger: options?.logger });
 
 	// 3. Discover and configure OIDCAuth from the mint
 	const oidc = await mint.oidcAuth({
 		...options?.oidc,
+		logger: options?.logger,
 		onTokens: (t) => auth.setCAT(t.access_token), // set CAT automatically
 	});
 
