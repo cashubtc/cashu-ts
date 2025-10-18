@@ -598,6 +598,7 @@ class Mint {
 		if (!this._authProvider) return undefined;
 		const info = await this.getLazyMintInfo();
 		if (!info.requiresClearAuthToken(method, path)) return undefined;
+		this._logger.error('Clear Authentication Token...', { cat: this._authProvider.getCAT() });
 		return this._authProvider.getCAT();
 	}
 
@@ -613,7 +614,9 @@ class Mint {
 		if (!this._authProvider) return undefined;
 		const info = await this.getLazyMintInfo();
 		if (!info.requiresBlindAuthToken(method, path)) return undefined;
-		return this._authProvider.getBlindAuthToken({ method, path });
+		const bat = await this._authProvider.getBlindAuthToken({ method, path });
+		this._logger.error('Blind Authentication Token...', { bat});
+		return bat;
 	}
 
 	private async requestWithAuth<T>(
