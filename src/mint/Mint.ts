@@ -587,6 +587,21 @@ class Mint {
 	}
 
 	/**
+	 * Returns the Clear Authentication Token (CAT) to use in the 'Clear-auth' header, or
+	 * undefined if not required for the given path and method.
+	 *
+	 * @param method The method to call on the path.
+	 * @param path The API path to check for blind auth requirement.
+	 * @returns The blind auth token if required, otherwise undefined.
+	 */
+	private async handleClearAuth(method: 'GET' | 'POST', path: string): Promise<string | undefined> {
+		if (!this._authProvider) return undefined;
+		const info = await this.getLazyMintInfo();
+		if (!info.requiresClearAuthToken(method, path)) return undefined;
+		return this._authProvider.getCAT();
+	}
+
+	/**
 	 * Returns a serialized Blind Authentication Token (BAT) to use in the 'Blind-auth' header, or
 	 * undefined if not required for the given path and method.
 	 *
@@ -611,12 +626,13 @@ class Mint {
 		customRequest?: RequestFn,
 	): Promise<T> {
 		const requestInstance = customRequest ?? this._request;
-		// Get a BAT if this endpoint is protected and merge
-		// any caller supplied headers with Blind-auth if present
+		// Get BAT/CAT token if this endpoint is protected
 		const bat = await this.handleBlindAuth(method, path);
+		const cat = await this.handleClearAuth(method, path);
 		const headers: Record<string, string> = {
 			...(init.headers ?? {}),
 			...(bat ? { 'Blind-auth': bat } : {}),
+			...(cat ? { 'Clear-auth': cat } : {}),
 		};
 		return requestInstance<T>({
 			...init,
