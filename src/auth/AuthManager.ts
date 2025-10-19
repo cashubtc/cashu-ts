@@ -3,10 +3,11 @@ import request, { type RequestFn } from '../transport';
 import { joinUrls, hasValidDleq, encodeJsonToBase64, Bytes } from '../utils';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
-import type { MintActiveKeys, MintAllKeysets, MintKeys, MintKeyset, Proof } from '../model/types';
+import type { MintActiveKeys, MintAllKeysets, Proof } from '../model/types';
 import { type GetInfoResponse, type BlindAuthMintResponse } from '../mint/types';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
+import { KeyChain, type Keyset } from '../wallet';
 
 export type AuthManagerOptions = {
 	/**
@@ -63,10 +64,8 @@ export class AuthManager implements AuthProvider {
 	private desiredPoolSize = 10;
 	private maxPerMint = 10;
 
-	// Key cache for 'auth' unit
-	private keysets: MintKeyset[] = [];
-	private keysById: Map<string, MintKeys> = new Map();
-	private activeKeysetId?: string;
+	// Keychain for 'auth' unit
+	private keychain?: KeyChain;
 
 	constructor(mintUrl: string, opts?: AuthManagerOptions) {
 		this.mintUrl = mintUrl;
@@ -97,7 +96,11 @@ export class AuthManager implements AuthProvider {
 		return this.desiredPoolSize;
 	}
 	get activeAuthKeysetId(): string | undefined {
-		return this.activeKeysetId;
+		try {
+			return this.keychain?.getCheapestKeyset().id;
+		} catch {
+			return undefined;
+		}
 	}
 	get hasCAT(): boolean {
 		return !!this.tokens.accessToken;
@@ -309,8 +312,22 @@ export class AuthManager implements AuthProvider {
 			});
 			this.info = new MintInfo(info);
 		}
-		if (this.keysets.length === 0 || !this.activeKeysetId) {
-			await this.refreshKeysets();
+		if (!this.keychain) {
+			// fetch blind keysets and keys for unit 'auth'
+			const [allKeysets, allKeys] = await Promise.all([
+				this.req<MintAllKeysets>({
+					endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keysets'),
+					method: 'GET',
+				}),
+				this.req<MintActiveKeys>({
+					endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys'),
+					method: 'GET',
+				}),
+			]);
+			// build a KeyChain preloaded with caches, unit 'auth'
+			// Then smoke test to surface errors early - no need to init() with cached keys
+			this.keychain = new KeyChain(this.mintUrl, 'auth', allKeysets.keysets, allKeys.keysets);
+			this.keychain.getCheapestKeyset();
 		}
 	}
 
@@ -324,44 +341,9 @@ export class AuthManager implements AuthProvider {
 		return Math.max(1, Math.min(this.maxPerMint, mintMax));
 	}
 
-	/**
-	 * Refreshes AUTH (unit 'auth') keysets from mint, choosing cheapest active keyset.
-	 */
-	private async refreshKeysets(): Promise<void> {
-		const allKeysets = await this.req<MintAllKeysets>({
-			endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keysets'),
-			method: 'GET',
-		});
-		const unitKeysets = allKeysets.keysets.filter((k) => k.unit === 'auth');
-		this.keysets = unitKeysets;
-
-		// Choose cheapest active keyset (tie-breaker by id for determinism)
-		const active = unitKeysets
-			.filter((k) => k.active)
-			.sort(
-				(a, b) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0) || a.id.localeCompare(b.id),
-			)[0];
-
-		if (!active) throw new Error('AuthManager: no active auth keyset found');
-		this.activeKeysetId = active.id;
-
-		// Fetch keys for active keyset
-		const resp = await this.req<MintActiveKeys>({
-			endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys', this.activeKeysetId),
-			method: 'GET',
-		});
-		const mintKeys = resp.keysets[0];
-		if (!mintKeys || mintKeys.id !== this.activeKeysetId) {
-			throw new Error('AuthManager: key fetch mismatch for active keyset');
-		}
-		this.keysById.set(mintKeys.id, mintKeys);
-	}
-
-	private getActiveKeys(): MintKeys {
-		if (!this.activeKeysetId) throw new Error('AuthManager: active keyset not set');
-		const k = this.keysById.get(this.activeKeysetId);
-		if (!k) throw new Error('AuthManager: keys not loaded for active keyset');
-		return k;
+	private getActiveKeys(): Keyset {
+		if (!this.keychain) throw new Error('AuthManager: keyset not loaded for active keyset');
+		return this.keychain.getCheapestKeyset();
 	}
 
 	/**

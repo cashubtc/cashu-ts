@@ -623,23 +623,17 @@ test('loadConfig throws on 200 with empty body', async () => {
 	await expect(o.loadConfig()).rejects.toThrow('OIDCAuth: invalid discovery document');
 });
 
-// 3) devicePoll, empty JSON object  ,  hits err defaulting and the final default message path
+// 3) devicePoll, empty JSON object → default message, no timers
 test('devicePoll throws default message when provider returns empty object', async () => {
-	vi.useFakeTimers();
-	try {
-		const DISC = 'http://oidc/.well-known/openid-configuration';
-		const TOKEN = 'http://oidc/token';
-		server.use(
-			http.get(DISC, () => HttpResponse.json({ token_endpoint: TOKEN })),
-			http.post(TOKEN, () => HttpResponse.json({})),
-		);
-		const o = new OIDCAuth(DISC);
-		const p = o.devicePoll('dev', 1);
-		await vi.advanceTimersByTimeAsync(1000);
-		await expect(p).rejects.toThrow('OIDCAuth: device authorization failed');
-	} finally {
-		vi.useRealTimers();
-	}
+	const DISC = 'http://oidc/.well-known/openid-configuration';
+	const TOKEN = 'http://oidc/token';
+	server.use(
+		http.get(DISC, () => HttpResponse.json({ token_endpoint: TOKEN })),
+		http.post(TOKEN, () => HttpResponse.json({})),
+	);
+	const o = new OIDCAuth(DISC);
+	// Interval = 0 → no polling timers to leak
+	await expect(o.devicePoll('dev', 0)).rejects.toThrow('OIDCAuth: device authorization failed');
 });
 
 // 4) postFormStrict, non 2xx with no JSON  ,  forces the "HTTP <status>" fallback message

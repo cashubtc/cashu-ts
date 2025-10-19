@@ -1,5 +1,5 @@
 import { Keyset } from './Keyset';
-import { type Mint } from '../mint';
+import { Mint } from '../mint';
 import type { MintKeyset, MintKeys, MintAllKeysets, MintActiveKeys } from '../model/types/keyset';
 
 /**
@@ -14,12 +14,12 @@ export class KeyChain {
 	private keysets: { [id: string]: Keyset } = {};
 
 	constructor(
-		mint: Mint,
+		mint: string | Mint,
 		unit: string,
 		cachedKeysets?: MintKeyset[],
 		cachedKeys?: MintKeys[] | MintKeys,
 	) {
-		this.mint = mint;
+		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this.unit = unit;
 		if (cachedKeysets && cachedKeys) {
 			// Normalize and preload if both are provided
