@@ -408,9 +408,38 @@ test('ensureCAT warns when refresh throws', async () => {
 	am['oidc'] = { refresh: vi.fn().mockRejectedValue(new Error('nope')) } as any;
 	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 	const cat = await am.ensureCAT(30);
-	expect(cat).toBe('old'); // returns whatever it has
-	expect(warn).toHaveBeenCalled(); // "CAT refresh failed"
+	expect(cat).toBeUndefined();
+	expect(warn).toHaveBeenCalled();
 	warn.mockRestore();
+});
+
+test('ensureCAT sets expiresAt from JWT exp when expires_in is missing', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Force a refresh path
+	am['tokens'] = {
+		accessToken: 'stale',
+		refreshToken: 'rrr',
+		expiresAt: Date.now() - 1, // expired
+	};
+	// Build a simple JWT with an exp 5 minutes in the future
+	const expSec = Math.floor(Date.now() / 1000) + 300;
+	const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64');
+	const payload = Buffer.from(JSON.stringify({ exp: expSec })).toString('base64');
+	const jwt = `${header}.${payload}.sig`;
+	// OIDC returns access_token without expires_in to trigger the JWT-exp fallback
+	const refresh = vi.fn().mockResolvedValue({
+		access_token: jwt,
+		// no expires_in
+	});
+	am['oidc'] = { refresh } as any;
+	const cat = await am.ensureCAT(30);
+	// We used the refreshed token
+	expect(cat).toBe(jwt);
+	expect(refresh).toHaveBeenCalledWith('rrr');
+	// And expiresAt was populated from JWT exp (± a tiny tolerance for timing)
+	const expiresAt = am['tokens'].expiresAt!;
+	expect(typeof expiresAt).toBe('number');
+	expect(Math.abs(expiresAt - expSec * 1000)).toBeLessThan(50); // 50 ms slack
 });
 
 test('ensureCAT treats token with unknown expiry as valid', async () => {
@@ -471,4 +500,245 @@ test('getBlindAuthToken logs warn when endpoint not protected by NUT-22', async 
 	);
 
 	warn.mockRestore();
+});
+
+test('updateFromOIDC leaves expiresAt undefined on malformed JWT', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Access token with bad payload part
+	const bad = 'hdr.bad-base64.sig';
+	// drive through updateFromOIDC
+	am['updateFromOIDC']({ access_token: bad });
+	expect(am['tokens'].expiresAt).toBeUndefined();
+});
+
+test('getBlindAuthToken throws when ensure returns but pool stays empty', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Minimal info to skip the “not protected” warn path
+	am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+	// Ensure pool is empty
+	expect(am.poolSize).toBe(0);
+	// Stub ensure to succeed without minting anything
+	const ensureSpy = vi.spyOn(am as any, 'ensure').mockResolvedValue(undefined);
+	await expect(am.getBlindAuthToken({ method: 'POST', path: '/v1/anything' })).rejects.toThrow(
+		'AuthManager: no BATs available and minting failed',
+	);
+	expect(ensureSpy).toHaveBeenCalledWith(1);
+	ensureSpy.mockRestore();
+});
+
+// --- Branch: withLock finaliser when a later lock supersedes the current one (line 296) ---
+test('withLock does not clear a newer lock when superseded by another call', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Call the private withLock twice so the second call installs a newer lock before the first finishes.
+	const first = (am as any).withLock(async () => {
+		// small delay so the second call has time to run and set a new lockChain
+		await new Promise((r) => setTimeout(r, 10));
+	});
+	const second = (am as any).withLock(async () => {
+		/* no-op */
+	});
+	await Promise.all([first, second]);
+	// After both complete, lockChain should be cleared by the last finisher.
+	expect((am as any).lockChain).toBeUndefined();
+});
+
+// --- Branch: parseJwtExpSec catch + logger.warn (lines 320-322) ---
+test('parseJwtExpSec logs a warn when JWT payload is malformed', () => {
+	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+	const am = new AuthManager(mintUrl, { request: reqSpy, logger: console as any });
+	// Drive via updateFromOIDC to hit the catch path
+	(am as any).updateFromOIDC({ access_token: 'hdr.bad-base64.sig' });
+	expect(warn).toHaveBeenCalledWith('JWT access token was malformed.', expect.any(Object));
+	warn.mockRestore();
+});
+
+// --- Branch: getBatMaxMint throws when info missing (line 341) ---
+test('getBatMaxMint throws when mint info not loaded', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	expect(() => (am as any).getBatMaxMint()).toThrow('mint info not loaded');
+});
+
+// --- Branch: topUp includes Clear-auth header when CAT is required (lines 360-362) ---
+test('topUp sets Clear-auth header when /v1/auth/blind/mint requires CAT', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Mint requires CAT
+	am['info'] = ((): any => fakeInfo({ batMax: 1, needCATForMint: true }))();
+	// Valid CAT available so ensureCAT() will return it
+	am['tokens'] = { accessToken: 'CAT', expiresAt: Date.now() + 60_000 };
+	// Seed keys
+	const keysetId = '00authkeyset0001';
+	am['activeKeysetId'] = keysetId;
+	am['keysById'].set(keysetId, makeKeys(keysetId));
+	am['keysets'] = [{ id: keysetId, unit: 'auth', active: true, input_fee_ppk: 0 }] as any;
+	// Stub outputs and mint response
+	stubOutputs(1);
+	reqSpy.mockResolvedValueOnce({ signatures: ['sig'] });
+	await am.ensure(1);
+	const call = reqSpy.mock.calls[0][0];
+	expect(call.endpoint).toContain('/v1/auth/blind/mint');
+	expect(call.method).toBe('POST');
+	expect(call.headers?.['Clear-auth']).toBe('CAT');
+});
+
+// --- Branch: getActiveKeys throws for missing active keyset id (line 370 first throw) ---
+test('getActiveKeys throws when active keyset not set', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	expect(() => (am as any).getActiveKeys()).toThrow('active keyset not set');
+});
+
+// --- Branch: getActiveKeys throws for missing keys on the active keyset (line 370 second throw) ---
+test('getActiveKeys throws when keys for active keyset are not loaded', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	am['activeKeysetId'] = 'k';
+	expect(() => (am as any).getActiveKeys()).toThrow('keys not loaded for active keyset');
+});
+
+// --- Branch: topUp throws when info not loaded (line 389) ---
+test('topUp throws when called without mint info', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Call the private method directly to avoid init() setting info
+	await expect((am as any).topUp(1)).rejects.toThrow('mint info not loaded');
+});
+
+// --- updateFromOIDC: early return when no access_token (line 162) ---
+test('updateFromOIDC ignores updates when access_token is missing', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// seed some state to prove it doesn't change
+	am['tokens'] = { accessToken: 'keep-cat', refreshToken: 'keep-rr', expiresAt: 1111 };
+	(am as any)['updateFromOIDC']({
+		/* no access_token */
+	});
+	expect(am.getCAT()).toBe('keep-cat');
+	expect(am['tokens'].refreshToken).toBe('keep-rr');
+	expect(am['tokens'].expiresAt).toBe(1111);
+});
+
+// --- ensureCAT: no access token and no OIDC => returns undefined (covers validForAtLeast no-token path ~ line 191) ---
+test('ensureCAT returns undefined when no CAT is set and no OIDC refresh is possible', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	am['tokens'] = {}; // no accessToken, no refreshToken
+	const cat = await am.ensureCAT(30);
+	expect(cat).toBeUndefined();
+});
+
+// --- importPool: ignores malformed entries via shape check (lines 241, 253) ---
+test('importPool ignores malformed proofs (missing id/secret/C)', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// malformed entries mixed with one valid
+	const bad1 = {} as any;
+	const bad2 = { id: 'k', C: 'C', amount: 1 } as any; // missing secret
+	const bad3 = { id: 'k', secret: 'S', amount: 1 } as any; // missing C
+	const good: Proof = { id: 'k', C: 'C1', secret: 'S1', amount: 1, dleq: { e: 'e', s: 's' } };
+	am.importPool([bad1, bad2, bad3, good], 'replace');
+	expect(am.poolSize).toBe(1);
+	const snap = am.exportPool();
+	expect(snap[0]).toMatchObject({ id: 'k', C: 'C1', secret: 'S1' });
+});
+
+// --- parseJwtExpSec: early return on non-JWT string (lines 264-270) ---
+test('parseJwtExpSec returns undefined for non-JWT strings (early return)', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	expect((am as any).parseJwtExpSec('not-a-jwt')).toBeUndefined();
+});
+
+// --- getBatMaxMint: falls back to maxPerMint when nuts["22"] or bat_max_mint missing (line 323) ---
+test('getBatMaxMint falls back to manager maxPerMint when n22 or bat_max_mint is missing', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy, maxPerMint: 5 });
+	// info present but no nuts['22'] (or missing bat_max_mint)
+	am['info'] = {
+		nuts: {}, // no '22'
+		requiresClearAuthToken: () => false,
+		requiresBlindAuthToken: () => true,
+	} as any;
+	expect((am as any).getBatMaxMint()).toBe(5);
+});
+
+// --- init: skips refreshKeysets when keysets already present and activeKeysetId set (line 342 branch) ---
+test('init skips refreshKeysets when keysets are present and activeKeysetId is set', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	// Provide minimal info so init() does not fetch it again
+	am['info'] = {
+		nuts: { '22': { bat_max_mint: 1 } },
+		requiresClearAuthToken: () => false,
+		requiresBlindAuthToken: () => true,
+	} as any;
+	// Seed keysets and active keyset so the second branch of init() short-circuits
+	const keysetId = '00authkeyset0001';
+	am['activeKeysetId'] = keysetId;
+	am['keysets'] = [{ id: keysetId, unit: 'auth', active: true, input_fee_ppk: 0 }] as any;
+	am['keysById'].set(keysetId, { id: keysetId, unit: 'auth', keys: { 1: '02deadbeef' } });
+	const rk = vi.spyOn(am as any, 'refreshKeysets');
+	await (am as any).init();
+	expect(rk).not.toHaveBeenCalled(); // branch: skip refreshKeysets
+});
+
+test('constructor clamps desiredPoolSize and maxPerMint to at least 1', () => {
+	const am = new AuthManager(mintUrl, { desiredPoolSize: 0, maxPerMint: 0 });
+	expect(am['desiredPoolSize']).toBe(1);
+	expect(am['maxPerMint']).toBe(1);
+});
+
+test('validForAtLeast returns false when no access token is set', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	am['tokens'] = {}; // no token at all
+	expect((am as any).validForAtLeast(30)).toBe(false);
+});
+
+test('importPool skips duplicate proofs with same secret', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	const p1: Proof = { id: 'a', C: 'C1', secret: 'SAME', amount: 1, dleq: { e: 'e', s: 's' } };
+	const p2: Proof = { id: 'b', C: 'C2', secret: 'SAME', amount: 1, dleq: { e: 'e', s: 's' } };
+	am.importPool([p1], 'replace');
+	am.importPool([p2], 'merge'); // duplicate should be ignored
+	expect(am.poolSize).toBe(1);
+});
+
+test('parseJwtExpSec returns undefined when token is undefined', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	expect((am as any).parseJwtExpSec(undefined)).toBeUndefined();
+});
+
+test('parseJwtExpSec returns undefined when token has wrong number of parts', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	expect((am as any).parseJwtExpSec('one.two')).toBeUndefined();
+});
+
+test('ensure returns early when batch <= 0', async () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy, desiredPoolSize: 2, maxPerMint: 5 });
+	// Preload minimal info so init() won’t call refreshKeysets()
+	am['info'] = {
+		nuts: { '22': { bat_max_mint: 10 } },
+		requiresClearAuthToken: () => false,
+		requiresBlindAuthToken: () => true,
+	} as any;
+
+	// Also seed fake keysets so init() is fully satisfied
+	am['activeKeysetId'] = '00authkeyset0001';
+	am['keysets'] = [{ id: '00authkeyset0001', unit: 'auth', active: true, input_fee_ppk: 0 }] as any;
+	am['keysById'].set('00authkeyset0001', makeKeys('00authkeyset0001'));
+
+	// pool already full => batch <= 0
+	am['pool'] = [
+		{ id: 'k', C: 'C1', secret: 'S1', amount: 1 },
+		{ id: 'k', C: 'C2', secret: 'S2', amount: 1 },
+	];
+	const topUpSpy = vi.spyOn(am as any, 'topUp');
+	await am.ensure(1); // should early-return without calling topUp
+	expect(topUpSpy).not.toHaveBeenCalled();
+});
+
+test('exportPool returns proofs with undefined dleq when none present', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	am['pool'] = [{ id: 'x', C: 'Cx', secret: 'Sx', amount: 1 } as any]; // no dleq field
+	const snap = am.exportPool();
+	expect(snap[0].dleq).toBeUndefined();
+});
+
+test('parseJwtExpSec handles numeric exp encoded as string', () => {
+	const am = new AuthManager(mintUrl, { request: reqSpy });
+	const exp = Math.floor(Date.now() / 1000) + 100;
+	const payload = Buffer.from(JSON.stringify({ exp: String(exp) })).toString('base64');
+	const jwt = `hdr.${payload}.sig`;
+	const result = (am as any).parseJwtExpSec(jwt);
+	expect(result).toBe(exp);
 });

@@ -587,8 +587,8 @@ class Mint {
 	}
 
 	/**
-	 * Returns the Clear Authentication Token (CAT) to use in the 'Clear-auth' header, or
-	 * undefined if not required for the given path and method.
+	 * Returns the Clear Authentication Token (CAT) to use in the 'Clear-auth' header, or undefined if
+	 * not required for the given path and method.
 	 *
 	 * @param method The method to call on the path.
 	 * @param path The API path to check for blind auth requirement.
@@ -615,7 +615,7 @@ class Mint {
 		const info = await this.getLazyMintInfo();
 		if (!info.requiresBlindAuthToken(method, path)) return undefined;
 		const bat = await this._authProvider.getBlindAuthToken({ method, path });
-		this._logger.error('Blind Authentication Token...', { bat});
+		this._logger.error('Blind Authentication Token...', { bat });
 		return bat;
 	}
 

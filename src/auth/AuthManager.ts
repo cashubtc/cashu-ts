@@ -1,6 +1,6 @@
 import type { AuthProvider } from './AuthProvider';
 import request, { type RequestFn } from '../transport';
-import { joinUrls, hasValidDleq, encodeJsonToBase64 } from '../utils';
+import { joinUrls, hasValidDleq, encodeJsonToBase64, Bytes } from '../utils';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
 import type { MintActiveKeys, MintAllKeysets, MintKeys, MintKeyset, Proof } from '../model/types';
@@ -51,6 +51,8 @@ export class AuthManager implements AuthProvider {
 	private readonly logger: Logger;
 	private info?: MintInfo;
 	private lockChain?: Promise<void>;
+	private inflightRefresh?: Promise<void>;
+	private static readonly MIN_VALID_SECS = 30;
 
 	// Open ID Connect (OIDC)
 	private oidc?: OIDCAuth;
@@ -121,37 +123,53 @@ export class AuthManager implements AuthProvider {
 	 * Ensure a valid CAT is available (refresh if expiring soon). Returns a token safe to send right
 	 * now, or undefined if unobtainable.
 	 */
-	async ensureCAT(minValidSecs = 30): Promise<string | undefined> {
+	async ensureCAT(minValidSecs?: number): Promise<string | undefined> {
 		if (this.validForAtLeast(minValidSecs)) {
 			return this.tokens.accessToken;
 		}
-		if (this.oidc && this.tokens.refreshToken) {
-			try {
-				const tok = await this.oidc.refresh(this.tokens.refreshToken);
-				this.updateFromOIDC(tok);
-				if (this.validForAtLeast(0)) return this.tokens.accessToken;
-			} catch (err) {
-				this.logger.warn('AuthManager: CAT refresh failed', { err });
-			}
+
+		if (!this.oidc || !this.tokens.refreshToken) {
+			return this.tokens.accessToken; // nothing we can do
 		}
-		return this.tokens.accessToken;
+
+		// One refresh at a time
+		if (!this.inflightRefresh) {
+			this.inflightRefresh = (async () => {
+				try {
+					const tok = await this.oidc!.refresh(this.tokens.refreshToken!);
+					this.updateFromOIDC(tok);
+				} catch (err) {
+					this.logger.warn('AuthManager: CAT refresh failed', { err });
+				} finally {
+					this.inflightRefresh = undefined;
+				}
+			})();
+		}
+		await this.inflightRefresh;
+		return this.validForAtLeast(0) ? this.tokens.accessToken : undefined;
 	}
 
 	// Returns true if expiry date is >minValidSecs away
-	private validForAtLeast(minValidSecs: number): boolean {
+	private validForAtLeast(minValidSecs: number = AuthManager.MIN_VALID_SECS): boolean {
 		const { accessToken, expiresAt } = this.tokens;
 		if (!accessToken) return false;
 		if (!expiresAt) return true; // Unknown expiry, allow and rely on server to reject if invalid
 		return Date.now() + minValidSecs * 1000 < expiresAt;
 	}
 
+	// Updates access and refresh tokens in our store, using either the explicit expires_in key or falling back to the JWT expiry.
 	private updateFromOIDC(t: TokenResponse): void {
 		if (!t.access_token) return;
-		const now = Date.now();
+		const nowMs = Date.now();
 		this.tokens.accessToken = t.access_token;
-		// prefer new refresh token if provided, else keep existing
 		if (t.refresh_token) this.tokens.refreshToken = t.refresh_token;
-		this.tokens.expiresAt = t.expires_in ? now + t.expires_in * 1000 : undefined;
+		if (typeof t.expires_in === 'number' && t.expires_in > 0) {
+			this.tokens.expiresAt = nowMs + t.expires_in * 1000; // Prefer expires_in
+		} else {
+			// Fall back to JWT exp, else undefined
+			const expSec = this.parseJwtExpSec(t.access_token);
+			this.tokens.expiresAt = expSec ? expSec * 1000 : undefined;
+		}
 		this.logger.debug('AuthManager: OIDC tokens updated', { expiresAt: this.tokens.expiresAt });
 	}
 
@@ -240,6 +258,26 @@ export class AuthManager implements AuthProvider {
 	// ------------------------------
 
 	/**
+	 * Extract exp, seconds since epoch, from a JWT access token.
+	 */
+	private parseJwtExpSec(token?: string): number | undefined {
+		if (!token) return;
+		const parts = token.split('.');
+		if (parts.length !== 3) return;
+		try {
+			const jsonStr = Bytes.toString(Bytes.fromBase64(parts[1]));
+			const obj = JSON.parse(jsonStr) as { exp?: unknown };
+			const exp = typeof obj.exp === 'number' ? obj.exp : Number(obj.exp);
+			if (Number.isFinite(exp) && exp > 0) return exp;
+		} catch {
+			this.logger.warn('JWT access token was malformed.', {
+				token,
+			});
+		}
+		return;
+	}
+
+	/**
 	 * Simple mutex lock - chains promises in order.
 	 */
 	private async withLock<T>(fn: () => T | Promise<T>): Promise<T> {
@@ -248,14 +286,15 @@ export class AuthManager implements AuthProvider {
 		const lock = new Promise<void>((resolve) => {
 			release = resolve;
 		});
-
-		this.lockChain = prev.then(() => lock);
+		const chain = prev.then(() => lock); // capture the exact Promise we assign
+		this.lockChain = chain;
 		try {
 			await prev;
 			return await fn();
 		} finally {
 			release();
-			if (this.lockChain === lock) this.lockChain = undefined;
+			// Only clear if no newer chain has been installed
+			if (this.lockChain === chain) this.lockChain = undefined;
 		}
 	}
 
@@ -335,7 +374,7 @@ export class AuthManager implements AuthProvider {
 		const needsCAT = this.info.requiresClearAuthToken('POST', '/v1/auth/blind/mint');
 		let cat: string | undefined;
 		if (needsCAT) {
-			cat = await this.ensureCAT(30);
+			cat = await this.ensureCAT();
 			if (!cat) {
 				throw new Error(
 					'AuthManager: Clear-auth token required for /v1/auth/blind/mint but not available. Authenticate with the mint to obtain a CAT first.',

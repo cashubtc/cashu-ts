@@ -14,7 +14,7 @@ import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
  * @param options.authPool Optional. Desired BAT pool size (default 10)
  * @param options.oidc Optional. Options for OIDCAuth (scope, clientId, logger, etc.)
  * @returns {mint, auth, oidc, wallet} — hydrated, ready to use.
- * @throws if mint does not require authentication
+ * @throws If mint does not require authentication.
  */
 export async function createAuthWallet(
 	mintUrl: string,
