@@ -481,3 +481,176 @@ test('startDeviceAuth.poll handles slow_down by increasing delay', async () => {
 		vi.useRealTimers();
 	}
 });
+
+describe('OIDCAuth: startDeviceAuth.poll compact mix', () => {
+	test('slow_down then pending then success with correct delay bump', async () => {
+		vi.useFakeTimers();
+		try {
+			const DISC = 'http://oidc/.well-known/openid-configuration';
+			const TOKEN = 'http://oidc/token';
+			const DEVICE = 'http://oidc/device';
+			let polls = 0;
+
+			server.use(
+				http.get(DISC, () =>
+					HttpResponse.json({
+						token_endpoint: TOKEN,
+						device_authorization_endpoint: DEVICE,
+						authorization_endpoint: 'http://oidc/auth',
+					}),
+				),
+				http.post(DEVICE, () =>
+					HttpResponse.json({
+						device_code: 'dev',
+						user_code: 'UCODE',
+						verification_uri: 'http://oidc/device',
+						interval: 1, // initial delay
+						expires_in: 600,
+					}),
+				),
+				http.post(TOKEN, () => {
+					polls++;
+					if (polls === 1)
+						return HttpResponse.json({ error: 'slow_down', error_description: 'too fast' });
+					if (polls === 2)
+						return HttpResponse.json({ error: 'authorization_pending', error_description: 'wait' });
+					return HttpResponse.json({ access_token: 'ok' });
+				}),
+			);
+
+			const o = new OIDCAuth(DISC);
+			const start = await o.startDeviceAuth(1);
+			const p = start.poll();
+
+			await vi.advanceTimersByTimeAsync(1000); // slow_down → delay becomes max(1+5, 2)=6
+			await vi.advanceTimersByTimeAsync(6000); // authorization_pending, keep 6
+			await vi.advanceTimersByTimeAsync(6000); // success
+
+			const tok = await p;
+			expect(tok.access_token).toBe('ok');
+			expect(polls).toBe(3);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
+describe('OIDCAuth: startDeviceAuth uses caller interval when provider omits it', () => {
+	test('initial delay = caller interval if start.interval is undefined', async () => {
+		vi.useFakeTimers();
+		try {
+			const DISC = 'http://oidc/.well-known/openid-configuration';
+			const TOKEN = 'http://oidc/token';
+			const DEVICE = 'http://oidc/device';
+
+			server.use(
+				http.get(DISC, () =>
+					HttpResponse.json({
+						token_endpoint: TOKEN,
+						device_authorization_endpoint: DEVICE,
+						authorization_endpoint: 'http://oidc/auth',
+					}),
+				),
+				http.post(DEVICE, () =>
+					HttpResponse.json({
+						device_code: 'dev-x',
+						user_code: 'UCODE-X',
+						verification_uri: 'http://oidc/device',
+						// no interval here
+						expires_in: 600,
+					}),
+				),
+				http.post(TOKEN, () => HttpResponse.json({ access_token: 'ok' })),
+			);
+
+			const o = new OIDCAuth(DISC);
+			const start = await o.startDeviceAuth(2); // expect initial wait to be 2s
+			const p = start.poll();
+
+			await vi.advanceTimersByTimeAsync(2000);
+			const tok = await p;
+			expect(tok.access_token).toBe('ok');
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+});
+
+describe('OIDCAuth: postFormLoose minimal success', () => {
+	test('returns parsed JSON on 200 and logs debug', async () => {
+		const DISC = 'http://oidc/.well-known/openid-configuration';
+		const TOKEN = 'http://oidc/token';
+		const logger = { debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+
+		server.use(
+			http.get(DISC, () => HttpResponse.json({ token_endpoint: TOKEN })),
+			http.post(TOKEN, () => HttpResponse.json({ ok: true })),
+		);
+
+		const o = new OIDCAuth(DISC, { logger });
+		await o.loadConfig();
+		const res = await o['postFormLoose'](TOKEN, 'grant_type=x');
+		expect(res).toEqual({ ok: true });
+		expect(logger.debug).toHaveBeenCalledWith('OIDCAuth Response', { json: { ok: true } });
+	});
+});
+
+// 1) setScope(undefined) resets to 'openid'  ,  covers the nullish-coalesce branch in setScope
+test('setScope(undefined) resets scope to openid', async () => {
+	const DISC = 'http://oidc/.well-known/openid-configuration';
+	const TOKEN = 'http://oidc/token';
+	server.use(http.get(DISC, () => HttpResponse.json({ token_endpoint: TOKEN })));
+	const bodies: string[] = [];
+	server.use(
+		http.post(TOKEN, async ({ request }) => {
+			bodies.push(await request.text());
+			return HttpResponse.json({ access_token: 'ok' });
+		}),
+	);
+
+	const o = new OIDCAuth(DISC, { scope: 'email profile' });
+	o.setScope(undefined);
+	await o.passwordGrant('u', 'p');
+
+	expect(bodies[0]).toContain('scope=openid');
+});
+
+// 2) loadConfig, 200 with empty body  ,  covers the "text ? ... : undefined" parse branch
+test('loadConfig throws on 200 with empty body', async () => {
+	const DISC = 'http://oidc/.well-known/openid-configuration';
+	server.use(http.get(DISC, () => new HttpResponse('', { status: 200 })));
+	const o = new OIDCAuth(DISC);
+	await expect(o.loadConfig()).rejects.toThrow('OIDCAuth: invalid discovery document');
+});
+
+// 3) devicePoll, empty JSON object  ,  hits err defaulting and the final default message path
+test('devicePoll throws default message when provider returns empty object', async () => {
+	vi.useFakeTimers();
+	try {
+		const DISC = 'http://oidc/.well-known/openid-configuration';
+		const TOKEN = 'http://oidc/token';
+		server.use(
+			http.get(DISC, () => HttpResponse.json({ token_endpoint: TOKEN })),
+			http.post(TOKEN, () => HttpResponse.json({})),
+		);
+		const o = new OIDCAuth(DISC);
+		const p = o.devicePoll('dev', 1);
+		await vi.advanceTimersByTimeAsync(1000);
+		await expect(p).rejects.toThrow('OIDCAuth: device authorization failed');
+	} finally {
+		vi.useRealTimers();
+	}
+});
+
+// 4) postFormStrict, non 2xx with no JSON  ,  forces the "HTTP <status>" fallback message
+test('postFormStrict throws HTTP <status> when non 2xx and no JSON', async () => {
+	const DISC = 'http://oidc/.well-known/openid-configuration';
+	const TOKEN = 'http://oidc/token';
+	server.use(
+		http.get(DISC, () => HttpResponse.json({ token_endpoint: TOKEN })),
+		http.post(TOKEN, () => new HttpResponse('', { status: 502 })),
+	);
+	const o = new OIDCAuth(DISC);
+	await o.loadConfig();
+	await expect(o['postFormStrict'](TOKEN, 'grant_type=x')).rejects.toThrow('OIDCAuth: HTTP 502');
+});
