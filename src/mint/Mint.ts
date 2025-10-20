@@ -400,16 +400,31 @@ class Mint {
 	 * also contain blank outputs in order to receive back overpaid Lightning fees.
 	 *
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
-	 * @param customRequest Optional override for the request function.
+	 * @param options.customRequest Optional override for the request function.
+	 * @param options.preferAsync Optional override to set 'respond-async' header.
 	 * @returns The melt response.
 	 */
 	async melt(
 		meltPayload: MeltPayload,
-		customRequest?: RequestFn,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		},
 	): Promise<PartialMeltQuoteResponse> {
+		const headers: Record<string, string> = {
+			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		};
 		const response = await this.requestWithAuth<
 			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
-		>('POST', '/v1/melt/bolt11', { requestBody: meltPayload }, customRequest);
+		>(
+			'POST',
+			'/v1/melt/bolt11',
+			{
+				requestBody: meltPayload,
+				headers,
+			},
+			options?.customRequest,
+		);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -431,18 +446,28 @@ class Mint {
 	 * overpaid Lightning fees.
 	 *
 	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
-	 * @param customRequest Optional override for the request function.
+	 * @param options.customRequest Optional override for the request function.
+	 * @param options.preferAsync Optional override to set 'respond-async' header.
 	 * @returns Payment result with state and optional change signatures.
 	 */
 	async meltBolt12(
 		meltPayload: MeltPayload,
-		customRequest?: RequestFn,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		},
 	): Promise<Bolt12MeltQuoteResponse> {
+		const headers: Record<string, string> = {
+			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		};
 		const data = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
 			'POST',
 			'/v1/melt/bolt12',
-			{ requestBody: meltPayload },
-			customRequest,
+			{
+				requestBody: meltPayload,
+				headers,
+			},
+			options?.customRequest,
 		);
 		return data;
 	}

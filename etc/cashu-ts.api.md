@@ -659,8 +659,14 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
-    melt(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
-    meltBolt12(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
+    melt(meltPayload: MeltPayload, options?: {
+        customRequest?: RequestFn;
+        preferAsync?: boolean;
+    }): Promise<PartialMeltQuoteResponse>;
+    meltBolt12(meltPayload: MeltPayload, options?: {
+        customRequest?: RequestFn;
+        preferAsync?: boolean;
+    }): Promise<Bolt12MeltQuoteResponse>;
     mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)

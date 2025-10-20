@@ -1778,12 +1778,13 @@ class Wallet {
 			this.on._emitMeltBlanksCreated(blanks); // global callback
 		}
 
-		// Proceed with melt
+		// Proceed with melt, setting preferredAsync header if an onChangeOutputsCreated callback was used
 		let meltResponse;
+		const preferAsync: boolean = typeof onChangeOutputsCreated === 'function';
 		if (method === 'bolt12') {
-			meltResponse = await this.mint.meltBolt12(meltPayload);
+			meltResponse = await this.mint.meltBolt12(meltPayload, { preferAsync });
 		} else {
-			meltResponse = await this.mint.melt(meltPayload);
+			meltResponse = await this.mint.melt(meltPayload, { preferAsync });
 		}
 
 		// Sanity check mint didn't send too many signatures before mapping

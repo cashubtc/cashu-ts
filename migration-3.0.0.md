@@ -146,8 +146,32 @@ The following constants are no longer available:
 - `TOKEN_VERSION`
 - `TOKEN_PREFIX`
 
-### Removed static methods in `Mint`
+### Method changes in `Mint`
 
-The `Mint` class no longer has static methods. If you wish to call a mint method, simply instantiate a mint first, then call the instance method.
+**Static methods** The `Mint` class no longer has static methods. If you wish to call a mint method, simply instantiate a mint first, then call the instance method.
+
+The following method signatures have changed:
+
+- async melt
+- async meltBolt12
+
+The second parameter (was `customRequest`) is now an options object as follows:
+
+```ts
+- async melt(
+		meltPayload: MeltPayload,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		}
+	)
+- async meltBolt12(
+		meltPayload: MeltPayload,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		}
+	)
+```
 
 ---
