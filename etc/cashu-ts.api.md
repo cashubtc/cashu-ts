@@ -646,7 +646,7 @@ export type MintAllKeysets = {
 
 // @public
 export class MintBuilder {
-    constructor(wallet: Wallet, amount: number, quote: string | MintQuoteResponse);
+    constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', amount: number, quote: string | MintQuoteResponse | Bolt12MintQuoteResponse);
     asCustom(data: OutputData[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -1534,7 +1534,9 @@ export class WalletOps {
     // (undocumented)
     meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
     // (undocumented)
-    mint(amount: number, quote: string | MintQuoteResponse): MintBuilder;
+    mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder;
+    // (undocumented)
+    mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)

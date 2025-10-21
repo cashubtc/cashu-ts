@@ -2,6 +2,7 @@ import {
 	type MeltQuoteResponse,
 	type MintQuoteResponse,
 	type Bolt12MeltQuoteResponse,
+	type Bolt12MintQuoteResponse,
 } from '../mint/types';
 import { type OutputData, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
@@ -33,8 +34,11 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
-	mint(amount: number, quote: string | MintQuoteResponse) {
-		return new MintBuilder(this.wallet, amount, quote);
+	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
+		return new MintBuilder(this.wallet, 'bolt11', amount, quote);
+	}
+	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
+		return new MintBuilder(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
@@ -418,8 +422,9 @@ export class MintBuilder {
 
 	constructor(
 		private wallet: Wallet,
+		private method: 'bolt11' | 'bolt12',
 		private amount: number,
-		private quote: string | MintQuoteResponse,
+		private quote: string | MintQuoteResponse | Bolt12MintQuoteResponse,
 	) {}
 
 	/**
@@ -524,10 +529,27 @@ export class MintBuilder {
 	 * @returns The newly minted proofs.
 	 */
 	async run() {
-		if (this.outputType) {
-			return this.wallet.mintProofs(this.amount, this.quote, this.config, this.outputType);
+		if (this.method === 'bolt12') {
+			if (!this.config.privkey) {
+				throw new Error('privkey is required for BOLT12 mint quotes');
+			}
+			const bolt12 = this.quote as Bolt12MintQuoteResponse;
+			return this.outputType
+				? this.wallet.mintProofsBolt12(
+						this.amount,
+						bolt12,
+						this.config.privkey,
+						this.config,
+						this.outputType,
+					)
+				: this.wallet.mintProofsBolt12(this.amount, bolt12, this.config.privkey, this.config);
 		}
-		return this.wallet.mintProofs(this.amount, this.quote, this.config);
+		// BOLT11
+		const bolt11 = this.quote as MintQuoteResponse;
+		if (this.outputType) {
+			return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config, this.outputType);
+		}
+		return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config);
 	}
 }
 
@@ -664,7 +686,7 @@ export class MeltBuilder {
 		}
 		// BOLT11
 		return this.outputType
-			? this.wallet.meltProofs(this.quote, this.proofs, this.config, this.outputType)
-			: this.wallet.meltProofs(this.quote, this.proofs, this.config);
+			? this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType)
+			: this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config);
 	}
 }
