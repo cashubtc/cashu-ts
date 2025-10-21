@@ -30,7 +30,14 @@ type ReceiveFn = (
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
-type MintFn = (
+type MintBolt11Fn = (
+	amount: number,
+	quote: string,
+	config?: MintProofsConfig,
+	outputType?: OutputType,
+) => Promise<{ proofs: Proof[] }>;
+
+type MintBolt12Fn = (
 	amount: number,
 	quote: string,
 	config?: MintProofsConfig,
@@ -60,8 +67,8 @@ class MockWallet {
 
 	send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
 	receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
-	mintProofsBolt11: Mock<MintFn> = vi.fn<MintFn>(async () => ({ proofs: [] }));
-	mintProofsBolt12: Mock<MintFn> = vi.fn<MintFn>(async () => ({ proofs: [] }));
+	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
+	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
 	sendOffline: Mock<SendOfflineFn> = vi.fn<SendOfflineFn>(() => ({ keep: [], send: [] }));
 
 	meltProofsBolt11: Mock<MeltBolt11Fn> = vi.fn<MeltBolt11Fn>(async () => ({ change: [] }));

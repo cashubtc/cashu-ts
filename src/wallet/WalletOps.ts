@@ -499,6 +499,8 @@ export class MintBuilder {
 	 * @param k Private key for locked quotes.
 	 */
 	privkey(k: string) {
+		// For bolt11 - privkey is sent in the config
+		// For bolt12 - privkey is sent explicitly
 		this.config.privkey = k;
 		return this;
 	}
@@ -529,27 +531,31 @@ export class MintBuilder {
 	 * @returns The newly minted proofs.
 	 */
 	async run() {
-		if (this.method === 'bolt12') {
-			if (!this.config.privkey) {
-				throw new Error('privkey is required for BOLT12 mint quotes');
+		// BOLT 11
+		if (this.method === 'bolt11') {
+			const bolt11 = this.quote as MintQuoteResponse;
+			if (bolt11.pubkey && !this.config.privkey) {
+				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			const bolt12 = this.quote as Bolt12MintQuoteResponse;
 			return this.outputType
-				? this.wallet.mintProofsBolt12(
-						this.amount,
-						bolt12,
-						this.config.privkey,
-						this.config,
-						this.outputType,
-					)
-				: this.wallet.mintProofsBolt12(this.amount, bolt12, this.config.privkey, this.config);
+				? this.wallet.mintProofsBolt11(this.amount, bolt11, this.config, this.outputType)
+				: this.wallet.mintProofsBolt11(this.amount, bolt11, this.config);
 		}
-		// BOLT11
-		const bolt11 = this.quote as MintQuoteResponse;
-		if (this.outputType) {
-			return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config, this.outputType);
+
+		// BOLT 12
+		const bolt12 = this.quote as Bolt12MintQuoteResponse;
+		if (!this.config.privkey) {
+			throw new Error('privkey is required for BOLT12 mint quotes');
 		}
-		return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config);
+		return this.outputType
+			? this.wallet.mintProofsBolt12(
+					this.amount,
+					bolt12,
+					this.config.privkey,
+					this.config,
+					this.outputType,
+				)
+			: this.wallet.mintProofsBolt12(this.amount, bolt12, this.config.privkey, this.config);
 	}
 }
 
@@ -679,14 +685,16 @@ export class MeltBuilder {
 	 * @returns The melt result: `{ quote, change }`.
 	 */
 	async run() {
-		if (this.method === 'bolt12') {
-			return this.outputType
-				? this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType)
-				: this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config);
-		}
 		// BOLT11
+		if (this.method === 'bolt11') {
+			return this.outputType
+				? this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType)
+				: this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config);
+		}
+
+		// BOLT 12
 		return this.outputType
-			? this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType)
-			: this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config);
+			? this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType)
+			: this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config);
 	}
 }
