@@ -60,8 +60,8 @@ export class WalletOps {
  *     	.run();
  */
 export class SendBuilder {
-	readonly sendOutputType = new OutputTypeBuilder();
-	readonly keepOutputType = new OutputTypeBuilder();
+	readonly sendOutputType = new OutputTypeBuilder(this);
+	readonly keepOutputType = new OutputTypeBuilder(this);
 	private config: SendConfig = {};
 	private offlineExact?: { requireDleq: boolean };
 	private offlineClose?: { requireDleq: boolean };
@@ -183,7 +183,7 @@ export class SendBuilder {
  *     	.run();
  */
 export class ReceiveBuilder {
-	readonly outputType = new OutputTypeBuilder();
+	readonly outputType = new OutputTypeBuilder(this);
 	private config: ReceiveConfig = {};
 
 	constructor(
@@ -260,7 +260,7 @@ export class ReceiveBuilder {
  *     	.run();
  */
 export class MintBuilder {
-	readonly outputType = new OutputTypeBuilder();
+	readonly outputType = new OutputTypeBuilder(this);
 	private config: MintProofsConfig = {};
 
 	constructor(
@@ -346,7 +346,7 @@ export class MintBuilder {
  * ```
  */
 export class MeltBuilder {
-	readonly outputType = new OutputTypeBuilder();
+	readonly outputType = new OutputTypeBuilder(this);
 	private config: MeltProofsConfig = {};
 
 	constructor(
@@ -410,26 +410,31 @@ export class MeltBuilder {
 
 class OutputTypeBuilder {
 	private outputType?: OutputType;
+	private parentBuilder: SendBuilder | ReceiveBuilder | MintBuilder | MeltBuilder;
+
+	constructor(parentBuilder: SendBuilder | ReceiveBuilder | MintBuilder | MeltBuilder) {
+		this.parentBuilder = parentBuilder;
+	}
 
 	asRandom(denoms?: number[]) {
 		this.outputType = { type: 'random', denominations: denoms };
-		return this;
+		return this.parentBuilder;
 	}
 	asDeterministic(counter = 0, denoms?: number[]) {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
+		return this.parentBuilder;
 	}
 	asP2PK(options: P2PKOptions, denoms?: number[]) {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
+		return this.parentBuilder;
 	}
 	asFactory(factory: OutputDataFactory, denoms?: number[]) {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
+		return this.parentBuilder;
 	}
 	asCustom(data: OutputData[]) {
 		this.outputType = { type: 'custom', data };
-		return this;
+		return this.parentBuilder;
 	}
 	toOutputType(): OutputType | undefined {
 		return this.outputType;
