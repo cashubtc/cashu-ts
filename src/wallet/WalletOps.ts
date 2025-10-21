@@ -35,10 +35,10 @@ export class WalletOps {
 		return new ReceiveBuilder(this.wallet, token);
 	}
 	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
-		return new MintBuilder(this.wallet, 'bolt11', amount, quote);
+		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
 	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
-		return new MintBuilder(this.wallet, 'bolt12', amount, quote);
+		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
@@ -408,24 +408,36 @@ export class ReceiveBuilder {
 /**
  * Builder for minting proofs from a quote.
  *
+ * @remarks
+ * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
+ * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
  * @example
  *
  *     const proofs = await wallet.ops
  *     	.mint(100, quote)
  *     	.asDeterministic() // counter 0 auto reserves
  *     	.onCountersReserved((info) => console.log(info))
+ *     	.privkey('sk')
  *     	.run();
  */
-export class MintBuilder {
+export class MintBuilder<
+	M extends 'bolt11' | 'bolt12',
+	HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
+> {
 	private outputType?: OutputType;
 	private config: MintProofsConfig = {};
 
+	// phantom field to satisfy linter (erased at emit)
+	private readonly _hasPrivkey!: HasPrivKey;
+
 	constructor(
 		private wallet: Wallet,
-		private method: 'bolt11' | 'bolt12',
+		private method: M,
 		private amount: number,
 		private quote: string | MintQuoteResponse | Bolt12MintQuoteResponse,
-	) {}
+	) {
+		void this._hasPrivkey; // intentionally unused (phantom field)
+	}
 
 	/**
 	 * Use random blinding for the minted proofs.
@@ -498,11 +510,11 @@ export class MintBuilder {
 	 *
 	 * @param k Private key for locked quotes.
 	 */
-	privkey(k: string) {
+	privkey(k: string): MintBuilder<M, true> {
 		// For bolt11 - privkey is sent in the config
-		// For bolt12 - privkey is sent explicitly
+		// For bolt12 - privkey is sent positionally in run()
 		this.config.privkey = k;
-		return this;
+		return this as MintBuilder<M, true>;
 	}
 	/**
 	 * Provide existing proofs to help optimise denomination selection.
@@ -528,9 +540,11 @@ export class MintBuilder {
 	/**
 	 * Execute minting against the quote.
 	 *
+	 * @remarks
+	 * This method can only be called for bolt12 quotes when .privkey() is set.
 	 * @returns The newly minted proofs.
 	 */
-	async run() {
+	async run(this: MintBuilder<M, true>) {
 		// BOLT 11
 		if (this.method === 'bolt11') {
 			const bolt11 = this.quote as MintQuoteResponse;

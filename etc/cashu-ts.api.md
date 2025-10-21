@@ -645,8 +645,8 @@ export type MintAllKeysets = {
 };
 
 // @public
-export class MintBuilder {
-    constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', amount: number, quote: string | MintQuoteResponse | Bolt12MintQuoteResponse);
+export class MintBuilder<M extends 'bolt11' | 'bolt12', HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
+    constructor(wallet: Wallet, method: M, amount: number, quote: string | MintQuoteResponse | Bolt12MintQuoteResponse);
     asCustom(data: OutputData[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -654,9 +654,9 @@ export class MintBuilder {
     asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    privkey(k: string): this;
+    privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Proof[]): this;
-    run(): Promise<Proof[]>;
+    run(this: MintBuilder<M, true>): Promise<Proof[]>;
 }
 
 // @public (undocumented)
@@ -1534,9 +1534,9 @@ export class WalletOps {
     // (undocumented)
     meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
     // (undocumented)
-    mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder;
+    mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder<"bolt11", true>;
     // (undocumented)
-    mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder;
+    mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder<"bolt12", false>;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)

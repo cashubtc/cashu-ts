@@ -13,7 +13,11 @@ import type {
 	SendResponse,
 	MeltProofsConfig,
 } from '../../src/wallet/types';
-import type { MeltQuoteResponse, Bolt12MeltQuoteResponse } from '../../src/mint/types';
+import type {
+	MeltQuoteResponse,
+	Bolt12MeltQuoteResponse,
+	Bolt12MintQuoteResponse,
+} from '../../src/mint/types';
 
 // ---- Function signatures for typed mocks ------------------------------------
 
@@ -39,7 +43,8 @@ type MintBolt11Fn = (
 
 type MintBolt12Fn = (
 	amount: number,
-	quote: string,
+	quote: Bolt12MintQuoteResponse,
+	privkey: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
@@ -107,6 +112,17 @@ const melt12: Bolt12MeltQuoteResponse = {
 	payment_preimage: null,
 	request: 'lno1...',
 	unit: 'sat',
+};
+
+const mint12: Bolt12MintQuoteResponse = {
+	quote: 'mq12',
+	request: 'lno1...',
+	amount: 7,
+	unit: 'sat',
+	expiry: 0,
+	pubkey: '0200000',
+	amount_paid: 0,
+	amount_issued: 0,
 };
 
 describe('WalletOps builders', () => {
@@ -423,6 +439,84 @@ describe('WalletOps builders', () => {
 
 			const [, , cfg] = wallet.mintProofsBolt11.mock.calls[0];
 			expect(cfg).toMatchObject({ proofsWeHave: some });
+		});
+		it('bolt12 requires privkey at compile time', () => {
+			if (false as boolean) {
+				// This is a compiler check - if you remove the exclude line below the
+				// compiler should complain 'MintBuilder<"bolt12", false>' is not assignable
+				// @ts-expect-error run should not be callable before privkey
+				ops.mintBolt12(7, mint12).run();
+			}
+
+			// OK once privkey is provided
+			void ops.mintBolt12(7, mint12).privkey('k').run();
+		});
+		it('bolt12 throws at runtime without privkey for JS consumers', async () => {
+			const builder: any = ops.mintBolt12(7, mint12);
+			await expect(builder.run()).rejects.toThrow(/privkey is required/i);
+			expect(wallet.mintProofsBolt12).not.toHaveBeenCalled();
+		});
+		it('bolt12 passes privkey as positional arg and forwards config and outputType', async () => {
+			const cb = vi.fn();
+			await ops
+				.mintBolt12(7, mint12)
+				.asDeterministic(0, [7])
+				.keyset('kid')
+				.onCountersReserved(cb)
+				.privkey('sk')
+				.run();
+
+			expect(wallet.mintProofsBolt12).toHaveBeenCalledTimes(1);
+			const [amount, q, pk, cfg, ot] = wallet.mintProofsBolt12.mock.calls[0];
+
+			expect(amount).toBe(7);
+			expect(q).toBe(mint12);
+			expect(pk).toBe('sk'); // positional
+			expect(cfg).toMatchObject({ keysetId: 'kid' });
+			expect(typeof cfg!.onCountersReserved).toBe('function');
+
+			expect(ot).toEqual({ type: 'deterministic', counter: 0, denominations: [7] });
+		});
+		it('bolt12 supports factory OutputType', async () => {
+			const factory = vi.fn();
+			await ops.mintBolt12(7, mint12).asFactory(factory, [7]).privkey('sk').run();
+
+			const [, , , , ot] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(ot).toEqual({ type: 'factory', factory, denominations: [7] });
+		});
+
+		it('bolt12 supports custom OutputType', async () => {
+			const data = [{ blindedMessage: { amount: 7 } }] as OutputData[];
+			await ops.mintBolt12(7, mint12).asCustom(data).privkey('sk').run();
+
+			const [, , , , ot] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(ot).toEqual({ type: 'custom', data });
+		});
+
+		it('bolt12 supports random OutputType with denominations', async () => {
+			await ops.mintBolt12(7, mint12).asRandom([7]).privkey('sk').run();
+
+			const [, , , , ot] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(ot).toEqual({ type: 'random', denominations: [7] });
+		});
+		it('bolt12 forwards proofsWeHave in config', async () => {
+			const some = [{ amount: 3 } as Proof];
+			await ops.mintBolt12(7, mint12).asDeterministic(0).proofsWeHave(some).privkey('sk').run();
+
+			const [, , , cfg] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(cfg).toMatchObject({ proofsWeHave: some });
+		});
+		it('bolt12 takes the last privkey if called twice', async () => {
+			await ops.mintBolt12(7, mint12).privkey('old').privkey('new').run();
+
+			const [, , pk] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(pk).toBe('new');
+		});
+		it('bolt11 locked quote without privkey throws at runtime', async () => {
+			const lockedQuote = { ...mint12, request: 'lnbc1...', pubkey: '02abcd' } as any; // shape of locked BOLT11 quote
+			await expect((ops.mintBolt11 as any)(10, lockedQuote).run()).rejects.toThrow(
+				/privkey is required/i,
+			);
 		});
 	});
 
