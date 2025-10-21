@@ -2,6 +2,7 @@ import {
 	type MeltQuoteResponse,
 	type MintQuoteResponse,
 	type Bolt12MeltQuoteResponse,
+	type Bolt12MintQuoteResponse,
 } from '../mint/types';
 import { type OutputData, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
@@ -33,8 +34,11 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
-	mint(amount: number, quote: string | MintQuoteResponse) {
-		return new MintBuilder(this.wallet, amount, quote);
+	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
+		return new MintBuilder(this.wallet, 'bolt11', amount, quote);
+	}
+	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
+		return new MintBuilder(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
@@ -42,6 +46,139 @@ export class WalletOps {
 	meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt12', quote, proofs);
 	}
+}
+
+/**
+ * Mixin infrastructure.
+ *
+ * Adds the asXXX family to a builder, always targeting a property named `outputType`.
+ *
+ * DX notes:
+ *
+ * - Compose it once per builder.
+ * - No per-instance allocations, methods live on the prototype.
+ * - TSDoc on these methods appears wherever the mixin is applied.
+ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyCtor<TInstance extends object = object> = new (...args: any[]) => TInstance;
+
+/**
+ * Structural helper: any builder that carries the unified `outputType` slot.
+ */
+type HasOutputSlot = { outputType?: OutputType };
+
+/**
+ * Methods added by the mixin. Keeping doc comments here ensures IDE hovers work on every builder
+ * that composes this mixin.
+ */
+interface OutputTypeMethods {
+	/**
+	 * Use random blinding for the outputs.
+	 *
+	 * @remarks
+	 * If `denoms` are specified, any `proofsWeHave()` hint will have no effect.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asRandom(denoms?: number[]): this;
+
+	/**
+	 * Use deterministic outputs.
+	 *
+	 * @remarks
+	 * If `denoms` are specified, any `proofsWeHave()` hint will have no effect.
+	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asDeterministic(counter?: number, denoms?: number[]): this;
+
+	/**
+	 * Use P2PK locked outputs.
+	 *
+	 * @remarks
+	 * If `denoms` are specified, any `proofsWeHave()` hint will have no effect.
+	 * @param options NUT 11 options like pubkey and locktime.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asP2PK(options: P2PKOptions, denoms?: number[]): this;
+
+	/**
+	 * Use a factory to generate `OutputData`.
+	 *
+	 * @remarks
+	 * If `denoms` are specified, any `proofsWeHave()` hint will have no effect.
+	 * @param factory OutputDataFactory used to produce blinded messages.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asFactory(factory: OutputDataFactory, denoms?: number[]): this;
+
+	/**
+	 * Provide pre-created `OutputData`.
+	 *
+	 * @param data Fully formed `OutputData` for the final amount.
+	 */
+	asCustom(data: OutputData[]): this;
+}
+
+/**
+ * Mixin that adds asXXX (asRandom/asDeterministic/etc.) to a builder. It always targets the unified
+ * `outputType` slot on the builder.
+ *
+ * Usage: class BaseReceiveBuilder { protected outputType?: OutputType; ... } export class
+ * ReceiveBuilder extends WithOutputType(BaseReceiveBuilder) {}
+ */
+function WithOutputType<Base extends AnyCtor<object>>(BaseCtor: Base) {
+	// TS mixins must accept (...args: any[]) in ctor.
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	class WithOT extends (BaseCtor as new (...args: any[]) => object) implements OutputTypeMethods {
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		constructor(...args: any[]) {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+			super(...args);
+		}
+
+		asRandom(denoms?: number[]) {
+			(this as HasOutputSlot).outputType = { type: 'random', denominations: denoms };
+			return this;
+		}
+
+		asDeterministic(counter = 0, denoms?: number[]) {
+			(this as HasOutputSlot).outputType = {
+				type: 'deterministic',
+				counter,
+				denominations: denoms,
+			};
+			return this;
+		}
+
+		asP2PK(options: P2PKOptions, denoms?: number[]) {
+			(this as HasOutputSlot).outputType = {
+				type: 'p2pk',
+				options,
+				denominations: denoms,
+			};
+			return this;
+		}
+
+		asFactory(factory: OutputDataFactory, denoms?: number[]) {
+			(this as HasOutputSlot).outputType = {
+				type: 'factory',
+				factory,
+				denominations: denoms,
+			};
+			return this;
+		}
+
+		asCustom(data: OutputData[]) {
+			(this as HasOutputSlot).outputType = { type: 'custom', data };
+			return this;
+		}
+	}
+
+	// Tell TS/IDE: instances are the base builder PLUS OutputTypeMethods (with docs).
+	return WithOT as new (
+		...args: ConstructorParameters<Base>
+	) => InstanceType<Base> & OutputTypeMethods;
 }
 
 /**
@@ -59,68 +196,20 @@ export class WalletOps {
  *     	.includeFees(true) // sender pays receiver’s future spend fee
  *     	.run();
  */
-export class SendBuilder {
-	private sendOT?: OutputType;
-	private keepOT?: OutputType;
-	private config: SendConfig = {};
-	private offlineExact?: { requireDleq: boolean };
-	private offlineClose?: { requireDleq: boolean };
+class BaseSendBuilder {
+	// Slots targeted by the mixin and keep methods
+	protected outputType?: OutputType; // send-side output type (formerly sendOT)
+	protected keepOT?: OutputType;
+
+	protected config: SendConfig = {};
+	protected offlineExact?: { requireDleq: boolean };
+	protected offlineClose?: { requireDleq: boolean };
 
 	constructor(
-		private wallet: Wallet,
-		private amount: number,
-		private proofs: Proof[],
+		protected wallet: Wallet,
+		protected amount: number,
+		protected proofs: Proof[],
 	) {}
-
-	/**
-	 * Use random blinding for the sent outputs.
-	 *
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: number[]) {
-		this.sendOT = { type: 'random', denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use deterministic outputs for the sent proofs.
-	 *
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
-		this.sendOT = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use P2PK locked outputs for the sent proofs.
-	 *
-	 * @param options NUT 11 options like pubkey and locktime.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
-		this.sendOT = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use a factory to generate OutputData for the sent proofs.
-	 *
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
-		this.sendOT = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Provide pre created OutputData for the sent proofs.
-	 *
-	 * @param data Fully formed OutputData. Their amounts must sum to the send amount, otherwise the
-	 *   wallet will throw.
-	 */
-	asCustom(data: OutputData[]) {
-		this.sendOT = { type: 'custom', data };
-		return this;
-	}
 
 	/**
 	 * Use random blinding for change outputs.
@@ -229,7 +318,7 @@ export class SendBuilder {
 	async run() {
 		// If an offline mode is requested, forbid custom OutputTypes,
 		// because offline uses existing proofs and cannot honour new outputs.
-		if ((this.offlineExact || this.offlineClose) && (this.sendOT || this.keepOT)) {
+		if ((this.offlineExact || this.offlineClose) && (this.outputType || this.keepOT)) {
 			throw new Error(
 				'Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.',
 			);
@@ -254,9 +343,9 @@ export class SendBuilder {
 		}
 
 		// If either side was customized, construct a full OutputConfig.
-		if (this.sendOT || this.keepOT) {
+		if (this.outputType || this.keepOT) {
 			const outputConfig: OutputConfig = {
-				send: this.sendOT ?? this.wallet.defaultOutputType(),
+				send: this.outputType ?? this.wallet.defaultOutputType(),
 				...(this.keepOT ? { keep: this.keepOT } : {}),
 			};
 			return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
@@ -265,6 +354,9 @@ export class SendBuilder {
 		return this.wallet.send(this.amount, this.proofs, this.config);
 	}
 }
+
+// Compose the mixin to attach send-side asXXX methods that write into `outputType`.
+export class SendBuilder extends WithOutputType(BaseSendBuilder) {}
 
 /**
  * Builder for receiving a token.
@@ -279,71 +371,15 @@ export class SendBuilder {
  *     	.requireDleq(true)
  *     	.run();
  */
-export class ReceiveBuilder {
-	private outputType?: OutputType;
-	private config: ReceiveConfig = {};
+class BaseReceiveBuilder {
+	// Slot targeted by WithOutputType
+	protected outputType?: OutputType;
+	protected config: ReceiveConfig = {};
 
 	constructor(
-		private wallet: Wallet,
-		private token: Token | string,
+		protected wallet: Wallet,
+		protected token: Token | string,
 	) {}
-
-	/**
-	 * Use random blinding for the received outputs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: number[]) {
-		this.outputType = { type: 'random', denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use deterministic outputs for the received proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
-		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use P2PK locked outputs for the received proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param options NUT 11 options like pubkey and locktime.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
-		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use a factory to generate OutputData for received proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
-		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Provide pre created OutputData for received proofs.
-	 *
-	 * @param data Fully formed OutputData for the final amount.
-	 */
-	asCustom(data: OutputData[]) {
-		this.outputType = { type: 'custom', data };
-		return this;
-	}
 
 	/**
 	 * Use a specific keyset for the operation.
@@ -394,12 +430,14 @@ export class ReceiveBuilder {
 	}
 
 	async run() {
-		if (this.outputType) {
-			return this.wallet.receive(this.token, this.config, this.outputType);
-		}
-		return this.wallet.receive(this.token, this.config);
+		return this.outputType
+			? this.wallet.receive(this.token, this.config, this.outputType)
+			: this.wallet.receive(this.token, this.config);
 	}
 }
+
+// Build main class with mixin
+export class ReceiveBuilder extends WithOutputType(BaseReceiveBuilder) {}
 
 /**
  * Builder for minting proofs from a quote.
@@ -412,71 +450,26 @@ export class ReceiveBuilder {
  *     	.onCountersReserved((info) => console.log(info))
  *     	.run();
  */
-export class MintBuilder {
-	private outputType?: OutputType;
-	private config: MintProofsConfig = {};
+class BaseMintBuilder {
+	// Slot targeted by WithOutputType
+	protected outputType?: OutputType;
+	protected config: MintProofsConfig = {};
+
+	// Hold the mutually exclusive quotes in separate slots for clean narrowing.
+	protected quote11?: string | MintQuoteResponse;
+	protected quote12?: Bolt12MintQuoteResponse;
 
 	constructor(
-		private wallet: Wallet,
-		private amount: number,
-		private quote: string | MintQuoteResponse,
-	) {}
-
-	/**
-	 * Use random blinding for the minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: number[]) {
-		this.outputType = { type: 'random', denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use deterministic outputs for the minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
-		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use P2PK locked outputs for the minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param options NUT 11 options like pubkey and locktime.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
-		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Use a factory to generate OutputData for minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
-		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
-	/**
-	 * Provide pre created OutputData for minted proofs.
-	 *
-	 * @param data Fully formed OutputData for the final amount.
-	 */
-	asCustom(data: OutputData[]) {
-		this.outputType = { type: 'custom', data };
-		return this;
+		protected wallet: Wallet,
+		protected method: 'bolt11' | 'bolt12',
+		protected amount: number,
+		quote: string | MintQuoteResponse | Bolt12MintQuoteResponse,
+	) {
+		if (method === 'bolt12') {
+			this.quote12 = quote as Bolt12MintQuoteResponse;
+		} else {
+			this.quote11 = quote as string | MintQuoteResponse;
+		}
 	}
 
 	/**
@@ -494,6 +487,8 @@ export class MintBuilder {
 	 * @param k Private key for locked quotes.
 	 */
 	privkey(k: string) {
+		// For BOLT12, wallet API requires privkey as separate arg;
+		// for BOLT11 we keep it in config if the wallet uses it for locked quotes.
 		this.config.privkey = k;
 		return this;
 	}
@@ -524,12 +519,35 @@ export class MintBuilder {
 	 * @returns The newly minted proofs.
 	 */
 	async run() {
-		if (this.outputType) {
-			return this.wallet.mintProofs(this.amount, this.quote, this.config, this.outputType);
+		if (this.method === 'bolt12') {
+			if (!this.config.privkey) {
+				throw new Error('privkey is required for BOLT12 mint quotes');
+			}
+			// Signature: mintProofsBolt12(amount, quote, privkey, config?, outputType?)
+			return this.outputType
+				? this.wallet.mintProofsBolt12(
+						this.amount,
+						this.quote12!, // guaranteed for bolt12
+						this.config.privkey,
+						this.config,
+						this.outputType,
+					)
+				: this.wallet.mintProofsBolt12(
+						this.amount,
+						this.quote12!, // guaranteed for bolt12
+						this.config.privkey,
+						this.config,
+					);
 		}
-		return this.wallet.mintProofs(this.amount, this.quote, this.config);
+		// BOLT11: mintProofsBolt11(amount, quote, config?, outputType?)
+		return this.outputType
+			? this.wallet.mintProofsBolt11(this.amount, this.quote11!, this.config, this.outputType)
+			: this.wallet.mintProofsBolt11(this.amount, this.quote11!, this.config);
 	}
 }
+
+// Build main class with mixin
+export class MintBuilder extends WithOutputType(BaseMintBuilder) {}
 
 /**
  * Builder for melting proofs to pay a Lightning invoice or BOLT12 offer.
@@ -554,69 +572,17 @@ export class MintBuilder {
  * 	.run();
  * ```
  */
-export class MeltBuilder {
-	private outputType?: OutputType;
-	private config: MeltProofsConfig = {};
+class BaseMeltBuilder {
+	// Slot targeted by WithOutputType
+	protected outputType?: OutputType;
+	protected config: MeltProofsConfig = {};
 
 	constructor(
-		private wallet: Wallet,
-		private method: 'bolt11' | 'bolt12',
-		private quote: MeltQuoteResponse,
-		private proofs: Proof[],
+		protected wallet: Wallet,
+		protected method: 'bolt11' | 'bolt12',
+		protected quote: MeltQuoteResponse,
+		protected proofs: Proof[],
 	) {}
-
-	/**
-	 * Use random blinding for change outputs.
-	 *
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: number[]) {
-		this.outputType = { type: 'random', denominations: denoms };
-		return this;
-	}
-
-	/**
-	 * Use deterministic outputs for change.
-	 *
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
-		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
-
-	/**
-	 * Use P2PK-locked change (NUT-11).
-	 *
-	 * @param options NUT-11 locking options (e.g., pubkey, locktime).
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
-		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
-
-	/**
-	 * Use a factory to generate OutputData for change.
-	 *
-	 * @param factory Factory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
-		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
-
-	/**
-	 * Provide pre-created OutputData for change.
-	 *
-	 * @param data Fully formed OutputData for the change amount.
-	 */
-	asCustom(data: OutputData[]) {
-		this.outputType = { type: 'custom', data };
-		return this;
-	}
 
 	/**
 	 * Use a specific keyset for the melt operation.
@@ -664,7 +630,10 @@ export class MeltBuilder {
 		}
 		// BOLT11
 		return this.outputType
-			? this.wallet.meltProofs(this.quote, this.proofs, this.config, this.outputType)
-			: this.wallet.meltProofs(this.quote, this.proofs, this.config);
+			? this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType)
+			: this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config);
 	}
 }
+
+// Build main class with mixin
+export class MeltBuilder extends WithOutputType(BaseMeltBuilder) {}

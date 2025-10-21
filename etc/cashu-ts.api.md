@@ -506,18 +506,10 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
     quote: T;
 }
 
-// @public
-export class MeltBuilder {
-    constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', quote: MeltQuoteResponse, proofs: Proof[]);
-    asCustom(data: OutputData[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
-    keyset(id: string): this;
-    onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
-    onCountersReserved(cb: OnCountersReserved): this;
-    run(): Promise<MeltProofsResponse>;
+// Warning: (ae-forgotten-export) The symbol "MeltBuilder_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class MeltBuilder extends MeltBuilder_base {
 }
 
 // @public
@@ -644,19 +636,10 @@ export type MintAllKeysets = {
     keysets: MintKeyset[];
 };
 
-// @public
-export class MintBuilder {
-    constructor(wallet: Wallet, amount: number, quote: string | MintQuoteResponse);
-    asCustom(data: OutputData[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
-    keyset(id: string): this;
-    onCountersReserved(cb: OnCountersReserved): this;
-    privkey(k: string): this;
-    proofsWeHave(p: Proof[]): this;
-    run(): Promise<Proof[]>;
+// Warning: (ae-forgotten-export) The symbol "MintBuilder_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class MintBuilder extends MintBuilder_base {
 }
 
 // @public (undocumented)
@@ -1117,21 +1100,10 @@ export type RawTransport = {
     g?: string[][];
 };
 
-// @public
-export class ReceiveBuilder {
-    constructor(wallet: Wallet, token: Token | string);
-    asCustom(data: OutputData[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
-    keyset(id: string): this;
-    onCountersReserved(cb: OnCountersReserved): this;
-    privkey(k: string | string[]): this;
-    proofsWeHave(p: Proof[]): this;
-    requireDleq(on?: boolean): this;
-    // (undocumented)
-    run(): Promise<Proof[]>;
+// Warning: (ae-forgotten-export) The symbol "ReceiveBuilder_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class ReceiveBuilder extends ReceiveBuilder_base {
 }
 
 // @public
@@ -1187,25 +1159,10 @@ export type SelectProofs = (proofs: Proof[], amountToSend: number, keyChain: Key
 // @public (undocumented)
 export const selectProofsRGLI: SelectProofs;
 
-// @public
-export class SendBuilder {
-    constructor(wallet: Wallet, amount: number, proofs: Proof[]);
-    asCustom(data: OutputData[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
-    includeFees(on?: boolean): this;
-    keepAsCustom(data: OutputData[]): this;
-    keepAsDeterministic(counter?: number, denoms?: number[]): this;
-    keepAsFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    keepAsP2PK(options: P2PKOptions, denoms?: number[]): this;
-    keepAsRandom(denoms?: number[]): this;
-    keyset(id: string): this;
-    offlineCloseMatch(requireDleq?: boolean): this;
-    offlineExactOnly(requireDleq?: boolean): this;
-    onCountersReserved(cb: OnCountersReserved): this;
-    run(): Promise<SendResponse>;
+// Warning: (ae-forgotten-export) The symbol "SendBuilder_base" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export class SendBuilder extends SendBuilder_base {
 }
 
 // @public
@@ -1534,7 +1491,9 @@ export class WalletOps {
     // (undocumented)
     meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
     // (undocumented)
-    mint(amount: number, quote: string | MintQuoteResponse): MintBuilder;
+    mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder;
+    // (undocumented)
+    mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)
