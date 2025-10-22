@@ -150,15 +150,18 @@ The following constants are no longer available:
 
 **Static methods** The `Mint` class no longer has static methods. If you wish to call a mint method, simply instantiate a mint first, then call the instance method.
 
-The following method signatures have changed:
+The following method names have changed:
 
-- async melt
-- async meltBolt12
+- async createMintQuote -> createMintQuoteBolt11
+- async checkMintQuote -> checkMintQuoteBolt11
+- async createMeltQuote -> createMeltQuoteBolt11
+- async checkMeltQuote -> checkMeltQuoteBolt11
+- async melt -> meltBolt11
 
-The second parameter (was `customRequest`) is now an options object as follows:
+The second parameter (was `customRequest`) is now an options object in the following methods:
 
 ```ts
-- async melt(
+- async meltBolt11(
 		meltPayload: MeltPayload,
 		options?: {
 			customRequest?: RequestFn;
@@ -173,5 +176,22 @@ The second parameter (was `customRequest`) is now an options object as follows:
 		}
 	)
 ```
+
+### Auth Changes
+
+Clear and Blind authentication have been simplified and enhanced. Here are the highlights:
+
+- Legacy `CashuAuthMint` / `CashuAuthWallet` have been removed.
+- A new `AuthManager` provides "Batteries Included" CAT/BAT management.
+- `createAuthWallet()` helper wires up a fully authenticated wallet session.
+- `OIDCAuth` class handles the mechanics of OIDC authentication
+- Mint replaces the `authTokenGetter` param with options, including an `authProvider`.
+
+```ts
+Before: new Mint(mintUrl, customRequest?, legacyAuthTokenGetter?)
+After:  new Mint(mintUrl, options?: {customRequest?, authProvider?, logger?})
+```
+
+See the `examples/auth_mint/` folder for examples of using these in all supported flows.
 
 ---

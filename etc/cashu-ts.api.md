@@ -645,21 +645,21 @@ export class Mint {
         logger?: Logger;
     });
     check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
-    checkMeltQuote(quote: string, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
+    checkMeltQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
-    checkMintQuote(quote: string, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
+    checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     connectWebSocket(): Promise<void>;
-    createMeltQuote(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
+    createMeltQuoteBolt11(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
-    createMintQuote(mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
+    createMintQuoteBolt11(mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
     createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     disconnectWebSocket(): void;
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
-    melt(meltPayload: MeltPayload, options?: {
+    meltBolt11(meltPayload: MeltPayload, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<PartialMeltQuoteResponse>;
@@ -667,7 +667,7 @@ export class Mint {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<Bolt12MeltQuoteResponse>;
-    mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBolt11(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;

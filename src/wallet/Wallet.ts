@@ -1251,7 +1251,7 @@ class Wallet {
 			amount: amount,
 			description: description,
 		};
-		const res = await this.mint.createMintQuote(mintQuotePayload);
+		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
 		return { ...res, amount: res.amount || amount, unit: res.unit || this._unit };
 	}
 
@@ -1277,7 +1277,7 @@ class Wallet {
 			description: description,
 			pubkey: pubkey,
 		};
-		const res = await this.mint.createMintQuote(mintQuotePayload);
+		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
 		this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
 		const resPubkey = res.pubkey!;
 		return {
@@ -1345,7 +1345,7 @@ class Wallet {
 		quote: string | MintQuoteResponse,
 	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const baseRes = await this.mint.checkMintQuote(quoteId);
+		const baseRes = await this.mint.checkMintQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
 			return baseRes;
 		}
@@ -1481,7 +1481,7 @@ class Wallet {
 		if (method === 'bolt12') {
 			({ signatures } = await this.mint.mintBolt12(mintPayload));
 		} else {
-			({ signatures } = await this.mint.mint(mintPayload));
+			({ signatures } = await this.mint.mintBolt11(mintPayload));
 		}
 		this.failIf(
 			signatures.length !== outputs.length,
@@ -1516,7 +1516,7 @@ class Wallet {
 			unit: this._unit,
 			request: invoice,
 		};
-		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return {
 			...meltQuote,
 			unit: meltQuote.unit || this._unit,
@@ -1583,7 +1583,7 @@ class Wallet {
 			request: invoice,
 			options: meltOptions,
 		};
-		const meltQuote = await this.mint.createMeltQuote(meltQuotePayload);
+		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return { ...meltQuote, request: invoice, unit: this._unit };
 	}
 
@@ -1610,7 +1610,7 @@ class Wallet {
 		quote: string | MeltQuoteResponse,
 	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const meltQuote = await this.mint.checkMeltQuote(quoteId);
+		const meltQuote = await this.mint.checkMeltQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
 			return meltQuote;
 		}
@@ -1784,7 +1784,7 @@ class Wallet {
 		if (method === 'bolt12') {
 			meltResponse = await this.mint.meltBolt12(meltPayload, { preferAsync });
 		} else {
-			meltResponse = await this.mint.melt(meltPayload, { preferAsync });
+			meltResponse = await this.mint.meltBolt11(meltPayload, { preferAsync });
 		}
 
 		// Sanity check mint didn't send too many signatures before mapping
@@ -1816,7 +1816,7 @@ class Wallet {
 		const meltResponse =
 			blanks.method === 'bolt12'
 				? await this.mint.meltBolt12(blanks.payload)
-				: await this.mint.melt(blanks.payload);
+				: await this.mint.meltBolt11(blanks.payload);
 
 		// Check for too many signatures before mapping
 		this.failIf(

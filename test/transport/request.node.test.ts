@@ -66,7 +66,7 @@ describe('requests', () => {
 		);
 		const wallet = new Wallet(mintUrl, { ...mintCache });
 		await wallet.loadMint();
-		await wallet.checkMeltQuote('test');
+		await wallet.checkMeltQuoteBolt11('test');
 
 		expect(headers!).toBeDefined();
 		// expect(request!['content-type']).toContain('application/json');
@@ -92,7 +92,7 @@ describe('requests', () => {
 		await wallet.loadMint();
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 
-		await wallet.checkMeltQuote('test');
+		await wallet.checkMeltQuoteBolt11('test');
 
 		expect(headers!).toBeDefined();
 		expect(headers!.get('x-cashu')).toContain('xyz-123-abc');
@@ -107,7 +107,7 @@ describe('requests', () => {
 
 		const wallet = new Wallet(mintUrl, { ...mintCache });
 		await wallet.loadMint();
-		await expect(wallet.checkMeltQuote('test')).rejects.toThrowError(HttpResponseError);
+		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrowError(HttpResponseError);
 	});
 	test('handles NetworkError on network failure', async () => {
 		server.use(
@@ -119,7 +119,7 @@ describe('requests', () => {
 
 		const wallet = new Wallet(mintUrl, { ...mintCache });
 		await wallet.loadMint();
-		await expect(wallet.checkMeltQuote('test')).rejects.toThrow(NetworkError);
+		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(NetworkError);
 	});
 
 	test('handles MintOperationError on 400 response with code and detail', async () => {
@@ -133,7 +133,7 @@ describe('requests', () => {
 
 		const wallet = new Wallet(mintUrl, { ...mintCache });
 		await wallet.loadMint();
-		const promise = wallet.checkMeltQuote('test');
+		const promise = wallet.checkMeltQuoteBolt11('test');
 		await expect(promise).rejects.toThrow(MintOperationError);
 		// assert that the error message is set correctly by the code
 		await expect(promise).rejects.toThrow('Minting is disabled');

@@ -174,7 +174,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns A new mint quote containing a payment request for the specified amount and unit.
 	 */
-	async createMintQuote(
+	async createMintQuoteBolt11(
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: RequestFn,
 	): Promise<PartialMintQuoteResponse> {
@@ -213,7 +213,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns The status of the mint quote, including payment details and state.
 	 */
-	async checkMintQuote(
+	async checkMintQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
 	): Promise<PartialMintQuoteResponse> {
@@ -252,7 +252,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures.
 	 */
-	async mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
+	async mintBolt11(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
 		const data = await this.requestWithAuth<MintResponse>(
 			'POST',
 			'/v1/mint/bolt11',
@@ -298,7 +298,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns The melt quote response.
 	 */
-	async createMeltQuote(
+	async createMeltQuoteBolt11(
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
@@ -348,7 +348,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns The melt quote response.
 	 */
-	async checkMeltQuote(
+	async checkMeltQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
@@ -404,7 +404,7 @@ class Mint {
 	 * @param options.preferAsync Optional override to set 'respond-async' header.
 	 * @returns The melt response.
 	 */
-	async melt(
+	async meltBolt11(
 		meltPayload: MeltPayload,
 		options?: {
 			customRequest?: RequestFn;

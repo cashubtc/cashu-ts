@@ -56,7 +56,7 @@ const runWalletExample = async () => {
 			// The mint will return a request, that we have to fullfil in order for the ecash to be issued.
 			// (in most cases this will be a lightning invoice that needs to be paid)
 			console.log('Requesting a mint quote for' + mintAmount + 'satoshis.');
-			const quote = await wallet.createMintQuote(mintAmount);
+			const quote = await wallet.createMintQuoteBolt11(mintAmount);
 
 			console.log('Invoice to pay, in order to fullfill the quote: ' + quote.request);
 
@@ -72,7 +72,7 @@ const runWalletExample = async () => {
 			const checkMintQuote = async (q: MintQuoteResponse) => {
 				// with this call, we can check the current status of a given quote
 				console.log('Checking the status of the quote: ' + q.quote);
-				const quote = await wallet.checkMintQuote(q.quote);
+				const quote = await wallet.checkMintQuoteBolt11(q.quote);
 				if (quote.error) {
 					console.error(quote.error, quote.code, quote.detail);
 					return;
@@ -163,7 +163,7 @@ const runWalletExample = async () => {
 			// Similar to the minting process, we need to create a melt quote first.
 			// For this, we let the mint know what kind of request we want to be fulfilled.
 			// Usually this would be the payment of a lightning invoice.
-			const quote = await wallet.createMeltQuote(externalInvoice);
+			const quote = await wallet.createMeltQuoteBolt11(externalInvoice);
 
 			// After creating the melt quote, we can initiate the melting process.
 			const amountToMelt = quote.amount + quote.fee_reserve;
@@ -199,7 +199,7 @@ const runWalletExample = async () => {
 
 			const checkMeltQuote = async (q: PartialMeltQuoteResponse) => {
 				// we can check on the status of the quote.
-				const quote = await wallet.checkMeltQuote(q.quote);
+				const quote = await wallet.checkMeltQuoteBolt11(q.quote);
 
 				if (quote.error) {
 					console.error(quote.error, quote.code, quote.detail);
