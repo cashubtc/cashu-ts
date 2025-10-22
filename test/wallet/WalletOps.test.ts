@@ -138,7 +138,7 @@ describe('WalletOps builders', () => {
 	// --------------------------- SendBuilder -----------------------------------
 
 	describe('SendBuilder', () => {
-		it('calls wallet.send with config only when no OutputType was set', async () => {
+		it('calls wallet.send with defaults when no OutputType was set', async () => {
 			await ops.send(5, proofs).includeFees(true).keyset('kid').run();
 
 			expect(wallet.send).toHaveBeenCalledTimes(1);
@@ -147,7 +147,9 @@ describe('WalletOps builders', () => {
 			expect(amount).toBe(5);
 			expect(sentProofs).toBe(proofs);
 			expect(config).toEqual({ includeFees: true, keysetId: 'kid' });
-			expect(maybeOutputConfig).toBeUndefined();
+			expect(maybeOutputConfig).toEqual({
+				send: { type: 'random' },
+			});
 		});
 
 		it('builds OutputConfig with send only and omits keep when keep not set', async () => {
