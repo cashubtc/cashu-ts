@@ -13,7 +13,11 @@ import type {
 	SendResponse,
 	MeltProofsConfig,
 } from '../../src/wallet/types';
-import type { MeltQuoteResponse, Bolt12MeltQuoteResponse } from '../../src/mint/types';
+import type {
+	MeltQuoteResponse,
+	Bolt12MeltQuoteResponse,
+	Bolt12MintQuoteResponse,
+} from '../../src/mint/types';
 
 // ---- Function signatures for typed mocks ------------------------------------
 
@@ -30,9 +34,17 @@ type ReceiveFn = (
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
-type MintFn = (
+type MintBolt11Fn = (
 	amount: number,
 	quote: string,
+	config?: MintProofsConfig,
+	outputType?: OutputType,
+) => Promise<{ proofs: Proof[] }>;
+
+type MintBolt12Fn = (
+	amount: number,
+	quote: Bolt12MintQuoteResponse,
+	privkey: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
@@ -60,10 +72,11 @@ class MockWallet {
 
 	send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
 	receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
-	mintProofs: Mock<MintFn> = vi.fn<MintFn>(async () => ({ proofs: [] }));
+	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
+	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
 	sendOffline: Mock<SendOfflineFn> = vi.fn<SendOfflineFn>(() => ({ keep: [], send: [] }));
 
-	meltProofs: Mock<MeltBolt11Fn> = vi.fn<MeltBolt11Fn>(async () => ({ change: [] }));
+	meltProofsBolt11: Mock<MeltBolt11Fn> = vi.fn<MeltBolt11Fn>(async () => ({ change: [] }));
 	meltProofsBolt12: Mock<MeltBolt12Fn> = vi.fn<MeltBolt12Fn>(async () => ({ change: [] }));
 }
 
@@ -101,6 +114,17 @@ const melt12: Bolt12MeltQuoteResponse = {
 	unit: 'sat',
 };
 
+const mint12: Bolt12MintQuoteResponse = {
+	quote: 'mq12',
+	request: 'lno1...',
+	amount: 7,
+	unit: 'sat',
+	expiry: 0,
+	pubkey: '0200000',
+	amount_paid: 0,
+	amount_issued: 0,
+};
+
 describe('WalletOps builders', () => {
 	let wallet: MockWallet;
 	let ops: WalletOps;
@@ -114,7 +138,7 @@ describe('WalletOps builders', () => {
 	// --------------------------- SendBuilder -----------------------------------
 
 	describe('SendBuilder', () => {
-		it('calls wallet.send with config only when no OutputType was set', async () => {
+		it('calls wallet.send with defaults when no OutputType was set', async () => {
 			await ops.send(5, proofs).includeFees(true).keyset('kid').run();
 
 			expect(wallet.send).toHaveBeenCalledTimes(1);
@@ -123,7 +147,9 @@ describe('WalletOps builders', () => {
 			expect(amount).toBe(5);
 			expect(sentProofs).toBe(proofs);
 			expect(config).toEqual({ includeFees: true, keysetId: 'kid' });
-			expect(maybeOutputConfig).toBeUndefined();
+			expect(maybeOutputConfig).toEqual({
+				send: { type: 'random' },
+			});
 		});
 
 		it('builds OutputConfig with send only and omits keep when keep not set', async () => {
@@ -354,10 +380,10 @@ describe('WalletOps builders', () => {
 
 	describe('MintBuilder', () => {
 		it('calls wallet.mintProofs with config only when no OutputType was set', async () => {
-			await ops.mint(10, quote).keyset('kid').run();
+			await ops.mintBolt11(10, quote).keyset('kid').run();
 
-			expect(wallet.mintProofs).toHaveBeenCalledTimes(1);
-			const [amount, q, config, maybeOT] = wallet.mintProofs.mock.calls[0];
+			expect(wallet.mintProofsBolt11).toHaveBeenCalledTimes(1);
+			const [amount, q, config, maybeOT] = wallet.mintProofsBolt11.mock.calls[0];
 
 			expect(amount).toBe(10);
 			expect(q).toBe(quote);
@@ -367,14 +393,14 @@ describe('WalletOps builders', () => {
 
 		it('calls wallet.mintProofs with custom OutputType and config', async () => {
 			await ops
-				.mint(10, quote)
+				.mintBolt11(10, quote)
 				.asP2PK({ pubkey: 'P' }, [10])
 				.privkey('sk')
 				.onCountersReserved(() => {})
 				.run();
 
-			expect(wallet.mintProofs).toHaveBeenCalledTimes(1);
-			const [amount, q, config, outputType] = wallet.mintProofs.mock.calls[0];
+			expect(wallet.mintProofsBolt11).toHaveBeenCalledTimes(1);
+			const [amount, q, config, outputType] = wallet.mintProofsBolt11.mock.calls[0];
 
 			expect(amount).toBe(10);
 			expect(q).toBe(quote);
@@ -388,33 +414,111 @@ describe('WalletOps builders', () => {
 
 		it('supports factory() OutputType for mint', async () => {
 			const factory = vi.fn();
-			await ops.mint(8, quote).asFactory(factory, [8]).run();
+			await ops.mintBolt11(8, quote).asFactory(factory, [8]).run();
 
-			const [, , , ot] = wallet.mintProofs.mock.calls[0];
+			const [, , , ot] = wallet.mintProofsBolt11.mock.calls[0];
 			expect(ot).toEqual({ type: 'factory', factory, denominations: [8] });
 		});
 
 		it('supports custom() OutputType for mint', async () => {
 			const data = [{ blindedMessage: { amount: 8 } }] as OutputData[];
-			await ops.mint(8, quote).asCustom(data).run();
+			await ops.mintBolt11(8, quote).asCustom(data).run();
 
-			const [, , , ot] = wallet.mintProofs.mock.calls[0];
+			const [, , , ot] = wallet.mintProofsBolt11.mock.calls[0];
 			expect(ot).toEqual({ type: 'custom', data });
 		});
 
 		it('random() OutputType for mint with denominations', async () => {
-			await ops.mint(12, quote).asRandom([12]).run();
+			await ops.mintBolt11(12, quote).asRandom([12]).run();
 
-			const [, , , outputType] = wallet.mintProofs.mock.calls[0];
+			const [, , , outputType] = wallet.mintProofsBolt11.mock.calls[0];
 			expect(outputType).toEqual({ type: 'random', denominations: [12] });
 		});
 
 		it('proofsWeHave() is forwarded in mint config', async () => {
 			const some = [{ amount: 3 } as Proof];
-			await ops.mint(3, quote).asDeterministic(0).proofsWeHave(some).run();
+			await ops.mintBolt11(3, quote).asDeterministic(0).proofsWeHave(some).run();
 
-			const [, , cfg] = wallet.mintProofs.mock.calls[0];
+			const [, , cfg] = wallet.mintProofsBolt11.mock.calls[0];
 			expect(cfg).toMatchObject({ proofsWeHave: some });
+		});
+		it('bolt12 requires privkey at compile time', () => {
+			if (false as boolean) {
+				// This is a compiler check - if you remove the exclude line below the
+				// compiler should complain 'MintBuilder<"bolt12", false>' is not assignable
+				// @ts-expect-error run should not be callable before privkey
+				ops.mintBolt12(7, mint12).run();
+			}
+
+			// OK once privkey is provided
+			void ops.mintBolt12(7, mint12).privkey('k').run();
+		});
+		it('bolt12 throws at runtime without privkey for JS consumers', async () => {
+			const builder: any = ops.mintBolt12(7, mint12);
+			await expect(builder.run()).rejects.toThrow(/privkey is required/i);
+			expect(wallet.mintProofsBolt12).not.toHaveBeenCalled();
+		});
+		it('bolt12 passes privkey as positional arg and forwards config and outputType', async () => {
+			const cb = vi.fn();
+			await ops
+				.mintBolt12(7, mint12)
+				.asDeterministic(0, [7])
+				.keyset('kid')
+				.onCountersReserved(cb)
+				.privkey('sk')
+				.run();
+
+			expect(wallet.mintProofsBolt12).toHaveBeenCalledTimes(1);
+			const [amount, q, pk, cfg, ot] = wallet.mintProofsBolt12.mock.calls[0];
+
+			expect(amount).toBe(7);
+			expect(q).toBe(mint12);
+			expect(pk).toBe('sk'); // positional
+			expect(cfg).toMatchObject({ keysetId: 'kid' });
+			expect(typeof cfg!.onCountersReserved).toBe('function');
+
+			expect(ot).toEqual({ type: 'deterministic', counter: 0, denominations: [7] });
+		});
+		it('bolt12 supports factory OutputType', async () => {
+			const factory = vi.fn();
+			await ops.mintBolt12(7, mint12).asFactory(factory, [7]).privkey('sk').run();
+
+			const [, , , , ot] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(ot).toEqual({ type: 'factory', factory, denominations: [7] });
+		});
+
+		it('bolt12 supports custom OutputType', async () => {
+			const data = [{ blindedMessage: { amount: 7 } }] as OutputData[];
+			await ops.mintBolt12(7, mint12).asCustom(data).privkey('sk').run();
+
+			const [, , , , ot] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(ot).toEqual({ type: 'custom', data });
+		});
+
+		it('bolt12 supports random OutputType with denominations', async () => {
+			await ops.mintBolt12(7, mint12).asRandom([7]).privkey('sk').run();
+
+			const [, , , , ot] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(ot).toEqual({ type: 'random', denominations: [7] });
+		});
+		it('bolt12 forwards proofsWeHave in config', async () => {
+			const some = [{ amount: 3 } as Proof];
+			await ops.mintBolt12(7, mint12).asDeterministic(0).proofsWeHave(some).privkey('sk').run();
+
+			const [, , , cfg] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(cfg).toMatchObject({ proofsWeHave: some });
+		});
+		it('bolt12 takes the last privkey if called twice', async () => {
+			await ops.mintBolt12(7, mint12).privkey('old').privkey('new').run();
+
+			const [, , pk] = wallet.mintProofsBolt12.mock.calls[0];
+			expect(pk).toBe('new');
+		});
+		it('bolt11 locked quote without privkey throws at runtime', async () => {
+			const lockedQuote = { ...mint12, request: 'lnbc1...', pubkey: '02abcd' } as any; // shape of locked BOLT11 quote
+			await expect((ops.mintBolt11 as any)(10, lockedQuote).run()).rejects.toThrow(
+				/privkey is required/i,
+			);
 		});
 	});
 
@@ -425,8 +529,8 @@ describe('WalletOps builders', () => {
 			const cb = vi.fn();
 			await ops.meltBolt11(melt11, proofs).keyset('kid').onCountersReserved(cb).run();
 
-			expect(wallet.meltProofs).toHaveBeenCalledTimes(1);
-			const [q, ps, cfg, maybeOT] = wallet.meltProofs.mock.calls[0];
+			expect(wallet.meltProofsBolt11).toHaveBeenCalledTimes(1);
+			const [q, ps, cfg, maybeOT] = wallet.meltProofsBolt11.mock.calls[0];
 
 			expect(q).toBe(melt11);
 			expect(ps).toBe(proofs);
@@ -439,7 +543,7 @@ describe('WalletOps builders', () => {
 		it('bolt11: supports OutputType (random) and passes as 4th arg', async () => {
 			await ops.meltBolt11(melt11, proofs).asRandom([1, 1, 1]).run();
 
-			const [, , , ot] = wallet.meltProofs.mock.calls[0];
+			const [, , , ot] = wallet.meltProofsBolt11.mock.calls[0];
 			expect(ot).toEqual({ type: 'random', denominations: [1, 1, 1] });
 		});
 
@@ -447,7 +551,7 @@ describe('WalletOps builders', () => {
 			const data = [{ blindedMessage: { amount: 0 } }] as OutputData[];
 			await ops.meltBolt11(melt11, proofs).asCustom(data).run();
 
-			const [, , , ot] = wallet.meltProofs.mock.calls[0];
+			const [, , , ot] = wallet.meltProofsBolt11.mock.calls[0];
 			expect(ot).toEqual({ type: 'custom', data });
 		});
 
@@ -473,7 +577,7 @@ describe('WalletOps builders', () => {
 		it('bolt11: supports P2PK OutputType', async () => {
 			await ops.meltBolt11(melt11, proofs).asP2PK({ pubkey: 'X', locktime: 99 }, []).run();
 
-			const [, , , ot] = wallet.meltProofs.mock.calls[0];
+			const [, , , ot] = wallet.meltProofsBolt11.mock.calls[0];
 			expect(ot).toEqual({
 				type: 'p2pk',
 				options: { pubkey: 'X', locktime: 99 },
@@ -497,8 +601,8 @@ describe('WalletOps builders', () => {
 			const cb = vi.fn();
 			await ops.meltBolt11(melt11, proofs).onChangeOutputsCreated(cb).run();
 
-			expect(wallet.meltProofs).toHaveBeenCalledTimes(1);
-			const [, , cfg] = wallet.meltProofs.mock.calls[0];
+			expect(wallet.meltProofsBolt11).toHaveBeenCalledTimes(1);
+			const [, , cfg] = wallet.meltProofsBolt11.mock.calls[0];
 			expect(cfg).toBeDefined();
 			expect(cfg!.onChangeOutputsCreated).toBe(cb);
 		});

@@ -2,6 +2,7 @@ import {
 	type MeltQuoteResponse,
 	type MintQuoteResponse,
 	type Bolt12MeltQuoteResponse,
+	type Bolt12MintQuoteResponse,
 } from '../mint/types';
 import { type OutputData, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
@@ -33,8 +34,11 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
-	mint(amount: number, quote: string | MintQuoteResponse) {
-		return new MintBuilder(this.wallet, amount, quote);
+	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
+		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
+	}
+	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
+		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
@@ -253,16 +257,12 @@ export class SendBuilder {
 			});
 		}
 
-		// If either side was customized, construct a full OutputConfig.
-		if (this.sendOT || this.keepOT) {
-			const outputConfig: OutputConfig = {
-				send: this.sendOT ?? this.wallet.defaultOutputType(),
-				...(this.keepOT ? { keep: this.keepOT } : {}),
-			};
-			return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
-		}
-		// Nothing customized: rely on wallet overload to apply policy defaults.
-		return this.wallet.send(this.amount, this.proofs, this.config);
+		// Construct an OutputConfig using default send if no customizations
+		const outputConfig: OutputConfig = {
+			send: this.sendOT ?? this.wallet.defaultOutputType(),
+			...(this.keepOT ? { keep: this.keepOT } : {}),
+		};
+		return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
 	}
 }
 
@@ -394,33 +394,43 @@ export class ReceiveBuilder {
 	}
 
 	async run() {
-		if (this.outputType) {
-			return this.wallet.receive(this.token, this.config, this.outputType);
-		}
-		return this.wallet.receive(this.token, this.config);
+		return this.wallet.receive(this.token, this.config, this.outputType);
 	}
 }
 
 /**
  * Builder for minting proofs from a quote.
  *
+ * @remarks
+ * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
+ * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
  * @example
  *
  *     const proofs = await wallet.ops
  *     	.mint(100, quote)
  *     	.asDeterministic() // counter 0 auto reserves
  *     	.onCountersReserved((info) => console.log(info))
+ *     	.privkey('sk')
  *     	.run();
  */
-export class MintBuilder {
+export class MintBuilder<
+	M extends 'bolt11' | 'bolt12',
+	HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
+> {
 	private outputType?: OutputType;
 	private config: MintProofsConfig = {};
 
+	// phantom field to satisfy linter (erased at emit)
+	private readonly _hasPrivkey!: HasPrivKey;
+
 	constructor(
 		private wallet: Wallet,
+		private method: M,
 		private amount: number,
-		private quote: string | MintQuoteResponse,
-	) {}
+		private quote: string | MintQuoteResponse | Bolt12MintQuoteResponse,
+	) {
+		void this._hasPrivkey; // intentionally unused (phantom field)
+	}
 
 	/**
 	 * Use random blinding for the minted proofs.
@@ -493,9 +503,11 @@ export class MintBuilder {
 	 *
 	 * @param k Private key for locked quotes.
 	 */
-	privkey(k: string) {
+	privkey(k: string): MintBuilder<M, true> {
+		// For bolt11 - privkey is sent in the config
+		// For bolt12 - privkey is sent positionally in run()
 		this.config.privkey = k;
-		return this;
+		return this as MintBuilder<M, true>;
 	}
 	/**
 	 * Provide existing proofs to help optimise denomination selection.
@@ -521,13 +533,32 @@ export class MintBuilder {
 	/**
 	 * Execute minting against the quote.
 	 *
+	 * @remarks
+	 * This method can only be called for bolt12 quotes when .privkey() is set.
 	 * @returns The newly minted proofs.
 	 */
-	async run() {
-		if (this.outputType) {
-			return this.wallet.mintProofs(this.amount, this.quote, this.config, this.outputType);
+	async run(this: MintBuilder<M, true>) {
+		// BOLT 11
+		if (this.method === 'bolt11') {
+			const bolt11 = this.quote as MintQuoteResponse;
+			if (bolt11.pubkey && !this.config.privkey) {
+				throw new Error('privkey is required for locked BOLT11 mint quotes');
+			}
+			return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config, this.outputType);
 		}
-		return this.wallet.mintProofs(this.amount, this.quote, this.config);
+
+		// BOLT 12
+		const bolt12 = this.quote as Bolt12MintQuoteResponse;
+		if (!this.config.privkey) {
+			throw new Error('privkey is required for BOLT12 mint quotes');
+		}
+		return this.wallet.mintProofsBolt12(
+			this.amount,
+			bolt12,
+			this.config.privkey,
+			this.config,
+			this.outputType,
+		);
 	}
 }
 
@@ -657,14 +688,12 @@ export class MeltBuilder {
 	 * @returns The melt result: `{ quote, change }`.
 	 */
 	async run() {
-		if (this.method === 'bolt12') {
-			return this.outputType
-				? this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType)
-				: this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config);
-		}
 		// BOLT11
-		return this.outputType
-			? this.wallet.meltProofs(this.quote, this.proofs, this.config, this.outputType)
-			: this.wallet.meltProofs(this.quote, this.proofs, this.config);
+		if (this.method === 'bolt11') {
+			return this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType);
+		}
+
+		// BOLT 12
+		return this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType);
 	}
 }
