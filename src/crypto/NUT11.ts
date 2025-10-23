@@ -1,4 +1,4 @@
-import { type PrivKey, bytesToHex, hexToBytes, randomBytes } from '@noble/curves/abstract/utils';
+import { type PrivKey, bytesToHex, hexToBytes, randomBytes } from '@noble/curves/utils';
 import { sha256 } from '@noble/hashes/sha2';
 import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';

@@ -35,6 +35,7 @@ import request, {
 	type WSConnection,
 	setRequestLogger,
 	type RequestFn,
+	type RequestOptions,
 } from '../transport';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
 import {
@@ -48,6 +49,8 @@ import {
 import { handleMintInfoContactFieldDeprecated } from '../legacy/nut-06';
 import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER } from '../logger';
+import type { AuthProvider } from '../auth/AuthProvider';
+import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 
 /**
  * Class represents Cashu Mint API.
@@ -57,40 +60,59 @@ import { type Logger, NULL_LOGGER } from '../logger';
  */
 class Mint {
 	private ws?: WSConnection;
-	private _mintInfo?: MintInfo;
-	private _authTokenGetter?: () => Promise<string>;
-	private _checkNut22 = false;
-	private _logger: Logger;
+	private _mintUrl: string;
 	private _request: RequestFn;
+	private _logger: Logger;
+	private _mintInfo?: MintInfo;
+	private _authProvider?: AuthProvider;
 
 	/**
-	 * @param _mintUrl Requires mint URL to create this object.
+	 * @param mintUrl Requires mint URL to create this object.
 	 * @param customRequest Optional, for custom network communication with the mint.
 	 * @param authTokenGetter Optional. Function to obtain a NUT-22 BlindedAuthToken (e.g. from a
 	 *   database or localstorage)
 	 */
 	constructor(
-		private _mintUrl: string,
-		customRequest?: RequestFn,
-		authTokenGetter?: () => Promise<string>,
+		mintUrl: string,
 		options?: {
+			customRequest?: RequestFn;
+			authProvider?: AuthProvider;
 			logger?: Logger;
 		},
 	) {
-		this._mintUrl = sanitizeUrl(_mintUrl);
-		this._request = customRequest ?? request;
-		if (authTokenGetter) {
-			this._checkNut22 = true;
-			this._authTokenGetter = authTokenGetter;
-		}
+		this._mintUrl = sanitizeUrl(mintUrl);
+		this._request = options?.customRequest ?? request;
+		this._authProvider = options?.authProvider;
 		this._logger = options?.logger ?? NULL_LOGGER;
 		setRequestLogger(this._logger);
 	}
 
-	//TODO: v3 - refactor Mint to take two or less args.
-
 	get mintUrl() {
 		return this._mintUrl;
+	}
+
+	/**
+	 * Create an OIDC client using this mint’s NUT-21 metadata.
+	 *
+	 * @example
+	 *
+	 * ```ts
+	 * const oidc = await mint.oidcAuth({ onTokens: (t) => authMgr.setCAT(t.access_token!) });
+	 * const start = await oidc.deviceStart();
+	 * // show start.user_code / start.verification_uri to the user
+	 * const token = await oidc.devicePoll(start.device_code, start.interval ?? 5);
+	 * // token.access_token is your CAT
+	 * ```
+	 */
+	async oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth> {
+		const n21 = (await this.getLazyMintInfo()).nuts['21'];
+		if (!n21?.openid_discovery) {
+			throw new Error('Mint: no NUT-21 openid_discovery');
+		}
+		return new OIDCAuth(n21.openid_discovery, {
+			...opts,
+			clientId: opts?.clientId ?? n21.client_id ?? 'cashu-client',
+		});
 	}
 
 	/**
@@ -130,15 +152,12 @@ class Mint {
 	 * @returns Signed outputs.
 	 */
 	async swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/swap');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const data = await requestInstance<SwapResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/swap'),
-			method: 'POST',
-			requestBody: swapPayload,
-			headers,
-		});
+		const data = await this.requestWithAuth<SwapResponse>(
+			'POST',
+			'/v1/swap',
+			{ requestBody: swapPayload },
+			customRequest,
+		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
 			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
@@ -159,17 +178,9 @@ class Mint {
 		mintQuotePayload: MintQuotePayload,
 		customRequest?: RequestFn,
 	): Promise<PartialMintQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt11');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<
+		const response = await this.requestWithAuth<
 			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
-		>({
-			endpoint: joinUrls(this._mintUrl, '/v1/mint/quote/bolt11'),
-			method: 'POST',
-			requestBody: mintQuotePayload,
-			headers,
-		});
+		>('POST', '/v1/mint/quote/bolt11', { requestBody: mintQuotePayload }, customRequest);
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
 		return data;
 	}
@@ -186,15 +197,12 @@ class Mint {
 		mintQuotePayload: Bolt12MintQuotePayload,
 		customRequest?: RequestFn,
 	): Promise<Bolt12MintQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/mint/quote/bolt12');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<Bolt12MintQuoteResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/mint/quote/bolt12'),
-			method: 'POST',
-			requestBody: mintQuotePayload,
-			headers,
-		});
+		const response = await this.requestWithAuth<Bolt12MintQuoteResponse>(
+			'POST',
+			'/v1/mint/quote/bolt12',
+			{ requestBody: mintQuotePayload },
+			customRequest,
+		);
 		return response;
 	}
 
@@ -209,16 +217,9 @@ class Mint {
 		quote: string,
 		customRequest?: RequestFn,
 	): Promise<PartialMintQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt11/${quote}`);
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<
+		const response = await this.requestWithAuth<
 			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
-		>({
-			endpoint: joinUrls(this._mintUrl, '/v1/mint/quote/bolt11', quote),
-			method: 'GET',
-			headers,
-		});
+		>('GET', `/v1/mint/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
 		return data;
@@ -235,14 +236,12 @@ class Mint {
 		quote: string,
 		customRequest?: RequestFn,
 	): Promise<Bolt12MintQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth(`/v1/mint/quote/bolt12/${quote}`);
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<Bolt12MintQuoteResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/mint/quote/bolt12', quote),
-			method: 'GET',
-			headers,
-		});
+		const response = await this.requestWithAuth<Bolt12MintQuoteResponse>(
+			'GET',
+			`/v1/mint/quote/bolt12/${quote}`,
+			{},
+			customRequest,
+		);
 		return response;
 	}
 
@@ -254,15 +253,12 @@ class Mint {
 	 * @returns Serialized blinded signatures.
 	 */
 	async mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt11');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const data = await requestInstance<MintResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/mint/bolt11'),
-			method: 'POST',
-			requestBody: mintPayload,
-			headers,
-		});
+		const data = await this.requestWithAuth<MintResponse>(
+			'POST',
+			'/v1/mint/bolt11',
+			{ requestBody: mintPayload },
+			customRequest,
+		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
 			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
@@ -280,15 +276,12 @@ class Mint {
 	 * @returns Serialized blinded signatures for the requested outputs.
 	 */
 	async mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/mint/bolt12');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const data = await requestInstance<MintResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/mint/bolt12'),
-			method: 'POST',
-			requestBody: mintPayload,
-			headers,
-		});
+		const data = await this.requestWithAuth<MintResponse>(
+			'POST',
+			'/v1/mint/bolt12',
+			{ requestBody: mintPayload },
+			customRequest,
+		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
 			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
@@ -309,17 +302,9 @@ class Mint {
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt11');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<
+		const response = await this.requestWithAuth<
 			PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated
-		>({
-			endpoint: joinUrls(this._mintUrl, '/v1/melt/quote/bolt11'),
-			method: 'POST',
-			requestBody: meltQuotePayload,
-			headers,
-		});
+		>('POST', '/v1/melt/quote/bolt11', { requestBody: meltQuotePayload }, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -347,15 +332,12 @@ class Mint {
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
 	): Promise<Bolt12MeltQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/melt/quote/bolt12');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<Bolt12MeltQuoteResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/melt/quote/bolt12'),
-			method: 'POST',
-			requestBody: meltQuotePayload,
-			headers,
-		});
+		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+			'POST',
+			'/v1/melt/quote/bolt12',
+			{ requestBody: meltQuotePayload },
+			customRequest,
+		);
 		return response;
 	}
 
@@ -370,14 +352,9 @@ class Mint {
 		quote: string,
 		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt11/${quote}`);
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
-			endpoint: joinUrls(this._mintUrl, '/v1/melt/quote/bolt11', quote),
-			method: 'GET',
-			headers,
-		});
+		const response = await this.requestWithAuth<
+			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+		>('GET', `/v1/melt/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -408,14 +385,12 @@ class Mint {
 		quote: string,
 		customRequest?: RequestFn,
 	): Promise<Bolt12MeltQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth(`/v1/melt/quote/bolt12/${quote}`);
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<Bolt12MeltQuoteResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/melt/quote/bolt12', quote),
-			method: 'GET',
-			headers,
-		});
+		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+			'GET',
+			`/v1/melt/quote/bolt12/${quote}`,
+			{},
+			customRequest,
+		);
 		return response;
 	}
 
@@ -432,15 +407,9 @@ class Mint {
 		meltPayload: MeltPayload,
 		customRequest?: RequestFn,
 	): Promise<PartialMeltQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt11');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const response = await requestInstance<MeltQuoteResponse & MeltQuoteResponsePaidDeprecated>({
-			endpoint: joinUrls(this._mintUrl, '/v1/melt/bolt11'),
-			method: 'POST',
-			requestBody: meltPayload,
-			headers,
-		});
+		const response = await this.requestWithAuth<
+			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+		>('POST', '/v1/melt/bolt11', { requestBody: meltPayload }, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -469,15 +438,12 @@ class Mint {
 		meltPayload: MeltPayload,
 		customRequest?: RequestFn,
 	): Promise<Bolt12MeltQuoteResponse> {
-		const blindAuthToken = await this.handleBlindAuth('/v1/melt/bolt12');
-		const requestInstance = customRequest ?? this._request;
-		const headers: Record<string, string> = blindAuthToken ? { 'Blind-auth': blindAuthToken } : {};
-		const data = await requestInstance<Bolt12MeltQuoteResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/melt/bolt12'),
-			method: 'POST',
-			requestBody: meltPayload,
-			headers,
-		});
+		const data = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+			'POST',
+			'/v1/melt/bolt12',
+			{ requestBody: meltPayload },
+			customRequest,
+		);
 		return data;
 	}
 
@@ -492,12 +458,12 @@ class Mint {
 		checkPayload: CheckStatePayload,
 		customRequest?: RequestFn,
 	): Promise<CheckStateResponse> {
-		const requestInstance = customRequest ?? this._request;
-		const data = await requestInstance<CheckStateResponse>({
-			endpoint: joinUrls(this._mintUrl, '/v1/checkstate'),
-			method: 'POST',
-			requestBody: checkPayload,
-		});
+		const data = await this.requestWithAuth<CheckStateResponse>(
+			'POST',
+			'/v1/checkstate',
+			{ requestBody: checkPayload },
+			customRequest,
+		);
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
 			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
@@ -621,23 +587,62 @@ class Mint {
 	}
 
 	/**
-	 * Handles blind authentication if required for the given path.
+	 * Returns the Clear Authentication Token (CAT) to use in the 'Clear-auth' header, or undefined if
+	 * not required for the given path and method.
 	 *
+	 * @param method The method to call on the path.
 	 * @param path The API path to check for blind auth requirement.
 	 * @returns The blind auth token if required, otherwise undefined.
 	 */
-	async handleBlindAuth(path: string): Promise<string | undefined> {
-		if (!this._checkNut22) {
-			return undefined;
-		}
+	private async handleClearAuth(method: 'GET' | 'POST', path: string): Promise<string | undefined> {
+		if (!this._authProvider) return undefined;
 		const info = await this.getLazyMintInfo();
-		if (info.requiresBlindAuthToken(path)) {
-			if (!this._authTokenGetter) {
-				throw new Error('Cannot call a protected endpoint without authTokenGetter');
-			}
-			return this._authTokenGetter();
-		}
-		return undefined;
+		if (!info.requiresClearAuthToken(method, path)) return undefined;
+		this._logger.error('Clear Authentication Token...', { cat: this._authProvider.getCAT() });
+		return this._authProvider.getCAT();
+	}
+
+	/**
+	 * Returns a serialized Blind Authentication Token (BAT) to use in the 'Blind-auth' header, or
+	 * undefined if not required for the given path and method.
+	 *
+	 * @param method The method to call on the path.
+	 * @param path The API path to check for blind auth requirement.
+	 * @returns The blind auth token if required, otherwise undefined.
+	 */
+	private async handleBlindAuth(method: 'GET' | 'POST', path: string): Promise<string | undefined> {
+		if (!this._authProvider) return undefined;
+		const info = await this.getLazyMintInfo();
+		if (!info.requiresBlindAuthToken(method, path)) return undefined;
+		const bat = await this._authProvider.getBlindAuthToken({ method, path });
+		this._logger.error('Blind Authentication Token...', { bat });
+		return bat;
+	}
+
+	private async requestWithAuth<T>(
+		method: 'GET' | 'POST',
+		path: string,
+		init: Omit<RequestOptions, 'endpoint' | 'method' | 'headers' | 'requestBody'> & {
+			requestBody?: Record<string, unknown>;
+			headers?: Record<string, string>;
+		} = {},
+		customRequest?: RequestFn,
+	): Promise<T> {
+		const requestInstance = customRequest ?? this._request;
+		// Get BAT/CAT token if this endpoint is protected
+		const bat = await this.handleBlindAuth(method, path);
+		const cat = await this.handleClearAuth(method, path);
+		const headers: Record<string, string> = {
+			...(init.headers ?? {}),
+			...(bat ? { 'Blind-auth': bat } : {}),
+			...(cat ? { 'Clear-auth': cat } : {}),
+		};
+		return requestInstance<T>({
+			...init,
+			endpoint: joinUrls(this._mintUrl, path),
+			method,
+			headers,
+		});
 	}
 }
 

@@ -4,7 +4,7 @@
 
 ```ts
 
-import { PrivKey } from '@noble/curves/abstract/utils';
+import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public
@@ -18,6 +18,56 @@ export type ApiError = {
     code?: number;
     detail?: string;
 };
+
+// @public
+export class AuthManager implements AuthProvider {
+    constructor(mintUrl: string, opts?: AuthManagerOptions);
+    // (undocumented)
+    get activeAuthKeysetId(): string | undefined;
+    attachOIDC(oidc: OIDCAuth): this;
+    ensure(minTokens: number): Promise<void>;
+    ensureCAT(minValidSecs?: number): Promise<string | undefined>;
+    exportPool(): Proof[];
+    getBlindAuthToken({ method, path, }: {
+        method: 'GET' | 'POST';
+        path: string;
+    }): Promise<string>;
+    // (undocumented)
+    getCAT(): string | undefined;
+    // (undocumented)
+    get hasCAT(): boolean;
+    importPool(proofs: Proof[], mode?: 'replace' | 'merge'): void;
+    // (undocumented)
+    get poolSize(): number;
+    // (undocumented)
+    get poolTarget(): number;
+    // (undocumented)
+    setCAT(cat: string | undefined): void;
+}
+
+// @public (undocumented)
+export type AuthManagerOptions = {
+    maxPerMint?: number;
+    desiredPoolSize?: number;
+    request?: RequestFn;
+    logger?: Logger;
+};
+
+// @public (undocumented)
+export interface AuthProvider {
+    // (undocumented)
+    ensure?(minTokens: number): Promise<void>;
+    ensureCAT?(minValiditySec?: number): Promise<string | undefined>;
+    // (undocumented)
+    getBlindAuthToken(input: {
+        method: 'GET' | 'POST';
+        path: string;
+    }): Promise<string>;
+    // (undocumented)
+    getCAT(): string | undefined;
+    // (undocumented)
+    setCAT(cat: string | undefined): void;
+}
 
 // @public (undocumented)
 export function bigIntStringify<T>(_key: unknown, value: T): string | T;
@@ -79,44 +129,6 @@ export function bytesToNumber(bytes: Uint8Array): bigint;
 
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
-
-// @public
-export class CashuAuthMint {
-    constructor(_mintUrl: string, _customRequest?: RequestFn | undefined);
-    static getKeys(mintUrl: string, keysetId?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
-    getKeys(keysetId?: string, mintUrl?: string): Promise<MintActiveKeys>;
-    static getKeySets(mintUrl: string, customRequest?: RequestFn): Promise<MintAllKeysets>;
-    getKeySets(): Promise<MintAllKeysets>;
-    static mint(mintUrl: string, mintPayload: BlindAuthMintPayload, clearAuthToken: string, customRequest?: RequestFn): Promise<BlindAuthMintResponse>;
-    mint(mintPayload: BlindAuthMintPayload, clearAuthToken: string): Promise<BlindAuthMintResponse>;
-    // (undocumented)
-    get mintUrl(): string;
-}
-
-// @public
-export class CashuAuthWallet {
-    constructor(mint: CashuAuthMint, options?: {
-        keys?: MintKeys[] | MintKeys;
-        keysets?: MintKeyset[];
-    });
-    getActiveKeyset(keysets: MintKeyset[]): MintKeyset;
-    getAllKeys(): Promise<MintKeys[]>;
-    getKeys(keysetId?: string, forceRefresh?: boolean): Promise<MintKeys>;
-    getKeySets(): Promise<MintKeyset[]>;
-    // (undocumented)
-    get keys(): Map<string, MintKeys>;
-    // (undocumented)
-    get keysetId(): string;
-    set keysetId(keysetId: string);
-    // (undocumented)
-    get keysets(): MintKeyset[];
-    loadMint(): Promise<void>;
-    // (undocumented)
-    mint: CashuAuthMint;
-    mintProofs(amount: number, clearAuthToken: string, options?: {
-        keysetId?: string;
-    }): Promise<Proof[]>;
-}
 
 // @public (undocumented)
 export function checkResponse(data: {
@@ -180,6 +192,18 @@ export interface CounterSource {
     snapshot?(): Promise<Record<string, number>>;
 }
 
+// @public
+export function createAuthWallet(mintUrl: string, options?: {
+    authPool?: number;
+    oidc?: OIDCAuthOptions;
+    logger?: Logger;
+}): Promise<{
+    mint: Mint;
+    auth: AuthManager;
+    oidc: OIDCAuth;
+    wallet: Wallet;
+}>;
+
 // @public (undocumented)
 export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
 
@@ -220,6 +244,16 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
 export const deserializeProof: (proof: SerializedProof) => RawProof;
 
 // @public (undocumented)
+export type DeviceStartResponse = {
+    device_code: string;
+    user_code: string;
+    verification_uri: string;
+    verification_uri_complete?: string;
+    interval?: number;
+    expires_in?: number;
+};
+
+// @public (undocumented)
 export type DLEQ = {
     s: Uint8Array;
     e: Uint8Array;
@@ -229,17 +263,11 @@ export type DLEQ = {
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
 
-// @public (undocumented)
-export function getBlindedAuthToken(amount: number, url: string, clearAuthToken: string): Promise<string[]>;
-
 // @public
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
-
-// @public
-export function getEncodedAuthToken(proof: Proof): string;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
@@ -303,6 +331,14 @@ export type GetInfoResponse = {
         };
         '20'?: {
             supported: boolean;
+        };
+        '21'?: {
+            openid_discovery: string;
+            client_id: string;
+            protected_endpoints?: Array<{
+                method: 'GET' | 'POST';
+                path: string;
+            }>;
         };
         '22'?: {
             bat_max_mint: number;
@@ -415,7 +451,7 @@ export type JsonRpcReqParams = {
 
 // @public
 export class KeyChain {
-    constructor(mint: Mint, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
+    constructor(mint: string | Mint, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
     getCache(): {
         keysets: MintKeyset[];
         keys: MintKeys[];
@@ -603,7 +639,9 @@ export class MessageQueue {
 
 // @public
 export class Mint {
-    constructor(_mintUrl: string, customRequest?: RequestFn, authTokenGetter?: () => Promise<string>, options?: {
+    constructor(mintUrl: string, options?: {
+        customRequest?: RequestFn;
+        authProvider?: AuthProvider;
         logger?: Logger;
     });
     check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
@@ -621,13 +659,13 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
-    handleBlindAuth(path: string): Promise<string | undefined>;
     melt(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     meltBolt12(meltPayload: MeltPayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
     mint(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
+    oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
     swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
@@ -737,6 +775,14 @@ export class MintInfo {
         '20'?: {
             supported: boolean;
         };
+        '21'?: {
+            openid_discovery: string;
+            client_id: string;
+            protected_endpoints?: Array<{
+                method: "GET" | "POST";
+                path: string;
+            }>;
+        };
         '22'?: {
             bat_max_mint: number;
             protected_endpoints: Array<{
@@ -748,7 +794,9 @@ export class MintInfo {
     // (undocumented)
     get pubkey(): string;
     // (undocumented)
-    requiresBlindAuthToken(path: string): boolean;
+    requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    // (undocumented)
+    requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
     get supportsBolt12Description(): boolean;
     // (undocumented)
     get version(): string;
@@ -846,6 +894,66 @@ export type NUT10Option = {
     kind: string;
     data: string;
     tags: string[][];
+};
+
+// @public (undocumented)
+export class OIDCAuth {
+    constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
+    addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
+    buildAuthCodeUrl(input: {
+        redirectUri: string;
+        codeChallenge: string;
+        codeChallengeMethod?: 'S256' | 'plain';
+        state?: string;
+        scope?: string;
+    }): Promise<string>;
+    // (undocumented)
+    devicePoll(device_code: string, intervalSec?: number): Promise<TokenResponse>;
+    // (undocumented)
+    deviceStart(): Promise<DeviceStartResponse>;
+    exchangeAuthCode(input: {
+        code: string;
+        redirectUri: string;
+        codeVerifier: string;
+    }): Promise<TokenResponse>;
+    // (undocumented)
+    static fromMintInfo(info: {
+        nuts: GetInfoResponse['nuts'];
+    }, opts?: OIDCAuthOptions): OIDCAuth;
+    generatePKCE(): {
+        verifier: string;
+        challenge: string;
+    };
+    // (undocumented)
+    loadConfig(): Promise<OIDCConfig>;
+    // (undocumented)
+    passwordGrant(username: string, password: string): Promise<TokenResponse>;
+    // (undocumented)
+    refresh(refresh_token: string): Promise<TokenResponse>;
+    // (undocumented)
+    setClient(id: string): void;
+    // (undocumented)
+    setScope(scope?: string): void;
+    startDeviceAuth(intervalSec?: number): Promise<DeviceStartResponse & {
+        poll: () => Promise<TokenResponse>;
+        cancel: () => void;
+    }>;
+}
+
+// @public (undocumented)
+export type OIDCAuthOptions = {
+    clientId?: string;
+    scope?: string;
+    logger?: Logger;
+    onTokens?: (t: TokenResponse) => void | Promise<void>;
+};
+
+// @public (undocumented)
+export type OIDCConfig = {
+    issuer: string;
+    authorization_endpoint?: string;
+    token_endpoint: string;
+    device_authorization_endpoint?: string;
 };
 
 // @public (undocumented)
@@ -1359,6 +1467,18 @@ export type Token = {
 };
 
 // @public (undocumented)
+export type TokenResponse = {
+    access_token?: string;
+    token_type?: string;
+    expires_in?: number;
+    refresh_token?: string;
+    id_token?: string;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+};
+
+// @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
 // @public (undocumented)
@@ -1391,6 +1511,7 @@ export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
 export class Wallet {
     constructor(mint: Mint | string, options?: {
         unit?: string;
+        authProvider?: AuthProvider;
         keysetId?: string;
         bip39seed?: Uint8Array;
         secretsPolicy?: SecretsPolicy;

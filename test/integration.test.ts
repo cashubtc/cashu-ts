@@ -1,3 +1,7 @@
+// +++++++++++++++++++++ CI Integration Test ++++++++++++++++++
+// To run locally, spin up a local mint instance on port 3338. Startup command:
+// docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_INPUT_FEE_PPK=100 -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.5 poetry run mint
+
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
 import { vi } from 'vitest';

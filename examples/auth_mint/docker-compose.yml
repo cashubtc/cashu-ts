@@ -1,0 +1,54 @@
+services:
+  keycloak:
+    container_name: keycloak
+    image: quay.io/keycloak/keycloak:25.0.0
+    command: start-dev --import-realm --hostname keycloak.localtest.me
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./cashu-realm.json:/opt/keycloak/data/import/cashu-realm.json:ro
+    networks:
+      authnet:
+        aliases:
+          - keycloak.localtest.me
+
+  mint:
+    image: cashubtc/mintd:latest
+    platform: linux/amd64
+    container_name: cdk_auth_mint
+    depends_on:
+      - keycloak
+    environment:
+      # Core settings
+      - CDK_MINTD_DATABASE=sqlite
+      - CDK_MINTD_LN_BACKEND=fakewallet
+      - CDK_MINTD_LISTEN_HOST=0.0.0.0
+      - CDK_MINTD_LISTEN_PORT=3338
+      - CDK_MINTD_URL=http://localhost:3338
+      - CDK_MINTD_MNEMONIC=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+      # Auth settings
+      - CDK_MINTD_AUTH_ENABLED=true
+      - CDK_MINTD_AUTH_OPENID_DISCOVERY=http://keycloak.localtest.me:8080/realms/cashu/.well-known/openid-configuration
+      - CDK_MINTD_AUTH_OPENID_CLIENT_ID=cashu-client
+      - CDK_MINTD_AUTH_MINT_MAX_BAT=10
+      # Endpoint auth settings (blind, clear, none=disabled)
+      - CDK_MINTD_AUTH_MINT=blind
+      - CDK_MINTD_AUTH_GET_MINT_QUOTE=blind
+      - CDK_MINTD_AUTH_CHECK_MINT_QUOTE=blind
+      - CDK_MINTD_AUTH_MELT=blind
+      - CDK_MINTD_AUTH_GET_MELT_QUOTE=blind
+      - CDK_MINTD_AUTH_CHECK_MELT_QUOTE=blind
+      - CDK_MINTD_AUTH_SWAP=blind
+      - CDK_MINTD_AUTH_RESTORE=blind
+      - CDK_MINTD_AUTH_CHECK_PROOF_STATE=blind
+    ports:
+      - '3338:3338'
+    networks:
+      - authnet
+
+networks:
+  authnet:
+    driver: bridge

@@ -12,7 +12,7 @@ import { type Keys, type Proof, type Token } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
 import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../../src/utils';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {

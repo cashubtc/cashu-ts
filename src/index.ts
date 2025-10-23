@@ -17,6 +17,19 @@ export {
 	WalletOps,
 } from './wallet/WalletOps';
 
+// AUTH module
+export {
+	OIDCAuth,
+	AuthManager,
+	createAuthWallet,
+	type AuthProvider,
+	type AuthManagerOptions,
+	type TokenResponse,
+	type DeviceStartResponse,
+	type OIDCConfig,
+	type OIDCAuthOptions,
+} from './auth';
+
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
 export type { SubscribeOpts, CancellerLike } from './wallet/WalletEvents';
@@ -40,9 +53,6 @@ export * from './crypto';
 
 // Core Utils
 export * from './utils/core';
-
-// Auth
-export { CashuAuthMint, CashuAuthWallet, getEncodedAuthToken, getBlindedAuthToken } from './auth';
 
 // Payment request facade (tests rely on these at top level)
 export { PaymentRequest } from './model/PaymentRequest';

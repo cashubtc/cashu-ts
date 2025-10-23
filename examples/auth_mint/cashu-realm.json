@@ -1,0 +1,77 @@
+{
+	"realm": "cashu",
+	"enabled": true,
+
+	"defaultRoles": ["offline_access", "uma_authorization"],
+
+	"clients": [
+		{
+			"clientId": "cashu-client",
+			"name": "Cashu Demo Client",
+			"publicClient": true,
+			"redirectUris": [
+				"http://localhost:33388/callback",
+				"http://localhost:3388/*",
+				"http://localhost:3388/callback"
+			],
+			"webOrigins": ["*"],
+			"standardFlowEnabled": true,
+			"directAccessGrantsEnabled": true,
+			"serviceAccountsEnabled": false,
+			"attributes": {
+				"oauth2.device.authorization.grant.enabled": "true"
+			},
+			"defaultClientScopes": [
+				"web-origins",
+				"role_list",
+				"profile",
+				"email",
+				"roles",
+				"offline_access"
+			],
+			"optionalClientScopes": ["address", "phone", "microprofile-jwt"],
+			"protocolMappers": [
+				{
+					"name": "audience-cashu-client",
+					"protocol": "openid-connect",
+					"protocolMapper": "oidc-audience-mapper",
+					"config": {
+						"included.client.audience": "cashu-client",
+						"id.token.claim": "false",
+						"access.token.claim": "true"
+					}
+				},
+				{
+					"name": "subject-in-access-token",
+					"protocol": "openid-connect",
+					"protocolMapper": "oidc-subject-mapper",
+					"config": {
+						"access.token.claim": "true",
+						"id.token.claim": "false"
+					}
+				}
+			]
+		},
+		{
+			"clientId": "account",
+			"name": "Account Console",
+			"publicClient": true
+		}
+	],
+
+	"users": [
+		{
+			"username": "test@test.com",
+			"email": "test@test.com",
+			"firstName": "Test",
+			"lastName": "User",
+			"enabled": true,
+			"emailVerified": true,
+			"realmRoles": ["offline_access", "uma_authorization"],
+			"clientRoles": {
+				"account": ["manage-account", "view-profile"]
+			},
+			"credentials": [{ "type": "password", "value": "testtest", "temporary": false }]
+		}
+	]
+}

@@ -77,6 +77,7 @@ import {
 	sumProofs,
 	sanitizeUrl,
 } from '../utils';
+import { type AuthProvider } from '../auth/AuthProvider';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 
@@ -179,6 +180,7 @@ class Wallet {
 		mint: Mint | string,
 		options?: {
 			unit?: string;
+			authProvider?: AuthProvider;
 			keysetId?: string; // if omitted, wallet binds to cheapest in loadMint
 			bip39seed?: Uint8Array;
 			secretsPolicy?: SecretsPolicy; // optional, auto
@@ -196,7 +198,10 @@ class Wallet {
 		this.on = new WalletEvents(this);
 		this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
 		this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
-		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
+		this.mint =
+			typeof mint === 'string'
+				? new Mint(mint, { authProvider: options?.authProvider, logger: this._logger })
+				: mint;
 		this._unit = options?.unit ?? this._unit;
 		this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
 		if (options?.bip39seed) {

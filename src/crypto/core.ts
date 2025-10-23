@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
-import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils';
 
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
