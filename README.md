@@ -111,9 +111,9 @@ const mintUrl = 'http://localhost:3338';
 const wallet = new Wallet(mintUrl);
 await wallet.loadMint(); // wallet is now ready to use
 
-const mintQuote = await wallet.createMintQuote(64);
+const mintQuote = await wallet.createMintQuoteBolt11(64);
 // pay the invoice here before you continue...
-const mintQuoteChecked = await wallet.checkMintQuote(mintQuote.quote);
+const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state === MintQuoteState.PAID) {
 	const proofs = await wallet.mintProofs(64, mintQuote.quote);
 }
@@ -129,7 +129,7 @@ const wallet = new Wallet(mintUrl);
 await wallet.loadMint(); // wallet is now ready to use
 
 const invoice = 'lnbc......'; // Lightning invoice to pay
-const meltQuote = await wallet.createMeltQuote(invoice);
+const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
 const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 
 // Wallet.send performs coin selection and swaps the proofs with the mint

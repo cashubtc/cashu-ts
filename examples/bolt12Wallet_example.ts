@@ -82,7 +82,7 @@ runBolt12WalletExample();
 // Helper functions
 const waitForMintQuote = async (wallet: Wallet, quoteId: string): Promise<Proof[]> => {
 	while (true) {
-		const quote = await wallet.checkMintQuote(quoteId);
+		const quote = await wallet.checkMintQuoteBolt11(quoteId);
 
 		if (quote.state === MintQuoteState.PAID) {
 			return await wallet.mintProofs(INITIAL_MINT_AMOUNT, quoteId);
@@ -97,7 +97,7 @@ const waitForMintQuote = async (wallet: Wallet, quoteId: string): Promise<Proof[
 const mintInitialProofs = async (wallet: Wallet): Promise<Proof[]> => {
 	console.log(`💰 Minting ${INITIAL_MINT_AMOUNT} sats via BOLT11...`);
 
-	const bolt11Quote = await wallet.createMintQuote(INITIAL_MINT_AMOUNT);
+	const bolt11Quote = await wallet.createMintQuoteBolt11(INITIAL_MINT_AMOUNT);
 	console.log(`Pay this invoice: ${bolt11Quote.request}`);
 
 	const proofs = await waitForMintQuote(wallet, bolt11Quote.quote);

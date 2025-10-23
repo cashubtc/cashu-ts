@@ -72,15 +72,15 @@ describe('mint api', () => {
 	test('request mint', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(100);
+		const request = await wallet.createMintQuoteBolt11(100);
 		expect(request).toBeDefined();
-		const mintQuote = await wallet.checkMintQuote(request.quote);
+		const mintQuote = await wallet.checkMintQuoteBolt11(request.quote);
 		expect(mintQuote).toBeDefined();
 	});
 	test('mint tokens', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(1337);
+		const request = await wallet.createMintQuoteBolt11(1337);
 		expect(request).toBeDefined();
 		expect(request.request).toContain('lnbc1337');
 		const proofs = await wallet.mintProofs(1337, request.quote);
@@ -91,8 +91,8 @@ describe('mint api', () => {
 	test('get fee for local invoice', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(100);
-		const fee = (await wallet.createMeltQuote(request.request)).fee_reserve;
+		const request = await wallet.createMintQuoteBolt11(100);
+		const fee = (await wallet.createMeltQuoteBolt11(request.request)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because local invoice, fee should be 0
 		expect(fee).toBe(0);
@@ -100,14 +100,14 @@ describe('mint api', () => {
 	test('invoice with description', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const quote = await wallet.createMintQuote(100, 'test description');
+		const quote = await wallet.createMintQuoteBolt11(100, 'test description');
 		expect(quote).toBeDefined();
 		console.log(`invoice with description: ${quote.request}`);
 	});
 	test('get fee for external invoice', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const fee = (await wallet.createMeltQuote(externalInvoice)).fee_reserve;
+		const fee = (await wallet.createMeltQuoteBolt11(externalInvoice)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because external invoice, fee should be > 0
 		expect(fee).toBeGreaterThan(0);
@@ -115,17 +115,17 @@ describe('mint api', () => {
 	test('pay local invoice', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(100);
+		const request = await wallet.createMintQuoteBolt11(100);
 		const proofs = await wallet.mintProofs(100, request.quote);
 
 		// expect no fee because local invoice
-		const mintQuote = await wallet.createMintQuote(10);
-		const quote = await wallet.createMeltQuote(mintQuote.request);
+		const mintQuote = await wallet.createMintQuoteBolt11(10);
+		const quote = await wallet.createMeltQuoteBolt11(mintQuote.request);
 		const fee = quote.fee_reserve;
 		expect(fee).toBe(0);
 
 		// get the quote from the mint
-		const quote_ = await wallet.checkMeltQuote(quote.quote);
+		const quote_ = await wallet.checkMeltQuoteBolt11(quote.quote);
 		expect(quote_).toBeDefined();
 
 		const sendResponse = await wallet.send(10, proofs, { includeFees: true });
@@ -153,15 +153,15 @@ describe('mint api', () => {
 	test('pay external invoice', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(3000);
+		const request = await wallet.createMintQuoteBolt11(3000);
 		const proofs = await wallet.mintProofs(3000, request.quote);
 
-		const meltQuote = await wallet.createMeltQuote(externalInvoice);
+		const meltQuote = await wallet.createMeltQuoteBolt11(externalInvoice);
 		const fee = meltQuote.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
 
 		// get the quote from the mint
-		const quote_ = await wallet.checkMeltQuote(meltQuote.quote);
+		const quote_ = await wallet.checkMeltQuoteBolt11(meltQuote.quote);
 		expect(quote_).toBeDefined();
 
 		const sendResponse = await wallet.send(2000 + fee, proofs, { includeFees: true });
@@ -190,7 +190,7 @@ describe('mint api', () => {
 	test('test send tokens exact without previous split', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(64);
+		const request = await wallet.createMintQuoteBolt11(64);
 		const proofs = await wallet.mintProofs(64, request.quote);
 
 		const sendResponse = await wallet.send(64, proofs);
@@ -204,7 +204,7 @@ describe('mint api', () => {
 	test('test send tokens with change', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(100);
+		const request = await wallet.createMintQuoteBolt11(100);
 		const proofs = await wallet.mintProofs(100, request.quote); // 4,32,64
 		const sendResponse = await wallet.send(10, proofs, { includeFees: false });
 		expect(sendResponse).toBeDefined();
@@ -222,7 +222,7 @@ describe('mint api', () => {
 	test('receive tokens with previous split', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(100);
+		const request = await wallet.createMintQuoteBolt11(100);
 		const proofs = await wallet.mintProofs(100, request.quote);
 
 		const sendResponse = await wallet.send(10, proofs);
@@ -233,7 +233,7 @@ describe('mint api', () => {
 	test('receive tokens with previous mint', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-		const request = await wallet.createMintQuote(64);
+		const request = await wallet.createMintQuoteBolt11(64);
 		const proofs = await wallet.mintProofs(64, request.quote);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: proofs });
 		const response = await wallet.receive(encoded);
@@ -251,7 +251,7 @@ describe('mint api', () => {
 		console.log('pubKeyBob:', pubKeyBob);
 
 		// Mint some proofs
-		const request = await wallet.createMintQuote(128);
+		const request = await wallet.createMintQuoteBolt11(128);
 		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
 		// Send them P2PK locked to Bob
@@ -281,7 +281,7 @@ describe('mint api', () => {
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
-		const mintRequest = await wallet.createMintQuote(3000);
+		const mintRequest = await wallet.createMintQuoteBolt11(3000);
 
 		const proofs = await wallet.ops
 			.mintBolt11(3000, mintRequest.quote)
@@ -290,7 +290,7 @@ describe('mint api', () => {
 			})
 			.run();
 
-		const meltRequest = await wallet.createMeltQuote(externalInvoice);
+		const meltRequest = await wallet.createMeltQuoteBolt11(externalInvoice);
 		const fee = meltRequest.fee_reserve;
 		expect(fee).toBeGreaterThan(0);
 		const signedProofs = wallet.signP2PKProofs(proofs, bytesToHex(privKeyBob));
@@ -306,7 +306,7 @@ describe('mint api', () => {
 		const keys = wallet.keyChain.getKeyset();
 
 		const data = OutputData.createSingleDeterministicData(1, hexToBytes(hexSeed), 1, keys.id);
-		const quote = await wallet.createMintQuote(1);
+		const quote = await wallet.createMintQuoteBolt11(1);
 		await new Promise((r) => setTimeout(r, 1500));
 		const proof = await wallet.mintProofs(1, quote.quote, {}, { type: 'custom', data: [data] });
 		expect(proof).toBeDefined();
@@ -316,7 +316,7 @@ describe('mint api', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 
-		const mintQuote = await wallet.createMintQuote(21);
+		const mintQuote = await wallet.createMintQuoteBolt11(21);
 		const callback = vi.fn();
 		const res = await new Promise(async (res, rej) => {
 			const unsub = await wallet.on.mintQuoteUpdates(
@@ -344,8 +344,8 @@ describe('mint api', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 
-		const mintQuote1 = await wallet.createMintQuote(21);
-		const mintQuote2 = await wallet.createMintQuote(22);
+		const mintQuote1 = await wallet.createMintQuoteBolt11(21);
+		const mintQuote2 = await wallet.createMintQuoteBolt11(22);
 
 		const callbackRef = vi.fn();
 		const res = await new Promise(async (res, rej) => {
@@ -379,7 +379,7 @@ describe('mint api', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 
-		const quote = await wallet.createMintQuote(63);
+		const quote = await wallet.createMintQuoteBolt11(63);
 		await new Promise((res, rej) => {
 			wallet.on.mintQuotePaid(quote.quote, res, rej);
 		});
@@ -432,7 +432,7 @@ describe('dleq', () => {
 			throw new Error('Cannot run this test: mint does not support NUT12');
 		}
 
-		const mintRequest = await wallet.createMintQuote(3000);
+		const mintRequest = await wallet.createMintQuoteBolt11(3000);
 		const proofs = await wallet.mintProofs(3000, mintRequest.quote);
 
 		proofs.forEach((p) => {
@@ -450,7 +450,7 @@ describe('dleq', () => {
 			throw new Error('Cannot run this test: mint does not support NUT12');
 		}
 
-		const mintRequest = await wallet.createMintQuote(8);
+		const mintRequest = await wallet.createMintQuoteBolt11(8);
 		const proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		const { send } = wallet.sendOffline(4, proofs, { requireDleq: true });
@@ -476,7 +476,7 @@ describe('dleq', () => {
 			throw new Error('Cannot run this test: mint does not support NUT12');
 		}
 
-		const mintRequest = await wallet.createMintQuote(8);
+		const mintRequest = await wallet.createMintQuoteBolt11(8);
 		const proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		const { send } = await wallet.send(4, proofs);
@@ -493,7 +493,7 @@ describe('dleq', () => {
 			throw new Error('Cannot run this test: mint does not support NUT12');
 		}
 
-		const mintRequest = await wallet.createMintQuote(8);
+		const mintRequest = await wallet.createMintQuoteBolt11(8);
 		let proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		// strip dleq
@@ -513,7 +513,7 @@ describe('dleq', () => {
 			throw new Error('Cannot run this test: mint does not support NUT12');
 		}
 
-		const mintRequest = await wallet.createMintQuote(8);
+		const mintRequest = await wallet.createMintQuoteBolt11(8);
 		let proofs = await wallet.mintProofs(8, mintRequest.quote);
 
 		// alter dleq signature
@@ -553,7 +553,7 @@ describe('Custom Outputs', () => {
 		await wallet.loadMint();
 
 		// Lets mint some fresh proofs, using our p2pKFactory as the outputType
-		const quoteRes = await wallet.createMintQuote(32);
+		const quoteRes = await wallet.createMintQuoteBolt11(32);
 		await new Promise((res) => setTimeout(res, 2000));
 		const proofs = await wallet.mintProofs(32, quoteRes.quote, {}, keepFactory);
 
@@ -561,7 +561,7 @@ describe('Custom Outputs', () => {
 		expectNUT10SecretDataToEqual(proofs, hexPk);
 
 		// Lets melt some of these proofs to pay an invoice
-		const meltQuote = await wallet.createMeltQuote(invoice);
+		const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
 		const meltAmount = meltQuote.amount + meltQuote.fee_reserve;
 		// Use our keepFactory for the change (keep) outputs
 		const customConfig: OutputConfig = {
@@ -617,7 +617,7 @@ describe('Custom Outputs', () => {
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 
-		const quote = await wallet.createMintQuote(21);
+		const quote = await wallet.createMintQuoteBolt11(21);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(21, quote.quote, {}, manualFactory);
 		expectNUT10SecretDataToEqual(proofs, 'mintTest');
@@ -633,7 +633,7 @@ describe('Custom Outputs', () => {
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 
-		const quote = await wallet.createMintQuote(21);
+		const quote = await wallet.createMintQuoteBolt11(21);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(21, quote.quote);
 		const amount = sumProofs(proofs) - wallet.getFeesForProofs(proofs);
@@ -654,7 +654,7 @@ describe('Custom Outputs', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 
-		const quote = await wallet.createMintQuote(40);
+		const quote = await wallet.createMintQuoteBolt11(40);
 		await new Promise((res) => setTimeout(res, 1000));
 		const proofs = await wallet.mintProofs(40, quote.quote);
 		const data1 = OutputData.createP2PKData({ pubkey: 'key1' }, 10, keys);
@@ -675,7 +675,7 @@ describe('Keep Vector and Reordering', () => {
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 
-		const mintQuote = await wallet.createMintQuote(64);
+		const mintQuote = await wallet.createMintQuoteBolt11(64);
 		await new Promise((res) => setTimeout(res, 1000));
 		const testOutputAmounts = [8, 4, 8, 2, 8, 2];
 		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
@@ -692,7 +692,7 @@ describe('Keep Vector and Reordering', () => {
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 
-		const mintQuote = await wallet.createMintQuote(64);
+		const mintQuote = await wallet.createMintQuoteBolt11(64);
 		await new Promise((res) => setTimeout(res, 1000));
 		const testOutputAmounts = [8, 4, 8, 2, 8, 2];
 		const testProofs = await wallet.mintProofs(64, mintQuote.quote);
@@ -710,7 +710,7 @@ describe('Keep Vector and Reordering', () => {
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 
-		const mintQuote = await wallet.createMintQuote(64);
+		const mintQuote = await wallet.createMintQuoteBolt11(64);
 		await new Promise((res) => setTimeout(res, 1000));
 		const testSendAmounts = [8, 4, 8, 2, 8, 2]; // complete (32), defined order
 		const testKeepAmounts = [16, 8]; // incomplete (24 vs 31), , so we expect...
@@ -733,7 +733,7 @@ describe('Keep Vector and Reordering', () => {
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 
-		const mintQuote = await wallet.createMintQuote(64);
+		const mintQuote = await wallet.createMintQuoteBolt11(64);
 		await new Promise((res) => setTimeout(res, 1000));
 		const testSendAmounts = [16, 8]; // incomplete (24 vs 32), so we expect...
 		const expectedSend = [16, 8, 8]; // ascending order with 8,16 + split rest
@@ -765,7 +765,7 @@ describe('Wallet Restore', () => {
 		const wallet = new Wallet(mintUrl, { bip39seed: seed });
 		await wallet.loadMint();
 
-		const mintQuote = await wallet.createMintQuote(70);
+		const mintQuote = await wallet.createMintQuoteBolt11(70);
 		await new Promise((r) => setTimeout(r, 1000));
 		const proofs = await wallet.ops.mintBolt11(70, mintQuote.quote).asDeterministic(5).run();
 
