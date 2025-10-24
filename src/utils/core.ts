@@ -81,10 +81,8 @@ export function splitAmount(
 		throw new Error('Cannot split amount, keyset is inactive or contains no keys');
 	}
 	for (const amt of sortedKeyAmounts) {
-		console.log('amt', amt);
 		if (amt <= 0) continue;
 		while (value >= amt) {
-			console.log('value', value);
 			split.push(amt);
 			value -= amt;
 		}
