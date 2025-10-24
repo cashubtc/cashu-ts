@@ -46,6 +46,22 @@ Some crypto types have been deduplicated to the main library types:
 - `MintKeys` is now `RawMintKeys`
 - `Keyset` and `KeysetWithKeys` have been removed as unused
 
+Function signature changes:
+
+- `signP2PKProofs`: The optional beStrict param has been replaced with a logger.
+
+```ts
+// third (optional) param:
+signP2PKProofs = (
+	proofs: Proof[], privateKey: string | string[], beStrict = false
+): Proof[]
+
+// is now a logger:
+signP2PKProofs = (
+	proofs: Proof[], privateKey: string | string[], logger: Logger = NULL_LOGGER
+): Proof[]
+```
+
 ### New `OutputType` and `OutputConfig`
 
 The output model for `send`, `receive`, `mintProofs`, and `meltProofs` has been simplified.
