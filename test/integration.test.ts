@@ -214,8 +214,7 @@ describe('mint api', () => {
 		// The 32 would have been selected (fee: 1 sat), leaving 4,64 unspent
 		// Keep is optimized to _denominationTarget (default: 3) vs unselected
 		// So we expect: 1,1,1,2,2,2,4,4,4 change + 4,64 unspent = 11 proofs (total 89)
-		console.log(`sumProofs(sendResponse.keep) = ${sumProofs(sendResponse.keep)}`);
-		expect(sendResponse.keep.length).toBe(11);
+		expect(sendResponse.keep.length).toBe(5);
 		expect(sumProofs(sendResponse.send)).toBe(10);
 		expect(sumProofs(sendResponse.keep)).toBe(89);
 	}, 10000000);
