@@ -85,7 +85,7 @@ export function splitAmount(
 		// Calculate how many of amt fit into remaining value
 		const requireCount = Math.floor(value / amt);
 		// Add them to the split and reduce the target value by added amounts
-		split.push(...Array(requireCount).fill(amt));
+		split.push(...Array<number>(requireCount).fill(amt));
 		value -= amt * requireCount;
 		// Break early once target is satisfied
 		if (value === 0) break;
