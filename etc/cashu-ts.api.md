@@ -1546,7 +1546,7 @@ export class Wallet {
     checkMintQuote(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt11(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
-    checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
