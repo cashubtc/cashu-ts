@@ -1409,7 +1409,7 @@ export function signMintQuote(privkey: string, quote: string, blindedMessages: S
 export const signP2PKProof: (proof: Proof, privateKey: string) => Proof;
 
 // @public
-export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], beStrict?: boolean) => Proof[];
+export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger) => Proof[];
 
 // @public (undocumented)
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;

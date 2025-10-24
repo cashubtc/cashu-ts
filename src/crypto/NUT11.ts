@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2';
 import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';
 import { type BlindedMessage } from './core';
+import { type Logger, NULL_LOGGER } from '../logger';
 
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
@@ -253,28 +254,34 @@ export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefin
  *
  * @param proofs - An array of proofs to sign.
  * @param privateKey - A single private key or array of private keys.
- * @param beStrict - (Default: false) Throws Error if any signing attempt fails.
+ * @param logger - Optional logger (default: NULL_LOGGER)
  */
 export const signP2PKProofs = (
 	proofs: Proof[],
 	privateKey: string | string[],
-	beStrict = false,
+	logger: Logger = NULL_LOGGER,
 ): Proof[] => {
-	const privateKeys: string[] = Array.isArray(privateKey) ? privateKey : [privateKey];
 	return proofs.map((proof, index) => {
-		let signedProof = proof;
-		for (const priv of privateKeys) {
-			try {
-				signedProof = signP2PKProof(signedProof, priv);
-			} catch (error: unknown) {
-				const message = error instanceof Error ? error.message : 'Unknown error';
-				if (beStrict) {
-					throw new Error(`Failed signing proof #${index + 1}: ${message}`);
+		try {
+			const privateKeys: string[] = Array.isArray(privateKey) ? privateKey : [privateKey];
+			let signedProof = proof;
+			for (const priv of privateKeys) {
+				try {
+					signedProof = signP2PKProof(signedProof, priv);
+				} catch (error: unknown) {
+					// Log signature failures only - these are not fatal, just informational
+					// as not all keys will be needed for some proofs (eg P2BK, NIP60 etc)
+					const message = error instanceof Error ? error.message : 'Unknown error';
+					logger.warn(`Proof #${index + 1}: ${message}`);
 				}
-				console.warn(`Proof #${index + 1}: ${message}`);
 			}
+			return signedProof;
+		} catch (error: unknown) {
+			// General errors
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			logger.error(`Proof #${index + 1}: ${message}`);
+			throw new Error(`Failed signing proof #${index + 1}: ${message}`);
 		}
-		return signedProof;
 	});
 };
 
