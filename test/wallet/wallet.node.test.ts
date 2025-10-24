@@ -1618,8 +1618,8 @@ describe('send', () => {
 		// Send 3 [2,1] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
 		// Total unselected = [1]
 		// Total send = [2, 2, 1]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
-		// Total change = [1, 1] because proofs are optimized to target (3)
-		// Total keep = [1, 1, 1]
+		// Total change = [2] because proofs are not optimized
+		// Total keep = [2, 1]
 		expect(result.send).toHaveLength(3);
 		expect(result.send[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
 		expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
