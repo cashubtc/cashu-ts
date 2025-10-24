@@ -1,8 +1,5 @@
-import { CashuMint } from '../src/CashuMint';
-import { CashuWallet } from '../src/CashuWallet';
 import dns from 'node:dns';
-import { MintQuoteState, Proof, Bolt12MintQuoteResponse } from '../src/model/types/index';
-import { sumProofs } from '../src/utils';
+import { Wallet, MintQuoteState, Bolt12MintQuoteResponse, Proof, sumProofs } from '../src';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
 
@@ -23,8 +20,7 @@ const runBolt12WalletExample = async () => {
 		console.log('========================\n');
 
 		// Initialize wallet
-		const mint = new CashuMint(MINT_URL);
-		const wallet = new CashuWallet(mint);
+		const wallet = new Wallet(MINT_URL);
 		await wallet.loadMint();
 
 		// Create reusable BOLT12 offer
@@ -84,9 +80,9 @@ const runBolt12WalletExample = async () => {
 runBolt12WalletExample();
 
 // Helper functions
-const waitForMintQuote = async (wallet: CashuWallet, quoteId: string): Promise<Proof[]> => {
+const waitForMintQuote = async (wallet: Wallet, quoteId: string): Promise<Proof[]> => {
 	while (true) {
-		const quote = await wallet.checkMintQuote(quoteId);
+		const quote = await wallet.checkMintQuoteBolt11(quoteId);
 
 		if (quote.state === MintQuoteState.PAID) {
 			return await wallet.mintProofs(INITIAL_MINT_AMOUNT, quoteId);
@@ -98,10 +94,10 @@ const waitForMintQuote = async (wallet: CashuWallet, quoteId: string): Promise<P
 	}
 };
 
-const mintInitialProofs = async (wallet: CashuWallet): Promise<Proof[]> => {
+const mintInitialProofs = async (wallet: Wallet): Promise<Proof[]> => {
 	console.log(`💰 Minting ${INITIAL_MINT_AMOUNT} sats via BOLT11...`);
 
-	const bolt11Quote = await wallet.createMintQuote(INITIAL_MINT_AMOUNT);
+	const bolt11Quote = await wallet.createMintQuoteBolt11(INITIAL_MINT_AMOUNT);
 	console.log(`Pay this invoice: ${bolt11Quote.request}`);
 
 	const proofs = await waitForMintQuote(wallet, bolt11Quote.quote);
@@ -111,7 +107,7 @@ const mintInitialProofs = async (wallet: CashuWallet): Promise<Proof[]> => {
 };
 
 const payBolt12Offer = async (
-	wallet: CashuWallet,
+	wallet: Wallet,
 	offer: string,
 	amount: number,
 	proofs: Proof[],
@@ -137,7 +133,7 @@ const payBolt12Offer = async (
 };
 
 const mintFromBolt12Quote = async (
-	wallet: CashuWallet,
+	wallet: Wallet,
 	quote: Bolt12MintQuoteResponse,
 ): Promise<Proof[]> => {
 	const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);

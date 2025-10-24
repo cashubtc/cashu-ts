@@ -1,5 +1,5 @@
-import type { PartialMeltQuoteResponse } from '../model/types/index';
-import { MeltQuoteState } from '../model/types/index';
+import type { PartialMeltQuoteResponse } from '../mint/types';
+import { MeltQuoteState } from '../mint/types';
 import type { Logger } from '../logger';
 
 export type MeltQuoteResponsePaidDeprecated = {
