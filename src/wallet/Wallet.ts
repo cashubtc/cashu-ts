@@ -947,13 +947,12 @@ class Wallet {
 
 		// Shape KEEP (change) output type and denominations
 		// No includeFees, as we are the receiver of the change
-		// Uses unselectedProofs to optimize denominations if needed
 		let keepOT = this.configureOutputs(
 			changeAmount,
 			keyset,
 			outputConfig.keep ?? this.defaultOutputType(),
 			false,
-			unselectedProofs,
+			config?.proofsWeHave,
 		);
 		const keepAmount = this.preparedTotal(keepOT);
 

@@ -80,12 +80,16 @@ export function splitAmount(
 	if (!sortedKeyAmounts || sortedKeyAmounts.length === 0) {
 		throw new Error('Cannot split amount, keyset is inactive or contains no keys');
 	}
-	sortedKeyAmounts.forEach((amt: number) => {
-		if (value <= 0 || amt <= 0) return;
-		const q = Math.floor(value / amt);
-		for (let i = 0; i < q; ++i) split.push(amt);
-		value %= amt;
-	});
+	for (const amt of sortedKeyAmounts) {
+		if (amt <= 0) continue;
+		// Calculate how many of amt fit into remaining value
+		const requireCount = Math.floor(value / amt);
+		// Add them to the split and reduce the target value by added amounts
+		split.push(...Array<number>(requireCount).fill(amt));
+		value -= amt * requireCount;
+		// Break early once target is satisfied
+		if (value === 0) break;
+	}
 	if (value !== 0) {
 		throw new Error(`Unable to split remaining amount: ${value}`);
 	}

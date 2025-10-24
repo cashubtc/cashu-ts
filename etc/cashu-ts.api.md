@@ -1319,6 +1319,8 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    // (undocumented)
+    proofsWeHave(p: Proof[]): this;
     run(): Promise<SendResponse>;
 }
 
@@ -1326,6 +1328,7 @@ export class SendBuilder {
 export type SendConfig = {
     keysetId?: string;
     includeFees?: boolean;
+    proofsWeHave?: Proof[];
     onCountersReserved?: OnCountersReserved;
 };
 

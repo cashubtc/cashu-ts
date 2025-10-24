@@ -192,6 +192,16 @@ export class SendBuilder {
 	keyset(id: string) {
 		this.config.keysetId = id;
 		return this;
+	} /**
+	 * Provide existing proofs to help optimise denomination selection.
+	 *
+	 * @remarks
+	 * Has no effect if denominations (custom split) was specified.
+	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
+	 */
+	proofsWeHave(p: Proof[]) {
+		this.config.proofsWeHave = p;
+		return this;
 	}
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.

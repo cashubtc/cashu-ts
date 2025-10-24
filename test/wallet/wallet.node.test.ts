@@ -1478,7 +1478,7 @@ describe('send', () => {
 
 		expect(result).toEqual(new Error('bad response'));
 	});
-	test('test send preference with fees included', async () => {
+	test('test send with proofsWeHave', async () => {
 		server.use(
 			http.get(mintUrl + '/v1/keysets', () => {
 				return HttpResponse.json({
@@ -1536,7 +1536,10 @@ describe('send', () => {
 				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			},
 		];
-		const result = await wallet.send(3, overpayProofs, { includeFees: true });
+		const result = await wallet.send(3, overpayProofs, {
+			includeFees: true,
+			proofsWeHave: [{ secret: '123', C: '123', amount: 64, id: 'id' }],
+		});
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
 		// Send 3 [2,1] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
@@ -1552,8 +1555,80 @@ describe('send', () => {
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
 		expect(result.keep).toHaveLength(3);
 		expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.keep[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 		expect(result.keep[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-		expect(result.keep[2]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
+
+	test('test send preference with fees included', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+		server.use(
+			http.post(mintUrl + '/v1/swap', async () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+						{
+							id: '00bd033559de27d0',
+							amount: 2,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const overpayProofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+		const result = await wallet.send(3, overpayProofs, { includeFees: true });
+
+		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
+		// Send 3 [2,1] plus fee (2*600 for send inputs = 1200ppk = 2 sat fee)
+		// Total unselected = [1]
+		// Total send = [2, 2, 1]  = send 3, total fee = 3*600 = 1800ppk = 2 sats)
+		// Total change = [2] because proofs are not optimized
+		// Total keep = [2, 1]
+		expect(result.send).toHaveLength(3);
+		expect(result.send[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.send[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		expect(result.send[2]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
+		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+		expect(result.keep).toHaveLength(2);
+		expect(result.keep[0]).toMatchObject({ amount: 2, id: '00bd033559de27d0' });
+		expect(result.keep[1]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
 	test('send with deterministic keep/send auto-offsets counters and fees', async () => {
 		server.use(
