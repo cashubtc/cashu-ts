@@ -953,7 +953,7 @@ class Wallet {
 			keyset,
 			outputConfig.keep ?? this.defaultOutputType(),
 			false,
-			unselectedProofs,
+			config?.proofsWeHave,
 		);
 		const keepAmount = this.preparedTotal(keepOT);
 
