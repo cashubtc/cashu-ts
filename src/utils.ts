@@ -438,16 +438,20 @@ export function deriveKeysetId(
 	versionByte: number = 0,
 	isDeprecatedBase64: boolean = false,
 ) {
-	let pubkeysConcat = Object.entries(keys)
-		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
-		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
-		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-
 	if (isDeprecatedBase64) {
+		const pubkeysConcat = Object.entries(keys)
+			.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
+			.map(([, pubKey]: [unknown, string]) => pubKey)
+			.reduce((prev: string, curr: string) => prev + curr, '');
 		const hash = sha256(pubkeysConcat);
 		const b64 = Bytes.toBase64(hash);
 		return b64.slice(0, 12);
 	}
+
+	let pubkeysConcat = Object.entries(keys)
+		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
+		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
+		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
 
 	let hash;
 	let hashHex;
