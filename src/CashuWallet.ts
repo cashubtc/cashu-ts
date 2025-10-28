@@ -1674,23 +1674,16 @@ class CashuWallet {
 				p2pk,
 			);
 		}
-		let mintPayload: MintPayload;
-		if (typeof quote !== 'string') {
+		const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
+		const mintPayload: MintPayload = {
+			outputs: blindedMessages,
+			quote: typeof quote === 'string' ? quote : quote.quote,
+		};
+		if (typeof quote !== 'string' && quote.pubkey) {
 			if (!privateKey) {
 				throw new Error('Can not sign locked quote without private key');
 			}
-			const blindedMessages = newBlindingData.map((d) => d.blindedMessage);
-			const mintQuoteSignature = signMintQuote(privateKey, quote.quote, blindedMessages);
-			mintPayload = {
-				outputs: blindedMessages,
-				quote: quote.quote,
-				signature: mintQuoteSignature,
-			};
-		} else {
-			mintPayload = {
-				outputs: newBlindingData.map((d) => d.blindedMessage),
-				quote: quote,
-			};
+			mintPayload.signature = signMintQuote(privateKey, quote.quote, blindedMessages);
 		}
 		if (method === 'bolt12') {
 			const { signatures } = await this.mint.mintBolt12(mintPayload);
