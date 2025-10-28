@@ -1,6 +1,6 @@
 {
 	"name": "@cashu/cashu-ts",
-	"version": "2.7.1",
+	"version": "3.0.1",
 	"description": "cashu library for communicating with a cashu mint",
 	"type": "module",
 	"engines": {
@@ -19,11 +19,12 @@
 	"scripts": {
 		"compile": "vite build && node post-process-dts.js",
 		"compile:standalone": "BUILD_FORMAT=iife vite build && node post-process-dts.js",
-		"test:bundler": "node test/consumer-bundler/run-test.js",
-		"test:commonjs": "node test/consumer-commonjs/run-test.js",
-		"test:iife": "node test/consumer-iife/run-test.js",
-		"test:nodenext": "node test/consumer-nodenext/run-test.js",
-		"test:reactnative": "node test/consumer-reactnative/run-test.js",
+		"test:bundler": "node test/consumer/bundler/run-test.js",
+		"test:commonjs": "node test/consumer/commonjs/run-test.js",
+		"test:iife": "node test/consumer/iife/run-test.js",
+		"test:nodenext": "node test/consumer/nodenext/run-test.js",
+		"test:reactnative": "node test/consumer/reactnative/run-test.js",
+		"test:consumer": "npm run test:bundler && npm run test:commonjs && npm run test:iife && npm run test:nodenext && npm run test:reactnative",
 		"test:prepare": "npx playwright install chromium --with-deps",
 		"test": "vitest run --coverage --project node --project browser",
 		"test-integration": "vitest run --coverage --project integration",
@@ -34,68 +35,15 @@
 		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts",
 		"api:check": "npm run compile && api-extractor run",
-		"api:update": "npm run compile && api-extractor run --local"
+		"api:update": "npm run compile && api-extractor run --local",
+		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status"
 	},
 	"exports": {
 		".": {
 			"types": "./lib/types/index.d.ts",
 			"require": "./lib/cashu-ts.cjs",
-			"import": "./lib/cashu-ts.es.js"
-		},
-		"./crypto/client": {
-			"types": "./lib/types/crypto/client/index.d.ts",
-			"require": "./lib/crypto/client.cjs",
-			"import": "./lib/crypto/client.es.js"
-		},
-		"./crypto/common": {
-			"types": "./lib/types/crypto/common/index.d.ts",
-			"require": "./lib/crypto/common.cjs",
-			"import": "./lib/crypto/common.es.js"
-		},
-		"./crypto/mint": {
-			"types": "./lib/types/crypto/mint/index.d.ts",
-			"require": "./lib/crypto/mint.cjs",
-			"import": "./lib/crypto/mint.es.js"
-		},
-		"./crypto/util": {
-			"types": "./lib/types/crypto/util/utils.d.ts",
-			"require": "./lib/crypto/util.cjs",
-			"import": "./lib/crypto/util.es.js"
-		},
-		"./crypto/client/NUT09": {
-			"types": "./lib/types/crypto/client/NUT09.d.ts",
-			"require": "./lib/crypto/client/NUT09.cjs",
-			"import": "./lib/crypto/client/NUT09.es.js"
-		},
-		"./crypto/client/NUT11": {
-			"types": "./lib/types/crypto/client/NUT11.d.ts",
-			"require": "./lib/crypto/client/NUT11.cjs",
-			"import": "./lib/crypto/client/NUT11.es.js"
-		},
-		"./crypto/client/NUT12": {
-			"types": "./lib/types/crypto/client/NUT12.d.ts",
-			"require": "./lib/crypto/client/NUT12.cjs",
-			"import": "./lib/crypto/client/NUT12.es.js"
-		},
-		"./crypto/client/NUT20": {
-			"types": "./lib/types/crypto/client/NUT20.d.ts",
-			"require": "./lib/crypto/client/NUT20.cjs",
-			"import": "./lib/crypto/client/NUT20.es.js"
-		},
-		"./crypto/common/NUT11": {
-			"types": "./lib/types/crypto/common/NUT11.d.ts",
-			"require": "./lib/crypto/common/NUT11.cjs",
-			"import": "./lib/crypto/common/NUT11.es.js"
-		},
-		"./crypto/mint/NUT11": {
-			"types": "./lib/types/crypto/mint/NUT11.d.ts",
-			"require": "./lib/crypto/mint/NUT11.cjs",
-			"import": "./lib/crypto/mint/NUT11.es.js"
-		},
-		"./crypto/mint/NUT12": {
-			"types": "./lib/types/crypto/mint/NUT12.d.ts",
-			"require": "./lib/crypto/mint/NUT12.cjs",
-			"import": "./lib/crypto/mint/NUT12.es.js"
+			"import": "./lib/cashu-ts.es.js",
+			"default": "./lib/cashu-ts.es.js"
 		}
 	},
 	"keywords": [
@@ -126,8 +74,8 @@
 		"prettier": "^3.6.2",
 		"prettier-plugin-jsdoc": "^1.3.3",
 		"replace-in-file": "^8.3.0",
-		"tmp-promise": "^3.0.3",
 		"ts-node": "^10.9.2",
+		"tsx": "^4.20.5",
 		"typedoc": "^0.28.8",
 		"typescript": "^5.7.2",
 		"typescript-eslint": "^8.38.0",
@@ -140,7 +88,6 @@
 	"dependencies": {
 		"@noble/curves": "^1.9.5",
 		"@noble/hashes": "^1.5.0",
-		"@scure/bip32": "^1.5.0",
-		"buffer": "^6.0.3"
+		"@scure/bip32": "^1.5.0"
 	}
 }

@@ -1,13 +1,11 @@
-import { encodeBase64toUint8 } from '../base64';
-import { decodeCBOR, encodeCBOR } from '../cbor';
-import {
-	type RawPaymentRequest,
-	type RawTransport,
-	type NUT10Option,
-	type PaymentRequestTransport,
-	type PaymentRequestTransportType,
-} from './types';
-import { Buffer } from 'buffer';
+import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
+import type {
+	RawPaymentRequest,
+	RawTransport,
+	NUT10Option,
+	PaymentRequestTransport,
+	PaymentRequestTransportType,
+} from '../wallet/types';
 
 export class PaymentRequest {
 	constructor(
@@ -61,7 +59,7 @@ export class PaymentRequest {
 	toEncodedRequest() {
 		const rawRequest: RawPaymentRequest = this.toRawRequest();
 		const data = encodeCBOR(rawRequest);
-		const encodedData = Buffer.from(data).toString('base64');
+		const encodedData = Bytes.toBase64(data);
 		return 'creq' + 'A' + encodedData;
 	}
 

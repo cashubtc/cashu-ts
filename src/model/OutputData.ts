@@ -5,22 +5,29 @@ import {
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { blindMessage, constructProofFromPromise, serializeProof } from '../crypto/client/index';
+import { type Keyset } from '../wallet';
+import {
+	blindMessage,
+	constructProofFromPromise,
+	serializeProof,
+	deriveBlindingFactor,
+	deriveSecret,
+	type DLEQ,
+	pointFromHex,
+} from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { type DLEQ, pointFromHex } from '../crypto/common/index';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
-import { deriveBlindingFactor, deriveSecret } from '../crypto/client/NUT09';
 
 export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys) => Proof;
+	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
 }
 
-export type OutputDataFactory = (amount: number, keys: MintKeys) => OutputDataLike;
+export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
 
 export function isOutputDataFactory(
 	value: OutputData[] | OutputDataFactory,
@@ -39,7 +46,7 @@ export class OutputData implements OutputDataLike {
 		this.blindedMessage = blindedMessage;
 	}
 
-	toProof(sig: SerializedBlindedSignature, keyset: MintKeys) {
+	toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset) {
 		let dleq: DLEQ | undefined;
 		if (sig.dleq) {
 			dleq = {
@@ -78,7 +85,7 @@ export class OutputData implements OutputDataLike {
 			requiredRefundSignatures?: number;
 		},
 		amount: number,
-		keyset: MintKeys,
+		keyset: MintKeys | Keyset,
 		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -139,7 +146,7 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
-	static createRandomData(amount: number, keyset: MintKeys, customSplit?: number[]) {
+	static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -159,7 +166,7 @@ export class OutputData implements OutputDataLike {
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
-		keyset: MintKeys,
+		keyset: MintKeys | Keyset,
 		customSplit?: number[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -184,5 +191,15 @@ export class OutputData implements OutputDataLike {
 			r,
 			utf8SecretBytes,
 		);
+	}
+
+	/**
+	 * Calculates the sum of amounts in an array of OutputDataLike objects.
+	 *
+	 * @param outputs Array of OutputDataLike objects.
+	 * @returns The total sum of amounts.
+	 */
+	static sumOutputAmounts(outputs: OutputDataLike[]): number {
+		return outputs.reduce((sum, output) => sum + output.blindedMessage.amount, 0);
 	}
 }

@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+	<head>
+		<title>IIFE Test</title>
+	</head>
+	<body>
+		<script src="../../lib/cashu-ts.iife.js"></script>
+		<script>
+			const { Wallet, createP2PKsecret } = window.cashuts;
+			const mintUrl = 'http://localhost:3338';
+			const wallet = new Wallet(mintUrl);
+			const secret = createP2PKsecret('foo');
+			console.log(wallet, secret);
+		</script>
+	</body>
+</html>
