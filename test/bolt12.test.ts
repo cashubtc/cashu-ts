@@ -368,8 +368,7 @@ describe('CashuWallet (BOLT12) – wrappers', () => {
 
 		// Test missing privateKey
 		await expect(
-			// @ts-expect-error testing missing privateKey runtime check (if present)
-			wallet.mintProofsBolt12(21, { quote: 'q1' } as any, undefined as any),
+			wallet.mintProofsBolt12(21, { quote: 'q1', pubkey: '1234' } as any, undefined as any),
 		).rejects.toBeTruthy();
 
 		// Test successful path with privateKey (valid secp256k1 private key)
