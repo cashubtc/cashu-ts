@@ -179,8 +179,8 @@ export class MintInfo {
 						typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl)
 							? Math.max(rawPolicy.ttl, 0) * 1000
 							: Infinity,
-					cached_endpoints: rawPolicy.cached_endpoints
-				} as Nut19Policy
+					cached_endpoints: rawPolicy.cached_endpoints,
+				} as Nut19Policy,
 			};
 		}
 		return { supported: false };

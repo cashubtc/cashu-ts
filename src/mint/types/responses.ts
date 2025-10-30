@@ -320,7 +320,7 @@ export type BlindAuthMintResponse = {
 } & ApiError;
 
 /**
- *  Caching policy of mint endpoints
+ * Caching policy of mint endpoints.
  */
 export type Nut19Policy = {
 	ttl: number;
