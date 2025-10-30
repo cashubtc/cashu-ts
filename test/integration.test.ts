@@ -1,6 +1,10 @@
 // +++++++++++++++++++++ CI Integration Test ++++++++++++++++++
 // To run locally, spin up a local mint instance on port 3338. Startup command:
 // docker run -d -p 3338:3338 --name cdk-mint  -e CDK_MINTD_DATABASE=sqlite  -e CDK_MINTD_LN_BACKEND=fakewallet  -e CDK_MINTD_INPUT_FEE_PPK=100  -e CDK_MINTD_LISTEN_HOST=0.0.0.0  -e CDK_MINTD_LISTEN_PORT=3338  -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0  -e CDK_MINTD_FAKE_WALLET_MAX_DELAY=0 -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' cashubtc/mintd:latest
+//
+// NOTE: CDK remembers ln invoices, so you will need to tear down the mint and
+// start over to run the tests again:
+// docker rm -f -v cdk-mint
 
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
