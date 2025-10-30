@@ -16,7 +16,7 @@ jobs:
           -e CDK_MINTD_LISTEN_HOST=0.0.0.0 \
           -e CDK_MINTD_LISTEN_PORT=3338 \
           -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0 \
-          -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0 \
+          -e CDK_MINTD_FAKE_WALLET_MAX_DELAY=0 \
           -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
           cashubtc/mintd:0.13
 
