@@ -611,7 +611,6 @@ describe('Keep Vector and Reordering', () => {
 		const testKeepAmounts = [16, 8]; // incomplete (24 vs 31), , so we expect...
 		const expectedKeep = [16, 8, 4, 2, 1]; // ascending order with 8,16 + split
 		const testProofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
-		const fees = wallet.getFeesForProofs(testProofs);
 		const customConfig: OutputConfig = {
 			keep: { type: 'random', denominations: testKeepAmounts },
 			send: { type: 'random', denominations: testSendAmounts },
@@ -630,7 +629,6 @@ describe('Keep Vector and Reordering', () => {
 		const expectedSend = [16, 8, 8]; // ascending order with 8,16 + split rest
 		const testKeepAmounts = [8, 4, 8, 1, 8, 2]; // complete (31), defined order
 		const testProofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
-		const fees = wallet.getFeesForProofs(testProofs);
 		const customConfig: OutputConfig = {
 			keep: { type: 'random', denominations: testKeepAmounts },
 			send: { type: 'random', denominations: testSendAmounts },
