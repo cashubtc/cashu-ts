@@ -991,25 +991,13 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createP2PKData(p2pk: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    }, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createP2PKData(p2pk: P2PKOptions, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    }, amount: number, keysetId: string): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
     // (undocumented)
@@ -1058,6 +1046,10 @@ export class P2PKBuilder {
     // (undocumented)
     addRefundPubkey(pk: string | string[]): this;
     // (undocumented)
+    addTag(key: string, values?: string[] | string): this;
+    // (undocumented)
+    addTags(tags: TagTuple[]): this;
+    // (undocumented)
     static fromOptions(opts: P2PKOptions): P2PKBuilder;
     // (undocumented)
     lockUntil(when: Date | number): this;
@@ -1076,6 +1068,7 @@ export type P2PKOptions = {
     refundKeys?: string[];
     requiredSignatures?: number;
     requiredRefundSignatures?: number;
+    additionalTags?: TagTuple[];
 };
 
 // @public
@@ -1466,6 +1459,9 @@ export type SwapTransaction = {
     keepVector: boolean[];
     sortedIndices: number[];
 };
+
+// @public (undocumented)
+export type TagTuple = [key: string, ...values: string[]];
 
 // @public
 export type Token = {

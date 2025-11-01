@@ -22,6 +22,7 @@ import {
 	OutputDataFactory,
 	OutputConfig,
 	OutputType,
+	P2PKBuilder,
 } from '../src';
 import ws from 'ws';
 import {
@@ -265,6 +266,48 @@ describe('mint api', () => {
 
 		// Try and receive them with Bob's secret key (should suceed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
+		expect(
+			proofs.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(63);
+	});
+
+	test('send and receive p2pk with additional tags', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		const mintedProofs = await wallet.mintProofs(128, request.quote);
+
+		// Send them P2PK locked to Alice, with extra tags
+		const p2pk = new P2PKBuilder()
+			.addLockPubkey(pubKeyAlice)
+			.addTags([
+				['e', 'abc'],
+				['p', '123'],
+			])
+			.addTag('msg', 'hello')
+			.toOptions();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).run();
+		expectNUT10SecretDataToEqual(send, pubKeyAlice);
+		send.forEach((p) => {
+			const parsedSecret = JSON.parse(p.secret);
+			expect(parsedSecret[1].tags).toStrictEqual([
+				['e', 'abc'],
+				['p', '123'],
+				['msg', 'hello'],
+			]);
+		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+
+		// Try and receive them with Alice's secret key (should succeed)
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) });
 		expect(
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;

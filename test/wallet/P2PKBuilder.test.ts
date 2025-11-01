@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { P2PKBuilder } from '../../src/';
+import { P2PKBuilder, P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys
 const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
@@ -165,7 +165,7 @@ describe('P2PKBuilder.toOptions()', () => {
 		const src = {
 			pubkey: lock,
 			locktime: now,
-			refundKeys: [r1, r2],
+			refundKeys: [r1, r2] as string[],
 			requiredRefundSignatures: 2,
 		} as const;
 
@@ -219,5 +219,147 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 		// round trip stays identical
 		const round = P2PKBuilder.fromOptions(opts).toOptions();
 		expect(round).toEqual(opts);
+	});
+});
+
+describe('P2PKBuilder addTag and addTags', () => {
+	it('omits additionalTags when unused', () => {
+		const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).toOptions();
+		expect('additionalTags' in opts).toBe(false);
+	});
+
+	it('adds a single tag with no values', () => {
+		const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('memo').toOptions();
+
+		expect(opts.additionalTags).toEqual([['memo']]);
+	});
+
+	it('adds a single tag with one value', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('memo', 'invoice-42')
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([['memo', 'invoice-42']]);
+	});
+
+	it('adds a single tag with multiple values and preserves order', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('meta', ['region=eu', 'channel=web', 'v=1'])
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([['meta', 'region=eu', 'channel=web', 'v=1']]);
+	});
+
+	it('accepts multiple calls to addTag and addTags, preserves insertion order', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('a', '1')
+			.addTags([['b', '2'], ['c']])
+			.addTag('d', ['3', '4'])
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([['a', '1'], ['b', '2'], ['c'], ['d', '3', '4']]);
+	});
+
+	it('allows duplicate non reserved keys, preserves both entries', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('note', 'x')
+			.addTag('note', 'y')
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([
+			['note', 'x'],
+			['note', 'y'],
+		]);
+	});
+
+	it('rejects reserved keys in addTag', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTag('locktime', '123')).toThrow(/reserved/i);
+		expect(() => b.addTag('pubkeys', ['x'])).toThrow(/reserved/i);
+		expect(() => b.addTag('n_sigs', '2')).toThrow(/reserved/i);
+		expect(() => b.addTag('refund', 'x')).toThrow(/reserved/i);
+		expect(() => b.addTag('n_sigs_refund', '2')).toThrow(/reserved/i);
+	});
+
+	it('rejects reserved keys in addTags', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTags([['pubkeys', 'x']])).toThrow(/reserved/i);
+	});
+
+	it('rejects empty tag key', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTag('', 'v')).toThrow(/key must be a non empty string/i);
+	});
+
+	it('round trips additionalTags via fromOptions', () => {
+		const original = new P2PKBuilder()
+			.addLockPubkey([comp('a', '02'), comp('b', '03')])
+			.addTag('memo', 'invoice-007')
+			.addTags([
+				['purpose', 'donation'],
+				['meta', 'env=prod', 'ver=2'],
+			])
+			.toOptions();
+
+		const rebuilt = P2PKBuilder.fromOptions(original).toOptions();
+		expect(rebuilt).toEqual(original);
+	});
+
+	it('fromOptions accepts options with additionalTags only and leaves shape untouched', () => {
+		const minimalWithTags: P2PKOptions = {
+			pubkey: comp('a', '02'),
+			additionalTags: [['x'], ['y', '1'], ['z', 'a', 'b']],
+		};
+
+		const round = P2PKBuilder.fromOptions(minimalWithTags).toOptions();
+		expect(round).toEqual(minimalWithTags);
+	});
+	it('caps additional tags at 5 via addTag and preserves existing entries', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+
+		// add exactly 5
+		for (let i = 0; i < 5; i++) {
+			b.addTag(`k${i}`, `${i}`);
+		}
+
+		// the 6th should throw
+		expect(() => b.addTag('overflow', 'x')).toThrow(/Too many additional tags/i);
+
+		// nothing beyond the first 5 was added
+		const out = b.toOptions();
+		expect(out.pubkey).toEqual(comp('a', '02'));
+		expect(out.additionalTags?.length).toBe(5);
+		expect(out.additionalTags?.[0]).toEqual(['k0', '0']);
+		expect(out.additionalTags?.[4]).toEqual(['k4', '4']);
+	});
+
+	it('preflights addTags, throws when batch exceeds remaining, and does not partially mutate', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+
+		// fill to 4
+		b.addTags(Array.from({ length: 4 }, (_, i) => [`k${i}`, `${i}`] as [string, string]));
+
+		// try to add 2 more when only 1 slot remains
+		expect(() =>
+			b.addTags([
+				['k9a', 'x'],
+				['k9b', 'y'],
+			]),
+		).toThrow(/Too many additional tags/i);
+
+		// still only 4, unchanged
+		let out = b.toOptions();
+		expect(out.additionalTags?.length).toBe(4);
+
+		// add exactly one, should succeed and reach 5
+		b.addTags([['k4c', 'z']]);
+		out = b.toOptions();
+		expect(out.pubkey).toEqual(comp('a', '02'));
+		expect(out.additionalTags?.length).toBe(5);
+		expect(out.additionalTags?.[4]).toEqual(['k4c', 'z']);
 	});
 });

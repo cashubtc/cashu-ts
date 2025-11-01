@@ -1,4 +1,4 @@
-import { type P2PKOptions } from './types/config';
+import { type TagTuple, type P2PKOptions, RESERVED_P2PK_TAGS, MAX_P2PK_TAGS } from './types/config';
 
 // Accept 33 byte compressed (02|03...), or 32 byte x-only,
 // normalised to lowercase 33 byte with 02 prefix for x only
@@ -24,6 +24,7 @@ export class P2PKBuilder {
 	private locktime?: number;
 	private nSigs?: number;
 	private nSigsRefund?: number;
+	private extraTags: TagTuple[] = [];
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
@@ -49,6 +50,31 @@ export class P2PKBuilder {
 
 	requireRefundSignatures(n: number) {
 		this.nSigsRefund = Math.max(1, Math.trunc(n));
+		return this;
+	}
+
+	addTag(key: string, values?: string[] | string) {
+		if (!key || typeof key !== 'string') throw new Error('tag key must be a non empty string');
+		if (RESERVED_P2PK_TAGS.has(key)) {
+			throw new Error(`tag key "${key}" is reserved. Use appropriate builder option.`);
+		}
+		if (this.extraTags.length >= MAX_P2PK_TAGS) {
+			throw new Error(`Too many additional tags, maximum is ${MAX_P2PK_TAGS}`);
+		}
+		const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
+		this.extraTags.push([key, ...vals.map(String)]); // all to strings
+		return this;
+	}
+
+	addTags(tags: TagTuple[]) {
+		const remaining = MAX_P2PK_TAGS - this.extraTags.length;
+		if (tags.length > remaining) {
+			throw new Error(
+				`Too many additional tags, ${tags.length} provided, ${remaining} slots remaining, ` +
+					`maximum is ${MAX_P2PK_TAGS}`,
+			);
+		}
+		for (const [k, ...vals] of tags) this.addTag(k, vals);
 		return this;
 	}
 
@@ -81,6 +107,7 @@ export class P2PKBuilder {
 			...(refunds.length ? { refundKeys: refunds } : {}),
 			...(reqLock && reqLock > 1 ? { requiredSignatures: reqLock } : {}),
 			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
+			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
 		};
 	}
 
@@ -93,6 +120,7 @@ export class P2PKBuilder {
 		if (opts.requiredSignatures !== undefined) b.requireLockSignatures(opts.requiredSignatures);
 		if (opts.requiredRefundSignatures !== undefined)
 			b.requireRefundSignatures(opts.requiredRefundSignatures);
+		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
 		return b;
 	}
 }

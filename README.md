@@ -471,6 +471,8 @@ new P2PKBuilder()
   .lockUntil(when: number | Date)         // unix seconds, unix ms, or Date
   .requireLockSignatures(n: number)       // n of m for lock keys
   .requireRefundSignatures(n: number)     // n of m for refund keys
+  .addTag(key: string, values?: string[] | string) // add single tag (eg: NutZap 'e')
+  .addTags(tags: TagTuple[]) // add multiple tags at once
   .toOptions(): P2PKOptions;
 
 P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
@@ -479,6 +481,8 @@ P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 **Behaviour**
 
 Keys are normalised and de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
+
+A maximum of 5 additional tags can be added, addTag/AddTags will throw if the limit is exceeded.
 
 Example usage:
 

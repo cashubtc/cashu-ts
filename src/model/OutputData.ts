@@ -5,7 +5,8 @@ import {
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type Keyset } from '../wallet';
+import { type P2PKOptions, type Keyset } from '../wallet';
+import { RESERVED_P2PK_TAGS, MAX_P2PK_TAGS } from '../wallet/types/config';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -77,13 +78,7 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createP2PKData(
-		p2pk: {
-			pubkey: string | string[];
-			locktime?: number;
-			refundKeys?: string[];
-			requiredSignatures?: number;
-			requiredRefundSignatures?: number;
-		},
+		p2pk: P2PKOptions,
 		amount: number,
 		keyset: MintKeys | Keyset,
 		customSplit?: number[],
@@ -92,58 +87,75 @@ export class OutputData implements OutputDataLike {
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 
-	static createSingleP2PKData(
-		p2pk: {
-			pubkey: string | string[];
-			locktime?: number;
-			refundKeys?: string[];
-			requiredSignatures?: number;
-			requiredRefundSignatures?: number;
-		},
-		amount: number,
-		keysetId: string,
-	) {
-		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
-		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
-		const pubkeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
-		const n_sigs: number = Math.max(1, Math.min(p2pk.requiredSignatures || 1, pubkeys.length));
-		const n_sigs_refund: number = Math.max(
+	static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string) {
+		// normalise keys and clamp required signature counts to available keys
+		const lockKeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
+		const refundKeys: string[] = p2pk.refundKeys ?? [];
+		const reqLock = Math.max(1, Math.min(p2pk.requiredSignatures ?? 1, lockKeys.length));
+		const reqRefund = Math.max(
 			1,
-			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1),
+			Math.min(p2pk.requiredRefundSignatures ?? 1, refundKeys.length || 1),
 		);
+
+		// Init vars
+		const data = lockKeys[0];
+		const pubkeys = lockKeys.slice(1);
+		const refund = refundKeys;
+
+		// build P2PK Tags (NUT-11)
+		const tags: string[][] = [];
+
+		if (p2pk.locktime !== undefined) {
+			tags.push(['locktime', String(p2pk.locktime)]);
+		}
+
+		if (pubkeys.length > 0) {
+			tags.push(['pubkeys', ...pubkeys]);
+			if (reqLock > 1) {
+				tags.push(['n_sigs', String(reqLock)]);
+			}
+		}
+
+		if (refund.length > 0) {
+			tags.push(['refund', ...refund]);
+			if (reqRefund > 1) {
+				tags.push(['n_sigs_refund', String(reqRefund)]);
+			}
+		}
+
+		// Append additional tags if any
+		if (p2pk.additionalTags?.length) {
+			const additional = p2pk.additionalTags.slice(0, MAX_P2PK_TAGS);
+			for (const [k] of additional) {
+				if (RESERVED_P2PK_TAGS.has(k)) {
+					throw new Error(`additionalTags must not use reserved key "${k}"`);
+				}
+			}
+			tags.push(...p2pk.additionalTags);
+		}
+
+		// Construct secret
 		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: pubkeys[0], // Primary key
-				tags: [],
+				data: data,
+				tags,
 			},
 		];
-		if (p2pk.locktime) {
-			newSecret[1].tags.push(['locktime', String(p2pk.locktime)]); // NUT-10 string
-		}
-		if (pubkeys.length > 1) {
-			newSecret[1].tags.push(['pubkeys', ...pubkeys.slice(1)]); // Additional keys
-			if (n_sigs > 1) {
-				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs', String(n_sigs)]); // NUT-10 string
-			}
-		}
-		if (p2pk.refundKeys) {
-			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
-			if (n_sigs_refund > 1) {
-				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs_refund', String(n_sigs_refund)]); // NUT-10 string
-			}
-		}
+
+		// blind the message
 		const parsed = JSON.stringify(newSecret);
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
-		return new OutputData(
+
+		// create OutputData
+		const od = new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes,
 		);
+		return od;
 	}
 
 	static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]) {
