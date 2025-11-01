@@ -11,6 +11,7 @@ import { getEncodedAuthToken } from './auth.js';
 import { GetInfoResponse as GetInfoResponse_2 } from './types.js';
 import { JsonRpcReqParams as JsonRpcReqParams_2 } from './model/types.js';
 import { Keys as Keys_2 } from './model/types.js';
+import { MintContactInfo as MintContactInfo_2 } from './types';
 import { MintKeys as MintKeys_2 } from './types.js';
 import { MintKeys as MintKeys_3 } from './model/types.js';
 import { MintKeyset as MintKeyset_2 } from './model/types.js';
