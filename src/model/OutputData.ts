@@ -125,8 +125,10 @@ export class OutputData implements OutputDataLike {
 
 		// Append additional tags if any
 		if (p2pk.additionalTags?.length) {
-			const additional = p2pk.additionalTags.slice(0, MAX_P2PK_TAGS);
-			for (const [k] of additional) {
+			if (p2pk.additionalTags.length > MAX_P2PK_TAGS) {
+				throw new Error(`Too many additional tags, maximum is ${MAX_P2PK_TAGS}`);
+			}
+			for (const [k] of p2pk.additionalTags) {
 				if (RESERVED_P2PK_TAGS.has(k)) {
 					throw new Error(`additionalTags must not use reserved key "${k}"`);
 				}
