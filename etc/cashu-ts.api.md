@@ -4,6 +4,7 @@
 
 ```ts
 
+import { MintContactInfo as MintContactInfo_2 } from '..';
 import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
@@ -589,7 +590,14 @@ export type MeltQuoteOptions = {
 export type MeltQuotePayload = {
     unit: string;
     request: string;
-    options?: MeltQuoteOptions;
+    options?: MeltQuoteOptions & MeltQuotePayloadAmountless;
+};
+
+// @public (undocumented)
+export type MeltQuotePayloadAmountless = {
+    amountless?: {
+        amount_msat: number;
+    };
 };
 
 // @public (undocumented)
@@ -716,7 +724,7 @@ export type MintContactInfo = {
 export class MintInfo {
     constructor(info: GetInfoResponse);
     // (undocumented)
-    get contact(): MintContactInfo[];
+    get contact(): MintContactInfo_2[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
@@ -806,6 +814,8 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    // (undocumented)
+    supportsAmountless(method?: string, unit?: string): boolean;
     // @deprecated (undocumented)
     get supportsBolt12Description(): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
@@ -1453,6 +1463,7 @@ export type SwapMethod = {
     options?: {
         description?: boolean;
     };
+    amountless?: boolean | null;
 };
 
 // @public
@@ -1567,8 +1578,8 @@ export class Wallet {
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     // @deprecated (undocumented)
-    createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
-    createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse>;
+    createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteResponse>;
+    createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
     // @deprecated (undocumented)
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
