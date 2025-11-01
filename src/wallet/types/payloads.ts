@@ -33,9 +33,21 @@ export type MeltQuotePayload = {
 	 */
 	request: string;
 	/**
-	 * Melt Quote options (e.g. multi-path payments NUT-15)
+	 * Melt Quote options (e.g. multi-path payments NUT-15 or amountless NUT-05)
 	 */
-	options?: MeltQuoteOptions;
+	options?: MeltQuoteOptions & MeltQuotePayloadAmountless;
+};
+
+export type MeltQuotePayloadAmountless = {
+	/**
+	 * Optional property for specifying an amountless option.
+	 */
+	amountless?: {
+		/**
+		 * The amount in milli-satoshis.
+		 */
+		amount_msat: number;
+	};
 };
 
 /**

@@ -282,6 +282,7 @@ export type SwapMethod = {
 	options?: {
 		description?: boolean;
 	};
+	amountless?: boolean | null;
 };
 
 /**
