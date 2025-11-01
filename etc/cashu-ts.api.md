@@ -4,6 +4,7 @@
 
 ```ts
 
+import { MintContactInfo as MintContactInfo_2 } from '..';
 import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
@@ -736,7 +737,7 @@ export type MintContactInfo = {
 export class MintInfo {
     constructor(info: GetInfoResponse);
     // (undocumented)
-    get contact(): MintContactInfo[];
+    get contact(): MintContactInfo_2[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
@@ -826,6 +827,8 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    // (undocumented)
+    supportsAmountless(method?: string, unit?: string): boolean;
     // @deprecated (undocumented)
     get supportsBolt12Description(): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
@@ -1504,6 +1507,7 @@ export type SwapMethod = {
     options?: {
         description?: boolean;
     };
+    amountless?: boolean | null;
 };
 
 // @public @deprecated
@@ -1630,8 +1634,8 @@ export class Wallet {
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
     // @deprecated (undocumented)
-    createMeltQuote(invoice: string): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteBolt11Response>;
+    createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<MeltQuoteBolt12Response>;
     // @deprecated (undocumented)
     createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response>;
