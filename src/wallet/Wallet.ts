@@ -1680,8 +1680,8 @@ class Wallet {
 	/**
 	 * @deprecated Use createMeltQuoteBolt11.
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteBolt11Response> {
-		return this.createMeltQuoteBolt11(invoice);
+	async createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+		return this.createMeltQuoteBolt11(invoice, amountMsat);
 	}
 
 	/**
@@ -1692,10 +1692,24 @@ class Wallet {
 	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
 	 *   reserve.
 	 */
-	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteBolt11Response> {
+	async createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
 		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
+
+			// only attach `options.amountless` if both:
+			//   1. the mint supports it, and
+			//   2. caller explicitly passed an amount
+			...(supportsAmountless && amountMsat
+				? {
+						options: {
+							amountless: {
+								amount_msat: amountMsat,
+							},
+						},
+					}
+				: {}),
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return {

@@ -212,4 +212,14 @@ export class MintInfo {
 				(met.options?.description === true || met.description === true),
 		);
 	}
+
+	supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
+		const meltMethods = this._mintInfo?.nuts?.[5]?.methods ?? [];
+
+		if (!Array.isArray(meltMethods)) return false;
+
+		return meltMethods.some(
+			(met) => met.method === method && met.unit === unit && met.amountless === true,
+		);
+	}
 }
