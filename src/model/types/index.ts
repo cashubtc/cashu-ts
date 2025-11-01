@@ -87,6 +87,7 @@ export type SendOptions = {
 		refundKeys?: string[];
 		requiredSignatures?: number;
 		requiredRefundSignatures?: number;
+		additionalTags?: Array<[key: string, ...values: string[]]>;
 	};
 };
 

@@ -263,6 +263,49 @@ describe('mint api', () => {
 		).toBe(63);
 	});
 
+	test('send and receive p2pk with additional tags', async () => {
+		const mint = new CashuMint(mintUrl);
+		const wallet = new CashuWallet(mint, { unit });
+
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+
+		// Mint some proofs
+		const request = await wallet.createMintQuote(128);
+		const mintedProofs = await wallet.mintProofs(128, request.quote);
+
+		// Send them P2PK locked to Alice, with extra tags
+		const { send } = await wallet.send(64, mintedProofs, {
+			p2pk: {
+				pubkey: pubKeyAlice,
+				additionalTags: [
+					['e', 'abc'],
+					['p', '123'],
+					['msg', 'hello'],
+				],
+			},
+		});
+		expectNUT10SecretDataToEqual(send, pubKeyAlice);
+		send.forEach((p) => {
+			const parsedSecret = JSON.parse(p.secret);
+			expect(parsedSecret[1].tags).toStrictEqual([
+				['e', 'abc'],
+				['p', '123'],
+				['msg', 'hello'],
+			]);
+		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+
+		// Try and receive them with Alice's secret key (should succeed)
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) });
+		expect(
+			proofs.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(63);
+	});
+
 	test('mint and melt p2pk', async () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
