@@ -241,10 +241,10 @@ export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string): {
 };
 
 // @public
-export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, expectedPub?: string): string;
+export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, blindPubkey?: Uint8Array, expectedPub?: Uint8Array): string | null;
 
 // @public
-export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], pubKeys: string | string[], keysetIdHex: string): string[];
+export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], keysetIdHex: string): string[];
 
 // @public
 export function deriveP2BKSecretsForProof(privateKey: string | string[], proof: Proof): string[];

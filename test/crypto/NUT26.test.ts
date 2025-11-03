@@ -11,7 +11,7 @@ describe('blinded pubkeys & scalar arithmetic', () => {
 		const P = bytesToHex(secp256k1.getPublicKey(hexToBytes(pHex), true));
 		const r = hexToNumber(rHex);
 		const P_ = pointFromHex(P).add(secp256k1.Point.BASE.multiply(r)).toHex(true);
-		const kHex = deriveP2BKSecretKey(pHex, rHex);
+		const kHex = deriveP2BKSecretKey(pHex, rHex)!;
 		const K = bytesToHex(secp256k1.getPublicKey(hexToBytes(kHex), true));
 		expect(K).toBe(P_);
 	});
@@ -22,7 +22,7 @@ describe('blinded pubkeys & scalar arithmetic', () => {
 		const pHex = numberToHexPadded64(p);
 		const P = bytesToHex(secp256k1.getPublicKey(hexToBytes(pHex), true));
 		const P_ = pointFromHex(P).add(secp256k1.Point.BASE.multiply(r)).toHex(true);
-		const kHex = deriveP2BKSecretKey(p, r);
+		const kHex = deriveP2BKSecretKey(p, r)!;
 		const K = bytesToHex(secp256k1.getPublicKey(hexToBytes(kHex), true));
 		expect(K).toBe(P_);
 	});
@@ -58,48 +58,69 @@ describe('deriveP2BKSecretKey with expectedPub hints', () => {
 		}
 	}
 
+	// convenience helpers
+	const toHex = (x: bigint) => numberToHexPadded64(x);
+	const compFromScalar = (x: bigint) => secp256k1.getPublicKey(hexToBytes(toHex(x)), true);
+
 	test('picks k1 when expectedPub equals SECP1 (compressed) of k1', () => {
 		const { p, r, k1 } = makePr();
-		const k1Hex = numberToHexPadded64(k1);
-		const expectedPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(k1Hex), true));
-		const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), expectedPub);
-		expect(out).toBe(k1Hex);
+		const pHex = toHex(p);
+		const rHex = toHex(r);
+		const Pprime = compFromScalar(k1); // P′ = k1·G
+		const expectedPub = compFromScalar(p); // P = p·G
+		const out = deriveP2BKSecretKey(pHex, rHex, Pprime, expectedPub);
+		expect(out).toBe(toHex(k1));
 	});
 
-	test('picks k2 when expectedPub equals SECP1 (compressed) of k2', () => {
-		const { p, r, k2 } = makePr();
-		const k2Hex = numberToHexPadded64(k2);
-		const expectedPub = bytesToHex(secp256k1.getPublicKey(hexToBytes(k2Hex), true));
-		const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), expectedPub);
-		expect(out).toBe(k2Hex);
+	test('selects k2 when expectedPub is the opposite-parity lift of P = p·G', () => {
+		const { p, r, k1, k2 } = makePr();
+		const pHex = toHex(p);
+		const rHex = toHex(r);
+		const Pprime = compFromScalar(k1); // valid blinded key: P′ = (p r)·G
+		const Pself = compFromScalar(p); // P = p·G
+		const expectedOpp = new Uint8Array(Pself); // flip 02<->03 to force opposite parity
+		expectedOpp[0] ^= 0x01;
+		const out = deriveP2BKSecretKey(pHex, rHex, Pprime, expectedOpp);
+		expect(out).toBe(toHex(k2));
 	});
 
-	test('picks k2 when expectedPub equals Schnorr x-only (02||x) of k2', () => {
-		const { p, r, k2 } = makePr();
-		const k2Hex = numberToHexPadded64(k2);
-		const schnorrXOnly = '02' + bytesToHex(schnorr.getPublicKey(k2Hex)); // x-only with 02 prefix
-		const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), schnorrXOnly);
-		console.log('out', out, 'k2Hex', k2Hex);
-		expect(out).toBe(k2Hex);
+	test('accepts Schnorr x-only (02||x) for expectedPub and selects k2 when parity mismatches', () => {
+		const { p, r, k1, k2 } = makePr();
+		const pHex = toHex(p);
+		const rHex = toHex(r);
+		const Pprime = compFromScalar(k1); // valid blinded key
+		const Pself = compFromScalar(p); // compressed P = p·G
+		// Build 02||x(p) from Schnorr API
+		const xonly = schnorr.getPublicKey(pHex); // 32-byte x of even-Y lift
+		const expectedFromX = new Uint8Array(33);
+		expectedFromX[0] = 0x02;
+		expectedFromX.set(xonly, 1);
+		// Ensure opposite parity vs actual P, to force k2
+		if ((expectedFromX[0] & 1) === (Pself[0] & 1)) expectedFromX[0] ^= 0x01;
+		const out = deriveP2BKSecretKey(pHex, rHex, Pprime, expectedFromX);
+		expect(out).toBe(toHex(k2));
 	});
 
-	test('falls back to k1 when expectedPub does not match either', () => {
+	test('returns null when blindPubkey is valid but does not correspond to this (p, r)', () => {
 		const { p, r, k1 } = makePr();
-		const k1Hex = numberToHexPadded64(k1);
-		const bogus = '02' + '0'.repeat(64); // well-formed, but won’t match
-		const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), bogus);
-		expect(out).toBe(k1Hex);
+		const pHex = toHex(p);
+		const rHex = toHex(r);
+		// Valid but unrelated point: q·G
+		const q = hexToNumber(bytesToHex(secp256k1.utils.randomSecretKey()));
+		const PprimeWrong = compFromScalar(q);
+		const out = deriveP2BKSecretKey(pHex, rHex, PprimeWrong, compFromScalar(p));
+		expect(out).toBeNull();
 	});
 
-	test('picks k1 when expectedPub equals Schnorr x-only (02||x) of k1', () => {
-		// Fixed values where (p + r) mod n yields even y (02 prefix for Schnorr)
-		const p = 1n; // Simple scalar
-		const r = 1n;
-		const k1 = (p + r) % n;
-		const k1Hex = numberToHexPadded64(k1);
-		const schnorrXOnly = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(k1Hex))); // Forces even y
-		const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), schnorrXOnly);
-		expect(out).toBe(k1Hex);
+	test('selects k1 when expectedPub matches the actual parity of P = p·G', () => {
+		const { p, r, k1 } = makePr();
+		const out = deriveP2BKSecretKey(
+			toHex(p),
+			toHex(r),
+			compFromScalar(k1), // P′ = (p + r)·G
+			compFromScalar(p), // expectedPub = P = p·G, same parity
+		);
+		expect(out).toBe(toHex(k1));
 	});
 
 	test('handles odd y-parity in SECP1 compressed for sk1 (no negation needed)', () => {
@@ -107,25 +128,33 @@ describe('deriveP2BKSecretKey with expectedPub hints', () => {
 		const p = hexToNumber('0000000000000000000000000000000000000000000000000000000000000001');
 		const r = hexToNumber('0000000000000000000000000000000000000000000000000000000000000005');
 		const k1 = (p + r) % n;
-		const k1Hex = numberToHexPadded64(k1);
-		const compressed = bytesToHex(secp256k1.getPublicKey(hexToBytes(k1Hex), true));
+		const k1Hex = toHex(k1);
+		const compressed = bytesToHex(compFromScalar(k1)); // P′ candidate
 		if (compressed.startsWith('03')) {
-			// Confirm odd y
-			const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), compressed);
+			const out = deriveP2BKSecretKey(
+				toHex(p),
+				toHex(r),
+				hexToBytes(compressed), // P′
+				compFromScalar(p), // P
+			);
 			expect(out).toBe(k1Hex);
 		} else {
-			throw new Error('Fixed values did not produce odd y; adjust p/r');
+			throw new Error('Fixed values did not produce odd y, adjust p or r');
 		}
 	});
 
-	test('skips sk2 and falls back to k1 when sk2 === 0n', () => {
-		const p = hexToNumber(bytesToHex(secp256k1.utils.randomSecretKey())); // Random p
-		const r = p; // Forces sk2 = (n - p + p) % n = 0n
-		const sk1 = (p + r) % n;
-		if (sk1 === 0n) return; // Rare, skip if sk1 also zero
-		const sk1Hex = numberToHexPadded64(sk1);
-		const bogus = '02' + '0'.repeat(64); // Mismatch forces fallback
-		const out = deriveP2BKSecretKey(numberToHexPadded64(p), numberToHexPadded64(r), bogus);
-		expect(out).toBe(sk1Hex);
+	test('when sk2 === 0n and P′ matches k1, returns k1', () => {
+		// Choose r = p, then sk2 = (n - p + r) % n = 0
+		const p = hexToNumber(bytesToHex(secp256k1.utils.randomSecretKey()));
+		const r = p;
+		const k1 = (p + r) % n; // k1 = 2p mod n
+		if (k1 === 0n) return; // extremely rare, skip if it happens
+		const out = deriveP2BKSecretKey(
+			toHex(p),
+			toHex(r),
+			compFromScalar(k1), // P′ = k1·G
+			compFromScalar(p), // P = p·G
+		);
+		expect(out).toBe(toHex(k1));
 	});
 });

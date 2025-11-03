@@ -1,4 +1,4 @@
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { Bytes, bytesToNumber, hexToNumber, numberToHexPadded64 } from '../utils';
 import { pointFromHex } from './core';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
@@ -56,26 +56,29 @@ export function deriveP2BKBlindedPubkeys(
  * This is the Receiver side API.
  * @param Ehex Ephemeral public key (E) as SEC1 hex.
  * @param privateKey Secret key or array of secret keys, hex.
- * @param pubKeys Blinded public key or array of blinded public keys, hex.
+ * @param blindPubKey Blinded public key or array of blinded public keys, hex.
  * @param keysetIdHex Keyset identifier as hex.
  * @returns Array of derived secret keys as 64 char hex.
  */
 export function deriveP2BKSecretKeys(
 	Ehex: string,
 	privateKey: string | string[],
-	pubKeys: string | string[],
+	blindPubKey: string | string[],
 	keysetIdHex: string,
 ): string[] {
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
-	const pubs = Array.isArray(pubKeys) ? pubKeys : [pubKeys];
+	const pubs = Array.isArray(blindPubKey) ? blindPubKey : [blindPubKey];
 	const out = new Set<string>();
 	const E = secp256k1.Point.fromHex(Ehex);
 	const kid = hexToBytes(keysetIdHex);
 	for (const privHex of privs) {
 		const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
-		pubs.forEach((P_, i) => {
+		const P = secp256k1.getPublicKey(hexToBytes(privHex), true); // 33 bytes, validates on curve
+		pubs.forEach((hexP_, i) => {
 			const r = deriveP2BKBlindingTweakFromECDH(E, p, kid, i);
-			out.add(deriveP2BKSecretKey(privHex, r, P_));
+			const P_ = hexToBytes(hexP_);
+			const kHex = deriveP2BKSecretKey(privHex, r, P_, P);
+			if (kHex) out.add(kHex); // add only when this priv matches this P′
 		});
 	}
 	return Array.from(out);
@@ -84,66 +87,61 @@ export function deriveP2BKSecretKeys(
 /**
  * Derive a blinded secret key per NUT-26.
  *
- * Computes two candidates: standard (sk1 = p + r mod n) and negated (sk2 = -p + r mod n). If
- * expectedPub is given, both are encoded as SEC1 compressed and as Schnorr x only with 0x02 prefix,
- * then compared with constant structure byte equality. Returns the matching one, or sk1 if both
- * match or if no expectedPub is provided.
+ * Unblinds the pubkey (P = P_ - r·G), verifies x-coord against the expectedPub x(P) == x(p·G), then
+ * choose sk1 = (p + rᵢ) mod n if parity(P) == parity(p·G), otherwise sk2 = (-p + rᵢ) mod n. Returns
+ * sk1 if both if no expectedPub is provided.
  *
  * @remarks
  * Security note, this operates on long lived secrets. JavaScript BigInt arithmetic in a JIT is not
  * guaranteed constant time. Do not expose this function on a server that holds private keys.
  * @param privkey Unblinded private key (p), hex or bigint.
  * @param rBlind Blinding scalar (r), hex or bigint.
- * @param expectedPub Optional blinded pubkey (P_) to match, 33 byte hex.
+ * @param blindPubkey Optional. Blinded pubkey (P_) to match, 33 byte hex.
+ * @param expectedPub Optional. Pubkey calculated from private key (P = p·G), 33 byte hex.
  * @returns Derived blinded secret key as 64 char hex.
  * @throws If inputs are out of range, or the derived key would be zero.
  */
 export function deriveP2BKSecretKey(
 	privkey: string | bigint,
 	rBlind: string | bigint,
-	expectedPub?: string,
-): string {
-	// Implementation note, keep algorithmic constant time:
-	// compute both candidates, compute both encodings, compare at the end only.
+	blindPubkey?: Uint8Array,
+	expectedPub?: Uint8Array,
+): string | null {
+	// Implementation note: must keep algorithmic constant time!
 	const n = secp256k1.Point.CURVE().n;
 	const p = typeof privkey === 'string' ? hexToNumber(privkey) : privkey;
 	const r = typeof rBlind === 'string' ? hexToNumber(rBlind) : rBlind;
 	if (p <= 0n || p >= n) throw new Error('Invalid private key');
 	if (r <= 0n || r >= n) throw new Error('Invalid scalar r');
-	// Derive standard blinded secret key: (p + r) mod n
+	// If caller didn't provide P = p·G, compute it in compressed form (33 bytes)
+	expectedPub = expectedPub ?? secp256k1.Point.BASE.multiply(p).toBytes(true);
+	if (expectedPub.length !== 33) throw new Error('expectedPub must be 33 bytes');
+	// Calculate both sk candidates for constant time (add/subtract is cheap)
 	const sk1: bigint = (p + r) % n;
-	if (sk1 === 0n) throw new Error('Derived secret key is zero');
-	// Derive the negated candidate to account for x only even y convention: (-p + r) mod n
-	const sk2: bigint = (n - p + r) % n; // may be 0n (handled below)
-	// Validate expectedPub if provided, else return sk1
-	if (!expectedPub) return numberToHexPadded64(sk1);
-	const exp: Uint8Array = Bytes.fromHex(expectedPub);
-	if (exp.length !== 33) throw new Error('expectedPub must be 33 bytes');
-	// Calculate sk1 pubkeys - SEC1 compressed and Schnorr '02' prefixed x-only
-	const pk1_secpcmp: Uint8Array = secp256k1.getPublicKey(sk1, true); // 33 bytes
-	const pk1_schnorr: Uint8Array = getSchnorrPublicKeyWithPrefix(sk1);
-	const m1 = Bytes.equals(exp, pk1_secpcmp) || Bytes.equals(exp, pk1_schnorr);
-	// Calculate sk2 pubkeys as above, but only if sk2 != 0
-	let m2 = false;
-	if (sk2 !== 0n) {
-		const pk2_secpcmp: Uint8Array = secp256k1.getPublicKey(sk2, true);
-		const pk2_schnorr: Uint8Array = getSchnorrPublicKeyWithPrefix(sk2);
-		m2 = Bytes.equals(exp, pk2_secpcmp) || Bytes.equals(exp, pk2_schnorr);
+	const sk2: bigint = (n - p + r) % n;
+	// Validate blinded pubkey, or if nothing to match, return sk1
+	if (!blindPubkey) {
+		if (sk1 === 0n) throw new Error('Derived secret key is zero');
+		return numberToHexPadded64(sk1);
 	}
-	// Return standard (sk1) unless negated (sk2) is the only match
-	const out = m2 && !m1 ? sk2 : sk1;
+	if (blindPubkey.length !== 33) throw new Error('blindPubkey must be 33 bytes');
+	// Decode P′, compute R and unblind
+	const P_ = secp256k1.Point.fromHex(blindPubkey); // valid point
+	const R = secp256k1.Point.BASE.multiply(r); // R = r·G
+	const Punblind = P_.subtract(R); // P = P_ - R
+	if (Punblind.equals(secp256k1.Point.ZERO)) return null;
+	// Check x only equality, using constant time compare
+	const xPunblind = Punblind.toBytes(true).slice(1);
+	const xExpectedPub = expectedPub.slice(1);
+	if (!Bytes.equals(xPunblind, xExpectedPub)) {
+		return null; // this P' is not for this privkey
+	}
+	// Select by parity, comparing the low bit only
+	const yPunblind = Punblind.toBytes(true)[0] & 1;
+	const yExpectedPub = expectedPub[0] & 1;
+	const out = yPunblind === yExpectedPub ? sk1 : sk2;
+	if (out === 0n) throw new Error('Derived secret key is zero');
 	return numberToHexPadded64(out);
-}
-
-/**
- * Get a Schnorr x only public key with 0x02 prefix, 33 bytes.
- */
-function getSchnorrPublicKeyWithPrefix(secretKey: bigint): Uint8Array {
-	const pubkey = schnorr.getPublicKey(numberToHexPadded64(secretKey));
-	const pk = new Uint8Array(33);
-	pk[0] = 0x02; // '02' in bytes
-	pk.set(pubkey, 1);
-	return pk;
 }
 
 /**
@@ -176,8 +174,8 @@ function deriveP2BKBlindingTweakFromECDH(
 	keysetId: Uint8Array, // kid
 	slotIndex: number, // i
 ): bigint {
-	// Calculate ECDH shared point (Z)
-	const Zx = point.multiply(scalar).toBytes(false).slice(1, 33);
+	// Calculate x-only ECDH shared point (Zx)
+	const Zx = point.multiply(scalar).toBytes(true).slice(1);
 	const iByte = new Uint8Array([slotIndex & 0xff]);
 	// Derive deterministic blinding factor (r):
 	let r = bytesToNumber(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte)));
