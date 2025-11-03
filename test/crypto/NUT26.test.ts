@@ -1,8 +1,13 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
-import { pointFromHex, deriveP2BKSecretKey } from '../../src/crypto';
+import {
+	pointFromHex,
+	deriveP2BKSecretKey,
+	deriveP2BKBlindedPubkeys,
+	deriveP2BKSecretKeys,
+} from '../../src/crypto';
 import { hexToNumber, numberToHexPadded64 } from '../../src/utils';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 describe('blinded pubkeys & scalar arithmetic', () => {
 	test('deriveP2BKSecretKey corresponds to pubkey addition: (p+r)·G == p·G + r·G', () => {
@@ -156,5 +161,33 @@ describe('deriveP2BKSecretKey with expectedPub hints', () => {
 			compFromScalar(p), // P = p·G
 		);
 		expect(out).toBe(toHex(k1));
+	});
+});
+
+describe('P2BK worked example, public API only', () => {
+	test('reconstructs spend key from E, P′, keyset_id, and Bob’s privkey', () => {
+		const keysetIdHex = '009a1f293253e41e'; // ASCII hex string from mint
+		const eHex = '1cedb9df0c6872188b560ace9e35fd55c2532d53e19ae65b46159073886482ca';
+		const Ehex = '02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c'; // proof.p2pk_e
+		const Pprime = '03f221b62aa21ee45982d14505de2b582716ae95c265168f586dc547f0ea8f135f'; // secret.data (slot 0)
+		const pubKeyBob = '02771fed6cb88aaac38b8b32104a942bf4b8f4696bc361171b3c7d06fa2ebddf06';
+		const privKeyBob = 'ad37e8abd800be3e8272b14045873f4353327eedeb702b72ddcc5c5adff5129c';
+		const sk1Hex = 'eeedda054df845fbde4b8a579952fd9a240a2e9ad3c1dc791c4c6e51654698c9';
+		const sk2Hex = '947e08ad9df6c97ed96627d70e447f1238540da5ac2a25cf208614287592b4d2';
+		const derived = deriveP2BKSecretKeys(
+			Ehex,
+			privKeyBob,
+			[Pprime], // single slot i = 0
+			keysetIdHex, // API hex-decodes internally
+		);
+		expect(derived).toHaveLength(1);
+		const kHex = derived[0];
+		// expected pub (p.G): 03771fed6cb88aaac38b8b32104a942bf4b8f4696bc361171b3c7d06fa2ebddf06
+		// but Bob's pubkey is 02771fed6cb88aaac38b8b32104a942bf4b8f4696bc361171b3c7d06fa2ebddf06
+		// so this is a negated Schnorr privkey (sk2)
+		expect(kHex).toEqual(sk2Hex);
+		// And its public key must equal the blinded pubkey (Pprime)
+		const Kpub = bytesToHex(secp256k1.getPublicKey(hexToBytes(kHex), true));
+		expect(Kpub).toBe(Pprime);
 	});
 });
