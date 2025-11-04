@@ -235,13 +235,13 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 // @public
-export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string): {
+export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string, eBytes?: Uint8Array): {
     blinded: string[];
     Ehex: string;
 };
 
 // @public
-export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, blindPubkey?: Uint8Array, expectedPub?: Uint8Array): string | null;
+export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, blindPubkey?: Uint8Array, naturalPub?: Uint8Array): string | null;
 
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], keysetIdHex: string): string[];

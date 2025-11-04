@@ -19,8 +19,7 @@
 // docker rm -f -v nutshell
 
 import dns from 'node:dns';
-import { test, describe, expect } from 'vitest';
-import { vi } from 'vitest';
+import { vi, test, describe, expect } from 'vitest';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1';
 import {
 	Mint,
