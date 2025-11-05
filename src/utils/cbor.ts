@@ -29,7 +29,7 @@ function encodeItem(value: unknown, buffer: number[]) {
 	} else if (typeof value === 'boolean') {
 		buffer.push(value ? 0xf5 : 0xf4);
 	} else if (typeof value === 'number') {
-		encodeUnsigned(value, buffer);
+		encodeNumber(value, buffer);
 	} else if (typeof value === 'string') {
 		encodeString(value, buffer);
 	} else if (Array.isArray(value)) {
@@ -59,6 +59,46 @@ function encodeUnsigned(value: number, buffer: number[]) {
 		buffer.push(0x1a, value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
 	} else {
 		throw new Error('Unsupported integer size');
+	}
+}
+
+function encodeSigned(value: number, buffer: number[]) {
+	// CBOR negative integer encoding: store -1 - value as unsigned under major type 1
+	const unsigned = -1 - value;
+	if (unsigned < 24) {
+		buffer.push(0x20 | unsigned);
+	} else if (unsigned < 256) {
+		buffer.push(0x38, unsigned);
+	} else if (unsigned < 65536) {
+		buffer.push(0x39, unsigned >> 8, unsigned & 0xff);
+	} else if (unsigned < 4294967296) {
+		buffer.push(0x3a, unsigned >> 24, (unsigned >> 16) & 0xff, (unsigned >> 8) & 0xff, unsigned & 0xff);
+	} else {
+		throw new Error('Unsupported integer size');
+	}
+}
+
+function encodeFloat64(value: number, buffer: number[]) {
+	// major type 7, additional info 27 (0xfb) followed by 8 bytes IEEE 754 big-endian
+	const ab = new ArrayBuffer(8);
+	const dv = new DataView(ab);
+	dv.setFloat64(0, value, false);
+	buffer.push(0xfb);
+	for (let i = 0; i < 8; i++) buffer.push(dv.getUint8(i));
+}
+
+function encodeNumber(value: number, buffer: number[]) {
+	if (Number.isInteger(value)) {
+		if (value >= 0) {
+			// unsigned
+			encodeUnsigned(value, buffer);
+		} else {
+			// negative integer
+			encodeSigned(value, buffer);
+		}
+	} else {
+		// encode non-integer numbers as float64 for simplicity
+		encodeFloat64(value, buffer);
 	}
 }
 
@@ -134,8 +174,29 @@ function encodeArray(value: unknown[], buffer: number[]) {
 
 function encodeObject(value: Record<string, unknown>, buffer: number[]) {
 	const keys = Object.keys(value);
-	encodeUnsigned(keys.length, buffer);
-	buffer[buffer.length - 1] |= 0xa0;
+	const length = keys.length;
+
+	// Guardrail: we only support map lengths up to 2^32-1 (same as encodeUnsigned max)
+	if (length >= 4294967296) {
+		throw new Error('Object has too many keys to encode');
+	}
+
+	// Write initial byte for major type 5 (map) and additional info based on length
+	if (length < 24) {
+		buffer.push(0xa0 | length);
+	} else if (length < 256) {
+		buffer.push(0xb8, length);
+	} else if (length < 65536) {
+		buffer.push(0xb9, (length >> 8) & 0xff, length & 0xff);
+	} else {
+		buffer.push(
+			0xba,
+			(length >> 24) & 0xff,
+			(length >> 16) & 0xff,
+			(length >> 8) & 0xff,
+			length & 0xff,
+		);
+	}
 	for (const key of keys) {
 		encodeString(key, buffer);
 		encodeItem(value[key], buffer);
@@ -176,24 +237,36 @@ function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
 	}
 }
 
+function ensureAvailable(view: DataView, offset: number, needed: number) {
+	if (offset + needed > view.byteLength) {
+		throw new Error('Unexpected end of data');
+	}
+}
+
 function decodeLength(
 	view: DataView,
 	offset: number,
 	additionalInfo: number,
 ): DecodeResult<number> {
 	if (additionalInfo < 24) return { value: additionalInfo, offset };
-	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
+	if (additionalInfo === 24) {
+		ensureAvailable(view, offset, 1);
+		return { value: view.getUint8(offset++), offset };
+	}
 	if (additionalInfo === 25) {
+		ensureAvailable(view, offset, 2);
 		const value = view.getUint16(offset, false);
 		offset += 2;
 		return { value, offset };
 	}
 	if (additionalInfo === 26) {
+		ensureAvailable(view, offset, 4);
 		const value = view.getUint32(offset, false);
 		offset += 4;
 		return { value, offset };
 	}
 	if (additionalInfo === 27) {
+		ensureAvailable(view, offset, 8);
 		const hi = view.getUint32(offset, false);
 		const lo = view.getUint32(offset + 4, false);
 		offset += 8;
@@ -315,18 +388,24 @@ function decodeSimpleAndFloat(
 				throw new Error(`Unknown simple value: ${additionalInfo}`);
 		}
 	}
-	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
+	if (additionalInfo === 24) {
+		ensureAvailable(view, offset, 1);
+		return { value: view.getUint8(offset++), offset };
+	}
 	if (additionalInfo === 25) {
+		ensureAvailable(view, offset, 2);
 		const value = decodeFloat16(view.getUint16(offset, false));
 		offset += 2;
 		return { value, offset };
 	}
 	if (additionalInfo === 26) {
+		ensureAvailable(view, offset, 4);
 		const value = view.getFloat32(offset, false);
 		offset += 4;
 		return { value, offset };
 	}
 	if (additionalInfo === 27) {
+		ensureAvailable(view, offset, 8);
 		const value = view.getFloat64(offset, false);
 		offset += 8;
 		return { value, offset };
