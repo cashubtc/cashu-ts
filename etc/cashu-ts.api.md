@@ -83,15 +83,14 @@ export type BlindAuthMintResponse = {
 } & ApiError;
 
 // @public (undocumented)
-export type BlindedMessage = {
+export type BlindMessage = {
     B_: WeierstrassPoint<bigint>;
     r: bigint;
     secret: Uint8Array;
-    witness?: P2PKWitness;
 };
 
-// @public (undocumented)
-export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage;
+// @public
+export function blindMessage(secret: Uint8Array, r?: bigint): BlindMessage;
 
 // @public (undocumented)
 export type BlindSignature = {
@@ -216,8 +215,8 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 // @public (undocumented)
 export const createP2PKsecret: (pubkey: string) => string;
 
-// @public (undocumented)
-export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage;
+// @public
+export function createRandomBlindMessage(): BlindMessage;
 
 // @public (undocumented)
 export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
@@ -395,12 +394,6 @@ export const getP2PKWitnessSignatures: (witness: string | P2PKWitness | undefine
 
 // @public (undocumented)
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
-
-// @public (undocumented)
-export const getSignedOutput: (output: BlindedMessage, privateKey: PrivKey) => BlindedMessage;
-
-// @public (undocumented)
-export const getSignedOutputs: (outputs: BlindedMessage[], privateKey: string) => BlindedMessage[];
 
 // @public
 export function getTokenMetadata(token: string): TokenMetadata;
@@ -1545,9 +1538,6 @@ export const verifyP2PKSecretSignature: (signature: string, secret: string, pubk
 
 // @public (undocumented)
 export const verifyP2PKSig: (proof: Proof) => boolean;
-
-// @public (undocumented)
-export const verifyP2PKSigOutput: (output: BlindedMessage, publicKey: string) => boolean;
 
 // @public (undocumented)
 export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;

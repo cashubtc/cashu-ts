@@ -2,7 +2,6 @@ import { type PrivKey, bytesToHex, hexToBytes, randomBytes } from '@noble/curves
 import { sha256 } from '@noble/hashes/sha2';
 import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';
-import { type BlindedMessage } from './core';
 import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
 
@@ -50,12 +49,6 @@ export const parseP2PKSecret = (secret: string | Uint8Array): Secret => {
 export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
 	const msghash = sha256(secret);
 	const sig = schnorr.sign(msghash, privateKey); // auxRand is random by default
-	return bytesToHex(sig);
-};
-
-export const signBlindedMessage = (B_: string, privateKey: PrivKey): string => {
-	const msgHash = sha256(B_);
-	const sig = schnorr.sign(msgHash, privateKey);
 	return bytesToHex(sig);
 };
 
@@ -362,31 +355,6 @@ export const verifyP2PKSig = (proof: Proof): boolean => {
 		}
 	}
 	return signatories >= requiredSigs;
-};
-
-export const verifyP2PKSigOutput = (output: BlindedMessage, publicKey: string): boolean => {
-	if (!output.witness?.signatures || output.witness.signatures.length === 0) {
-		throw new Error('could not verify signature, no witness signatures provided');
-	}
-	return schnorr.verify(
-		output.witness.signatures[0],
-		sha256(output.B_.toHex(true)),
-		publicKey.slice(2),
-	);
-};
-
-export const getSignedOutput = (output: BlindedMessage, privateKey: PrivKey): BlindedMessage => {
-	const B_ = output.B_.toHex(true);
-	const signature = signBlindedMessage(B_, privateKey);
-	output.witness = { signatures: [signature] };
-	return output;
-};
-
-export const getSignedOutputs = (
-	outputs: BlindedMessage[],
-	privateKey: string,
-): BlindedMessage[] => {
-	return outputs.map((o) => getSignedOutput(o, privateKey));
 };
 
 /**

@@ -15,12 +15,9 @@ import {
 	getP2PKWitnessSignatures,
 	Secret,
 	verifyP2PKSig,
-	verifyP2PKSigOutput,
 	getPubKeyFromPrivKey,
-	createRandomBlindedMessage,
+	createRandomBlindMessage,
 	createRandomSecretKey,
-	getSignedOutput,
-	getSignedOutputs,
 	hasP2PKSignedProof,
 	signP2PKSecret,
 	verifyP2PKSecretSignature,
@@ -136,12 +133,6 @@ describe('test create p2pk secret', () => {
 		const verify1 = verifyP2PKSig(signedProofs[1]);
 		expect(verify0).toBe(true);
 		expect(verify1).toBe(true);
-	});
-
-	test('sign and verify blindedMessage', async () => {
-		const blindedMessage = createRandomBlindedMessage(PRIVKEY);
-		const verify = verifyP2PKSigOutput(blindedMessage, PUBKEY);
-		expect(verify).toBe(true);
 	});
 });
 
@@ -700,33 +691,5 @@ describe('verifyP2PKSecretSignature & hasP2PKSignedProof', () => {
 			witness: 'not-json',
 		};
 		expect(hasP2PKSignedProof(PUBKEY, proof)).toBe(false);
-	});
-});
-
-describe('getSignedOutput(s) & verifyP2PKSigOutput errors', () => {
-	test('verifyP2PKSigOutput throws when no witness signatures provided', () => {
-		const out = createRandomBlindedMessage(PRIVKEY);
-		// strip the witness
-		delete (out as any).witness;
-		expect(() => verifyP2PKSigOutput(out, PUBKEY)).toThrow(/no witness signatures provided/i);
-	});
-
-	test('getSignedOutput signs a single output', () => {
-		const out = createRandomBlindedMessage(PRIVKEY);
-		delete (out as any).witness;
-
-		const signed = getSignedOutput(out, PRIVKEY);
-		expect(verifyP2PKSigOutput(signed, PUBKEY)).toBe(true);
-	});
-
-	test('getSignedOutputs signs all outputs in array', () => {
-		const a = createRandomBlindedMessage(PRIVKEY);
-		const b = createRandomBlindedMessage(PRIVKEY);
-		delete (a as any).witness;
-		delete (b as any).witness;
-
-		const signed = getSignedOutputs([a, b], bytesToHex(PRIVKEY));
-		expect(verifyP2PKSigOutput(signed[0], PUBKEY)).toBe(true);
-		expect(verifyP2PKSigOutput(signed[1], PUBKEY)).toBe(true);
 	});
 });
