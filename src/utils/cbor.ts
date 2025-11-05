@@ -72,7 +72,13 @@ function encodeSigned(value: number, buffer: number[]) {
 	} else if (unsigned < 65536) {
 		buffer.push(0x39, unsigned >> 8, unsigned & 0xff);
 	} else if (unsigned < 4294967296) {
-		buffer.push(0x3a, unsigned >> 24, (unsigned >> 16) & 0xff, (unsigned >> 8) & 0xff, unsigned & 0xff);
+		buffer.push(
+			0x3a,
+			unsigned >> 24,
+			(unsigned >> 16) & 0xff,
+			(unsigned >> 8) & 0xff,
+			unsigned & 0xff,
+		);
 	} else {
 		throw new Error('Unsupported integer size');
 	}

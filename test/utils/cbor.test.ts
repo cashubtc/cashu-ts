@@ -209,7 +209,7 @@ const tests = [
 
 const encoderThrows = [
 	{ name: 'Symbol', decoded: Symbol('x'), throws: /Unsupported type/ },
-	{ name: 'function', decoded: (() => { }) as any, throws: /Unsupported type/ },
+	{ name: 'function', decoded: (() => {}) as any, throws: /Unsupported type/ },
 	{ name: 'BigInt', decoded: BigInt(1) as any, throws: /Unsupported type/ },
 	{ name: 'unsigned integer too large', decoded: 4294967296, throws: /Unsupported integer size/ },
 	{ name: 'negative integer too large', decoded: -4294967297, throws: /Unsupported integer size/ },
@@ -218,15 +218,51 @@ const encoderThrows = [
 
 const decoderThrows = [
 	{ name: 'unsupported major type', buf: new Uint8Array([0xc0]), throws: /Unsupported major type/ },
-	{ name: 'unsupported length additionalInfo 31', buf: new Uint8Array([0x1f]), throws: /Unsupported length/ },
-	{ name: 'byte string length exceeds data length', buf: new Uint8Array([0x58, 0x05, 0x01, 0x02]), throws: /Byte string length exceeds data length/ },
-	{ name: 'string length exceeds data length', buf: new Uint8Array([0x78, 0x05, 0x61, 0x62]), throws: /String length exceeds data length/ },
-	{ name: 'map invalid key type', buf: new Uint8Array([0xa1, 0x80, 0x01]), throws: /Invalid key type/ },
-	{ name: 'unexpected end empty buffer', buf: new Uint8Array([]), throws: /Unexpected end of data/ },
-	{ name: 'unexpected end truncated initial', buf: new Uint8Array([0x18]), throws: /Unexpected end of data/ },
-	{ name: 'unknown simple value additionalInfo0', buf: new Uint8Array([0xe0]), throws: /Unknown simple value: 0/ },
-	{ name: 'unknown simple or float additionalInfo 28', buf: new Uint8Array([0xfc]), throws: /Unknown simple or float value: 28/ },
-	{ name: 'byte string 8-byte length > buffer', buf: Uint8Array.from([0x5b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 0x02]), throws: /Byte string length exceeds data length/ },
+	{
+		name: 'unsupported length additionalInfo 31',
+		buf: new Uint8Array([0x1f]),
+		throws: /Unsupported length/,
+	},
+	{
+		name: 'byte string length exceeds data length',
+		buf: new Uint8Array([0x58, 0x05, 0x01, 0x02]),
+		throws: /Byte string length exceeds data length/,
+	},
+	{
+		name: 'string length exceeds data length',
+		buf: new Uint8Array([0x78, 0x05, 0x61, 0x62]),
+		throws: /String length exceeds data length/,
+	},
+	{
+		name: 'map invalid key type',
+		buf: new Uint8Array([0xa1, 0x80, 0x01]),
+		throws: /Invalid key type/,
+	},
+	{
+		name: 'unexpected end empty buffer',
+		buf: new Uint8Array([]),
+		throws: /Unexpected end of data/,
+	},
+	{
+		name: 'unexpected end truncated initial',
+		buf: new Uint8Array([0x18]),
+		throws: /Unexpected end of data/,
+	},
+	{
+		name: 'unknown simple value additionalInfo0',
+		buf: new Uint8Array([0xe0]),
+		throws: /Unknown simple value: 0/,
+	},
+	{
+		name: 'unknown simple or float additionalInfo 28',
+		buf: new Uint8Array([0xfc]),
+		throws: /Unknown simple or float value: 28/,
+	},
+	{
+		name: 'byte string 8-byte length > buffer',
+		buf: Uint8Array.from([0x5b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x01, 0x02]),
+		throws: /Byte string length exceeds data length/,
+	},
 ];
 
 describe('cbor decoder', () => {
@@ -234,7 +270,6 @@ describe('cbor decoder', () => {
 		const res = decodeCBOR(hexToBytes(hex));
 		expect(res).toEqual(decoded);
 	});
-
 
 	test('decode simple value in next byte (additionalInfo 24) returns next byte', () => {
 		// 0xf8 <next byte> -> simple/extended simple
@@ -298,9 +333,19 @@ describe('cbor decoder', () => {
 		// next 8 bytes are big-endian hi,lo. hi=0, lo=5 -> length 5
 		const data = Uint8Array.from([
 			0x5b,
-			0x00, 0x00, 0x00, 0x00, // hi
-			0x00, 0x00, 0x00, 0x05, // lo = 5
-			0x01, 0x02, 0x03, 0x04, 0x05,
+			0x00,
+			0x00,
+			0x00,
+			0x00, // hi
+			0x00,
+			0x00,
+			0x00,
+			0x05, // lo = 5
+			0x01,
+			0x02,
+			0x03,
+			0x04,
+			0x05,
 		]);
 		const res = decodeCBOR(data) as Uint8Array;
 		expect(Array.from(res)).toEqual([1, 2, 3, 4, 5]);
@@ -445,8 +490,6 @@ describe('cbor encoder', () => {
 		expect(() => encodeCBOR(decoded)).toThrow(throws as RegExp);
 	});
 
-
-
 	test('encodes maps with 256 (2-byte) and 65536 (4-byte) lengths and roundtrips', () => {
 		// 2-byte form (additional-info 25 -> 0xb9)
 		{
@@ -540,7 +583,7 @@ describe('cbor encoder', () => {
 	test('throws when object has >= 2**32 keys (guardrail)', () => {
 		const sentinel = { __huge__: true } as any;
 		const realObjectKeys = Object.keys;
-		(Object.keys as any) = function(obj: any) {
+		(Object.keys as any) = function (obj: any) {
 			if (obj === sentinel) {
 				// return an iterable with a huge length property but no elements to iterate
 				return {
@@ -578,9 +621,9 @@ describe('cbor encoder', () => {
 			encode(_: string) {
 				return { length: 4294967296 } as any;
 			}
-		} as any);
+		}) as any;
 		(globalThis as any).TextEncoder = function () {
-			return { encode: (s: string) => ({ length: 4294967296 } as any) };
+			return { encode: (s: string) => ({ length: 4294967296 }) as any };
 		};
 		try {
 			expect(() => encodeCBOR('x' as any)).toThrow(/String too long to encode/);
