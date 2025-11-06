@@ -64,6 +64,7 @@ import type {
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
 } from '../mint/types';
+import { MeltQuoteState } from '../mint/types';
 
 // model helpers
 import { OutputData, type OutputDataLike } from '../model/OutputData';
@@ -1366,6 +1367,36 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
+	 * Generic method to mint proofs using any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param amount Amount to mint.
+	 * @param quote Quote ID (string) or quote response object. Must contain at least `quote` field.
+	 * @param config Optional configuration including private key for locked quotes.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns Array of newly minted proofs.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to the internal _mintProofsGeneric function, enabling any endpoint of the form `/v1/mint/{method}`.
+	 *
+	 * @example
+	 * ```ts
+	 * const proofs = await wallet.mintProofsGeneric('bolt11', 100, 'quote-id');
+	 * const proofs = await wallet.mintProofsGeneric('custom-payment', 100, customQuote);
+	 * ```
+	 */
+	async mintProofsGeneric(
+		method: string,
+		amount: number,
+		quote: string | Record<string, unknown>,
+		config?: MintProofsConfig,
+		outputType?: OutputType,
+	): Promise<Proof[]> {
+		return this._mintProofsGeneric(method, amount, quote, config, outputType);
+	}
+
+	/**
 	 * @deprecated Use mintProofsBolt11()
 	 */
 	async mintProofs(
@@ -1429,10 +1460,50 @@ class Wallet {
 	 * @returns Minted proofs.
 	 * @throws If params are invalid or mint returns errors.
 	 */
+	/**
+	 * Internal helper for minting proofs with any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom).
+	 * @param amount Amount to mint.
+	 * @param quote Quote ID (string) or quote response object. For string quotes, no signature is required.
+	 * @param config Optional configuration including private key for locked quotes.
+	 * @param outputType Configuration for proof generation.
+	 * @returns Array of newly minted proofs.
+	 *
+	 * @remarks
+	 * This generic method now supports any payment method. The method parameter is passed directly to
+	 * the mint, enabling support for custom payment methods without code changes.
+	 *
+	 * @throws If params are invalid or mint returns errors.
+	 */
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		amount: number,
 		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
+		config?: MintProofsConfig,
+		outputType?: OutputType,
+	): Promise<Proof[]> {
+		return this._mintProofsGeneric(method, amount, quote, config, outputType);
+	}
+
+	/**
+	 * Generic internal helper for minting proofs with any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom).
+	 * @param amount Amount to mint.
+	 * @param quote Quote ID (string) or quote response object.
+	 * @param config Optional configuration including private key for locked quotes.
+	 * @param outputType Configuration for proof generation.
+	 * @returns Array of newly minted proofs.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to mint.mint(), allowing any endpoint of the form `/v1/mint/{method}`.
+	 */
+	private async _mintProofsGeneric(
+		method: string,
+		amount: number,
+		quote: string | Record<string, unknown>,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1466,22 +1537,17 @@ class Wallet {
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		const mintPayload: MintPayload = {
 			outputs: blindedMessages,
-			quote: typeof quote === 'string' ? quote : quote.quote,
+			quote: typeof quote === 'string' ? quote : quote.quote as string,
 		};
 
 		// Sign payload if the quote carries a public key
 		if (typeof quote !== 'string' && quote.pubkey) {
 			this.failIf(!privkey, 'Can not sign locked quote without private key');
-			const mintQuoteSignature = signMintQuote(privkey!, quote.quote, blindedMessages);
+			const mintQuoteSignature = signMintQuote(privkey!, quote.quote as string, blindedMessages);
 			mintPayload.signature = mintQuoteSignature;
 		}
-		// Mint proofs
-		let signatures;
-		if (method === 'bolt12') {
-			({ signatures } = await this.mint.mintBolt12(mintPayload));
-		} else {
-			({ signatures } = await this.mint.mintBolt11(mintPayload));
-		}
+		// Mint proofs using generic method
+		const { signatures } = await this.mint.mint(method, mintPayload);
 		this.failIf(
 			signatures.length !== outputs.length,
 			`Mint returned ${signatures.length} signatures, expected ${outputs.length}`,
@@ -1627,8 +1693,150 @@ class Wallet {
 	}
 
 	// -----------------------------------------------------------------
+	// Section: Generic Quote Methods
+	// -----------------------------------------------------------------
+
+	/**
+	 * Generic method to create a mint quote for any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param amount Amount requesting for mint.
+	 * @param description Optional description for the mint quote.
+	 * @returns The mint will return a mint quote with payment details for the specified method.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to the Mint class, enabling any endpoint of the form `/v1/mint/quote/{method}`.
+	 *
+	 * @example
+	 * ```ts
+	 * const quote = await wallet.createMintQuoteGeneric('bolt11', 100);
+	 * const quote = await wallet.createMintQuoteGeneric('custom-payment', 100, 'My payment');
+	 * ```
+	 */
+	async createMintQuoteGeneric<T extends Record<string, unknown>>(
+		method: string,
+		amount: number,
+		description?: string,
+	): Promise<T & { quote: string; amount: number; unit: string; expiry: number }> {
+		const payload: MintQuotePayload = {
+			unit: this._unit,
+			amount,
+			description,
+		};
+		return this.mint.createMintQuote<T>(method, payload);
+	}
+
+	/**
+	 * Generic method to check a mint quote status for any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param quote Quote ID.
+	 * @returns The mint will return the current state of the mint quote.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to the Mint class, enabling any endpoint of the form `/v1/mint/quote/{method}/{quote}`.
+	 *
+	 * @example
+	 * ```ts
+	 * const status = await wallet.checkMintQuoteGeneric('bolt11', 'quote-id');
+	 * const status = await wallet.checkMintQuoteGeneric('custom-payment', 'custom-quote-id');
+	 * ```
+	 */
+	async checkMintQuoteGeneric<T extends Record<string, unknown>>(
+		method: string,
+		quote: string,
+	): Promise<T & { quote: string; amount: number; unit: string; expiry: number }> {
+		return this.mint.checkMintQuote<T>(method, quote);
+	}
+
+	/**
+	 * Generic method to create a melt quote for any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param request Payment request (e.g., bolt11 invoice, bolt12 offer, or custom format).
+	 * @returns The mint will return a melt quote with fee and status information.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to the Mint class, enabling any endpoint of the form `/v1/melt/quote/{method}`.
+	 *
+	 * @example
+	 * ```ts
+	 * const quote = await wallet.createMeltQuoteGeneric('bolt11', 'invoice...');
+	 * const quote = await wallet.createMeltQuoteGeneric('custom-payment', customRequest);
+	 * ```
+	 */
+	async createMeltQuoteGeneric<T extends Record<string, unknown>>(
+		method: string,
+		request: string,
+	): Promise<T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }> {
+		const payload: MeltQuotePayload = {
+			unit: this._unit,
+			request,
+		};
+		return this.mint.createMeltQuote<T>(method, payload);
+	}
+
+	/**
+	 * Generic method to check a melt quote status for any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param quote Quote ID.
+	 * @returns The mint will return the current state of the melt quote.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to the Mint class, enabling any endpoint of the form `/v1/melt/quote/{method}/{quote}`.
+	 *
+	 * @example
+	 * ```ts
+	 * const status = await wallet.checkMeltQuoteGeneric('bolt11', 'quote-id');
+	 * const status = await wallet.checkMeltQuoteGeneric('custom-payment', 'custom-quote-id');
+	 * ```
+	 */
+	async checkMeltQuoteGeneric<T extends Record<string, unknown>>(
+		method: string,
+		quote: string,
+	): Promise<T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }> {
+		return this.mint.checkMeltQuote<T>(method, quote);
+	}
+
+	// -----------------------------------------------------------------
 	// Section: Melt Proofs
 	// -----------------------------------------------------------------
+
+	/**
+	 * Generic method to melt proofs using any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param meltQuote Quote response object containing quote ID, amount, and fee_reserve.
+	 * @param proofsToSend Proofs to melt (must be >= amount + fee_reserve).
+	 * @param config Optional configuration including callbacks.
+	 * @param outputType Configuration for change proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns MeltProofsResponse with quote and change proofs.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to the internal _meltProofsGeneric function, enabling any endpoint of the form `/v1/melt/{method}`.
+	 * ProofsToSend must be at least amount+fee_reserve. This function does not perform coin selection!
+	 *
+	 * @example
+	 * ```ts
+	 * const response = await wallet.meltProofsGeneric('bolt11', quote, proofsToSend);
+	 * const response = await wallet.meltProofsGeneric('custom-payment', customQuote, proofsToSend);
+	 * ```
+	 */
+	async meltProofsGeneric(
+		method: string,
+		meltQuote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number },
+		proofsToSend: Proof[],
+		config?: MeltProofsConfig,
+		outputType?: OutputType,
+	): Promise<MeltProofsResponse> {
+		return this._meltProofsGeneric(method, meltQuote, proofsToSend, config, outputType);
+	}
 
 	/**
 	 * @deprecated Use meltProofsBolt11()
@@ -1706,6 +1914,30 @@ class Wallet {
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
 	): Promise<MeltProofsResponse> {
+		return this._meltProofsGeneric(method as string, meltQuote, proofsToSend, config, outputType);
+	}
+
+	/**
+	 * Generic internal helper for melting proofs with any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom).
+	 * @param meltQuote Quote response object containing quote ID, amount, and fee_reserve.
+	 * @param proofsToSend Proofs to melt.
+	 * @param config Optional configuration including callbacks.
+	 * @param outputType Configuration for change proof generation.
+	 * @returns Melt response with quote and change proofs.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods. The method parameter is passed directly
+	 * to mint.melt(), allowing any endpoint of the form `/v1/melt/{method}`.
+	 */
+	private async _meltProofsGeneric(
+		method: string,
+		meltQuote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number },
+		proofsToSend: Proof[],
+		config?: MeltProofsConfig,
+		outputType?: OutputType,
+	): Promise<MeltProofsResponse> {
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -1713,9 +1945,9 @@ class Wallet {
 
 		// feeReserve is the overage above the invoice/offer amount.
 		// In the common case where selected proofs = amount + fee_reserve,
-		// this equals the quote’s fee_reserve. If you overshoot more,
+		// this equals the quote's fee_reserve. If you overshoot more,
 		// the extra also becomes NUT-08 lightning fee change.
-		const feeReserve = sendAmount - meltQuote.amount;
+		const feeReserve = sendAmount - (meltQuote.amount as number);
 		let outputData: OutputDataLike[] = [];
 
 		// bolt11 does not allow partial payment, and although bolt12 could, mints
@@ -1759,7 +1991,7 @@ class Wallet {
 		proofsToSend = this._prepareInputsForMint(proofsToSend);
 
 		const meltPayload: MeltPayload = {
-			quote: meltQuote.quote,
+			quote: meltQuote.quote as string,
 			inputs: proofsToSend,
 			outputs: outputData.map((d) => d.blindedMessage),
 		};
@@ -1767,24 +1999,23 @@ class Wallet {
 		// Fire event(s) after blanks creation
 		if (outputData.length > 0) {
 			const blanks: MeltBlanks = {
-				method,
+				method: method as 'bolt11' | 'bolt12',
 				payload: meltPayload,
 				outputData,
 				keyset,
-				quote: meltQuote,
+				quote: meltQuote as any,
 			};
 			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
 			this.on._emitMeltBlanksCreated(blanks); // global callback
 		}
 
 		// Proceed with melt, setting preferredAsync header if an onChangeOutputsCreated callback was used
-		let meltResponse;
 		const preferAsync: boolean = typeof onChangeOutputsCreated === 'function';
-		if (method === 'bolt12') {
-			meltResponse = await this.mint.meltBolt12(meltPayload, { preferAsync });
-		} else {
-			meltResponse = await this.mint.meltBolt11(meltPayload, { preferAsync });
-		}
+		const meltResponse = await this.mint.melt<{ change?: SerializedBlindedSignature[] }>(
+			method,
+			meltPayload,
+			{ preferAsync }
+		);
 
 		// Sanity check mint didn't send too many signatures before mapping
 		// Should not happen, except in case of a broken or malicious mint
@@ -1794,9 +2025,22 @@ class Wallet {
 		);
 
 		// Construct change if provided (empty if pending/not paid; shorter ok if less overfee)
-		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
+		const change = (meltResponse.change as SerializedBlindedSignature[] | undefined)?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
 		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
-		return { quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request }, change };
+		
+		// Construct the response quote with required fields
+		const responseQuote: MeltQuoteResponse = {
+			quote: meltResponse.quote,
+			amount: meltResponse.amount,
+			fee_reserve: meltResponse.fee_reserve,
+			state: meltResponse.state as MeltQuoteState,
+			expiry: meltResponse.expiry,
+			payment_preimage: (meltResponse as any).payment_preimage ?? null,
+			unit: (meltQuote.unit as string) || this._unit,
+			request: (meltQuote.request as string) || '',
+			...(meltResponse.change && { change: meltResponse.change as SerializedBlindedSignature[] }),
+		};
+		return { quote: responseQuote, change };
 	}
 
 	/**

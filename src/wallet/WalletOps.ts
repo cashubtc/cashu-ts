@@ -34,12 +34,60 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
+
+	/**
+	 * Generic method to mint proofs for any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param amount Amount to mint.
+	 * @param quote Quote response or ID for the payment method.
+	 * @returns A MintBuilder for composing the mint operation.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods using the fluent builder pattern.
+	 *
+	 * @example
+	 * ```ts
+	 * const proofs = await wallet.ops
+	 *   .mintGeneric('custom-payment', 100, customQuote)
+	 *   .asDeterministic()
+	 *   .run();
+	 * ```
+	 */
+	mintGeneric(method: string, amount: number, quote: Record<string, unknown>) {
+		return new MintBuilderGeneric(this.wallet, method, amount, quote);
+	}
+
 	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
 		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
 	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
 		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
+
+	/**
+	 * Generic method to melt proofs for any payment method.
+	 *
+	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param quote Quote response for the payment method.
+	 * @param proofs Proofs to melt.
+	 * @returns A MeltBuilderGeneric for composing the melt operation.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods using the fluent builder pattern.
+	 *
+	 * @example
+	 * ```ts
+	 * const result = await wallet.ops
+	 *   .meltGeneric('custom-payment', customQuote, proofs)
+	 *   .asDeterministic()
+	 *   .run();
+	 * ```
+	 */
+	meltGeneric(method: string, quote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number }, proofs: Proof[]) {
+		return new MeltBuilderGeneric(this.wallet, method, quote, proofs);
+	}
+
 	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
 	}
@@ -705,5 +753,254 @@ export class MeltBuilder {
 
 		// BOLT 12
 		return this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType);
+	}
+}
+
+/**
+ * Builder for minting proofs from a quote using any payment method.
+ *
+ * @remarks
+ * Supports any custom payment method through the generic method parameter.
+ * @example
+ *
+ * ```typescript
+ * const proofs = await wallet.ops
+ *   .mintGeneric('custom-payment', 100, quote)
+ *   .asDeterministic()
+ *   .run();
+ * ```
+ */
+export class MintBuilderGeneric {
+	private outputType?: OutputType;
+	private config: MintProofsConfig = {};
+
+	constructor(
+		private wallet: Wallet,
+		private method: string,
+		private amount: number,
+		private quote: Record<string, unknown>,
+	) {}
+
+	/**
+	 * Use random blinding for the minted proofs.
+	 *
+	 * @remarks
+	 * If denoms specified, proofsWeHave() will have no effect.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asRandom(denoms?: number[]) {
+		this.outputType = { type: 'random', denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Use deterministic outputs for the minted proofs.
+	 *
+	 * @remarks
+	 * If denoms specified, proofsWeHave() will have no effect.
+	 * @param counter Starting counter. Zero means auto reserve using the wallet's CounterSource.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asDeterministic(counter = 0, denoms?: number[]) {
+		this.outputType = { type: 'deterministic', counter, denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Use P2PK locked outputs for the minted proofs.
+	 *
+	 * @remarks
+	 * If denoms specified, proofsWeHave() will have no effect.
+	 * @param options NUT 11 options like pubkey and locktime.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asP2PK(options: P2PKOptions, denoms?: number[]) {
+		this.outputType = { type: 'p2pk', options, denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Use a factory to generate OutputData for minted proofs.
+	 *
+	 * @remarks
+	 * If denoms specified, proofsWeHave() will have no effect.
+	 * @param factory OutputDataFactory used to produce blinded messages.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asFactory(factory: OutputDataFactory, denoms?: number[]) {
+		this.outputType = { type: 'factory', factory, denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Provide pre created OutputData for minted proofs.
+	 *
+	 * @param data Fully formed OutputData for the final amount.
+	 */
+	asCustom(data: OutputData[]) {
+		this.outputType = { type: 'custom', data };
+		return this;
+	}
+
+	/**
+	 * Use a specific keyset for the operation.
+	 *
+	 * @param id Keyset id to use for mint keys and fee lookup.
+	 */
+	keyset(id: string) {
+		this.config.keysetId = id;
+		return this;
+	}
+
+	/**
+	 * Provide existing proofs to help optimise denomination selection.
+	 *
+	 * @remarks
+	 * Has no effect if denominations (custom split) was specified.
+	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
+	 */
+	proofsWeHave(p: Proof[]) {
+		this.config.proofsWeHave = p;
+		return this;
+	}
+
+	/**
+	 * Receive a callback once counters are atomically reserved for deterministic outputs.
+	 *
+	 * @param cb Called with OperationCounters when counters are reserved.
+	 */
+	onCountersReserved(cb: OnCountersReserved) {
+		this.config.onCountersReserved = cb;
+		return this;
+	}
+
+	/**
+	 * Execute minting against the quote using any payment method.
+	 *
+	 * @returns The newly minted proofs.
+	 */
+	async run() {
+		return this.wallet.mintProofsGeneric(this.method, this.amount, this.quote, this.config, this.outputType);
+	}
+}
+
+/**
+ * Builder for melting proofs to pay any custom payment method.
+ *
+ * @remarks
+ * Supports any custom payment method through the generic method parameter.
+ * @example
+ *
+ * ```typescript
+ * const result = await wallet.ops
+ *   .meltGeneric('custom-payment', quote, proofs)
+ *   .asDeterministic()
+ *   .run();
+ * ```
+ */
+export class MeltBuilderGeneric {
+	private outputType?: OutputType;
+	private config: MeltProofsConfig = {};
+
+	constructor(
+		private wallet: Wallet,
+		private method: string,
+		private quote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number },
+		private proofs: Proof[],
+	) {}
+
+	/**
+	 * Use random blinding for change outputs.
+	 *
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asRandom(denoms?: number[]) {
+		this.outputType = { type: 'random', denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Use deterministic outputs for change.
+	 *
+	 * @param counter Starting counter. Zero means auto reserve using the wallet's CounterSource.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asDeterministic(counter = 0, denoms?: number[]) {
+		this.outputType = { type: 'deterministic', counter, denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Use P2PK-locked change (NUT-11).
+	 *
+	 * @param options NUT-11 locking options (e.g., pubkey, locktime).
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asP2PK(options: P2PKOptions, denoms?: number[]) {
+		this.outputType = { type: 'p2pk', options, denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Use a factory to generate OutputData for change.
+	 *
+	 * @param factory Factory used to produce blinded messages.
+	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+	 */
+	asFactory(factory: OutputDataFactory, denoms?: number[]) {
+		this.outputType = { type: 'factory', factory, denominations: denoms };
+		return this;
+	}
+
+	/**
+	 * Provide pre-created OutputData for change.
+	 *
+	 * @param data Fully formed OutputData for the change amount.
+	 */
+	asCustom(data: OutputData[]) {
+		this.outputType = { type: 'custom', data };
+		return this;
+	}
+
+	/**
+	 * Use a specific keyset for the melt operation.
+	 *
+	 * @param id Keyset id to use for mint keys and fee lookup.
+	 */
+	keyset(id: string) {
+		this.config.keysetId = id;
+		return this;
+	}
+
+	/**
+	 * Receive a callback once counters are atomically reserved for deterministic outputs.
+	 *
+	 * @param cb Called with OperationCounters when counters are reserved.
+	 */
+	onCountersReserved(cb: OnCountersReserved) {
+		this.config.onCountersReserved = cb;
+		return this;
+	}
+
+	/**
+	 * Receive a callback when NUT-08 blanks (0-sat change outputs) are created for async melts.
+	 *
+	 * @remarks
+	 * You can persist these blanks and later call `wallet.completeMelt(blanks)` to finalize and
+	 * recover change once the invoice/offer is paid.
+	 * @param cb Callback invoked with the created blanks payload.
+	 */
+	onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>) {
+		this.config.onChangeOutputsCreated = cb;
+		return this;
+	}
+
+	/**
+	 * Execute the melt against the quote using any payment method.
+	 *
+	 * @returns The melt result: `{ quote, change }`.
+	 */
+	async run() {
+		return this.wallet.meltProofsGeneric(this.method, this.quote, this.proofs, this.config, this.outputType);
 	}
 }

@@ -316,3 +316,53 @@ export type WebSocketSupport = {
 export type BlindAuthMintResponse = {
 	signatures: SerializedBlindedSignature[];
 } & ApiError;
+
+/**
+ * Generic mint quote response. All mint quote responses must contain at least these fields.
+ * This type is used as a base for both standard and custom payment methods.
+ */
+export type GenericMintQuoteResponse = {
+	/**
+	 * Quote ID.
+	 */
+	quote: string;
+	/**
+	 * Amount to be minted.
+	 */
+	amount: number;
+	/**
+	 * Unit of the quote.
+	 */
+	unit: string;
+	/**
+	 * Timestamp of when the quote expires.
+	 */
+	expiry: number;
+} & ApiError;
+
+/**
+ * Generic melt quote response. All melt quote responses must contain at least these fields.
+ * This type is used as a base for both standard and custom payment methods.
+ */
+export type GenericMeltQuoteResponse = {
+	/**
+	 * Quote ID.
+	 */
+	quote: string;
+	/**
+	 * Amount to be melted.
+	 */
+	amount: number;
+	/**
+	 * Fee reserve to be added to the amount.
+	 */
+	fee_reserve: number;
+	/**
+	 * State of the melt quote.
+	 */
+	state: MeltQuoteState;
+	/**
+	 * Timestamp of when the quote expires.
+	 */
+	expiry: number;
+} & ApiError;
