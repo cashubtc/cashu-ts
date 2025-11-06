@@ -381,7 +381,7 @@ export function getP2PKLocktime(secretStr: string | Secret): number;
 export function getP2PKNSigs(secretStr: string | Secret): number;
 
 // @public
-export function getP2PKSigFlag(secretStr: string | Secret): string;
+export function getP2PKSigFlag(secretStr: string | Secret): SigFlag;
 
 // @public
 export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[];
@@ -1420,9 +1420,6 @@ export interface SharedOutputTypeProps {
 
 // @public (undocumented)
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
-
-// @public (undocumented)
-export const signBlindedMessage: (B_: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;

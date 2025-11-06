@@ -17,6 +17,21 @@ export type SecretData = {
 	tags?: string[][];
 };
 
+/**
+ * Validates proof secret is P2PK.
+ *
+ * @param secretStr - The Proof secret.
+ * @throws If secret is not P2PK.
+ * @internal
+ */
+const validateP2PKSecret = (secretStr: string | Secret): Secret => {
+	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
+	if (secret[0] !== 'P2PK') {
+		throw new Error('Invalid P2PK secret: must start with "P2PK"');
+	}
+	return secret;
+};
+
 export const createP2PKsecret = (pubkey: string): string => {
 	const newSecret: Secret = [
 		'P2PK',
@@ -47,7 +62,7 @@ export const parseP2PKSecret = (secret: string | Uint8Array): Secret => {
  * (auxRand) each time it is called.
  */
 export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
-	const msghash = sha256(secret);
+	const msghash = sha256(new TextEncoder().encode(secret));
 	const sig = schnorr.sign(msghash, privateKey); // auxRand is random by default
 	return bytesToHex(sig);
 };
@@ -58,7 +73,7 @@ export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
  * @param signature - The Schnorr signature (hex-encoded).
  * @param secret - The Secret to verify.
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
- * @returns {boolean} True if the signature is valid, false otherwise.
+ * @returns True if the signature is valid, false otherwise.
  */
 export const verifyP2PKSecretSignature = (
 	signature: string,
@@ -66,7 +81,7 @@ export const verifyP2PKSecretSignature = (
 	pubkey: string,
 ): boolean => {
 	try {
-		const msghash = sha256(secret);
+		const msghash = sha256(new TextEncoder().encode(secret));
 		// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
 		const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
 		if (schnorr.verify(signature, msghash, hexToBytes(pubkeyX))) {
@@ -83,7 +98,7 @@ export const verifyP2PKSecretSignature = (
  *
  * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
  * @param proof - A Cashu proof.
- * @returns {boolean} True if one of the signatures is theirs, false otherwise.
+ * @returns True if one of the signatures is theirs, false otherwise.
  */
 export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
 	if (!proof.witness) {
@@ -105,15 +120,12 @@ export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
  * Returns the expected witness public keys from a NUT-11 P2PK secret.
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns {array} With the public keys or empty array.
+ * @returns Array of public keys or empty array.
+ * @throws If secret is not P2PK.
  */
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[] {
 	try {
-		// Validate secret
-		const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
-		if (secret[0] !== 'P2PK') {
-			throw new Error('Invalid P2PK secret: must start with "P2PK"');
-		}
+		const secret: Secret = validateP2PKSecret(secretStr);
 		const now = Math.floor(Date.now() / 1000);
 		const locktime = getP2PKLocktime(secret);
 		if (locktime > now) {
@@ -133,14 +145,11 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): stri
  * expected to sign - see: getP2PKExpectedKWitnessPubkeys()
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns {array} With the public key(s or empty array.
+ * @returns Array of public key(s or empty array.
+ * @throws If secret is not P2PK.
  */
 export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
-	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
-	if (secret[0] !== 'P2PK') {
-		throw new Error('Invalid P2PK secret: must start with "P2PK"');
-	}
+	const secret: Secret = validateP2PKSecret(secretStr);
 	const { data, tags } = secret[1];
 	const pubkeysTag = tags && tags.find((tag) => tag[0] === 'pubkeys');
 	const pubkeys = pubkeysTag && pubkeysTag.length > 1 ? pubkeysTag.slice(1) : [];
@@ -152,14 +161,11 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
  * to sign - see: getP2PKExpectedKWitnessPubkeys()
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns {array} With the public keys or empty array.
+ * @returns Array of public keys or empty array.
+ * @throws If secret is not P2PK.
  */
 export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
-	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
-	if (secret[0] !== 'P2PK') {
-		throw new Error('Invalid P2PK secret: must start with "P2PK"');
-	}
+	const secret: Secret = validateP2PKSecret(secretStr);
 	const { tags } = secret[1];
 	const refundTag = tags && tags.find((tag) => tag[0] === 'refund');
 	return refundTag && refundTag.length > 1 ? refundTag.slice(1).filter(Boolean) : [];
@@ -169,14 +175,11 @@ export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
  * Returns the locktime from a NUT-11 P2PK secret or Infinity if no locktime.
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns {number} The locktime unix timestamp or Infinity (permanent lock)
+ * @returns The locktime unix timestamp or Infinity (permanent lock)
+ * @throws If secret is not P2PK.
  */
 export function getP2PKLocktime(secretStr: string | Secret): number {
-	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
-	if (secret[0] !== 'P2PK') {
-		throw new Error('Invalid P2PK secret: must start with "P2PK"');
-	}
+	const secret: Secret = validateP2PKSecret(secretStr);
 	const { tags } = secret[1];
 	const locktimeTag = tags && tags.find((tag) => tag[0] === 'locktime');
 	return locktimeTag && locktimeTag.length > 1 ? parseInt(locktimeTag[1], 10) : Infinity; // Permanent lock if not set
@@ -186,14 +189,11 @@ export function getP2PKLocktime(secretStr: string | Secret): number {
  * Returns the number of signatures required from a NUT-11 P2PK secret.
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns {number} The number of signatories (n_sigs / n_sigs_refund) or 0 if secret is unlocked.
+ * @returns The number of signatories (n_sigs / n_sigs_refund) or 0 if secret is unlocked.
+ * @throws If secret is not P2PK.
  */
 export function getP2PKNSigs(secretStr: string | Secret): number {
-	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
-	if (secret[0] !== 'P2PK') {
-		throw new Error('Invalid P2PK secret: must start with "P2PK"');
-	}
+	const secret: Secret = validateP2PKSecret(secretStr);
 	// Check for witnesses
 	const witness = getP2PKExpectedKWitnessPubkeys(secret);
 	if (!witness.length) {
@@ -216,14 +216,11 @@ export function getP2PKNSigs(secretStr: string | Secret): number {
  * Returns the sigflag from a NUT-11 P2PK secret.
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns {string} The sigflag or 'SIG_INPUTS' (default)
+ * @returns The sigflag or 'SIG_INPUTS' (default)
+ * @throws If secret is not P2PK.
  */
-export function getP2PKSigFlag(secretStr: string | Secret): string {
-	// Validate secret
-	const secret: Secret = typeof secretStr === 'string' ? parseP2PKSecret(secretStr) : secretStr;
-	if (secret[0] !== 'P2PK') {
-		throw new Error('Invalid P2PK secret: must start with "P2PK"');
-	}
+export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
+	const secret: Secret = validateP2PKSecret(secretStr);
 	const { tags } = secret[1];
 	const sigFlagTag = tags && tags.find((tag) => tag[0] === 'sigflag');
 	return sigFlagTag && sigFlagTag.length > 1 ? (sigFlagTag[1] as SigFlag) : 'SIG_INPUTS';
@@ -250,12 +247,15 @@ export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefin
 };
 
 /**
- * Signs proofs with provided private key(s) if required NB: Will only sign if the proof requires a
- * signature from the key.
+ * Signs proofs with provided private key(s) if required.
  *
+ * @remarks
+ * NB: Will only sign if the proof requires a signature from the key.
  * @param proofs - An array of proofs to sign.
  * @param privateKey - A single private key or array of private keys.
  * @param logger - Optional logger (default: NULL_LOGGER)
+ * @returns Signed proofs.
+ * @throws If SIG_ALL proofs detected, and on general errors.
  */
 export const signP2PKProofs = (
 	proofs: Proof[],
@@ -287,11 +287,13 @@ export const signP2PKProofs = (
 };
 
 /**
- * Signs a single proof with the provided private key if required NB: Will only sign if the proof
- * requires a signature from the key.
+ * Signs a single proof with the provided private key if required.
  *
+ * @remarks
+ * Will only sign if the proof requires a signature from the key.
  * @param proof - A proof to sign.
  * @param privateKey - A single private key.
+ * @returns Signed proofs.
  * @throws Error if signature is not required or proof is already signed.
  */
 export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
@@ -299,6 +301,9 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 	const parsed: Secret = parseP2PKSecret(proof.secret);
 	if (parsed[0] !== 'P2PK') {
 		throw new Error('not a P2PK secret');
+	}
+	if (getP2PKSigFlag(proof.secret) == 'SIG_ALL') {
+		throw new Error('Cannot sign - SIG_ALL proof detected.');
 	}
 	// Check if the private key is required to sign by checking its
 	// X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
