@@ -1,0 +1,133 @@
+name: reusable integration against mint
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: 'Docker image to run (e.g. cashubtc/mintd:0.13.4)'
+        required: true
+        type: string
+      port:
+        description: 'Host/Container port to publish'
+        required: false
+        type: number
+        default: 3338
+      timeout:
+        description: 'Timeout in seconds for waiting for mint readiness'
+        required: false
+        type: number
+        default: 90
+      container_name:
+        description: 'Name to give the container (used for logs/inspect)'
+        required: false
+        type: string
+        default: mint
+      envs:
+        description: |
+          Extra environment variables to pass to docker. Accepts either:
+            - a JSON object string, e.g. '{"VAR1":"val1","VAR2":"val2"}'
+            - or a newline/space-separated list of KEY=VALUE pairs, e.g. "VAR1=val1\nVAR2=val2"
+          The workflow will convert these into appropriate `-e` flags.
+        required: false
+        type: string
+        default: ''
+      cmd:
+        description: 'Optional command to append to docker run to start the service'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Pull mint image
+        run: docker pull "${{ inputs.image }}"
+
+      - name: Ensure old container is removed
+        run: docker rm -f "${{ inputs.container_name }}" || true
+
+      - name: Start mint
+        run: |
+          raw_envs='${{ inputs.envs }}'
+          container_name='${{ inputs.container_name }}'
+          cmd='${{ inputs.cmd }}'
+          image='${{ inputs.image }}'
+          env_file=$(mktemp)
+          echo "Writing envs to $env_file"
+          if [ -n "$raw_envs" ]; then
+            if echo "$raw_envs" | jq -e . >/dev/null 2>&1; then
+              # JSON object -> KEY=VALUE lines
+              echo "$raw_envs" | jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' > "$env_file"
+            else
+              # treat as raw lines (preserve spaces)
+              echo "$raw_envs" | sed 's/\r$//' > "$env_file"
+            fi
+          fi
+          echo "Env file contents:" && sed -n '1,200p' "$env_file" || true
+          # Run docker with --env-file to safely pass variables (handles spaces)
+          if [ -n "$cmd" ]; then
+            echo "Starting container with command: $cmd"
+            docker run -d -p ${{ inputs.port }}:${{ inputs.port }} \
+              --name "$container_name" \
+              --env-file "$env_file" \
+              "$image" sh -c "$cmd"
+          else
+            echo "Starting container without extra command"
+            docker run -d -p ${{ inputs.port }}:${{ inputs.port }} \
+              --name "$container_name" \
+              --env-file "$env_file" \
+              "$image"
+          fi
+          rm -f "$env_file"
+
+      - name: Wait for mint to be ready (host-side)
+        run: |
+          set -euo pipefail
+          host_url="http://127.0.0.1:${{ inputs.port }}/v1/info"
+          timeout=${{ inputs.timeout }}
+          interval=2
+          elapsed=0
+          container_name="${{ inputs.container_name }}"
+          echo "Waiting up to ${timeout}s for mint at $host_url..."
+          until curl --silent --show-error --fail --max-time 5 "$host_url" > /dev/null; do
+            if [ "$elapsed" -ge "$timeout" ]; then
+              echo "Timed out waiting for mint at $host_url"
+              echo "--- Container inspect ---"
+              docker inspect "$container_name" || true
+              echo "--- Container logs (last 200 lines) ---"
+              docker logs --tail 200 "$container_name" || true
+              exit 1
+            fi
+            sleep "$interval"
+            elapsed=$((elapsed + interval))
+            echo "Still waiting... (${elapsed}/${timeout}s)"
+          done
+          echo "Mint responded to host HTTP at $host_url"
+
+      - name: Checkout cashu-ts repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run compile
+
+      - name: Run integration tests
+        run: npm run test-integration
+
+      - name: Dump mint logs on failure
+        if: ${{ failure() }}
+        run: |
+          container_name="${{ inputs.container_name }}"
+          echo "=== ${container_name} inspect ==="
+          docker inspect "$container_name" || true
+          echo "=== ${container_name} logs (last 200 lines) ==="
+          docker logs --tail 200 "$container_name" || true

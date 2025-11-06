@@ -1,0 +1,18 @@
+name: Nutshell integration
+
+on: [push, pull_request]
+
+jobs:
+  integration-tests:
+    uses: ./.github/workflows/integration-against-mint.yml
+    with:
+      image: cashubtc/nutshell:0.16.4
+      port: 3338
+      container_name: nutshell
+      envs: |
+        MINT_LIGHTNING_BACKEND=FakeWallet
+        MINT_INPUT_FEE_PPK=100
+        MINT_LISTEN_HOST=0.0.0.0
+        MINT_LISTEN_PORT=3338
+        MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+      cmd: "poetry run mint"
