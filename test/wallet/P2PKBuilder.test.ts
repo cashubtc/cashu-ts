@@ -318,48 +318,16 @@ describe('P2PKBuilder addTag and addTags', () => {
 		const round = P2PKBuilder.fromOptions(minimalWithTags).toOptions();
 		expect(round).toEqual(minimalWithTags);
 	});
-	it('caps additional tags at 5 via addTag and preserves existing entries', () => {
+	it('throws if a reserved key is set in additionalTags', () => {
 		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
-
-		// add exactly 5
-		for (let i = 0; i < 5; i++) {
-			b.addTag(`k${i}`, `${i}`);
-		}
-
-		// the 6th should throw
-		expect(() => b.addTag('overflow', 'x')).toThrow(/Too many additional tags/i);
-
-		// nothing beyond the first 5 was added
-		const out = b.toOptions();
-		expect(out.pubkey).toEqual(comp('a', '02'));
-		expect(out.additionalTags?.length).toBe(5);
-		expect(out.additionalTags?.[0]).toEqual(['k0', '0']);
-		expect(out.additionalTags?.[4]).toEqual(['k4', '4']);
+		expect(() => b.addTag('refund', comp('b', '02'))).toThrow(/is reserved/i);
 	});
-
-	it('preflights addTags, throws when batch exceeds remaining, and does not partially mutate', () => {
+	it('throws if secret is too long', () => {
 		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
-
-		// fill to 4
-		b.addTags(Array.from({ length: 4 }, (_, i) => [`k${i}`, `${i}`] as [string, string]));
-
-		// try to add 2 more when only 1 slot remains
-		expect(() =>
-			b.addTags([
-				['k9a', 'x'],
-				['k9b', 'y'],
-			]),
-		).toThrow(/Too many additional tags/i);
-
-		// still only 4, unchanged
-		let out = b.toOptions();
-		expect(out.additionalTags?.length).toBe(4);
-
-		// add exactly one, should succeed and reach 5
-		b.addTags([['k4c', 'z']]);
-		out = b.toOptions();
-		expect(out.pubkey).toEqual(comp('a', '02'));
-		expect(out.additionalTags?.length).toBe(5);
-		expect(out.additionalTags?.[4]).toEqual(['k4c', 'z']);
+		// add 10
+		for (let i = 0; i < 12; i++) {
+			b.addTag(`k${i}`, comp('a', '02'));
+		}
+		expect(() => b.toOptions()).toThrow(/Secret too long/i);
 	});
 });

@@ -482,8 +482,6 @@ P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
 
 Keys are normalised and de-duplicated, insertion order is preserved, total lock plus refund keys must be ≤ 10, refund keys will throw if no locktime is set.
 
-A maximum of 5 additional tags can be added, addTag/AddTags will throw if the limit is exceeded.
-
 Example usage:
 
 ```ts

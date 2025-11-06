@@ -6,7 +6,6 @@ import {
 	type SerializedDLEQ,
 } from './types';
 import { type P2PKOptions, type Keyset } from '../wallet';
-import { RESERVED_P2PK_TAGS, MAX_P2PK_TAGS } from '../wallet/types/config';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -29,6 +28,28 @@ export interface OutputDataLike {
 }
 
 export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+
+/**
+ * Core P2PK tags that must not be settable in additional tags.
+ *
+ * @internal
+ */
+export const RESERVED_P2PK_TAGS = new Set([
+	'locktime',
+	'pubkeys',
+	'n_sigs',
+	'refund',
+	'n_sigs_refund',
+]);
+
+/**
+ * Maximum secret length.
+ *
+ * @remarks
+ * Based on the Nutshell default mint_max_secret_length.
+ * @internal
+ */
+export const MAX_SECRET_LENGTH = 1024;
 
 export function isOutputDataFactory(
 	value: OutputData[] | OutputDataFactory,
@@ -125,9 +146,6 @@ export class OutputData implements OutputDataLike {
 
 		// Append additional tags if any
 		if (p2pk.additionalTags?.length) {
-			if (p2pk.additionalTags.length > MAX_P2PK_TAGS) {
-				throw new Error(`Too many additional tags, maximum is ${MAX_P2PK_TAGS}`);
-			}
 			for (const [k] of p2pk.additionalTags) {
 				if (RESERVED_P2PK_TAGS.has(k)) {
 					throw new Error(`additionalTags must not use reserved key "${k}"`);
@@ -148,6 +166,11 @@ export class OutputData implements OutputDataLike {
 
 		// blind the message
 		const parsed = JSON.stringify(newSecret);
+		if (parsed.length > MAX_SECRET_LENGTH) {
+			throw new Error(
+				`Secret too long (${parsed.length} characters), maximum is ${MAX_SECRET_LENGTH}`,
+			);
+		}
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
 

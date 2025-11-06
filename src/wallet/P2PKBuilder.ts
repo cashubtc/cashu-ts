@@ -1,4 +1,5 @@
-import { type TagTuple, type P2PKOptions, RESERVED_P2PK_TAGS, MAX_P2PK_TAGS } from './types/config';
+import { OutputData, RESERVED_P2PK_TAGS } from '../model/OutputData';
+import { type P2PKOptions, type TagTuple } from './types/config';
 
 // Accept 33 byte compressed (02|03...), or 32 byte x-only,
 // normalised to lowercase 33 byte with 02 prefix for x only
@@ -58,22 +59,12 @@ export class P2PKBuilder {
 		if (RESERVED_P2PK_TAGS.has(key)) {
 			throw new Error(`tag key "${key}" is reserved. Use appropriate builder option.`);
 		}
-		if (this.extraTags.length >= MAX_P2PK_TAGS) {
-			throw new Error(`Too many additional tags, maximum is ${MAX_P2PK_TAGS}`);
-		}
 		const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
 		this.extraTags.push([key, ...vals.map(String)]); // all to strings
 		return this;
 	}
 
 	addTags(tags: TagTuple[]) {
-		const remaining = MAX_P2PK_TAGS - this.extraTags.length;
-		if (tags.length > remaining) {
-			throw new Error(
-				`Too many additional tags, ${tags.length} provided, ${remaining} slots remaining, ` +
-					`maximum is ${MAX_P2PK_TAGS}`,
-			);
-		}
 		for (const [k, ...vals] of tags) this.addTag(k, vals);
 		return this;
 	}
@@ -101,7 +92,7 @@ export class P2PKBuilder {
 
 		const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
 
-		return {
+		const p2pk: P2PKOptions = {
 			pubkey,
 			...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
 			...(refunds.length ? { refundKeys: refunds } : {}),
@@ -109,6 +100,12 @@ export class P2PKBuilder {
 			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
 			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
 		};
+
+		// Ensure the secret is valid (not too long etc)
+		const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
+		void smokeTest; // intentionally unused
+
+		return p2pk;
 	}
 
 	static fromOptions(opts: P2PKOptions): P2PKBuilder {

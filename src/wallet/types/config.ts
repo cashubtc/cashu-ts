@@ -132,26 +132,6 @@ export type P2PKOptions = {
 
 export type TagTuple = [key: string, ...values: string[]];
 
-/**
- * Core P2PK tags that must not be settable in additional tags.
- *
- * @internal
- */
-export const RESERVED_P2PK_TAGS = new Set([
-	'locktime',
-	'pubkeys',
-	'n_sigs',
-	'refund',
-	'n_sigs_refund',
-]);
-
-/**
- * The maximum additional P2PK tags allowed.
- *
- * @internal
- */
-export const MAX_P2PK_TAGS = 5;
-
 export type OnCountersReserved = (info: OperationCounters) => void;
 
 /**
