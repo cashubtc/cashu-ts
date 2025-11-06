@@ -702,7 +702,15 @@ Use the builder hooks for transaction-local callbacks, and WalletEvents for app-
 Contributions are very welcome.
 
 If you want to contribute, please open an Issue or a PR.
-If you open a PR, please do so from the `development` branch as the base branch.
+
+### Versions
+
+Cashu-TS' latest version is major version 3. We are still supporting major verson 2 with patches and critical fixes. While new feature PRs MUST include a feature for version 3 they CAN also include a backport of that feature for version 2. If you decide to write feature code for both versions it must be in two separate PRs.
+
+### Base Branches
+
+- version 3: If you open a PR, please do so from the `development` branch as the base branch.
+- version 2: If you open a PR, please do so from the `dev-v2` branch as the base branch.
 
 ## Release strategy
 
