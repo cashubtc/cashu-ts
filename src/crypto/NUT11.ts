@@ -385,3 +385,55 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
 	const kid = proof.id; // keyset id is hex
 	return deriveP2BKSecretKeys(Ehex, privs, pubs, kid);
 }
+
+/*
+ * Validates SIG_ALL inputs have matching secrets and tags.
+ *
+ * @param inputs Array of Proofs.
+ * @returns First input's data and tags.
+ * @throws If proofs are not valid for SIG_ALL.
+ * @internal
+ */
+export function assertSigAllInputs(inputs: Proof[]): void {
+	if (inputs.length === 0) throw new Error('No proofs');
+	// Check first proof
+	const first = parseP2PKSecret(inputs[0].secret);
+	if (first[0] !== 'P2PK') throw new Error('Not a P2PK secret');
+	if (getP2PKSigFlag(first) !== 'SIG_ALL') throw new Error('First proof is not SIG_ALL');
+	const data0 = first[1].data;
+	const tags0 = JSON.stringify(first[1].tags ?? []);
+	// Compare remaining proofs
+	for (let i = 1; i < inputs.length; i++) {
+		const si = parseP2PKSecret(inputs[i].secret);
+		if (si[0] !== 'P2PK') throw new Error(`Proof #${i + 1} is not P2PK`);
+		if (getP2PKSigFlag(si) !== 'SIG_ALL') throw new Error(`Proof #${i + 1} is not SIG_ALL`);
+		if (si[1].data !== data0) throw new Error('SIG_ALL inputs must share identical Secret.data');
+		if (JSON.stringify(si[1].tags ?? []) !== tags0)
+			throw new Error('SIG_ALL inputs must share identical Secret.tags');
+	}
+}
+
+/**
+ * Message aggregation for SIG_ALL.
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId.
+ * @param inputs Array of Proofs.
+ * @param outputs Array of blind message / amounts.
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildP2PKSigAllMessage(
+	inputs: Proof[],
+	outputs: Array<{ amount: number; B_: string }>,
+	quoteId?: string,
+): string {
+	const parts: string[] = [];
+	// Concat inputs: secret_0 || C_0 ...
+	for (const p of inputs) parts.push(p.secret, p.C);
+	// Concat outputs: amount_0 ||  B_0 ...
+	for (const o of outputs) parts.push(String(o.amount), o.B_);
+	// Add quoteId for melts
+	if (quoteId) parts.push(quoteId);
+	return parts.join('');
+}
