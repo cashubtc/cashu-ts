@@ -303,6 +303,13 @@ describe('cbor encoder', () => {
 		expect(Array.from(enc)).toEqual([0x1a, 0xff, 0xff, 0xff, 0xff]);
 		expect(decodeCBOR(enc)).toBe(n);
 	});
+	
+	test('encodes min 32 bit unsigned integer and roundtrips', () => {
+		const n = 0x00010000; // 65536
+		const enc = encodeCBOR(n as any);
+		expect(Array.from(enc)).toEqual([0x1a, 0x00, 0x01, 0x00, 0x00]);
+		expect(decodeCBOR(enc)).toBe(n);
+	});
 
 	test.each(encoderThrows)('encoding unsupported $name throws', ({ decoded, throws }) => {
 		expect(() => encodeCBOR(decoded)).toThrow(throws as RegExp);
