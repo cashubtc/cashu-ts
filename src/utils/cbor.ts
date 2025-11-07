@@ -1,3 +1,48 @@
+/*
+ * Lightweight CBOR encoder/decoder (purpose and limitations)
+ *
+ * Supported
+ * - Major types: 0 (unsigned), 1 (negative), 2 (byte string), 3 (text string),
+ *   4 (array), 5 (map), 7 (simple values & floats).
+ * - Additional-info lengths: short (0..23), 1-, 2- and 4-byte length forms are
+ *   encoded by the encoder. The decoder understands 8-byte length fields
+ *   (additional-info 27) and will decode them into a JavaScript Number
+ *   (hi * 2**32 + lo) but the encoder intentionally does not emit 8-byte
+ *   integer forms (see 'Not implemented' below).
+ * - Floating point: decoder supports float16/float32/float64. Encoder emits
+ *   float64 for non-integers.
+ * - Guardrails: explicit throws for unsupported types and sizes (e.g. huge
+ *   strings/byte arrays/arrays/maps > 2**32-1, integers larger than 32-bit for
+ *   encoding). DataView out-of-bounds reads are normalized to
+ *   "Unexpected end of data" for clearer errors.
+ *
+ * Not implemented / intentionally out of scope
+ * - Indefinite-length (streaming) containers (indefinite-length arrays,
+ *   maps, byte/text strings) are not supported. Test vectors with streaming
+ *   markers are skipped in the test harness.
+ * - Semantic tags (major type 6) are not interpreted; tagged values are
+ *   skipped in encode-roundtrip tests. Implementing tags should return a
+ *   wrapper object or otherwise surface the tag + value.
+ * - Big integers / bignum handling: this implementation does not return
+ *   BigInt for values outside Number.isSafeInteger nor emit CBOR bignum tags
+ *   (tag 2/3). Decode may parse 8-byte unsigned/negative integers into a
+ *   Number which can overflow JS precision; callers who need accurate bignum
+ *   support should add BigInt decoding and encoder support.
+ * - Encoder does not emit float16/float32 or 8-byte integer (additional-info
+ *   27) forms. It intentionally limits integer encoding to <= 32-bit and
+ *   uses float64 for non-integers to keep the implementation small.
+ *
+ * Guidance for contributors
+ * - To add streaming support, implement indefinite-length decoders that
+ *   concatenate chunks until the break byte (0xff) and update decodeItem
+ *   accordingly.
+ * - To add BigInt/bignum support, change decode paths to return BigInt when
+ *   required, add fixture representation for BigInt in tests, and emit proper
+ *   tag-2/3 bignum encodings or 8-byte integer forms in the encoder.
+ */
+
+/* Reference: CBOR specification (RFC 8949) https://www.rfc-editor.org/rfc/rfc8949.html */
+
 type SimpleValue = boolean | null | undefined;
 
 export type ResultObject = { [key: string]: ResultValue };
