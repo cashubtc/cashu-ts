@@ -704,22 +704,13 @@ Contributions are very welcome.
 If you want to contribute, please open an Issue or a PR.
 Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for more info.
 
-### Versions
+## Versions & releases
 
-Cashu-TS' latest version is major version 3. We are still supporting major verson 2 with patches and critical fixes. While new feature PRs MUST include a feature for version 3 they CAN also include a backport of that feature for version 2. If you decide to write feature code for both versions it must be in two separate PRs.
+This project uses semantic versioning and maintains a `development` branch for the current major (v3) and a `dev-v2` branch for critical fixes to the v2 line. See [DEVELOPER.md](DEVELOPER.md) for the full release process and branch policies.
 
-### Base Branches
+### Quick pointers:
 
-- version 3: If you open a PR, please do so from the `development` branch as the base branch.
-- version 2: If you open a PR, please do so from the `dev-v2` branch as the base branch.
+- Target `development` as the base branch for v3 feature PRs.
+- Target `dev-v2` for v2 patches and critical fixes.
 
-## Release strategy
-
-Features and fixes should be implemented by branching off `development`. Hotfixes can be implemented by branching off a given `tag`. A new release can be created if at least one new feature or fix has been added to the `development` branch. If the release has breaking API changes, the major version must be incremented (X.0.0). If not, the release can increment the minor version (0.X.0). Patches and hotfixes increment the patch version (0.0.X). To create a new release, the following steps must be taken:
-
-1. `git checkout development && git pull` Checkout and pull latest changes from `development`
-2. `npm version <major | minor | patch>` create new release commit & tag
-3. `git push && git push --tags` push commit and tag
-4. Create a new release on github, targeting the newly created tag
-5. The CI will build and deploy to npm, with provenance
-6. `git checkout main && git pull && git merge <tag>` After creating a new version, merge the tag into `main`
+For a fuller developer-focused guide (setup, hooks, release steps and troubleshooting) see [DEVELOPER.md](DEVELOPER.md).
