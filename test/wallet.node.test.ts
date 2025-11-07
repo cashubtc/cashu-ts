@@ -89,6 +89,25 @@ afterAll(() => {
 	server.close();
 });
 
+describe('upgrade warning to v3 in constructor', () => {
+	test('constructor emits upgrade warning', async () => {
+		const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {
+			/* no-op */
+		});
+		const mint = new CashuMint('http://localhost:3338');
+		// Constructing the wallet should trigger the console.warn
+		// eslint-disable-next-line no-new
+		new CashuWallet(mint);
+		expect(warnSpy).toHaveBeenCalled();
+		// ensure message mention: unknowns v3 to avoid false positives
+		const calledArgs = warnSpy.mock.calls.flat();
+		expect(
+			calledArgs.some((a: unknown) => typeof a === 'string' && a.includes('v3 has been released.')),
+		).toBe(true);
+		warnSpy.mockRestore();
+	});
+});
+
 describe('test info', () => {
 	const mintInfoResp = JSON.parse(
 		'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. It uses a FakeWallet, all your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[{"method":"email","info":"contact@me.com"},{"method":"twitter","info":"@me"},{"method":"nostr","info":"npub1337"}],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","icon_url":"https://image.nostr.build/46ee47763c345d2cfa3317f042d332003f498ee281fb42808d47a7d3b9585911.png","time":1731684933,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true},{"method":"bolt11","unit":"usd","description":true},{"method":"bolt11","unit":"eur","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"},{"method":"bolt11","unit":"eur"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"eur","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}',

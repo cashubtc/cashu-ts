@@ -109,6 +109,14 @@ class CashuWallet {
 	) {
 		this.mint = mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
+
+		// Inform consumers that there is a new v3 and they should upgrade.
+		// Keep this log lightweight and safe to run in browser and node environments
+		if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+			console.warn(
+				'cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.',
+			);
+		}
 		let keys: MintKeys[] = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
