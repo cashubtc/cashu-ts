@@ -138,12 +138,16 @@ export class OutputData implements OutputDataLike {
 
 		// Append additional tags if any
 		if (p2pk.additionalTags?.length) {
-			for (const [k] of p2pk.additionalTags) {
+			const normalized = p2pk.additionalTags.map(([k, ...vals], i) => {
+				if (typeof k !== 'string' || !k) {
+					throw new Error(`additionalTags[${i}][0] must be a non empty string`);
+				}
 				if (RESERVED_P2PK_TAGS.has(k)) {
 					throw new Error(`additionalTags must not use reserved key "${k}"`);
 				}
-			}
-			tags.push(...p2pk.additionalTags);
+				return [k, ...vals.map(String)]; // all to strings
+			});
+			tags.push(...normalized);
 		}
 
 		// Construct secret
@@ -155,9 +159,15 @@ export class OutputData implements OutputDataLike {
 				tags,
 			},
 		];
-
-		// blind the message
 		const parsed = JSON.stringify(newSecret);
+
+		// Check secret length, counting Unicode code points
+		// Same semantics as Nutshell python: len(str)
+		const charCount = [...parsed].length;
+		if (charCount > MAX_SECRET_LENGTH) {
+			throw new Error(`Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`);
+		}
+		// blind the message
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
 		if (parsed.length > MAX_SECRET_LENGTH) {
