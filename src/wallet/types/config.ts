@@ -8,6 +8,7 @@ import {
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
 import { type OperationCounters } from '../CounterSource';
+import { SigFlag } from '../../crypto';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
@@ -129,6 +130,7 @@ export type P2PKOptions = {
 	requiredRefundSignatures?: number;
 	additionalTags?: P2PKTag[];
 	blindKeys?: boolean; // default false
+	sigFlag?: SigFlag;
 };
 
 export type P2PKTag = [key: string, ...values: string[]];
