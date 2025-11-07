@@ -1192,6 +1192,17 @@ export type PostRestoreResponse = {
 };
 
 // @public
+export type PreparedSend = {
+    amount: number;
+    fees: number;
+    keysetId: string;
+    inputs: Proof[];
+    sendOutputs: OutputData[];
+    keepOutputs: OutputData[];
+    unselectedProofs: Proof[];
+};
+
+// @public
 export type Proof = {
     id: string;
     amount: number;
@@ -1571,6 +1582,7 @@ export class Wallet {
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
+    completeSend(preparedSend: PreparedSend): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     // @deprecated (undocumented)
@@ -1614,6 +1626,7 @@ export class Wallet {
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
+    prepareSend(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<PreparedSend>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];

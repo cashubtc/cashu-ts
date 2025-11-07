@@ -163,3 +163,37 @@ export type SwapTransaction = {
 	 */
 	sortedIndices: number[];
 };
+
+/**
+ * Includes all data required to complete a send transaction.
+ */
+export type PreparedSend = {
+	/**
+	 * Amount being sent.
+	 */
+	amount: number;
+	/**
+	 * Total fees for the send (inc receiver fees if specified)
+	 */
+	fees: number;
+	/**
+	 * Keyset ID used to prepare the outputs.
+	 */
+	keysetId: string;
+	/**
+	 * Input Proofs for this transaction.
+	 */
+	inputs: Proof[];
+	/**
+	 * Blinding data to construct send (swap) proofs.
+	 */
+	sendOutputs: OutputData[];
+	/**
+	 * Blinding data to construct keep (change) proofs.
+	 */
+	keepOutputs: OutputData[];
+	/**
+	 * Proofs not selected for this transaction (can be returned to storage).
+	 */
+	unselectedProofs: Proof[];
+};

@@ -27,6 +27,7 @@ import {
 	type SendResponse,
 	type RestoreConfig,
 	type SecretsPolicy,
+	type PreparedSend,
 } from './types';
 import {
 	type CounterSource,
@@ -855,7 +856,8 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
-		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+		const { keysetId, includeFees = false } = config || {};
+
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
 			send: this.defaultOutputType(),
@@ -906,6 +908,48 @@ class Wallet {
 			const message = e instanceof Error ? e.message : 'Unknown error';
 			this._logger.debug('ExactMatch offline selection failed.', { e: message });
 		}
+
+		// Prepare and complete the send
+		const txn = await this.prepareSend(amount, proofs, config, outputConfig);
+		return await this.completeSend(txn);
+	}
+
+	/**
+	 * Prepare A Send Transaction.
+	 *
+	 * @remarks
+	 * Allows you to preview fees for a send, get concrete outputs for P2PK SIG_ALL transactions, and
+	 * do any pre-swap tasks (such as marking proofs in-flight etc)
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSend(5, proofs, { includeFees: true });
+	 * const fees = txn.fees;
+	 *
+	 * // Complete transaction
+	 * const result = await wallet.completeSend(txn);
+	 * ```
+	 *
+	 * @param amount Amount to send (receiver gets this net amount).
+	 * @param proofs Array of proofs to split.
+	 * @param config Optional parameters for the swap.
+	 * @returns PreparedSend with swap transaction and metadata.
+	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
+	 */
+	async prepareSend(
+		amount: number,
+		proofs: Proof[],
+		config?: SendConfig,
+		outputConfig?: OutputConfig,
+	): Promise<PreparedSend> {
+		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+
+		// Fallback to policy defaults if no outputConfig
+		outputConfig = outputConfig ?? {
+			send: this.defaultOutputType(),
+			keep: this.defaultOutputType(),
+		};
 
 		// Fetch keys
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -968,8 +1012,46 @@ class Wallet {
 		const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
 		const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
+		// Return PreparedSend
+		return {
+			amount,
+			fees: swapFee,
+			keysetId: keyset.id,
+			inputs: selectedProofs,
+			sendOutputs,
+			keepOutputs,
+			unselectedProofs,
+		} as PreparedSend;
+	}
+
+	/**
+	 * Complete a prepared send transaction.
+	 *
+	 * @remarks
+	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSend(5, proofs, { includeFees: true });
+	 *
+	 * // Complete transaction
+	 * const result = await wallet.completeSend(txn);
+	 * ```
+	 *
+	 * @param preparedSend Output of prepareSend() method.
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async completeSend(preparedSend: PreparedSend): Promise<SendResponse> {
+		// Create swap transaction
+		const swapTransaction = this.createSwapTransaction(
+			preparedSend.inputs,
+			preparedSend.keepOutputs,
+			preparedSend.sendOutputs,
+		);
+		const keyset = this.getKeyset(preparedSend.keysetId);
+
 		// Execute swap
-		const swapTransaction = this.createSwapTransaction(selectedProofs, keepOutputs, sendOutputs);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
@@ -990,15 +1072,15 @@ class Wallet {
 			}
 		});
 		this._logger.debug('SEND COMPLETED', {
-			unselectedProofs: unselectedProofs.map((p) => p.amount),
 			keepProofs: keepProofs.map((p) => p.amount),
 			sendProofs: sendProofs.map((p) => p.amount),
 		});
 		return {
-			keep: [...keepProofs, ...unselectedProofs],
+			keep: [...keepProofs, ...preparedSend.unselectedProofs],
 			send: sendProofs,
 		};
 	}
+
 	/**
 	 * Swap is an alias of send.
 	 */
