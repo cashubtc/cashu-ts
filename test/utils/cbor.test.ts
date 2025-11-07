@@ -1,7 +1,6 @@
 import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils';
+import { hexToBytes } from '@noble/curves/utils';
 import { test, describe, expect } from 'vitest';
-import { Bytes } from '../src/utils/Bytes';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes
 // runtime errors. Load them dynamically inside a Node-only guard below.
@@ -25,7 +24,7 @@ function base64urlDecode(str: string): Uint8Array {
 
 const encoderThrows = [
 	{ name: 'Symbol', decoded: Symbol('x'), throws: /Unsupported type/ },
-	{ name: 'function', decoded: (() => { }) as any, throws: /Unsupported type/ },
+	{ name: 'function', decoded: (() => {}) as any, throws: /Unsupported type/ },
 	{ name: 'BigInt', decoded: BigInt(1) as any, throws: /Unsupported type/ },
 	{ name: 'unsigned integer too large', decoded: 4294967296, throws: /Unsupported integer size/ },
 	{ name: 'negative integer too large', decoded: -4294967297, throws: /Unsupported integer size/ },
@@ -298,6 +297,13 @@ describe('cbor encoder', () => {
 		expect(dec.slice(0, 3)).toBe('aaa');
 	});
 
+	test('encodes max 32 bit unsigned integer and roundtrips', () => {
+		const n = 0xffffffff; // 4294967295
+		const enc = encodeCBOR(n as any);
+		expect(Array.from(enc)).toEqual([0x1a, 0xff, 0xff, 0xff, 0xff]);
+		expect(decodeCBOR(enc)).toBe(n);
+	});
+
 	test.each(encoderThrows)('encoding unsupported $name throws', ({ decoded, throws }) => {
 		expect(() => encodeCBOR(decoded)).toThrow(throws as RegExp);
 	});
@@ -395,7 +401,7 @@ describe('cbor encoder', () => {
 	test('throws when object has >= 2**32 keys (guardrail)', () => {
 		const sentinel = { __huge__: true } as any;
 		const realObjectKeys = Object.keys;
-		(Object.keys as any) = function(obj: any) {
+		(Object.keys as any) = function (obj: any) {
 			if (obj === sentinel) {
 				// return an iterable with a huge length property but no elements to iterate
 				return {
@@ -434,7 +440,7 @@ describe('cbor encoder', () => {
 				return { length: 4294967296 } as any;
 			}
 		}) as any;
-		(globalThis as any).TextEncoder = function() {
+		(globalThis as any).TextEncoder = function () {
 			return { encode: (s: string) => ({ length: 4294967296 }) as any };
 		};
 		try {
@@ -586,7 +592,7 @@ describe('CBOR Test Vectors', () => {
 			if ((majorType === 0 || majorType === 1) && additionalInfo === 27) {
 				skipEncode = true;
 			}
-		} catch { }
+		} catch {}
 
 		// Always attempt decode to surface decode-time errors for every vector
 		const decodedResult = decodeCBOR(Buffer.from(hex, 'hex'));

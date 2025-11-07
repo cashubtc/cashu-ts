@@ -99,9 +99,15 @@ function encodeUnsigned(value: number, buffer: number[]) {
 	} else if (value < 256) {
 		buffer.push(0x18, value);
 	} else if (value < 65536) {
-		buffer.push(0x19, value >> 8, value & 0xff);
+		buffer.push(0x19, (value >>> 8) & 0xff, value & 0xff);
 	} else if (value < 4294967296) {
-		buffer.push(0x1a, value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
+		buffer.push(
+			0x1a,
+			(value >>> 24) & 0xff,
+			(value >>> 16) & 0xff,
+			(value >>> 8) & 0xff,
+			value & 0xff,
+		);
 	} else {
 		throw new Error('Unsupported integer size');
 	}
@@ -113,15 +119,15 @@ function encodeSigned(value: number, buffer: number[]) {
 	if (unsigned < 24) {
 		buffer.push(0x20 | unsigned);
 	} else if (unsigned < 256) {
-		buffer.push(0x38, unsigned);
+		buffer.push(0x38, unsigned & 0xff);
 	} else if (unsigned < 65536) {
-		buffer.push(0x39, unsigned >> 8, unsigned & 0xff);
+		buffer.push(0x39, (unsigned >>> 8) & 0xff, unsigned & 0xff);
 	} else if (unsigned < 4294967296) {
 		buffer.push(
 			0x3a,
-			unsigned >> 24,
-			(unsigned >> 16) & 0xff,
-			(unsigned >> 8) & 0xff,
+			(unsigned >>> 24) & 0xff,
+			(unsigned >>> 16) & 0xff,
+			(unsigned >>> 8) & 0xff,
 			unsigned & 0xff,
 		);
 	} else {
@@ -165,9 +171,9 @@ function encodeByteString(value: Uint8Array, buffer: number[]) {
 	} else if (length < 4294967296) {
 		buffer.push(
 			0x5a,
-			(length >> 24) & 0xff,
-			(length >> 16) & 0xff,
-			(length >> 8) & 0xff,
+			(length >>> 24) & 0xff,
+			(length >>> 16) & 0xff,
+			(length >>> 8) & 0xff,
 			length & 0xff,
 		);
 	} else {
@@ -188,13 +194,13 @@ function encodeString(value: string, buffer: number[]) {
 	} else if (length < 256) {
 		buffer.push(0x78, length);
 	} else if (length < 65536) {
-		buffer.push(0x79, (length >> 8) & 0xff, length & 0xff);
+		buffer.push(0x79, (length >>> 8) & 0xff, length & 0xff);
 	} else if (length < 4294967296) {
 		buffer.push(
 			0x7a,
-			(length >> 24) & 0xff,
-			(length >> 16) & 0xff,
-			(length >> 8) & 0xff,
+			(length >>> 24) & 0xff,
+			(length >>> 16) & 0xff,
+			(length >>> 8) & 0xff,
 			length & 0xff,
 		);
 	} else {
@@ -213,7 +219,7 @@ function encodeArray(value: unknown[], buffer: number[]) {
 	} else if (length < 256) {
 		buffer.push(0x98, length);
 	} else if (length < 65536) {
-		buffer.push(0x99, length >> 8, length & 0xff);
+		buffer.push(0x99, (length >>> 8) & 0xff, length & 0xff);
 	} else {
 		throw new Error('Unsupported array length');
 	}
