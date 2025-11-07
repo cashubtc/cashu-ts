@@ -30,6 +30,7 @@ import { bytesToNumber, sumProofs } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
+import { NULL_LOGGER } from '../../src/logger';
 
 injectWebSocketImpl(WebSocket);
 
@@ -286,6 +287,13 @@ describe('test wallet init', () => {
 		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
 		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
 		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
+	});
+
+	test('should return getters', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+		expect(wallet.logger).toBe(NULL_LOGGER);
+		expect(wallet.unit).toBe('sat');
 	});
 
 	test('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {

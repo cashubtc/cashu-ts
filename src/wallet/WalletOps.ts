@@ -238,7 +238,7 @@ export class SendBuilder {
 	/**
 	 * Prepare the send or swap.
 	 *
-	 * @returns A PrepareSend containing inputs, outputs, amount, fee and unselectedProofs
+	 * @returns A PrepareSend containing inputs, outputs, amount, fee and unselectedProofs.
 	 */
 	async prepare() {
 		// Construct an OutputConfig using default send if no customizations

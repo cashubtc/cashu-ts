@@ -19,6 +19,9 @@ export type ApiError = {
     detail?: string;
 };
 
+// @public (undocumented)
+export function assertSigAllInputs(inputs: Proof[]): void;
+
 // @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
@@ -1076,6 +1079,8 @@ export class P2PKBuilder {
     // (undocumented)
     requireRefundSignatures(n: number): this;
     // (undocumented)
+    sigAll(): this;
+    // (undocumented)
     toOptions(): P2PKOptions;
 }
 
@@ -1088,6 +1093,7 @@ export type P2PKOptions = {
     requiredRefundSignatures?: number;
     additionalTags?: P2PKTag[];
     blindKeys?: boolean;
+    sigFlag?: SigFlag;
 };
 
 // @public (undocumented)
@@ -1349,6 +1355,7 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    prepare(): Promise<PreparedSend>;
     // (undocumented)
     proofsWeHave(p: Proof[]): this;
     run(): Promise<SendResponse>;
@@ -1436,10 +1443,10 @@ export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
-export const signP2PKProof: (proof: Proof, privateKey: string) => Proof;
+export const signP2PKProof: (proof: Proof, privateKey: string, message?: string) => Proof;
 
 // @public
-export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger) => Proof[];
+export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger, message?: string) => Proof[];
 
 // @public
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
@@ -1582,7 +1589,7 @@ export class Wallet {
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
-    completeSend(preparedSend: PreparedSend): Promise<SendResponse>;
+    completeSend(preparedSend: PreparedSend, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     // @deprecated (undocumented)
@@ -1635,7 +1642,7 @@ export class Wallet {
     selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
-    signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[];
+    signP2PKProofs(proofs: Proof[], privkey: string | string[], outputData?: OutputDataLike[]): Proof[];
     readonly swap: (amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {

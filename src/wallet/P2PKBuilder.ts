@@ -1,6 +1,6 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 import { type P2PKOptions, type P2PKTag } from './types/config';
-import { SigFlag } from '../crypto';
+import { type SigFlag } from '../crypto';
 
 // Accept 33 byte compressed (02|03...), or 32 byte x-only,
 // normalised to lowercase 33 byte with 02 prefix for x only
@@ -112,7 +112,7 @@ export class P2PKBuilder {
 			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
 			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
 			...(this._blindKeys ? { blindKeys: true } : {}),
-			...(this.sigFlag == 'SIG_ALL' ? {sigFlag: 'SIG_ALL'} : {}),
+			...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
 		};
 
 		// Ensure the secret is valid (not too long etc)
@@ -133,7 +133,7 @@ export class P2PKBuilder {
 			b.requireRefundSignatures(opts.requiredRefundSignatures);
 		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
 		if (opts.blindKeys) b.blindKeys();
-		if (opts.sigFlag == 'SIG_ALL' ) b.sigAll();
+		if (opts.sigFlag == 'SIG_ALL') b.sigAll();
 		return b;
 	}
 }

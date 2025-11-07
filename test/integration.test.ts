@@ -294,6 +294,42 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
+	test('send and receive p2pk with SIG_ALL', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		const privKeyBob = secp256k1.utils.randomSecretKey();
+		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
+		console.log('pubKeyAlice:', pubKeyAlice);
+		console.log('pubKeyBob:', pubKeyBob);
+
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		const mintedProofs = await wallet.mintProofs(16, request.quote);
+
+		// Send them P2PK locked to Bob
+		const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
+		const { send } = await wallet.ops.send(11, mintedProofs).asP2PK(p2pk).run();
+		console.log('send', send);
+		// expectNUT10SecretDataToEqual(send, pubKeyBob);
+		// const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+
+		// // Try and receive them with Alice's secret key (should fail)
+		// const result = await wallet
+		// 	.completeSend(txn, bytesToHex(privKeyAlice))
+		// 	.catch((e) => e);
+		// expect(result).toEqual(new MintOperationError(0, 'Witness is missing for p2pk signature'));
+
+		// // Try and receive them with Bob's secret key (should suceed)
+		// const {send} = await wallet.completeSend(txn, bytesToHex(privKeyBob));
+		// expect(
+		// 	send.reduce((curr, acc) => {
+		// 		return curr + acc.amount;
+		// 	}, 0),
+		// ).toBe(63);
+	});
 	test('send and receive p2pk with additional tags', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
@@ -411,7 +447,6 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
-
 	test('mint and melt p2pk', async () => {
 		const invoice =
 			'lnbc20u1p5tnrdtsp5xaus66jztyj4f4m9wuza7ay9994d5dals6dluvw80dduhhulgxvspp5gsdp48uz9x20etle8j7muweujzxd2w4ay2v6cwzwjy7pff44r4gqhp5jujtt4hgd57c5hskstzkjkxqtfmctfvpfc3wmt3h42a9f2p9sqcsxq9z0rgqcqpnrzjqvxr759n8jl5226n47zw6325pyffxqlpyrjh9ztswvnglhrmtcsfzrw8mqqqf2cqqqqqqqlgqqqqzhsqjq9qxpqysgq2rtnpkqzmwmuf6cw653s63552qf0hgst6xzdywkgekhz836ayrz572cm72r7ejj7w0ktgldlwfu33fpr9dxywx5wqy4tte7smpa9q4gqaaydvv';

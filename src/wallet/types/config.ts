@@ -8,7 +8,7 @@ import {
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
 import { type OperationCounters } from '../CounterSource';
-import { SigFlag } from '../../crypto';
+import { type SigFlag } from '../../crypto';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 

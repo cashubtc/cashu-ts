@@ -1070,6 +1070,7 @@ class Wallet {
 			preparedSend.keepOutputs,
 			preparedSend.sendOutputs,
 		);
+		console.log('swap payload', swapTransaction.payload);
 
 		// Execute swap
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
@@ -1160,7 +1161,7 @@ class Wallet {
 		if (isP2PKSigAll(proofs)) {
 			this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
 			assertSigAllInputs(proofs);
-			const message = buildP2PKSigAllMessage(proofs, outputData!);
+			const message = buildP2PKSigAllMessage(proofs, outputData);
 			return signP2PKProofs(proofs.slice(0, 1), privkey, this._logger, message);
 		}
 		return signP2PKProofs(proofs, privkey, this._logger);
