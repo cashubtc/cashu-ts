@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "Running pre-push: full PR tasks (lint, format, api:update, tests)"
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm not found in PATH. Install Node.js/npm before pushing." >&2
+  exit 1
+fi
+
+echo "-> npm run prtasks"
+if ! npm run prtasks; then
+  echo "pre-push checks failed. Push aborted." >&2
+  exit 1
+fi
+
+echo "Pre-push checks passed."

@@ -702,6 +702,7 @@ Use the builder hooks for transaction-local callbacks, and WalletEvents for app-
 Contributions are very welcome.
 
 If you want to contribute, please open an Issue or a PR.
+Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for more info.
 
 ### Versions
 
