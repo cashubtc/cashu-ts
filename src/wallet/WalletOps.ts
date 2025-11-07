@@ -236,6 +236,20 @@ export class SendBuilder {
 	}
 
 	/**
+	 * Prepare the send or swap.
+	 *
+	 * @returns A PrepareSend containing inputs, outputs, amount, fee and unselectedProofs
+	 */
+	async prepare() {
+		// Construct an OutputConfig using default send if no customizations
+		const outputConfig: OutputConfig = {
+			send: this.sendOT ?? this.wallet.defaultOutputType(),
+			...(this.keepOT ? { keep: this.keepOT } : {}),
+		};
+		return this.wallet.prepareSend(this.amount, this.proofs, this.config, outputConfig);
+	}
+
+	/**
 	 * Execute the send or swap.
 	 *
 	 * @returns The split result with kept and sent proofs.

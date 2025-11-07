@@ -36,7 +36,14 @@ import {
 	type CounterRange,
 } from './CounterSource';
 
-import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
+import {
+	signMintQuote,
+	signP2PKProofs,
+	hashToCurve,
+	isP2PKSigAll,
+	buildP2PKSigAllMessage,
+	assertSigAllInputs,
+} from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
 import { KeyChain } from './KeyChain';
@@ -662,13 +669,15 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Sort ASC by amount for privacy, but keep indices to return order afterwards
+		// But ONLY if the transaction is NOT SIG_ALL (as order is fixed for signing)
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
-		const indices = mergedBlindingData
-			.map((_, i) => i)
-			.sort(
+		const indices = mergedBlindingData.map((_, i) => i);
+		if (!isP2PKSigAll(inputs)) {
+			indices.sort(
 				(a, b) =>
 					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
 			);
+		}
 		const keepVector: boolean[] = [
 			...Array.from({ length: keepOutputs.length }, () => true),
 			...Array.from({ length: sendOutputs.length }, () => false),
@@ -1040,21 +1049,33 @@ class Wallet {
 	 * ```
 	 *
 	 * @param preparedSend Output of prepareSend() method.
+	 * @param privkey The private key(s) for signing.
 	 * @returns SendResponse with keep/send proofs.
 	 */
-	async completeSend(preparedSend: PreparedSend): Promise<SendResponse> {
+	async completeSend(
+		preparedSend: PreparedSend,
+		privkey?: string | string[],
+	): Promise<SendResponse> {
+		// Sign proofs if needed
+		if (privkey) {
+			this.signP2PKProofs(preparedSend.inputs, privkey, [
+				...preparedSend.keepOutputs,
+				...preparedSend.sendOutputs,
+			]);
+		}
+
 		// Create swap transaction
 		const swapTransaction = this.createSwapTransaction(
 			preparedSend.inputs,
 			preparedSend.keepOutputs,
 			preparedSend.sendOutputs,
 		);
-		const keyset = this.getKeyset(preparedSend.keysetId);
 
 		// Execute swap
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
+		const keyset = this.getKeyset(preparedSend.keysetId);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const reorderedProofs = Array(swapProofs.length);
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
@@ -1127,11 +1148,22 @@ class Wallet {
 	 * Call this method before operations like send if the proofs are P2PK-locked and need unlocking.
 	 * This is a public wrapper for signing.
 	 * @param proofs The proofs to sign.
-	 * @param privkey The private key for signing.
+	 * @param privkey The private key(s) for signing.
+	 * @param outputData Optional. For signing of SIG_ALL transactions.
 	 * @returns Signed proofs.
 	 */
-	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
-		return signP2PKProofs(proofs, privkey);
+	signP2PKProofs(
+		proofs: Proof[],
+		privkey: string | string[],
+		outputData?: OutputDataLike[],
+	): Proof[] {
+		if (isP2PKSigAll(proofs)) {
+			this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
+			assertSigAllInputs(proofs);
+			const message = buildP2PKSigAllMessage(proofs, outputData!);
+			return signP2PKProofs(proofs.slice(0, 1), privkey, this._logger, message);
+		}
+		return signP2PKProofs(proofs, privkey, this._logger);
 	}
 
 	/**
