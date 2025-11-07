@@ -85,6 +85,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for the sent proofs.
 	 *
@@ -95,6 +96,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked outputs for the sent proofs.
 	 *
@@ -105,6 +107,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for the sent proofs.
 	 *
@@ -115,6 +118,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for the sent proofs.
 	 *
@@ -135,6 +139,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for change.
 	 *
@@ -145,6 +150,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked change (NUT 11).
 	 *
@@ -155,6 +161,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for change.
 	 *
@@ -165,6 +172,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for change.
 	 *
@@ -184,6 +192,7 @@ export class SendBuilder {
 		this.config.includeFees = on;
 		return this;
 	}
+
 	/**
 	 * Use a specific keyset for the operation.
 	 *
@@ -192,7 +201,9 @@ export class SendBuilder {
 	keyset(id: string) {
 		this.config.keysetId = id;
 		return this;
-	} /**
+	}
+
+	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
 	 * @remarks
@@ -203,6 +214,7 @@ export class SendBuilder {
 		this.config.proofsWeHave = p;
 		return this;
 	}
+
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
@@ -212,6 +224,7 @@ export class SendBuilder {
 		this.config.onCountersReserved = cb;
 		return this;
 	}
+
 	/**
 	 * Force a pure offline, exact match selection. No mint calls are made. If an exact match cannot
 	 * be found, this throws.
@@ -323,6 +336,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for the received proofs.
 	 *
@@ -335,6 +349,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked outputs for the received proofs.
 	 *
@@ -347,6 +362,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for received proofs.
 	 *
@@ -359,6 +375,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for received proofs.
 	 *
@@ -378,6 +395,7 @@ export class ReceiveBuilder {
 		this.config.keysetId = id;
 		return this;
 	}
+
 	/**
 	 * Require all incoming proofs to have a valid DLEQ for the selected keyset.
 	 *
@@ -387,6 +405,7 @@ export class ReceiveBuilder {
 		this.config.requireDleq = on;
 		return this;
 	}
+
 	/**
 	 * Private key used to sign P2PK locked incoming proofs.
 	 *
@@ -396,6 +415,7 @@ export class ReceiveBuilder {
 		this.config.privkey = k;
 		return this;
 	}
+
 	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
@@ -407,6 +427,7 @@ export class ReceiveBuilder {
 		this.config.proofsWeHave = p;
 		return this;
 	}
+
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
@@ -416,7 +437,6 @@ export class ReceiveBuilder {
 		this.config.onCountersReserved = cb;
 		return this;
 	}
-
 	async run() {
 		return this.wallet.receive(this.token, this.config, this.outputType);
 	}
@@ -467,6 +487,7 @@ export class MintBuilder<
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for the minted proofs.
 	 *
@@ -479,6 +500,7 @@ export class MintBuilder<
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked outputs for the minted proofs.
 	 *
@@ -491,6 +513,7 @@ export class MintBuilder<
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for minted proofs.
 	 *
@@ -503,6 +526,7 @@ export class MintBuilder<
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for minted proofs.
 	 *
@@ -522,6 +546,7 @@ export class MintBuilder<
 		this.config.keysetId = id;
 		return this;
 	}
+
 	/**
 	 * Private key to sign locked mint quotes.
 	 *
@@ -533,6 +558,7 @@ export class MintBuilder<
 		this.config.privkey = k;
 		return this as MintBuilder<M, true>;
 	}
+
 	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
@@ -544,6 +570,7 @@ export class MintBuilder<
 		this.config.proofsWeHave = p;
 		return this;
 	}
+
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
