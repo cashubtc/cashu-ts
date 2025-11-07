@@ -44,11 +44,11 @@ jobs:
       - name: Pull mint image
         run: docker pull "${{ inputs.image }}"
 
-      - name: Ensure old container is removed
-        run: docker rm -f "${{ inputs.container_name }}" || true
-
       - name: Start mint
         run: |
+          # This workflow expects `inputs.envs` to be a newline-delimited list of KEY=VALUE
+          # pairs (the format used in integration-mint-cdk.yml). We deliberately do not
+          # support JSON here to keep the runner simple and avoid jq dependency.
           raw_envs='${{ inputs.envs }}'
           container_name='${{ inputs.container_name }}'
           cmd='${{ inputs.cmd }}'
@@ -56,15 +56,11 @@ jobs:
           env_file=$(mktemp)
           echo "Writing envs to $env_file"
           if [ -n "$raw_envs" ]; then
-            if echo "$raw_envs" | jq -e . >/dev/null 2>&1; then
-              # JSON object -> KEY=VALUE lines
-              echo "$raw_envs" | jq -r 'to_entries[] | "\(.key)=\(.value|tostring)"' > "$env_file"
-            else
-              # treat as raw lines (preserve spaces)
-              echo "$raw_envs" | sed 's/\r$//' > "$env_file"
-            fi
+            # Treat the input as already KEY=VALUE lines; preserve spaces in values.
+            echo "$raw_envs" | sed 's/\r$//' > "$env_file"
           fi
-          echo "Env file contents:" && sed -n '1,200p' "$env_file" || true
+          # Do not print env-file contents to logs (may contain secrets).
+          echo "Env file written to $env_file"
           # Run docker with --env-file to safely pass variables (handles spaces)
           if [ -n "$cmd" ]; then
             echo "Starting container with command: $cmd"
