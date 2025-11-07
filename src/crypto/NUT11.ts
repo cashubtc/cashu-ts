@@ -4,6 +4,7 @@ import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';
 import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
+import { type OutputDataLike } from '../model/OutputData';
 
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
@@ -108,11 +109,7 @@ export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
 	// See if any of the signatures belong to this pubkey. We need to do this
 	// as Schnorr signatures are non-deterministic (see: signP2PKSecret)
 	return signatures.some((sig) => {
-		try {
-			return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
-		} catch {
-			return false; // Invalid signature, treat as not signed
-		}
+		return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
 	});
 };
 
@@ -254,35 +251,30 @@ export const getP2PKWitnessSignatures = (witness: string | P2PKWitness | undefin
  * @param proofs - An array of proofs to sign.
  * @param privateKey - A single private key or array of private keys.
  * @param logger - Optional logger (default: NULL_LOGGER)
+ * @param message - Optional. The message to sign (for SIG_ALL)
  * @returns Signed proofs.
- * @throws If SIG_ALL proofs detected, and on general errors.
+ * @throws On general errors.
  */
 export const signP2PKProofs = (
 	proofs: Proof[],
 	privateKey: string | string[],
 	logger: Logger = NULL_LOGGER,
+	message?: string,
 ): Proof[] => {
 	return proofs.map((proof, index) => {
-		try {
-			const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKey, proof);
-			let signedProof = proof;
-			for (const priv of privateKeys) {
-				try {
-					signedProof = signP2PKProof(signedProof, priv);
-				} catch (error: unknown) {
-					// Log signature failures only - these are not fatal, just informational
-					// as not all keys will be needed for some proofs (eg P2BK, NIP60 etc)
-					const message = error instanceof Error ? error.message : 'Unknown error';
-					logger.warn(`Proof #${index + 1}: ${message}`);
-				}
+		const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKey, proof);
+		let signedProof = proof;
+		for (const priv of privateKeys) {
+			try {
+				signedProof = signP2PKProof(signedProof, priv, message);
+			} catch (error: unknown) {
+				// Log signature failures only - these are not fatal, just informational
+				// as not all keys will be needed for some proofs (eg P2BK, NIP60 etc)
+				const message = error instanceof Error ? error.message : 'Unknown error';
+				logger.warn(`Proof #${index + 1}: ${message}`);
 			}
-			return signedProof;
-		} catch (error: unknown) {
-			// General errors (eg from deriveP2BKSecretKey)
-			const message = error instanceof Error ? error.message : 'Unknown error';
-			logger.error(`Proof #${index + 1}: ${message}`);
-			throw new Error(`Failed signing proof #${index + 1}: ${message}`);
 		}
+		return signedProof;
 	});
 };
 
@@ -293,40 +285,32 @@ export const signP2PKProofs = (
  * Will only sign if the proof requires a signature from the key.
  * @param proof - A proof to sign.
  * @param privateKey - A single private key.
+ * @param message - Optional. The message to sign (for SIG_ALL)
  * @returns Signed proofs.
  * @throws Error if signature is not required or proof is already signed.
  */
-export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
-	// Check secret is P2PK
-	const parsed: Secret = parseP2PKSecret(proof.secret);
-	if (parsed[0] !== 'P2PK') {
-		throw new Error('not a P2PK secret');
-	}
-	if (getP2PKSigFlag(proof.secret) == 'SIG_ALL') {
-		throw new Error('Cannot sign - SIG_ALL proof detected.');
-	}
+export const signP2PKProof = (proof: Proof, privateKey: string, message?: string): Proof => {
+	const secret: Secret = validateP2PKSecret(proof.secret);
+	message = message ?? proof.secret; // default message is secret
+
 	// Check if the private key is required to sign by checking its
 	// X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
 	// NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
 	const pubkey = bytesToHex(schnorr.getPublicKey(privateKey)); // x-only
-	const witnesses = getP2PKExpectedKWitnessPubkeys(parsed);
+	const witnesses = getP2PKExpectedKWitnessPubkeys(secret);
 	if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
 		throw new Error(`Signature not required from [02|03]${pubkey}`);
 	}
 	// Check if the public key has already signed
 	const signatures = getP2PKWitnessSignatures(proof.witness);
 	const alreadySigned = signatures.some((sig) => {
-		try {
-			return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
-		} catch {
-			return false; // Invalid signature, treat as not signed
-		}
+		return verifyP2PKSecretSignature(sig, message, pubkey);
 	});
 	if (alreadySigned) {
 		throw new Error(`Proof already signed by [02|03]${pubkey}`);
 	}
 	// Add new signature
-	const signature = signP2PKSecret(proof.secret, privateKey);
+	const signature = signP2PKSecret(message, privateKey);
 	return { ...proof, witness: { signatures: [...signatures, signature] } };
 };
 
@@ -334,14 +318,13 @@ export const verifyP2PKSig = (proof: Proof): boolean => {
 	if (!proof.witness) {
 		throw new Error('could not verify signature, no witness provided');
 	}
-
-	const parsedSecret: Secret = parseP2PKSecret(proof.secret);
-	const witnesses = getP2PKExpectedKWitnessPubkeys(parsedSecret);
+	const secret: Secret = parseP2PKSecret(proof.secret);
+	const witnesses = getP2PKExpectedKWitnessPubkeys(secret);
 	if (!witnesses.length) {
 		throw new Error('no signatures required, proof is unlocked');
 	}
 	let signatories = 0;
-	const requiredSigs = getP2PKNSigs(parsedSecret);
+	const requiredSigs = getP2PKNSigs(secret);
 	const signatures = getP2PKWitnessSignatures(proof.witness);
 	// Loop through witnesses to see if any of the signatures belong to them.
 	// We need to do this as Schnorr signatures are non-deterministic
@@ -349,11 +332,7 @@ export const verifyP2PKSig = (proof: Proof): boolean => {
 	// not the number of valid signatures
 	for (const pubkey of witnesses) {
 		const hasSigned = signatures.some((sig) => {
-			try {
-				return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
-			} catch {
-				return false; // Invalid signature, treat as not signed
-			}
+			return verifyP2PKSecretSignature(sig, proof.secret, pubkey);
 		});
 		if (hasSigned) {
 			signatories++;
@@ -419,21 +398,39 @@ export function assertSigAllInputs(inputs: Proof[]): void {
  * @remarks
  * Melt transactions MUST include the quoteId.
  * @param inputs Array of Proofs.
- * @param outputs Array of blind message / amounts.
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
  * @param quoteId Optional. Quote id for Melt transactions.
  * @internal
  */
 export function buildP2PKSigAllMessage(
 	inputs: Proof[],
-	outputs: Array<{ amount: number; B_: string }>,
+	outputs: OutputDataLike[],
 	quoteId?: string,
 ): string {
 	const parts: string[] = [];
 	// Concat inputs: secret_0 || C_0 ...
 	for (const p of inputs) parts.push(p.secret, p.C);
 	// Concat outputs: amount_0 ||  B_0 ...
-	for (const o of outputs) parts.push(String(o.amount), o.B_);
+	for (const o of outputs) parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
 	// Add quoteId for melts
 	if (quoteId) parts.push(quoteId);
 	return parts.join('');
+}
+
+/**
+ * Check if proofs are SIG_ALL.
+ *
+ * @remarks
+ * Returns true if ANY proof has SIG_ALL, false otherwise.
+ * @param inputs Array of Proofs.
+ * @internal
+ */
+export function isP2PKSigAll(inputs: Proof[]): boolean {
+	return inputs.some((p) => {
+		try {
+			return getP2PKSigFlag(p.secret) === 'SIG_ALL';
+		} catch {
+			return false;
+		}
+	});
 }
