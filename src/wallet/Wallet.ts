@@ -1058,7 +1058,7 @@ class Wallet {
 	): Promise<SendResponse> {
 		// Sign proofs if needed
 		if (privkey) {
-			this.signP2PKProofs(preparedSend.inputs, privkey, [
+			preparedSend.inputs = this.signP2PKProofs(preparedSend.inputs, privkey, [
 				...preparedSend.keepOutputs,
 				...preparedSend.sendOutputs,
 			]);
@@ -1070,7 +1070,6 @@ class Wallet {
 			preparedSend.keepOutputs,
 			preparedSend.sendOutputs,
 		);
-		console.log('swap payload', swapTransaction.payload);
 
 		// Execute swap
 		const { signatures } = await this.mint.swap(swapTransaction.payload);

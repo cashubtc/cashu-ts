@@ -1356,7 +1356,6 @@ export class SendBuilder {
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<PreparedSend>;
-    // (undocumented)
     proofsWeHave(p: Proof[]): this;
     run(): Promise<SendResponse>;
 }

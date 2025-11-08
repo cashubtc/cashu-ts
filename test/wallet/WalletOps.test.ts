@@ -12,7 +12,7 @@ import type {
 	MintProofsConfig,
 	SendResponse,
 	MeltProofsConfig,
-    PreparedSend,
+	PreparedSend,
 } from '../../src/wallet/types';
 import type {
 	MeltQuoteResponse,
@@ -79,7 +79,15 @@ class MockWallet {
 	defaultOutputType: () => OutputType = vi.fn(() => ({ type: 'random' as const }));
 
 	send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
-	prepareSend: Mock<PrepareFn> = vi.fn<PrepareFn>(async () => ({ amount: 16, fees: 1, keysetId: '123', inputs: [], keepOutputs: [], sendOutputs: [], unselectedProofs: [] }));
+	prepareSend: Mock<PrepareFn> = vi.fn<PrepareFn>(async () => ({
+		amount: 16,
+		fees: 1,
+		keysetId: '123',
+		inputs: [],
+		keepOutputs: [],
+		sendOutputs: [],
+		unselectedProofs: [],
+	}));
 	receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
 	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
 	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
