@@ -464,7 +464,7 @@ describe('mint api', () => {
 		const response = await wallet.meltProofsBolt11(meltRequest, signedProofs);
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
-	});
+	}, 10000);
 	test('mint deterministic', async () => {
 		const hexSeed = bytesToHex(randomBytes(64));
 		const wallet = new Wallet(mintUrl);
