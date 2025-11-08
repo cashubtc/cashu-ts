@@ -294,37 +294,37 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
-	// test('send and receive p2pk with SIG_ALL', async () => {
-	// 	const wallet = new Wallet(mintUrl, { unit });
-	// 	await wallet.loadMint();
+	test('send and receive p2pk with SIG_ALL', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
 
-	// 	const privKeyAlice = secp256k1.utils.randomSecretKey();
-	// 	const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
-	// 	const privKeyBob = secp256k1.utils.randomSecretKey();
-	// 	const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
-	// 	console.log('pubKeyAlice:', pubKeyAlice);
-	// 	console.log('pubKeyBob:', pubKeyBob);
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		const privKeyBob = secp256k1.utils.randomSecretKey();
+		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
+		console.log('pubKeyAlice:', pubKeyAlice);
+		console.log('pubKeyBob:', pubKeyBob);
 
-	// 	// Mint some proofs
-	// 	const request = await wallet.createMintQuoteBolt11(128);
-	// 	const mintedProofs = await wallet.mintProofs(128, request.quote);
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
-	// 	// Send them P2PK locked to Bob
-	// 	const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
-	// 	const { send } = await wallet.ops.send(65, mintedProofs).asP2PK(p2pk).run();
-	// 	console.log('send', send);
-	// 	expectNUT10SecretDataToEqual(send, pubKeyBob);
+		// Send them P2PK locked to Bob
+		const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).includeFees().run();
+		console.log('send', send);
+		expectNUT10SecretDataToEqual(send, pubKeyBob);
 
-	// 	// Try and receive them with Bob's secret key (should suceed)
-	// 	const txn = await wallet.prepareSend(11, send);
-	// 	const {send: receive} = await wallet.completeSend(txn, bytesToHex(privKeyBob));
-	// 	console.log('receive', receive);
-	// 	expect(
-	// 		receive.reduce((curr, acc) => {
-	// 			return curr + acc.amount;
-	// 		}, 0),
-	// 	).toBe(63);
-	// });
+		// Try and receive them with Bob's secret key (should suceed)
+		const txn = await wallet.prepareSend(64, send);
+		const { send: receive } = await wallet.completeSend(txn, bytesToHex(privKeyBob));
+		console.log('receive', receive);
+		expect(
+			receive.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(64);
+	});
 	test('send and receive p2pk with additional tags', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();

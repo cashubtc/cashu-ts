@@ -409,11 +409,79 @@ export function buildP2PKSigAllMessage(
 ): string {
 	const parts: string[] = [];
 	// Concat inputs: secret_0 || C_0 ...
-	for (const p of inputs) parts.push(p.secret, p.C);
+	for (const p of inputs) {
+		parts.push(p.secret, p.C);
+	}
 	// Concat outputs: amount_0 ||  B_0 ...
-	for (const o of outputs) parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
+	for (const o of outputs) {
+		parts.push(String(o.blindedMessage.amount), o.blindedMessage.B_);
+	}
 	// Add quoteId for melts
-	if (quoteId) parts.push(quoteId);
+	if (quoteId) {
+		parts.push(quoteId);
+	}
+	return parts.join('');
+}
+
+/**
+ * Message aggregation for SIG_ALL (interim format).
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId.
+ * @param inputs Array of Proofs.
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildInterimP2PKSigAllMessage(
+	inputs: Proof[],
+	outputs: OutputDataLike[],
+	quoteId?: string,
+): string {
+	const parts: string[] = [];
+	// Concat inputs: secret_0 || C_0 ...
+	for (const p of inputs) {
+		parts.push(p.secret, p.C);
+	}
+	// Concat outputs: amount_0 || id_0 || B_0 ...
+	for (const o of outputs) {
+		parts.push(String(o.blindedMessage.amount), o.blindedMessage.id, o.blindedMessage.B_);
+	}
+	// Add quoteId for melts
+	if (quoteId) {
+		parts.push(quoteId);
+	}
+	return parts.join('');
+}
+
+/**
+ * Message aggregation for SIG_ALL (legacy format).
+ *
+ * @remarks
+ * Melt transactions MUST include the quoteId.
+ * @param inputs Array of Proofs.
+ * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
+ * @param quoteId Optional. Quote id for Melt transactions.
+ * @internal
+ */
+export function buildLegacyP2PKSigAllMessage(
+	inputs: Proof[],
+	outputs: OutputDataLike[],
+	quoteId?: string,
+): string {
+	const parts: string[] = [];
+	// Concat inputs: secret_0 ...
+	for (const p of inputs) {
+		parts.push(p.secret);
+	}
+	// Concat outputs: B_0 ...
+	for (const o of outputs) {
+		parts.push(o.blindedMessage.B_);
+	}
+	// Add quoteId for melts
+	if (quoteId) {
+		parts.push(quoteId);
+	}
 	return parts.join('');
 }
 

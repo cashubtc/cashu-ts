@@ -38,11 +38,13 @@ import {
 
 import {
 	signMintQuote,
-	signP2PKProofs,
+	signP2PKProofs as cryptoSignP2PKProofs,
 	hashToCurve,
 	isP2PKSigAll,
 	buildP2PKSigAllMessage,
 	assertSigAllInputs,
+	buildLegacyP2PKSigAllMessage,
+	buildInterimP2PKSigAllMessage,
 } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
@@ -1157,13 +1159,30 @@ class Wallet {
 		privkey: string | string[],
 		outputData?: OutputDataLike[],
 	): Proof[] {
-		if (isP2PKSigAll(proofs)) {
-			this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
-			assertSigAllInputs(proofs);
-			const message = buildP2PKSigAllMessage(proofs, outputData);
-			return signP2PKProofs(proofs.slice(0, 1), privkey, this._logger, message);
+		// Normal case, sign everything as usual
+		if (!isP2PKSigAll(proofs)) {
+			return cryptoSignP2PKProofs(proofs, privkey, this._logger);
 		}
-		return signP2PKProofs(proofs, privkey, this._logger);
+
+		// Ensure SIG_ALL conditions are met
+		this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
+		assertSigAllInputs(proofs);
+
+		// SIG_ALL is in flux currently, so let's generate all known message formats
+		// and sign the first proof only against each message...
+		const [first, ...rest] = proofs;
+		let signedFirst = first;
+		const messages = [
+			buildLegacyP2PKSigAllMessage(proofs, outputData),
+			buildInterimP2PKSigAllMessage(proofs, outputData),
+			buildP2PKSigAllMessage(proofs, outputData),
+		];
+		messages.map(
+			(msg) => (signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0]),
+		);
+
+		// Return the proofs in same order as before
+		return [signedFirst, ...rest];
 	}
 
 	/**
