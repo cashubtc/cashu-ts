@@ -1,14 +1,25 @@
 // +++++++++++++++++++++ CI Integration Test ++++++++++++++++++
-// To run locally, spin up a local mint instance on port 3338. Startup command:
-// docker run -d -p 3338:3338 --name cdk-mint  -e CDK_MINTD_DATABASE=sqlite  -e CDK_MINTD_LN_BACKEND=fakewallet  -e CDK_MINTD_INPUT_FEE_PPK=100  -e CDK_MINTD_LISTEN_HOST=0.0.0.0  -e CDK_MINTD_LISTEN_PORT=3338  -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=0  -e CDK_MINTD_FAKE_WALLET_MAX_DELAY=0 -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' cashubtc/mintd:latest
+// To run locally, spin up a local mint instance on port 3338.
 //
-// NOTE: CDK remembers ln invoices, so you will need to tear down the mint and
+// Startup command:
+//
+// - CDK Mint:
+// docker run -d -p 3338:3338 --name cdk-mint  -e CDK_MINTD_DATABASE=sqlite  -e CDK_MINTD_LN_BACKEND=fakewallet  -e CDK_MINTD_INPUT_FEE_PPK=100  -e CDK_MINTD_LISTEN_HOST=0.0.0.0  -e CDK_MINTD_LISTEN_PORT=3338  -e CDK_MINTD_FAKE_WALLET_MIN_DELAY=1  -e CDK_MINTD_FAKE_WALLET_MAX_DELAY=1 -e CDK_MINTD_MNEMONIC='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' cashubtc/mintd:latest
+//
+// - Nutshell:
+// docker run -d -p 3338:3338 --name nutshell -e MINT_LIGHTNING_BACKEND=FakeWallet -e MINT_INPUT_FEE_PPK=100 -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY -e FAKEWALLET_DELAY_PAYMENT=TRUE -e FAKEWALLET_DELAY_OUTGOING_PAYMENT=1 -e FAKEWALLET_DELAY_INCOMING_PAYMENT=1 -e MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE=100 cashubtc/nutshell:0.18.1 poetry run mint
+//
+// NOTE: Both Nutshell & CDK remember ln invoices, so you will need to tear down the mint and
 // start over to run the tests again:
+//
+// - CDK Mint:
 // docker rm -f -v cdk-mint
+//
+// - Nutshell:
+// docker rm -f -v nutshell
 
 import dns from 'node:dns';
-import { test, describe, expect } from 'vitest';
-import { vi } from 'vitest';
+import { vi, test, describe, expect, afterEach } from 'vitest';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import {
 	Mint,
