@@ -6,7 +6,7 @@ jobs:
   integration-tests:
     uses: ./.github/workflows/integration-against-mint.yml
     with:
-      image: cashubtc/nutshell:0.16.4
+      image: cashubtc/nutshell:0.18.1
       port: 3338
       container_name: nutshell
       envs: |
@@ -15,4 +15,8 @@ jobs:
         MINT_LISTEN_HOST=0.0.0.0
         MINT_LISTEN_PORT=3338
         MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
-      cmd: "poetry run mint"
+        FAKEWALLET_DELAY_PAYMENT=TRUE
+        FAKEWALLET_DELAY_INCOMING_PAYMENT=1
+        FAKEWALLET_DELAY_OUTGOING_PAYMENT=1
+        MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE=100
+      cmd: 'poetry run mint'
