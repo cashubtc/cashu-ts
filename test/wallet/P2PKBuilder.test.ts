@@ -320,7 +320,7 @@ describe('P2PKBuilder addTag and addTags', () => {
 	});
 	it('throws if a reserved key is set in additionalTags', () => {
 		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
-		expect(() => b.addTag('refund', comp('b', '02'))).toThrow(/is reserved/i);
+		expect(() => b.addTag('refund', comp('b', '02'))).toThrow(/must not use reserved key/i);
 	});
 	it('throws if secret is too long', () => {
 		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));

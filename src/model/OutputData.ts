@@ -43,6 +43,19 @@ export const RESERVED_P2PK_TAGS = new Set([
 ]);
 
 /**
+ * Asserts P2PK Tag key is valid.
+ *
+ * @param key Tag Key.
+ * @throws If not a string, or is a reserved string.
+ */
+export function assertValidTagKey(key: string) {
+	if (!key || typeof key !== 'string') throw new Error('tag key must be a non empty string');
+	if (RESERVED_P2PK_TAGS.has(key)) {
+		throw new Error(`additionalTags must not use reserved key "${key}"`);
+	}
+}
+
+/**
  * Maximum secret length.
  *
  * @remarks
@@ -146,13 +159,8 @@ export class OutputData implements OutputDataLike {
 
 		// Append additional tags if any
 		if (p2pk.additionalTags?.length) {
-			const normalized = p2pk.additionalTags.map(([k, ...vals], i) => {
-				if (typeof k !== 'string' || !k) {
-					throw new Error(`additionalTags[${i}][0] must be a non empty string`);
-				}
-				if (RESERVED_P2PK_TAGS.has(k)) {
-					throw new Error(`additionalTags must not use reserved key "${k}"`);
-				}
+			const normalized = p2pk.additionalTags.map(([k, ...vals]) => {
+				assertValidTagKey(k); // Validate key
 				return [k, ...vals.map(String)]; // all to strings
 			});
 			tags.push(...normalized);

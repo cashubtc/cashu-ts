@@ -1048,7 +1048,7 @@ export class P2PKBuilder {
     // (undocumented)
     addTag(key: string, values?: string[] | string): this;
     // (undocumented)
-    addTags(tags: TagTuple[]): this;
+    addTags(tags: P2PKTag[]): this;
     // (undocumented)
     static fromOptions(opts: P2PKOptions): P2PKBuilder;
     // (undocumented)
@@ -1068,8 +1068,11 @@ export type P2PKOptions = {
     refundKeys?: string[];
     requiredSignatures?: number;
     requiredRefundSignatures?: number;
-    additionalTags?: TagTuple[];
+    additionalTags?: P2PKTag[];
 };
+
+// @public (undocumented)
+export type P2PKTag = [key: string, ...values: string[]];
 
 // @public
 export type P2PKWitness = {
@@ -1459,9 +1462,6 @@ export type SwapTransaction = {
     keepVector: boolean[];
     sortedIndices: number[];
 };
-
-// @public (undocumented)
-export type TagTuple = [key: string, ...values: string[]];
 
 // @public
 export type Token = {

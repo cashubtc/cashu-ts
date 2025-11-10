@@ -1,5 +1,5 @@
-import { OutputData, RESERVED_P2PK_TAGS } from '../model/OutputData';
-import { type P2PKOptions, type TagTuple } from './types/config';
+import { assertValidTagKey, OutputData } from '../model/OutputData';
+import { type P2PKOptions, type P2PKTag } from './types/config';
 
 // Accept 33 byte compressed (02|03...), or 32 byte x-only,
 // normalised to lowercase 33 byte with 02 prefix for x only
@@ -25,7 +25,7 @@ export class P2PKBuilder {
 	private locktime?: number;
 	private nSigs?: number;
 	private nSigsRefund?: number;
-	private extraTags: TagTuple[] = [];
+	private extraTags: P2PKTag[] = [];
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
@@ -55,16 +55,13 @@ export class P2PKBuilder {
 	}
 
 	addTag(key: string, values?: string[] | string) {
-		if (!key || typeof key !== 'string') throw new Error('tag key must be a non empty string');
-		if (RESERVED_P2PK_TAGS.has(key)) {
-			throw new Error(`tag key "${key}" is reserved. Use appropriate builder option.`);
-		}
+		assertValidTagKey(key); //  Validate key
 		const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
 		this.extraTags.push([key, ...vals.map(String)]); // all to strings
 		return this;
 	}
 
-	addTags(tags: TagTuple[]) {
+	addTags(tags: P2PKTag[]) {
 		for (const [k, ...vals] of tags) this.addTag(k, vals);
 		return this;
 	}
