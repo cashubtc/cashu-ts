@@ -387,17 +387,10 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  */
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
 	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
-	uriPrefixes.forEach((prefix: string) => {
-		if (!tokenString.startsWith(prefix)) {
-			return;
-		}
-		tokenString = tokenString.slice(prefix.length);
-	});
-
-	const token = handleTokens(tokenString);
-	token.proofs = mapShortKeysetIds(token.proofs, keysets);
-	return token;
+	const token = removePrefix(tokenString);
+	const tokenObj = handleTokens(token);
+	tokenObj.proofs = mapShortKeysetIds(tokenObj.proofs, keysets);
+	return tokenObj;
 }
 
 /**
@@ -407,12 +400,14 @@ export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Ke
  * @returns Token metadata.
  */
 export function getTokenMetadata(token: string): TokenMetadata {
+	token = removePrefix(token);
+	console.log('token', token);
 	const tokenObj = handleTokens(token);
 	return {
 		unit: tokenObj.unit || 'sat',
-		memo: tokenObj.memo,
 		mint: tokenObj.mint,
 		amount: sumProofs(tokenObj.proofs),
+		...(tokenObj.memo && { memo: tokenObj.memo }),
 	};
 }
 
@@ -791,4 +786,15 @@ export function deepEqual<T>(a: T, b: T): boolean {
 	if (keysA.length !== keysB.length) return false;
 
 	return keysA.every((key) => keysB.includes(key) && deepEqual(a[key], b[key]));
+}
+
+function removePrefix(token: string): string {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
+	uriPrefixes.forEach((prefix: string) => {
+		if (!token.startsWith(prefix)) {
+			return;
+		}
+		token = token.slice(prefix.length);
+	});
+	return token;
 }
