@@ -271,6 +271,7 @@ describe('mint api', () => {
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
+		await untilMintQuotePaid(wallet, request);
 		const mintedProofs = await wallet.mintProofs(128, request.quote);
 
 		// Send them P2PK locked to Alice, with extra tags
