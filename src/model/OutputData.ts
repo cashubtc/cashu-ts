@@ -126,7 +126,7 @@ export class OutputData implements OutputDataLike {
 		// build P2PK Tags (NUT-11)
 		const tags: string[][] = [];
 
-		if (p2pk.locktime !== undefined) {
+		if (typeof p2pk.locktime === 'number') {
 			tags.push(['locktime', String(p2pk.locktime)]);
 		}
 
