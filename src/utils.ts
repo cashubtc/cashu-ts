@@ -374,14 +374,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @returns Cashu token object.
  */
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]) {
-	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
-	uriPrefixes.forEach((prefix: string) => {
-		if (!tokenString.startsWith(prefix)) {
-			return;
-		}
-		tokenString = tokenString.slice(prefix.length);
-	});
+	tokenString = removePrefix(tokenString);
 
 	const token = handleTokens(tokenString);
 	token.proofs = mapShortKeysetIds(token.proofs, keysets);
@@ -395,12 +388,13 @@ export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]) {
  * @returns Token metadata.
  */
 export function getTokenMetadata(token: string): TokenMetadata {
+	token = removePrefix(token);
 	const tokenObj = handleTokens(token);
 	return {
 		unit: tokenObj.unit || 'sat',
-		memo: tokenObj.memo,
 		mint: tokenObj.mint,
 		amount: sumProofs(tokenObj.proofs),
+		...(tokenObj.memo && { memo: tokenObj.memo }),
 	};
 }
 
@@ -773,4 +767,15 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 
 function sumArray(arr: number[]) {
 	return arr.reduce((a, c) => a + c, 0);
+}
+
+function removePrefix(token: string): string {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
+	uriPrefixes.forEach((prefix: string) => {
+		if (!token.startsWith(prefix)) {
+			return;
+		}
+		token = token.slice(prefix.length);
+	});
+	return token;
 }
