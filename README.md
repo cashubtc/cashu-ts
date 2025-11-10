@@ -471,6 +471,8 @@ new P2PKBuilder()
   .lockUntil(when: number | Date)         // unix seconds, unix ms, or Date
   .requireLockSignatures(n: number)       // n of m for lock keys
   .requireRefundSignatures(n: number)     // n of m for refund keys
+  .addTag(key: string, values?: string[] | string) // add single tag (eg: NutZap 'e')
+  .addTags(tags: P2PKTag[]) // add multiple tags at once
   .toOptions(): P2PKOptions;
 
 P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
