@@ -37,6 +37,7 @@ import {
 	OutputDataFactory,
 	OutputConfig,
 	OutputType,
+	P2PKBuilder,
 } from '../src';
 import ws from 'ws';
 import {
@@ -259,6 +260,49 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
+
+	test('send and receive p2pk with additional tags', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		const mintedProofs = await wallet.mintProofs(128, request.quote);
+
+		// Send them P2PK locked to Alice, with extra tags
+		const p2pk = new P2PKBuilder()
+			.addLockPubkey(pubKeyAlice)
+			.addTags([
+				['e', 'abc'],
+				['p', '123'],
+			])
+			.addTag('msg', 'hello')
+			.toOptions();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).run();
+		expectNUT10SecretDataToEqual(send, pubKeyAlice);
+		send.forEach((p) => {
+			const parsedSecret = JSON.parse(p.secret);
+			expect(parsedSecret[1].tags).toStrictEqual([
+				['e', 'abc'],
+				['p', '123'],
+				['msg', 'hello'],
+			]);
+		});
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+
+		// Try and receive them with Alice's secret key (should succeed)
+		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) });
+		expect(
+			proofs.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(63);
+	});
+
 	test('mint and melt p2pk', async () => {
 		const invoice =
 			'lnbc20u1p5tnrdtsp5xaus66jztyj4f4m9wuza7ay9994d5dals6dluvw80dduhhulgxvspp5gsdp48uz9x20etle8j7muweujzxd2w4ay2v6cwzwjy7pff44r4gqhp5jujtt4hgd57c5hskstzkjkxqtfmctfvpfc3wmt3h42a9f2p9sqcsxq9z0rgqcqpnrzjqvxr759n8jl5226n47zw6325pyffxqlpyrjh9ztswvnglhrmtcsfzrw8mqqqf2cqqqqqqqlgqqqqzhsqjq9qxpqysgq2rtnpkqzmwmuf6cw653s63552qf0hgst6xzdywkgekhz836ayrz572cm72r7ejj7w0ktgldlwfu33fpr9dxywx5wqy4tte7smpa9q4gqaaydvv';

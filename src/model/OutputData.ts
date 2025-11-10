@@ -5,7 +5,7 @@ import {
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type Keyset } from '../wallet';
+import { type P2PKOptions, type Keyset } from '../wallet';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -28,6 +28,41 @@ export interface OutputDataLike {
 }
 
 export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+
+/**
+ * Core P2PK tags that must not be settable in additional tags.
+ *
+ * @internal
+ */
+export const RESERVED_P2PK_TAGS = new Set([
+	'locktime',
+	'pubkeys',
+	'n_sigs',
+	'refund',
+	'n_sigs_refund',
+]);
+
+/**
+ * Asserts P2PK Tag key is valid.
+ *
+ * @param key Tag Key.
+ * @throws If not a string, or is a reserved string.
+ */
+export function assertValidTagKey(key: string) {
+	if (!key || typeof key !== 'string') throw new Error('tag key must be a non empty string');
+	if (RESERVED_P2PK_TAGS.has(key)) {
+		throw new Error(`additionalTags must not use reserved key "${key}"`);
+	}
+}
+
+/**
+ * Maximum secret length.
+ *
+ * @remarks
+ * Based on the Nutshell default mint_max_secret_length.
+ * @internal
+ */
+export const MAX_SECRET_LENGTH = 1024;
 
 export function isOutputDataFactory(
 	value: OutputData[] | OutputDataFactory,
@@ -77,13 +112,7 @@ export class OutputData implements OutputDataLike {
 	}
 
 	static createP2PKData(
-		p2pk: {
-			pubkey: string | string[];
-			locktime?: number;
-			refundKeys?: string[];
-			requiredSignatures?: number;
-			requiredRefundSignatures?: number;
-		},
+		p2pk: P2PKOptions,
 		amount: number,
 		keyset: MintKeys | Keyset,
 		customSplit?: number[],
@@ -92,58 +121,80 @@ export class OutputData implements OutputDataLike {
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 
-	static createSingleP2PKData(
-		p2pk: {
-			pubkey: string | string[];
-			locktime?: number;
-			refundKeys?: string[];
-			requiredSignatures?: number;
-			requiredRefundSignatures?: number;
-		},
-		amount: number,
-		keysetId: string,
-	) {
-		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
-		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
-		const pubkeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
-		const n_sigs: number = Math.max(1, Math.min(p2pk.requiredSignatures || 1, pubkeys.length));
-		const n_sigs_refund: number = Math.max(
+	static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string) {
+		// normalise keys and clamp required signature counts to available keys
+		const lockKeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
+		const refundKeys: string[] = p2pk.refundKeys ?? [];
+		const reqLock = Math.max(1, Math.min(p2pk.requiredSignatures ?? 1, lockKeys.length));
+		const reqRefund = Math.max(
 			1,
-			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1),
+			Math.min(p2pk.requiredRefundSignatures ?? 1, refundKeys.length || 1),
 		);
+
+		// Init vars
+		const data = lockKeys[0];
+		const pubkeys = lockKeys.slice(1);
+		const refund = refundKeys;
+
+		// build P2PK Tags (NUT-11)
+		const tags: string[][] = [];
+
+		const ts = p2pk.locktime ?? NaN;
+		if (Number.isSafeInteger(ts) && ts >= 0) {
+			tags.push(['locktime', String(ts)]);
+		}
+
+		if (pubkeys.length > 0) {
+			tags.push(['pubkeys', ...pubkeys]);
+			if (reqLock > 1) {
+				tags.push(['n_sigs', String(reqLock)]);
+			}
+		}
+
+		if (refund.length > 0) {
+			tags.push(['refund', ...refund]);
+			if (reqRefund > 1) {
+				tags.push(['n_sigs_refund', String(reqRefund)]);
+			}
+		}
+
+		// Append additional tags if any
+		if (p2pk.additionalTags?.length) {
+			const normalized = p2pk.additionalTags.map(([k, ...vals]) => {
+				assertValidTagKey(k); // Validate key
+				return [k, ...vals.map(String)]; // all to strings
+			});
+			tags.push(...normalized);
+		}
+
+		// Construct secret
 		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: pubkeys[0], // Primary key
-				tags: [],
+				data: data,
+				tags,
 			},
 		];
-		if (p2pk.locktime) {
-			newSecret[1].tags.push(['locktime', String(p2pk.locktime)]); // NUT-10 string
-		}
-		if (pubkeys.length > 1) {
-			newSecret[1].tags.push(['pubkeys', ...pubkeys.slice(1)]); // Additional keys
-			if (n_sigs > 1) {
-				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs', String(n_sigs)]); // NUT-10 string
-			}
-		}
-		if (p2pk.refundKeys) {
-			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
-			if (n_sigs_refund > 1) {
-				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs_refund', String(n_sigs_refund)]); // NUT-10 string
-			}
-		}
 		const parsed = JSON.stringify(newSecret);
+
+		// Check secret length, counting Unicode code points
+		// Same semantics as Nutshell python: len(str)
+		const charCount = [...parsed].length;
+		if (charCount > MAX_SECRET_LENGTH) {
+			throw new Error(`Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`);
+		}
+		// blind the message
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
-		return new OutputData(
+
+		// create OutputData
+		const od = new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes,
 		);
+		return od;
 	}
 
 	static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]) {

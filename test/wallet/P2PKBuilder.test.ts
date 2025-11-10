@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { P2PKBuilder } from '../../src/';
+import { P2PKBuilder, P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys
 const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
@@ -165,7 +165,7 @@ describe('P2PKBuilder.toOptions()', () => {
 		const src = {
 			pubkey: lock,
 			locktime: now,
-			refundKeys: [r1, r2],
+			refundKeys: [r1, r2] as string[],
 			requiredRefundSignatures: 2,
 		} as const;
 
@@ -219,5 +219,115 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 		// round trip stays identical
 		const round = P2PKBuilder.fromOptions(opts).toOptions();
 		expect(round).toEqual(opts);
+	});
+});
+
+describe('P2PKBuilder addTag and addTags', () => {
+	it('omits additionalTags when unused', () => {
+		const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).toOptions();
+		expect('additionalTags' in opts).toBe(false);
+	});
+
+	it('adds a single tag with no values', () => {
+		const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).addTag('memo').toOptions();
+
+		expect(opts.additionalTags).toEqual([['memo']]);
+	});
+
+	it('adds a single tag with one value', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('memo', 'invoice-42')
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([['memo', 'invoice-42']]);
+	});
+
+	it('adds a single tag with multiple values and preserves order', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('meta', ['region=eu', 'channel=web', 'v=1'])
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([['meta', 'region=eu', 'channel=web', 'v=1']]);
+	});
+
+	it('accepts multiple calls to addTag and addTags, preserves insertion order', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('a', '1')
+			.addTags([['b', '2'], ['c']])
+			.addTag('d', ['3', '4'])
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([['a', '1'], ['b', '2'], ['c'], ['d', '3', '4']]);
+	});
+
+	it('allows duplicate non reserved keys, preserves both entries', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey(comp('a', '02'))
+			.addTag('note', 'x')
+			.addTag('note', 'y')
+			.toOptions();
+
+		expect(opts.additionalTags).toEqual([
+			['note', 'x'],
+			['note', 'y'],
+		]);
+	});
+
+	it('rejects reserved keys in addTag', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTag('locktime', '123')).toThrow(/reserved/i);
+		expect(() => b.addTag('pubkeys', ['x'])).toThrow(/reserved/i);
+		expect(() => b.addTag('n_sigs', '2')).toThrow(/reserved/i);
+		expect(() => b.addTag('refund', 'x')).toThrow(/reserved/i);
+		expect(() => b.addTag('n_sigs_refund', '2')).toThrow(/reserved/i);
+	});
+
+	it('rejects reserved keys in addTags', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTags([['pubkeys', 'x']])).toThrow(/reserved/i);
+	});
+
+	it('rejects empty tag key', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTag('', 'v')).toThrow(/key must be a non empty string/i);
+	});
+
+	it('round trips additionalTags via fromOptions', () => {
+		const original = new P2PKBuilder()
+			.addLockPubkey([comp('a', '02'), comp('b', '03')])
+			.addTag('memo', 'invoice-007')
+			.addTags([
+				['purpose', 'donation'],
+				['meta', 'env=prod', 'ver=2'],
+			])
+			.toOptions();
+
+		const rebuilt = P2PKBuilder.fromOptions(original).toOptions();
+		expect(rebuilt).toEqual(original);
+	});
+
+	it('fromOptions accepts options with additionalTags only and leaves shape untouched', () => {
+		const minimalWithTags: P2PKOptions = {
+			pubkey: comp('a', '02'),
+			additionalTags: [['x'], ['y', '1'], ['z', 'a', 'b']],
+		};
+
+		const round = P2PKBuilder.fromOptions(minimalWithTags).toOptions();
+		expect(round).toEqual(minimalWithTags);
+	});
+	it('throws if a reserved key is set in additionalTags', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		expect(() => b.addTag('refund', comp('b', '02'))).toThrow(/must not use reserved key/i);
+	});
+	it('throws if secret is too long', () => {
+		const b = new P2PKBuilder().addLockPubkey(comp('a', '02'));
+		// add 10
+		for (let i = 0; i < 12; i++) {
+			b.addTag(`k${i}`, comp('a', '02'));
+		}
+		expect(() => b.toOptions()).toThrow(/Secret too long/i);
 	});
 });
