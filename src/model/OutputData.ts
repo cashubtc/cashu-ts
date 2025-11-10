@@ -139,8 +139,9 @@ export class OutputData implements OutputDataLike {
 		// build P2PK Tags (NUT-11)
 		const tags: string[][] = [];
 
-		if (typeof p2pk.locktime === 'number') {
-			tags.push(['locktime', String(p2pk.locktime)]);
+		const ts = p2pk.locktime ?? NaN;
+		if (Number.isSafeInteger(ts) && ts >= 0) {
+			tags.push(['locktime', String(ts)]);
 		}
 
 		if (pubkeys.length > 0) {
