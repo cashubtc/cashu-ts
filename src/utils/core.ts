@@ -10,18 +10,19 @@ import {
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from '../model/PaymentRequest';
-import {
-	type DeprecatedToken,
-	type Keys,
-	type MintKeys,
-	type MintKeyset,
-	type Proof,
-	type SerializedDLEQ,
-	type Token,
-	type TokenV4Template,
-	type V4DLEQTemplate,
-	type V4InnerToken,
-	type V4ProofTemplate,
+import type {
+	TokenMetadata,
+	DeprecatedToken,
+	Keys,
+	MintKeys,
+	MintKeyset,
+	Proof,
+	SerializedDLEQ,
+	Token,
+	TokenV4Template,
+	V4DLEQTemplate,
+	V4InnerToken,
+	V4ProofTemplate,
 } from '../model/types';
 import { Bytes } from './Bytes';
 import { type Keyset } from '../wallet';
@@ -397,6 +398,22 @@ export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Ke
 	const token = handleTokens(tokenString);
 	token.proofs = mapShortKeysetIds(token.proofs, keysets);
 	return token;
+}
+
+/**
+ * Returns the metadata of a cashu token.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Token metadata.
+ */
+export function getTokenMetadata(token: string): TokenMetadata {
+	const tokenObj = handleTokens(token);
+	return {
+		unit: tokenObj.unit || 'sat',
+		memo: tokenObj.memo,
+		mint: tokenObj.mint,
+		amount: sumProofs(tokenObj.proofs),
+	};
 }
 
 /**
