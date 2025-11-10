@@ -117,7 +117,9 @@ class CashuWallet {
 				'cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.',
 			);
 		}
-		this._logger.warn('cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.');
+		this._logger.warn(
+			'cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.',
+		);
 		let keys: MintKeys[] = [];
 		if (options?.keys && !Array.isArray(options.keys)) {
 			keys = [options.keys];
