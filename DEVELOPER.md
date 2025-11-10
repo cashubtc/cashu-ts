@@ -19,10 +19,42 @@ npm run test:prepare
 npm run setup-hooks
 ```
 
+Developing branch
+
+Please develop new features against the `development` branch (v3). After cloning, switch to it and pull the latest changes:
+
+```bash
+# switch to the development branch for v3 work
+git checkout development
+git pull
+```
+
+If you are backporting fixes to the v2 line, use the `dev-v2` branch instead.
+
 Notes:
 
 - `npm ci` requires a package-lock.json and produces a reproducible node_modules tree.
 - Node requirement: see `package.json` (engine: `node >=22.4.0`). Use `nvm`, `volta`, or `asdf` to pin your local Node version.
+
+### ⚠️ Important — run `npm ci` after switching major branches
+
+When switching between major branches (for example `development` for v3 and `dev-v2` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
+
+Always run a clean install after switching major branches to ensure `node_modules` matches the checked-in lockfile:
+
+```bash
+# after checkout
+npm ci
+```
+
+If you still see strange build or extractor errors, do a full refresh of dependencies:
+
+```bash
+rm -rf node_modules
+npm ci
+```
+
+This callout is important — please don't skip it when moving between major branches, it saves a lot of time debugging mysterious build/test failures.
 
 ## Environment & toolchain
 
@@ -53,7 +85,16 @@ Useful commands
 npm run setup-hooks
 
 # undo opt-in (revert to default hooks path)
+# NOTE: removing the installed hooks directory is destructive. The uninstall
+# script unsets the local hooks path by default. To also remove the
+# `.githooks/` directory set the guard variable explicitly to avoid an
+# accidental `rm -rf`:
+
+# unset hooks path only
 npm run uninstall-hooks
+
+# unset hooks path AND remove installed hooks (explicit opt-in)
+REMOVE_GITHOOKS=1 npm run uninstall-hooks
 ```
 
 Authoring hooks
@@ -80,6 +121,37 @@ npm run prtasks
 This runs (in order): lint, format, api:update (compile + api-extractor), tests, and `git status`.
 
 Caution: `api:update` can modify generated files (e.g. API reports). Inspect and commit any intended changes.
+
+### Local pre-push workflow (recommended)
+
+Many maintainers prefer to run the full PR checks locally before pushing. A common, reliable workflow:
+
+1. Start a local mint (for integration tests). An example docker-compose is available at `examples/auth_mint/docker-compose.yml`:
+
+```bash
+# from the repo root
+docker compose -f examples/auth_mint/docker-compose.yml up -d
+```
+
+2. Run the full PR tasks (lint, format, api:update, tests):
+
+```bash
+npm run prtasks
+```
+
+3. Run the integration tests against the local mint:
+
+```bash
+npm run test-integration
+```
+
+4. When finished, stop the local mint:
+
+```bash
+docker compose -f examples/auth_mint/docker-compose.yml down
+```
+
+This pattern (run `npm run prtasks` and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.
 
 ## API Extractor workflow
 
@@ -181,6 +253,10 @@ Release steps (manual flow):
 Note: increment the major if there are breaking API changes. Otherwise increment the minor for new features and patch for hotfixes.
 
 ## Troubleshooting (common issues)
+
+- If you see strange compile or api-extractor errors after switching branches: run `npm ci` to ensure `node_modules` matches the checked-in lockfile. If problems persist, try removing `node_modules` and running `npm ci` again.
+
+- To reproduce CI locally (fast): run `npm run prtasks`. This runs the same suite used for PRs and helps surface issues that CI would catch.
 
 ## Contact & maintainers
 

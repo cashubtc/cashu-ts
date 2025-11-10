@@ -41,6 +41,8 @@ If you need the pre-commit hook to run the full suite for one commit, set `FULL_
 FULL_PRECOMMIT=1 git commit -m "..."
 ```
 
+Tip: a common local workflow before pushing is to run `npm run prtasks` and, for integration tests, start a local mint using the example `docker-compose` (see `examples/auth_mint/docker-compose.yml`) and then run `npm run test-integration`. This reproduces CI conditions locally and reduces surprises.
+
 ## API Extractor
 
 This project uses API-Extractor in CI. For details on `npm run api:check` and `npm run api:update` and the correct workflow for updating API reports, see `DEVELOPER.md`.
