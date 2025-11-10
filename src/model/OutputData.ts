@@ -118,8 +118,9 @@ export class OutputData implements OutputDataLike {
 		// build P2PK Tags (NUT-11)
 		const tags: string[][] = [];
 
-		if (p2pk.locktime !== undefined) {
-			tags.push(['locktime', String(p2pk.locktime)]);
+		const ts = p2pk.locktime ?? NaN;
+		if (Number.isSafeInteger(ts) && ts >= 0) {
+			tags.push(['locktime', String(ts)]);
 		}
 
 		if (pubkeys.length > 0) {
@@ -170,11 +171,6 @@ export class OutputData implements OutputDataLike {
 		// blind the message
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
-		if (parsed.length > MAX_SECRET_LENGTH) {
-			throw new Error(
-				`Secret too long (${parsed.length} characters), maximum is ${MAX_SECRET_LENGTH}`,
-			);
-		}
 
 		// create OutputData
 		return new OutputData(
