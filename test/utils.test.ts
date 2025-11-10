@@ -303,6 +303,58 @@ describe('test token metadata', () => {
 			unit: 'sat',
 			mint: 'https://testnut.cashu.space',
 			amount: 10,
+			incompleteProofs: [
+				{
+					secret: '4e585c19592a0a10007b451822e22f8129ec2753da0be3f22dec26a92b1302db',
+					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
+					amount: 4,
+					dleq: {
+						r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
+						s: '32475fe73ba9839dda273fb37e4deae3987aa086e68150a8b8187618cf146b0b',
+						e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
+					},
+				},
+				{
+					secret: '16a0cc2214adcf80b19f60e972b7ad1d9efa7a1eed84de111df6b0d982f217fb',
+					C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
+					amount: 2,
+					dleq: {
+						r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
+						s: '81cb23d0799341bc94f1f87235bc63f6b3a27c8b6f13a9dcf5f97a18485215c0',
+						e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
+					},
+				},
+				{
+					secret: 'a53274b9476067a7ae0c7d1fba7c3f53a7b4b3610f03af736c6e1fc5361ec6ac',
+					C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
+					amount: 2,
+					dleq: {
+						r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
+						s: 'efe730298fae0764403efbfc004d5e7d8cabb6d62570061aabacc0c1e1796dae',
+						e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
+					},
+				},
+				{
+					secret: 'ab52ba6a75b6659859927a337083241c4adc79e76d4fdb2fb3a07cb2564b6462',
+					C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
+					amount: 1,
+					dleq: {
+						r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
+						s: '77f917378c5b0ed4c99d52fdab25f7cb201cb33ef3fb764083c6552cdaece39e',
+						e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
+					},
+				},
+				{
+					secret: 'f64259355a1f2d5d892c64f5beafae861da163998acb27f778761ac7e226dcf3',
+					C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
+					amount: 1,
+					dleq: {
+						r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
+						s: '9a63f7d05a8d9ef18d3d52b814e22716aff4e2f696f28727e31e86721015f1be',
+						e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
+					},
+				},
+			],
 		});
 	});
 	test('test metadata v4', () => {
@@ -313,6 +365,58 @@ describe('test token metadata', () => {
 			unit: 'sat',
 			mint: 'https://testnut.cashu.space',
 			amount: 10,
+			incompleteProofs: [
+				{
+					secret: '4e585c19592a0a10007b451822e22f8129ec2753da0be3f22dec26a92b1302db',
+					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
+					amount: 4,
+					dleq: {
+						r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
+						s: '32475fe73ba9839dda273fb37e4deae3987aa086e68150a8b8187618cf146b0b',
+						e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
+					},
+				},
+				{
+					secret: '16a0cc2214adcf80b19f60e972b7ad1d9efa7a1eed84de111df6b0d982f217fb',
+					C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
+					amount: 2,
+					dleq: {
+						r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
+						s: '81cb23d0799341bc94f1f87235bc63f6b3a27c8b6f13a9dcf5f97a18485215c0',
+						e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
+					},
+				},
+				{
+					secret: 'a53274b9476067a7ae0c7d1fba7c3f53a7b4b3610f03af736c6e1fc5361ec6ac',
+					C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
+					amount: 2,
+					dleq: {
+						r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
+						s: 'efe730298fae0764403efbfc004d5e7d8cabb6d62570061aabacc0c1e1796dae',
+						e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
+					},
+				},
+				{
+					secret: 'ab52ba6a75b6659859927a337083241c4adc79e76d4fdb2fb3a07cb2564b6462',
+					C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
+					amount: 1,
+					dleq: {
+						r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
+						s: '77f917378c5b0ed4c99d52fdab25f7cb201cb33ef3fb764083c6552cdaece39e',
+						e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
+					},
+				},
+				{
+					secret: 'f64259355a1f2d5d892c64f5beafae861da163998acb27f778761ac7e226dcf3',
+					C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
+					amount: 1,
+					dleq: {
+						r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
+						s: '9a63f7d05a8d9ef18d3d52b814e22716aff4e2f696f28727e31e86721015f1be',
+						e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
+					},
+				},
+			],
 		});
 	});
 });

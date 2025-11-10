@@ -150,4 +150,8 @@ export type TokenMetadata = {
 	 * The amount of the token.
 	 */
 	amount: number;
+	/**
+	 * Proofs without an id.
+	 */
+	incompleteProofs: Omit<Proof, 'id'>[];
 };

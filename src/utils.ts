@@ -394,6 +394,14 @@ export function getTokenMetadata(token: string): TokenMetadata {
 		unit: tokenObj.unit || 'sat',
 		mint: tokenObj.mint,
 		amount: sumProofs(tokenObj.proofs),
+		incompleteProofs: tokenObj.proofs.map((p) => ({
+			secret: p.secret,
+			C: p.C,
+			amount: p.amount,
+			...(p.dleq && {
+				dleq: p.dleq,
+			}),
+		})),
 		...(tokenObj.memo && { memo: tokenObj.memo }),
 	};
 }
