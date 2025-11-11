@@ -294,20 +294,23 @@ class Mint {
 	/**
 	 * Generic method to create a mint quote for any payment method.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/mint/quote/{method}` and POSTs the payload.
+	 * @example
+	 *
+	 * ```ts
+	 * const response = await mint.createMintQuote('bolt11', { unit: 'sat', amount: 100 });
+	 * const response = await mint.createMintQuote('custom-payment', {
+	 * 	unit: 'sat',
+	 * 	amount: 100,
+	 * });
+	 * ```
+	 *
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param mintQuotePayload Payload for creating a mint quote.
 	 * @param customRequest Optional override for the request function.
 	 * @returns The mint quote response (must contain quote, amount, unit, expiry).
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods without modifying the Mint class.
-	 * It constructs the endpoint as `/v1/mint/quote/{method}` and POSTs the payload.
-	 *
-	 * @example
-	 * ```ts
-	 * const response = await mint.createMintQuote('bolt11', { unit: 'sat', amount: 100 });
-	 * const response = await mint.createMintQuote('custom-payment', { unit: 'sat', amount: 100 });
-	 * ```
 	 */
 	async createMintQuote<T extends Record<string, unknown>>(
 		method: string,
@@ -323,14 +326,13 @@ class Mint {
 	/**
 	 * Generic method to check the status of a mint quote for any payment method.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/mint/quote/{method}/{quote}` and performs a GET request.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param quote The quote ID to check.
 	 * @param customRequest Optional override for the request function.
 	 * @returns The mint quote status (must contain quote, amount, unit, expiry).
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods without modifying the Mint class.
-	 * It constructs the endpoint as `/v1/mint/quote/{method}/{quote}` and performs a GET request.
 	 */
 	async checkMintQuote<T extends Record<string, unknown>>(
 		method: string,
@@ -346,20 +348,21 @@ class Mint {
 	/**
 	 * Generic method to create a melt quote for any payment method.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/melt/quote/{method}` and POSTs the payload.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param meltQuotePayload Payload for creating a melt quote.
 	 * @param customRequest Optional override for the request function.
 	 * @returns The melt quote response (must contain quote, amount, fee_reserve, state, expiry).
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods without modifying the Mint class.
-	 * It constructs the endpoint as `/v1/melt/quote/{method}` and POSTs the payload.
 	 */
 	async createMeltQuote<T extends Record<string, unknown>>(
 		method: string,
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
-	): Promise<T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }> {
+	): Promise<
+		T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }
+	> {
 		const data = await this.requestWithAuth<
 			T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }
 		>('POST', `/v1/melt/quote/${method}`, { requestBody: meltQuotePayload }, customRequest);
@@ -369,20 +372,21 @@ class Mint {
 	/**
 	 * Generic method to check the status of a melt quote for any payment method.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/melt/quote/{method}/{quote}` and performs a GET request.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param quote The quote ID to check.
 	 * @param customRequest Optional override for the request function.
 	 * @returns The melt quote status (must contain quote, amount, fee_reserve, state, expiry).
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods without modifying the Mint class.
-	 * It constructs the endpoint as `/v1/melt/quote/{method}/{quote}` and performs a GET request.
 	 */
 	async checkMeltQuote<T extends Record<string, unknown>>(
 		method: string,
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }> {
+	): Promise<
+		T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }
+	> {
 		const data = await this.requestWithAuth<
 			T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }
 		>('GET', `/v1/melt/quote/${method}/${quote}`, {}, customRequest);
@@ -699,22 +703,26 @@ class Mint {
 	/**
 	 * Generic method to mint tokens using any payment method endpoint.
 	 *
-	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
-	 * @param mintPayload Payload containing the quote ID and outputs.
-	 * @param customRequest Optional override for the request function.
-	 * @returns Serialized blinded signatures for the requested outputs.
-	 *
 	 * @remarks
-	 * This method enables support for custom payment methods without modifying the Mint class.
-	 * It constructs the endpoint as `/v1/mint/{method}` and POSTs the payload.
-	 *
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/mint/{method}` and POSTs the payload.
 	 * @example
+	 *
 	 * ```ts
 	 * const response = await mint.mint('bolt11', { quote: 'q1', outputs: [...] });
 	 * const response = await mint.mint('custom-payment', { quote: 'c1', outputs: [...] });
 	 * ```
+	 *
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param mintPayload Payload containing the quote ID and outputs.
+	 * @param customRequest Optional override for the request function.
+	 * @returns Serialized blinded signatures for the requested outputs.
 	 */
-	async mint(method: string, mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
+	async mint(
+		method: string,
+		mintPayload: MintPayload,
+		customRequest?: RequestFn,
+	): Promise<MintResponse> {
 		const data = await this.requestWithAuth<MintResponse>(
 			'POST',
 			`/v1/mint/${method}`,
@@ -733,22 +741,22 @@ class Mint {
 	/**
 	 * Generic method to melt tokens using any payment method endpoint.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
+	 * the common fields: quote, amount, fee_reserve, state, expiry.
+	 * @example
+	 *
+	 * ```ts
+	 * const response = await mint.melt('bolt11', { quote: 'q1', inputs: [...], outputs: [...] });
+	 * const response = await mint.melt('custom-payment', { quote: 'c1', inputs: [...], outputs: [...] });
+	 * ```
+	 *
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
 	 * @param options.preferAsync Optional override to set 'respond-async' header.
 	 * @returns A response object with at least the required melt quote fields.
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods without modifying the Mint class.
-	 * It constructs the endpoint as `/v1/melt/{method}` and POSTs the payload.
-	 * The response must contain the common fields: quote, amount, fee_reserve, state, expiry.
-	 *
-	 * @example
-	 * ```ts
-	 * const response = await mint.melt('bolt11', { quote: 'q1', inputs: [...], outputs: [...] });
-	 * const response = await mint.melt('custom-payment', { quote: 'c1', inputs: [...], outputs: [...] });
-	 * ```
 	 */
 	async melt<T extends Record<string, unknown>>(
 		method: string,
@@ -757,7 +765,9 @@ class Mint {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }> {
+	): Promise<
+		T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }
+	> {
 		const headers: Record<string, string> = {
 			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
 		};

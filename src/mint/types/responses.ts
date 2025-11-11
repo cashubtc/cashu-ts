@@ -318,8 +318,8 @@ export type BlindAuthMintResponse = {
 } & ApiError;
 
 /**
- * Generic mint quote response. All mint quote responses must contain at least these fields.
- * This type is used as a base for both standard and custom payment methods.
+ * Generic mint quote response. All mint quote responses must contain at least these fields. This
+ * type is used as a base for both standard and custom payment methods.
  */
 export type GenericMintQuoteResponse = {
 	/**
@@ -341,8 +341,8 @@ export type GenericMintQuoteResponse = {
 } & ApiError;
 
 /**
- * Generic melt quote response. All melt quote responses must contain at least these fields.
- * This type is used as a base for both standard and custom payment methods.
+ * Generic melt quote response. All melt quote responses must contain at least these fields. This
+ * type is used as a base for both standard and custom payment methods.
  */
 export type GenericMeltQuoteResponse = {
 	/**

@@ -1,5 +1,5 @@
 /**
- * Tests for generic payment method support in Wallet, WalletOps, and Mint classes
+ * Tests for generic payment method support in Wallet, WalletOps, and Mint classes.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -47,7 +47,10 @@ describe('Wallet - Generic Payment Methods', () => {
 				amount: 100,
 			});
 
-			expect(mockRequest).toHaveBeenCalledWith('custom-payment', expect.objectContaining({ unit: 'sat', amount: 100 }));
+			expect(mockRequest).toHaveBeenCalledWith(
+				'custom-payment',
+				expect.objectContaining({ unit: 'sat', amount: 100 }),
+			);
 			expect(result).toEqual(customMintQuote);
 		});
 

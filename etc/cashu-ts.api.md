@@ -264,6 +264,23 @@ export type DLEQ = {
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
 
 // @public
+export type GenericMeltQuoteResponse = {
+    quote: string;
+    amount: number;
+    fee_reserve: number;
+    state: MeltQuoteState;
+    expiry: number;
+} & ApiError;
+
+// @public
+export type GenericMintQuoteResponse = {
+    quote: string;
+    amount: number;
+    unit: string;
+    expiry: number;
+} & ApiError;
+
+// @public
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]): Token;
 
 // @public (undocumented)
@@ -645,13 +662,39 @@ export class Mint {
         logger?: Logger;
     });
     check(checkPayload: CheckStatePayload, customRequest?: RequestFn): Promise<CheckStateResponse>;
+    checkMeltQuote<T extends Record<string, unknown>>(method: string, quote: string, customRequest?: RequestFn): Promise<T & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+        state: string;
+        expiry: number;
+    }>;
     checkMeltQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
+    checkMintQuote<T extends Record<string, unknown>>(method: string, quote: string, customRequest?: RequestFn): Promise<T & {
+        quote: string;
+        amount: number;
+        unit: string;
+        expiry: number;
+    }>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     connectWebSocket(): Promise<void>;
+    createMeltQuote<T extends Record<string, unknown>>(method: string, meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<T & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+        state: string;
+        expiry: number;
+    }>;
     createMeltQuoteBolt11(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
+    createMintQuote<T extends Record<string, unknown>>(method: string, mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<T & {
+        quote: string;
+        amount: number;
+        unit: string;
+        expiry: number;
+    }>;
     createMintQuoteBolt11(mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
     createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     disconnectWebSocket(): void;
@@ -659,6 +702,16 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
+    melt<T extends Record<string, unknown>>(method: string, meltPayload: MeltPayload, options?: {
+        customRequest?: RequestFn;
+        preferAsync?: boolean;
+    }): Promise<T & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+        state: string;
+        expiry: number;
+    }>;
     meltBolt11(meltPayload: MeltPayload, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
@@ -667,6 +720,7 @@ export class Mint {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<Bolt12MeltQuoteResponse>;
+    mint(method: string, mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt11(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
@@ -1542,10 +1596,23 @@ export class Wallet {
     checkMeltQuote(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
     checkMeltQuoteBolt11(quote: string | MeltQuoteResponse): Promise<MeltQuoteResponse | PartialMeltQuoteResponse>;
     checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse>;
+    checkMeltQuoteGeneric<T extends Record<string, unknown>>(method: string, quote: string): Promise<T & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+        state: string;
+        expiry: number;
+    }>;
     // @deprecated (undocumented)
     checkMintQuote(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt11(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
+    checkMintQuoteGeneric<T extends Record<string, unknown>>(method: string, quote: string): Promise<T & {
+        quote: string;
+        amount: number;
+        unit: string;
+        expiry: number;
+    }>;
     checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
     readonly counters: WalletCounters;
@@ -1554,6 +1621,13 @@ export class Wallet {
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
+    createMeltQuoteGeneric<T extends Record<string, unknown>>(method: string, request: string): Promise<T & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+        state: string;
+        expiry: number;
+    }>;
     // @deprecated (undocumented)
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
     createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse>;
@@ -1561,6 +1635,12 @@ export class Wallet {
         amount?: number;
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
+    createMintQuoteGeneric<T extends Record<string, unknown>>(method: string, amount: number, description?: string): Promise<T & {
+        quote: string;
+        amount: number;
+        unit: string;
+        expiry: number;
+    }>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteResponse>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
@@ -1582,6 +1662,11 @@ export class Wallet {
     meltProofs(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     meltProofsBolt11(meltQuote: MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     meltProofsBolt12(meltQuote: Bolt12MeltQuoteResponse, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
+    meltProofsGeneric(method: string, meltQuote: Record<string, unknown> & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+    }, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     readonly mint: Mint;
     // @deprecated (undocumented)
     mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
@@ -1589,6 +1674,7 @@ export class Wallet {
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsGeneric(method: string, amount: number, quote: string | Record<string, unknown>, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
@@ -1663,10 +1749,18 @@ export class WalletOps {
     meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
     // (undocumented)
     meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]): MeltBuilder;
+    // Warning: (ae-forgotten-export) The symbol "MeltBuilderGeneric" needs to be exported by the entry point index.d.ts
+    meltGeneric(method: string, quote: Record<string, unknown> & {
+        quote: string;
+        amount: number;
+        fee_reserve: number;
+    }, proofs: Proof[]): MeltBuilderGeneric;
     // (undocumented)
     mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder<"bolt11", true>;
     // (undocumented)
     mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder<"bolt12", false>;
+    // Warning: (ae-forgotten-export) The symbol "MintBuilderGeneric" needs to be exported by the entry point index.d.ts
+    mintGeneric(method: string, amount: number, quote: Record<string, unknown>): MintBuilderGeneric;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)

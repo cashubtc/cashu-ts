@@ -38,21 +38,21 @@ export class WalletOps {
 	/**
 	 * Generic method to mint proofs for any payment method.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods using the fluent builder pattern.
+	 * @example
+	 *
+	 * ```ts
+	 * const proofs = await wallet.ops
+	 * 	.mintGeneric('custom-payment', 100, customQuote)
+	 * 	.asDeterministic()
+	 * 	.run();
+	 * ```
+	 *
 	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param amount Amount to mint.
 	 * @param quote Quote response or ID for the payment method.
 	 * @returns A MintBuilder for composing the mint operation.
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods using the fluent builder pattern.
-	 *
-	 * @example
-	 * ```ts
-	 * const proofs = await wallet.ops
-	 *   .mintGeneric('custom-payment', 100, customQuote)
-	 *   .asDeterministic()
-	 *   .run();
-	 * ```
 	 */
 	mintGeneric(method: string, amount: number, quote: Record<string, unknown>) {
 		return new MintBuilderGeneric(this.wallet, method, amount, quote);
@@ -68,23 +68,27 @@ export class WalletOps {
 	/**
 	 * Generic method to melt proofs for any payment method.
 	 *
+	 * @remarks
+	 * This method enables support for custom payment methods using the fluent builder pattern.
+	 * @example
+	 *
+	 * ```ts
+	 * const result = await wallet.ops
+	 * 	.meltGeneric('custom-payment', customQuote, proofs)
+	 * 	.asDeterministic()
+	 * 	.run();
+	 * ```
+	 *
 	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param quote Quote response for the payment method.
 	 * @param proofs Proofs to melt.
 	 * @returns A MeltBuilderGeneric for composing the melt operation.
-	 *
-	 * @remarks
-	 * This method enables support for custom payment methods using the fluent builder pattern.
-	 *
-	 * @example
-	 * ```ts
-	 * const result = await wallet.ops
-	 *   .meltGeneric('custom-payment', customQuote, proofs)
-	 *   .asDeterministic()
-	 *   .run();
-	 * ```
 	 */
-	meltGeneric(method: string, quote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number }, proofs: Proof[]) {
+	meltGeneric(
+		method: string,
+		quote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number },
+		proofs: Proof[],
+	) {
 		return new MeltBuilderGeneric(this.wallet, method, quote, proofs);
 	}
 
@@ -765,9 +769,9 @@ export class MeltBuilder {
  *
  * ```typescript
  * const proofs = await wallet.ops
- *   .mintGeneric('custom-payment', 100, quote)
- *   .asDeterministic()
- *   .run();
+ * 	.mintGeneric('custom-payment', 100, quote)
+ * 	.asDeterministic()
+ * 	.run();
  * ```
  */
 export class MintBuilderGeneric {
@@ -880,7 +884,13 @@ export class MintBuilderGeneric {
 	 * @returns The newly minted proofs.
 	 */
 	async run() {
-		return this.wallet.mintProofsGeneric(this.method, this.amount, this.quote, this.config, this.outputType);
+		return this.wallet.mintProofsGeneric(
+			this.method,
+			this.amount,
+			this.quote,
+			this.config,
+			this.outputType,
+		);
 	}
 }
 
@@ -893,9 +903,9 @@ export class MintBuilderGeneric {
  *
  * ```typescript
  * const result = await wallet.ops
- *   .meltGeneric('custom-payment', quote, proofs)
- *   .asDeterministic()
- *   .run();
+ * 	.meltGeneric('custom-payment', quote, proofs)
+ * 	.asDeterministic()
+ * 	.run();
  * ```
  */
 export class MeltBuilderGeneric {
@@ -1001,6 +1011,12 @@ export class MeltBuilderGeneric {
 	 * @returns The melt result: `{ quote, change }`.
 	 */
 	async run() {
-		return this.wallet.meltProofsGeneric(this.method, this.quote, this.proofs, this.config, this.outputType);
+		return this.wallet.meltProofsGeneric(
+			this.method,
+			this.quote,
+			this.proofs,
+			this.config,
+			this.outputType,
+		);
 	}
 }
