@@ -303,7 +303,7 @@ describe('cbor encoder', () => {
 		expect(Array.from(enc)).toEqual([0x1a, 0xff, 0xff, 0xff, 0xff]);
 		expect(decodeCBOR(enc)).toBe(n);
 	});
-	
+
 	test('encodes min 32 bit unsigned integer and roundtrips', () => {
 		const n = 0x00010000; // 65536
 		const enc = encodeCBOR(n as any);
