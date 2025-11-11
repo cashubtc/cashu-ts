@@ -63,8 +63,8 @@ import type {
 	LockedMintQuoteResponse,
 	Bolt12MintQuoteResponse,
 	Bolt12MeltQuoteResponse,
+	MeltQuoteState,
 } from '../mint/types';
-import { type MeltQuoteState } from '../mint/types';
 
 // model helpers
 import { OutputData, type OutputDataLike } from '../model/OutputData';
@@ -2010,12 +2010,12 @@ class Wallet {
 
 		// Fire event(s) after blanks creation
 		if (outputData.length > 0) {
-			const blanks: MeltBlanks = {
+			const blanks: MeltBlanks<MeltQuoteResponse> = {
 				method: method as 'bolt11' | 'bolt12',
 				payload: meltPayload,
 				outputData,
 				keyset,
-				quote: meltQuote as any,
+				quote: meltQuote as MeltQuoteResponse,
 			};
 			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
 			this.on._emitMeltBlanksCreated(blanks); // global callback
