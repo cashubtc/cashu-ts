@@ -79,6 +79,10 @@ import {
 	sanitizeUrl,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
+import {
+	handleMeltQuoteResponseDeprecated,
+	type MeltQuoteResponsePaidDeprecated,
+} from '../legacy/nut-05';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 
@@ -2032,18 +2036,36 @@ class Wallet {
 			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${outputData.length} blanks were provided`,
 		);
 
+		// Validate that the response is not completely empty
+		if (Object.keys(meltResponse).length === 0) {
+			throw new Error('bad response');
+		}
+
 		// Construct change if provided (empty if pending/not paid; shorter ok if less overfee)
 		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
 		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
 
+		// Handle legacy responses that use 'paid' instead of 'state'
+		const normalizedResponse = handleMeltQuoteResponseDeprecated(
+			meltResponse as PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated,
+			this._logger,
+		);
+
+		// Determine the state from the response, or use the input quote's state if not provided
+		const state =
+			normalizedResponse.state ||
+			(meltResponse.state as MeltQuoteState) ||
+			(meltQuote.state as MeltQuoteState);
+
 		// Construct the response quote with required fields
+		// Most fields come from the input meltQuote, but state and payment_preimage are updated from the response
 		const responseQuote: MeltQuoteResponse = {
-			quote: meltResponse.quote,
-			amount: meltResponse.amount,
-			fee_reserve: meltResponse.fee_reserve,
-			state: meltResponse.state as MeltQuoteState,
-			expiry: meltResponse.expiry,
-			payment_preimage: (meltResponse as any).payment_preimage ?? null,
+			quote: meltQuote.quote,
+			amount: meltQuote.amount,
+			fee_reserve: meltQuote.fee_reserve,
+			state: state,
+			expiry: (meltQuote.expiry as number) ?? 0,
+			payment_preimage: normalizedResponse.payment_preimage ?? null,
 			unit: (meltQuote.unit as string) || this._unit,
 			request: (meltQuote.request as string) || '',
 			...(meltResponse.change && { change: meltResponse.change }),
