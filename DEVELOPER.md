@@ -145,6 +145,25 @@ npm run prtasks
 npm run test-integration
 ```
 
+3a. (Optional but recommended) Run the consumer smoke tests used by CI:
+
+```bash
+# runs all consumer smoke tests (bundler, commonjs, iife, nodenext, reactnative)
+npm run test:consumer
+```
+
+Note: the consumer smoke tests are run in CI but are intentionally not part of `prtasks` to avoid adding noise to every local run; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
+
+The `test:consumer` aggregator runs the following scripts (you can run them individually):
+
+- `npm run test:bundler` — smoke test using the bundler consumer
+- `npm run test:commonjs` — smoke test for CommonJS consumers
+- `npm run test:iife` — smoke test for IIFE (standalone) build
+- `npm run test:nodenext` — smoke test for Node ESM consumers
+- `npm run test:reactnative` — smoke test for React Native consumer
+
+Run the individual script if you want to isolate failures or speed up debugging.
+
 4. When finished, stop the local mint:
 
 ```bash
