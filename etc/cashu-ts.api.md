@@ -991,6 +991,7 @@ export type TokenMetadata = {
     memo?: string;
     mint: string;
     amount: number;
+    incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
 
 // @public @deprecated (undocumented)

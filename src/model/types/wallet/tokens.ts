@@ -153,5 +153,5 @@ export type TokenMetadata = {
 	/**
 	 * Proofs without an id.
 	 */
-	incompleteProofs: Omit<Proof, 'id'>[];
+	incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
