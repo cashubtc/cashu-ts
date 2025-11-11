@@ -803,7 +803,7 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
-    get supportsBolt12Description(): boolean;
+    supportsNut04Description(method: 'bolt11' | 'bolt12', unit: string): boolean;
     // (undocumented)
     get version(): string;
 }
