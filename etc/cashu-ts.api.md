@@ -590,14 +590,7 @@ export type MeltQuoteOptions = {
 export type MeltQuotePayload = {
     unit: string;
     request: string;
-    options?: MeltQuoteOptions & MeltQuotePayloadAmountless;
-};
-
-// @public (undocumented)
-export type MeltQuotePayloadAmountless = {
-    amountless?: {
-        amount_msat: number;
-    };
+    options?: MeltQuoteOptions;
 };
 
 // @public (undocumented)
@@ -1462,8 +1455,8 @@ export type SwapMethod = {
     description?: boolean;
     options?: {
         description?: boolean;
+        amountless?: boolean | null;
     };
-    amountless?: boolean | null;
 };
 
 // @public

@@ -281,8 +281,8 @@ export type SwapMethod = {
 	description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783
 	options?: {
 		description?: boolean;
+		amountless?: boolean | null;
 	};
-	amountless?: boolean | null;
 };
 
 /**

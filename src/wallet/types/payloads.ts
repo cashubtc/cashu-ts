@@ -35,19 +35,7 @@ export type MeltQuotePayload = {
 	/**
 	 * Melt Quote options (e.g. multi-path payments NUT-15 or amountless NUT-05)
 	 */
-	options?: MeltQuoteOptions & MeltQuotePayloadAmountless;
-};
-
-export type MeltQuotePayloadAmountless = {
-	/**
-	 * Optional property for specifying an amountless option.
-	 */
-	amountless?: {
-		/**
-		 * The amount in milli-satoshis.
-		 */
-		amount_msat: number;
-	};
+	options?: MeltQuoteOptions;
 };
 
 /**
@@ -60,7 +48,7 @@ export type Bolt12MeltQuotePayload = MeltQuotePayload;
  */
 export type MeltQuoteOptions = {
 	mpp?: MPPOption;
-	amountless?: AmountlessOption;
+	amountless?: AmountlessOption; //The amount in milli-satoshis.
 };
 
 /**
