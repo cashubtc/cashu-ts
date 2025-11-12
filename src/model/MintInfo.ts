@@ -219,7 +219,7 @@ export class MintInfo {
 		if (!Array.isArray(meltMethods)) return false;
 
 		return meltMethods.some(
-			(met) => met.method === method && met.unit === unit && met.amountless === true,
+			(met) => met.method === method && met.unit === unit && met.options?.amountless === true,
 		);
 	}
 }
