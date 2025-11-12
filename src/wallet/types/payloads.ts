@@ -165,15 +165,15 @@ export type SwapTransaction = {
 };
 
 /**
- * Includes all data required to complete a send transaction.
+ * Preview of a swap transaction created by prepareSend / prepareReceive.
  */
-export type PreparedSend = {
+export type SwapPreview = {
 	/**
-	 * Amount being sent.
+	 * Amount being swapped.
 	 */
 	amount: number;
 	/**
-	 * Total fees for the send (inc receiver fees if specified)
+	 * Total fees for the swap (inc receiver fees if specified)
 	 */
 	fees: number;
 	/**
@@ -185,15 +185,15 @@ export type PreparedSend = {
 	 */
 	inputs: Proof[];
 	/**
-	 * Blinding data to construct send (swap) proofs.
+	 * Blinding data to construct proofs to send.
 	 */
-	sendOutputs: OutputData[];
+	sendOutputs?: OutputData[];
 	/**
-	 * Blinding data to construct keep (change) proofs.
+	 * Blinding data to construct proofs to keep.
 	 */
-	keepOutputs: OutputData[];
+	keepOutputs?: OutputData[];
 	/**
 	 * Proofs not selected for this transaction (can be returned to storage).
 	 */
-	unselectedProofs: Proof[];
+	unselectedProofs?: Proof[];
 };

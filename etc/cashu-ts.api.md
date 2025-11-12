@@ -1198,17 +1198,6 @@ export type PostRestoreResponse = {
 };
 
 // @public
-export type PreparedSend = {
-    amount: number;
-    fees: number;
-    keysetId: string;
-    inputs: Proof[];
-    sendOutputs: OutputData[];
-    keepOutputs: OutputData[];
-    unselectedProofs: Proof[];
-};
-
-// @public
 export type Proof = {
     id: string;
     amount: number;
@@ -1355,7 +1344,7 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<PreparedSend>;
+    prepare(): Promise<SwapPreview>;
     proofsWeHave(p: Proof[]): this;
     run(): Promise<SendResponse>;
 }
@@ -1489,6 +1478,17 @@ export type SwapPayload = {
 };
 
 // @public
+export type SwapPreview = {
+    amount: number;
+    fees: number;
+    keysetId: string;
+    inputs: Proof[];
+    sendOutputs?: OutputData[];
+    keepOutputs?: OutputData[];
+    unselectedProofs?: Proof[];
+};
+
+// @public
 export type SwapResponse = {
     signatures: SerializedBlindedSignature[];
 } & ApiError;
@@ -1588,7 +1588,7 @@ export class Wallet {
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
-    completeSend(preparedSend: PreparedSend, privkey?: string | string[]): Promise<SendResponse>;
+    completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     // @deprecated (undocumented)
@@ -1632,7 +1632,8 @@ export class Wallet {
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
-    prepareSend(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<PreparedSend>;
+    prepareReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
+    prepareSend(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];

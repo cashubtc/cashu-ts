@@ -27,7 +27,7 @@ import {
 	type SendResponse,
 	type RestoreConfig,
 	type SecretsPolicy,
-	type PreparedSend,
+	type SwapPreview,
 } from './types';
 import {
 	type CounterSource,
@@ -731,6 +731,39 @@ class Wallet {
 		config?: ReceiveConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
+		// Prepare and complete the send
+		const txn = await this.prepareReceive(token, config, outputType);
+		const { keep } = await this.completeSwap(txn);
+		return keep;
+	}
+
+	/**
+	 * Prepare A Receive Transaction.
+	 *
+	 * @remarks
+	 * Allows you to preview fees for a receive, get concrete outputs for P2PK SIG_ALL transactions,
+	 * and do any pre-swap tasks (such as marking proofs in-flight etc)
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareReceive(token, { requireDleq: true });
+	 * const fees = txn.fees;
+	 *
+	 * // Complete transaction
+	 * const { keep } = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param token Token string or decoded token.
+	 * @param config Optional receive config.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns SwapPreview with metadata for swap transaction.
+	 */
+	async prepareReceive(
+		token: Token | string,
+		config?: ReceiveConfig,
+		outputType?: OutputType,
+	): Promise<SwapPreview> {
 		const { keysetId, privkey, requireDleq, proofsWeHave, onCountersReserved } = config || {};
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
@@ -750,9 +783,7 @@ class Wallet {
 		let proofs: Proof[] = [];
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
-		if (totalAmount === 0) {
-			return [];
-		}
+		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
 
 		// Sign proofs if needed
 		if (privkey) {
@@ -771,7 +802,8 @@ class Wallet {
 		}
 
 		// Shape receive output type and denominations
-		const netAmount = totalAmount - this.getFeesForProofs(proofs);
+		const swapFee = this.getFeesForProofs(proofs);
+		const netAmount = totalAmount - swapFee;
 		let receiveOT = this.configureOutputs(
 			netAmount,
 			keyset,
@@ -791,19 +823,15 @@ class Wallet {
 
 		// Create outputs and execute swap
 		const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
-		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
-		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
-		// Construct and return proofs
-		const proofsReceived = swapTransaction.outputData.map((d, i) =>
-			d.toProof(signatures[i], keyset),
-		);
-		const orderedProofs: Proof[] = [];
-		swapTransaction.sortedIndices.forEach((s, o) => {
-			orderedProofs[s] = proofsReceived[o];
-		});
-		this._logger.debug('RECEIVE COMPLETED', { amounts: orderedProofs.map((p) => p.amount) });
-		return orderedProofs;
+		// Return SwapPreview
+		return {
+			amount: totalAmount,
+			fees: swapFee,
+			keysetId: keyset.id,
+			inputs: proofs,
+			keepOutputs: outputs,
+		} as SwapPreview;
 	}
 
 	/**
@@ -922,7 +950,7 @@ class Wallet {
 
 		// Prepare and complete the send
 		const txn = await this.prepareSend(amount, proofs, config, outputConfig);
-		return await this.completeSend(txn);
+		return await this.completeSwap(txn);
 	}
 
 	/**
@@ -939,13 +967,13 @@ class Wallet {
 	 * const fees = txn.fees;
 	 *
 	 * // Complete transaction
-	 * const result = await wallet.completeSend(txn);
+	 * const { keep, send } = await wallet.completeSwap(txn);
 	 * ```
 	 *
 	 * @param amount Amount to send (receiver gets this net amount).
 	 * @param proofs Array of proofs to split.
 	 * @param config Optional parameters for the swap.
-	 * @returns PreparedSend with swap transaction and metadata.
+	 * @returns SwapPreview with metadata for swap transaction.
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
 	async prepareSend(
@@ -953,7 +981,7 @@ class Wallet {
 		proofs: Proof[],
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
-	): Promise<PreparedSend> {
+	): Promise<SwapPreview> {
 		const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
 		// Fallback to policy defaults if no outputConfig
@@ -1023,7 +1051,7 @@ class Wallet {
 		const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
 		const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
-		// Return PreparedSend
+		// Return SwapPreview
 		return {
 			amount,
 			fees: swapFee,
@@ -1032,11 +1060,11 @@ class Wallet {
 			sendOutputs,
 			keepOutputs,
 			unselectedProofs,
-		} as PreparedSend;
+		} as SwapPreview;
 	}
 
 	/**
-	 * Complete a prepared send transaction.
+	 * Complete a prepared swap transaction.
 	 *
 	 * @remarks
 	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
@@ -1047,37 +1075,40 @@ class Wallet {
 	 * const txn = await wallet.prepareSend(5, proofs, { includeFees: true });
 	 *
 	 * // Complete transaction
-	 * const result = await wallet.completeSend(txn);
+	 * const result = await wallet.completeSwap(txn);
 	 * ```
 	 *
-	 * @param preparedSend Output of prepareSend() method.
+	 * @param swapPreview With metadata for swap transaction.
 	 * @param privkey The private key(s) for signing.
 	 * @returns SendResponse with keep/send proofs.
 	 */
-	async completeSend(
-		preparedSend: PreparedSend,
-		privkey?: string | string[],
-	): Promise<SendResponse> {
+	async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
+		const keepOutputs: OutputData[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
+		const sendOutputs: OutputData[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
+		const unselectedProofs: Proof[] = swapPreview.unselectedProofs
+			? swapPreview.unselectedProofs
+			: [];
+
 		// Sign proofs if needed
 		if (privkey) {
-			preparedSend.inputs = this.signP2PKProofs(preparedSend.inputs, privkey, [
-				...preparedSend.keepOutputs,
-				...preparedSend.sendOutputs,
+			swapPreview.inputs = this.signP2PKProofs(swapPreview.inputs, privkey, [
+				...keepOutputs,
+				...sendOutputs,
 			]);
 		}
 
 		// Create swap transaction
 		const swapTransaction = this.createSwapTransaction(
-			preparedSend.inputs,
-			preparedSend.keepOutputs,
-			preparedSend.sendOutputs,
+			swapPreview.inputs,
+			keepOutputs,
+			sendOutputs,
 		);
 
 		// Execute swap
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
-		const keyset = this.getKeyset(preparedSend.keysetId);
+		const keyset = this.getKeyset(swapPreview.keysetId);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const reorderedProofs = Array(swapProofs.length);
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
@@ -1099,7 +1130,7 @@ class Wallet {
 			sendProofs: sendProofs.map((p) => p.amount),
 		});
 		return {
-			keep: [...keepProofs, ...preparedSend.unselectedProofs],
+			keep: [...keepProofs, ...unselectedProofs],
 			send: sendProofs,
 		};
 	}

@@ -297,30 +297,35 @@ describe('mint api', () => {
 	test('send and receive p2pk with SIG_ALL', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
-
 		const privKeyAlice = secp256k1.utils.randomSecretKey();
 		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
 		console.log('pubKeyAlice:', pubKeyAlice);
 		console.log('pubKeyBob:', pubKeyBob);
-
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
-		const mintedProofs = await wallet.mintProofs(128, request.quote);
-
+		// await untilMintQuotePaid(wallet, request);
+		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 		// Send them P2PK locked to Bob
 		const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
 		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).includeFees().run();
 		console.log('send', send);
 		expectNUT10SecretDataToEqual(send, pubKeyBob);
-
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+		const txn = await wallet.prepareReceive(encoded);
+		// Try and receive them with Alice's secret key (should fail)
+		const result = await wallet.completeSwap(txn, bytesToHex(privKeyAlice)).catch((e) => e);
+		expect(result).toBeInstanceOf(MintOperationError);
+		const e = result as MintOperationError;
+		expect(e.name).toBe('MintOperationError');
+		expect([11000, 20008]).toContain(e.code); // nutshell + cdk
+		expect(e.message.toLowerCase()).toMatch(/no witness/); // nutshell + cdk
 		// Try and receive them with Bob's secret key (should suceed)
-		const txn = await wallet.prepareSend(64, send);
-		const { send: receive } = await wallet.completeSend(txn, bytesToHex(privKeyBob));
-		console.log('receive', receive);
+		const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
+		console.log('receive', keep);
 		expect(
-			receive.reduce((curr, acc) => {
+			keep.reduce((curr, acc) => {
 				return curr + acc.amount;
 			}, 0),
 		).toBe(64);
