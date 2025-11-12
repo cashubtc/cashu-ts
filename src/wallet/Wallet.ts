@@ -803,9 +803,9 @@ class Wallet {
 
 		// Shape receive output type and denominations
 		const swapFee = this.getFeesForProofs(proofs);
-		const netAmount = totalAmount - swapFee;
+		const amount = totalAmount - swapFee;
 		let receiveOT = this.configureOutputs(
-			netAmount,
+			amount,
 			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
@@ -826,7 +826,7 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount: totalAmount,
+			amount,
 			fees: swapFee,
 			keysetId: keyset.id,
 			inputs: proofs,

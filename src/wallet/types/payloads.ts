@@ -169,11 +169,11 @@ export type SwapTransaction = {
  */
 export type SwapPreview = {
 	/**
-	 * Amount being swapped.
+	 * Amount being sent or received (excluding fees).
 	 */
 	amount: number;
 	/**
-	 * Total fees for the swap (inc receiver fees if specified)
+	 * Total fees for the swap (inc receiver's fees if applicable)
 	 */
 	fees: number;
 	/**
