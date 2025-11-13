@@ -36,6 +36,8 @@
 		"typedoc": "typedoc src/index.ts",
 		"api:check": "npm run compile && api-extractor run",
 		"api:update": "npm run compile && api-extractor run --local",
+		"setup-hooks": "chmod +x scripts/install-git-hooks.sh && ./scripts/install-git-hooks.sh",
+		"uninstall-hooks": "git config --local --unset core.hooksPath && [ \"${REMOVE_GITHOOKS:-0}\" = \"1\" ] && rm -rf .githooks || echo 'To remove the installed hooks set REMOVE_GITHOOKS=1'",
 		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status"
 	},
 	"exports": {
