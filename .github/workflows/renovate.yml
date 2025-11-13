@@ -1,0 +1,22 @@
+name: Renovate
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # daily at 02:00 UTC
+  workflow_dispatch: {}
+  push:
+    branches:
+      - develop
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Renovate
+        uses: renovate-actions/renovate@v36
+        with:
+          # allow Renovate to use its default token from GITHUB_TOKEN
+          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          # ensure Docker Hub is checked (Renovate uses registry credentials if provided)
+          RENOVATE_DOCKER_COM_AUTH: 'true'

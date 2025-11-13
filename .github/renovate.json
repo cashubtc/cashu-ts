@@ -1,0 +1,43 @@
+{
+	"extends": ["config:base"],
+	"enabledManagers": ["docker"],
+	"schedule": ["at any time"],
+	"packageRules": [
+		{
+			"matchManagers": ["docker"],
+			"matchPackageNames": ["cashubtc/nutshell"],
+			"groupName": "nutshell-docker",
+			"automerge": false,
+			"labels": ["renovate", "docker", "nutshell"]
+		},
+		{
+			"matchManagers": ["docker"],
+			"matchPackageNames": ["cashubtc/mintd"],
+			"groupName": "mintd-docker",
+			"automerge": false,
+			"labels": ["renovate", "docker", "mintd"]
+		}
+	],
+	"docker": {
+		"enabled": true,
+		"fileMatch": ["(^|/)Dockerfile$", "(^|/)docker-compose\\.(ya?ml)$", "(^|/)k8s/.*\\.(ya?ml)$"]
+	},
+	"regexManagers": [
+		{
+			"fileMatch": ["^Makefile$"],
+			"matchStrings": ["(?<depName>cashubtc/mintd):(?<currentValue>[0-9]+(?:\\.[0-9]+)*[^\\s]*)"],
+			"datasourceTemplate": "docker",
+			"depNameTemplate": "{{depName}}",
+			"versioningTemplate": "semver"
+		},
+		{
+			"fileMatch": ["^Makefile$"],
+			"matchStrings": [
+				"(?<depName>cashubtc/nutshell):(?<currentValue>[0-9]+(?:\\.[0-9]+)*[^\\s]*)"
+			],
+			"datasourceTemplate": "docker",
+			"depNameTemplate": "{{depName}}",
+			"versioningTemplate": "semver"
+		}
+	]
+}
