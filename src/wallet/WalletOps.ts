@@ -249,9 +249,9 @@ export class SendBuilder {
 	}
 
 	/**
-	 * Prepare the send or swap.
+	 * Prepare the swap to send.
 	 *
-	 * @returns A PrepareSend containing inputs, outputs, amount, fee and unselectedProofs.
+	 * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
 	 */
 	async prepare() {
 		// Construct an OutputConfig using default send if no customizations
@@ -259,11 +259,11 @@ export class SendBuilder {
 			send: this.sendOT ?? this.wallet.defaultOutputType(),
 			...(this.keepOT ? { keep: this.keepOT } : {}),
 		};
-		return this.wallet.prepareSend(this.amount, this.proofs, this.config, outputConfig);
+		return this.wallet.prepareSwapToSend(this.amount, this.proofs, this.config, outputConfig);
 	}
 
 	/**
-	 * Execute the send or swap.
+	 * Execute the send.
 	 *
 	 * @returns The split result with kept and sent proofs.
 	 */
@@ -437,6 +437,21 @@ export class ReceiveBuilder {
 		this.config.onCountersReserved = cb;
 		return this;
 	}
+
+	/**
+	 * Prepare the swap to receive.
+	 *
+	 * @returns A SwapPreview containing inputs, outputs, amount, and fee.
+	 */
+	async prepare() {
+		return this.wallet.prepareSwapToReceive(this.token, this.config, this.outputType);
+	}
+
+	/**
+	 * Execute the receive.
+	 *
+	 * @returns The new proofs.
+	 */
 	async run() {
 		return this.wallet.receive(this.token, this.config, this.outputType);
 	}

@@ -313,7 +313,7 @@ describe('mint api', () => {
 		console.log('send', send);
 		expectNUT10SecretDataToEqual(send, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
-		const txn = await wallet.prepareReceive(encoded);
+		const txn = await wallet.prepareSwapToReceive(encoded);
 		// Try and receive them with Alice's secret key (should fail)
 		const result = await wallet.completeSwap(txn, bytesToHex(privKeyAlice)).catch((e) => e);
 		expect(result).toBeInstanceOf(MintOperationError);

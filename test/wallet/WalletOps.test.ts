@@ -29,7 +29,7 @@ type SendFn = (
 	outputConfig?: OutputConfig,
 ) => Promise<SendResponse>;
 
-type PrepareFn = (
+type PrepareSendFn = (
 	amount: number,
 	proofs: Proof[],
 	config?: SendConfig,
@@ -41,6 +41,12 @@ type ReceiveFn = (
 	config?: ReceiveConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
+
+type PrepareReceiveFn = (
+	token: string,
+	config?: ReceiveConfig,
+	outputType?: OutputType,
+) => Promise<SwapPreview>;
 
 type MintBolt11Fn = (
 	amount: number,
@@ -79,7 +85,7 @@ class MockWallet {
 	defaultOutputType: () => OutputType = vi.fn(() => ({ type: 'random' as const }));
 
 	send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
-	prepareSend: Mock<PrepareFn> = vi.fn<PrepareFn>(async () => ({
+	prepareSwapToSend: Mock<PrepareSendFn> = vi.fn<PrepareSendFn>(async () => ({
 		amount: 16,
 		fees: 1,
 		keysetId: '123',
@@ -89,6 +95,13 @@ class MockWallet {
 		unselectedProofs: [],
 	}));
 	receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
+	prepareSwapToReceive: Mock<PrepareReceiveFn> = vi.fn<PrepareReceiveFn>(async () => ({
+		amount: 16,
+		fees: 1,
+		keysetId: '123',
+		inputs: [],
+		keepOutputs: [],
+	}));
 	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
 	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
 	sendOffline: Mock<SendOfflineFn> = vi.fn<SendOfflineFn>(() => ({ keep: [], send: [] }));
@@ -169,11 +182,12 @@ describe('WalletOps builders', () => {
 			});
 		});
 
-		it('calls wallet.prepareSend with defaults when no OutputType was set', async () => {
+		it('calls wallet.prepareSwapToSend with defaults when no OutputType was set', async () => {
 			await ops.send(5, proofs).includeFees(true).keyset('kid').prepare();
 
-			expect(wallet.prepareSend).toHaveBeenCalledTimes(1);
-			const [amount, sentProofs, config, maybeOutputConfig] = wallet.prepareSend.mock.calls[0];
+			expect(wallet.prepareSwapToSend).toHaveBeenCalledTimes(1);
+			const [amount, sentProofs, config, maybeOutputConfig] =
+				wallet.prepareSwapToSend.mock.calls[0];
 
 			expect(amount).toBe(5);
 			expect(sentProofs).toBe(proofs);
@@ -263,14 +277,14 @@ describe('WalletOps builders', () => {
 			});
 		});
 
-		it('supports prepareSend', async () => {
+		it('supports prepareSwapToSend', async () => {
 			await ops
 				.send(7, proofs)
 				.asP2PK({ pubkey: 'pub', locktime: 123 }, [7])
 				.keepAsP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
 				.prepare();
 
-			const [, , , outputConfig] = wallet.prepareSend.mock.calls[0];
+			const [, , , outputConfig] = wallet.prepareSwapToSend.mock.calls[0];
 			expect(outputConfig).toEqual({
 				send: { type: 'p2pk', options: { pubkey: 'pub', locktime: 123 }, denominations: [7] },
 				keep: {
@@ -344,6 +358,16 @@ describe('WalletOps builders', () => {
 
 			expect(wallet.receive).toHaveBeenCalledTimes(1);
 			const [tok, config, maybeOT] = wallet.receive.mock.calls[0];
+			expect(tok).toBe(token);
+			expect(config).toEqual({ requireDleq: true, keysetId: 'kid' });
+			expect(maybeOT).toBeUndefined();
+		});
+
+		it('calls wallet.prepareSwapToReceive with config only when no OutputType was set', async () => {
+			await ops.receive(token).requireDleq(true).keyset('kid').prepare();
+
+			expect(wallet.prepareSwapToReceive).toHaveBeenCalledTimes(1);
+			const [tok, config, maybeOT] = wallet.prepareSwapToReceive.mock.calls[0];
 			expect(tok).toBe(token);
 			expect(config).toEqual({ requireDleq: true, keysetId: 'kid' });
 			expect(maybeOT).toBeUndefined();

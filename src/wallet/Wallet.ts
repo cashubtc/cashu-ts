@@ -732,7 +732,7 @@ class Wallet {
 		outputType?: OutputType,
 	): Promise<Proof[]> {
 		// Prepare and complete the send
-		const txn = await this.prepareReceive(token, config, outputType);
+		const txn = await this.prepareSwapToReceive(token, config, outputType);
 		const { keep } = await this.completeSwap(txn);
 		return keep;
 	}
@@ -747,7 +747,7 @@ class Wallet {
 	 *
 	 * ```typescript
 	 * // Prepare transaction
-	 * const txn = await wallet.prepareReceive(token, { requireDleq: true });
+	 * const txn = await wallet.prepareSwapToReceive(token, { requireDleq: true });
 	 * const fees = txn.fees;
 	 *
 	 * // Complete transaction
@@ -759,7 +759,7 @@ class Wallet {
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns SwapPreview with metadata for swap transaction.
 	 */
-	async prepareReceive(
+	async prepareSwapToReceive(
 		token: Token | string,
 		config?: ReceiveConfig,
 		outputType?: OutputType,
@@ -949,7 +949,7 @@ class Wallet {
 		}
 
 		// Prepare and complete the send
-		const txn = await this.prepareSend(amount, proofs, config, outputConfig);
+		const txn = await this.prepareSwapToSend(amount, proofs, config, outputConfig);
 		return await this.completeSwap(txn);
 	}
 
@@ -963,7 +963,7 @@ class Wallet {
 	 *
 	 * ```typescript
 	 * // Prepare transaction
-	 * const txn = await wallet.prepareSend(5, proofs, { includeFees: true });
+	 * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
 	 * const fees = txn.fees;
 	 *
 	 * // Complete transaction
@@ -976,7 +976,7 @@ class Wallet {
 	 * @returns SwapPreview with metadata for swap transaction.
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
-	async prepareSend(
+	async prepareSwapToSend(
 		amount: number,
 		proofs: Proof[],
 		config?: SendConfig,
@@ -1072,7 +1072,7 @@ class Wallet {
 	 *
 	 * ```typescript
 	 * // Prepare transaction
-	 * const txn = await wallet.prepareSend(5, proofs, { includeFees: true });
+	 * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
 	 *
 	 * // Complete transaction
 	 * const result = await wallet.completeSwap(txn);
@@ -1136,7 +1136,7 @@ class Wallet {
 	}
 
 	/**
-	 * Swap is an alias of send.
+	 * @deprecated - Use send()
 	 */
 	public readonly swap = this.send.bind(this);
 
