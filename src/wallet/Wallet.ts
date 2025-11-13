@@ -1126,6 +1126,7 @@ class Wallet {
 			}
 		});
 		this._logger.debug('SEND COMPLETED', {
+			unselectedProofs: unselectedProofs.map((p) => p.amount),
 			keepProofs: keepProofs.map((p) => p.amount),
 			sendProofs: sendProofs.map((p) => p.amount),
 		});

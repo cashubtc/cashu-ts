@@ -305,12 +305,11 @@ describe('mint api', () => {
 		console.log('pubKeyBob:', pubKeyBob);
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
-		// await untilMintQuotePaid(wallet, request);
+		await untilMintQuotePaid(wallet, request);
 		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 		// Send them P2PK locked to Bob
 		const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
 		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).includeFees().run();
-		console.log('send', send);
 		expectNUT10SecretDataToEqual(send, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
 		const txn = await wallet.prepareSwapToReceive(encoded);
@@ -320,10 +319,9 @@ describe('mint api', () => {
 		const e = result as MintOperationError;
 		expect(e.name).toBe('MintOperationError');
 		expect([11000, 20008]).toContain(e.code); // nutshell + cdk
-		expect(e.message.toLowerCase()).toMatch(/no witness/); // nutshell + cdk
+		expect(e.message.toLowerCase()).toMatch(/no witness|signatures not provided/); // nutshell + cdk
 		// Try and receive them with Bob's secret key (should suceed)
 		const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
-		console.log('receive', keep);
 		expect(
 			keep.reduce((curr, acc) => {
 				return curr + acc.amount;
@@ -469,7 +467,7 @@ describe('mint api', () => {
 		const response = await wallet.meltProofsBolt11(meltRequest, signedProofs);
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
-	}, 10000);
+	});
 	test('mint deterministic', async () => {
 		const hexSeed = bytesToHex(randomBytes(64));
 		const wallet = new Wallet(mintUrl);
@@ -616,7 +614,7 @@ describe('dleq', () => {
 		const mintRequest = await wallet.createMintQuoteBolt11(8);
 		await untilMintQuotePaid(wallet, mintRequest);
 		const proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
-		const { send } = wallet.sendOffline(4, proofs, { requireDleq: true });
+		const { send } = wallet.sendOffline(8, proofs, { requireDleq: true });
 		send.forEach((p) => {
 			expect(p.dleq).toBeDefined();
 			expect(p.dleq?.r).toBeDefined();
@@ -628,6 +626,7 @@ describe('dleq', () => {
 		const encodedToken = getEncodedTokenV4(token);
 		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 		expect(newProofs).toBeDefined();
+		expect(sumProofs(newProofs)).toEqual(7); // after 1 sat fee
 	});
 	test('send strip dleq', async () => {
 		const wallet = new Wallet(mintUrl);
