@@ -24,6 +24,7 @@
 		"test:iife": "node test/consumer-iife/run-test.js",
 		"test:nodenext": "node test/consumer-nodenext/run-test.js",
 		"test:reactnative": "node test/consumer-reactnative/run-test.js",
+		"test:consumer": "npm run test:bundler && npm run test:commonjs && npm run test:iife && npm run test:nodenext && npm run test:reactnative",
 		"test:prepare": "npx playwright install chromium --with-deps",
 		"test": "vitest run --coverage --project node --project browser",
 		"test-integration": "vitest run --coverage --project integration",
@@ -34,7 +35,8 @@
 		"check-format": "prettier --check .",
 		"typedoc": "typedoc src/index.ts",
 		"api:check": "npm run compile && api-extractor run",
-		"api:update": "npm run compile && api-extractor run --local"
+		"api:update": "npm run compile && api-extractor run --local",
+		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status"
 	},
 	"exports": {
 		".": {
