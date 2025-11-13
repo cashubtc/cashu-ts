@@ -24,7 +24,7 @@ ifeq ($(filter arm64 aarch64,$(UNAME_M)),$(UNAME_M))
 endif
 PLATFORM_FLAG := $(if $(PLATFORM),--platform=$(PLATFORM),)
 
-.PHONY: cdk-up cdk-down nutshell-up nutshell-down cdk-image nutshell-image
+.PHONY: cdk-up cdk-down nutshell-up nutshell-down
 
 cdk-up:
 	-$(DOCKER) rm -f -v $(CDK_NAME) >/dev/null 2>&1 || true
@@ -60,9 +60,3 @@ nutshell-up:
 
 nutshell-down:
 	-$(DOCKER) rm -f -v $(NUT_NAME)
-
-cdk-image:
-	@printf "%s\n" "$(CDK_IMAGE)"
-
-nutshell-image:
-	@printf "%s\n" "$(NUT_IMAGE)"

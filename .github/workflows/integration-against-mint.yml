@@ -13,9 +13,6 @@ jobs:
         id: start_container
         run: |
           set -euo pipefail
-          # echo the container image
-          DEV=1 make cdk-image
-
           CONTAINER_NAME=cdk-integration
           # use the container name and set that output for later steps
           DEV=1 CDK_NAME="$CONTAINER_NAME" make cdk-up
@@ -36,9 +33,6 @@ jobs:
         id: start_container
         run: |
           set -euo pipefail
-          # echo the container image
-          DEV=1 make nutshell-image
-
           CONTAINER_NAME=nutshell-integration
           # use the container name and set that output for later steps
           DEV=1 NUT_NAME="$CONTAINER_NAME" make nutshell-up
