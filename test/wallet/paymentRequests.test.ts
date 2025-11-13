@@ -81,13 +81,13 @@ describe('payment requests', () => {
 		);
 	});
 	test('test unsupported prefix/version', async () => {
-		const prWithoutInvalidPrefix =
+		const prWithInvalidPrefix =
 			'croqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
-		const prWithoutInvalidVersion =
+		const prWithInvalidVersion =
 			'creqZpGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
-		expect(() => decodePaymentRequest(prWithoutInvalidPrefix)).toThrow(
+		expect(() => decodePaymentRequest(prWithInvalidPrefix)).toThrow(
 			'unsupported pr: invalid prefix',
 		);
-		expect(() => decodePaymentRequest(prWithoutInvalidVersion)).toThrow('unsupported pr version');
+		expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
 	});
 });
