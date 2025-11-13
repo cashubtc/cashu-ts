@@ -110,13 +110,14 @@ class CashuWallet {
 		this.mint = mint;
 		this._logger = options?.logger ?? NULL_LOGGER;
 
+		// When we decide to stop v2 support we should push the warming to console.
 		// Inform consumers that there is a new v3 and they should upgrade.
 		// Keep this log lightweight and safe to run in browser and node environments
-		if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-			console.warn(
-				'cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.',
-			);
-		}
+		// if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+		// 	console.warn(
+		// 		'cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.',
+		// 	);
+		// }
 		this._logger.warn(
 			'cashu-ts v3 has been released. Please upgrade to access the latest features. v2 is now in minimal maintenance mode.',
 		);
