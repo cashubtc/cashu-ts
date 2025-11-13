@@ -653,6 +653,7 @@ export class OutputData implements OutputDataLike {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
     }, amount: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createRandomData(amount: number, keyset: MintKeys_2, customSplit?: number[]): OutputData[];
@@ -665,6 +666,7 @@ export class OutputData implements OutputDataLike {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
     }, amount: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
@@ -878,6 +880,7 @@ export type SendOptions = {
         refundKeys?: string[];
         requiredSignatures?: number;
         requiredRefundSignatures?: number;
+        additionalTags?: Array<[key: string, ...values: string[]]>;
     };
 };
 
@@ -1027,9 +1030,9 @@ export type WebSocketSupport = {
 // Warnings were encountered during analysis:
 //
 // lib/types/CashuWallet.d.ts:41:9 - (ae-forgotten-export) The symbol "OutputDataFactory" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:150:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:190:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
-// lib/types/model/types/index.d.ts:218:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:151:5 - (ae-forgotten-export) The symbol "OutputDataLike" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:191:5 - (ae-forgotten-export) The symbol "RpcSubKinds" needs to be exported by the entry point index.d.ts
+// lib/types/model/types/index.d.ts:219:5 - (ae-forgotten-export) The symbol "JsonRpcParams" needs to be exported by the entry point index.d.ts
 // lib/types/model/types/wallet/tokens.d.ts:103:5 - (ae-forgotten-export) The symbol "TokenEntry" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)

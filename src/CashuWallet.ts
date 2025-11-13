@@ -1279,6 +1279,7 @@ class CashuWallet {
 			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
+			additionalTags?: Array<[key: string, ...values: string[]]>;
 		},
 	): SwapTransaction {
 		const totalAmount = proofsToSend.reduce((total: number, curr: Proof) => total + curr.amount, 0);
@@ -1570,12 +1571,18 @@ class CashuWallet {
 			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
+			additionalTags?: Array<[key: string, ...values: string[]]>;
 		},
 		factory?: OutputDataFactory,
 	): OutputDataLike[] {
 		let outputData: OutputDataLike[];
 		if (pubkey) {
-			outputData = OutputData.createP2PKData({ pubkey }, amount, keyset, outputAmounts);
+			outputData = OutputData.createP2PKData(
+				{ pubkey, additionalTags: p2pk?.additionalTags },
+				amount,
+				keyset,
+				outputAmounts,
+			);
 		} else if (counter || counter === 0) {
 			if (!this._seed) {
 				throw new Error('cannot create deterministic messages without seed');

@@ -28,6 +28,9 @@ export function isOutputDataFactory(
 	return typeof value === 'function';
 }
 
+const RESERVED_P2PK_TAGS = new Set(['locktime', 'pubkeys', 'n_sigs', 'refund', 'n_sigs_refund']);
+const MAX_SECRET_LENGTH = 1024;
+
 export class OutputData implements OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
@@ -76,6 +79,7 @@ export class OutputData implements OutputDataLike {
 			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
+			additionalTags?: Array<[key: string, ...values: string[]]>;
 		},
 		amount: number,
 		keyset: MintKeys,
@@ -92,46 +96,83 @@ export class OutputData implements OutputDataLike {
 			refundKeys?: string[];
 			requiredSignatures?: number;
 			requiredRefundSignatures?: number;
+			additionalTags?: Array<[key: string, ...values: string[]]>;
 		},
 		amount: number,
 		keysetId: string,
 	) {
-		// Standardize pubkey (backwards compat), clamp n_sigs between 1 and total pubkeys
-		// clamp n_sigs_refund between 1 and total refundKeys, and create secret
-		const pubkeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
-		const n_sigs: number = Math.max(1, Math.min(p2pk.requiredSignatures || 1, pubkeys.length));
-		const n_sigs_refund: number = Math.max(
+		// normalise keys and clamp required signature counts to available keys
+		const lockKeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
+		const refundKeys: string[] = p2pk.refundKeys ?? [];
+		const reqLock = Math.max(1, Math.min(p2pk.requiredSignatures ?? 1, lockKeys.length));
+		const reqRefund = Math.max(
 			1,
-			Math.min(p2pk.requiredRefundSignatures || 1, p2pk.refundKeys ? p2pk.refundKeys.length : 1),
+			Math.min(p2pk.requiredRefundSignatures ?? 1, refundKeys.length || 1),
 		);
+
+		// Init vars
+		const data = lockKeys[0];
+		const pubkeys = lockKeys.slice(1);
+		const refund = refundKeys;
+
+		// build P2PK Tags (NUT-11)
+		const tags: string[][] = [];
+
+		const ts = p2pk.locktime ?? NaN;
+		if (Number.isSafeInteger(ts) && ts >= 0) {
+			tags.push(['locktime', String(ts)]);
+		}
+
+		if (pubkeys.length > 0) {
+			tags.push(['pubkeys', ...pubkeys]);
+			if (reqLock > 1) {
+				tags.push(['n_sigs', String(reqLock)]);
+			}
+		}
+
+		if (refund.length > 0) {
+			tags.push(['refund', ...refund]);
+			if (reqRefund > 1) {
+				tags.push(['n_sigs_refund', String(reqRefund)]);
+			}
+		}
+
+		// Append additional tags if any
+		if (p2pk.additionalTags?.length) {
+			const normalized = p2pk.additionalTags.map(([k, ...vals], i) => {
+				if (typeof k !== 'string' || !k) {
+					throw new Error(`additionalTags[${i}][0] must be a non empty string`);
+				}
+				if (RESERVED_P2PK_TAGS.has(k)) {
+					throw new Error(`additionalTags must not use reserved key "${k}"`);
+				}
+				return [k, ...vals.map(String)]; // all to strings
+			});
+			tags.push(...normalized);
+		}
+
+		// Construct secret
 		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
 			'P2PK',
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: pubkeys[0], // Primary key
-				tags: [],
+				data: data,
+				tags,
 			},
 		];
-		if (p2pk.locktime) {
-			newSecret[1].tags.push(['locktime', String(p2pk.locktime)]); // NUT-10 string
-		}
-		if (pubkeys.length > 1) {
-			newSecret[1].tags.push(['pubkeys', ...pubkeys.slice(1)]); // Additional keys
-			if (n_sigs > 1) {
-				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs', String(n_sigs)]); // NUT-10 string
-			}
-		}
-		if (p2pk.refundKeys) {
-			newSecret[1].tags.push(['refund', ...p2pk.refundKeys]);
-			if (n_sigs_refund > 1) {
-				// 1 is the default, so we can save space if not multisig
-				newSecret[1].tags.push(['n_sigs_refund', String(n_sigs_refund)]); // NUT-10 string
-			}
-		}
 		const parsed = JSON.stringify(newSecret);
+
+		// Check secret length, counting Unicode code points
+		// Same semantics as Nutshell python: len(str)
+		const charCount = [...parsed].length;
+		if (charCount > MAX_SECRET_LENGTH) {
+			throw new Error(`Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`);
+		}
+		// blind the message
 		const secretBytes = new TextEncoder().encode(parsed);
 		const { r, B_ } = blindMessage(secretBytes);
+
+		// create OutputData
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
 			r,
