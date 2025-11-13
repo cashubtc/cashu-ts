@@ -234,21 +234,6 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 // @public
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
-// @public
-export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string, eBytes?: Uint8Array): {
-    blinded: string[];
-    Ehex: string;
-};
-
-// @public
-export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, blindPubkey?: Uint8Array, naturalPub?: Uint8Array): string | null;
-
-// @public
-export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], keysetIdHex: string): string[];
-
-// @public
-export function deriveP2BKSecretsForProof(privateKey: string | string[], proof: Proof): string[];
-
 // @public (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
@@ -1054,9 +1039,6 @@ export type OutputType = ({
     data: OutputData[];
 };
 
-// @public
-export const P2BK_DST: Uint8Array<ArrayBufferLike>;
-
 // @public (undocumented)
 export class P2PKBuilder {
     // (undocumented)
@@ -1067,8 +1049,6 @@ export class P2PKBuilder {
     addTag(key: string, values?: string[] | string): this;
     // (undocumented)
     addTags(tags: P2PKTag[]): this;
-    // (undocumented)
-    blindKeys(): this;
     // (undocumented)
     static fromOptions(opts: P2PKOptions): P2PKBuilder;
     // (undocumented)

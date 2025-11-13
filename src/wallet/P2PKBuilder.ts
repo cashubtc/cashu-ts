@@ -66,7 +66,9 @@ export class P2PKBuilder {
 		for (const [k, ...vals] of tags) this.addTag(k, vals);
 		return this;
 	}
-
+	/**
+	 * @alpha
+	 */
 	blindKeys() {
 		this._blindKeys = true;
 		return this;

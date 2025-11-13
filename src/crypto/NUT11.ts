@@ -398,6 +398,7 @@ export const getSignedOutputs = (
  * @param privateKey Secret key (or array of secret keys)
  * @param proof The proof.
  * @returns Deduplicated list of derived secret keys (hex, 64 chars)
+ * @alpha
  */
 export function deriveP2BKSecretsForProof(privateKey: string | string[], proof: Proof): string[] {
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
