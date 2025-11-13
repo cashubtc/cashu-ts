@@ -354,6 +354,7 @@ describe('mint api', () => {
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
+		await untilMintQuotePaid(wallet, request);
 		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
 		// Send them P2BK locked to Bob
@@ -389,6 +390,7 @@ describe('mint api', () => {
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
+		await untilMintQuotePaid(wallet, request);
 		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
 		// Send them P2BK locked to Bob
