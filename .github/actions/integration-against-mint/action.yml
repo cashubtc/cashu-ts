@@ -35,16 +35,20 @@ runs:
         echo "Mint responded to host HTTP at $host_url"
 
     - name: Install dependencies
+      shell: bash
       run: npm ci
 
     - name: Build
+      shell: bash
       run: npm run compile
 
     - name: Run integration tests
+      shell: bash
       run: npm run test-integration
 
     - name: Dump mint logs on failure
       if: ${{ failure() }}
+      shell: bash
       run: |
         container_name='${{ inputs.container_name }}'
         echo "=== ${container_name} inspect ==="
