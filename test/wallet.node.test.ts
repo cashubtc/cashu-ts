@@ -19,6 +19,7 @@ import { MintInfo } from '../src/model/MintInfo';
 import { OutputData } from '../src/model/OutputData';
 import { hexToBytes } from '@noble/curves/abstract/utils';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { type Logger } from '../src/logger';
 
 injectWebSocketImpl(WebSocket);
 
@@ -87,6 +88,30 @@ afterEach(() => {
 
 afterAll(() => {
 	server.close();
+});
+
+describe('upgrade warning to v3 in constructor', () => {
+	test('constructor emits upgrade warning via logger', async () => {
+		const logger: Logger = {
+			fatal: vi.fn(),
+			error: vi.fn(),
+			warn: vi.fn(),
+			info: vi.fn(),
+			debug: vi.fn(),
+			trace: vi.fn(),
+			log: vi.fn(),
+		};
+		const mint = new CashuMint('http://localhost:3338');
+		// Constructing the wallet should trigger the console.warn
+		// eslint-disable-next-line no-new
+		new CashuWallet(mint, { logger });
+		expect(logger.warn).toHaveBeenCalled();
+		// ensure message mention: unknowns v3 to avoid false positives
+		const calledArgs = (logger.warn as unknown as vi.Mock).mock.calls.flat();
+		expect(
+			calledArgs.some((a: unknown) => typeof a === 'string' && a.includes('v3 has been released.')),
+		).toBe(true);
+	});
 });
 
 describe('test info', () => {
