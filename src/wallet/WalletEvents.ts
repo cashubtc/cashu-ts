@@ -232,7 +232,8 @@ export class WalletEvents {
 		const ws = this.wallet.mint.webSocketConnection;
 		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
-		const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: ids }, cb, err);
+		const uniq = Array.from(new Set(ids));
+		const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, cb, err);
 		const cancel = () => ws.cancelSubscription(subId, cb);
 		return this.withAbort(opts?.signal, cancel);
 	}
@@ -279,7 +280,8 @@ export class WalletEvents {
 		const ws = this.wallet.mint.webSocketConnection;
 		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
-		const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: ids }, cb, err);
+		const uniq = Array.from(new Set(ids));
+		const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, cb, err);
 		const cancel = () => ws.cancelSubscription(subId, cb);
 		return this.withAbort(opts?.signal, cancel);
 	}
@@ -334,14 +336,12 @@ export class WalletEvents {
 		}
 		const ys = Object.keys(proofMap);
 
-		const subId = ws.createSubscription(
-			{ kind: 'proof_state', filters: ys },
-			(payload: ProofState) => {
-				cb({ ...payload, proof: proofMap[payload.Y] });
-			},
-			err,
-		);
-		const cancel = () => ws.cancelSubscription(subId, cb);
+		const handler = (payload: ProofState) => {
+			cb({ ...payload, proof: proofMap[payload.Y] });
+		};
+		const subId = ws.createSubscription({ kind: 'proof_state', filters: ys }, handler, err);
+		const cancel = () => ws.cancelSubscription(subId, handler);
+
 		return this.withAbort(opts?.signal, cancel);
 	}
 
