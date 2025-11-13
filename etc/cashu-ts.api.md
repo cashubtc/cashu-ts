@@ -559,7 +559,7 @@ export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
 // @public
 export class MeltBuilder {
     constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', quote: MeltQuoteResponse, proofs: Proof[]);
-    asCustom(data: OutputData[]): this;
+    asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
     asP2PK(options: P2PKOptions, denoms?: number[]): this;
@@ -705,7 +705,7 @@ export type MintAllKeysets = {
 // @public
 export class MintBuilder<M extends 'bolt11' | 'bolt12', HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
     constructor(wallet: Wallet, method: M, amount: number, quote: string | MintQuoteResponse | Bolt12MintQuoteResponse);
-    asCustom(data: OutputData[]): this;
+    asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
     asP2PK(options: P2PKOptions, denoms?: number[]): this;
@@ -1052,7 +1052,7 @@ export type OutputType = ({
     factory: OutputDataFactory;
 } & SharedOutputTypeProps) | {
     type: 'custom';
-    data: OutputData[];
+    data: OutputDataLike[];
 };
 
 // @public
@@ -1259,7 +1259,7 @@ export type RawTransport = {
 // @public
 export class ReceiveBuilder {
     constructor(wallet: Wallet, token: Token | string);
-    asCustom(data: OutputData[]): this;
+    asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
     asP2PK(options: P2PKOptions, denoms?: number[]): this;
@@ -1329,13 +1329,13 @@ export const selectProofsRGLI: SelectProofs;
 // @public
 export class SendBuilder {
     constructor(wallet: Wallet, amount: number, proofs: Proof[]);
-    asCustom(data: OutputData[]): this;
+    asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
     asP2PK(options: P2PKOptions, denoms?: number[]): this;
     asRandom(denoms?: number[]): this;
     includeFees(on?: boolean): this;
-    keepAsCustom(data: OutputData[]): this;
+    keepAsCustom(data: OutputDataLike[]): this;
     keepAsDeterministic(counter?: number, denoms?: number[]): this;
     keepAsFactory(factory: OutputDataFactory, denoms?: number[]): this;
     keepAsP2PK(options: P2PKOptions, denoms?: number[]): this;
@@ -1483,8 +1483,8 @@ export type SwapPreview = {
     fees: number;
     keysetId: string;
     inputs: Proof[];
-    sendOutputs?: OutputData[];
-    keepOutputs?: OutputData[];
+    sendOutputs?: OutputDataLike[];
+    keepOutputs?: OutputDataLike[];
     unselectedProofs?: Proof[];
 };
 
@@ -1496,7 +1496,7 @@ export type SwapResponse = {
 // @public
 export type SwapTransaction = {
     payload: SwapPayload;
-    outputData: OutputData[];
+    outputData: OutputDataLike[];
     keepVector: boolean[];
     sortedIndices: number[];
 };

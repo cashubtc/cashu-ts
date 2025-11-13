@@ -1,4 +1,4 @@
-import { type OutputData } from '../../model/OutputData';
+import { type OutputDataLike } from '../../model/OutputData';
 import { type Proof } from '../../model/types/proof';
 import { type SerializedBlindedMessage } from '../../model/types/blinded';
 
@@ -153,7 +153,7 @@ export type SwapTransaction = {
 	/**
 	 * Blinding data required to construct proofs.
 	 */
-	outputData: OutputData[];
+	outputData: OutputDataLike[];
 	/**
 	 * List of booleans to determine which proofs to keep.
 	 */
@@ -187,11 +187,11 @@ export type SwapPreview = {
 	/**
 	 * Blinding data to construct proofs to send.
 	 */
-	sendOutputs?: OutputData[];
+	sendOutputs?: OutputDataLike[];
 	/**
 	 * Blinding data to construct proofs to keep.
 	 */
-	keepOutputs?: OutputData[];
+	keepOutputs?: OutputDataLike[];
 	/**
 	 * Proofs not selected for this transaction (can be returned to storage).
 	 */

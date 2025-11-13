@@ -1083,8 +1083,8 @@ class Wallet {
 	 * @returns SendResponse with keep/send proofs.
 	 */
 	async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
-		const keepOutputs: OutputData[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
-		const sendOutputs: OutputData[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
+		const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
+		const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
 		const unselectedProofs: Proof[] = swapPreview.unselectedProofs
 			? swapPreview.unselectedProofs
 			: [];

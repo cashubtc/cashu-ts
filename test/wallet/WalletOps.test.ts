@@ -12,7 +12,7 @@ import type {
 	MintProofsConfig,
 	SendResponse,
 	MeltProofsConfig,
-	PreparedSend,
+	SwapPreview,
 } from '../../src/wallet/types';
 import type {
 	MeltQuoteResponse,
@@ -34,7 +34,7 @@ type PrepareFn = (
 	proofs: Proof[],
 	config?: SendConfig,
 	outputConfig?: OutputConfig,
-) => Promise<PreparedSend>;
+) => Promise<SwapPreview>;
 
 type ReceiveFn = (
 	token: string,

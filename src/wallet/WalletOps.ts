@@ -4,7 +4,7 @@ import {
 	type Bolt12MeltQuoteResponse,
 	type Bolt12MintQuoteResponse,
 } from '../mint/types';
-import { type OutputData, type OutputDataFactory } from '../model/OutputData';
+import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
@@ -125,7 +125,7 @@ export class SendBuilder {
 	 * @param data Fully formed OutputData. Their amounts must sum to the send amount, otherwise the
 	 *   wallet will throw.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.sendOT = { type: 'custom', data };
 		return this;
 	}
@@ -178,7 +178,7 @@ export class SendBuilder {
 	 *
 	 * @param data Fully formed OutputData for the keep (change) amount.
 	 */
-	keepAsCustom(data: OutputData[]) {
+	keepAsCustom(data: OutputDataLike[]) {
 		this.keepOT = { type: 'custom', data };
 		return this;
 	}
@@ -381,7 +381,7 @@ export class ReceiveBuilder {
 	 *
 	 * @param data Fully formed OutputData for the final amount.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}
@@ -532,7 +532,7 @@ export class MintBuilder<
 	 *
 	 * @param data Fully formed OutputData for the final amount.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}
@@ -695,7 +695,7 @@ export class MeltBuilder {
 	 *
 	 * @param data Fully formed OutputData for the change amount.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}

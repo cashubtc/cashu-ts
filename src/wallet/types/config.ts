@@ -1,10 +1,6 @@
 import type { Proof } from '../../model/types/proof';
 import type { MeltQuoteResponse } from '../../mint/types';
-import {
-	type OutputData,
-	type OutputDataFactory,
-	type OutputDataLike,
-} from '../../model/OutputData';
+import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import type { Keyset } from '../Keyset';
 import type { MeltPayload } from './payloads';
 import { type OperationCounters } from '../CounterSource';
@@ -94,7 +90,7 @@ export type OutputType =
 			 * Pre-created OutputData, bypassing splitting.
 			 */
 			type: 'custom';
-			data: OutputData[];
+			data: OutputDataLike[];
 	  };
 
 /**
