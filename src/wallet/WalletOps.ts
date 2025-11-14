@@ -1,8 +1,8 @@
 import {
-	type MeltQuoteResponse,
 	type MintQuoteResponse,
-	type Bolt12MeltQuoteResponse,
 	type Bolt12MintQuoteResponse,
+	type MeltQuoteBolt11Response,
+	type MeltQuoteBolt12Response,
 } from '../mint/types';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
@@ -40,10 +40,10 @@ export class WalletOps {
 	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
 		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
-	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
+	meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
 	}
-	meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]) {
+	meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
 		return new MeltBuilder(this.wallet, 'bolt12', quote, proofs);
 	}
 }
@@ -651,14 +651,14 @@ export class MintBuilder<
  * 	.run();
  * ```
  */
-export class MeltBuilder {
+export class MeltBuilder<TQuote extends MeltQuoteBolt11Response = MeltQuoteBolt11Response> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 
 	constructor(
 		private wallet: Wallet,
 		private method: 'bolt11' | 'bolt12',
-		private quote: MeltQuoteResponse,
+		private quote: TQuote,
 		private proofs: Proof[],
 	) {}
 
@@ -756,10 +756,20 @@ export class MeltBuilder {
 	async run() {
 		// BOLT11
 		if (this.method === 'bolt11') {
-			return this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType);
+			return this.wallet.meltProofsBolt11(
+				this.quote as MeltQuoteBolt11Response,
+				this.proofs,
+				this.config,
+				this.outputType,
+			);
 		}
 
 		// BOLT 12
-		return this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType);
+		return this.wallet.meltProofsBolt12(
+			this.quote as MeltQuoteBolt12Response,
+			this.proofs,
+			this.config,
+			this.outputType,
+		);
 	}
 }

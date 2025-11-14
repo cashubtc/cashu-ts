@@ -2540,11 +2540,10 @@ describe('melt proofs', () => {
 		expect(capturedBlanks).toBeDefined();
 		expect(capturedBlanks!.method).toBe('bolt11');
 		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
-		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
+		expect(capturedBlanks!.keysetId).toBe('00bd033559de27d0');
 		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
-		expect(capturedBlanks!.payload.quote).toBe('test_melt_quote');
-		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
-		expect(capturedBlanks!.payload.outputs).toHaveLength(2);
+		expect(capturedBlanks!.quote.quote).toBe('test_melt_quote');
+		expect(capturedBlanks!.inputs).toHaveLength(2);
 
 		// Response still completes sync
 		expect(response.change).toHaveLength(2);

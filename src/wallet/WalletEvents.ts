@@ -4,9 +4,10 @@ import {
 	MintQuoteState,
 	MeltQuoteState,
 	type MintQuoteResponse,
-	type MeltQuoteResponse,
+	type MeltQuoteBolt11Response,
+	type NUT05MeltQuoteResponse,
 } from '../mint/types';
-import type { MeltBlanks, SubscriptionCanceller } from './types';
+import type { MeltPreview, SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './CounterSource';
 import { safeCallback } from '../logger';
@@ -69,7 +70,7 @@ export class WalletEvents {
 	private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
 
 	// Callbacks registered for Melt blanks created events
-	private meltBlanksHandlers = new Set<(payload: MeltBlanks) => void>();
+	private meltBlanksHandlers = new Set<(payload: MeltPreview<NUT05MeltQuoteResponse>) => void>();
 
 	// Binds an abort signal to each subscription canceller
 	private withAbort(
@@ -197,7 +198,7 @@ export class WalletEvents {
 	 * Typical use: persist `payload` so you can later call `wallet.completeMelt(payload)`.
 	 */
 	public meltBlanksCreated(
-		cb: (payload: MeltBlanks) => void,
+		cb: (payload: MeltPreview<NUT05MeltQuoteResponse>) => void,
 		opts?: SubscribeOpts,
 	): SubscriptionCanceller {
 		this.meltBlanksHandlers.add(cb);
@@ -208,7 +209,7 @@ export class WalletEvents {
 	/**
 	 * @internal
 	 */
-	public _emitMeltBlanksCreated(payload: MeltBlanks) {
+	public _emitMeltBlanksCreated(payload: MeltPreview<NUT05MeltQuoteResponse>) {
 		for (const h of this.meltBlanksHandlers) {
 			safeCallback(h, payload, this.wallet.logger, { event: 'meltBlanksCreated' });
 		}
@@ -272,7 +273,7 @@ export class WalletEvents {
 	 */
 	async meltQuoteUpdates(
 		ids: string[],
-		cb: (p: MeltQuoteResponse) => void,
+		cb: (p: MeltQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -296,7 +297,7 @@ export class WalletEvents {
 	 */
 	async meltQuotePaid(
 		id: string,
-		cb: (p: MeltQuoteResponse) => void,
+		cb: (p: MeltQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -511,8 +512,8 @@ export class WalletEvents {
 	onceMeltPaid(
 		id: string,
 		opts?: { signal?: AbortSignal; timeoutMs?: number },
-	): Promise<MeltQuoteResponse> {
-		return this.waitUntilPaid<MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt11Response> {
+		return this.waitUntilPaid<MeltQuoteBolt11Response>(
 			this.meltQuotePaid.bind(this),
 			id,
 			opts,

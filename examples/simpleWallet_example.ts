@@ -1,6 +1,6 @@
 import dns from 'node:dns';
 import {
-	PartialMeltQuoteResponse,
+	MeltQuoteBolt11Response,
 	MeltQuoteState,
 	MintQuoteResponse,
 	MintQuoteState,
@@ -197,7 +197,7 @@ const runWalletExample = async () => {
 			// we can check on the status
 			setTimeout(async () => await checkMeltQuote(quote), 1000);
 
-			const checkMeltQuote = async (q: PartialMeltQuoteResponse) => {
+			const checkMeltQuote = async (q: MeltQuoteBolt11Response) => {
 				// we can check on the status of the quote.
 				const quote = await wallet.checkMeltQuoteBolt11(q.quote);
 

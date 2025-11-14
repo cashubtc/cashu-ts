@@ -108,9 +108,9 @@ export type GetInfoResponse = {
 };
 
 /**
- * Response from the mint after requesting a melt quote.
+ * Base melt quote response - all melt quotes have these fields (NUT-05)
  */
-export type PartialMeltQuoteResponse = {
+export type NUT05MeltQuoteResponse = {
 	/**
 	 * Quote ID.
 	 */
@@ -120,9 +120,9 @@ export type PartialMeltQuoteResponse = {
 	 */
 	amount: number;
 	/**
-	 * Fee reserve to be added to the amount.
+	 * Unit of the melt quote.
 	 */
-	fee_reserve: number;
+	unit: string;
 	/**
 	 * State of the melt quote.
 	 */
@@ -131,6 +131,18 @@ export type PartialMeltQuoteResponse = {
 	 * Timestamp of when the quote expires.
 	 */
 	expiry: number;
+} & ApiError;
+
+/**
+ * Response from the mint after requesting a melt quote.
+ *
+ * @deprecated - Use MeltQuoteBolt11Response.
+ */
+export type PartialMeltQuoteResponse = NUT05MeltQuoteResponse & {
+	/**
+	 * Fee reserve to be added to the amount.
+	 */
+	fee_reserve: number;
 	/**
 	 * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
 	 * depending on which LN-backend the mint uses.
@@ -144,17 +156,48 @@ export type PartialMeltQuoteResponse = {
 	 * Payment request for the melt quote.
 	 */
 	request?: string;
-	/**
-	 * Unit of the melt quote.
-	 */
-	unit?: string;
 } & ApiError;
 
-export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
+/**
+ * Response from the mint after requesting a BOLT11 melt quote. Contains payment details and state
+ * for paying Lightning Network offers.
+ */
+export type MeltQuoteBolt11Response = NUT05MeltQuoteResponse & {
+	/**
+	 * Payment request for the melt quote.
+	 */
+	request: string; // LN invoice
+	/**
+	 * Fee reserve to be added to the amount.
+	 */
+	fee_reserve: number;
+	/**
+	 * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
+	 * depending on which LN-backend the mint uses.
+	 */
+	payment_preimage: string | null;
+	/**
+	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
+	 */
+	change?: SerializedBlindedSignature[];
+};
 
 /**
  * Response from the mint after requesting a BOLT12 melt quote. Contains payment details and state
  * for paying Lightning Network offers.
+ *
+ * @remarks
+ * - Same as Bolt11.
+ */
+export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
+
+/**
+ * @deprecated - Use MeltQuoteBolt11Response.
+ */
+export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
+
+/**
+ * @deprecated - Use MeltQuoteBolt12Response.
  */
 export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
 

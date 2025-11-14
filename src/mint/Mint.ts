@@ -8,10 +8,9 @@
 import type {
 	GetInfoResponse,
 	PartialMintQuoteResponse,
-	MeltQuoteResponse,
-	PartialMeltQuoteResponse,
 	Bolt12MintQuoteResponse,
-	Bolt12MeltQuoteResponse,
+	MeltQuoteBolt11Response,
+	MeltQuoteBolt12Response,
 	CheckStateResponse,
 	PostRestoreResponse,
 	SwapResponse,
@@ -301,9 +300,9 @@ class Mint {
 	async createMeltQuoteBolt11(
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('POST', '/v1/melt/quote/bolt11', { requestBody: meltQuotePayload }, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -331,8 +330,8 @@ class Mint {
 	async createMeltQuoteBolt12(
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MeltQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'POST',
 			'/v1/melt/quote/bolt12',
 			{ requestBody: meltQuotePayload },
@@ -351,9 +350,9 @@ class Mint {
 	async checkMeltQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('GET', `/v1/melt/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -384,8 +383,8 @@ class Mint {
 	async checkMeltQuoteBolt12(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MeltQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'GET',
 			`/v1/melt/quote/bolt12/${quote}`,
 			{},
@@ -410,12 +409,12 @@ class Mint {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const headers: Record<string, string> = {
 			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
 		};
 		const response = await this.requestWithAuth<
-			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>(
 			'POST',
 			'/v1/melt/bolt11',
@@ -456,11 +455,11 @@ class Mint {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<Bolt12MeltQuoteResponse> {
+	): Promise<MeltQuoteBolt12Response> {
 		const headers: Record<string, string> = {
 			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
 		};
-		const data = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+		const data = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'POST',
 			'/v1/melt/bolt12',
 			{

@@ -1,27 +1,15 @@
 import type { Proof } from '../../model/types/proof';
-import type { MeltQuoteResponse } from '../../mint/types';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
-import type { Keyset } from '../Keyset';
-import type { MeltPayload } from './payloads';
 import { type OperationCounters } from '../CounterSource';
 import { type SigFlag } from '../../crypto';
+import { type MeltPreview } from './payloads';
+import { type NUT05MeltQuoteResponse } from '../../mint/types';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 export type RestoreConfig = {
 	keysetId?: string;
 };
-
-/**
- * Blanks for completing a melt operation asynchronously.
- */
-export interface MeltBlanks<T extends MeltQuoteResponse = MeltQuoteResponse> {
-	method: 'bolt11' | 'bolt12';
-	payload: MeltPayload;
-	outputData: OutputDataLike[];
-	keyset: Keyset;
-	quote: T;
-}
 
 /**
  * Shared properties for most `OutputType` variants (except 'custom').
@@ -178,6 +166,7 @@ export type MintProofsConfig = {
  */
 export type MeltProofsConfig = {
 	keysetId?: string;
-	onChangeOutputsCreated?: (blanks: MeltBlanks) => void;
+	privkey?: string | string[];
+	onChangeOutputsCreated?: (blanks: MeltPreview<NUT05MeltQuoteResponse>) => void;
 	onCountersReserved?: OnCountersReserved;
 };

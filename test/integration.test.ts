@@ -468,6 +468,32 @@ describe('mint api', () => {
 		expect(response).toBeDefined();
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
+	test('mint and melt p2pk SIG_ALL', async () => {
+		const invoice =
+			'lnbc200n1p530wtspp59anj2yqy6v3695js9ny96upv38unwz7g44p6z75wm5cqufe2dy5qdqqcqzzsxqyz5vqsp5qzr39dz38km5xu2q7yyh0d5g4vfmwlxnvyklnth4h456gyfx7lsq9qxpqysgqx6fw02a2mfvf6eldlgajer9tz4f39clsstzhs37s0r3u7c5mdl59q9qnuqrt7wqje4uxd7lzjas9vz7g0xkc3kk3an7cj99609gy9ksq3qgwdt';
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+		const privKeyBob = secp256k1.utils.randomSecretKey();
+		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
+		const mintRequest = await wallet.createMintQuoteBolt11(50);
+		await untilMintQuotePaid(wallet, mintRequest);
+		const proofs = await wallet.ops
+			.mintBolt11(50, mintRequest.quote)
+			.asP2PK({
+				pubkey: bytesToHex(pubKeyBob),
+				sigFlag: 'SIG_ALL',
+			})
+			.run();
+		// console.log('input proofs', proofs);
+		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
+		const fee = meltRequest.fee_reserve;
+		expect(fee).toBeGreaterThan(0);
+		const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
+		const response = await wallet.completeMelt(melt, bytesToHex(privKeyBob));
+		expect(response).toBeDefined();
+		// console.log('melt response', response);
+		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
+	});
 	test('mint deterministic', async () => {
 		const hexSeed = bytesToHex(randomBytes(64));
 		const wallet = new Wallet(mintUrl);
