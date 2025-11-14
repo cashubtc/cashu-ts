@@ -53,3 +53,29 @@ export type TokenEntry = {
 	 */
 	mint: string;
 };
+
+/**
+ * Metadata for a Cashu token.
+ */
+export type TokenMetadata = {
+	/**
+	 * The unit of the token.
+	 */
+	unit: string;
+	/**
+	 * The memo of the token.
+	 */
+	memo?: string;
+	/**
+	 * The mint of the token.
+	 */
+	mint: string;
+	/**
+	 * The amount of the token.
+	 */
+	amount: number;
+	/**
+	 * The incomplete proofs of the token.
+	 */
+	incompleteProofs: Array<Omit<Proof, 'id'>>;
+};

@@ -46,7 +46,7 @@ export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
 export * from './model/types/proof-state';
 export type * from './model/types/proof';
-export type { Token } from './model/types/token';
+export type { Token, TokenMetadata } from './model/types/token';
 
 // Crypto
 export * from './crypto';

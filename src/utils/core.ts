@@ -10,18 +10,19 @@ import {
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from '../model/PaymentRequest';
-import {
-	type DeprecatedToken,
-	type Keys,
-	type MintKeys,
-	type MintKeyset,
-	type Proof,
-	type SerializedDLEQ,
-	type Token,
-	type TokenV4Template,
-	type V4DLEQTemplate,
-	type V4InnerToken,
-	type V4ProofTemplate,
+import type {
+	TokenMetadata,
+	DeprecatedToken,
+	Keys,
+	MintKeys,
+	MintKeyset,
+	Proof,
+	SerializedDLEQ,
+	Token,
+	TokenV4Template,
+	V4DLEQTemplate,
+	V4InnerToken,
+	V4ProofTemplate,
 } from '../model/types';
 import { Bytes } from './Bytes';
 import { type Keyset } from '../wallet';
@@ -386,17 +387,38 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  */
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
 	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
-	uriPrefixes.forEach((prefix: string) => {
-		if (!tokenString.startsWith(prefix)) {
-			return;
-		}
-		tokenString = tokenString.slice(prefix.length);
-	});
+	const token = removePrefix(tokenString);
+	const tokenObj = handleTokens(token);
+	tokenObj.proofs = mapShortKeysetIds(tokenObj.proofs, keysets);
+	return tokenObj;
+}
 
-	const token = handleTokens(tokenString);
-	token.proofs = mapShortKeysetIds(token.proofs, keysets);
-	return token;
+/**
+ * Returns the metadata of a cashu token.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Token metadata.
+ */
+export function getTokenMetadata(token: string): TokenMetadata {
+	token = removePrefix(token);
+	const tokenObj = handleTokens(token);
+	return {
+		unit: tokenObj.unit || 'sat',
+		mint: tokenObj.mint,
+		amount: sumProofs(tokenObj.proofs),
+		...(tokenObj.memo && { memo: tokenObj.memo }),
+		incompleteProofs: tokenObj.proofs.map((p) => ({
+			secret: p.secret,
+			C: p.C,
+			amount: p.amount,
+			...(p.dleq && {
+				dleq: p.dleq,
+			}),
+			...(p.witness && {
+				witness: p.witness,
+			}),
+		})),
+	};
 }
 
 /**
@@ -774,4 +796,15 @@ export function deepEqual<T>(a: T, b: T): boolean {
 	if (keysA.length !== keysB.length) return false;
 
 	return keysA.every((key) => keysB.includes(key) && deepEqual(a[key], b[key]));
+}
+
+function removePrefix(token: string): string {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
+	uriPrefixes.forEach((prefix: string) => {
+		if (!token.startsWith(prefix)) {
+			return;
+		}
+		token = token.slice(prefix.length);
+	});
+	return token;
 }

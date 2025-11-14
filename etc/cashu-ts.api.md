@@ -391,6 +391,9 @@ export const getSignedOutput: (output: BlindedMessage, privateKey: PrivKey) => B
 export const getSignedOutputs: (outputs: BlindedMessage[], privateKey: string) => BlindedMessage[];
 
 // @public
+export function getTokenMetadata(token: string): TokenMetadata;
+
+// @public
 export function handleTokens(token: string): Token;
 
 // @public
@@ -1469,6 +1472,15 @@ export type Token = {
     proofs: Proof[];
     memo?: string;
     unit?: string;
+};
+
+// @public
+export type TokenMetadata = {
+    unit: string;
+    memo?: string;
+    mint: string;
+    amount: number;
+    incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
 
 // @public (undocumented)
