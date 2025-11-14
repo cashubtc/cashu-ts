@@ -26,6 +26,7 @@ import { SerializedBlindedMessage as SerializedBlindedMessage_2 } from './types.
 import { SerializedBlindedSignature as SerializedBlindedSignature_2 } from './types.js';
 import { SwapMethod as SwapMethod_2 } from './types.js';
 import { Token as Token_2 } from './model/types.js';
+import { TokenMetadata as TokenMetadata_2 } from './model/types.js';
 import { WebSocketSupport as WebSocketSupport_2 } from './types.js';
 
 // @public
@@ -360,6 +361,9 @@ export type GetInfoResponse = {
     };
     motd?: string;
 };
+
+// @public
+export function getTokenMetadata(token: string): TokenMetadata_2;
 
 // @public
 export function hasValidDleq(proof: Proof_3, keyset: MintKeys_3): boolean;
@@ -979,6 +983,15 @@ export type Token = {
     proofs: Proof[];
     memo?: string;
     unit?: string;
+};
+
+// @public
+export type TokenMetadata = {
+    unit: string;
+    memo?: string;
+    mint: string;
+    amount: number;
+    incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
 
 // @public @deprecated (undocumented)

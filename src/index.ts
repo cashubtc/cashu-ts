@@ -13,6 +13,7 @@ import {
 	getDecodedTokenBinary,
 	getEncodedTokenBinary,
 	hasValidDleq,
+	getTokenMetadata,
 } from './utils';
 import { CashuAuthMint, CashuAuthWallet, getBlindedAuthToken, getEncodedAuthToken } from './auth';
 
@@ -28,6 +29,7 @@ export {
 	PaymentRequest,
 	OutputData,
 	getDecodedToken,
+	getTokenMetadata,
 	getEncodedToken,
 	getEncodedTokenV4,
 	decodePaymentRequest,

@@ -11,18 +11,19 @@ import {
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from './model/PaymentRequest';
-import {
-	type DeprecatedToken,
-	type Keys,
-	type MintKeys,
-	type MintKeyset,
-	type Proof,
-	type SerializedDLEQ,
-	type Token,
-	type TokenV4Template,
-	type V4DLEQTemplate,
-	type V4InnerToken,
-	type V4ProofTemplate,
+import type {
+	TokenMetadata,
+	DeprecatedToken,
+	Keys,
+	MintKeys,
+	MintKeyset,
+	Proof,
+	SerializedDLEQ,
+	Token,
+	TokenV4Template,
+	V4DLEQTemplate,
+	V4InnerToken,
+	V4ProofTemplate,
 } from './model/types';
 import { TOKEN_PREFIX, TOKEN_VERSION } from './utils/Constants';
 import { Bytes } from './utils/Bytes';
@@ -373,18 +374,36 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @returns Cashu token object.
  */
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[]) {
-	// remove prefixes
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
-	uriPrefixes.forEach((prefix: string) => {
-		if (!tokenString.startsWith(prefix)) {
-			return;
-		}
-		tokenString = tokenString.slice(prefix.length);
-	});
+	tokenString = removePrefix(tokenString);
 
 	const token = handleTokens(tokenString);
 	token.proofs = mapShortKeysetIds(token.proofs, keysets);
 	return token;
+}
+
+/**
+ * Returns the metadata of a cashu token.
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Token metadata.
+ */
+export function getTokenMetadata(token: string): TokenMetadata {
+	token = removePrefix(token);
+	const tokenObj = handleTokens(token);
+	return {
+		unit: tokenObj.unit || 'sat',
+		mint: tokenObj.mint,
+		amount: sumProofs(tokenObj.proofs),
+		incompleteProofs: tokenObj.proofs.map((p) => ({
+			secret: p.secret,
+			C: p.C,
+			amount: p.amount,
+			...(p.dleq && {
+				dleq: p.dleq,
+			}),
+		})),
+		...(tokenObj.memo && { memo: tokenObj.memo }),
+	};
 }
 
 /**
@@ -756,4 +775,15 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 
 function sumArray(arr: number[]) {
 	return arr.reduce((a, c) => a + c, 0);
+}
+
+function removePrefix(token: string): string {
+	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
+	uriPrefixes.forEach((prefix: string) => {
+		if (!token.startsWith(prefix)) {
+			return;
+		}
+		token = token.slice(prefix.length);
+	});
+	return token;
 }
