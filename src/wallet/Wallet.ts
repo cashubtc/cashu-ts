@@ -764,7 +764,7 @@ class Wallet {
 		config?: ReceiveConfig,
 		outputType?: OutputType,
 	): Promise<SwapPreview> {
-		const { keysetId, privkey, requireDleq, proofsWeHave, onCountersReserved } = config || {};
+		const { keysetId, requireDleq, proofsWeHave, onCountersReserved } = config || {};
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
 		// Decode and validate token
@@ -784,11 +784,6 @@ class Wallet {
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
-
-		// Sign proofs if needed
-		if (privkey) {
-			proofs = this.signP2PKProofs(proofs, privkey);
-		}
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
