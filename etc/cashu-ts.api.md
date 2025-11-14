@@ -806,7 +806,9 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    // @deprecated (undocumented)
     get supportsBolt12Description(): boolean;
+    supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;
 }
@@ -1447,6 +1449,7 @@ export type SwapMethod = {
     unit: string;
     min_amount: number;
     max_amount: number;
+    description?: boolean;
     options?: {
         description?: boolean;
     };

@@ -1246,6 +1246,14 @@ class Wallet {
 	 *   specified amount and unit.
 	 */
 	async createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse> {
+		// Check if mint supports description for bolt11
+		if (description) {
+			const mintInfo = this.getMintInfo();
+			if (!mintInfo.supportsNut04Description('bolt11', this._unit)) {
+				this.fail('Mint does not support description for bolt11');
+			}
+		}
+
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -1308,7 +1316,7 @@ class Wallet {
 	): Promise<Bolt12MintQuoteResponse> {
 		// Check if mint supports description for bolt12
 		const mintInfo = this.getMintInfo();
-		if (options?.description && !mintInfo.supportsBolt12Description) {
+		if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
 			this.fail('Mint does not support description for bolt12');
 		}
 
