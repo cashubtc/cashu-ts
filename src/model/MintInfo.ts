@@ -191,6 +191,15 @@ export class MintInfo {
 	}
 
 	/**
+	 * @deprecated Use supportsNut04Description(method, unit)
+	 */
+	get supportsBolt12Description(): boolean {
+		return this._mintInfo.nuts[4]?.methods.some(
+			(m) => m.method === 'bolt12' && this.supportsNut04Description('bolt12', m.unit),
+		);
+	}
+
+	/**
 	 * Checks if the mint supports creating invoices/offers with a description for the specified
 	 * payment method.
 	 *
