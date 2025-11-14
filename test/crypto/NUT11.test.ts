@@ -844,6 +844,55 @@ describe('buildP2PKSigAllMessage, SIG_ALL aggregation', () => {
 
 		expect(m1).toBe(m2);
 	});
+
+	test('replicates NUT-11 SIG_ALL test vectors for swap', () => {
+		const sig =
+			'ce017ca25b1b97df2f72e4b49f69ac26a240ce14b3690a8fe619d41ccc42d3c1282e073f85acd36dc50011638906f35b56615f24e4d03e8effe8257f6a808538';
+		const pub = '030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1';
+		const inputs = [
+			{
+				amount: 2,
+				id: '00bfa73302d12ffd',
+				secret: `[\"P2PK\",{\"nonce\":\"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
+				C: '02c97ee3d1db41cf0a3ddb601724be8711a032950811bf326f8219c50c4808d3cd',
+				witness: `{\"signatures\":[\"${sig}\"]}`,
+			},
+		];
+		const outputs = [
+			mkOutput(2, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
+		];
+		const message = buildP2PKSigAllMessage(inputs, outputs);
+
+		expect(message).toBe(
+			'["P2PK",{"nonce":"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303","data":"030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1","tags":[["sigflag","SIG_ALL"]]}]02c97ee3d1db41cf0a3ddb601724be8711a032950811bf326f8219c50c4808d3cd2038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39',
+		);
+		expect(verifyP2PKSecretSignature(sig, message, pub)).toBeTruthy();
+	});
+
+	test('replicates NUT-11 SIG_ALL test vectors for melt', () => {
+		const quote = 'cF8911fzT88aEi1d-6boZZkq5lYxbUSVs-HbJxK0';
+		const sig =
+			'478224fbe715e34f78cb33451db6fcf8ab948afb8bd04ff1a952c92e562ac0f7c1cb5e61809410635be0aa94d0448f7f7959bd5762cc3802b0a00ff58b2da747';
+		const pub = '029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835';
+		const inputs = [
+			{
+				amount: 2,
+				id: '00bfa73302d12ffd',
+				secret: `[\"P2PK\",{\"nonce\":\"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
+				C: '02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b',
+				witness: `{\"signatures\":[\"${sig}\"]}`,
+			},
+		];
+		const outputs = [
+			mkOutput(0, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
+		];
+		const message = buildP2PKSigAllMessage(inputs, outputs, quote);
+
+		expect(message).toBe(
+			'["P2PK",{"nonce":"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de","data":"029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835","tags":[["sigflag","SIG_ALL"]]}]02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b0038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39cF8911fzT88aEi1d-6boZZkq5lYxbUSVs-HbJxK0',
+		);
+		expect(verifyP2PKSecretSignature(sig, message, pub)).toBeTruthy();
+	});
 });
 
 describe('assertSigAllInputs, SIG_ALL validation', () => {

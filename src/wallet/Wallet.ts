@@ -1184,12 +1184,14 @@ class Wallet {
 	 * @param proofs The proofs to sign.
 	 * @param privkey The private key(s) for signing.
 	 * @param outputData Optional. For signing of SIG_ALL transactions.
+	 * @param quoteId Optional. For signing SIG_ALL melt transactions.
 	 * @returns Signed proofs.
 	 */
 	signP2PKProofs(
 		proofs: Proof[],
 		privkey: string | string[],
 		outputData?: OutputDataLike[],
+		quoteId?: string,
 	): Proof[] {
 		// Normal case, sign everything as usual
 		if (!isP2PKSigAll(proofs)) {
@@ -1205,9 +1207,9 @@ class Wallet {
 		const [first, ...rest] = proofs;
 		let signedFirst = first;
 		const messages = [
-			buildLegacyP2PKSigAllMessage(proofs, outputData),
-			buildInterimP2PKSigAllMessage(proofs, outputData),
-			buildP2PKSigAllMessage(proofs, outputData),
+			buildLegacyP2PKSigAllMessage(proofs, outputData, quoteId),
+			buildInterimP2PKSigAllMessage(proofs, outputData, quoteId),
+			buildP2PKSigAllMessage(proofs, outputData, quoteId),
 		];
 		messages.map(
 			(msg) => (signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0]),
