@@ -4,7 +4,6 @@
 
 ```ts
 
-import { MintContactInfo as MintContactInfo_2 } from '..';
 import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
@@ -737,7 +736,7 @@ export type MintContactInfo = {
 export class MintInfo {
     constructor(info: GetInfoResponse);
     // (undocumented)
-    get contact(): MintContactInfo_2[];
+    get contact(): MintContactInfo[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
