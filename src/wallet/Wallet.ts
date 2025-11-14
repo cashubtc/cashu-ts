@@ -1689,18 +1689,29 @@ class Wallet {
 	 * to pay a Lightning invoice.
 	 *
 	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @param amountMsat Optional amount in millisatoshis to attach for amountless invoices, must not
+	 *   be provided for invoices that already encode an amount.
 	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
 	 *   reserve.
 	 */
 	async createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+		if (amountMsat != null) {
+			// invoice is amount-less <=> HumanReadablePart has NO amount segment
+			const hasAmountInHRP = /^ln[a-z0-9]*\d+[munp]?$/.test(invoice);
+			if (hasAmountInHRP) {
+				throw new Error(
+					'amountMsat supplied but invoice already contains an amount. ' +
+						'Leave amountMsat undefined for non-zero invoices.',
+				);
+			}
+		}
+
 		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
+
 		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
 
-			// only attach `options.amountless` if both:
-			//   1. the mint supports it, and
-			//   2. caller explicitly passed an amount
 			...(supportsAmountless && amountMsat
 				? {
 						options: {
