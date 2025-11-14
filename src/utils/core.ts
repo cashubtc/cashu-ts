@@ -401,13 +401,23 @@ export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Ke
  */
 export function getTokenMetadata(token: string): TokenMetadata {
 	token = removePrefix(token);
-	console.log('token', token);
 	const tokenObj = handleTokens(token);
 	return {
 		unit: tokenObj.unit || 'sat',
 		mint: tokenObj.mint,
 		amount: sumProofs(tokenObj.proofs),
 		...(tokenObj.memo && { memo: tokenObj.memo }),
+		incompleteProofs: tokenObj.proofs.map((p) => ({
+			secret: p.secret,
+			C: p.C,
+			amount: p.amount,
+			...(p.dleq && {
+				dleq: p.dleq,
+			}),
+			...(p.witness && {
+				witness: p.witness,
+			}),
+		})),
 	};
 }
 

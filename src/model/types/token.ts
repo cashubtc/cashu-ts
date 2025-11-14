@@ -74,4 +74,8 @@ export type TokenMetadata = {
 	 * The amount of the token.
 	 */
 	amount: number;
+	/**
+	 * The incomplete proofs of the token.
+	 */
+	incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
