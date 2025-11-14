@@ -73,7 +73,6 @@ import {
 	getKeepAmounts,
 	hasValidDleq,
 	splitAmount,
-	stripDleq,
 	sumProofs,
 	sanitizeUrl,
 } from '../utils';
@@ -1106,19 +1105,21 @@ class Wallet {
 	 * Prepares inputs for a mint operation.
 	 *
 	 * @remarks
-	 * Internal method; strips DLEQ for privacy and serializes witnesses.
+	 * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-26) for privacy and serializes witnesses.
+	 * Returns an array of new proof objects - does not mutate the originals.
 	 * @param proofs The proofs to prepare.
 	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
 	 * @returns Prepared proofs for mint payload.
 	 */
 	private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
-		if (!keepDleq) {
-			proofs = stripDleq(proofs);
-		}
-		return proofs.map((p) => ({
-			...p,
-			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
-		}));
+		return proofs.map((p) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
+			void p2pk_e; // intentionally unused (linter)
+			// New proof object
+			return keepDleq && dleq ? { ...rest, dleq, witness } : { ...rest, witness };
+		});
 	}
 
 	/**

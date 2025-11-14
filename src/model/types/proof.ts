@@ -25,6 +25,10 @@ export type Proof = {
 	 */
 	dleq?: SerializedDLEQ;
 	/**
+	 * The P2BK ephemeral pubkey "E" (SEC1-compressed 33-byte hex).
+	 */
+	p2pk_e?: string;
+	/**
 	 * The witness for this proof.
 	 */
 	witness?: string | P2PKWitness | HTLCWitness;

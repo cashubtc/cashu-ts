@@ -167,7 +167,7 @@ describe('P2PKBuilder.toOptions()', () => {
 			locktime: now,
 			refundKeys: [r1, r2] as string[],
 			requiredRefundSignatures: 2,
-		} as const;
+		} as P2PKOptions;
 
 		const out = P2PKBuilder.fromOptions(src).toOptions();
 		expect(out.requiredRefundSignatures).toBe(2);
@@ -329,5 +329,16 @@ describe('P2PKBuilder addTag and addTags', () => {
 			b.addTag(`k${i}`, comp('a', '02'));
 		}
 		expect(() => b.toOptions()).toThrow(/Secret too long/i);
+	});
+});
+
+describe('P2PKBuilder.blindKeys()', () => {
+	it('sets blindKeys flag and round-trips via fromOptions', () => {
+		const k = '02' + 'a'.repeat(64);
+		const opts = new P2PKBuilder().addLockPubkey(k).blindKeys().toOptions();
+		expect(opts.blindKeys).toBe(true);
+
+		const round = P2PKBuilder.fromOptions(opts).toOptions();
+		expect(round.blindKeys).toBe(true);
 	});
 });

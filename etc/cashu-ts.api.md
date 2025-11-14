@@ -986,7 +986,7 @@ export interface OutputConfig {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1072,6 +1072,7 @@ export type P2PKOptions = {
     requiredSignatures?: number;
     requiredRefundSignatures?: number;
     additionalTags?: P2PKTag[];
+    blindKeys?: boolean;
 };
 
 // @public (undocumented)
@@ -1111,7 +1112,7 @@ export type PartialMintQuoteResponse = {
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, nut26?: boolean);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -1128,6 +1129,8 @@ class PaymentRequest_2 {
     mints?: string[] | undefined;
     // (undocumented)
     nut10?: NUT10Option | undefined;
+    // (undocumented)
+    nut26: boolean;
     // (undocumented)
     singleUse: boolean;
     // (undocumented)
@@ -1180,6 +1183,7 @@ export type Proof = {
     secret: string;
     C: string;
     dleq?: SerializedDLEQ;
+    p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
 };
 
@@ -1212,6 +1216,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+    nut26?: boolean;
 };
 
 // @public (undocumented)
@@ -1413,7 +1418,7 @@ export const signP2PKProof: (proof: Proof, privateKey: string) => Proof;
 // @public
 export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger) => Proof[];
 
-// @public (undocumented)
+// @public
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)

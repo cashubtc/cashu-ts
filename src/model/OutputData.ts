@@ -9,11 +9,12 @@ import { type P2PKOptions, type Keyset } from '../wallet';
 import {
 	blindMessage,
 	constructProofFromPromise,
-	serializeProof,
+	deriveP2BKBlindedPubkeys,
 	deriveBlindingFactor,
 	deriveSecret,
-	type DLEQ,
 	pointFromHex,
+	serializeProof,
+	type DLEQ,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
@@ -70,14 +71,31 @@ export function isOutputDataFactory(
 	return typeof value === 'function';
 }
 
+// Holds the map of Pubkey blinding factors for a given OutputData
+// This avoids changing the shape of the OutputDataLike interface
+const EPHEMERAL_E = new WeakMap<OutputData, string>(); // one-shot
+function setEphemeralE(target: OutputData, Ehex?: string) {
+	if (Ehex) EPHEMERAL_E.set(target, Ehex);
+}
+function takeEphemeralE(target: OutputData): string | undefined {
+	const e = EPHEMERAL_E.get(target);
+	if (!e) return;
+	EPHEMERAL_E.delete(target); // one-shot to avoid leakage
+	return e;
+}
+
 export class OutputData implements OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array) {
+	constructor(
+		blindedMessage: SerializedBlindedMessage,
+		blindingFactor: bigint,
+		secret: Uint8Array,
+	) {
 		this.secret = secret;
-		this.blindingFactor = blidingFactor;
+		this.blindingFactor = blindingFactor;
 		this.blindedMessage = blindedMessage;
 	}
 
@@ -108,6 +126,11 @@ export class OutputData implements OutputDataLike {
 				} as SerializedDLEQ,
 			}),
 		} as Proof;
+
+		// Add P2BK (Pay to Blinded Key) blinding factors if needed
+		const Ehex = takeEphemeralE(this);
+		if (Ehex) serializedProof.p2pk_e = Ehex;
+
 		return serializedProof;
 	}
 
@@ -132,9 +155,20 @@ export class OutputData implements OutputDataLike {
 		);
 
 		// Init vars
-		const data = lockKeys[0];
-		const pubkeys = lockKeys.slice(1);
-		const refund = refundKeys;
+		let data = lockKeys[0];
+		let pubkeys = lockKeys.slice(1);
+		let refund = refundKeys;
+
+		// Optional key blinding (P2BK)
+		let Ehex: string | undefined;
+		if (p2pk.blindKeys) {
+			const ordered = [data, ...pubkeys, ...refundKeys];
+			const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, keysetId);
+			data = blinded[0];
+			pubkeys = blinded.slice(1, lockKeys.length);
+			refund = blinded.slice(lockKeys.length);
+			Ehex = _E;
+		}
 
 		// build P2PK Tags (NUT-11)
 		const tags: string[][] = [];
@@ -176,6 +210,8 @@ export class OutputData implements OutputDataLike {
 				tags,
 			},
 		];
+
+		// blind the message
 		const parsed = JSON.stringify(newSecret);
 
 		// Check secret length, counting Unicode code points
@@ -194,6 +230,10 @@ export class OutputData implements OutputDataLike {
 			r,
 			secretBytes,
 		);
+
+		// stash Ehex - we add it to Proof later @see: toProof()
+		if (p2pk.blindKeys && Ehex) setEphemeralE(od, Ehex);
+
 		return od;
 	}
 
