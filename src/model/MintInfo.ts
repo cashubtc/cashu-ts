@@ -194,9 +194,7 @@ export class MintInfo {
 	 * @deprecated Use supportsNut04Description(method, unit)
 	 */
 	get supportsBolt12Description(): boolean {
-		return this._mintInfo.nuts[4]?.methods.some(
-			(m) => m.method === 'bolt12' && this.supportsNut04Description('bolt12', m.unit),
-		);
+		return this.supportsNut04Description('bolt12');
 	}
 
 	/**
@@ -206,11 +204,11 @@ export class MintInfo {
 	 * @param method - The payment method to check ('bolt11' or 'bolt12')
 	 * @returns True if the mint supports description for the method, false otherwise.
 	 */
-	supportsNut04Description(method: 'bolt11' | 'bolt12', unit: string): boolean {
+	supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean {
 		return this._mintInfo.nuts[4]?.methods.some(
 			(met) =>
 				met.method === method &&
-				met.unit === unit &&
+				(unit ? met.unit === unit : true) &&
 				(met.options?.description === true || met.description === true),
 		);
 	}

@@ -805,7 +805,7 @@ export class MintInfo {
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // @deprecated (undocumented)
     get supportsBolt12Description(): boolean;
-    supportsNut04Description(method: 'bolt11' | 'bolt12', unit: string): boolean;
+    supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;
 }
