@@ -271,7 +271,7 @@ export const signP2PKProofs = (
 ): Proof[] => {
 	return proofs.map((proof, index) => {
 		try {
-			const privateKeys: string[] = deriveP2BKSecretsForProof(privateKey, proof);
+			const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKey, proof);
 			let signedProof = proof;
 			for (const priv of privateKeys) {
 				try {
@@ -400,7 +400,7 @@ export const getSignedOutputs = (
  * @returns Deduplicated list of derived secret keys (hex, 64 chars)
  * @alpha
  */
-export function deriveP2BKSecretsForProof(privateKey: string | string[], proof: Proof): string[] {
+export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[] {
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
 	const Ehex: string | undefined = proof?.p2pk_e;
 	if (!Ehex) {
