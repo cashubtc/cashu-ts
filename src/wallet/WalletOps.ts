@@ -633,11 +633,12 @@ export class MintBuilder<
 	async run(this: MintBuilder<M, true>) {
 		// BOLT 11
 		if (this.method === 'bolt11') {
-			const bolt11 = this.quote as MintQuoteResponse;
-			if (bolt11.pubkey && !this.config.privkey) {
+			const quote = this.quote as string | MintQuoteResponse;
+			// For object quotes, enforce privkey when the quote is locked
+			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config, this.outputType);
+			return this.wallet.mintProofsBolt11(this.amount, quote, this.config, this.outputType);
 		}
 
 		// BOLT 12
