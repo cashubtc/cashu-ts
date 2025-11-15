@@ -859,8 +859,6 @@ class Wallet {
 	/**
 	 * Send proofs with online swap if necessary.
 	 *
-	 * @remarks
-	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
@@ -945,7 +943,7 @@ class Wallet {
 
 		// Prepare and complete the send
 		const txn = await this.prepareSwapToSend(amount, proofs, config, outputConfig);
-		return await this.completeSwap(txn);
+		return await this.completeSwap(txn, config?.privkey);
 	}
 
 	/**
@@ -1061,8 +1059,6 @@ class Wallet {
 	/**
 	 * Complete a prepared swap transaction.
 	 *
-	 * @remarks
-	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
@@ -2028,12 +2024,12 @@ class Wallet {
 
 		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
 
-		const mergedQuote: TQuote = {
+		const mergedQuote = {
 			...meltPreview.quote,
-			...(meltResponse as unknown as Partial<TQuote>),
+			...meltResponse,
 		};
 
-		return { quote: mergedQuote, change };
+		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
 	}
 
 	// -----------------------------------------------------------------

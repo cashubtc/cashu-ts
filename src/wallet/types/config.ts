@@ -126,6 +126,7 @@ export type OnCountersReserved = (info: OperationCounters) => void;
  */
 export type SendConfig = {
 	keysetId?: string;
+	privkey?: string | string[];
 	includeFees?: boolean;
 	proofsWeHave?: Proof[];
 	onCountersReserved?: OnCountersReserved;

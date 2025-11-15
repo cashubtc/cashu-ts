@@ -19,9 +19,6 @@ export type ApiError = {
     detail?: string;
 };
 
-// @public (undocumented)
-export function assertSigAllInputs(inputs: Proof[]): void;
-
 // @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
@@ -542,9 +539,12 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 // @public
 export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
 
+// Warning: (ae-forgotten-export) The symbol "MeltMethod" needs to be exported by the entry point index.d.ts
+//
 // @public
-export class MeltBuilder<TQuote extends MeltQuoteBolt11Response = MeltQuoteBolt11Response> {
-    constructor(wallet: Wallet, method: 'bolt11' | 'bolt12', quote: TQuote, proofs: Proof[]);
+export class MeltBuilder<M extends MeltMethod> {
+    // Warning: (ae-forgotten-export) The symbol "MeltQuoteFor" needs to be exported by the entry point index.d.ts
+    constructor(wallet: Wallet, method: M, quote: MeltQuoteFor<M>, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -553,7 +553,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBolt11Response = MeltQuoteBolt1
     keyset(id: string): this;
     onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    run(): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
+    run(): Promise<MeltProofsResponse<MeltQuoteFor<M>>>;
 }
 
 // @public
@@ -710,9 +710,12 @@ export type MintAllKeysets = {
     keysets: MintKeyset[];
 };
 
+// Warning: (ae-forgotten-export) The symbol "MintMethod" needs to be exported by the entry point index.d.ts
+//
 // @public
-export class MintBuilder<M extends 'bolt11' | 'bolt12', HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
-    constructor(wallet: Wallet, method: M, amount: number, quote: string | MintQuoteResponse | Bolt12MintQuoteResponse);
+export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
+    // Warning: (ae-forgotten-export) The symbol "MintQuoteFor" needs to be exported by the entry point index.d.ts
+    constructor(wallet: Wallet, method: M, amount: number, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -1357,6 +1360,7 @@ export class SendBuilder {
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
+    privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
     run(): Promise<SendResponse>;
 }
@@ -1364,6 +1368,7 @@ export class SendBuilder {
 // @public
 export type SendConfig = {
     keysetId?: string;
+    privkey?: string | string[];
     includeFees?: boolean;
     proofsWeHave?: Proof[];
     onCountersReserved?: OnCountersReserved;
@@ -1717,9 +1722,9 @@ export class WalletEvents {
 export class WalletOps {
     constructor(wallet: Wallet);
     // (undocumented)
-    meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]): MeltBuilder<MeltQuoteBolt11Response>;
+    meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]): MeltBuilder<"bolt11">;
     // (undocumented)
-    meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]): MeltBuilder<MeltQuoteBolt11Response>;
+    meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]): MeltBuilder<"bolt12">;
     // (undocumented)
     mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder<"bolt11", true>;
     // (undocumented)

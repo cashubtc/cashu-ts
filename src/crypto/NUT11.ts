@@ -365,11 +365,10 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
 	return deriveP2BKSecretKeys(Ehex, privs, pubs, kid);
 }
 
-/*
+/**
  * Validates SIG_ALL inputs have matching secrets and tags.
  *
  * @param inputs Array of Proofs.
- * @returns First input's data and tags.
  * @throws If proofs are not valid for SIG_ALL.
  * @internal
  */

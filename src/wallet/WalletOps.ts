@@ -16,6 +16,7 @@ import {
 	type P2PKOptions,
 	type OnCountersReserved,
 	type MeltProofsConfig,
+	type MeltProofsResponse,
 } from './types';
 import type { Wallet } from './Wallet';
 
@@ -41,10 +42,10 @@ export class WalletOps {
 		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
-		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
+		return new MeltBuilder<'bolt11'>(this.wallet, 'bolt11', quote, proofs);
 	}
 	meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
-		return new MeltBuilder(this.wallet, 'bolt12', quote, proofs);
+		return new MeltBuilder<'bolt12'>(this.wallet, 'bolt12', quote, proofs);
 	}
 }
 
@@ -204,6 +205,16 @@ export class SendBuilder {
 	}
 
 	/**
+	 * Private key(s) used to sign P2PK locked proofs.
+	 *
+	 * @param k Single key or array of multisig keys.
+	 */
+	privkey(k: string | string[]) {
+		this.config.privkey = k;
+		return this;
+	}
+
+	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
 	 * @remarks
@@ -278,6 +289,10 @@ export class SendBuilder {
 
 		// Strict offline, exact match only
 		if (this.offlineExact) {
+			// Sign if needed
+			if (this.config.privkey) {
+				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+			}
 			return this.wallet.sendOffline(this.amount, this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: true,
@@ -287,6 +302,10 @@ export class SendBuilder {
 
 		// Offline close match, may overshoot
 		if (this.offlineClose) {
+			// Sign if needed
+			if (this.config.privkey) {
+				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+			}
 			return this.wallet.sendOffline(this.amount, this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: false,
@@ -407,7 +426,7 @@ export class ReceiveBuilder {
 	}
 
 	/**
-	 * Private key used to sign P2PK locked incoming proofs.
+	 * Private key(s) used to sign P2PK locked incoming proofs.
 	 *
 	 * @param k Single key or array of multisig keys.
 	 */
@@ -457,6 +476,14 @@ export class ReceiveBuilder {
 	}
 }
 
+// Mint: internal types
+
+type MintMethod = 'bolt11' | 'bolt12';
+
+type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
+	? string | MintQuoteResponse
+	: Bolt12MintQuoteResponse;
+
 /**
  * Builder for minting proofs from a quote.
  *
@@ -473,7 +500,7 @@ export class ReceiveBuilder {
  *     	.run();
  */
 export class MintBuilder<
-	M extends 'bolt11' | 'bolt12',
+	M extends MintMethod,
 	HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
 > {
 	private outputType?: OutputType;
@@ -486,7 +513,7 @@ export class MintBuilder<
 		private wallet: Wallet,
 		private method: M,
 		private amount: number,
-		private quote: string | MintQuoteResponse | Bolt12MintQuoteResponse,
+		private quote: MintQuoteFor<M>,
 	) {
 		void this._hasPrivkey; // intentionally unused (phantom field)
 	}
@@ -628,6 +655,13 @@ export class MintBuilder<
 	}
 }
 
+// Melt: internal types
+type MeltMethod = 'bolt11' | 'bolt12';
+
+type MeltQuoteFor<M extends MeltMethod> = M extends 'bolt11'
+	? MeltQuoteBolt11Response
+	: MeltQuoteBolt12Response;
+
 /**
  * Builder for melting proofs to pay a Lightning invoice or BOLT12 offer.
  *
@@ -651,14 +685,14 @@ export class MintBuilder<
  * 	.run();
  * ```
  */
-export class MeltBuilder<TQuote extends MeltQuoteBolt11Response = MeltQuoteBolt11Response> {
+export class MeltBuilder<M extends MeltMethod> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 
 	constructor(
 		private wallet: Wallet,
-		private method: 'bolt11' | 'bolt12',
-		private quote: TQuote,
+		private method: M,
+		private quote: MeltQuoteFor<M>,
 		private proofs: Proof[],
 	) {}
 
@@ -753,7 +787,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBolt11Response = MeltQuoteBolt1
 	 *
 	 * @returns The melt result: `{ quote, change }`.
 	 */
-	async run() {
+	async run(): Promise<MeltProofsResponse<MeltQuoteFor<M>>> {
 		// BOLT11
 		if (this.method === 'bolt11') {
 			return this.wallet.meltProofsBolt11(
@@ -761,15 +795,15 @@ export class MeltBuilder<TQuote extends MeltQuoteBolt11Response = MeltQuoteBolt1
 				this.proofs,
 				this.config,
 				this.outputType,
-			);
+			) as Promise<MeltProofsResponse<MeltQuoteFor<M>>>;
 		}
 
-		// BOLT 12
+		// BOLT12
 		return this.wallet.meltProofsBolt12(
 			this.quote as MeltQuoteBolt12Response,
 			this.proofs,
 			this.config,
 			this.outputType,
-		);
+		) as Promise<MeltProofsResponse<MeltQuoteFor<M>>>;
 	}
 }
