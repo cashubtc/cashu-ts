@@ -21,7 +21,7 @@ import {
 	ConsoleLogger,
 	OutputConfig,
 	MeltProofsConfig,
-	MeltBlanks,
+	MeltPreview,
 	Bolt12MeltQuoteResponse,
 	AuthProvider,
 } from '../../src';
@@ -2529,7 +2529,7 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltBlanks | undefined;
+		let capturedBlanks: MeltPreview | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
 				capturedBlanks = blanks;
@@ -2606,7 +2606,7 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltBlanks | undefined;
+		let capturedBlanks: MeltPreview | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
 				capturedBlanks = blanks;
