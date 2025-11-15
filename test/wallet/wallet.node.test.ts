@@ -7,7 +7,7 @@ import {
 	Wallet,
 	CheckStateEnum,
 	type Proof,
-	type MeltQuoteResponse,
+	type MeltQuoteBolt11Response,
 	MeltQuoteState,
 	type MintQuoteResponse,
 	MintQuoteState,
@@ -456,7 +456,7 @@ describe('test fees', () => {
 					fee_reserve: 20,
 					payment_preimage: null,
 					state: 'UNPAID',
-				} as MeltQuoteResponse);
+				} as MeltQuoteBolt11Response);
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
@@ -1923,7 +1923,7 @@ describe('WebSocket Updates', () => {
 		await wallet.loadMint();
 
 		const state = await new Promise(async (res, rej) => {
-			const callback = (p: MeltQuoteResponse) => {
+			const callback = (p: MeltQuoteBolt11Response) => {
 				console.log(p);
 				if (p.state === MeltQuoteState.PAID) {
 					res(p);
@@ -2358,7 +2358,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2406,7 +2406,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 12,
 			fee_reserve: 0,
@@ -2450,7 +2450,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2505,7 +2505,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2532,7 +2532,7 @@ describe('melt proofs', () => {
 		let capturedBlanks: MeltPreview | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks;
+				capturedBlanks = blanks as MeltPreview;
 			},
 		};
 		const response = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2582,7 +2582,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2609,7 +2609,7 @@ describe('melt proofs', () => {
 		let capturedBlanks: MeltPreview | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks;
+				capturedBlanks = blanks as MeltPreview;
 			},
 		};
 		const initialResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2631,7 +2631,7 @@ describe('melt proofs', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt11)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
 			await wallet.loadMint();
-			const meltQuote: MeltQuoteResponse = {
+			const meltQuote: MeltQuoteBolt11Response = {
 				quote: 'test_melt_quote',
 				amount: 10,
 				fee_reserve: 3, // ceil(log2(3)) = 2 blanks expected
@@ -2821,7 +2821,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2879,7 +2879,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 2,
@@ -3005,7 +3005,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3049,7 +3049,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3185,7 +3185,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',

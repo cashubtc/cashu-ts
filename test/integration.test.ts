@@ -39,6 +39,7 @@ import {
 	OutputType,
 	P2PKBuilder,
 	ConsoleLogger,
+	MintQuoteResponse,
 } from '../src';
 import ws from 'ws';
 import {
@@ -66,7 +67,7 @@ vi.setConfig({
 });
 
 // Helper to wait until mint quote is paid
-async function untilMintQuotePaid(wallet, quote) {
+async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteResponse) {
 	try {
 		await wallet.on.onceMintPaid(quote.quote, {
 			timeoutMs: 6_000,
@@ -267,8 +268,8 @@ describe('mint api', () => {
 		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
 		await untilMintQuotePaid(wallet, request);
@@ -301,8 +302,8 @@ describe('mint api', () => {
 		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
 		await untilMintQuotePaid(wallet, request);
@@ -381,10 +382,10 @@ describe('mint api', () => {
 
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
-		console.log('privKeyAlice:', bytesToHex(privKeyAlice));
-		console.log('privKeyBob:', bytesToHex(privKeyBob));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
+		// console.log('privKeyAlice:', bytesToHex(privKeyAlice));
+		// console.log('privKeyBob:', bytesToHex(privKeyBob));
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
@@ -394,14 +395,14 @@ describe('mint api', () => {
 		// Send them P2BK locked to Bob
 		const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
 		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
-		console.log('P2BK SEND', send);
+		// console.log('P2BK SEND', send);
 		expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
-		console.log('P2BK token', encoded);
+		// console.log('P2BK token', encoded);
 
 		// Try and receive them with Bob's secret key (should suceed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
-		console.log('P2BK RECEIVE', proofs);
+		// console.log('P2BK RECEIVE', proofs);
 		expect(
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;
@@ -410,17 +411,17 @@ describe('mint api', () => {
 	});
 
 	test('send and receive p2bk SCHNORR', async () => {
-		const wallet = new Wallet(mintUrl, { unit, logger: new ConsoleLogger('debug') });
+		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
 		const privKeyAlice = schnorr.utils.randomSecretKey();
 		const pubKeyAlice = '02' + bytesToHex(schnorr.getPublicKey(privKeyAlice));
 		const privKeyBob = schnorr.utils.randomSecretKey();
 		const pubKeyBob = '02' + bytesToHex(schnorr.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
-		console.log('privKeyAlice:', bytesToHex(privKeyAlice));
-		console.log('privKeyBob:', bytesToHex(privKeyBob));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
+		// console.log('privKeyAlice:', bytesToHex(privKeyAlice));
+		// console.log('privKeyBob:', bytesToHex(privKeyBob));
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
@@ -430,14 +431,14 @@ describe('mint api', () => {
 		// Send them P2BK locked to Bob
 		const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
 		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
-		console.log('P2BK SEND', send);
+		// console.log('P2BK SEND', send);
 		expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
-		console.log('P2BK token', encoded);
+		// console.log('P2BK token', encoded);
 
 		// Try and receive them with Bob's secret key (should suceed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
-		console.log('P2BK RECEIVE', proofs);
+		// console.log('P2BK RECEIVE', proofs);
 
 		expect(
 			proofs.reduce((curr, acc) => {
@@ -576,10 +577,10 @@ describe('mint api', () => {
 			wallet.on.mintQuotePaid(quote.quote, res, rej);
 		});
 		const proofs = await wallet.mintProofsBolt11(63, quote.quote);
-		console.log(
-			'proofs',
-			proofs.map((p) => p.amount),
-		);
+		// console.log(
+		// 	'proofs',
+		// 	proofs.map((p) => p.amount),
+		// );
 		await new Promise<ProofState>((res) => {
 			wallet.on.proofStateUpdates(
 				proofs,
@@ -885,8 +886,8 @@ describe('Keep Vector and Reordering', () => {
 			send: { type: 'random', denominations: testSendAmounts },
 		};
 		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
-		console.log(send.map((p) => p.amount));
-		console.log(keep.map((p) => p.amount));
+		// console.log(send.map((p) => p.amount));
+		// console.log(keep.map((p) => p.amount));
 		send.forEach((p, i) => expect(p.amount).toBe(testSendAmounts[i]));
 		keep.forEach((p, i) => expect(p.amount).toBe(expectedKeep[i]));
 	});
@@ -904,14 +905,14 @@ describe('Keep Vector and Reordering', () => {
 			send: { type: 'random', denominations: testSendAmounts },
 		};
 		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
-		console.log(
-			'send',
-			send.map((p) => p.amount),
-		);
-		console.log(
-			'keep',
-			keep.map((p) => p.amount),
-		);
+		// console.log(
+		// 	'send',
+		// 	send.map((p) => p.amount),
+		// );
+		// console.log(
+		// 	'keep',
+		// 	keep.map((p) => p.amount),
+		// );
 		send.forEach((p, i) => expect(p.amount).toBe(expectedSend[i]));
 		keep.forEach((p, i) => expect(p.amount).toBe(testKeepAmounts[i]));
 	});
