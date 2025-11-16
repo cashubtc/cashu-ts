@@ -7,6 +7,7 @@ import {
 import { type OutputData, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+import type { SerializedBlindedMessage } from '../model/types/blinded';
 import {
 	type OutputType,
 	type OutputConfig,
@@ -39,23 +40,33 @@ export class WalletOps {
 	 * Generic method to mint proofs for any payment method.
 	 *
 	 * @remarks
-	 * This method enables support for custom payment methods using the fluent builder pattern.
+	 * This method enables support for custom payment methods using the fluent builder pattern. The
+	 * payload factory function receives the blinded messages and should return the complete mint
+	 * payload.
 	 * @example
 	 *
 	 * ```ts
 	 * const proofs = await wallet.ops
-	 * 	.mintGeneric('custom-payment', 100, customQuote)
+	 * 	.mintGeneric('custom-payment', 100, (blindedMessages) => ({
+	 * 		quote: customQuote.quote,
+	 * 		outputs: blindedMessages,
+	 * 		customField: 'value',
+	 * 	}))
 	 * 	.asDeterministic()
 	 * 	.run();
 	 * ```
 	 *
 	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param amount Amount to mint.
-	 * @param quote Quote response or ID for the payment method.
+	 * @param payloadFactory Function that receives blinded messages and returns the mint payload.
 	 * @returns A MintBuilder for composing the mint operation.
 	 */
-	mintGeneric(method: string, amount: number, quote: Record<string, unknown>) {
-		return new MintBuilderGeneric(this.wallet, method, amount, quote);
+	mintGeneric(
+		method: string,
+		amount: number,
+		payloadFactory: (blindedMessages: SerializedBlindedMessage[]) => Record<string, unknown>,
+	) {
+		return new MintBuilderGeneric(this.wallet, method, amount, payloadFactory);
 	}
 
 	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
@@ -69,27 +80,45 @@ export class WalletOps {
 	 * Generic method to melt proofs for any payment method.
 	 *
 	 * @remarks
-	 * This method enables support for custom payment methods using the fluent builder pattern.
+	 * This method enables support for custom payment methods using the fluent builder pattern. The
+	 * payload factory function receives the proofs and change outputs.
 	 * @example
 	 *
 	 * ```ts
 	 * const result = await wallet.ops
-	 * 	.meltGeneric('custom-payment', customQuote, proofs)
+	 * 	.meltGeneric(
+	 * 		'custom-payment',
+	 * 		customQuote,
+	 * 		customQuote.amount + customQuote.fee_reserve,
+	 * 		proofs,
+	 * 		(proofs, outputs) => ({
+	 * 			quote: customQuote.quote,
+	 * 			inputs: proofs,
+	 * 			outputs,
+	 * 		}),
+	 * 	)
 	 * 	.asDeterministic()
 	 * 	.run();
 	 * ```
 	 *
 	 * @param method Payment method name (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param quote Quote response for the payment method.
+	 * @param amount Total amount from the quote (amount + fee_reserve).
 	 * @param proofs Proofs to melt.
+	 * @param payloadFactory Function that receives proofs and outputs, returns melt payload.
 	 * @returns A MeltBuilderGeneric for composing the melt operation.
 	 */
 	meltGeneric(
 		method: string,
 		quote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number },
+		amount: number,
 		proofs: Proof[],
+		payloadFactory: (
+			proofs: Proof[],
+			outputs: SerializedBlindedMessage[],
+		) => Record<string, unknown>,
 	) {
-		return new MeltBuilderGeneric(this.wallet, method, quote, proofs);
+		return new MeltBuilderGeneric(this.wallet, method, quote, amount, proofs, payloadFactory);
 	}
 
 	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
@@ -782,7 +811,9 @@ export class MintBuilderGeneric {
 		private wallet: Wallet,
 		private method: string,
 		private amount: number,
-		private quote: Record<string, unknown>,
+		private payloadFactory: (
+			blindedMessages: SerializedBlindedMessage[],
+		) => Record<string, unknown>,
 	) {}
 
 	/**
@@ -887,7 +918,7 @@ export class MintBuilderGeneric {
 		return this.wallet.mintProofsGeneric(
 			this.method,
 			this.amount,
-			this.quote,
+			this.payloadFactory,
 			this.config,
 			this.outputType,
 		);
@@ -916,7 +947,12 @@ export class MeltBuilderGeneric {
 		private wallet: Wallet,
 		private method: string,
 		private quote: Record<string, unknown> & { quote: string; amount: number; fee_reserve: number },
+		private amount: number,
 		private proofs: Proof[],
+		private payloadFactory: (
+			proofs: Proof[],
+			outputs: SerializedBlindedMessage[],
+		) => Record<string, unknown>,
 	) {}
 
 	/**
@@ -1014,7 +1050,9 @@ export class MeltBuilderGeneric {
 		return this.wallet.meltProofsGeneric(
 			this.method,
 			this.quote,
+			this.amount,
 			this.proofs,
+			this.payloadFactory,
 			this.config,
 			this.outputType,
 		);

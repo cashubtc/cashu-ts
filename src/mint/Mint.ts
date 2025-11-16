@@ -314,7 +314,7 @@ class Mint {
 	 */
 	async createMintQuote<T extends Record<string, unknown>>(
 		method: string,
-		mintQuotePayload: MintQuotePayload,
+		mintQuotePayload: Record<string, unknown>,
 		customRequest?: RequestFn,
 	): Promise<T & { quote: string; amount: number; unit: string; expiry: number }> {
 		const data = await this.requestWithAuth<
@@ -358,7 +358,7 @@ class Mint {
 	 */
 	async createMeltQuote<T extends Record<string, unknown>>(
 		method: string,
-		meltQuotePayload: MeltQuotePayload,
+		meltQuotePayload: Record<string, unknown>,
 		customRequest?: RequestFn,
 	): Promise<
 		T & { quote: string; amount: number; fee_reserve: number; state: string; expiry: number }
