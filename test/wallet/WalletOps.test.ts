@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { WalletOps } from '../../src/wallet/WalletOps';
 
 import type { Proof } from '../../src/model/types';
-import type { OutputData } from '../../src/model/OutputData';
+import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
 	OutputType,
 	OutputConfig,
@@ -30,6 +30,13 @@ type SendFn = (
 	config?: SendConfig,
 	outputConfig?: OutputConfig,
 ) => Promise<SendResponse>;
+
+type SignP2PKFn = (
+	proofs: Proof[],
+	privkey: string | string[],
+	outputData?: OutputDataLike[],
+	quoteId?: string,
+) => Proof[];
 
 type PrepareSendFn = (
 	amount: number,
@@ -86,6 +93,7 @@ type CompleteMeltFn = (
 class MockWallet {
 	defaultOutputType: () => OutputType = vi.fn(() => ({ type: 'random' as const }));
 
+	signP2PKProofs: Mock<SignP2PKFn> = vi.fn<SignP2PKFn>((ps) => ps); // passthrough
 	send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
 	prepareSwapToSend: Mock<PrepareSendFn> = vi.fn<PrepareSendFn>(async () => ({
 		amount: 16,
@@ -107,12 +115,12 @@ class MockWallet {
 	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
 	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
 	sendOffline: Mock<SendOfflineFn> = vi.fn<SendOfflineFn>(() => ({ keep: [], send: [] }));
-	prepareMelt: Mock<PrepareMeltFn> = vi.fn<PrepareMeltFn>(async () => ({
-		method: 'bolt11',
-		inputs: [],
+	prepareMelt: Mock<PrepareMeltFn> = vi.fn<PrepareMeltFn>(async (m, q, p, c, o) => ({
+		method: m,
+		inputs: p,
 		outputData: [],
 		keysetId: '123',
-		quote: { quote: '', amount: 0, state: 'UNPAID', unit: 'sat', expiry: 99999 },
+		quote: q,
 	}));
 	completeMelt: Mock<CompleteMeltFn> = vi.fn<CompleteMeltFn>(async () => ({ change: [] }));
 }
@@ -220,6 +228,7 @@ describe('WalletOps builders', () => {
 				.asRandom([5])
 				.keepAsDeterministic(0, [])
 				.includeFees(true)
+				.privkey('12345')
 				.onCountersReserved(() => {})
 				.proofsWeHave(proofs)
 				.run();
@@ -238,7 +247,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('offlineExactOnly calls sendOffline with exactMatch true and requireDleq false by default', async () => {
-			await ops.send(5, proofs).offlineExactOnly().includeFees(true).run();
+			await ops.send(5, proofs).offlineExactOnly().includeFees(true).privkey('12345').run();
 
 			expect(wallet.sendOffline).toHaveBeenCalledTimes(1);
 			const [amount, sentProofs, config] = wallet.sendOffline.mock.calls[0];
@@ -250,7 +259,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('offlineCloseMatch calls sendOffline with exactMatch false and requireDleq true when set', async () => {
-			await ops.send(5, proofs).offlineCloseMatch(true).run();
+			await ops.send(5, proofs).offlineCloseMatch(true).privkey('12345').run();
 
 			const [, , config] = wallet.sendOffline.mock.calls[0];
 			expect(config).toEqual({ includeFees: undefined, exactMatch: false, requireDleq: true });
@@ -606,12 +615,15 @@ describe('WalletOps builders', () => {
 
 	// --------------------------- MeltBuilder -----------------------------------
 
-	// --------------------------- MeltBuilder -----------------------------------
-
 	describe('MeltBuilder', () => {
 		it('bolt11: calls wallet.prepareMelt and completeMelt with config only when no OutputType was set', async () => {
 			const cb = vi.fn();
-			await ops.meltBolt11(melt11, proofs).keyset('kid').onCountersReserved(cb).run();
+			await ops
+				.meltBolt11(melt11, proofs)
+				.privkey('12345')
+				.keyset('kid')
+				.onCountersReserved(cb)
+				.run();
 
 			expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
 			expect(wallet.completeMelt).toHaveBeenCalledTimes(1);
