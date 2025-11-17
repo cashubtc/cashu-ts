@@ -1804,7 +1804,7 @@ class Wallet {
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
 	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+		return this.meltProofsBolt11(meltQuote, proofsToSend, config, outputType);
 	}
 
 	/**
@@ -1825,7 +1825,9 @@ class Wallet {
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
 	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+		const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
+		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
+		return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey, preferAsync);
 	}
 
 	/**
@@ -1846,37 +1848,9 @@ class Wallet {
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
 	): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, config, outputType);
-	}
-
-	/**
-	 * Melt proofs for a given melt quote created with the bolt11 or bolt12 method.
-	 *
-	 * @remarks
-	 * Creates NUT-08 blanks (1-sat) for Lightning fee return. Get these by setting a
-	 * config.onChangeOutputsCreated callback for async melting. @see completeMelt.
-	 * @param method Payment method of the quote.
-	 * @param meltQuote The bolt11 or bolt12 melt quote.
-	 * @param proofsToSend Proofs to melt.
-	 * @param config Optional (keysetId, onChangeOutputsCreated).
-	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns MeltProofsResponse.
-	 * @throws If params are invalid or mint returns errors.
-	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
-	 */
-	private async _meltProofs<
-		TMethod extends 'bolt11' | 'bolt12',
-		TQuote extends NUT05MeltQuoteResponse,
-	>(
-		method: TMethod,
-		meltQuote: TQuote,
-		proofsToSend: Proof[],
-		config?: MeltProofsConfig,
-		outputType?: OutputType,
-	): Promise<MeltProofsResponse<TQuote>> {
-		const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
+		const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
 		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
-		return this.completeMelt<TQuote>(meltTxn, config?.privkey, preferAsync);
+		return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey, preferAsync);
 	}
 
 	/**
