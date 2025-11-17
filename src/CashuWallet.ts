@@ -42,6 +42,7 @@ import {
 	getDecodedToken,
 	getKeepAmounts,
 	hasValidDleq,
+	isValidHex,
 	splitAmount,
 	stripDleq,
 	sumProofs,
@@ -217,8 +218,8 @@ class CashuWallet {
 	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
 
-		// we only consider keyset IDs that start with "00"
-		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
+		// Only consider keysets that are hex
+		activeKeysets = activeKeysets.filter((k: MintKeyset) => isValidHex(k.id));
 
 		const activeKeyset = activeKeysets.sort(
 			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),

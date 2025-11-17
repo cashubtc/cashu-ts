@@ -205,6 +205,69 @@ describe('test fees', () => {
 	});
 });
 
+describe('Keysets', () => {
+	test('getActiveKeyset should prefer non-base64 keysets', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [
+						{
+							id: 'ctv28hTYzQwr',
+							unit: 'sat',
+							active: false,
+							input_fee_ppk: 0,
+						},
+						{
+							id: '015f90828a64a24bb328a2140e5d205929b9d43e04b93a4427c6bbc48c41561ec1',
+							unit: 'sat',
+							active: true,
+							input_fee_ppk: 100,
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const keysets = await wallet.getKeySets();
+		const activeKeyset = wallet.getActiveKeyset(keysets);
+		expect(activeKeyset.id).toEqual(
+			'015f90828a64a24bb328a2140e5d205929b9d43e04b93a4427c6bbc48c41561ec1',
+		);
+	});
+	test('getActiveKeyset should pick cheapest non-base64 keyset', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [
+						{
+							id: '00500550f0494146',
+							unit: 'sat',
+							active: true,
+							input_fee_ppk: 0,
+						},
+						{
+							id: 'ctv28hTYzQwr',
+							unit: 'sat',
+							active: false,
+							input_fee_ppk: 0,
+						},
+						{
+							id: '015f90828a64a24bb328a2140e5d205929b9d43e04b93a4427c6bbc48c41561ec1',
+							unit: 'sat',
+							active: true,
+							input_fee_ppk: 100,
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new CashuWallet(mint, { unit });
+		const keysets = await wallet.getKeySets();
+		const activeKeyset = wallet.getActiveKeyset(keysets);
+		expect(activeKeyset.id).toEqual('00500550f0494146');
+	});
+});
+
 describe('receive', () => {
 	const tokenInput =
 		'cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwYmQwMzM1NTlkZTI3ZDAiLCAiYW1vdW50IjogMSwgInNlY3JldCI6ICIwMWY5MTA2ZDE1YzAxYjk0MGM5OGVhN2U5NjhhMDZlM2FmNjk2MThlZGI4YmU4ZTUxYjUxMmQwOGU5MDc5MjE2IiwgIkMiOiAiMDJmODVkZDg0YjBmODQxODQzNjZjYjY5MTQ2MTA2YWY3YzBmMjZmMmVlMGFkMjg3YTNlNWZhODUyNTI4YmIyOWRmIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19';
