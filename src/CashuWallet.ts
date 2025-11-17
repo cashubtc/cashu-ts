@@ -54,6 +54,7 @@ import {
 	type OutputDataLike,
 	isOutputDataFactory,
 } from './model/OutputData';
+import { isBase64String } from './base64';
 
 /**
  * The default number of proofs per denomination to keep in a wallet.
@@ -217,8 +218,8 @@ class CashuWallet {
 	getActiveKeyset(keysets: MintKeyset[]): MintKeyset {
 		let activeKeysets = keysets.filter((k: MintKeyset) => k.active && k.unit === this._unit);
 
-		// we only consider keyset IDs that start with "00"
-		activeKeysets = activeKeysets.filter((k: MintKeyset) => k.id.startsWith('00'));
+		// Only consider keysets that are not base64
+		activeKeysets = activeKeysets.filter((k: MintKeyset) => !isBase64String(k.id));
 
 		const activeKeyset = activeKeysets.sort(
 			(a: MintKeyset, b: MintKeyset) => (a.input_fee_ppk ?? 0) - (b.input_fee_ppk ?? 0),
