@@ -744,6 +744,21 @@ describe('verifyP2PKSecretSignature & hasP2PKSignedProof', () => {
 		};
 		expect(hasP2PKSignedProof(PUBKEY, proof)).toBe(false);
 	});
+	test('throws on SIG_ALL secret', () => {
+		const proof: Proof = {
+			amount: 1,
+			id: 'mw',
+			C: '03'.padEnd(66, '0'),
+			secret: `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["sigflag","SIG_ALL"]]}]`,
+			witness: 'not-json',
+		};
+		expect(() => {
+			hasP2PKSignedProof(PUBKEY, proof);
+		}).toThrow('Cannot verify a SIG_ALL proof');
+		expect(() => {
+			verifyP2PKSig(proof);
+		}).toThrow('Cannot verify a SIG_ALL proof');
+	});
 });
 
 describe('buildP2PKSigAllMessage, SIG_ALL aggregation', () => {
