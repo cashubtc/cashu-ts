@@ -24,9 +24,13 @@ import {
 	P2BK_DST,
 	buildP2PKSigAllMessage,
 	assertSigAllInputs,
+    buildLegacyP2PKSigAllMessage,
+    buildInterimP2PKSigAllMessage,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2';
+import { OutputDataLike } from '../../src';
+import { NULL_LOGGER } from '../../src/logger';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
@@ -548,7 +552,7 @@ describe('test p2pk verify', () => {
 			)}"}]`,
 		};
 		expect(() => verifyP2PKSig(proof)).toThrow(
-			new Error('could not verify signature, no witness provided'),
+			new Error('Could not verify signature, no witness provided'),
 		);
 	});
 });
@@ -667,7 +671,7 @@ describe('NUT-11 helper edge cases', () => {
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`;
 		const parsed = parseP2PKSecret(new TextEncoder().encode(s));
 		expect(parsed[0]).toBe('P2PK');
-		expect(() => parseP2PKSecret('not-json')).toThrow("can't parse secret");
+		expect(() => parseP2PKSecret('not-json')).toThrow("Can't parse secret");
 	});
 
 	test('getP2PKWitnessPubkeys: empty pubkeys tag returns only data', () => {
@@ -1003,5 +1007,89 @@ describe('branch coverage helpers', () => {
 	test('getP2PKWitnessSignatures, witness object with signatures undefined', () => {
 		const sigs = getP2PKWitnessSignatures({} as any);
 		expect(sigs).toEqual([]); // covers object path with fallback
+	});
+});
+
+describe('SIG_ALL, all three message formats are actually signed', () => {
+	test('first proof witness contains signatures for legacy, interim and final SIG_ALL messages', () => {
+		// 1. Set up a keypair and a SIG_ALL P2PK secret
+		const privBytes = schnorr.utils.randomSecretKey();
+		const privHex = bytesToHex(privBytes);
+		const pubCompressed = bytesToHex(getPubKeyFromPrivKey(privBytes)); // 33-byte SEC1
+
+		const secret = JSON.stringify([
+			'P2PK',
+			{
+				nonce: 'aa',
+				data: pubCompressed,
+				tags: [['sigflag', 'SIG_ALL']],
+			},
+		] as const);
+
+		// 2. Build a minimal SIG_ALL input set that passes assertSigAllInputs
+		const proofs: Proof[] = [
+			{
+				amount: 1,
+				id: '00a1',
+				C: '03'.padEnd(66, '1'),
+				secret,
+			} as Proof,
+			{
+				amount: 2,
+				id: '00a2',
+				C: '03'.padEnd(66, '2'),
+				secret,
+			} as Proof,
+		];
+
+		// 3. Minimal outputs satisfying OutputDataLike
+		const outputs: OutputDataLike[] = [
+			{
+				blindedMessage: {
+					amount: 3,
+					id: 'out-1',
+					B_: '03'.padEnd(66, '3'),
+				},
+			} as any,
+		];
+
+		const quoteId = 'quote-xyz';
+
+		// 4. Build the three distinct SIG_ALL messages the wallet is supposed to sign
+		const legacyMsg = buildLegacyP2PKSigAllMessage(proofs, outputs, quoteId);
+		const interimMsg = buildInterimP2PKSigAllMessage(proofs, outputs, quoteId);
+		const finalMsg = buildP2PKSigAllMessage(proofs, outputs, quoteId);
+
+		const messages = [legacyMsg, interimMsg, finalMsg];
+
+		// 5. Mimic the wallet SIG_ALL path:
+		//    start from the first proof, then sign it three times with the three messages,
+		//    threading the witness through on each call.
+		let signedFirst: Proof = proofs[0];
+
+		for (const msg of messages) {
+			[signedFirst] = signP2PKProofs([signedFirst], privHex, NULL_LOGGER, msg);
+		}
+
+		const sigs = getP2PKWitnessSignatures(signedFirst.witness);
+
+		// Sanity: we really appended three signatures
+		expect(sigs.length).toBe(3);
+
+		// 6. For each message variant, there must be at least one signature that verifies
+		//    against that specific message and this pubkey.
+		for (const msg of messages) {
+			const hasValid = sigs.some((sig) =>
+				verifyP2PKSecretSignature(sig, msg, pubCompressed),
+			);
+			expect(hasValid).toBe(true);
+		}
+
+		// Optional extra: none of these signatures should verify against the bare secret,
+		// which would indicate we mistakenly signed proof.secret instead of the message.
+		const anyOnSecret = sigs.some((sig) =>
+			verifyP2PKSecretSignature(sig, secret, pubCompressed),
+		);
+		expect(anyOnSecret).toBe(false);
 	});
 });

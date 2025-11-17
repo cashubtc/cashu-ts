@@ -51,7 +51,7 @@ export const parseP2PKSecret = (secret: string | Uint8Array): Secret => {
 		}
 		return JSON.parse(secret) as Secret;
 	} catch {
-		throw new Error("can't parse secret");
+		throw new Error("Can't parse secret");
 	}
 };
 
@@ -104,6 +104,9 @@ export const verifyP2PKSecretSignature = (
 export const hasP2PKSignedProof = (pubkey: string, proof: Proof): boolean => {
 	if (!proof.witness) {
 		return false;
+	}
+	if (isP2PKSigAll([proof])) {
+		throw new Error('Cannot verify a SIG_ALL proof');
 	}
 	const signatures = getP2PKWitnessSignatures(proof.witness);
 	// See if any of the signatures belong to this pubkey. We need to do this
@@ -316,12 +319,15 @@ export const signP2PKProof = (proof: Proof, privateKey: string, message?: string
 
 export const verifyP2PKSig = (proof: Proof): boolean => {
 	if (!proof.witness) {
-		throw new Error('could not verify signature, no witness provided');
+		throw new Error('Could not verify signature, no witness provided');
+	}
+	if (isP2PKSigAll([proof])) {
+		throw new Error('Cannot verify a SIG_ALL proof');
 	}
 	const secret: Secret = parseP2PKSecret(proof.secret);
 	const witnesses = getP2PKExpectedKWitnessPubkeys(secret);
 	if (!witnesses.length) {
-		throw new Error('no signatures required, proof is unlocked');
+		throw new Error('No signatures required, proof is unlocked');
 	}
 	let signatories = 0;
 	const requiredSigs = getP2PKNSigs(secret);
