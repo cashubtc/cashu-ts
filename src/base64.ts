@@ -39,11 +39,6 @@ function base64urlFromBase64(str: string) {
 function isBase64String(s: string): boolean {
 	if (typeof s !== 'string' || s.length === 0) return false;
 
-	// Check if it's a hex string (keyset IDs are hex, not base64)
-	// This prevents hex strings like '00500550f0494146' from being misidentified as base64
-	const isHex = /^[a-fA-F0-9]+$/.test(s);
-	if (isHex) return false;
-
 	// Accept both base64 and base64url char sets
 	const base64url = /^[A-Za-z0-9\-_]+={0,2}$/;
 	const base64 = /^[A-Za-z0-9+/]+={0,2}$/;
