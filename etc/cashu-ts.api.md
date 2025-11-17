@@ -680,7 +680,7 @@ export class Mint {
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<Bolt12MintQuoteResponse>;
     connectWebSocket(): Promise<void>;
-    createMeltQuote<T extends Record<string, unknown>>(method: string, meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<T & {
+    createMeltQuote<T extends Record<string, unknown>>(method: string, meltQuotePayload: Record<string, unknown>, customRequest?: RequestFn): Promise<T & {
         quote: string;
         amount: number;
         fee_reserve: number;
@@ -689,7 +689,7 @@ export class Mint {
     }>;
     createMeltQuoteBolt11(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<PartialMeltQuoteResponse>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<Bolt12MeltQuoteResponse>;
-    createMintQuote<T extends Record<string, unknown>>(method: string, mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<T & {
+    createMintQuote<T extends Record<string, unknown>>(method: string, mintQuotePayload: Record<string, unknown>, customRequest?: RequestFn): Promise<T & {
         quote: string;
         amount: number;
         unit: string;
@@ -1621,7 +1621,7 @@ export class Wallet {
     createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
-    createMeltQuoteGeneric<T extends Record<string, unknown>>(method: string, request: string): Promise<T & {
+    createMeltQuoteGeneric<T extends Record<string, unknown>>(method: string, payloadFactory: (unit: string) => Record<string, unknown>): Promise<T & {
         quote: string;
         amount: number;
         fee_reserve: number;
@@ -1635,7 +1635,7 @@ export class Wallet {
         amount?: number;
         description?: string;
     }): Promise<Bolt12MintQuoteResponse>;
-    createMintQuoteGeneric<T extends Record<string, unknown>>(method: string, amount: number, description?: string): Promise<T & {
+    createMintQuoteGeneric<T extends Record<string, unknown>>(method: string, payloadFactory: (unit: string) => Record<string, unknown>): Promise<T & {
         quote: string;
         amount: number;
         unit: string;
@@ -1666,7 +1666,7 @@ export class Wallet {
         quote: string;
         amount: number;
         fee_reserve: number;
-    }, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
+    }, amount: number, proofsToSend: Proof[], payloadFactory: (proofs: Proof[], outputs: SerializedBlindedMessage[]) => Record<string, unknown>, config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse>;
     readonly mint: Mint;
     // @deprecated (undocumented)
     mintProofs(amount: number, quote: string | MintQuoteResponse, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
@@ -1674,7 +1674,7 @@ export class Wallet {
     mintProofsBolt12(amount: number, quote: Bolt12MintQuoteResponse, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsGeneric(method: string, amount: number, quote: string | Record<string, unknown>, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsGeneric(method: string, amount: number, payloadFactory: (blindedMessages: SerializedBlindedMessage[]) => Record<string, unknown>, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
@@ -1754,13 +1754,13 @@ export class WalletOps {
         quote: string;
         amount: number;
         fee_reserve: number;
-    }, proofs: Proof[]): MeltBuilderGeneric;
+    }, amount: number, proofs: Proof[], payloadFactory: (proofs: Proof[], outputs: SerializedBlindedMessage[]) => Record<string, unknown>): MeltBuilderGeneric;
     // (undocumented)
     mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder<"bolt11", true>;
     // (undocumented)
     mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder<"bolt12", false>;
     // Warning: (ae-forgotten-export) The symbol "MintBuilderGeneric" needs to be exported by the entry point index.d.ts
-    mintGeneric(method: string, amount: number, quote: Record<string, unknown>): MintBuilderGeneric;
+    mintGeneric(method: string, amount: number, payloadFactory: (blindedMessages: SerializedBlindedMessage[]) => Record<string, unknown>): MintBuilderGeneric;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)
