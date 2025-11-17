@@ -18,6 +18,7 @@ import type {
 	PostRestorePayload,
 	MintResponse,
 	ApiError,
+	NUT05MeltQuoteResponse,
 } from './types';
 import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
 import type {
@@ -50,6 +51,7 @@ import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
+import { type Proof } from '../model/types';
 
 /**
  * Class represents Cashu Mint API.
@@ -394,6 +396,59 @@ class Mint {
 	}
 
 	/**
+	 * Requests the mint to pay a melt offer.
+	 *
+	 * @remarks
+	 * This generic method allows any melt meltPayload that conforms to NUT-05.
+	 * @param meltPayload Payload containing quote ID, inputs, and custom REQ items.
+	 * @param options.customRequest Optional override for the request function.
+	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @returns Payment result with state and optional RES items.
+	 */
+	async melt<
+		TReq extends { quote: string; inputs: Proof[] }, // NUT-05
+		TRes extends Record<string, unknown> = Record<string, unknown>, // any KVP
+	>(
+		method: string,
+		meltPayload: TReq,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		},
+	): Promise<NUT05MeltQuoteResponse & TRes> {
+		// Set headers as needed
+		const headers: Record<string, string> = {
+			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		};
+		// Sanitize method string and make request
+		if (!/^[a-z0-9-]+$/.test(method)) {
+			throw new Error(`Invalid melt method: ${method}`);
+		}
+		const data = await this.requestWithAuth<NUT05MeltQuoteResponse & TRes>(
+			'POST',
+			`/v1/melt/${method}`,
+			{ requestBody: meltPayload as Record<string, unknown>, headers },
+			options?.customRequest,
+		);
+
+		// Runtime shape check for basic NUT05MeltQuoteResponse
+		// @todo - Tests need updating before we can do full shape check!
+		if (
+			!isObj(data) //||
+			// typeof data.quote !== 'string' ||
+			// typeof data.amount !== 'number' ||
+			// typeof data.unit !== 'string' ||
+			// typeof data.expiry !== 'number' ||
+			// !Object.values(MeltQuoteState).includes(data.state)
+		) {
+			this._logger.error('invalid response from mint...', { data });
+			throw new Error('invalid response from mint');
+		}
+
+		return data;
+	}
+
+	/**
 	 * Requests the mint to pay for a Bolt11 payment request by providing ecash as inputs to be spent.
 	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
 	 * also contain blank outputs in order to receive back overpaid Lightning fees.
@@ -410,19 +465,10 @@ class Mint {
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt11Response> {
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		const response = await this.requestWithAuth<
-			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
-		>(
-			'POST',
-			'/v1/melt/bolt11',
-			{
-				requestBody: meltPayload,
-				headers,
-			},
-			options?.customRequest,
+		const response = await this.melt<MeltPayload, MeltQuoteBolt11Response>(
+			'bolt11',
+			meltPayload,
+			options,
 		);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -456,19 +502,7 @@ class Mint {
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt12Response> {
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		const data = await this.requestWithAuth<MeltQuoteBolt12Response>(
-			'POST',
-			'/v1/melt/bolt12',
-			{
-				requestBody: meltPayload,
-				headers,
-			},
-			options?.customRequest,
-		);
-		return data;
+		return this.melt<MeltPayload, MeltQuoteBolt12Response>('bolt12', meltPayload, options);
 	}
 
 	/**

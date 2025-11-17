@@ -568,7 +568,7 @@ export interface MeltPreview<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBo
     inputs: Proof[];
     keysetId: string;
     // (undocumented)
-    method: 'bolt11' | 'bolt12';
+    method: string;
     outputData: OutputDataLike[];
     quote: TQuote;
 }
@@ -681,6 +681,14 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
+    melt<TReq extends {
+        quote: string;
+        inputs: Proof[];
+    }, // NUT-05
+    TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: TReq, options?: {
+        customRequest?: RequestFn;
+        preferAsync?: boolean;
+    }): Promise<NUT05MeltQuoteResponse & TRes>;
     meltBolt11(meltPayload: MeltPayload, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
@@ -929,6 +937,7 @@ export type NUT05MeltQuoteResponse = {
     unit: string;
     state: MeltQuoteState;
     expiry: number;
+    change?: SerializedBlindedSignature[];
 } & ApiError;
 
 // @public
@@ -1649,7 +1658,7 @@ export class Wallet {
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
-    prepareMelt<TMethod extends 'bolt11' | 'bolt12', TQuote extends NUT05MeltQuoteResponse>(method: TMethod, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
+    prepareMelt<TQuote extends NUT05MeltQuoteResponse>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

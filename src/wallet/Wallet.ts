@@ -1891,12 +1891,12 @@ class Wallet {
 	 * @param proofsToSend Proofs to melt.
 	 * @param config Optional (keysetId, onChangeOutputsCreated).
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns MeltProofsResponse.
+	 * @returns MeltPreview.
 	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	async prepareMelt<TMethod extends 'bolt11' | 'bolt12', TQuote extends NUT05MeltQuoteResponse>(
-		method: TMethod,
+	async prepareMelt<TQuote extends NUT05MeltQuoteResponse>(
+		method: string,
 		meltQuote: TQuote,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
@@ -2001,16 +2001,15 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Construct melt payload
-		const meltPayload: MeltPayload = {
-			quote,
-			inputs,
-			outputs,
-		};
+		const meltPayload: MeltPayload = { quote, inputs, outputs };
 
-		const meltResponse =
-			meltPreview.method === 'bolt12'
-				? await this.mint.meltBolt12(meltPayload, { preferAsync })
-				: await this.mint.meltBolt11(meltPayload, { preferAsync });
+		// Make melt call (note: bolt11 has legacy data handling)
+		const meltResponse: NUT05MeltQuoteResponse =
+			meltPreview.method === 'bolt11'
+				? await this.mint.meltBolt11(meltPayload, { preferAsync })
+				: await this.mint.melt<MeltPayload, TQuote>(meltPreview.method, meltPayload, {
+						preferAsync,
+					});
 
 		// Check for too many blind signatures before mapping
 		this.failIf(
@@ -2027,7 +2026,7 @@ class Wallet {
 		const mergedQuote = {
 			...meltPreview.quote,
 			...meltResponse,
-		};
+		} as TQuote;
 
 		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
 	}

@@ -131,6 +131,10 @@ export type NUT05MeltQuoteResponse = {
 	 * Timestamp of when the quote expires.
 	 */
 	expiry: number;
+	/**
+	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
+	 */
+	change?: SerializedBlindedSignature[];
 } & ApiError;
 
 /**

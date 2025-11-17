@@ -7,7 +7,7 @@ import { type MeltQuoteBolt11Response, type NUT05MeltQuoteResponse } from '../..
  * Preview of a Melt transaction created by prepareMelt.
  */
 export interface MeltPreview<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
-	method: 'bolt11' | 'bolt12';
+	method: string;
 	/**
 	 * Inputs (Proofs) to be melted.
 	 */
