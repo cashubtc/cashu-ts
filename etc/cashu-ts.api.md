@@ -539,12 +539,9 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 // @public
 export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
 
-// Warning: (ae-forgotten-export) The symbol "MeltMethod" needs to be exported by the entry point index.d.ts
-//
 // @public
-export class MeltBuilder<M extends MeltMethod> {
-    // Warning: (ae-forgotten-export) The symbol "MeltQuoteFor" needs to be exported by the entry point index.d.ts
-    constructor(wallet: Wallet, method: M, quote: MeltQuoteFor<M>, proofs: Proof[]);
+export class MeltBuilder<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
+    constructor(wallet: Wallet, method: string, quote: TQuote, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -553,7 +550,8 @@ export class MeltBuilder<M extends MeltMethod> {
     keyset(id: string): this;
     onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    run(): Promise<MeltProofsResponse<MeltQuoteFor<M>>>;
+    privkey(k: string | string[]): this;
+    run(): Promise<MeltProofsResponse<TQuote>>;
 }
 
 // @public
@@ -1731,13 +1729,13 @@ export class WalletEvents {
 export class WalletOps {
     constructor(wallet: Wallet);
     // (undocumented)
-    meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]): MeltBuilder<"bolt11">;
+    meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
-    meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]): MeltBuilder<"bolt12">;
+    meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
-    mintBolt11(amount: number, quote: string | MintQuoteResponse): MintBuilder<"bolt11", true>;
+    mintBolt11(amount: number, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
     // (undocumented)
-    mintBolt12(amount: number, quote: Bolt12MintQuoteResponse): MintBuilder<"bolt12", false>;
+    mintBolt12(amount: number, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)

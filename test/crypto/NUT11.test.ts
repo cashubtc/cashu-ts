@@ -24,8 +24,8 @@ import {
 	P2BK_DST,
 	buildP2PKSigAllMessage,
 	assertSigAllInputs,
-    buildLegacyP2PKSigAllMessage,
-    buildInterimP2PKSigAllMessage,
+	buildLegacyP2PKSigAllMessage,
+	buildInterimP2PKSigAllMessage,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2';
@@ -1079,17 +1079,13 @@ describe('SIG_ALL, all three message formats are actually signed', () => {
 		// 6. For each message variant, there must be at least one signature that verifies
 		//    against that specific message and this pubkey.
 		for (const msg of messages) {
-			const hasValid = sigs.some((sig) =>
-				verifyP2PKSecretSignature(sig, msg, pubCompressed),
-			);
+			const hasValid = sigs.some((sig) => verifyP2PKSecretSignature(sig, msg, pubCompressed));
 			expect(hasValid).toBe(true);
 		}
 
 		// Optional extra: none of these signatures should verify against the bare secret,
 		// which would indicate we mistakenly signed proof.secret instead of the message.
-		const anyOnSecret = sigs.some((sig) =>
-			verifyP2PKSecretSignature(sig, secret, pubCompressed),
-		);
+		const anyOnSecret = sigs.some((sig) => verifyP2PKSecretSignature(sig, secret, pubCompressed));
 		expect(anyOnSecret).toBe(false);
 	});
 });

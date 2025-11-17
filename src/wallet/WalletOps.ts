@@ -3,6 +3,7 @@ import {
 	type Bolt12MintQuoteResponse,
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBolt12Response,
+	type NUT05MeltQuoteResponse,
 } from '../mint/types';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
@@ -20,6 +21,12 @@ import {
 } from './types';
 import type { Wallet } from './Wallet';
 
+export type MintMethod = 'bolt11' | 'bolt12';
+
+export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
+	? string | MintQuoteResponse
+	: Bolt12MintQuoteResponse;
+
 /**
  * Fluent operations builder for a Wallet instance.
  *
@@ -35,17 +42,17 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
-	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
+	mintBolt11(amount: number, quote: MintQuoteFor<'bolt11'>) {
 		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
-	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
+	mintBolt12(amount: number, quote: MintQuoteFor<'bolt12'>) {
 		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
-		return new MeltBuilder<'bolt11'>(this.wallet, 'bolt11', quote, proofs);
+		return new MeltBuilder<MeltQuoteBolt11Response>(this.wallet, 'bolt11', quote, proofs);
 	}
 	meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
-		return new MeltBuilder<'bolt12'>(this.wallet, 'bolt12', quote, proofs);
+		return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
 	}
 }
 
@@ -476,14 +483,6 @@ export class ReceiveBuilder {
 	}
 }
 
-// Mint: internal types
-
-type MintMethod = 'bolt11' | 'bolt12';
-
-type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
-	? string | MintQuoteResponse
-	: Bolt12MintQuoteResponse;
-
 /**
  * Builder for minting proofs from a quote.
  *
@@ -656,19 +655,12 @@ export class MintBuilder<
 	}
 }
 
-// Melt: internal types
-type MeltMethod = 'bolt11' | 'bolt12';
-
-type MeltQuoteFor<M extends MeltMethod> = M extends 'bolt11'
-	? MeltQuoteBolt11Response
-	: MeltQuoteBolt12Response;
-
 /**
  * Builder for melting proofs to pay a Lightning invoice or BOLT12 offer.
  *
  * @remarks
- * Supports both BOLT11 and BOLT12. You can optionally receive a callback when NUT-08 blanks are
- * created for async melts.
+ * Uses the generic prepareMelt / completeMelt flow under the hood, so it works for any NUT-05 style
+ * melt quote, not just BOLT11 / BOLT12.
  * @example
  *
  * ```typescript
@@ -686,14 +678,14 @@ type MeltQuoteFor<M extends MeltMethod> = M extends 'bolt11'
  * 	.run();
  * ```
  */
-export class MeltBuilder<M extends MeltMethod> {
+export class MeltBuilder<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 
 	constructor(
 		private wallet: Wallet,
-		private method: M,
-		private quote: MeltQuoteFor<M>,
+		private method: string,
+		private quote: TQuote,
 		private proofs: Proof[],
 	) {}
 
@@ -761,6 +753,16 @@ export class MeltBuilder<M extends MeltMethod> {
 	}
 
 	/**
+	 * Private key(s) used to sign P2PK locked proofs.
+	 *
+	 * @param k Single key or array of multisig keys.
+	 */
+	privkey(k: string | string[]) {
+		this.config.privkey = k;
+		return this;
+	}
+
+	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
 	 * @param cb Called with OperationCounters when counters are reserved.
@@ -788,23 +790,17 @@ export class MeltBuilder<M extends MeltMethod> {
 	 *
 	 * @returns The melt result: `{ quote, change }`.
 	 */
-	async run(): Promise<MeltProofsResponse<MeltQuoteFor<M>>> {
-		// BOLT11
-		if (this.method === 'bolt11') {
-			return this.wallet.meltProofsBolt11(
-				this.quote as MeltQuoteBolt11Response,
-				this.proofs,
-				this.config,
-				this.outputType,
-			) as Promise<MeltProofsResponse<MeltQuoteFor<M>>>;
-		}
-
-		// BOLT12
-		return this.wallet.meltProofsBolt12(
-			this.quote as MeltQuoteBolt12Response,
+	async run(): Promise<MeltProofsResponse<TQuote>> {
+		// Step 1, preview and allocate NUT-08 blanks
+		const preview = await this.wallet.prepareMelt<TQuote>(
+			this.method,
+			this.quote,
 			this.proofs,
 			this.config,
 			this.outputType,
-		) as Promise<MeltProofsResponse<MeltQuoteFor<M>>>;
+		);
+
+		// Step 2, sign if needed and complete the melt
+		return this.wallet.completeMelt(preview, this.config.privkey);
 	}
 }
