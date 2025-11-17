@@ -192,7 +192,7 @@ export function numberToHexPadded64(number: bigint): string {
 	return number.toString(16).padStart(64, '0');
 }
 
-function isValidHex(str: string) {
+export function isValidHex(str: string) {
 	return /^[a-f0-9]*$/i.test(str);
 }
 
