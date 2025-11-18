@@ -19,6 +19,7 @@ import type {
 	MintResponse,
 	ApiError,
 	NUT05MeltQuoteResponse,
+	NUT05MeltPayload,
 } from './types';
 import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
 import type {
@@ -51,7 +52,6 @@ import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
-import { type Proof } from '../model/types';
 
 /**
  * Class represents Cashu Mint API.
@@ -405,12 +405,9 @@ class Mint {
 	 * @param options.preferAsync Optional override to set 'respond-async' header.
 	 * @returns Payment result with state and optional RES items.
 	 */
-	async melt<
-		TReq extends { quote: string; inputs: Proof[] }, // NUT-05
-		TRes extends Record<string, unknown> = Record<string, unknown>, // any KVP
-	>(
+	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
 		method: string,
-		meltPayload: TReq,
+		meltPayload: NUT05MeltPayload,
 		options?: {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
@@ -427,7 +424,7 @@ class Mint {
 		const data = await this.requestWithAuth<NUT05MeltQuoteResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
-			{ requestBody: meltPayload as Record<string, unknown>, headers },
+			{ requestBody: meltPayload, headers },
 			options?.customRequest,
 		);
 
@@ -465,11 +462,7 @@ class Mint {
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt11Response> {
-		const response = await this.melt<MeltPayload, MeltQuoteBolt11Response>(
-			'bolt11',
-			meltPayload,
-			options,
-		);
+		const response = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -502,7 +495,7 @@ class Mint {
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt12Response> {
-		return this.melt<MeltPayload, MeltQuoteBolt12Response>('bolt12', meltPayload, options);
+		return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
 	}
 
 	/**
