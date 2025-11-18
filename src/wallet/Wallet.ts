@@ -1981,7 +1981,7 @@ class Wallet {
 		const meltResponse: NUT05MeltQuoteResponse =
 			meltPreview.method === 'bolt11'
 				? await this.mint.meltBolt11(meltPayload, { preferAsync })
-				: await this.mint.melt<MeltPayload, TQuote>(meltPreview.method, meltPayload, {
+				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
 						preferAsync,
 					});
 

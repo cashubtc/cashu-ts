@@ -679,11 +679,7 @@ export class Mint {
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
-    melt<TReq extends {
-        quote: string;
-        inputs: Proof[];
-    }, // NUT-05
-    TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: TReq, options?: {
+    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: NUT05MeltPayload, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<NUT05MeltQuoteResponse & TRes>;
@@ -927,6 +923,12 @@ export class NetworkError extends Error {
 
 // @public
 export function numberToHexPadded64(number: bigint): string;
+
+// @public
+export type NUT05MeltPayload = {
+    quote: string;
+    inputs: Proof[];
+} & Record<string, unknown>;
 
 // @public
 export type NUT05MeltQuoteResponse = {
