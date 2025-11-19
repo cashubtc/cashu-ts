@@ -23,9 +23,10 @@ import {
 	MeltPreview,
 	MeltQuoteBolt12Response,
 	AuthProvider,
+	MintQuoteBolt11Response,
 } from '../../src';
 
-import { bytesToNumber, sumProofs } from '../../src/utils';
+import { bytesToNumber } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
@@ -399,7 +400,7 @@ describe('test info', () => {
 		);
 		const wallet = new Wallet(mint, { unit: 'sat' });
 		await wallet.loadMint();
-		const info = await wallet.getMintInfo();
+		const info = wallet.getMintInfo();
 
 		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
 		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(true);
@@ -1878,7 +1879,7 @@ describe('WebSocket Updates', () => {
 		await wallet.loadMint();
 
 		const state = await new Promise(async (res, rej) => {
-			const callback = (p: MintQuoteResponse) => {
+			const callback = (p: MintQuoteBolt11Response) => {
 				if (p.state === MintQuoteState.PAID) {
 					res(p);
 				}

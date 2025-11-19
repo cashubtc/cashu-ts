@@ -1,7 +1,7 @@
 // test/auth/createAuthWallet.test.ts (essential handlers and setup)
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
-import { beforeAll, beforeEach, afterEach, afterAll, test, describe, expect, vi } from 'vitest';
+import { beforeAll, beforeEach, afterEach, afterAll, test, describe, expect } from 'vitest';
 import { createAuthWallet } from '../../src/auth/createAuthWallet';
 
 // ---- Constants

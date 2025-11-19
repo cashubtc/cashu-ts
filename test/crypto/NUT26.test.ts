@@ -7,7 +7,7 @@ import {
 } from '../../src/crypto';
 import { hexToNumber, numberToHexPadded64 } from '../../src/utils';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test } from 'vitest';
 
 describe('blinded pubkeys & scalar arithmetic', () => {
 	test('deriveP2BKSecretKey corresponds to pubkey addition: (p+r)·G == p·G + r·G', () => {
@@ -107,7 +107,7 @@ describe('deriveP2BKSecretKey with expectedPub hints', () => {
 	});
 
 	test('returns null when blindPubkey is valid but does not correspond to this (p, r)', () => {
-		const { p, r, k1 } = makePr();
+		const { p, r } = makePr();
 		const pHex = toHex(p);
 		const rHex = toHex(r);
 		// Valid but unrelated point: q·G
