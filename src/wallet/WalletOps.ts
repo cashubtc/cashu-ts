@@ -1,10 +1,9 @@
+import { type MintQuoteResponse, type Bolt12MintQuoteResponse } from '../mint/types';
 import {
-	type MintQuoteResponse,
-	type Bolt12MintQuoteResponse,
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBolt12Response,
-	type NUT05MeltQuoteResponse,
-} from '../mint/types';
+	type MeltQuoteBaseResponse,
+} from '../model/types';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
@@ -678,7 +677,7 @@ export class MintBuilder<
  * 	.run();
  * ```
  */
-export class MeltBuilder<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
+export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 

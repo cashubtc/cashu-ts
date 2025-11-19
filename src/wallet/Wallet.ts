@@ -62,6 +62,11 @@ import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/proof-state';
 import type { MintKeys, MintKeyset } from '../model/types/keyset';
+import type {
+	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Response,
+	MeltQuoteBolt12Response,
+} from '../model/types';
 
 // mint wire DTOs and enums
 import type {
@@ -70,9 +75,6 @@ import type {
 	PartialMintQuoteResponse,
 	LockedMintQuoteResponse,
 	Bolt12MintQuoteResponse,
-	NUT05MeltQuoteResponse,
-	MeltQuoteBolt11Response,
-	MeltQuoteBolt12Response,
 } from '../mint/types';
 
 // model helpers
@@ -1869,7 +1871,7 @@ class Wallet {
 	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	async prepareMelt<TQuote extends NUT05MeltQuoteResponse>(
+	async prepareMelt<TQuote extends MeltQuoteBaseResponse>(
 		method: string,
 		meltQuote: TQuote,
 		proofsToSend: Proof[],
@@ -1956,7 +1958,7 @@ class Wallet {
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<TQuote extends NUT05MeltQuoteResponse>(
+	async completeMelt<TQuote extends MeltQuoteBaseResponse>(
 		meltPreview: MeltPreview<TQuote>,
 		privkey?: string | string[],
 		preferAsync?: boolean,
@@ -1978,7 +1980,7 @@ class Wallet {
 		const meltPayload: MeltPayload = { quote, inputs, outputs };
 
 		// Make melt call (note: bolt11 has legacy data handling)
-		const meltResponse: NUT05MeltQuoteResponse =
+		const meltResponse: MeltQuoteBaseResponse =
 			meltPreview.method === 'bolt11'
 				? await this.mint.meltBolt11(meltPayload, { preferAsync })
 				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
