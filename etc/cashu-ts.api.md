@@ -662,7 +662,6 @@ export class Mint {
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
-    // Warning: (ae-forgotten-export) The symbol "SwapRequest" needs to be exported by the entry point index.d.ts
     swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
@@ -1470,6 +1469,12 @@ export type SwapPreview = {
     sendOutputs?: OutputDataLike[];
     keepOutputs?: OutputDataLike[];
     unselectedProofs?: Proof[];
+};
+
+// @public
+export type SwapRequest = {
+    inputs: Proof[];
+    outputs: SerializedBlindedMessage[];
 };
 
 // @public
