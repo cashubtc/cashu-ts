@@ -1,5 +1,24 @@
 import { type SerializedBlindedSignature } from './blinded';
+import { type MintQuoteBaseResponse, type MintQuoteState } from './NUT04';
 import { type MeltQuoteBaseResponse } from './NUT05';
+
+/**
+ * Response from the mint after requesting a BOLT11 mint quote.
+ */
+export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
+	/**
+	 * Amount requested for mint quote.
+	 */
+	amount?: number;
+	/**
+	 * State of the mint quote.
+	 */
+	state: MintQuoteState;
+	/**
+	 * Timestamp of when the quote expires.
+	 */
+	expiry: number;
+};
 
 /**
  * Response from the mint after requesting a BOLT11 melt quote. Contains payment details and state

@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { WalletOps } from '../../src/wallet/WalletOps';
 
-import type { Proof, MeltQuoteBaseResponse } from '../../src/model/types';
+import type {
+	Proof,
+	MintQuoteBolt12Response,
+	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Response,
+	MeltQuoteBolt12Response,
+} from '../../src/model/types';
 import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
 	OutputType,
@@ -15,11 +21,6 @@ import type {
 	SwapPreview,
 	MeltPreview,
 } from '../../src/wallet/types';
-import type {
-	MeltQuoteResponse,
-	Bolt12MeltQuoteResponse,
-	Bolt12MintQuoteResponse,
-} from '../../src/mint/types';
 
 // ---- Function signatures for typed mocks ------------------------------------
 
@@ -65,7 +66,7 @@ type MintBolt11Fn = (
 
 type MintBolt12Fn = (
 	amount: number,
-	quote: Bolt12MintQuoteResponse,
+	quote: MintQuoteBolt12Response,
 	privkey: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
@@ -114,7 +115,7 @@ class MockWallet {
 	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
 	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
 	sendOffline: Mock<SendOfflineFn> = vi.fn<SendOfflineFn>(() => ({ keep: [], send: [] }));
-	prepareMelt: Mock<PrepareMeltFn> = vi.fn<PrepareMeltFn>(async (m, q, p, c, o) => ({
+	prepareMelt: Mock<PrepareMeltFn> = vi.fn<PrepareMeltFn>(async (m, q, p, _c, _o) => ({
 		method: m,
 		inputs: p,
 		outputData: [],
@@ -136,7 +137,7 @@ const token =
 
 const quote = 'q123';
 
-const melt11: MeltQuoteResponse = {
+const melt11: MeltQuoteBolt11Response = {
 	quote: 'mq11',
 	amount: 5,
 	fee_reserve: 1,
@@ -147,7 +148,7 @@ const melt11: MeltQuoteResponse = {
 	unit: 'sat',
 };
 
-const melt12: Bolt12MeltQuoteResponse = {
+const melt12: MeltQuoteBolt12Response = {
 	quote: 'mq12',
 	amount: 7,
 	fee_reserve: 2,
@@ -158,7 +159,7 @@ const melt12: Bolt12MeltQuoteResponse = {
 	unit: 'sat',
 };
 
-const mint12: Bolt12MintQuoteResponse = {
+const mint12: MintQuoteBolt12Response = {
 	quote: 'mq12',
 	request: 'lno1...',
 	amount: 7,

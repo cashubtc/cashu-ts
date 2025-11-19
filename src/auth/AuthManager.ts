@@ -3,8 +3,13 @@ import request, { type RequestFn } from '../transport';
 import { joinUrls, hasValidDleq, encodeJsonToBase64, Bytes } from '../utils';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
-import type { MintActiveKeys, MintAllKeysets, Proof } from '../model/types';
-import { type GetInfoResponse, type BlindAuthMintResponse } from '../mint/types';
+import type {
+	GetInfoResponse,
+	MintActiveKeys,
+	MintAllKeysets,
+	Proof,
+	SerializedBlindedSignature,
+} from '../model/types';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
 import { KeyChain, type Keyset } from '../wallet';
@@ -36,6 +41,13 @@ type StoredTokens = {
 	 * Epoch timestamp (ms).
 	 */
 	expiresAt?: number;
+};
+
+/**
+ * Response from the mint after blind auth minting.
+ */
+export type BlindAuthMintResponse = {
+	signatures: SerializedBlindedSignature[];
 };
 
 /**

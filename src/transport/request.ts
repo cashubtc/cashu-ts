@@ -1,6 +1,5 @@
 import { HttpResponseError, NetworkError, MintOperationError } from '../model/Errors';
 import { type Logger, NULL_LOGGER } from '../logger';
-import { type ApiError } from '../mint/types/responses';
 
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
@@ -13,6 +12,19 @@ export type RequestArgs = {
 };
 
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+
+/**
+ * Cashu api error.
+ *
+ * - Error: Brief error message.
+ * - Code: HTTP error code.
+ * - Detail: Detailed error message.
+ */
+export type ApiError = {
+	error?: string;
+	code?: number;
+	detail?: string;
+};
 
 let globalRequestOptions: Partial<RequestOptions> = {};
 let requestLogger = NULL_LOGGER;

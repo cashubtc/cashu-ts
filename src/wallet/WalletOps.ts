@@ -1,8 +1,9 @@
-import { type MintQuoteResponse, type Bolt12MintQuoteResponse } from '../mint/types';
 import {
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBolt12Response,
 	type MeltQuoteBaseResponse,
+	type MintQuoteBolt12Response,
+	type MintQuoteBolt11Response,
 } from '../model/types';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
@@ -23,8 +24,8 @@ import type { Wallet } from './Wallet';
 export type MintMethod = 'bolt11' | 'bolt12';
 
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
-	? string | MintQuoteResponse
-	: Bolt12MintQuoteResponse;
+	? string | MintQuoteBolt11Response
+	: MintQuoteBolt12Response;
 
 /**
  * Fluent operations builder for a Wallet instance.
@@ -631,7 +632,7 @@ export class MintBuilder<
 	async run(this: MintBuilder<M, true>) {
 		// BOLT 11
 		if (this.method === 'bolt11') {
-			const quote = this.quote as string | MintQuoteResponse;
+			const quote = this.quote as string | MintQuoteBolt11Response;
 			// For object quotes, enforce privkey when the quote is locked
 			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
@@ -640,7 +641,7 @@ export class MintBuilder<
 		}
 
 		// BOLT 12
-		const bolt12 = this.quote as Bolt12MintQuoteResponse;
+		const bolt12 = this.quote as MintQuoteBolt12Response;
 		if (!this.config.privkey) {
 			throw new Error('privkey is required for BOLT12 mint quotes');
 		}

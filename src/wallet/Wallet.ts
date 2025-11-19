@@ -14,7 +14,6 @@ import {
 	type ReceiveConfig,
 	type MintProofsConfig,
 	type MeltProofsConfig,
-	type MeltPayload,
 	type MeltQuotePayload,
 	type MintPayload,
 	type MintQuotePayload,
@@ -60,22 +59,17 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
-import { CheckStateEnum, type ProofState } from '../model/types/proof-state';
+import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
+	GetInfoResponse,
+	MeltPayload,
 	MeltQuoteBaseResponse,
 	MeltQuoteBolt11Response,
 	MeltQuoteBolt12Response,
+	MintQuoteBolt11Response,
+	MintQuoteBolt12Response,
 } from '../model/types';
-
-// mint wire DTOs and enums
-import type {
-	GetInfoResponse,
-	MintQuoteResponse,
-	PartialMintQuoteResponse,
-	LockedMintQuoteResponse,
-	Bolt12MintQuoteResponse,
-} from '../mint/types';
 
 // model helpers
 import { OutputData, type OutputDataLike } from '../model/OutputData';
@@ -1391,7 +1385,7 @@ class Wallet {
 	/**
 	 * @deprecated Use createMintQuoteBolt11()
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response> {
 		return this.createMintQuoteBolt11(amount, description);
 	}
 
@@ -1405,7 +1399,10 @@ class Wallet {
 	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
 	 *   specified amount and unit.
 	 */
-	async createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuoteBolt11(
+		amount: number,
+		description?: string,
+	): Promise<MintQuoteBolt11Response> {
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1436,7 +1433,7 @@ class Wallet {
 		amount: number,
 		pubkey: string,
 		description?: string,
-	): Promise<LockedMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
 		const mintQuotePayload: MintQuotePayload = {
@@ -1473,7 +1470,7 @@ class Wallet {
 			amount?: number;
 			description?: string;
 		},
-	): Promise<Bolt12MintQuoteResponse> {
+	): Promise<MintQuoteBolt12Response> {
 		// Check if mint supports description for bolt12
 		const mintInfo = this.getMintInfo();
 		if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
@@ -1497,9 +1494,7 @@ class Wallet {
 	/**
 	 * @deprecated Use checkMintQuoteBolt11()
 	 */
-	async checkMintQuote(
-		quote: string | MintQuoteResponse,
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+	async checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response> {
 		return this.checkMintQuoteBolt11(quote);
 	}
 
@@ -1510,8 +1505,8 @@ class Wallet {
 	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	async checkMintQuoteBolt11(
-		quote: string | MintQuoteResponse,
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+		quote: string | MintQuoteBolt11Response,
+	): Promise<MintQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const baseRes = await this.mint.checkMintQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
@@ -1526,7 +1521,7 @@ class Wallet {
 	 * @param quote Quote ID.
 	 * @returns The latest mint quote for the given quote ID.
 	 */
-	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
+	async checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response> {
 		return this.mint.checkMintQuoteBolt12(quote);
 	}
 
@@ -1539,7 +1534,7 @@ class Wallet {
 	 */
 	async mintProofs(
 		amount: number,
-		quote: string | MintQuoteResponse,
+		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1557,7 +1552,7 @@ class Wallet {
 	 */
 	async mintProofsBolt11(
 		amount: number,
-		quote: string | MintQuoteResponse,
+		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1576,7 +1571,7 @@ class Wallet {
 	 */
 	async mintProofsBolt12(
 		amount: number,
-		quote: Bolt12MintQuoteResponse,
+		quote: MintQuoteBolt12Response,
 		privkey: string,
 		config?: { keysetId?: string },
 		outputType?: OutputType,
@@ -1601,7 +1596,7 @@ class Wallet {
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		amount: number,
-		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
+		quote: string | (T extends 'bolt11' ? MintQuoteBolt11Response : MintQuoteBolt12Response),
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {

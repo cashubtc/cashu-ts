@@ -4,9 +4,9 @@ import type {
 	ProofState,
 	MeltQuoteBaseResponse,
 	MeltQuoteBolt11Response,
+	MintQuoteBolt11Response,
 } from '../model/types';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
-import { type MintQuoteResponse } from '../mint/types';
 import type { MeltPreview, SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './CounterSource';
@@ -225,7 +225,7 @@ export class WalletEvents {
 	 */
 	async mintQuoteUpdates(
 		ids: string[],
-		cb: (p: MintQuoteResponse) => void,
+		cb: (p: MintQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -249,7 +249,7 @@ export class WalletEvents {
 	 */
 	async mintQuotePaid(
 		id: string,
-		cb: (p: MintQuoteResponse) => void,
+		cb: (p: MintQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -379,13 +379,13 @@ export class WalletEvents {
 	 * @param opts Optional controls.
 	 * @param opts.signal AbortSignal to cancel the wait early.
 	 * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
-	 * @returns A promise that resolves with the latest `MintQuoteResponse` once PAID.
+	 * @returns A promise that resolves with the latest `MintQuoteBolt11Response` once PAID.
 	 */
 	onceMintPaid(
 		id: string,
 		opts?: { signal?: AbortSignal; timeoutMs?: number },
-	): Promise<MintQuoteResponse> {
-		return this.waitUntilPaid<MintQuoteResponse>(
+	): Promise<MintQuoteBolt11Response> {
+		return this.waitUntilPaid<MintQuoteBolt11Response>(
 			this.mintQuotePaid.bind(this),
 			id,
 			opts,
@@ -418,12 +418,12 @@ export class WalletEvents {
 	 * @param opts.signal AbortSignal to cancel the wait early.
 	 * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
 	 * @param opts.failOnError When true, reject on first error. Default false.
-	 * @returns A promise resolving to the id that won and its `MintQuoteResponse`.
+	 * @returns A promise resolving to the id that won and its `MintQuoteBolt11Response`.
 	 */
 	onceAnyMintPaid(
 		ids: string[],
 		opts?: { signal?: AbortSignal; timeoutMs?: number; failOnError?: boolean },
-	): Promise<{ id: string; quote: MintQuoteResponse }> {
+	): Promise<{ id: string; quote: MintQuoteBolt11Response }> {
 		return new Promise((resolve, reject) => {
 			const unique = Array.from(new Set(ids));
 			const cancels: Map<string, CancellerLike> = new Map();
@@ -507,7 +507,7 @@ export class WalletEvents {
 	 * @param opts Optional controls.
 	 * @param opts.signal AbortSignal to cancel the wait early.
 	 * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
-	 * @returns A promise that resolves with the `MeltQuoteResponse` once PAID.
+	 * @returns A promise that resolves with the `MeltQuoteBolt11Response` once PAID.
 	 */
 	onceMeltPaid(
 		id: string,

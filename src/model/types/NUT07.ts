@@ -16,3 +16,11 @@ export const CheckStateEnum = {
 	SPENT: 'SPENT',
 } as const;
 export type CheckStateEnum = (typeof CheckStateEnum)[keyof typeof CheckStateEnum];
+
+/**
+ * Response when checking proofs if they are spendable. Should not rely on this for receiving, since
+ * it can be easily cheated.
+ */
+export type CheckStateResponse = {
+	states: ProofState[];
+};

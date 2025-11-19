@@ -9,7 +9,6 @@ import {
 	type Proof,
 	type MeltQuoteBolt11Response,
 	MeltQuoteState,
-	type MintQuoteResponse,
 	MintQuoteState,
 	type MintKeys,
 	MintKeyset,
@@ -22,7 +21,7 @@ import {
 	OutputConfig,
 	MeltProofsConfig,
 	MeltPreview,
-	Bolt12MeltQuoteResponse,
+	MeltQuoteBolt12Response,
 	AuthProvider,
 } from '../../src';
 
@@ -1195,9 +1194,7 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const result = await wallet.mintProofsBolt11(1, '').catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		await expect(wallet.mintProofsBolt11(1, '')).rejects.toThrow('Invalid response from mint');
 	});
 });
 
@@ -1525,19 +1522,16 @@ describe('send', () => {
 		);
 		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
-
-		const result = await wallet
-			.send(1, [
+		await expect(
+			wallet.send(1, [
 				{
 					id: '00bd033559de27d0',
 					amount: 2,
 					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 				},
-			])
-			.catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+			]),
+		).rejects.toThrow('Invalid response from mint');
 	});
 	test('test send with proofsWeHave', async () => {
 		server.use(
@@ -2695,7 +2689,7 @@ describe('melt proofs', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt12)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
 			await wallet.loadMint();
-			const meltQuote: Bolt12MeltQuoteResponse = {
+			const meltQuote: MeltQuoteBolt12Response = {
 				quote: 'test_melt_quote',
 				amount: 10,
 				fee_reserve: 3,
@@ -2780,7 +2774,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: Bolt12MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt12Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2845,9 +2839,9 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
+			'Invalid response from mint',
+		);
 	});
 
 	test('test melt proofs mismatch signatures', async () => {
