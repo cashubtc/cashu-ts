@@ -46,7 +46,7 @@ type StoredTokens = {
 /**
  * Response from the mint after blind auth minting.
  */
-export type BlindAuthMintResponse = {
+type BlindAuthMintResponse = {
 	signatures: SerializedBlindedSignature[];
 };
 

@@ -14,14 +14,7 @@ import {
 	type ReceiveConfig,
 	type MintProofsConfig,
 	type MeltProofsConfig,
-	type MeltQuotePayload,
-	type MintPayload,
-	type MintQuotePayload,
-	type MPPOption,
-	type MeltQuoteOptions,
 	type SwapTransaction,
-	type Bolt12MintQuotePayload,
-	type SwapPayload,
 	type MeltProofsResponse,
 	type SendResponse,
 	type RestoreConfig,
@@ -63,12 +56,17 @@ import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
 	GetInfoResponse,
-	MeltPayload,
+	MeltRequest,
 	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Request,
 	MeltQuoteBolt11Response,
 	MeltQuoteBolt12Response,
+	MintRequest,
 	MintQuoteBolt11Response,
 	MintQuoteBolt12Response,
+	MintQuoteBolt11Request,
+	MintQuoteBolt12Request,
+	SwapRequest,
 } from '../model/types';
 
 // model helpers
@@ -688,7 +686,7 @@ class Wallet {
 			sortedKeepVector,
 			// outputs, // <-- removed for security
 		});
-		const payload: SwapPayload = {
+		const payload: SwapRequest = {
 			inputs,
 			outputs,
 		};
@@ -1411,7 +1409,7 @@ class Wallet {
 			}
 		}
 
-		const mintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
 			amount: amount,
 			description: description,
@@ -1436,7 +1434,7 @@ class Wallet {
 	): Promise<MintQuoteBolt11Response> {
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
-		const mintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
 			amount: amount,
 			description: description,
@@ -1477,7 +1475,7 @@ class Wallet {
 			this.fail('Mint does not support description for bolt12');
 		}
 
-		const mintQuotePayload: Bolt12MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt12Request = {
 			pubkey: pubkey,
 			unit: this._unit,
 			amount: options?.amount,
@@ -1628,7 +1626,7 @@ class Wallet {
 		// Create outputs and mint payload
 		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
-		const mintPayload: MintPayload = {
+		const mintPayload: MintRequest = {
 			outputs: blindedMessages,
 			quote: typeof quote === 'string' ? quote : quote.quote,
 		};
@@ -1675,7 +1673,7 @@ class Wallet {
 	 *   reserve.
 	 */
 	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteBolt11Response> {
-		const meltQuotePayload: MeltQuotePayload = {
+		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
 		};
@@ -1735,16 +1733,10 @@ class Wallet {
 			!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit),
 			`Mint does not support MPP for bolt11 and ${this._unit}`,
 		);
-		const mppOption: MPPOption = {
-			amount: millisatPartialAmount,
-		};
-		const meltOptions: MeltQuoteOptions = {
-			mpp: mppOption,
-		};
-		const meltQuotePayload: MeltQuotePayload = {
+		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
-			options: meltOptions,
+			options: { mpp: { amount: millisatPartialAmount } },
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return { ...meltQuote, request: invoice, unit: this._unit };
@@ -1972,7 +1964,7 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Construct melt payload
-		const meltPayload: MeltPayload = { quote, inputs, outputs };
+		const meltPayload: MeltRequest = { quote, inputs, outputs };
 
 		// Make melt call (note: bolt11 has legacy data handling)
 		const meltResponse: MeltQuoteBaseResponse =

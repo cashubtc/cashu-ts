@@ -8,11 +8,6 @@ import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public
-export type AmountlessOption = {
-    amount_msat: number;
-};
-
-// @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
     // (undocumented)
@@ -65,11 +60,6 @@ export interface AuthProvider {
 // @public (undocumented)
 export function bigIntStringify<T>(_key: unknown, value: T): string | T;
 
-// @public
-export type BlindAuthMintPayload = {
-    outputs: SerializedBlindedMessage[];
-};
-
 // @public @deprecated (undocumented)
 export type BlindedMessage = RawBlindedMessage;
 
@@ -81,15 +71,6 @@ export type BlindSignature = {
     C_: WeierstrassPoint<bigint>;
     amount: number;
     id: string;
-};
-
-// @public
-export type Bolt12MeltQuotePayload = MeltQuotePayload;
-
-// @public
-export type Bolt12MintQuotePayload = Omit<MintQuotePayload, 'amount'> & {
-    amount?: number;
-    pubkey: string;
 };
 
 // @public
@@ -522,13 +503,6 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 }
 
 // @public
-export type MeltPayload = {
-    quote: string;
-    inputs: Proof[];
-    outputs?: SerializedBlindedMessage[];
-} & Record<string, unknown>;
-
-// @public
 export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
     inputs: Proof[];
     keysetId: string;
@@ -547,9 +521,15 @@ export type MeltProofsConfig = {
 };
 
 // @public
-export type MeltProofsResponse<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> = {
+export type MeltProofsResponse<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> = {
     quote: TQuote;
     change: Proof[];
+};
+
+// @public
+export type MeltQuoteBaseRequest = {
+    unit: string;
+    request: string;
 };
 
 // @public
@@ -563,28 +543,35 @@ export type MeltQuoteBaseResponse = {
 };
 
 // @public
+export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
+    options?: {
+        amountless?: {
+            amount_msat: number;
+        };
+        mpp?: {
+            amount: number;
+        };
+    };
+};
+
+// @public
 export type MeltQuoteBolt11Response = MeltQuoteBaseResponse & {
     request: string;
     fee_reserve: number;
     payment_preimage: string | null;
-    change?: SerializedBlindedSignature[];
+};
+
+// @public
+export type MeltQuoteBolt12Request = MeltQuoteBaseRequest & {
+    options?: {
+        amountless?: {
+            amount_msat: number;
+        };
+    };
 };
 
 // @public
 export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
-
-// @public
-export type MeltQuoteOptions = {
-    mpp?: MPPOption;
-    amountless?: AmountlessOption;
-};
-
-// @public
-export type MeltQuotePayload = {
-    unit: string;
-    request: string;
-    options?: MeltQuoteOptions;
-};
 
 // @public (undocumented)
 export const MeltQuoteState: {
@@ -595,6 +582,13 @@ export const MeltQuoteState: {
 
 // @public (undocumented)
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
+
+// @public
+export type MeltRequest = {
+    quote: string;
+    inputs: Proof[];
+    outputs?: SerializedBlindedMessage[];
+} & Record<string, unknown>;
 
 // @public (undocumented)
 export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array;
@@ -641,34 +635,35 @@ export class Mint {
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     connectWebSocket(): Promise<void>;
-    createMeltQuoteBolt11(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(meltQuotePayload: MeltQuotePayload, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
-    createMintQuoteBolt11(mintQuotePayload: MintQuotePayload, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
-    createMintQuoteBolt12(mintQuotePayload: Bolt12MintQuotePayload, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
+    createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
+    createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     disconnectWebSocket(): void;
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
     getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
     getLazyMintInfo(): Promise<MintInfo>;
-    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltPayload, options?: {
+    melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<MeltQuoteBaseResponse & TRes>;
-    meltBolt11(meltPayload: MeltPayload, options?: {
+    meltBolt11(meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<MeltQuoteBolt11Response>;
-    meltBolt12(meltPayload: MeltPayload, options?: {
+    meltBolt12(meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<MeltQuoteBolt12Response>;
-    mintBolt11(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
-    swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse>;
+    // Warning: (ae-forgotten-export) The symbol "SwapRequest" needs to be exported by the entry point index.d.ts
+    swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
@@ -833,18 +828,17 @@ export class MintOperationError extends HttpResponseError {
 }
 
 // @public
-export type MintPayload = {
-    quote: string;
-    outputs: SerializedBlindedMessage[];
-    signature?: string;
-};
-
-// @public
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string;
     proofsWeHave?: Proof[];
     onCountersReserved?: OnCountersReserved;
+};
+
+// @public
+export type MintQuoteBaseRequest = {
+    unit: string;
+    pubkey?: string;
 };
 
 // @public
@@ -856,10 +850,22 @@ export type MintQuoteBaseResponse = {
 };
 
 // @public
+export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
+    amount: number;
+    description?: string;
+};
+
+// @public
 export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
     amount?: number;
     state: MintQuoteState;
     expiry: number;
+};
+
+// @public
+export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
+    amount?: number;
+    description?: string;
 };
 
 // @public
@@ -874,14 +880,6 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 // @public (undocumented)
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : MintQuoteBolt12Response;
 
-// @public
-export type MintQuotePayload = {
-    unit: string;
-    amount: number;
-    description?: string;
-    pubkey?: string;
-};
-
 // @public (undocumented)
 export const MintQuoteState: {
     readonly UNPAID: "UNPAID";
@@ -893,6 +891,13 @@ export const MintQuoteState: {
 export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState];
 
 // @public
+export type MintRequest = {
+    quote: string;
+    outputs: SerializedBlindedMessage[];
+    signature?: string;
+};
+
+// @public
 export type MintResponse = {
     signatures: SerializedBlindedSignature[];
 };
@@ -901,11 +906,6 @@ export type MintResponse = {
 export type MPPMethod = {
     method: string;
     unit: string;
-};
-
-// @public
-export type MPPOption = {
-    amount: number;
 };
 
 // @public
@@ -1462,12 +1462,6 @@ export type SwapMethod = {
 };
 
 // @public
-export type SwapPayload = {
-    inputs: Proof[];
-    outputs: SerializedBlindedMessage[];
-};
-
-// @public
 export type SwapPreview = {
     amount: number;
     fees: number;
@@ -1485,7 +1479,7 @@ export type SwapResponse = {
 
 // @public
 export type SwapTransaction = {
-    payload: SwapPayload;
+    payload: SwapRequest;
     outputData: OutputDataLike[];
     keepVector: boolean[];
     sortedIndices: number[];
