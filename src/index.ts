@@ -46,6 +46,7 @@ export type * from './mint/types/responses';
 export type * from './model/types/blinded';
 export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
+export type * from './model/types/NUT03';
 export * from './model/types/NUT04';
 export * from './model/types/NUT05';
 export type * from './model/types/NUT06';
