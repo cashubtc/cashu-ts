@@ -9,6 +9,20 @@ export const MeltQuoteState = {
 export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
 
 /**
+ * Base melt quote request - all melt quote requests have these fields (NUT-05)
+ */
+export type MeltQuoteBaseRequest = {
+	/**
+	 * Unit to be melted.
+	 */
+	unit: string;
+	/**
+	 * Request to be melted to.
+	 */
+	request: string;
+};
+
+/**
  * Base melt quote response - all melt quotes have these fields (NUT-05)
  */
 export type MeltQuoteBaseResponse = {
@@ -40,11 +54,11 @@ export type MeltQuoteBaseResponse = {
 };
 
 /**
- * Generic payload for Melt.
+ * Generic Melt request payload.
  *
  * NUT-05 core fields plus optional blanks for overpayment change.
  */
-export type MeltPayload = {
+export type MeltRequest = {
 	/**
 	 * Quote ID.
 	 */
