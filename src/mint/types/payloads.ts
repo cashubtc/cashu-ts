@@ -21,8 +21,7 @@ export type PostRestorePayload = {
 /**
  * Generic payload for Melt.
  *
- * @remarks
- * Defines the NUT-05 payload keys as the minimum required.
+ * NUT-05 core fields plus optional blanks for overpayment change.
  */
 export type NUT05MeltPayload = {
 	/**
@@ -33,4 +32,8 @@ export type NUT05MeltPayload = {
 	 * Proofs to melt.
 	 */
 	inputs: Proof[];
+	/**
+	 * Optional blanks for fee change. If present, the mint may return signatures in `change`.
+	 */
+	outputs?: SerializedBlindedMessage[];
 } & Record<string, unknown>;

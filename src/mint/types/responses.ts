@@ -132,7 +132,8 @@ export type NUT05MeltQuoteResponse = {
 	 */
 	expiry: number;
 	/**
-	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
+	 * Optional change from overpaid fees. If blanks were provided in `outputs`, the mint may return
+	 * signatures here.
 	 */
 	change?: SerializedBlindedSignature[];
 } & ApiError;

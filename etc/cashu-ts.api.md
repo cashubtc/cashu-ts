@@ -928,6 +928,7 @@ export function numberToHexPadded64(number: bigint): string;
 export type NUT05MeltPayload = {
     quote: string;
     inputs: Proof[];
+    outputs?: SerializedBlindedMessage[];
 } & Record<string, unknown>;
 
 // @public
