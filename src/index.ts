@@ -10,6 +10,8 @@ export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {
+	type MintMethod,
+	type MintQuoteFor,
 	SendBuilder,
 	ReceiveBuilder,
 	MintBuilder,
@@ -46,9 +48,10 @@ export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
 export * from './model/types/NUT04';
 export * from './model/types/NUT05';
+export type * from './model/types/NUT06';
+export * from './model/types/NUT07';
 export type * from './model/types/NUT23';
 export type * from './model/types/NUT25';
-export * from './model/types/proof-state';
 export type * from './model/types/proof';
 export type { Token, TokenMetadata } from './model/types/token';
 

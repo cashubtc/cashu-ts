@@ -1,4 +1,5 @@
-import { type SerializedBlindedSignature } from './blinded';
+import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
+import { type Proof } from './proof';
 
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
@@ -37,3 +38,23 @@ export type MeltQuoteBaseResponse = {
 	 */
 	change?: SerializedBlindedSignature[];
 };
+
+/**
+ * Generic payload for Melt.
+ *
+ * NUT-05 core fields plus optional blanks for overpayment change.
+ */
+export type MeltPayload = {
+	/**
+	 * Quote ID.
+	 */
+	quote: string;
+	/**
+	 * Proofs to melt.
+	 */
+	inputs: Proof[];
+	/**
+	 * Optional blanks for fee change. If present, the mint may return signatures in `change`.
+	 */
+	outputs?: SerializedBlindedMessage[];
+} & Record<string, unknown>;

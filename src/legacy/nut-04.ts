@@ -1,5 +1,4 @@
-import type { PartialMintQuoteResponse } from '../mint/types';
-import { MintQuoteState } from '../model/types';
+import { type MintQuoteBolt11Response, MintQuoteState } from '../model/types';
 import type { Logger } from '../logger';
 
 export type MintQuoteResponsePaidDeprecated = {
@@ -7,13 +6,13 @@ export type MintQuoteResponsePaidDeprecated = {
 };
 
 export function handleMintQuoteResponseDeprecated(
-	response: PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated,
+	response: MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated,
 	logger: Logger,
-): PartialMintQuoteResponse {
-	// if the response MintQuoteResponse has a "paid" flag, we monkey patch it to the state enum
+): MintQuoteBolt11Response {
+	// if the response has a "paid" flag, we monkey patch it to the state enum
 	if (!response.state) {
 		logger.warn(
-			"Field 'state' not found in MintQuoteResponse. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)",
+			"Field 'state' not found in Mint quote response. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)",
 		);
 		if (typeof response.paid === 'boolean') {
 			response.state = response.paid ? MintQuoteState.PAID : MintQuoteState.UNPAID;

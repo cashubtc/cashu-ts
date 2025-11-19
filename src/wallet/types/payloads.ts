@@ -27,24 +27,6 @@ export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBol
 }
 
 /**
- * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees.
- */
-export type MeltPayload = {
-	/**
-	 * ID of the melt quote.
-	 */
-	quote: string;
-	/**
-	 * Inputs (Proofs) to be melted.
-	 */
-	inputs: Proof[];
-	/**
-	 * Blank outputs (blinded messages) that can be filled by the mint to return overpaid fees.
-	 */
-	outputs: SerializedBlindedMessage[];
-};
-
-/**
  * Payload that needs to be send to the mint to request a melt quote.
  */
 export type MeltQuotePayload = {

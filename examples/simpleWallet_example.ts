@@ -2,7 +2,7 @@ import dns from 'node:dns';
 import {
 	MeltQuoteBolt11Response,
 	MeltQuoteState,
-	MintQuoteResponse,
+	MintQuoteBolt11Response,
 	MintQuoteState,
 	Proof,
 	Token,
@@ -60,23 +60,13 @@ const runWalletExample = async () => {
 
 			console.log('Invoice to pay, in order to fullfill the quote: ' + quote.request);
 
-			//check if an error occurred in the creation of the quote
-			if (quote.error) {
-				console.error(quote.error, quote.code, quote.detail);
-				return;
-			}
-
 			// After some time of waiting, let's ask the mint if the request has been fullfilled.
 			setTimeout(async () => await checkMintQuote(quote), 1000);
 
-			const checkMintQuote = async (q: MintQuoteResponse) => {
+			const checkMintQuote = async (q: MintQuoteBolt11Response) => {
 				// with this call, we can check the current status of a given quote
 				console.log('Checking the status of the quote: ' + q.quote);
 				const quote = await wallet.checkMintQuoteBolt11(q.quote);
-				if (quote.error) {
-					console.error(quote.error, quote.code, quote.detail);
-					return;
-				}
 				if (quote.state === MintQuoteState.PAID) {
 					//if the quote was paid, we can ask the mint to issue the signatures for the ecash
 					const response = await wallet.mintProofsBolt11(mintAmount, quote.quote);
