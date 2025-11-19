@@ -1,3 +1,4 @@
+import { type MeltQuoteBaseResponse, type MintQuoteState } from '../../model/types';
 import type {
 	SerializedBlindedMessage,
 	SerializedBlindedSignature,
@@ -108,42 +109,11 @@ export type GetInfoResponse = {
 };
 
 /**
- * Base melt quote response - all melt quotes have these fields (NUT-05)
- */
-export type NUT05MeltQuoteResponse = {
-	/**
-	 * Quote ID.
-	 */
-	quote: string;
-	/**
-	 * Amount to be melted.
-	 */
-	amount: number;
-	/**
-	 * Unit of the melt quote.
-	 */
-	unit: string;
-	/**
-	 * State of the melt quote.
-	 */
-	state: MeltQuoteState;
-	/**
-	 * Timestamp of when the quote expires.
-	 */
-	expiry: number;
-	/**
-	 * Optional change from overpaid fees. If blanks were provided in `outputs`, the mint may return
-	 * signatures here.
-	 */
-	change?: SerializedBlindedSignature[];
-} & ApiError;
-
-/**
  * Response from the mint after requesting a melt quote.
  *
  * @deprecated - Use MeltQuoteBolt11Response.
  */
-export type PartialMeltQuoteResponse = NUT05MeltQuoteResponse & {
+export type PartialMeltQuoteResponse = MeltQuoteBaseResponse & {
 	/**
 	 * Fee reserve to be added to the amount.
 	 */
@@ -164,39 +134,6 @@ export type PartialMeltQuoteResponse = NUT05MeltQuoteResponse & {
 } & ApiError;
 
 /**
- * Response from the mint after requesting a BOLT11 melt quote. Contains payment details and state
- * for paying Lightning Network offers.
- */
-export type MeltQuoteBolt11Response = NUT05MeltQuoteResponse & {
-	/**
-	 * Payment request for the melt quote.
-	 */
-	request: string; // LN invoice
-	/**
-	 * Fee reserve to be added to the amount.
-	 */
-	fee_reserve: number;
-	/**
-	 * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
-	 * depending on which LN-backend the mint uses.
-	 */
-	payment_preimage: string | null;
-	/**
-	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
-	 */
-	change?: SerializedBlindedSignature[];
-};
-
-/**
- * Response from the mint after requesting a BOLT12 melt quote. Contains payment details and state
- * for paying Lightning Network offers.
- *
- * @remarks
- * - Same as Bolt11.
- */
-export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
-
-/**
  * @deprecated - Use MeltQuoteBolt11Response.
  */
 export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; unit: string };
@@ -206,24 +143,10 @@ export type MeltQuoteResponse = PartialMeltQuoteResponse & { request: string; un
  */
 export type Bolt12MeltQuoteResponse = MeltQuoteResponse;
 
-export const MeltQuoteState = {
-	UNPAID: 'UNPAID',
-	PENDING: 'PENDING',
-	PAID: 'PAID',
-} as const;
-export type MeltQuoteState = (typeof MeltQuoteState)[keyof typeof MeltQuoteState];
-
 export type MintContactInfo = {
 	method: string;
 	info: string;
 };
-
-export const MintQuoteState = {
-	UNPAID: 'UNPAID',
-	PAID: 'PAID',
-	ISSUED: 'ISSUED',
-} as const;
-export type MintQuoteState = (typeof MintQuoteState)[keyof typeof MintQuoteState];
 
 /**
  * Response from the mint after requesting a mint.

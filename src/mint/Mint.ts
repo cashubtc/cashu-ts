@@ -9,8 +9,6 @@ import type {
 	GetInfoResponse,
 	PartialMintQuoteResponse,
 	Bolt12MintQuoteResponse,
-	MeltQuoteBolt11Response,
-	MeltQuoteBolt12Response,
 	CheckStateResponse,
 	PostRestoreResponse,
 	SwapResponse,
@@ -18,7 +16,6 @@ import type {
 	PostRestorePayload,
 	MintResponse,
 	ApiError,
-	NUT05MeltQuoteResponse,
 	NUT05MeltPayload,
 } from './types';
 import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
@@ -30,7 +27,6 @@ import type {
 	SwapPayload,
 	Bolt12MintQuotePayload,
 } from '../wallet/types';
-import { MeltQuoteState } from './types';
 import request, {
 	ConnectionManager,
 	type WSConnection,
@@ -52,6 +48,12 @@ import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
+import {
+	type MeltQuoteBaseResponse,
+	type MeltQuoteBolt11Response,
+	type MeltQuoteBolt12Response,
+	MeltQuoteState,
+} from '../model/types';
 
 /**
  * Class represents Cashu Mint API.
@@ -412,7 +414,7 @@ class Mint {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<NUT05MeltQuoteResponse & TRes> {
+	): Promise<MeltQuoteBaseResponse & TRes> {
 		// Set headers as needed
 		const headers: Record<string, string> = {
 			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
@@ -421,14 +423,14 @@ class Mint {
 		if (!/^[a-z0-9-]+$/.test(method)) {
 			throw new Error(`Invalid melt method: ${method}`);
 		}
-		const data = await this.requestWithAuth<NUT05MeltQuoteResponse & TRes>(
+		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
 			{ requestBody: meltPayload, headers },
 			options?.customRequest,
 		);
 
-		// Runtime shape check for basic NUT05MeltQuoteResponse
+		// Runtime shape check for basic MeltQuoteBaseResponse
 		// @todo - Tests need updating before we can do full shape check!
 		if (
 			!isObj(data) //||

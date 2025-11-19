@@ -1,12 +1,12 @@
 import type { Wallet } from './Wallet';
-import type { Proof, ProofState } from '../model/types';
-import {
-	MintQuoteState,
-	MeltQuoteState,
-	type MintQuoteResponse,
-	type MeltQuoteBolt11Response,
-	type NUT05MeltQuoteResponse,
-} from '../mint/types';
+import type {
+	Proof,
+	ProofState,
+	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Response,
+} from '../model/types';
+import { MintQuoteState, MeltQuoteState } from '../model/types';
+import { type MintQuoteResponse } from '../mint/types';
 import type { MeltPreview, SubscriptionCanceller } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './CounterSource';
@@ -70,7 +70,7 @@ export class WalletEvents {
 	private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
 
 	// Callbacks registered for Melt blanks created events
-	private meltBlanksHandlers = new Set<(payload: MeltPreview<NUT05MeltQuoteResponse>) => void>();
+	private meltBlanksHandlers = new Set<(payload: MeltPreview<MeltQuoteBaseResponse>) => void>();
 
 	// Binds an abort signal to each subscription canceller
 	private withAbort(
@@ -198,7 +198,7 @@ export class WalletEvents {
 	 * Typical use: persist `payload` so you can later call `wallet.completeMelt(payload)`.
 	 */
 	public meltBlanksCreated(
-		cb: (payload: MeltPreview<NUT05MeltQuoteResponse>) => void,
+		cb: (payload: MeltPreview<MeltQuoteBaseResponse>) => void,
 		opts?: SubscribeOpts,
 	): SubscriptionCanceller {
 		this.meltBlanksHandlers.add(cb);
@@ -209,7 +209,7 @@ export class WalletEvents {
 	/**
 	 * @internal
 	 */
-	public _emitMeltBlanksCreated(payload: MeltPreview<NUT05MeltQuoteResponse>) {
+	public _emitMeltBlanksCreated(payload: MeltPreview<MeltQuoteBaseResponse>) {
 		for (const h of this.meltBlanksHandlers) {
 			safeCallback(h, payload, this.wallet.logger, { event: 'meltBlanksCreated' });
 		}

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { WalletOps } from '../../src/wallet/WalletOps';
 
-import type { Proof } from '../../src/model/types';
+import type { Proof, MeltQuoteBaseResponse } from '../../src/model/types';
 import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
 	OutputType,
@@ -19,7 +19,6 @@ import type {
 	MeltQuoteResponse,
 	Bolt12MeltQuoteResponse,
 	Bolt12MintQuoteResponse,
-	NUT05MeltQuoteResponse,
 } from '../../src/mint/types';
 
 // ---- Function signatures for typed mocks ------------------------------------
@@ -76,11 +75,11 @@ type SendOfflineFn = (amount: number, proofs: Proof[], config?: SendOfflineConfi
 
 type PrepareMeltFn = (
 	method: string,
-	quote: NUT05MeltQuoteResponse,
+	quote: MeltQuoteBaseResponse,
 	proofs: Proof[],
 	config?: MeltProofsConfig,
 	outputType?: OutputType,
-) => Promise<MeltPreview<NUT05MeltQuoteResponse>>;
+) => Promise<MeltPreview<MeltQuoteBaseResponse>>;
 
 type CompleteMeltFn = (
 	meltPreview: MeltPreview,

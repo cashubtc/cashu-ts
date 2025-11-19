@@ -38,12 +38,16 @@ export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
 export type { SubscriptionCanceller } from './wallet/types/websocket';
 export type * from './mint/types/payloads';
-export * from './mint/types/responses';
+export type * from './mint/types/responses';
 
 // Shared models & primitives
 export type * from './model/types/blinded';
 export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
+export * from './model/types/NUT04';
+export * from './model/types/NUT05';
+export type * from './model/types/NUT23';
+export type * from './model/types/NUT25';
 export * from './model/types/proof-state';
 export type * from './model/types/proof';
 export type { Token, TokenMetadata } from './model/types/token';

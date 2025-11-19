@@ -1,12 +1,11 @@
-import type { NUT05MeltQuoteResponse } from '../mint/types';
-import { MeltQuoteState } from '../mint/types';
+import { MeltQuoteState, type MeltQuoteBaseResponse } from '../model/types';
 import type { Logger } from '../logger';
 
 export type MeltQuoteResponsePaidDeprecated = {
 	paid?: boolean;
 };
 
-export function handleMeltQuoteResponseDeprecated<TQuote extends NUT05MeltQuoteResponse>(
+export function handleMeltQuoteResponseDeprecated<TQuote extends MeltQuoteBaseResponse>(
 	response: TQuote & MeltQuoteResponsePaidDeprecated,
 	logger: Logger,
 ): TQuote {

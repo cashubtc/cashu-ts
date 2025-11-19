@@ -1,6 +1,10 @@
 export type * from './blinded';
 export type * from './jsonrpc';
 export type * from './keyset';
+export * from './NUT04';
+export * from './NUT05';
+export type * from './NUT23';
+export type * from './NUT25';
 export * from './proof-state';
 export type * from './proof';
 export type * from './token';

@@ -1,12 +1,12 @@
 import { type OutputDataLike } from '../../model/OutputData';
 import { type Proof } from '../../model/types/proof';
 import { type SerializedBlindedMessage } from '../../model/types/blinded';
-import { type MeltQuoteBolt11Response, type NUT05MeltQuoteResponse } from '../../mint/types';
+import { type MeltQuoteBolt11Response, type MeltQuoteBaseResponse } from '../../model/types';
 
 /**
  * Preview of a Melt transaction created by prepareMelt.
  */
-export interface MeltPreview<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
+export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
 	method: string;
 	/**
 	 * Inputs (Proofs) to be melted.

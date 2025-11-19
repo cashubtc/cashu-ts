@@ -3,7 +3,7 @@ import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputD
 import { type OperationCounters } from '../CounterSource';
 import { type SigFlag } from '../../crypto';
 import { type MeltPreview } from './payloads';
-import { type NUT05MeltQuoteResponse } from '../../mint/types';
+import { type MeltQuoteBaseResponse } from '../../model/types';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
@@ -168,6 +168,6 @@ export type MintProofsConfig = {
 export type MeltProofsConfig = {
 	keysetId?: string;
 	privkey?: string | string[];
-	onChangeOutputsCreated?: (blanks: MeltPreview<NUT05MeltQuoteResponse>) => void;
+	onChangeOutputsCreated?: (blanks: MeltPreview<MeltQuoteBaseResponse>) => void;
 	onCountersReserved?: OnCountersReserved;
 };
