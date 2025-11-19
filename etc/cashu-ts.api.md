@@ -656,6 +656,7 @@ export class Mint {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<MeltQuoteBolt12Response>;
+    mint(method: string, mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)

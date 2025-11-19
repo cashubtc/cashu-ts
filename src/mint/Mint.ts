@@ -30,7 +30,7 @@ import {
 } from '../legacy/nut-04';
 import { handleMintInfoContactFieldDeprecated } from '../legacy/nut-06';
 import { MintInfo } from '../model/MintInfo';
-import { type Logger, NULL_LOGGER } from '../logger';
+import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import {
@@ -395,14 +395,24 @@ class Mint {
 	}
 
 	/**
-	 * Requests the mint to pay a melt offer.
+	 * Generic method to melt tokens using any payment method endpoint.
 	 *
 	 * @remarks
-	 * This generic method allows any melt meltPayload that conforms to NUT-05.
-	 * @param meltPayload Payload containing quote ID, inputs, and custom REQ items.
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
+	 * the common fields: quote, amount, fee_reserve, state, expiry.
+	 * @example
+	 *
+	 * ```ts
+	 * const response = await mint.melt('bolt11', { quote: 'q1', inputs: [...], outputs: [...] });
+	 * const response = await mint.melt('custom-payment', { quote: 'c1', inputs: [...], outputs: [...] });
+	 * ```
+	 *
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
 	 * @param options.preferAsync Optional override to set 'respond-async' header.
-	 * @returns Payment result with state and optional RES items.
+	 * @returns A response object with at least the required melt quote fields.
 	 */
 	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
 		method: string,
@@ -416,10 +426,8 @@ class Mint {
 		const headers: Record<string, string> = {
 			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
 		};
-		// Sanitize method string and make request
-		if (!/^[a-z0-9-]+$/.test(method)) {
-			throw new Error(`Invalid melt method: ${method}`);
-		}
+		// Validate method string and make request
+		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
 		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
@@ -693,6 +701,14 @@ class Mint {
 			method,
 			headers,
 		});
+	}
+
+	private isValidMethodString(method: unknown): boolean {
+		// Is a string at least one character long, containing only 0-9, a-z, _ or -
+		if (typeof method === 'string' && /^[a-z0-9_-]+$/.test(method)) {
+			return true;
+		}
+		return false;
 	}
 }
 
