@@ -67,7 +67,7 @@ export class P2PKBuilder {
 		return this;
 	}
 	/**
-	 * @alpha
+	 * @experimental
 	 */
 	blindKeys() {
 		this._blindKeys = true;
