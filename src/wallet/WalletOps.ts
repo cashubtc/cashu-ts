@@ -18,6 +18,7 @@ import {
 	type OnCountersReserved,
 	type MeltProofsConfig,
 	type MeltProofsResponse,
+	type MeltPreview,
 } from './types';
 import type { Wallet } from './Wallet';
 
@@ -671,9 +672,6 @@ export class MintBuilder<
  * await wallet.ops
  * 	.meltBolt12(quote12, proofs)
  * 	.asDeterministic() // counter 0 auto reserves
- * 	.onChangeOutputsCreated((blanks) => {
- * 		// Persist blanks and retry later with wallet.completeMelt(blanks)
- * 	})
  * 	.onCountersReserved((info) => console.log('Reserved', info))
  * 	.run();
  * ```
@@ -778,11 +776,27 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	 * @remarks
 	 * You can persist these blanks and later call `wallet.completeMelt(blanks)` to finalize and
 	 * recover change once the invoice/offer is paid.
+	 * @deprecated Use prepare() instead of run() and store the MeltPreview instead.
 	 * @param cb Callback invoked with the created blanks payload.
 	 */
 	onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>) {
 		this.config.onChangeOutputsCreated = cb;
 		return this;
+	}
+
+	/**
+	 * Prepare the melt.
+	 *
+	 * @returns A MeltPreview containing inputs, outputs, amount, and fee.
+	 */
+	async prepare(): Promise<MeltPreview<TQuote>> {
+		return await this.wallet.prepareMelt<TQuote>(
+			this.method,
+			this.quote,
+			this.proofs,
+			this.config,
+			this.outputType,
+		);
 	}
 
 	/**
