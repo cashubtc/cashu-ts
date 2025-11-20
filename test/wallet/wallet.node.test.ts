@@ -20,10 +20,10 @@ import {
 	ConsoleLogger,
 	OutputConfig,
 	MeltProofsConfig,
-	MeltPreview,
 	MeltQuoteBolt12Response,
 	AuthProvider,
 	MintQuoteBolt11Response,
+	MeltBlanks,
 } from '../../src';
 
 import { bytesToNumber } from '../../src/utils';
@@ -2476,6 +2476,9 @@ describe('melt proofs', () => {
 		expect(response.change).toHaveLength(0);
 	});
 
+	/**
+	 * @deprecated
+	 */
 	test('test melt proofs with callback for blanks', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
@@ -2524,10 +2527,10 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltPreview | undefined;
+		let capturedBlanks: MeltBlanks | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks as MeltPreview;
+				capturedBlanks = blanks as MeltBlanks;
 			},
 		};
 		const response = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2535,10 +2538,10 @@ describe('melt proofs', () => {
 		expect(capturedBlanks).toBeDefined();
 		expect(capturedBlanks!.method).toBe('bolt11');
 		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
-		expect(capturedBlanks!.keysetId).toBe('00bd033559de27d0');
+		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
 		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
 		expect(capturedBlanks!.quote.quote).toBe('test_melt_quote');
-		expect(capturedBlanks!.inputs).toHaveLength(2);
+		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
 
 		// Response still completes sync
 		expect(response.change).toHaveLength(2);
@@ -2601,10 +2604,10 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltPreview | undefined;
+		let capturedBlanks: MeltBlanks | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks as MeltPreview;
+				capturedBlanks = blanks as MeltBlanks;
 			},
 		};
 		const initialResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
