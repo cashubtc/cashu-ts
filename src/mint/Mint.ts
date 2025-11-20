@@ -6,31 +6,12 @@
  * Wallet class when you pass in the mint url.
  */
 import type {
-	GetInfoResponse,
-	PartialMintQuoteResponse,
-	Bolt12MintQuoteResponse,
-	MeltQuoteBolt11Response,
-	MeltQuoteBolt12Response,
-	CheckStateResponse,
 	PostRestoreResponse,
 	SwapResponse,
 	CheckStatePayload,
 	PostRestorePayload,
-	MintResponse,
-	ApiError,
-	NUT05MeltQuoteResponse,
-	NUT05MeltPayload,
 } from './types';
 import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
-import type {
-	MintQuotePayload,
-	MintPayload,
-	MeltQuotePayload,
-	MeltPayload,
-	SwapPayload,
-	Bolt12MintQuotePayload,
-} from '../wallet/types';
-import { MeltQuoteState } from './types';
 import request, {
 	ConnectionManager,
 	type WSConnection,
@@ -49,9 +30,27 @@ import {
 } from '../legacy/nut-04';
 import { handleMintInfoContactFieldDeprecated } from '../legacy/nut-06';
 import { MintInfo } from '../model/MintInfo';
-import { type Logger, NULL_LOGGER } from '../logger';
+import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
+import {
+	type MintQuoteBolt11Response,
+	type MintQuoteBolt12Response,
+	type MeltQuoteBaseResponse,
+	type MeltQuoteBolt11Response,
+	type MeltQuoteBolt12Response,
+	MeltQuoteState,
+	type MintResponse,
+	type GetInfoResponse,
+	type MeltRequest,
+	type CheckStateResponse,
+	type MeltQuoteBolt11Request,
+	type MeltQuoteBolt12Request,
+	type MintRequest,
+	type MintQuoteBolt11Request,
+	type MintQuoteBolt12Request,
+	type SwapRequest,
+} from '../model/types';
 
 /**
  * Class represents Cashu Mint API.
@@ -152,7 +151,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Signed outputs.
 	 */
-	async swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse> {
+	async swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse> {
 		const data = await this.requestWithAuth<SwapResponse>(
 			'POST',
 			'/v1/swap',
@@ -161,8 +160,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'swap' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -176,11 +175,11 @@ class Mint {
 	 * @returns A new mint quote containing a payment request for the specified amount and unit.
 	 */
 	async createMintQuoteBolt11(
-		mintQuotePayload: MintQuotePayload,
+		mintQuotePayload: MintQuoteBolt11Request,
 		customRequest?: RequestFn,
-	): Promise<PartialMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('POST', '/v1/mint/quote/bolt11', { requestBody: mintQuotePayload }, customRequest);
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
 		return data;
@@ -195,10 +194,10 @@ class Mint {
 	 * @returns A mint quote containing a BOLT12 offer.
 	 */
 	async createMintQuoteBolt12(
-		mintQuotePayload: Bolt12MintQuotePayload,
+		mintQuotePayload: MintQuoteBolt12Request,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MintQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MintQuoteResponse>(
+	): Promise<MintQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MintQuoteBolt12Response>(
 			'POST',
 			'/v1/mint/quote/bolt12',
 			{ requestBody: mintQuotePayload },
@@ -217,9 +216,9 @@ class Mint {
 	async checkMintQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<PartialMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('GET', `/v1/mint/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
@@ -236,8 +235,8 @@ class Mint {
 	async checkMintQuoteBolt12(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MintQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MintQuoteResponse>(
+	): Promise<MintQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MintQuoteBolt12Response>(
 			'GET',
 			`/v1/mint/quote/bolt12/${quote}`,
 			{},
@@ -253,7 +252,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures.
 	 */
-	async mintBolt11(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
+	async mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
 		const data = await this.requestWithAuth<MintResponse>(
 			'POST',
 			'/v1/mint/bolt11',
@@ -262,8 +261,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -276,7 +275,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures for the requested outputs.
 	 */
-	async mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
+	async mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
 		const data = await this.requestWithAuth<MintResponse>(
 			'POST',
 			'/v1/mint/bolt12',
@@ -285,8 +284,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt12' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -300,7 +299,7 @@ class Mint {
 	 * @returns The melt quote response.
 	 */
 	async createMeltQuoteBolt11(
-		meltQuotePayload: MeltQuotePayload,
+		meltQuotePayload: MeltQuoteBolt11Request,
 		customRequest?: RequestFn,
 	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
@@ -315,8 +314,8 @@ class Mint {
 			typeof data?.fee_reserve !== 'number' ||
 			typeof data?.quote !== 'string'
 		) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'createMeltQuoteBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 		return data;
 	}
@@ -330,7 +329,7 @@ class Mint {
 	 * @returns Melt quote with amount, fee reserve, and payment state.
 	 */
 	async createMeltQuoteBolt12(
-		meltQuotePayload: MeltQuotePayload,
+		meltQuotePayload: MeltQuoteBolt12Request,
 		customRequest?: RequestFn,
 	): Promise<MeltQuoteBolt12Response> {
 		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
@@ -367,8 +366,8 @@ class Mint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'checkMeltQuoteBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -396,39 +395,47 @@ class Mint {
 	}
 
 	/**
-	 * Requests the mint to pay a melt offer.
+	 * Generic method to melt tokens using any payment method endpoint.
 	 *
 	 * @remarks
-	 * This generic method allows any melt meltPayload that conforms to NUT-05.
-	 * @param meltPayload Payload containing quote ID, inputs, and custom REQ items.
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
+	 * the common fields: quote, amount, fee_reserve, state, expiry.
+	 * @example
+	 *
+	 * ```ts
+	 * const response = await mint.melt('bolt11', { quote: 'q1', inputs: [...], outputs: [...] });
+	 * const response = await mint.melt('custom-payment', { quote: 'c1', inputs: [...], outputs: [...] });
+	 * ```
+	 *
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
 	 * @param options.preferAsync Optional override to set 'respond-async' header.
-	 * @returns Payment result with state and optional RES items.
+	 * @returns A response object with at least the required melt quote fields.
 	 */
 	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
 		method: string,
-		meltPayload: NUT05MeltPayload,
+		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<NUT05MeltQuoteResponse & TRes> {
+	): Promise<MeltQuoteBaseResponse & TRes> {
 		// Set headers as needed
 		const headers: Record<string, string> = {
 			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
 		};
-		// Sanitize method string and make request
-		if (!/^[a-z0-9-]+$/.test(method)) {
-			throw new Error(`Invalid melt method: ${method}`);
-		}
-		const data = await this.requestWithAuth<NUT05MeltQuoteResponse & TRes>(
+		// Validate method string and make request
+		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
+		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
 			{ requestBody: meltPayload, headers },
 			options?.customRequest,
 		);
 
-		// Runtime shape check for basic NUT05MeltQuoteResponse
+		// Runtime shape check for basic MeltQuoteBaseResponse
 		// @todo - Tests need updating before we can do full shape check!
 		if (
 			!isObj(data) //||
@@ -438,8 +445,8 @@ class Mint {
 			// typeof data.expiry !== 'number' ||
 			// !Object.values(MeltQuoteState).includes(data.state)
 		) {
-			this._logger.error('invalid response from mint...', { data });
-			throw new Error('invalid response from mint');
+			this._logger.error('Invalid response from mint...', { data, op: 'melt' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -456,7 +463,7 @@ class Mint {
 	 * @returns The melt response.
 	 */
 	async meltBolt11(
-		meltPayload: MeltPayload,
+		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
@@ -471,8 +478,8 @@ class Mint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'meltBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -489,7 +496,7 @@ class Mint {
 	 * @returns Payment result with state and optional change signatures.
 	 */
 	async meltBolt12(
-		meltPayload: MeltPayload,
+		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
@@ -517,8 +524,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'check' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -552,8 +559,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'getKeys' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -589,8 +596,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'restore' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -694,6 +701,14 @@ class Mint {
 			method,
 			headers,
 		});
+	}
+
+	private isValidMethodString(method: unknown): boolean {
+		// Is a string at least one character long, containing only 0-9, a-z, _ or -
+		if (typeof method === 'string' && /^[a-z0-9_-]+$/.test(method)) {
+			return true;
+		}
+		return false;
 	}
 }
 

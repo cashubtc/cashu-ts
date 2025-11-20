@@ -38,8 +38,7 @@ import {
 	OutputConfig,
 	OutputType,
 	P2PKBuilder,
-	ConsoleLogger,
-	MintQuoteResponse,
+	MintQuoteBaseResponse,
 } from '../src';
 import ws from 'ws';
 import {
@@ -67,7 +66,7 @@ vi.setConfig({
 });
 
 // Helper to wait until mint quote is paid
-async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteResponse) {
+async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteBaseResponse) {
 	try {
 		await wallet.on.onceMintPaid(quote.quote, {
 			timeoutMs: 6_000,
@@ -265,7 +264,7 @@ describe('mint api', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 		const privKeyAlice = secp256k1.utils.randomSecretKey();
-		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
 		// console.log('pubKeyAlice:', pubKeyAlice);
@@ -299,7 +298,7 @@ describe('mint api', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 		const privKeyAlice = secp256k1.utils.randomSecretKey();
-		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
 		// console.log('pubKeyAlice:', pubKeyAlice);
@@ -340,7 +339,7 @@ describe('mint api', () => {
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
 		await untilMintQuotePaid(wallet, request);
-		const mintedProofs = await wallet.mintProofs(128, request.quote);
+		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
 		// Send them P2PK locked to Alice, with extra tags
 		const p2pk = new P2PKBuilder()
@@ -377,8 +376,8 @@ describe('mint api', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
-		const privKeyAlice = secp256k1.utils.randomSecretKey();
-		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// const privKeyAlice = secp256k1.utils.randomSecretKey();
+		// const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
@@ -414,8 +413,8 @@ describe('mint api', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
-		const privKeyAlice = schnorr.utils.randomSecretKey();
-		const pubKeyAlice = '02' + bytesToHex(schnorr.getPublicKey(privKeyAlice));
+		// const privKeyAlice = schnorr.utils.randomSecretKey();
+		// const pubKeyAlice = '02' + bytesToHex(schnorr.getPublicKey(privKeyAlice));
 		const privKeyBob = schnorr.utils.randomSecretKey();
 		const pubKeyBob = '02' + bytesToHex(schnorr.getPublicKey(privKeyBob));
 		// console.log('pubKeyAlice:', pubKeyAlice);

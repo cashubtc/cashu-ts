@@ -58,9 +58,9 @@ export function failIfNullish<T>(
 /**
  * Invoke a user-supplied callback safely in a fire-and-forget manner.
  *
- * Used for per-operation hooks (e.g. `onCountersReserved`, `onChangeOutputsCreated`) where user
- * code must never break the wallet’s control flow. The callback is invoked synchronously,
- * exceptions are caught and logged (as a warning), and then swallowed.
+ * Used for per-operation hooks (e.g. `onCountersReserved`) where user code must never break the
+ * wallet’s control flow. The callback is invoked synchronously, exceptions are caught and logged
+ * (as a warning), and then swallowed.
  *
  * The wallet never `await`s the callback.
  *

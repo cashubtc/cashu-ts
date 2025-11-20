@@ -3,7 +3,7 @@ import {
 	type MPPMethod,
 	type SwapMethod,
 	type WebSocketSupport,
-} from '../mint/types';
+} from './types';
 
 type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
