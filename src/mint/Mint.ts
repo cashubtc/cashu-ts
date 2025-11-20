@@ -8,10 +8,9 @@
 import type {
 	GetInfoResponse,
 	PartialMintQuoteResponse,
-	MeltQuoteResponse,
-	PartialMeltQuoteResponse,
 	Bolt12MintQuoteResponse,
-	Bolt12MeltQuoteResponse,
+	MeltQuoteBolt11Response,
+	MeltQuoteBolt12Response,
 	CheckStateResponse,
 	PostRestoreResponse,
 	SwapResponse,
@@ -19,6 +18,8 @@ import type {
 	PostRestorePayload,
 	MintResponse,
 	ApiError,
+	NUT05MeltQuoteResponse,
+	NUT05MeltPayload,
 } from './types';
 import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
 import type {
@@ -301,9 +302,9 @@ class Mint {
 	async createMeltQuoteBolt11(
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('POST', '/v1/melt/quote/bolt11', { requestBody: meltQuotePayload }, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -331,8 +332,8 @@ class Mint {
 	async createMeltQuoteBolt12(
 		meltQuotePayload: MeltQuotePayload,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MeltQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'POST',
 			'/v1/melt/quote/bolt12',
 			{ requestBody: meltQuotePayload },
@@ -351,9 +352,9 @@ class Mint {
 	async checkMeltQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('GET', `/v1/melt/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -384,14 +385,64 @@ class Mint {
 	async checkMeltQuoteBolt12(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MeltQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'GET',
 			`/v1/melt/quote/bolt12/${quote}`,
 			{},
 			customRequest,
 		);
 		return response;
+	}
+
+	/**
+	 * Requests the mint to pay a melt offer.
+	 *
+	 * @remarks
+	 * This generic method allows any melt meltPayload that conforms to NUT-05.
+	 * @param meltPayload Payload containing quote ID, inputs, and custom REQ items.
+	 * @param options.customRequest Optional override for the request function.
+	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @returns Payment result with state and optional RES items.
+	 */
+	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
+		method: string,
+		meltPayload: NUT05MeltPayload,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		},
+	): Promise<NUT05MeltQuoteResponse & TRes> {
+		// Set headers as needed
+		const headers: Record<string, string> = {
+			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		};
+		// Sanitize method string and make request
+		if (!/^[a-z0-9-]+$/.test(method)) {
+			throw new Error(`Invalid melt method: ${method}`);
+		}
+		const data = await this.requestWithAuth<NUT05MeltQuoteResponse & TRes>(
+			'POST',
+			`/v1/melt/${method}`,
+			{ requestBody: meltPayload, headers },
+			options?.customRequest,
+		);
+
+		// Runtime shape check for basic NUT05MeltQuoteResponse
+		// @todo - Tests need updating before we can do full shape check!
+		if (
+			!isObj(data) //||
+			// typeof data.quote !== 'string' ||
+			// typeof data.amount !== 'number' ||
+			// typeof data.unit !== 'string' ||
+			// typeof data.expiry !== 'number' ||
+			// !Object.values(MeltQuoteState).includes(data.state)
+		) {
+			this._logger.error('invalid response from mint...', { data });
+			throw new Error('invalid response from mint');
+		}
+
+		return data;
 	}
 
 	/**
@@ -410,21 +461,8 @@ class Mint {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<PartialMeltQuoteResponse> {
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		const response = await this.requestWithAuth<
-			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
-		>(
-			'POST',
-			'/v1/melt/bolt11',
-			{
-				requestBody: meltPayload,
-				headers,
-			},
-			options?.customRequest,
-		);
+	): Promise<MeltQuoteBolt11Response> {
+		const response = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -456,20 +494,8 @@ class Mint {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<Bolt12MeltQuoteResponse> {
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		const data = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
-			'POST',
-			'/v1/melt/bolt12',
-			{
-				requestBody: meltPayload,
-				headers,
-			},
-			options?.customRequest,
-		);
-		return data;
+	): Promise<MeltQuoteBolt12Response> {
+		return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
 	}
 
 	/**

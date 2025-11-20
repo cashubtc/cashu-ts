@@ -1,10 +1,11 @@
 import {
-	type MeltQuoteResponse,
 	type MintQuoteResponse,
-	type Bolt12MeltQuoteResponse,
 	type Bolt12MintQuoteResponse,
+	type MeltQuoteBolt11Response,
+	type MeltQuoteBolt12Response,
+	type NUT05MeltQuoteResponse,
 } from '../mint/types';
-import { type OutputData, type OutputDataFactory } from '../model/OutputData';
+import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
@@ -16,8 +17,15 @@ import {
 	type P2PKOptions,
 	type OnCountersReserved,
 	type MeltProofsConfig,
+	type MeltProofsResponse,
 } from './types';
 import type { Wallet } from './Wallet';
+
+export type MintMethod = 'bolt11' | 'bolt12';
+
+export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
+	? string | MintQuoteResponse
+	: Bolt12MintQuoteResponse;
 
 /**
  * Fluent operations builder for a Wallet instance.
@@ -34,17 +42,17 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
-	mintBolt11(amount: number, quote: string | MintQuoteResponse) {
+	mintBolt11(amount: number, quote: MintQuoteFor<'bolt11'>) {
 		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
-	mintBolt12(amount: number, quote: Bolt12MintQuoteResponse) {
+	mintBolt12(amount: number, quote: MintQuoteFor<'bolt12'>) {
 		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
-	meltBolt11(quote: MeltQuoteResponse, proofs: Proof[]) {
-		return new MeltBuilder(this.wallet, 'bolt11', quote, proofs);
+	meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
+		return new MeltBuilder<MeltQuoteBolt11Response>(this.wallet, 'bolt11', quote, proofs);
 	}
-	meltBolt12(quote: Bolt12MeltQuoteResponse, proofs: Proof[]) {
-		return new MeltBuilder(this.wallet, 'bolt12', quote, proofs);
+	meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
+		return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
 	}
 }
 
@@ -85,6 +93,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for the sent proofs.
 	 *
@@ -95,6 +104,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked outputs for the sent proofs.
 	 *
@@ -105,6 +115,7 @@ export class SendBuilder {
 		this.sendOT = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for the sent proofs.
 	 *
@@ -115,13 +126,14 @@ export class SendBuilder {
 		this.sendOT = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for the sent proofs.
 	 *
 	 * @param data Fully formed OutputData. Their amounts must sum to the send amount, otherwise the
 	 *   wallet will throw.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.sendOT = { type: 'custom', data };
 		return this;
 	}
@@ -135,6 +147,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for change.
 	 *
@@ -145,6 +158,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked change (NUT 11).
 	 *
@@ -155,6 +169,7 @@ export class SendBuilder {
 		this.keepOT = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for change.
 	 *
@@ -165,12 +180,13 @@ export class SendBuilder {
 		this.keepOT = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for change.
 	 *
 	 * @param data Fully formed OutputData for the keep (change) amount.
 	 */
-	keepAsCustom(data: OutputData[]) {
+	keepAsCustom(data: OutputDataLike[]) {
 		this.keepOT = { type: 'custom', data };
 		return this;
 	}
@@ -184,6 +200,7 @@ export class SendBuilder {
 		this.config.includeFees = on;
 		return this;
 	}
+
 	/**
 	 * Use a specific keyset for the operation.
 	 *
@@ -192,7 +209,19 @@ export class SendBuilder {
 	keyset(id: string) {
 		this.config.keysetId = id;
 		return this;
-	} /**
+	}
+
+	/**
+	 * Private key(s) used to sign P2PK locked proofs.
+	 *
+	 * @param k Single key or array of multisig keys.
+	 */
+	privkey(k: string | string[]) {
+		this.config.privkey = k;
+		return this;
+	}
+
+	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
 	 * @remarks
@@ -203,6 +232,7 @@ export class SendBuilder {
 		this.config.proofsWeHave = p;
 		return this;
 	}
+
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
@@ -212,6 +242,7 @@ export class SendBuilder {
 		this.config.onCountersReserved = cb;
 		return this;
 	}
+
 	/**
 	 * Force a pure offline, exact match selection. No mint calls are made. If an exact match cannot
 	 * be found, this throws.
@@ -236,7 +267,21 @@ export class SendBuilder {
 	}
 
 	/**
-	 * Execute the send or swap.
+	 * Prepare the swap to send.
+	 *
+	 * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
+	 */
+	async prepare() {
+		// Construct an OutputConfig using default send if no customizations
+		const outputConfig: OutputConfig = {
+			send: this.sendOT ?? this.wallet.defaultOutputType(),
+			...(this.keepOT ? { keep: this.keepOT } : {}),
+		};
+		return this.wallet.prepareSwapToSend(this.amount, this.proofs, this.config, outputConfig);
+	}
+
+	/**
+	 * Execute the send.
 	 *
 	 * @returns The split result with kept and sent proofs.
 	 */
@@ -251,6 +296,10 @@ export class SendBuilder {
 
 		// Strict offline, exact match only
 		if (this.offlineExact) {
+			// Sign if needed
+			if (this.config.privkey) {
+				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+			}
 			return this.wallet.sendOffline(this.amount, this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: true,
@@ -260,6 +309,10 @@ export class SendBuilder {
 
 		// Offline close match, may overshoot
 		if (this.offlineClose) {
+			// Sign if needed
+			if (this.config.privkey) {
+				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+			}
 			return this.wallet.sendOffline(this.amount, this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: false,
@@ -309,6 +362,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for the received proofs.
 	 *
@@ -321,6 +375,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked outputs for the received proofs.
 	 *
@@ -333,6 +388,7 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for received proofs.
 	 *
@@ -345,12 +401,13 @@ export class ReceiveBuilder {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for received proofs.
 	 *
 	 * @param data Fully formed OutputData for the final amount.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}
@@ -364,6 +421,7 @@ export class ReceiveBuilder {
 		this.config.keysetId = id;
 		return this;
 	}
+
 	/**
 	 * Require all incoming proofs to have a valid DLEQ for the selected keyset.
 	 *
@@ -373,8 +431,9 @@ export class ReceiveBuilder {
 		this.config.requireDleq = on;
 		return this;
 	}
+
 	/**
-	 * Private key used to sign P2PK locked incoming proofs.
+	 * Private key(s) used to sign P2PK locked incoming proofs.
 	 *
 	 * @param k Single key or array of multisig keys.
 	 */
@@ -382,6 +441,7 @@ export class ReceiveBuilder {
 		this.config.privkey = k;
 		return this;
 	}
+
 	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
@@ -393,6 +453,7 @@ export class ReceiveBuilder {
 		this.config.proofsWeHave = p;
 		return this;
 	}
+
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
@@ -403,6 +464,20 @@ export class ReceiveBuilder {
 		return this;
 	}
 
+	/**
+	 * Prepare the swap to receive.
+	 *
+	 * @returns A SwapPreview containing inputs, outputs, amount, and fee.
+	 */
+	async prepare() {
+		return this.wallet.prepareSwapToReceive(this.token, this.config, this.outputType);
+	}
+
+	/**
+	 * Execute the receive.
+	 *
+	 * @returns The new proofs.
+	 */
 	async run() {
 		return this.wallet.receive(this.token, this.config, this.outputType);
 	}
@@ -424,7 +499,7 @@ export class ReceiveBuilder {
  *     	.run();
  */
 export class MintBuilder<
-	M extends 'bolt11' | 'bolt12',
+	M extends MintMethod,
 	HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
 > {
 	private outputType?: OutputType;
@@ -437,7 +512,7 @@ export class MintBuilder<
 		private wallet: Wallet,
 		private method: M,
 		private amount: number,
-		private quote: string | MintQuoteResponse | Bolt12MintQuoteResponse,
+		private quote: MintQuoteFor<M>,
 	) {
 		void this._hasPrivkey; // intentionally unused (phantom field)
 	}
@@ -453,6 +528,7 @@ export class MintBuilder<
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use deterministic outputs for the minted proofs.
 	 *
@@ -465,6 +541,7 @@ export class MintBuilder<
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use P2PK locked outputs for the minted proofs.
 	 *
@@ -477,6 +554,7 @@ export class MintBuilder<
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Use a factory to generate OutputData for minted proofs.
 	 *
@@ -489,12 +567,13 @@ export class MintBuilder<
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
+
 	/**
 	 * Provide pre created OutputData for minted proofs.
 	 *
 	 * @param data Fully formed OutputData for the final amount.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}
@@ -508,6 +587,7 @@ export class MintBuilder<
 		this.config.keysetId = id;
 		return this;
 	}
+
 	/**
 	 * Private key to sign locked mint quotes.
 	 *
@@ -519,6 +599,7 @@ export class MintBuilder<
 		this.config.privkey = k;
 		return this as MintBuilder<M, true>;
 	}
+
 	/**
 	 * Provide existing proofs to help optimise denomination selection.
 	 *
@@ -530,6 +611,7 @@ export class MintBuilder<
 		this.config.proofsWeHave = p;
 		return this;
 	}
+
 	/**
 	 * Receive a callback once counters are atomically reserved for deterministic outputs.
 	 *
@@ -550,11 +632,12 @@ export class MintBuilder<
 	async run(this: MintBuilder<M, true>) {
 		// BOLT 11
 		if (this.method === 'bolt11') {
-			const bolt11 = this.quote as MintQuoteResponse;
-			if (bolt11.pubkey && !this.config.privkey) {
+			const quote = this.quote as string | MintQuoteResponse;
+			// For object quotes, enforce privkey when the quote is locked
+			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			return this.wallet.mintProofsBolt11(this.amount, bolt11, this.config, this.outputType);
+			return this.wallet.mintProofsBolt11(this.amount, quote, this.config, this.outputType);
 		}
 
 		// BOLT 12
@@ -576,8 +659,8 @@ export class MintBuilder<
  * Builder for melting proofs to pay a Lightning invoice or BOLT12 offer.
  *
  * @remarks
- * Supports both BOLT11 and BOLT12. You can optionally receive a callback when NUT-08 blanks are
- * created for async melts.
+ * Uses the generic prepareMelt / completeMelt flow under the hood, so it works for any NUT-05 style
+ * melt quote, not just BOLT11 / BOLT12.
  * @example
  *
  * ```typescript
@@ -595,14 +678,14 @@ export class MintBuilder<
  * 	.run();
  * ```
  */
-export class MeltBuilder {
+export class MeltBuilder<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 
 	constructor(
 		private wallet: Wallet,
-		private method: 'bolt11' | 'bolt12',
-		private quote: MeltQuoteResponse,
+		private method: string,
+		private quote: TQuote,
 		private proofs: Proof[],
 	) {}
 
@@ -654,7 +737,7 @@ export class MeltBuilder {
 	 *
 	 * @param data Fully formed OutputData for the change amount.
 	 */
-	asCustom(data: OutputData[]) {
+	asCustom(data: OutputDataLike[]) {
 		this.outputType = { type: 'custom', data };
 		return this;
 	}
@@ -666,6 +749,16 @@ export class MeltBuilder {
 	 */
 	keyset(id: string) {
 		this.config.keysetId = id;
+		return this;
+	}
+
+	/**
+	 * Private key(s) used to sign P2PK locked proofs.
+	 *
+	 * @param k Single key or array of multisig keys.
+	 */
+	privkey(k: string | string[]) {
+		this.config.privkey = k;
 		return this;
 	}
 
@@ -697,13 +790,17 @@ export class MeltBuilder {
 	 *
 	 * @returns The melt result: `{ quote, change }`.
 	 */
-	async run() {
-		// BOLT11
-		if (this.method === 'bolt11') {
-			return this.wallet.meltProofsBolt11(this.quote, this.proofs, this.config, this.outputType);
-		}
+	async run(): Promise<MeltProofsResponse<TQuote>> {
+		// Step 1, preview and allocate NUT-08 blanks
+		const preview = await this.wallet.prepareMelt<TQuote>(
+			this.method,
+			this.quote,
+			this.proofs,
+			this.config,
+			this.outputType,
+		);
 
-		// BOLT 12
-		return this.wallet.meltProofsBolt12(this.quote, this.proofs, this.config, this.outputType);
+		// Step 2, sign if needed and complete the melt
+		return this.wallet.completeMelt(preview, this.config.privkey);
 	}
 }

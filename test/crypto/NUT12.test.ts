@@ -10,7 +10,7 @@ import {
 	verifyDLEQProof,
 	verifyDLEQProof_reblind,
 	constructProofFromPromise,
-	createRandomBlindedMessage,
+	createRandomBlindMessage,
 } from '../../src/crypto';
 
 describe('test hash_e', () => {
@@ -33,7 +33,7 @@ describe('test DLEQ scheme', () => {
 		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
 
 		// Wallet(Alice)
-		const blindMessage = createRandomBlindedMessage();
+		const blindMessage = createRandomBlindMessage();
 
 		// Mint
 		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, 1, '');
@@ -48,7 +48,7 @@ describe('test DLEQ scheme', () => {
 		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
 
 		// Wallet(Alice)
-		const blindMessage = createRandomBlindedMessage();
+		const blindMessage = createRandomBlindMessage();
 
 		// Mint
 		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, 1, '');

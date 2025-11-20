@@ -15,20 +15,22 @@ import {
 	getP2PKWitnessSignatures,
 	Secret,
 	verifyP2PKSig,
-	verifyP2PKSigOutput,
 	getPubKeyFromPrivKey,
-	createRandomBlindedMessage,
 	createRandomSecretKey,
-	getSignedOutput,
-	getSignedOutputs,
 	hasP2PKSignedProof,
 	signP2PKSecret,
 	verifyP2PKSecretSignature,
 	deriveP2BKBlindedPubkeys,
 	P2BK_DST,
+	buildP2PKSigAllMessage,
+	assertSigAllInputs,
+	buildLegacyP2PKSigAllMessage,
+	buildInterimP2PKSigAllMessage,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2';
+import { OutputDataLike } from '../../src';
+import { NULL_LOGGER } from '../../src/logger';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
@@ -36,11 +38,13 @@ describe('test create p2pk secret', () => {
 	test('create from key', async () => {
 		const secret = createP2PKsecret(PUBKEY);
 		const decodedSecret = parseP2PKSecret(secret);
-
 		expect(decodedSecret[0]).toBe('P2PK');
 		// console.log(JSON.stringify(decodedSecret))
 		expect(Object.keys(decodedSecret[1]).includes('nonce')).toBe(true);
 		expect(Object.keys(decodedSecret[1]).includes('data')).toBe(true);
+		const secretUint8 = new TextEncoder().encode(secret);
+		const decodedSecret2 = parseP2PKSecret(secretUint8);
+		expect(decodedSecret2[0]).toBe('P2PK');
 	});
 	test('sign and verify proof', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
@@ -130,7 +134,7 @@ describe('test create p2pk secret', () => {
 		};
 
 		const proofs = [proof1, proof2];
-
+		expect(hasP2PKSignedProof(PUBKEY, proof1)).toBe(false);
 		const signedProofs = signP2PKProofs(proofs, [bytesToHex(PRIVKEY), bytesToHex(PRIVKEY2)]);
 		const verify0 = verifyP2PKSig(signedProofs[0]);
 		const verify1 = verifyP2PKSig(signedProofs[1]);
@@ -138,10 +142,47 @@ describe('test create p2pk secret', () => {
 		expect(verify1).toBe(true);
 	});
 
-	test('sign and verify blindedMessage', async () => {
-		const blindedMessage = createRandomBlindedMessage(PRIVKEY);
-		const verify = verifyP2PKSigOutput(blindedMessage, PUBKEY);
-		expect(verify).toBe(true);
+	test('sign and verify proofs, insufficient and incorrect keys', async () => {
+		const PRIVKEY2 = schnorr.utils.randomSecretKey();
+		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["pubkeys","${PUBKEY2}"]]}]`;
+		const secretStr2 = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","1"],["pubkeys","${PUBKEY2}"]]}]`;
+		const proof1: Proof = {
+			amount: 1,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: secretStr,
+		};
+
+		const proof2: Proof = {
+			amount: 1,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: secretStr2,
+		};
+
+		const proofs = [proof1, proof2];
+
+		const signedProofs = signP2PKProofs(proofs, [bytesToHex(PRIVKEY)]);
+		const verify0 = verifyP2PKSig(signedProofs[0]);
+		expect(verify0).toBe(false);
+		const verify1 = verifyP2PKSig(signedProofs[1]);
+		expect(verify1).toBe(true);
+	});
+
+	test('verify unlocked proofs and bad witness', async () => {
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["locktime","123"]]}]`;
+		const proof1: Proof = {
+			amount: 1,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: secretStr,
+			witness: { signatures: ['foo'] },
+		};
+		// const signedProofs = signP2PKProofs([proof1], [bytesToHex(PRIVKEY)]);
+		expect(() => verifyP2PKSig(proof1)).toThrow(/proof is unlocked/);
+		expect(hasP2PKSignedProof(PUBKEY, proof1)).toBe(false);
 	});
 });
 
@@ -398,7 +439,9 @@ describe('test signP2PKProof', () => {
 			id: '00000000000',
 			secret: secretStr,
 		};
-		expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow('not a P2PK secret');
+		expect(() => signP2PKProof(proof, bytesToHex(PRIVKEY))).toThrow(
+			'Invalid P2PK secret: must start with "P2PK"',
+		);
 	});
 	test('can only sign and verify once', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
@@ -509,7 +552,7 @@ describe('test p2pk verify', () => {
 			)}"}]`,
 		};
 		expect(() => verifyP2PKSig(proof)).toThrow(
-			new Error('could not verify signature, no witness provided'),
+			new Error('Could not verify signature, no witness provided'),
 		);
 	});
 });
@@ -628,7 +671,7 @@ describe('NUT-11 helper edge cases', () => {
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`;
 		const parsed = parseP2PKSecret(new TextEncoder().encode(s));
 		expect(parsed[0]).toBe('P2PK');
-		expect(() => parseP2PKSecret('not-json')).toThrow("can't parse secret");
+		expect(() => parseP2PKSecret('not-json')).toThrow("Can't parse secret");
 	});
 
 	test('getP2PKWitnessPubkeys: empty pubkeys tag returns only data', () => {
@@ -701,32 +744,363 @@ describe('verifyP2PKSecretSignature & hasP2PKSignedProof', () => {
 		};
 		expect(hasP2PKSignedProof(PUBKEY, proof)).toBe(false);
 	});
+	test('throws on SIG_ALL secret', () => {
+		const proof: Proof = {
+			amount: 1,
+			id: 'mw',
+			C: '03'.padEnd(66, '0'),
+			secret: `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["sigflag","SIG_ALL"]]}]`,
+			witness: 'not-json',
+		};
+		expect(() => {
+			hasP2PKSignedProof(PUBKEY, proof);
+		}).toThrow('Cannot verify a SIG_ALL proof');
+		expect(() => {
+			verifyP2PKSig(proof);
+		}).toThrow('Cannot verify a SIG_ALL proof');
+	});
 });
 
-describe('getSignedOutput(s) & verifyP2PKSigOutput errors', () => {
-	test('verifyP2PKSigOutput throws when no witness signatures provided', () => {
-		const out = createRandomBlindedMessage(PRIVKEY);
-		// strip the witness
-		delete (out as any).witness;
-		expect(() => verifyP2PKSigOutput(out, PUBKEY)).toThrow(/no witness signatures provided/i);
+describe('buildP2PKSigAllMessage, SIG_ALL aggregation', () => {
+	// Helpers
+	const mkProof = (secret: string, C: string) => ({ secret, C }) as any; // keep minimal shape for this unit
+
+	const mkOutput = (amount: number | string, B_: string) =>
+		({ blindedMessage: { amount, B_ } }) as any;
+
+	test('concatenates inputs then outputs, no separators, in given order', () => {
+		const inputs = [mkProof('sA', 'CA'), mkProof('sB', 'CB')];
+		const outputs = [mkOutput(2, 'B2'), mkOutput(5, 'B5')];
+
+		const msg = buildP2PKSigAllMessage(inputs, outputs);
+
+		// manual expectation, inputs first, then outputs, no separators
+		const expected = ['sA', 'CA', 'sB', 'CB', '2', 'B2', '5', 'B5'].join('');
+		expect(msg).toBe(expected);
 	});
 
-	test('getSignedOutput signs a single output', () => {
-		const out = createRandomBlindedMessage(PRIVKEY);
-		delete (out as any).witness;
+	test('appends quoteId at the end when provided', () => {
+		const inputs = [mkProof('s1', 'C1')];
+		const outputs = [mkOutput(1, 'B1')];
 
-		const signed = getSignedOutput(out, PRIVKEY);
-		expect(verifyP2PKSigOutput(signed, PUBKEY)).toBe(true);
+		const msgNoQuote = buildP2PKSigAllMessage(inputs, outputs);
+		const msgWithQuote = buildP2PKSigAllMessage(inputs, outputs, 'quote-xyz');
+
+		expect(msgWithQuote).toBe(msgNoQuote + 'quote-xyz');
+		expect(msgWithQuote).not.toBe(msgNoQuote);
 	});
 
-	test('getSignedOutputs signs all outputs in array', () => {
-		const a = createRandomBlindedMessage(PRIVKEY);
-		const b = createRandomBlindedMessage(PRIVKEY);
-		delete (a as any).witness;
-		delete (b as any).witness;
+	test('amounts are stringified consistently', () => {
+		const inputs = [mkProof('s', 'C')];
+		const outNum = [mkOutput(7, 'B7')];
+		const outStr = [mkOutput('7', 'B7')];
 
-		const signed = getSignedOutputs([a, b], bytesToHex(PRIVKEY));
-		expect(verifyP2PKSigOutput(signed[0], PUBKEY)).toBe(true);
-		expect(verifyP2PKSigOutput(signed[1], PUBKEY)).toBe(true);
+		const mNum = buildP2PKSigAllMessage(inputs, outNum);
+		const mStr = buildP2PKSigAllMessage(inputs, outStr);
+
+		expect(mNum).toBe(mStr);
+	});
+
+	test('changing any input field changes the message', () => {
+		const baseInputs = [mkProof('s1', 'C1')];
+		const outputs = [mkOutput(3, 'B3')];
+
+		const m1 = buildP2PKSigAllMessage(baseInputs, outputs);
+		const m2 = buildP2PKSigAllMessage([mkProof('s2', 'C1')], outputs);
+		const m3 = buildP2PKSigAllMessage([mkProof('s1', 'C2')], outputs);
+
+		expect(m2).not.toBe(m1);
+		expect(m3).not.toBe(m1);
+	});
+
+	test('changing any output field changes the message', () => {
+		const inputs = [mkProof('s1', 'C1')];
+		const m1 = buildP2PKSigAllMessage(inputs, [mkOutput(3, 'B3')]);
+		const m2 = buildP2PKSigAllMessage(inputs, [mkOutput(4, 'B3')]); // amount changed
+		const m3 = buildP2PKSigAllMessage(inputs, [mkOutput(3, 'B4')]); // B_ changed
+
+		expect(m2).not.toBe(m1);
+		expect(m3).not.toBe(m1);
+	});
+
+	test('order of inputs affects the message', () => {
+		const inputsA = [mkProof('sA', 'CA'), mkProof('sB', 'CB')];
+		const inputsB = [...inputsA].reverse();
+		const outputs = [mkOutput(1, 'B1')];
+
+		const mA = buildP2PKSigAllMessage(inputsA, outputs);
+		const mB = buildP2PKSigAllMessage(inputsB, outputs);
+
+		expect(mA).not.toBe(mB);
+	});
+
+	test('order of outputs affects the message', () => {
+		const inputs = [mkProof('s', 'C')];
+		const outputsA = [mkOutput(1, 'B1'), mkOutput(2, 'B2')];
+		const outputsB = [...outputsA].reverse();
+
+		const mA = buildP2PKSigAllMessage(inputs, outputsA);
+		const mB = buildP2PKSigAllMessage(inputs, outputsB);
+
+		expect(mA).not.toBe(mB);
+	});
+
+	test('empty arrays are allowed, quoteId only contributes when present', () => {
+		const mNone = buildP2PKSigAllMessage([], []);
+		const mQuoteOnly = buildP2PKSigAllMessage([], [], 'q123');
+
+		expect(mNone).toBe('');
+		expect(mQuoteOnly).toBe('q123');
+	});
+
+	test('is stable across repeated calls with identical data', () => {
+		const inputs = [mkProof('s1', 'C1'), mkProof('s2', 'C2')];
+		const outputs = [mkOutput(9, 'B9')];
+		const q = 'q999';
+
+		const m1 = buildP2PKSigAllMessage(inputs, outputs, q);
+		const m2 = buildP2PKSigAllMessage(inputs, outputs, q);
+
+		expect(m1).toBe(m2);
+	});
+
+	test('replicates NUT-11 SIG_ALL test vectors for swap', () => {
+		const sig =
+			'ce017ca25b1b97df2f72e4b49f69ac26a240ce14b3690a8fe619d41ccc42d3c1282e073f85acd36dc50011638906f35b56615f24e4d03e8effe8257f6a808538';
+		const pub = '030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1';
+		const inputs = [
+			{
+				amount: 2,
+				id: '00bfa73302d12ffd',
+				secret: `[\"P2PK\",{\"nonce\":\"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
+				C: '02c97ee3d1db41cf0a3ddb601724be8711a032950811bf326f8219c50c4808d3cd',
+				witness: `{\"signatures\":[\"${sig}\"]}`,
+			},
+		];
+		const outputs = [
+			mkOutput(2, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
+		];
+		const message = buildP2PKSigAllMessage(inputs, outputs);
+
+		expect(message).toBe(
+			'["P2PK",{"nonce":"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303","data":"030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1","tags":[["sigflag","SIG_ALL"]]}]02c97ee3d1db41cf0a3ddb601724be8711a032950811bf326f8219c50c4808d3cd2038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39',
+		);
+		expect(verifyP2PKSecretSignature(sig, message, pub)).toBeTruthy();
+	});
+
+	test('replicates NUT-11 SIG_ALL test vectors for melt', () => {
+		const quote = 'cF8911fzT88aEi1d-6boZZkq5lYxbUSVs-HbJxK0';
+		const sig =
+			'478224fbe715e34f78cb33451db6fcf8ab948afb8bd04ff1a952c92e562ac0f7c1cb5e61809410635be0aa94d0448f7f7959bd5762cc3802b0a00ff58b2da747';
+		const pub = '029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835';
+		const inputs = [
+			{
+				amount: 2,
+				id: '00bfa73302d12ffd',
+				secret: `[\"P2PK\",{\"nonce\":\"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
+				C: '02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b',
+				witness: `{\"signatures\":[\"${sig}\"]}`,
+			},
+		];
+		const outputs = [
+			mkOutput(0, '038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39'),
+		];
+		const message = buildP2PKSigAllMessage(inputs, outputs, quote);
+
+		expect(message).toBe(
+			'["P2PK",{"nonce":"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de","data":"029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835","tags":[["sigflag","SIG_ALL"]]}]02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b0038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39cF8911fzT88aEi1d-6boZZkq5lYxbUSVs-HbJxK0',
+		);
+		expect(verifyP2PKSecretSignature(sig, message, pub)).toBeTruthy();
+	});
+});
+
+describe('assertSigAllInputs, SIG_ALL validation', () => {
+	// Helpers to keep tests short and readable
+	const mkSecret = (data: string, tags = [['sigflag', 'SIG_ALL']]) =>
+		JSON.stringify(['P2PK', { data, tags }]);
+
+	const mkProof = (secret: string) => ({ secret }) as any;
+
+	test('throws when no proofs are provided', () => {
+		expect(() => assertSigAllInputs([])).toThrow('No proofs');
+	});
+
+	test('throws when first proof is not P2PK', () => {
+		const badSecret = JSON.stringify(['OTHER', { data: 'x', tags: [] }]);
+		expect(() => assertSigAllInputs([mkProof(badSecret)])).toThrow('Not a P2PK secret');
+	});
+
+	test('throws when first proof is not SIG_ALL', () => {
+		const secret = JSON.stringify(['P2PK', { data: 'x', tags: [['sigflag', 'SIG_INPUTS']] }]);
+		expect(() => assertSigAllInputs([mkProof(secret)])).toThrow('First proof is not SIG_ALL');
+	});
+
+	test('returns silently when one valid SIG_ALL proof is present', () => {
+		const secret = mkSecret('pubkey');
+		expect(() => assertSigAllInputs([mkProof(secret)])).not.toThrow();
+	});
+
+	test('throws when any subsequent proof is not P2PK', () => {
+		const s1 = mkSecret('pubkey');
+		const s2 = JSON.stringify(['WRONG', { data: 'pubkey', tags: [['sigflag', 'SIG_ALL']] }]);
+		expect(() => assertSigAllInputs([mkProof(s1), mkProof(s2)])).toThrow('not P2PK');
+	});
+
+	test('throws when any subsequent proof is not SIG_ALL', () => {
+		const s1 = mkSecret('pubkey');
+		const s2 = JSON.stringify(['P2PK', { data: 'pubkey', tags: [['sigflag', 'SIG_INPUTS']] }]);
+		expect(() => assertSigAllInputs([mkProof(s1), mkProof(s2)])).toThrow('not SIG_ALL');
+	});
+
+	test('throws when data fields differ across inputs', () => {
+		const s1 = mkSecret('pkA');
+		const s2 = mkSecret('pkB');
+		expect(() => assertSigAllInputs([mkProof(s1), mkProof(s2)])).toThrow(
+			'SIG_ALL inputs must share identical Secret.data',
+		);
+	});
+
+	test('throws when tags differ across inputs', () => {
+		const s1 = mkSecret('pk', [
+			['sigflag', 'SIG_ALL'],
+			['locktime', '123'],
+		]);
+		const s2 = mkSecret('pk', [
+			['sigflag', 'SIG_ALL'],
+			['locktime', '456'],
+		]);
+		expect(() => assertSigAllInputs([mkProof(s1), mkProof(s2)])).toThrow(
+			'SIG_ALL inputs must share identical Secret.tags',
+		);
+	});
+
+	test('passes when all inputs have identical data and tags', () => {
+		const s1 = mkSecret('pk', [
+			['sigflag', 'SIG_ALL'],
+			['n_sigs', '2'],
+		]);
+		const s2 = mkSecret('pk', [
+			['sigflag', 'SIG_ALL'],
+			['n_sigs', '2'],
+		]);
+		expect(() => assertSigAllInputs([mkProof(s1), mkProof(s2)])).not.toThrow();
+	});
+});
+
+describe('branch coverage helpers', () => {
+	const mkSecret = (data: string, tags?: string[][]) =>
+		JSON.stringify(['P2PK', { nonce: '00', data, ...(tags ? { tags } : {}) }]);
+
+	const p = (secret: string): Proof => ({
+		secret,
+		C: 'C',
+		amount: 1 as any, // satisfy type if needed by your model
+		id: 'x' as any,
+		witness: undefined,
+	});
+
+	test('assertSigAllInputs, tags undefined on all inputs', () => {
+		const s = mkSecret('PUB', [['sigflag', 'SIG_ALL']]);
+		expect(() => assertSigAllInputs([p(s), p(s)])).not.toThrow();
+	});
+
+	test('assertSigAllInputs, tags present and identical on all inputs', () => {
+		const tags: string[][] = [
+			['sigflag', 'SIG_ALL'],
+			['locktime', String(Math.floor(Date.now() / 1000) + 60)], // any extra tag is fine
+			['pubkeys', 'PUB'],
+		];
+		const s = mkSecret('PUB', tags);
+		expect(() => assertSigAllInputs([p(s), p(s)])).not.toThrow();
+	});
+
+	test('getP2PKWitnessSignatures, witness is string with no signatures field', () => {
+		const sigs = getP2PKWitnessSignatures(JSON.stringify({}));
+		expect(sigs).toEqual([]); // covers string path with fallback
+	});
+
+	test('getP2PKWitnessSignatures, witness object with signatures undefined', () => {
+		const sigs = getP2PKWitnessSignatures({} as any);
+		expect(sigs).toEqual([]); // covers object path with fallback
+	});
+});
+
+describe('SIG_ALL, all three message formats are actually signed', () => {
+	test('first proof witness contains signatures for legacy, interim and final SIG_ALL messages', () => {
+		// 1. Set up a keypair and a SIG_ALL P2PK secret
+		const privBytes = schnorr.utils.randomSecretKey();
+		const privHex = bytesToHex(privBytes);
+		const pubCompressed = bytesToHex(getPubKeyFromPrivKey(privBytes)); // 33-byte SEC1
+
+		const secret = JSON.stringify([
+			'P2PK',
+			{
+				nonce: 'aa',
+				data: pubCompressed,
+				tags: [['sigflag', 'SIG_ALL']],
+			},
+		] as const);
+
+		// 2. Build a minimal SIG_ALL input set that passes assertSigAllInputs
+		const proofs: Proof[] = [
+			{
+				amount: 1,
+				id: '00a1',
+				C: '03'.padEnd(66, '1'),
+				secret,
+			} as Proof,
+			{
+				amount: 2,
+				id: '00a2',
+				C: '03'.padEnd(66, '2'),
+				secret,
+			} as Proof,
+		];
+
+		// 3. Minimal outputs satisfying OutputDataLike
+		const outputs: OutputDataLike[] = [
+			{
+				blindedMessage: {
+					amount: 3,
+					id: 'out-1',
+					B_: '03'.padEnd(66, '3'),
+				},
+			} as any,
+		];
+
+		const quoteId = 'quote-xyz';
+
+		// 4. Build the three distinct SIG_ALL messages the wallet is supposed to sign
+		const legacyMsg = buildLegacyP2PKSigAllMessage(proofs, outputs, quoteId);
+		const interimMsg = buildInterimP2PKSigAllMessage(proofs, outputs, quoteId);
+		const finalMsg = buildP2PKSigAllMessage(proofs, outputs, quoteId);
+
+		const messages = [legacyMsg, interimMsg, finalMsg];
+
+		// 5. Mimic the wallet SIG_ALL path:
+		//    start from the first proof, then sign it three times with the three messages,
+		//    threading the witness through on each call.
+		let signedFirst: Proof = proofs[0];
+
+		for (const msg of messages) {
+			[signedFirst] = signP2PKProofs([signedFirst], privHex, NULL_LOGGER, msg);
+		}
+
+		const sigs = getP2PKWitnessSignatures(signedFirst.witness);
+
+		// Sanity: we really appended three signatures
+		expect(sigs.length).toBe(3);
+
+		// 6. For each message variant, there must be at least one signature that verifies
+		//    against that specific message and this pubkey.
+		for (const msg of messages) {
+			const hasValid = sigs.some((sig) => verifyP2PKSecretSignature(sig, msg, pubCompressed));
+			expect(hasValid).toBe(true);
+		}
+
+		// Optional extra: none of these signatures should verify against the bare secret,
+		// which would indicate we mistakenly signed proof.secret instead of the message.
+		const anyOnSecret = sigs.some((sig) => verifyP2PKSecretSignature(sig, secret, pubCompressed));
+		expect(anyOnSecret).toBe(false);
 	});
 });

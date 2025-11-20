@@ -192,6 +192,10 @@ export class OutputData implements OutputDataLike {
 			}
 		}
 
+		if (p2pk.sigFlag == 'SIG_ALL') {
+			tags.push(['sigflag', 'SIG_ALL']);
+		}
+
 		// Append additional tags if any
 		if (p2pk.additionalTags?.length) {
 			const normalized = p2pk.additionalTags.map(([k, ...vals]) => {

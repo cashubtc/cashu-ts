@@ -220,14 +220,6 @@ describe('Mint (BOLT12) – instance methods', () => {
 });
 
 describe('Wallet (BOLT12) – wrappers', () => {
-	beforeEach(async () => {
-		// Setup wallet with cached data
-		const { req: reqInfo } = makeRequestSpy(mintInfoResp);
-		const mint = new Mint(mintUrl, reqInfo);
-		const wallet = new Wallet(mint, mintCache);
-		await wallet.loadMint();
-	});
-
 	it('wallet.createMintQuoteBolt12 delegates to mint', async () => {
 		const response = {
 			quote: 'q1',
