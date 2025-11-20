@@ -4,7 +4,20 @@ import {
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBaseResponse,
 	type SwapRequest,
+	type MeltRequest,
 } from '../../model/types';
+import { type Keyset } from '../Keyset';
+
+/**
+ * @deprecated Use wallet.prepareMelt() and store the MeltPreview instead.
+ */
+export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
+	method: 'bolt11' | 'bolt12';
+	payload: MeltRequest;
+	outputData: OutputDataLike[];
+	keyset: Keyset;
+	quote: T;
+}
 
 /**
  * Preview of a Melt transaction created by prepareMelt.

@@ -20,6 +20,7 @@ import {
 	type RestoreConfig,
 	type SecretsPolicy,
 	type SwapPreview,
+	type MeltBlanks,
 } from './types';
 import {
 	type CounterSource,
@@ -1923,10 +1924,22 @@ class Wallet {
 			quote: meltQuote,
 		};
 
-		// Fire event(s) after preview creation
+		// Fire legacy event(s) after preview creation
+		// Note: These events are deprecated and should be removed in a future version
 		if (outputData.length > 0) {
-			this.safeCallback(onChangeOutputsCreated, meltPreview, { op: 'meltProofs' });
-			this.on._emitMeltBlanksCreated(meltPreview); // global callback
+			const blanks: MeltBlanks<TQuote> = {
+				method: method as 'bolt11' | 'bolt12',
+				payload: {
+					quote: meltQuote.quote,
+					inputs: proofsToSend,
+					outputs: outputData.map((d) => d.blindedMessage),
+				},
+				outputData,
+				keyset,
+				quote: meltQuote,
+			};
+			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
+			this.on._emitMeltBlanksCreated(blanks); // global callback
 		}
 
 		return meltPreview;
@@ -1936,20 +1949,24 @@ class Wallet {
 	 * Completes a pending melt by calling the melt endpoint and constructing change proofs.
 	 *
 	 * @remarks
-	 * Use with a MeltPreview returned from prepareMelt or from the meltBlanksCreated or
-	 * onChangeOutputsCreated callback. This method lets you sign P2PK locked proofs before melting.
-	 * If the payment is pending or unpaid, the change array will be empty.
-	 * @param meltPreview The blanks from onChangeOutputsCreated.
+	 * Use with a MeltPreview returned from prepareMelt or the legacy MeltBlanks object returned by
+	 * the meltBlanksCreated or onChangeOutputsCreated callback. This method lets you sign P2PK locked
+	 * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
+	 * @param meltPreview The preview from prepareMelt().
 	 * @param privkey The private key(s) for signing.
 	 * @param preferAsync Optional override to set 'respond-async' header.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
 	async completeMelt<TQuote extends MeltQuoteBaseResponse>(
-		meltPreview: MeltPreview<TQuote>,
+		meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>,
 		privkey?: string | string[],
 		preferAsync?: boolean,
 	): Promise<MeltProofsResponse<TQuote>> {
+		// Convert from legacy MeltBlanks if needed
+		meltPreview = this.maybeConvertMeltBlanks(meltPreview);
+
+		// Extract vars from MeltPreview
 		let inputs = meltPreview.inputs;
 		const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
 		const quote = meltPreview.quote.quote;
@@ -1992,6 +2009,30 @@ class Wallet {
 		} as TQuote;
 
 		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
+	}
+
+	/**
+	 * Helper to ease transition from MeltBlanks to MeltPreview.
+	 */
+	private maybeConvertMeltBlanks<TQuote extends MeltQuoteBaseResponse>(
+		melt: MeltPreview<TQuote> | MeltBlanks<TQuote>,
+	): MeltPreview<TQuote> {
+		// New shape already, just return as is
+		if (!('payload' in melt)) {
+			return melt;
+		}
+		// Legacy MeltBlanks, adapt it to MeltPreview
+		this._logger.warn(
+			'MeltBlanks objects and the meltBlanksCreated / onChangeOutputsCreated events are deprecated. Please use wallet.prepareMelt() to create a MeltPreview instead.',
+		);
+		const { method, payload, outputData, keyset, quote } = melt;
+		return {
+			method,
+			inputs: payload.inputs,
+			outputData,
+			keysetId: keyset.id,
+			quote,
+		};
 	}
 
 	// -----------------------------------------------------------------

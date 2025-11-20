@@ -485,6 +485,20 @@ export interface Logger {
 // @public
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
+// @public @deprecated (undocumented)
+export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
+    // (undocumented)
+    keyset: Keyset;
+    // (undocumented)
+    method: 'bolt11' | 'bolt12';
+    // (undocumented)
+    outputData: OutputDataLike[];
+    // (undocumented)
+    payload: MeltRequest;
+    // (undocumented)
+    quote: T;
+}
+
 // @public
 export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
 
@@ -497,8 +511,10 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
     asP2PK(options: P2PKOptions, denoms?: number[]): this;
     asRandom(denoms?: number[]): this;
     keyset(id: string): this;
+    // @deprecated
     onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    prepare(): Promise<MeltPreview<TQuote>>;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<TQuote>>;
 }
@@ -517,7 +533,7 @@ export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBol
 export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
-    onChangeOutputsCreated?: (blanks: MeltPreview<MeltQuoteBaseResponse>) => void;
+    onChangeOutputsCreated?: (blanks: MeltBlanks<MeltQuoteBaseResponse>) => void;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -1570,7 +1586,7 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
-    completeMelt<TQuote extends MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
+    completeMelt<TQuote extends MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
@@ -1652,7 +1668,8 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
-    meltBlanksCreated(cb: (payload: MeltPreview<MeltQuoteBaseResponse>) => void, opts?: SubscribeOpts): SubscriptionCanceller;
+    // @deprecated
+    meltBlanksCreated(cb: (payload: MeltBlanks<MeltQuoteBaseResponse>) => void, opts?: SubscribeOpts): SubscriptionCanceller;
     meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
