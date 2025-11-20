@@ -1,0 +1,57 @@
+name: Integration against mint (composite)
+description: Reusable composite action that waits for a mint HTTP endpoint, runs tests
+inputs:
+  container_name:
+    description: 'Container name used for logs and inspect'
+    required: false
+    default: 'mint'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Wait for mint to be ready (host-side)
+      shell: bash
+      run: |
+        set -euo pipefail
+        host_url="http://127.0.0.1:3338/v1/info"
+        timeout=90
+        interval=2
+        elapsed=0
+        container_name='${{ inputs.container_name }}'
+        echo "Waiting up to ${timeout}s for mint at $host_url..."
+        until curl --silent --show-error --fail --max-time 5 "$host_url" > /dev/null; do
+          if [ "$elapsed" -ge "$timeout" ]; then
+            echo "Timed out waiting for mint at $host_url"
+            echo "--- Container inspect ---"
+            docker inspect "$container_name" || true
+            echo "--- Container logs (last 200 lines) ---"
+            docker logs --tail 200 "$container_name" || true
+            exit 1
+          fi
+          sleep "$interval"
+          elapsed=$((elapsed + interval))
+          echo "Still waiting... (${elapsed}/${timeout}s)"
+        done
+        echo "Mint responded to host HTTP at $host_url"
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Build
+      shell: bash
+      run: npm run compile
+
+    - name: Run integration tests
+      shell: bash
+      run: npm run test-integration
+
+    - name: Dump mint logs on failure
+      if: ${{ failure() }}
+      shell: bash
+      run: |
+        container_name='${{ inputs.container_name }}'
+        echo "=== ${container_name} inspect ==="
+        docker inspect "$container_name" || true
+        echo "=== ${container_name} logs (last 200 lines) ==="
+        docker logs --tail 200 "$container_name" || true
