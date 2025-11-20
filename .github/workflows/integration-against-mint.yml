@@ -1,0 +1,44 @@
+name: Mint integration
+
+on: [push, pull_request]
+
+jobs:
+  cdk-integration-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start CDK container via Makefile
+        id: start_container
+        run: |
+          set -euo pipefail
+          CONTAINER_NAME=cdk-integration
+          # use the container name and set that output for later steps
+          DEV=1 CDK_NAME="$CONTAINER_NAME" make cdk-up
+          echo "name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Run shared integration steps (wait, build, test)
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ steps.start_container.outputs.name }}
+
+  nutshell-integration-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Start Nutshell container via Makefile
+        id: start_container
+        run: |
+          set -euo pipefail
+          CONTAINER_NAME=nutshell-integration
+          # use the container name and set that output for later steps
+          DEV=1 NUT_NAME="$CONTAINER_NAME" make nutshell-up
+          echo "name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Run shared integration steps (wait, build, test)
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ steps.start_container.outputs.name }}

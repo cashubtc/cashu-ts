@@ -1,3 +1,48 @@
+/*
+ * Lightweight CBOR encoder/decoder (purpose and limitations)
+ *
+ * Supported
+ * - Major types: 0 (unsigned), 1 (negative), 2 (byte string), 3 (text string),
+ *   4 (array), 5 (map), 7 (simple values & floats).
+ * - Additional-info lengths: short (0..23), 1-, 2- and 4-byte length forms are
+ *   encoded by the encoder. The decoder understands 8-byte length fields
+ *   (additional-info 27) and will decode them into a JavaScript Number
+ *   (hi * 2**32 + lo) but the encoder intentionally does not emit 8-byte
+ *   integer forms (see 'Not implemented' below).
+ * - Floating point: decoder supports float16/float32/float64. Encoder emits
+ *   float64 for non-integers.
+ * - Guardrails: explicit throws for unsupported types and sizes (e.g. huge
+ *   strings/byte arrays/arrays/maps > 2**32-1, integers larger than 32-bit for
+ *   encoding). DataView out-of-bounds reads are normalized to
+ *   "Unexpected end of data" for clearer errors.
+ *
+ * Not implemented / intentionally out of scope
+ * - Indefinite-length (streaming) containers (indefinite-length arrays,
+ *   maps, byte/text strings) are not supported. Test vectors with streaming
+ *   markers are skipped in the test harness.
+ * - Semantic tags (major type 6) are not interpreted; tagged values are
+ *   skipped in encode-roundtrip tests. Implementing tags should return a
+ *   wrapper object or otherwise surface the tag + value.
+ * - Big integers / bignum handling: this implementation does not return
+ *   BigInt for values outside Number.isSafeInteger nor emit CBOR bignum tags
+ *   (tag 2/3). Decode may parse 8-byte unsigned/negative integers into a
+ *   Number which can overflow JS precision; callers who need accurate bignum
+ *   support should add BigInt decoding and encoder support.
+ * - Encoder does not emit float16/float32 or 8-byte integer (additional-info
+ *   27) forms. It intentionally limits integer encoding to <= 32-bit and
+ *   uses float64 for non-integers to keep the implementation small.
+ *
+ * Guidance for contributors
+ * - To add streaming support, implement indefinite-length decoders that
+ *   concatenate chunks until the break byte (0xff) and update decodeItem
+ *   accordingly.
+ * - To add BigInt/bignum support, change decode paths to return BigInt when
+ *   required, add fixture representation for BigInt in tests, and emit proper
+ *   tag-2/3 bignum encodings or 8-byte integer forms in the encoder.
+ */
+
+/* Reference: CBOR specification (RFC 8949) https://www.rfc-editor.org/rfc/rfc8949.html */
+
 type SimpleValue = boolean | null | undefined;
 
 export type ResultObject = { [key: string]: ResultValue };
@@ -29,7 +74,7 @@ function encodeItem(value: unknown, buffer: number[]) {
 	} else if (typeof value === 'boolean') {
 		buffer.push(value ? 0xf5 : 0xf4);
 	} else if (typeof value === 'number') {
-		encodeUnsigned(value, buffer);
+		encodeNumber(value, buffer);
 	} else if (typeof value === 'string') {
 		encodeString(value, buffer);
 	} else if (Array.isArray(value)) {
@@ -54,11 +99,63 @@ function encodeUnsigned(value: number, buffer: number[]) {
 	} else if (value < 256) {
 		buffer.push(0x18, value);
 	} else if (value < 65536) {
-		buffer.push(0x19, value >> 8, value & 0xff);
+		buffer.push(0x19, (value >>> 8) & 0xff, value & 0xff);
 	} else if (value < 4294967296) {
-		buffer.push(0x1a, value >> 24, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
+		buffer.push(
+			0x1a,
+			(value >>> 24) & 0xff,
+			(value >>> 16) & 0xff,
+			(value >>> 8) & 0xff,
+			value & 0xff,
+		);
 	} else {
 		throw new Error('Unsupported integer size');
+	}
+}
+
+function encodeSigned(value: number, buffer: number[]) {
+	// CBOR negative integer encoding: store -1 - value as unsigned under major type 1
+	const unsigned = -1 - value;
+	if (unsigned < 24) {
+		buffer.push(0x20 | unsigned);
+	} else if (unsigned < 256) {
+		buffer.push(0x38, unsigned & 0xff);
+	} else if (unsigned < 65536) {
+		buffer.push(0x39, (unsigned >>> 8) & 0xff, unsigned & 0xff);
+	} else if (unsigned < 4294967296) {
+		buffer.push(
+			0x3a,
+			(unsigned >>> 24) & 0xff,
+			(unsigned >>> 16) & 0xff,
+			(unsigned >>> 8) & 0xff,
+			unsigned & 0xff,
+		);
+	} else {
+		throw new Error('Unsupported integer size');
+	}
+}
+
+function encodeFloat64(value: number, buffer: number[]) {
+	// major type 7, additional info 27 (0xfb) followed by 8 bytes IEEE 754 big-endian
+	const ab = new ArrayBuffer(8);
+	const dv = new DataView(ab);
+	dv.setFloat64(0, value, false);
+	buffer.push(0xfb);
+	for (let i = 0; i < 8; i++) buffer.push(dv.getUint8(i));
+}
+
+function encodeNumber(value: number, buffer: number[]) {
+	if (Number.isInteger(value)) {
+		if (value >= 0) {
+			// unsigned
+			encodeUnsigned(value, buffer);
+		} else {
+			// negative integer
+			encodeSigned(value, buffer);
+		}
+	} else {
+		// encode non-integer numbers as float64 for simplicity
+		encodeFloat64(value, buffer);
 	}
 }
 
@@ -74,9 +171,9 @@ function encodeByteString(value: Uint8Array, buffer: number[]) {
 	} else if (length < 4294967296) {
 		buffer.push(
 			0x5a,
-			(length >> 24) & 0xff,
-			(length >> 16) & 0xff,
-			(length >> 8) & 0xff,
+			(length >>> 24) & 0xff,
+			(length >>> 16) & 0xff,
+			(length >>> 8) & 0xff,
 			length & 0xff,
 		);
 	} else {
@@ -97,13 +194,13 @@ function encodeString(value: string, buffer: number[]) {
 	} else if (length < 256) {
 		buffer.push(0x78, length);
 	} else if (length < 65536) {
-		buffer.push(0x79, (length >> 8) & 0xff, length & 0xff);
+		buffer.push(0x79, (length >>> 8) & 0xff, length & 0xff);
 	} else if (length < 4294967296) {
 		buffer.push(
 			0x7a,
-			(length >> 24) & 0xff,
-			(length >> 16) & 0xff,
-			(length >> 8) & 0xff,
+			(length >>> 24) & 0xff,
+			(length >>> 16) & 0xff,
+			(length >>> 8) & 0xff,
 			length & 0xff,
 		);
 	} else {
@@ -122,7 +219,7 @@ function encodeArray(value: unknown[], buffer: number[]) {
 	} else if (length < 256) {
 		buffer.push(0x98, length);
 	} else if (length < 65536) {
-		buffer.push(0x99, length >> 8, length & 0xff);
+		buffer.push(0x99, (length >>> 8) & 0xff, length & 0xff);
 	} else {
 		throw new Error('Unsupported array length');
 	}
@@ -134,8 +231,29 @@ function encodeArray(value: unknown[], buffer: number[]) {
 
 function encodeObject(value: Record<string, unknown>, buffer: number[]) {
 	const keys = Object.keys(value);
-	encodeUnsigned(keys.length, buffer);
-	buffer[buffer.length - 1] |= 0xa0;
+	const length = keys.length;
+
+	// Guardrail: we only support map lengths up to 2^32-1 (same as encodeUnsigned max)
+	if (length >= 4294967296) {
+		throw new Error('Object has too many keys to encode');
+	}
+
+	// Write initial byte for major type 5 (map) and additional info based on length
+	if (length < 24) {
+		buffer.push(0xa0 | length);
+	} else if (length < 256) {
+		buffer.push(0xb8, length);
+	} else if (length < 65536) {
+		buffer.push(0xb9, (length >> 8) & 0xff, length & 0xff);
+	} else {
+		buffer.push(
+			0xba,
+			(length >> 24) & 0xff,
+			(length >> 16) & 0xff,
+			(length >> 8) & 0xff,
+			length & 0xff,
+		);
+	}
 	for (const key of keys) {
 		encodeString(key, buffer);
 		encodeItem(value[key], buffer);
@@ -176,24 +294,36 @@ function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
 	}
 }
 
+function ensureAvailable(view: DataView, offset: number, needed: number) {
+	if (offset + needed > view.byteLength) {
+		throw new Error('Unexpected end of data');
+	}
+}
+
 function decodeLength(
 	view: DataView,
 	offset: number,
 	additionalInfo: number,
 ): DecodeResult<number> {
 	if (additionalInfo < 24) return { value: additionalInfo, offset };
-	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
+	if (additionalInfo === 24) {
+		ensureAvailable(view, offset, 1);
+		return { value: view.getUint8(offset++), offset };
+	}
 	if (additionalInfo === 25) {
+		ensureAvailable(view, offset, 2);
 		const value = view.getUint16(offset, false);
 		offset += 2;
 		return { value, offset };
 	}
 	if (additionalInfo === 26) {
+		ensureAvailable(view, offset, 4);
 		const value = view.getUint32(offset, false);
 		offset += 4;
 		return { value, offset };
 	}
 	if (additionalInfo === 27) {
+		ensureAvailable(view, offset, 8);
 		const hi = view.getUint32(offset, false);
 		const lo = view.getUint32(offset + 4, false);
 		offset += 8;
@@ -315,18 +445,24 @@ function decodeSimpleAndFloat(
 				throw new Error(`Unknown simple value: ${additionalInfo}`);
 		}
 	}
-	if (additionalInfo === 24) return { value: view.getUint8(offset++), offset };
+	if (additionalInfo === 24) {
+		ensureAvailable(view, offset, 1);
+		return { value: view.getUint8(offset++), offset };
+	}
 	if (additionalInfo === 25) {
+		ensureAvailable(view, offset, 2);
 		const value = decodeFloat16(view.getUint16(offset, false));
 		offset += 2;
 		return { value, offset };
 	}
 	if (additionalInfo === 26) {
+		ensureAvailable(view, offset, 4);
 		const value = view.getFloat32(offset, false);
 		offset += 4;
 		return { value, offset };
 	}
 	if (additionalInfo === 27) {
+		ensureAvailable(view, offset, 8);
 		const value = view.getFloat64(offset, false);
 		offset += 8;
 		return { value, offset };

@@ -12,6 +12,7 @@ import {
 	type MintQuoteResponse,
 	MintQuoteState,
 	type MintKeys,
+	MintKeyset,
 	deriveKeysetId,
 	getDecodedToken,
 	injectWebSocketImpl,
@@ -382,6 +383,58 @@ describe('test info', () => {
 			{ method: 'twitter', info: '@me' },
 			{ method: 'nostr', info: 'npub1337' },
 		]);
+	});
+	test('supportsNut04Description respects per-unit description support', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfoResp);
+			}),
+		);
+		const wallet = new Wallet(mint, { unit: 'sat' });
+		await wallet.loadMint();
+		const info = await wallet.getMintInfo();
+
+		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
+		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(true);
+		expect(info.supportsNut04Description('bolt12', 'sat')).toBe(false);
+
+		server.use(
+			http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
+				HttpResponse.json({ quote: 'sat-quote', request: 'lnbc...' }),
+			),
+		);
+		await expect(wallet.createMintQuoteBolt11(1000, 'sat description')).resolves.toHaveProperty(
+			'quote',
+			'sat-quote',
+		);
+
+		// Define a USD keyset for next test
+		const mintCache = {
+			keysets: [
+				{
+					id: '00bd033559de27d0',
+					unit: 'usd',
+					active: true,
+					input_fee_ppk: 0,
+					final_expiry: undefined,
+				},
+			] as MintKeyset[],
+			keys: [
+				{
+					id: '00bd033559de27d0',
+					unit: 'usd',
+					keys: {
+						'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+						'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+					},
+				},
+			] as MintKeys[],
+			unit: 'usd',
+			mintInfo: mintInfoResp,
+		};
+		const usdWallet = new Wallet(mint, mintCache);
+		await usdWallet.loadMint();
+		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
 	});
 });
 

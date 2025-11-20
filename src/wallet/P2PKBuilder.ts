@@ -1,4 +1,5 @@
-import { type P2PKOptions } from './types/config';
+import { assertValidTagKey, OutputData } from '../model/OutputData';
+import { type P2PKOptions, type P2PKTag } from './types/config';
 
 // Accept 33 byte compressed (02|03...), or 32 byte x-only,
 // normalised to lowercase 33 byte with 02 prefix for x only
@@ -24,6 +25,8 @@ export class P2PKBuilder {
 	private locktime?: number;
 	private nSigs?: number;
 	private nSigsRefund?: number;
+	private extraTags: P2PKTag[] = [];
+	private _blindKeys?: boolean;
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
@@ -52,6 +55,25 @@ export class P2PKBuilder {
 		return this;
 	}
 
+	addTag(key: string, values?: string[] | string) {
+		assertValidTagKey(key); //  Validate key
+		const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
+		this.extraTags.push([key, ...vals.map(String)]); // all to strings
+		return this;
+	}
+
+	addTags(tags: P2PKTag[]) {
+		for (const [k, ...vals] of tags) this.addTag(k, vals);
+		return this;
+	}
+	/**
+	 * @alpha
+	 */
+	blindKeys() {
+		this._blindKeys = true;
+		return this;
+	}
+
 	toOptions(): P2PKOptions {
 		const locks = Array.from(this.lockSet);
 		const refunds = Array.from(this.refundSet);
@@ -75,13 +97,21 @@ export class P2PKBuilder {
 
 		const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
 
-		return {
+		const p2pk: P2PKOptions = {
 			pubkey,
 			...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
 			...(refunds.length ? { refundKeys: refunds } : {}),
 			...(reqLock && reqLock > 1 ? { requiredSignatures: reqLock } : {}),
 			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
+			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
+			...(this._blindKeys ? { blindKeys: true } : {}),
 		};
+
+		// Ensure the secret is valid (not too long etc)
+		const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
+		void smokeTest; // intentionally unused
+
+		return p2pk;
 	}
 
 	static fromOptions(opts: P2PKOptions): P2PKBuilder {
@@ -93,6 +123,8 @@ export class P2PKBuilder {
 		if (opts.requiredSignatures !== undefined) b.requireLockSignatures(opts.requiredSignatures);
 		if (opts.requiredRefundSignatures !== undefined)
 			b.requireRefundSignatures(opts.requiredRefundSignatures);
+		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
+		if (opts.blindKeys) b.blindKeys();
 		return b;
 	}
 }

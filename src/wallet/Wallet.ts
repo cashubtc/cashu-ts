@@ -73,7 +73,6 @@ import {
 	getKeepAmounts,
 	hasValidDleq,
 	splitAmount,
-	stripDleq,
 	sumProofs,
 	sanitizeUrl,
 } from '../utils';
@@ -1106,19 +1105,21 @@ class Wallet {
 	 * Prepares inputs for a mint operation.
 	 *
 	 * @remarks
-	 * Internal method; strips DLEQ for privacy and serializes witnesses.
+	 * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-26) for privacy and serializes witnesses.
+	 * Returns an array of new proof objects - does not mutate the originals.
 	 * @param proofs The proofs to prepare.
 	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
 	 * @returns Prepared proofs for mint payload.
 	 */
 	private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
-		if (!keepDleq) {
-			proofs = stripDleq(proofs);
-		}
-		return proofs.map((p) => ({
-			...p,
-			witness: p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness,
-		}));
+		return proofs.map((p) => {
+			const witness =
+				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
+			void p2pk_e; // intentionally unused (linter)
+			// New proof object
+			return keepDleq && dleq ? { ...rest, dleq, witness } : { ...rest, witness };
+		});
 	}
 
 	/**
@@ -1245,6 +1246,14 @@ class Wallet {
 	 *   specified amount and unit.
 	 */
 	async createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse> {
+		// Check if mint supports description for bolt11
+		if (description) {
+			const mintInfo = this.getMintInfo();
+			if (!mintInfo.supportsNut04Description('bolt11', this._unit)) {
+				this.fail('Mint does not support description for bolt11');
+			}
+		}
+
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -1307,7 +1316,7 @@ class Wallet {
 	): Promise<Bolt12MintQuoteResponse> {
 		// Check if mint supports description for bolt12
 		const mintInfo = this.getMintInfo();
-		if (options?.description && !mintInfo.supportsBolt12Description) {
+		if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
 			this.fail('Mint does not support description for bolt12');
 		}
 
@@ -1844,9 +1853,11 @@ class Wallet {
 	 * @param proofs (only the `secret` field is required)
 	 * @returns NUT-07 state for each proof, in same order.
 	 */
-	async checkProofsStates(proofs: Proof[]): Promise<ProofState[]> {
+	async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]> {
 		const enc = new TextEncoder();
-		const Ys = proofs.map((p: Proof) => hashToCurve(enc.encode(p.secret)).toHex(true));
+		const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
+			hashToCurve(enc.encode(p.secret)).toHex(true),
+		);
 		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
 		const states: ProofState[] = [];

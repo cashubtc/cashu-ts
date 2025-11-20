@@ -391,6 +391,9 @@ export const getSignedOutput: (output: BlindedMessage, privateKey: PrivKey) => B
 export const getSignedOutputs: (outputs: BlindedMessage[], privateKey: string) => BlindedMessage[];
 
 // @public
+export function getTokenMetadata(token: string): TokenMetadata;
+
+// @public
 export function handleTokens(token: string): Token;
 
 // @public
@@ -803,7 +806,9 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    // @deprecated (undocumented)
     get supportsBolt12Description(): boolean;
+    supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;
 }
@@ -983,7 +988,7 @@ export interface OutputConfig {
 
 // @public (undocumented)
 export class OutputData implements OutputDataLike {
-    constructor(blindedMessage: SerializedBlindedMessage, blidingFactor: bigint, secret: Uint8Array);
+    constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -991,25 +996,13 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createP2PKData(p2pk: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    }, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createP2PKData(p2pk: P2PKOptions, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: {
-        pubkey: string | string[];
-        locktime?: number;
-        refundKeys?: string[];
-        requiredSignatures?: number;
-        requiredRefundSignatures?: number;
-    }, amount: number, keysetId: string): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: number, keysetId: string): OutputData;
     // (undocumented)
@@ -1058,6 +1051,10 @@ export class P2PKBuilder {
     // (undocumented)
     addRefundPubkey(pk: string | string[]): this;
     // (undocumented)
+    addTag(key: string, values?: string[] | string): this;
+    // (undocumented)
+    addTags(tags: P2PKTag[]): this;
+    // (undocumented)
     static fromOptions(opts: P2PKOptions): P2PKBuilder;
     // (undocumented)
     lockUntil(when: Date | number): this;
@@ -1076,7 +1073,12 @@ export type P2PKOptions = {
     refundKeys?: string[];
     requiredSignatures?: number;
     requiredRefundSignatures?: number;
+    additionalTags?: P2PKTag[];
+    blindKeys?: boolean;
 };
+
+// @public (undocumented)
+export type P2PKTag = [key: string, ...values: string[]];
 
 // @public
 export type P2PKWitness = {
@@ -1112,7 +1114,7 @@ export type PartialMintQuoteResponse = {
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, nut26?: boolean);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -1129,6 +1131,8 @@ class PaymentRequest_2 {
     mints?: string[] | undefined;
     // (undocumented)
     nut10?: NUT10Option | undefined;
+    // (undocumented)
+    nut26: boolean;
     // (undocumented)
     singleUse: boolean;
     // (undocumented)
@@ -1181,6 +1185,7 @@ export type Proof = {
     secret: string;
     C: string;
     dleq?: SerializedDLEQ;
+    p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
 };
 
@@ -1213,6 +1218,7 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
+    nut26?: boolean;
 };
 
 // @public (undocumented)
@@ -1414,7 +1420,7 @@ export const signP2PKProof: (proof: Proof, privateKey: string) => Proof;
 // @public
 export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger) => Proof[];
 
-// @public (undocumented)
+// @public
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)
@@ -1443,6 +1449,7 @@ export type SwapMethod = {
     unit: string;
     min_amount: number;
     max_amount: number;
+    description?: boolean;
     options?: {
         description?: boolean;
     };
@@ -1473,6 +1480,15 @@ export type Token = {
     proofs: Proof[];
     memo?: string;
     unit?: string;
+};
+
+// @public
+export type TokenMetadata = {
+    unit: string;
+    memo?: string;
+    mint: string;
+    amount: number;
+    incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
 
 // @public (undocumented)
@@ -1546,7 +1562,7 @@ export class Wallet {
     checkMintQuote(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt11(quote: string | MintQuoteResponse): Promise<MintQuoteResponse | PartialMintQuoteResponse>;
     checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse>;
-    checkProofsStates(proofs: Proof[]): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<T extends MeltQuoteResponse>(blanks: MeltBlanks<T>): Promise<MeltProofsResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;

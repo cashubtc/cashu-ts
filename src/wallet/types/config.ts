@@ -127,7 +127,11 @@ export type P2PKOptions = {
 	refundKeys?: string[];
 	requiredSignatures?: number;
 	requiredRefundSignatures?: number;
+	additionalTags?: P2PKTag[];
+	blindKeys?: boolean; // default false
 };
+
+export type P2PKTag = [key: string, ...values: string[]];
 
 export type OnCountersReserved = (info: OperationCounters) => void;
 
