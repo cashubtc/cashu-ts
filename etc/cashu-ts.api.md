@@ -485,6 +485,9 @@ export interface Logger {
 // @public
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
+// @public
+export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
+
 // @public @deprecated (undocumented)
 export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
     // (undocumented)
@@ -498,9 +501,6 @@ export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Res
     // (undocumented)
     quote: T;
 }
-
-// @public
-export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
 
 // @public
 export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
