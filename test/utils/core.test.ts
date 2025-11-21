@@ -11,7 +11,12 @@ import { test, describe, expect } from 'vitest';
 import { MintKeys, type Keys, type Proof, type Token } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
-import { hasValidDleq, hexToNumber, invoiceHasAmountInHRP, numberToHexPadded64 } from '../../src/utils';
+import {
+	hasValidDleq,
+	hexToNumber,
+	invoiceHasAmountInHRP,
+	numberToHexPadded64,
+} from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils';
 
 const keys: Keys = {};
