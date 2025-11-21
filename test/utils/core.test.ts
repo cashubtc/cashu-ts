@@ -11,7 +11,7 @@ import { test, describe, expect } from 'vitest';
 import { MintKeys, type Keys, type Proof, type Token } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
-import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../../src/utils';
+import { hasValidDleq, hexToNumber, invoiceHasAmountInHRP, numberToHexPadded64 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils';
 
 const keys: Keys = {};
@@ -806,5 +806,36 @@ describe('test deprecated base64 keyset id derivation', () => {
 
 		const verified = utils.verifyKeysetId(mintKeys);
 		expect(verified).toBe(true);
+	});
+});
+
+describe('invoiceHasAmountInHRP()', () => {
+	test('detects amountless invoices correctly', () => {
+		const amountless = [
+			'lnbc1p53lqw7pp5d8ntp7kfaqcqtxfgks0n32xd4lng2hhx5z3gvfcm9teyn4vee35sdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqr8pqsp5wdg4qaq6ktrvfm4z99ry98y4qrmg3krnc4mhf2rwce230hyyeu4s9qxpqysgqgz7lt5hnxcq3wrpd5qe64a37msj0lhqfa0ky6ppagyedd79lz86zrcg20p78csjtqv3sc2m06uu24ykh8q0jzhu30yr820sysh9wv8gpz44nvz',
+		];
+		amountless.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
+	});
+
+	test('detects invoices with amount', () => {
+		const withAmount = [
+			// 21 sats (210n → valid)
+			'lnbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa',
+
+			// 1 BTC — no multiplier
+			'lnbc11p53lqsgpp5mxs67qwmh34wu3jy7um8u490n2dtgy7dsrhzpdup008g8ygj2eysdp82pshjgr5dusyymrfde4jq4mpd3kx2',
+		];
+
+		withAmount.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(true));
+	});
+
+	test('rejects malformed or invalid HRP structure', () => {
+		const invalid = [
+			'lNbc210n1...', // uppercase LN (valid BOLT-11 but won’t match this HRP regex → fine)
+			'lnbc0210n1...', // leading zero in amount → invalid per spec
+			'lnsomething', // incomplete HRP
+		];
+
+		invalid.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
 	});
 });
