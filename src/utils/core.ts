@@ -814,3 +814,11 @@ function removePrefix(token: string): string {
 	});
 	return token;
 }
+
+/**
+ * Detects whether a BOLT-11 Lightning invoice encodes a non-zero amount in the Human-Readable Part
+ * (HRP).
+ */
+export function invoiceHasAmountInHRP(invoice: string): boolean {
+	return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/.test(invoice);
+}

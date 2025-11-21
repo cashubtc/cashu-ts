@@ -80,6 +80,7 @@ import {
 	splitAmount,
 	sumProofs,
 	sanitizeUrl,
+	invoiceHasAmountInHRP,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
 
@@ -1695,15 +1696,10 @@ class Wallet {
 	 *   reserve.
 	 */
 	async createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
-		if (amountMsat != null) {
-			// invoice is amount-less <=> HumanReadablePart has NO amount segment
-			const hasAmountInHRP = /^ln[a-z0-9]*\d+[munp]?$/.test(invoice);
-			if (hasAmountInHRP) {
-				throw new Error(
-					'amountMsat supplied but invoice already contains an amount. ' +
-						'Leave amountMsat undefined for non-zero invoices.',
-				);
-			}
+		if (amountMsat != null && invoiceHasAmountInHRP(invoice)) {
+			throw new Error(
+				'amountMsat supplied but invoice already contains an amount, Leave amountMsat undefined for non-zero invoices.',
+			);
 		}
 
 		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
