@@ -341,6 +341,9 @@ export type GetInfoResponse = {
         '17'?: {
             supported: WebSocketSupport[];
         };
+        '19'?: Omit<Nut19Policy, 'ttl'> & {
+            ttl: number | null;
+        };
         '20'?: {
             supported: boolean;
         };
@@ -756,6 +759,11 @@ export class MintInfo {
         params?: MPPMethod[];
     };
     // (undocumented)
+    isSupported(num: 19): {
+        supported: boolean;
+        params?: Nut19Policy;
+    };
+    // (undocumented)
     get motd(): string | undefined;
     // (undocumented)
     get name(): string;
@@ -795,6 +803,9 @@ export class MintInfo {
         };
         '17'?: {
             supported: WebSocketSupport[];
+        };
+        '19'?: Omit<Nut19Policy, "ttl"> & {
+            ttl: number | null;
         };
         '20'?: {
             supported: boolean;
@@ -920,6 +931,15 @@ export type NUT10Option = {
     kind: string;
     data: string;
     tags: string[][];
+};
+
+// @public
+export type Nut19Policy = {
+    ttl: number;
+    cached_endpoints: Array<{
+        method: 'GET' | 'POST';
+        path: string;
+    }>;
 };
 
 // @public (undocumented)
@@ -1295,7 +1315,7 @@ export type RequestArgs = {
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 // @public (undocumented)
 export type RestoreConfig = {

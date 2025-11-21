@@ -2,6 +2,7 @@ import {
 	type GetInfoResponse,
 	type MPPMethod,
 	type SwapMethod,
+	type Nut19Policy,
 	type WebSocketSupport,
 } from '../mint/types';
 
@@ -38,6 +39,7 @@ export class MintInfo {
 	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
 	isSupported(num: 17): { supported: boolean; params?: WebSocketSupport[] };
 	isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
+	isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
 	isSupported(num: number) {
 		switch (num) {
 			case 4:
@@ -59,6 +61,9 @@ export class MintInfo {
 			}
 			case 15: {
 				return this.checkNut15();
+			}
+			case 19: {
+				return this.checkNut19();
 			}
 			default: {
 				throw new Error('nut is not supported by cashu-ts');
@@ -161,6 +166,24 @@ export class MintInfo {
 		// plain object avoids the unsafe any from Object.create(null)
 		const cache: Record<string, boolean> = {};
 		return { cache, exact, regex };
+	}
+
+	private checkNut19() {
+		const rawPolicy = this._mintInfo.nuts[19];
+		if (rawPolicy && rawPolicy.cached_endpoints.length > 0) {
+			return {
+				supported: true,
+				params: {
+					// map null to infinity, if not null map seconds to milliseconds
+					ttl:
+						typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl)
+							? Math.max(rawPolicy.ttl, 0) * 1000
+							: Infinity,
+					cached_endpoints: rawPolicy.cached_endpoints,
+				} as Nut19Policy,
+			};
+		}
+		return { supported: false };
 	}
 
 	// ---------- getters ----------

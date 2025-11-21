@@ -88,6 +88,8 @@ export type GetInfoResponse = {
 			// WebSockets
 			supported: WebSocketSupport[];
 		};
+		// Cached mint responses, tll is mapped null -> infinity later
+		'19'?: Omit<Nut19Policy, 'ttl'> & { ttl: number | null };
 		'20'?: {
 			// Locked Mint Quote
 			supported: boolean;
@@ -317,3 +319,11 @@ export type WebSocketSupport = {
 export type BlindAuthMintResponse = {
 	signatures: SerializedBlindedSignature[];
 } & ApiError;
+
+/**
+ * Caching policy of mint endpoints.
+ */
+export type Nut19Policy = {
+	ttl: number;
+	cached_endpoints: Array<{ method: 'GET' | 'POST'; path: string }>;
+};
