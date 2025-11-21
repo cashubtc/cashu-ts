@@ -406,6 +406,9 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 // @public (undocumented)
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
+// @public
+export function invoiceHasAmountInHRP(invoice: string): boolean;
+
 // @public (undocumented)
 export function isObj(v: unknown): v is object;
 
