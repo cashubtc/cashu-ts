@@ -1,0 +1,35 @@
+{
+	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
+	"enabledManagers": ["regex"],
+	"baseBranch": "development",
+	"schedule": ["at any time"],
+	"packageRules": [
+		{
+			"matchManagers": ["regex"],
+			"matchPackageNames": ["docker.io/cashubtc/nutshell"],
+			"matchFileNames": ["Makefile"],
+			"groupName": "nutshell-docker",
+			"automerge": false,
+			"labels": ["renovate", "docker", "nutshell"]
+		},
+		{
+			"matchManagers": ["regex"],
+			"matchPackageNames": ["docker.io/cashubtc/mintd"],
+			"matchFileNames": ["Makefile"],
+			"groupName": "mintd-docker",
+			"automerge": false,
+			"labels": ["renovate", "docker", "mintd"]
+		}
+	],
+	"regexManagers": [
+		{
+			"fileMatch": ["^Makefile$"],
+			"matchStrings": [
+				"(?<depName>cashubtc/(?:mintd|nutshell)):(?<currentValue>[0-9]+(?:\\.[0-9]+)*(?:-[a-zA-Z0-9]+)?)"
+			],
+			"datasourceTemplate": "docker",
+			"depNameTemplate": "docker.io/{{depName}}",
+			"versioningTemplate": "semver"
+		}
+	]
+}

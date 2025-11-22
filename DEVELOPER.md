@@ -152,7 +152,7 @@ npm run test-integration
 npm run test:consumer
 ```
 
-Note: the consumer smoke tests are run in CI but are intentionally not part of `prtasks` to avoid adding noise to every local run; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
+**Note**: the consumer smoke tests are run in CI but are intentionally not part of `prtasks` to avoid adding noise to every local run; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
 
 The `test:consumer` aggregator runs the following scripts (you can run them individually):
 
@@ -171,6 +171,48 @@ docker compose -f examples/auth_mint/docker-compose.yml down
 ```
 
 This pattern (run `npm run prtasks` and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.
+
+## Integration mints (Makefile & CI)
+
+The repository provides Makefile targets that make it easy to spin up the most popular cashu mints (currently cdk and nutshell). These are used in the CI for integration testing and made available locally. Use the Makefile as the single source of truth for the pinned Docker image versions.
+
+Spin up / tear down locally
+
+```bash
+# start the mint (uses Makefile defaults unless you override)
+DEV=1 make cdk-up
+
+# stop the mint
+DEV=1 make cdk-down
+
+# start nutshell
+DEV=1 make nutshell-up
+# stop nutshell
+DEV=1 make nutshell-down
+```
+
+#### Override behavior
+
+- To test a different image or container name locally you can override the Makefile variables on the command line. Example:
+
+```bash
+# run a specific mint image with a custom container name
+CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
+```
+
+### CI integration notes
+
+- CI workflows call the same Makefile targets (for example `make cdk-up` / `make nutshell-up`) so the runtime behavior in CI matches local usage.
+- Renovate is configured to update pinned image tags in the Makefile (the canonical source of truth). The Renovate regex intentionally matches semver-like tags (no `latest`) so PRs will update numeric tags.
+- Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs `npm run test-integration`.
+
+#### Practical checklist before running integration tests locally:
+
+1. Ensure dependencies are installed: `npm ci`
+2. Prepare browser artifacts if needed: `npm run test:prepare`
+3. Start the mint(s): `DEV=1 make cdk-up` (and/or `DEV=1 make nutshell-up`)
+4. Run the integration tests: `npm run test-integration`
+5. When finished, tear down: `DEV=1 make cdk-down` / `DEV=1 make nutshell-down`
 
 ## API Extractor workflow
 
