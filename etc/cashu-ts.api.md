@@ -448,6 +448,9 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 // @public (undocumented)
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
+// @public
+export function invoiceHasAmountInHRP(invoice: string): boolean;
+
 // @public (undocumented)
 export function isObj(v: unknown): v is object;
 
@@ -821,6 +824,8 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    // (undocumented)
+    supportsAmountless(method?: string, unit?: string): boolean;
     // @deprecated (undocumented)
     get supportsBolt12Description(): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
@@ -1472,6 +1477,7 @@ export type SwapMethod = {
     description?: boolean;
     options?: {
         description?: boolean;
+        amountless?: boolean | null;
     };
 };
 
@@ -1587,8 +1593,8 @@ export class Wallet {
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<LockedMintQuoteResponse>;
     // @deprecated (undocumented)
-    createMeltQuote(invoice: string): Promise<MeltQuoteResponse>;
-    createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse>;
+    createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteResponse>;
+    createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteResponse>;
     createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<Bolt12MeltQuoteResponse>;
     // @deprecated (undocumented)
     createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse>;
