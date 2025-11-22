@@ -829,6 +829,9 @@ describe('invoiceHasAmountInHRP()', () => {
 
 			// 1 BTC — no multiplier
 			'lnbc11p53lqsgpp5mxs67qwmh34wu3jy7um8u490n2dtgy7dsrhzpdup008g8ygj2eysdp82pshjgr5dusyymrfde4jq4mpd3kx2',
+
+			//uppercase LN — should be valid as BOLT11 is case insensitive
+			'lNbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa',
 		];
 
 		withAmount.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(true));
@@ -836,7 +839,6 @@ describe('invoiceHasAmountInHRP()', () => {
 
 	test('rejects malformed or invalid HRP structure', () => {
 		const invalid = [
-			'lNbc210n1...', // uppercase LN (valid BOLT-11 but won’t match this HRP regex → fine)
 			'lnbc0210n1...', // leading zero in amount → invalid per spec
 			'lnsomething', // incomplete HRP
 		];
