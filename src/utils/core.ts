@@ -820,5 +820,5 @@ function removePrefix(token: string): string {
  * (HRP).
  */
 export function invoiceHasAmountInHRP(invoice: string): boolean {
-	return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/.test(invoice);
+	return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/i.test(invoice);
 }
