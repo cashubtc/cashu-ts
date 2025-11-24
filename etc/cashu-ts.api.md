@@ -4,7 +4,10 @@
 
 ```ts
 
+import { MintContactInfo as MintContactInfo_2 } from './types';
 import { PrivKey } from '@noble/curves/utils';
+import { SendResponse as SendResponse_2 } from './types';
+import { SwapPreview as SwapPreview_2 } from './types';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public
@@ -736,7 +739,7 @@ export type MintContactInfo = {
 export class MintInfo {
     constructor(info: GetInfoResponse);
     // (undocumented)
-    get contact(): MintContactInfo[];
+    get contact(): MintContactInfo_2[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
@@ -1299,7 +1302,7 @@ export class ReceiveBuilder {
     asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview>;
+    prepare(): Promise<SwapPreview_2>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
     requireDleq(on?: boolean): this;
@@ -1377,10 +1380,10 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview>;
+    prepare(): Promise<SwapPreview_2>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
-    run(): Promise<SendResponse>;
+    run(): Promise<SendResponse_2>;
 }
 
 // @public

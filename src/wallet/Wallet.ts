@@ -256,6 +256,14 @@ class Wallet {
 		safeCallback(cb, payload, this._logger, context);
 	}
 
+	private assertAmount(amount: unknown, op: string): asserts amount is number {
+		this.failIf(
+			typeof amount !== 'number' || !Number.isInteger(amount) || amount < 0,
+			'Amount must be a non-negative integer',
+			{ op, amount },
+		);
+	}
+
 	/**
 	 * Load mint information, keysets, and keys. Must be called before using other methods.
 	 *
@@ -838,6 +846,7 @@ class Wallet {
 	 * @throws Throws if the send cannot be completed offline.
 	 */
 	sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
+		this.assertAmount(amount, 'sendOffline');
 		const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
@@ -883,8 +892,8 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
+		this.assertAmount(amount, 'send');
 		const { keysetId, includeFees = false } = config || {};
-
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
 			send: this.defaultOutputType(),
@@ -1151,6 +1160,7 @@ class Wallet {
 		includeFees = false,
 		exactMatch = false,
 	): SendResponse {
+		this.assertAmount(amountToSend, 'selectProofsToSend');
 		const { keep, send } = this._selectProofs(
 			proofs,
 			amountToSend,
@@ -1402,6 +1412,7 @@ class Wallet {
 		amount: number,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
+		this.assertAmount(amount, 'createMintQuoteBolt11');
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1433,6 +1444,7 @@ class Wallet {
 		pubkey: string,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
+		this.assertAmount(amount, 'createLockedMintQuote');
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
 		const mintQuotePayload: MintQuoteBolt11Request = {
@@ -1599,6 +1611,7 @@ class Wallet {
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
+		this.assertAmount(amount, `_mintProofs: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 		this.failIf(amount <= 0, 'Invalid mint amount: must be positive', { amount });
@@ -1728,6 +1741,7 @@ class Wallet {
 		invoice: string,
 		millisatPartialAmount: number,
 	): Promise<MeltQuoteBolt11Response> {
+		this.assertAmount(millisatPartialAmount, 'createMultiPathMeltQuote');
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(
