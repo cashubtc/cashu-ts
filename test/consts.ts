@@ -13,11 +13,26 @@ export const MINTCACHE = {
 			input_fee_ppk: 0,
 			final_expiry: undefined,
 		},
+		{
+			id: '00bd033559de27d0',
+			unit: 'usd',
+			active: true,
+			input_fee_ppk: 0,
+			final_expiry: undefined,
+		},
 	] as MintKeyset[],
 	keys: [
 		{
 			id: '00bd033559de27d0',
 			unit: 'sat',
+			keys: {
+				'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			},
+		},
+		{
+			id: '00bd033559de27d0',
+			unit: 'usd',
 			keys: {
 				'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
