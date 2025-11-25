@@ -301,9 +301,14 @@ class CashuWallet {
 		return this._keys.get(keysetId) as MintKeys;
 	}
 
+	/**
+	 * Asserts amount is a positive integer.
+	 *
+	 * @throws If not.
+	 */
 	private assertAmount(amount: unknown, op: string): asserts amount is number {
-		if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 0) {
-			throw new Error(`Amount must be a non-negative integer, method: ${op}`);
+		if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+			throw new Error(`Amount must be a positive integer, method: ${op}`);
 		}
 	}
 

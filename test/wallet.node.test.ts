@@ -1590,17 +1590,17 @@ describe('Test coinselection', () => {
 		const wallet = new CashuWallet(mint, { unit, keysets: keysets.keysets });
 		const targetAmount = 0;
 		// Exact match (offline)
-		const { send } = await wallet.send(targetAmount, notes, { offline: true, includeFees: true });
-		// No proofs needed, fee = 0, net = 0 >= 0
-		expect(send).toHaveLength(0);
+		await expect(
+			wallet.send(targetAmount, notes, { offline: true, includeFees: true }),
+		).rejects.toThrow(/Amount must be a positive integer/);
 		// try using selectProofsToSend directly
-		const { send: send1, keep: keep1 } = wallet.selectProofsToSend(
-			notes,
-			targetAmount,
-			true, // includeFees
-		);
-		expect(send1).toHaveLength(0);
-		expect(keep1).toHaveLength(6);
+		expect(() => {
+			wallet.selectProofsToSend(
+				notes,
+				targetAmount,
+				true, // includeFees
+			);
+		}).toThrow(/Amount must be a positive integer/);
 	});
 	test('all proofs smaller than target', async () => {
 		server.use(
