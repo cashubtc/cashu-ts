@@ -256,10 +256,15 @@ class Wallet {
 		safeCallback(cb, payload, this._logger, context);
 	}
 
+	/**
+	 * Asserts amount is a positive integer.
+	 *
+	 * @throws If not.
+	 */
 	private assertAmount(amount: unknown, op: string): asserts amount is number {
 		this.failIf(
-			typeof amount !== 'number' || !Number.isInteger(amount) || amount < 0,
-			'Amount must be a non-negative integer',
+			typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0,
+			'Amount must be a positive integer',
 			{ op, amount },
 		);
 	}
@@ -1614,7 +1619,6 @@ class Wallet {
 		this.assertAmount(amount, `_mintProofs: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
-		this.failIf(amount <= 0, 'Invalid mint amount: must be positive', { amount });
 
 		// Shape output type and denominations for our proofs
 		// we are receiving, so no includeFees.

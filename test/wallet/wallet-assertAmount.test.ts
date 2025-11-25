@@ -6,19 +6,19 @@ import { MINTCACHE } from '../consts';
 const mintUrl = 'http://localhost:3338';
 const wallet = new Wallet(mintUrl, MINTCACHE) as any;
 await wallet.loadMint();
-const expMsg = 'Amount must be a non-negative integer';
+const expMsg = 'Amount must be a positive integer';
 
 describe('assertInteger', () => {
 	test('allows valid integers', () => {
 		expect(() => wallet.assertAmount(2561)).not.toThrow();
-		expect(() => wallet.assertAmount(0)).not.toThrow();
 	});
 
-	test('rejects non integer numbers', () => {
+	test('rejects non positive integer numbers', () => {
 		expect(() => wallet.assertAmount(512.0019)).toThrow(expMsg);
 		expect(() => wallet.assertAmount(NaN)).toThrow(expMsg);
 		expect(() => wallet.assertAmount(Infinity)).toThrow(expMsg);
 		expect(() => wallet.assertAmount(-Infinity)).toThrow(expMsg);
+		expect(() => wallet.assertAmount(0)).toThrow(expMsg);
 	});
 
 	test('rejects non number types', () => {
