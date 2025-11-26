@@ -304,6 +304,8 @@ class CashuWallet {
 	/**
 	 * Asserts amount is a positive integer.
 	 *
+	 * @param amount To check.
+	 * @param op Caller method name (or other identifier) for debug.
 	 * @throws If not.
 	 */
 	private assertAmount(amount: unknown, op: string): asserts amount is number {
