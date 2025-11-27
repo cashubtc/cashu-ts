@@ -1202,9 +1202,9 @@ class Wallet {
 			buildInterimP2PKSigAllMessage(proofs, outputData, quoteId),
 			buildP2PKSigAllMessage(proofs, outputData, quoteId),
 		];
-		messages.map(
-			(msg) => (signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0]),
-		);
+		for (const msg of messages) {
+			signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
+		}
 
 		// Return the proofs in same order as before
 		return [signedFirst, ...rest];
