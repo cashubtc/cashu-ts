@@ -2001,7 +2001,11 @@ class Wallet {
 		const change =
 			meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
 
-		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+		if (preferAsync) {
+			this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
+		} else {
+			this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+		}
 
 		const mergedQuote = {
 			...meltPreview.quote,
