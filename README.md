@@ -239,6 +239,10 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
 
 ```ts
 const { keep, send } = await wallet.ops.send(5, myProofs).run();
+
+// Or use prepare() instead of run() to do a dry run preview first
+const preview = await wallet.ops.send(5, myProofs).prepare();
+const { keep, send } = await wallet.completeSwap(preview);
 ```
 
 - Uses wallet policy for both `send` and `keep`.
@@ -325,6 +329,10 @@ const { keep, send } = await wallet.ops
 
 ```ts
 const proofs = await wallet.ops.receive(token).run();
+
+// Or use prepare() instead of run() to do a dry run preview first
+const preview = await wallet.ops.receive(token).prepare();
+const { keep } = await wallet.completeSwap(preview);
 ```
 
 #### 2) Deterministic receive with DLEQ requirement
