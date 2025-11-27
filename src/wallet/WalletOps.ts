@@ -270,6 +270,8 @@ export class SendBuilder {
 	/**
 	 * Prepare the swap to send.
 	 *
+	 * @remarks
+	 * Call `wallet.completeSwap(SwapPreview)` to complete the send.
 	 * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
 	 */
 	async prepare() {
@@ -468,6 +470,8 @@ export class ReceiveBuilder {
 	/**
 	 * Prepare the swap to receive.
 	 *
+	 * @remarks
+	 * Call `wallet.completeSwap(SwapPreview)` to complete the receive.
 	 * @returns A SwapPreview containing inputs, outputs, amount, and fee.
 	 */
 	async prepare() {
@@ -787,6 +791,8 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	/**
 	 * Prepare the melt.
 	 *
+	 * @remarks
+	 * Call `wallet.completeMelt(MeltPreview)` to complete the melt.
 	 * @returns A MeltPreview containing inputs, outputs, amount, and fee.
 	 */
 	async prepare(): Promise<MeltPreview<TQuote>> {
