@@ -82,15 +82,11 @@ export type BlindAuthMintResponse = {
     signatures: SerializedBlindedSignature[];
 } & ApiError;
 
-// @public (undocumented)
-export type BlindMessage = {
-    B_: WeierstrassPoint<bigint>;
-    r: bigint;
-    secret: Uint8Array;
-};
+// @public @deprecated (undocumented)
+export type BlindedMessage = RawBlindedMessage;
 
 // @public
-export function blindMessage(secret: Uint8Array, r?: bigint): BlindMessage;
+export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public (undocumented)
 export type BlindSignature = {
@@ -215,8 +211,11 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 // @public (undocumented)
 export const createP2PKsecret: (pubkey: string) => string;
 
+// @public @deprecated (undocumented)
+export function createRandomBlindedMessage(_deprecated?: PrivKey): BlindedMessage;
+
 // @public
-export function createRandomBlindMessage(): BlindMessage;
+export function createRandomRawBlindedMessage(): RawBlindedMessage;
 
 // @public (undocumented)
 export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
@@ -1238,6 +1237,13 @@ export type ProofState = {
     Y: string;
     state: CheckStateEnum;
     witness: string | null;
+};
+
+// @public (undocumented)
+export type RawBlindedMessage = {
+    B_: WeierstrassPoint<bigint>;
+    r: bigint;
+    secret: Uint8Array;
 };
 
 // @public (undocumented)

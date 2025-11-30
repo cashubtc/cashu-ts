@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
-import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils';
+import { randomBytes, bytesToHex, hexToBytes, type PrivKey } from '@noble/curves/utils';
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 
@@ -11,11 +11,16 @@ export type BlindSignature = {
 	id: string;
 };
 
-export type BlindMessage = {
+export type RawBlindedMessage = {
 	B_: WeierstrassPoint<bigint>;
 	r: bigint;
 	secret: Uint8Array;
 };
+
+/**
+ * @deprecated - Use RawBlindedMessage.
+ */
+export type BlindedMessage = RawBlindedMessage;
 
 export type DLEQ = {
 	s: Uint8Array; // signature
@@ -97,14 +102,22 @@ export function createBlindSignature(
 }
 
 /**
+ * @deprecated - Use createRandomRawBlindedMessage()
+ */
+export function createRandomBlindedMessage(_deprecated?: PrivKey): BlindedMessage {
+	void _deprecated; // intentionally unused
+	return createRandomRawBlindedMessage();
+}
+
+/**
  * Creates a random blinded message.
  *
  * @remarks
  * The secret is a UTF-8 encoded 64-character lowercase hex string, generated from 32 random bytes
  * as recommended by NUT-00.
- * @returns A BlindedMessage: {B_, r, secret}
+ * @returns A RawBlindedMessage: {B_, r, secret}
  */
-export function createRandomBlindMessage(): BlindMessage {
+export function createRandomRawBlindedMessage(): RawBlindedMessage {
 	const secretStr = bytesToHex(randomBytes(32)); // 64 char ASCII hex string
 	const secretBytes = new TextEncoder().encode(secretStr); // UTF-8 of the hex
 	return blindMessage(secretBytes);
@@ -115,9 +128,9 @@ export function createRandomBlindMessage(): BlindMessage {
  *
  * @param secret A UTF-8 byte encoded string.
  * @param r Optional. Deterministic blinding scalar to use (eg: for testing / seeded)
- * @returns A BlindedMessage: {B_, r, secret}
+ * @returns A RawBlindedMessage: {B_, r, secret}
  */
-export function blindMessage(secret: Uint8Array, r?: bigint): BlindMessage {
+export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
 		r = bytesToNumber(createRandomSecretKey());
