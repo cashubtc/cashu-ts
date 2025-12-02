@@ -73,6 +73,18 @@ export type BlindSignature = {
     id: string;
 };
 
+// @public @deprecated
+export type Bolt12MeltQuotePayload = MeltQuoteBolt12Request;
+
+// @public @deprecated (undocumented)
+export type Bolt12MeltQuoteResponse = MeltQuoteBolt12Response;
+
+// @public @deprecated
+export type Bolt12MintQuotePayload = MintQuoteBolt12Request;
+
+// @public @deprecated
+export type Bolt12MintQuoteResponse = MintQuoteBolt12Response;
+
 // @public
 export function bytesToNumber(bytes: Uint8Array): bigint;
 
@@ -465,6 +477,9 @@ export type KeysetPair = {
     privKeys: RawMintKeys;
 };
 
+// @public @deprecated (undocumented)
+export type LockedMintQuoteResponse = MeltQuoteBolt11Response;
+
 // @public (undocumented)
 export interface Logger {
     // (undocumented)
@@ -588,6 +603,9 @@ export type MeltQuoteBolt12Request = MeltQuoteBaseRequest & {
 
 // @public
 export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
+
+// @public @deprecated (undocumented)
+export type MeltQuoteResponse = MeltQuoteBolt11Response;
 
 // @public (undocumented)
 export const MeltQuoteState: {
@@ -895,6 +913,12 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 // @public (undocumented)
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : MintQuoteBolt12Response;
 
+// @public @deprecated
+export type MintQuotePayload = MintQuoteBolt11Request;
+
+// @public @deprecated (undocumented)
+export type MintQuoteResponse = MeltQuoteBolt11Response;
+
 // @public (undocumented)
 export const MintQuoteState: {
     readonly UNPAID: "UNPAID";
@@ -1126,6 +1150,12 @@ export type P2PKWitness = {
 
 // @public (undocumented)
 export const parseP2PKSecret: (secret: string | Uint8Array) => Secret;
+
+// @public @deprecated
+export type PartialMeltQuoteResponse = MeltQuoteBolt11Response;
+
+// @public @deprecated
+export type PartialMintQuoteResponse = MeltQuoteBolt11Response;
 
 // @public (undocumented)
 class PaymentRequest_2 {
@@ -1475,6 +1505,9 @@ export type SwapMethod = {
         description?: boolean;
     };
 };
+
+// @public @deprecated
+export type SwapPayload = SwapRequest;
 
 // @public
 export type SwapPreview = {
