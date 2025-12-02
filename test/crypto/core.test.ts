@@ -6,7 +6,7 @@ import {
 	unblindSignature,
 	createBlindSignature,
 	constructProofFromPromise,
-	createRandomBlindedMessage,
+	createRandomRawBlindedMessage,
 	serializeProof,
 	deserializeProof,
 	getKeysetIdInt,
@@ -27,16 +27,16 @@ describe('test crypto scheme', () => {
 		const mintPubKey = secp256k1.getPublicKey(mintPrivKey, true);
 
 		//Wallet(Bob)
-		const blindedMessage = createRandomBlindedMessage();
+		const blindMessage = createRandomRawBlindedMessage();
 
 		//Mint
-		const blindSignature = createBlindSignature(blindedMessage.B_, mintPrivKey, 1, '');
+		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, 1, '');
 
 		//Wallet
 		const proof = constructProofFromPromise(
 			blindSignature,
-			blindedMessage.r,
-			blindedMessage.secret,
+			blindMessage.r,
+			blindMessage.secret,
 			pointFromHex(bytesToHex(mintPubKey)),
 		);
 

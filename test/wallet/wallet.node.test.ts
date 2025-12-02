@@ -7,7 +7,7 @@ import {
 	Wallet,
 	CheckStateEnum,
 	type Proof,
-	type MeltQuoteResponse,
+	type MeltQuoteBolt11Response,
 	MeltQuoteState,
 	type MintQuoteResponse,
 	MintQuoteState,
@@ -21,7 +21,7 @@ import {
 	ConsoleLogger,
 	OutputConfig,
 	MeltProofsConfig,
-	MeltBlanks,
+	MeltPreview,
 	Bolt12MeltQuoteResponse,
 	AuthProvider,
 } from '../../src';
@@ -30,6 +30,7 @@ import { bytesToNumber, sumProofs } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
+import { NULL_LOGGER } from '../../src/logger';
 
 injectWebSocketImpl(WebSocket);
 
@@ -288,6 +289,13 @@ describe('test wallet init', () => {
 		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
 	});
 
+	test('should return getters', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+		expect(wallet.logger).toBe(NULL_LOGGER);
+		expect(wallet.unit).toBe('sat');
+	});
+
 	test('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
 		const wallet = new Wallet(mintUrl, {
 			unit,
@@ -448,7 +456,7 @@ describe('test fees', () => {
 					fee_reserve: 20,
 					payment_preimage: null,
 					state: 'UNPAID',
-				} as MeltQuoteResponse);
+				} as MeltQuoteBolt11Response);
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
@@ -1915,7 +1923,7 @@ describe('WebSocket Updates', () => {
 		await wallet.loadMint();
 
 		const state = await new Promise(async (res, rej) => {
-			const callback = (p: MeltQuoteResponse) => {
+			const callback = (p: MeltQuoteBolt11Response) => {
 				console.log(p);
 				if (p.state === MeltQuoteState.PAID) {
 					res(p);
@@ -2350,7 +2358,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2398,7 +2406,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 12,
 			fee_reserve: 0,
@@ -2442,7 +2450,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2497,7 +2505,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2521,10 +2529,10 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltBlanks | undefined;
+		let capturedBlanks: MeltPreview | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks;
+				capturedBlanks = blanks as MeltPreview;
 			},
 		};
 		const response = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2532,11 +2540,10 @@ describe('melt proofs', () => {
 		expect(capturedBlanks).toBeDefined();
 		expect(capturedBlanks!.method).toBe('bolt11');
 		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
-		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
+		expect(capturedBlanks!.keysetId).toBe('00bd033559de27d0');
 		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
-		expect(capturedBlanks!.payload.quote).toBe('test_melt_quote');
-		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
-		expect(capturedBlanks!.payload.outputs).toHaveLength(2);
+		expect(capturedBlanks!.quote.quote).toBe('test_melt_quote');
+		expect(capturedBlanks!.inputs).toHaveLength(2);
 
 		// Response still completes sync
 		expect(response.change).toHaveLength(2);
@@ -2575,7 +2582,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2599,10 +2606,10 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltBlanks | undefined;
+		let capturedBlanks: MeltPreview | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks;
+				capturedBlanks = blanks as MeltPreview;
 			},
 		};
 		const initialResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2624,7 +2631,7 @@ describe('melt proofs', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt11)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
 			await wallet.loadMint();
-			const meltQuote: MeltQuoteResponse = {
+			const meltQuote: MeltQuoteBolt11Response = {
 				quote: 'test_melt_quote',
 				amount: 10,
 				fee_reserve: 3, // ceil(log2(3)) = 2 blanks expected
@@ -2814,7 +2821,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2872,7 +2879,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 2,
@@ -2998,7 +3005,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3042,7 +3049,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3178,7 +3185,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',

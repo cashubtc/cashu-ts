@@ -1,10 +1,9 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
-import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils';
+import { randomBytes, bytesToHex, hexToBytes, type PrivKey } from '@noble/curves/utils';
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
-import { getSignedOutput } from './NUT11';
 
 export type BlindSignature = {
 	C_: WeierstrassPoint<bigint>;
@@ -12,12 +11,16 @@ export type BlindSignature = {
 	id: string;
 };
 
-export type BlindedMessage = {
+export type RawBlindedMessage = {
 	B_: WeierstrassPoint<bigint>;
 	r: bigint;
 	secret: Uint8Array;
-	witness?: P2PKWitness;
 };
+
+/**
+ * @deprecated - Use RawBlindedMessage.
+ */
+export type BlindedMessage = RawBlindedMessage;
 
 export type DLEQ = {
 	s: Uint8Array; // signature
@@ -98,24 +101,42 @@ export function createBlindSignature(
 	return { C_, amount, id };
 }
 
-export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage {
-	return blindMessage(
-		randomBytes(32),
-		bytesToNumber(secp256k1.utils.randomSecretKey()),
-		privateKey,
-	);
+/**
+ * @deprecated - Use createRandomRawBlindedMessage()
+ */
+export function createRandomBlindedMessage(_deprecated?: PrivKey): BlindedMessage {
+	void _deprecated; // intentionally unused
+	return createRandomRawBlindedMessage();
 }
 
-export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage {
+/**
+ * Creates a random blinded message.
+ *
+ * @remarks
+ * The secret is a UTF-8 encoded 64-character lowercase hex string, generated from 32 random bytes
+ * as recommended by NUT-00.
+ * @returns A RawBlindedMessage: {B_, r, secret}
+ */
+export function createRandomRawBlindedMessage(): RawBlindedMessage {
+	const secretStr = bytesToHex(randomBytes(32)); // 64 char ASCII hex string
+	const secretBytes = new TextEncoder().encode(secretStr); // UTF-8 of the hex
+	return blindMessage(secretBytes);
+}
+
+/**
+ * Blind a secret message.
+ *
+ * @param secret A UTF-8 byte encoded string.
+ * @param r Optional. Deterministic blinding scalar to use (eg: for testing / seeded)
+ * @returns A RawBlindedMessage: {B_, r, secret}
+ */
+export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
-		r = bytesToNumber(secp256k1.utils.randomSecretKey());
+		r = bytesToNumber(createRandomSecretKey());
 	}
 	const rG = secp256k1.Point.BASE.multiply(r);
 	const B_ = Y.add(rG);
-	if (privateKey !== undefined) {
-		return getSignedOutput({ B_, r, secret }, privateKey);
-	}
 	return { B_, r, secret };
 }
 

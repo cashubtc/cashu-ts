@@ -6,7 +6,7 @@
  */
 
 import {
-	type MeltBlanks,
+	type MeltPreview,
 	type OutputType,
 	type OutputConfig,
 	type SendConfig,
@@ -27,6 +27,7 @@ import {
 	type SendResponse,
 	type RestoreConfig,
 	type SecretsPolicy,
+	type SwapPreview,
 } from './types';
 import {
 	type CounterSource,
@@ -35,7 +36,16 @@ import {
 	type CounterRange,
 } from './CounterSource';
 
-import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
+import {
+	signMintQuote,
+	signP2PKProofs as cryptoSignP2PKProofs,
+	hashToCurve,
+	isP2PKSigAll,
+	buildP2PKSigAllMessage,
+	assertSigAllInputs,
+	buildLegacyP2PKSigAllMessage,
+	buildInterimP2PKSigAllMessage,
+} from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
 import { KeyChain } from './KeyChain';
@@ -57,12 +67,12 @@ import type { MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
 	GetInfoResponse,
 	MintQuoteResponse,
-	MeltQuoteResponse,
 	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse,
 	LockedMintQuoteResponse,
 	Bolt12MintQuoteResponse,
-	Bolt12MeltQuoteResponse,
+	NUT05MeltQuoteResponse,
+	MeltQuoteBolt11Response,
+	MeltQuoteBolt12Response,
 } from '../mint/types';
 
 // model helpers
@@ -661,13 +671,15 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Sort ASC by amount for privacy, but keep indices to return order afterwards
+		// But ONLY if the transaction is NOT SIG_ALL (as order is fixed for signing)
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
-		const indices = mergedBlindingData
-			.map((_, i) => i)
-			.sort(
+		const indices = mergedBlindingData.map((_, i) => i);
+		if (!isP2PKSigAll(inputs)) {
+			indices.sort(
 				(a, b) =>
 					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
 			);
+		}
 		const keepVector: boolean[] = [
 			...Array.from({ length: keepOutputs.length }, () => true),
 			...Array.from({ length: sendOutputs.length }, () => false),
@@ -719,7 +731,40 @@ class Wallet {
 		config?: ReceiveConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
-		const { keysetId, privkey, requireDleq, proofsWeHave, onCountersReserved } = config || {};
+		// Prepare and complete the send
+		const txn = await this.prepareSwapToReceive(token, config, outputType);
+		const { keep } = await this.completeSwap(txn, config?.privkey);
+		return keep;
+	}
+
+	/**
+	 * Prepare A Receive Transaction.
+	 *
+	 * @remarks
+	 * Allows you to preview fees for a receive, get concrete outputs for P2PK SIG_ALL transactions,
+	 * and do any pre-swap tasks (such as marking proofs in-flight etc)
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSwapToReceive(token, { requireDleq: true });
+	 * const fees = txn.fees;
+	 *
+	 * // Complete transaction
+	 * const { keep } = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param token Token string or decoded token.
+	 * @param config Optional receive config.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns SwapPreview with metadata for swap transaction.
+	 */
+	async prepareSwapToReceive(
+		token: Token | string,
+		config?: ReceiveConfig,
+		outputType?: OutputType,
+	): Promise<SwapPreview> {
+		const { keysetId, requireDleq, proofsWeHave, onCountersReserved } = config || {};
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
 		// Decode and validate token
@@ -738,14 +783,7 @@ class Wallet {
 		let proofs: Proof[] = [];
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
-		if (totalAmount === 0) {
-			return [];
-		}
-
-		// Sign proofs if needed
-		if (privkey) {
-			proofs = this.signP2PKProofs(proofs, privkey);
-		}
+		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -759,9 +797,10 @@ class Wallet {
 		}
 
 		// Shape receive output type and denominations
-		const netAmount = totalAmount - this.getFeesForProofs(proofs);
+		const swapFee = this.getFeesForProofs(proofs);
+		const amount = totalAmount - swapFee;
 		let receiveOT = this.configureOutputs(
-			netAmount,
+			amount,
 			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
@@ -779,19 +818,15 @@ class Wallet {
 
 		// Create outputs and execute swap
 		const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
-		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
-		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
-		// Construct and return proofs
-		const proofsReceived = swapTransaction.outputData.map((d, i) =>
-			d.toProof(signatures[i], keyset),
-		);
-		const orderedProofs: Proof[] = [];
-		swapTransaction.sortedIndices.forEach((s, o) => {
-			orderedProofs[s] = proofsReceived[o];
-		});
-		this._logger.debug('RECEIVE COMPLETED', { amounts: orderedProofs.map((p) => p.amount) });
-		return orderedProofs;
+		// Return SwapPreview
+		return {
+			amount,
+			fees: swapFee,
+			keysetId: keyset.id,
+			inputs: proofs,
+			keepOutputs: outputs,
+		} as SwapPreview;
 	}
 
 	/**
@@ -824,8 +859,6 @@ class Wallet {
 	/**
 	 * Send proofs with online swap if necessary.
 	 *
-	 * @remarks
-	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
@@ -855,7 +888,8 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
-		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+		const { keysetId, includeFees = false } = config || {};
+
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
 			send: this.defaultOutputType(),
@@ -906,6 +940,48 @@ class Wallet {
 			const message = e instanceof Error ? e.message : 'Unknown error';
 			this._logger.debug('ExactMatch offline selection failed.', { e: message });
 		}
+
+		// Prepare and complete the send
+		const txn = await this.prepareSwapToSend(amount, proofs, config, outputConfig);
+		return await this.completeSwap(txn, config?.privkey);
+	}
+
+	/**
+	 * Prepare A Send Transaction.
+	 *
+	 * @remarks
+	 * Allows you to preview fees for a send, get concrete outputs for P2PK SIG_ALL transactions, and
+	 * do any pre-swap tasks (such as marking proofs in-flight etc)
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
+	 * const fees = txn.fees;
+	 *
+	 * // Complete transaction
+	 * const { keep, send } = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param amount Amount to send (receiver gets this net amount).
+	 * @param proofs Array of proofs to split.
+	 * @param config Optional parameters for the swap.
+	 * @returns SwapPreview with metadata for swap transaction.
+	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
+	 */
+	async prepareSwapToSend(
+		amount: number,
+		proofs: Proof[],
+		config?: SendConfig,
+		outputConfig?: OutputConfig,
+	): Promise<SwapPreview> {
+		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+
+		// Fallback to policy defaults if no outputConfig
+		outputConfig = outputConfig ?? {
+			send: this.defaultOutputType(),
+			keep: this.defaultOutputType(),
+		};
 
 		// Fetch keys
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -968,11 +1044,62 @@ class Wallet {
 		const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
 		const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
+		// Return SwapPreview
+		return {
+			amount,
+			fees: swapFee,
+			keysetId: keyset.id,
+			inputs: selectedProofs,
+			sendOutputs,
+			keepOutputs,
+			unselectedProofs,
+		} as SwapPreview;
+	}
+
+	/**
+	 * Complete a prepared swap transaction.
+	 *
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
+	 *
+	 * // Complete transaction
+	 * const result = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param swapPreview With metadata for swap transaction.
+	 * @param privkey The private key(s) for signing.
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
+		const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
+		const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
+		const unselectedProofs: Proof[] = swapPreview.unselectedProofs
+			? swapPreview.unselectedProofs
+			: [];
+
+		// Sign proofs if needed
+		if (privkey) {
+			swapPreview.inputs = this.signP2PKProofs(swapPreview.inputs, privkey, [
+				...keepOutputs,
+				...sendOutputs,
+			]);
+		}
+
+		// Create swap transaction
+		const swapTransaction = this.createSwapTransaction(
+			swapPreview.inputs,
+			keepOutputs,
+			sendOutputs,
+		);
+
 		// Execute swap
-		const swapTransaction = this.createSwapTransaction(selectedProofs, keepOutputs, sendOutputs);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
 		// Construct proofs
+		const keyset = this.getKeyset(swapPreview.keysetId);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const reorderedProofs = Array(swapProofs.length);
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
@@ -999,8 +1126,9 @@ class Wallet {
 			send: sendProofs,
 		};
 	}
+
 	/**
-	 * Swap is an alias of send.
+	 * @deprecated - Use send()
 	 */
 	public readonly swap = this.send.bind(this);
 
@@ -1045,11 +1173,41 @@ class Wallet {
 	 * Call this method before operations like send if the proofs are P2PK-locked and need unlocking.
 	 * This is a public wrapper for signing.
 	 * @param proofs The proofs to sign.
-	 * @param privkey The private key for signing.
+	 * @param privkey The private key(s) for signing.
+	 * @param outputData Optional. For signing of SIG_ALL transactions.
+	 * @param quoteId Optional. For signing SIG_ALL melt transactions.
 	 * @returns Signed proofs.
 	 */
-	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
-		return signP2PKProofs(proofs, privkey);
+	signP2PKProofs(
+		proofs: Proof[],
+		privkey: string | string[],
+		outputData?: OutputDataLike[],
+		quoteId?: string,
+	): Proof[] {
+		// Normal case, sign everything as usual
+		if (!isP2PKSigAll(proofs)) {
+			return cryptoSignP2PKProofs(proofs, privkey, this._logger);
+		}
+
+		// Ensure SIG_ALL conditions are met
+		this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
+		assertSigAllInputs(proofs);
+
+		// SIG_ALL is in flux currently, so let's generate all known message formats
+		// and sign the first proof only against each message...
+		const [first, ...rest] = proofs;
+		let signedFirst = first;
+		const messages = [
+			buildLegacyP2PKSigAllMessage(proofs, outputData, quoteId),
+			buildInterimP2PKSigAllMessage(proofs, outputData, quoteId),
+			buildP2PKSigAllMessage(proofs, outputData, quoteId),
+		];
+		for (const msg of messages) {
+			signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
+		}
+
+		// Return the proofs in same order as before
+		return [signedFirst, ...rest];
 	}
 
 	/**
@@ -1507,7 +1665,7 @@ class Wallet {
 	/**
 	 * @deprecated Use createMeltQuoteBolt11.
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuote(invoice: string): Promise<MeltQuoteBolt11Response> {
 		return this.createMeltQuoteBolt11(invoice);
 	}
 
@@ -1519,7 +1677,7 @@ class Wallet {
 	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
 	 *   reserve.
 	 */
-	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse> {
+	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteBolt11Response> {
 		const meltQuotePayload: MeltQuotePayload = {
 			unit: this._unit,
 			request: invoice,
@@ -1545,7 +1703,7 @@ class Wallet {
 	async createMeltQuoteBolt12(
 		offer: string,
 		amountMsat?: number,
-	): Promise<Bolt12MeltQuoteResponse> {
+	): Promise<MeltQuoteBolt12Response> {
 		return this.mint.createMeltQuoteBolt12({
 			unit: this._unit,
 			request: offer,
@@ -1573,7 +1731,7 @@ class Wallet {
 	async createMultiPathMeltQuote(
 		invoice: string,
 		millisatPartialAmount: number,
-	): Promise<MeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(
@@ -1602,9 +1760,7 @@ class Wallet {
 	/**
 	 * @deprecated Use checkMeltQuoteBolt11()
 	 */
-	async checkMeltQuote(
-		quote: string | MeltQuoteResponse,
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+	async checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response> {
 		return this.checkMeltQuoteBolt11(quote);
 	}
 
@@ -1615,8 +1771,8 @@ class Wallet {
 	 * @returns The mint will return an existing melt quote.
 	 */
 	async checkMeltQuoteBolt11(
-		quote: string | MeltQuoteResponse,
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+		quote: string | MeltQuoteBolt11Response,
+	): Promise<MeltQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const meltQuote = await this.mint.checkMeltQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
@@ -1631,7 +1787,7 @@ class Wallet {
 	 * @param quote ID of the melt quote.
 	 * @returns The mint will return an existing melt quote.
 	 */
-	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
+	async checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response> {
 		return this.mint.checkMeltQuoteBolt12(quote);
 	}
 
@@ -1643,12 +1799,12 @@ class Wallet {
 	 * @deprecated Use meltProofsBolt11()
 	 */
 	async meltProofs(
-		meltQuote: MeltQuoteResponse,
+		meltQuote: MeltQuoteBolt11Response,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
+		return this.meltProofsBolt11(meltQuote, proofsToSend, config, outputType);
 	}
 
 	/**
@@ -1664,12 +1820,14 @@ class Wallet {
 	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofsBolt11(
-		meltQuote: MeltQuoteResponse,
+		meltQuote: MeltQuoteBolt11Response,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
+		const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
+		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
+		return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey, preferAsync);
 	}
 
 	/**
@@ -1685,36 +1843,39 @@ class Wallet {
 	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofsBolt12(
-		meltQuote: Bolt12MeltQuoteResponse,
+		meltQuote: MeltQuoteBolt12Response,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, config, outputType);
+	): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
+		const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
+		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
+		return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey, preferAsync);
 	}
 
 	/**
-	 * Melt proofs for a given melt quote created with the bolt11 or bolt12 method.
+	 * Prepare A Melt Transaction.
 	 *
 	 * @remarks
-	 * Creates NUT-08 blanks (1-sat) for Lightning fee return. Get these by setting a
-	 * config.onChangeOutputsCreated callback for async melting. @see completeMelt.
+	 * Allows you to preview fees for a melt, get concrete outputs for P2PK SIG_ALL melts, and do any
+	 * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for
+	 * Lightning fee return and returns a MeltPreview, which you can melt using completeMelt.
 	 * @param method Payment method of the quote.
-	 * @param meltQuote The bolt11 or bolt12 melt quote.
+	 * @param meltQuote The melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param config Optional (keysetId, onChangeOutputsCreated).
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns MeltProofsResponse.
-	 * @throws If params are invalid or mint returns errors.
+	 * @returns MeltPreview.
+	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	private async _meltProofs<T extends 'bolt11' | 'bolt12'>(
-		method: T,
-		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
+	async prepareMelt<TQuote extends NUT05MeltQuoteResponse>(
+		method: string,
+		meltQuote: TQuote,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
+	): Promise<MeltPreview<TQuote>> {
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -1728,7 +1889,7 @@ class Wallet {
 		let outputData: OutputDataLike[] = [];
 
 		// bolt11 does not allow partial payment, and although bolt12 could, mints
-		// like CDK forbids it. So let's fail loudly up front...
+		// like CDK forbid it. So let's fail loudly up front...
 		this.failIf(feeReserve < 0, 'Not enough proofs to cover amount + fee reserve', {
 			sendAmount,
 			quoteAmount: meltQuote.amount,
@@ -1764,83 +1925,84 @@ class Wallet {
 			outputData = this.createOutputData(0, keyset, meltOT);
 		}
 
-		// Prepare proofs for mint
-		proofsToSend = this._prepareInputsForMint(proofsToSend);
-
-		const meltPayload: MeltPayload = {
-			quote: meltQuote.quote,
+		// Create melt preview
+		const meltPreview: MeltPreview<TQuote> = {
+			method,
 			inputs: proofsToSend,
-			outputs: outputData.map((d) => d.blindedMessage),
+			outputData,
+			keysetId: keyset.id,
+			quote: meltQuote,
 		};
 
-		// Fire event(s) after blanks creation
+		// Fire event(s) after preview creation
 		if (outputData.length > 0) {
-			const blanks: MeltBlanks = {
-				method,
-				payload: meltPayload,
-				outputData,
-				keyset,
-				quote: meltQuote,
-			};
-			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
-			this.on._emitMeltBlanksCreated(blanks); // global callback
+			this.safeCallback(onChangeOutputsCreated, meltPreview, { op: 'meltProofs' });
+			this.on._emitMeltBlanksCreated(meltPreview); // global callback
 		}
 
-		// Proceed with melt, setting preferredAsync header if an onChangeOutputsCreated callback was used
-		let meltResponse;
-		const preferAsync: boolean = typeof onChangeOutputsCreated === 'function';
-		if (method === 'bolt12') {
-			meltResponse = await this.mint.meltBolt12(meltPayload, { preferAsync });
-		} else {
-			meltResponse = await this.mint.meltBolt11(meltPayload, { preferAsync });
-		}
-
-		// Sanity check mint didn't send too many signatures before mapping
-		// Should not happen, except in case of a broken or malicious mint
-		this.failIf(
-			(meltResponse.change?.length ?? 0) > outputData.length,
-			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${outputData.length} blanks were provided`,
-		);
-
-		// Construct change if provided (empty if pending/not paid; shorter ok if less overfee)
-		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
-		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
-		return { quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request }, change };
+		return meltPreview;
 	}
 
 	/**
-	 * Completes a pending melt by re-calling the melt endpoint and constructing change proofs.
+	 * Completes a pending melt by calling the melt endpoint and constructing change proofs.
 	 *
 	 * @remarks
-	 * Use with blanks from onChangeOutputsCreated to retry pending melts. Works for Bolt11/Bolt12.
-	 * Returns change proofs if paid, else empty change.
-	 * @param blanks The blanks from onChangeOutputsCreated.
+	 * Use with a MeltPreview returned from prepareMelt or from the meltBlanksCreated or
+	 * onChangeOutputsCreated callback. This method lets you sign P2PK locked proofs before melting.
+	 * If the payment is pending or unpaid, the change array will be empty.
+	 * @param meltPreview The blanks from onChangeOutputsCreated.
+	 * @param privkey The private key(s) for signing.
+	 * @param preferAsync Optional override to set 'respond-async' header.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<T extends MeltQuoteResponse>(
-		blanks: MeltBlanks<T>,
-	): Promise<MeltProofsResponse> {
-		const meltResponse =
-			blanks.method === 'bolt12'
-				? await this.mint.meltBolt12(blanks.payload)
-				: await this.mint.meltBolt11(blanks.payload);
+	async completeMelt<TQuote extends NUT05MeltQuoteResponse>(
+		meltPreview: MeltPreview<TQuote>,
+		privkey?: string | string[],
+		preferAsync?: boolean,
+	): Promise<MeltProofsResponse<TQuote>> {
+		let inputs = meltPreview.inputs;
+		const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
+		const quote = meltPreview.quote.quote;
+		const keyset = this.getKeyset(meltPreview.keysetId);
 
-		// Check for too many signatures before mapping
+		// Sign proofs if needed
+		if (privkey) {
+			inputs = this.signP2PKProofs(inputs, privkey, meltPreview.outputData, quote);
+		}
+
+		// Prepare proofs for mint
+		inputs = this._prepareInputsForMint(inputs);
+
+		// Construct melt payload
+		const meltPayload: MeltPayload = { quote, inputs, outputs };
+
+		// Make melt call (note: bolt11 has legacy data handling)
+		const meltResponse: NUT05MeltQuoteResponse =
+			meltPreview.method === 'bolt11'
+				? await this.mint.meltBolt11(meltPayload, { preferAsync })
+				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
+						preferAsync,
+					});
+
+		// Check for too many blind signatures before mapping
 		this.failIf(
-			(meltResponse.change?.length ?? 0) > blanks.outputData.length,
-			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${blanks.outputData.length} blanks were provided`,
+			(meltResponse.change?.length ?? 0) > meltPreview.outputData.length,
+			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${meltPreview.outputData.length} blanks were provided`,
 		);
 
 		// Construct change (shorter ok)
 		const change =
-			meltResponse.change?.map((s, i) => blanks.outputData[i].toProof(s, blanks.keyset)) ?? [];
+			meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
 
-		this._logger.debug('COMPLETE MELT', { changeAmounts: change.map((p) => p.amount) });
-		return {
-			quote: { ...meltResponse, unit: blanks.quote.unit, request: blanks.quote.request },
-			change,
-		};
+		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+
+		const mergedQuote = {
+			...meltPreview.quote,
+			...meltResponse,
+		} as TQuote;
+
+		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
 	}
 
 	// -----------------------------------------------------------------

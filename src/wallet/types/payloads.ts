@@ -1,6 +1,30 @@
-import { type OutputData } from '../../model/OutputData';
+import { type OutputDataLike } from '../../model/OutputData';
 import { type Proof } from '../../model/types/proof';
 import { type SerializedBlindedMessage } from '../../model/types/blinded';
+import { type MeltQuoteBolt11Response, type NUT05MeltQuoteResponse } from '../../mint/types';
+
+/**
+ * Preview of a Melt transaction created by prepareMelt.
+ */
+export interface MeltPreview<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
+	method: string;
+	/**
+	 * Inputs (Proofs) to be melted.
+	 */
+	inputs: Proof[];
+	/**
+	 * Outputs (blinded messages) that can be filled by the mint to return overpaid fees.
+	 */
+	outputData: OutputDataLike[];
+	/**
+	 * Keyset ID used to prepare the outputs.
+	 */
+	keysetId: string;
+	/**
+	 * Melt Quote object.
+	 */
+	quote: TQuote;
+}
 
 /**
  * Payload that needs to be sent to the mint when melting. Includes Return for overpaid fees.
@@ -153,7 +177,7 @@ export type SwapTransaction = {
 	/**
 	 * Blinding data required to construct proofs.
 	 */
-	outputData: OutputData[];
+	outputData: OutputDataLike[];
 	/**
 	 * List of booleans to determine which proofs to keep.
 	 */
@@ -162,4 +186,38 @@ export type SwapTransaction = {
 	 * Indices that can be used to restore original output data.
 	 */
 	sortedIndices: number[];
+};
+
+/**
+ * Preview of a swap transaction created by prepareSend / prepareReceive.
+ */
+export type SwapPreview = {
+	/**
+	 * Amount being sent or received (excluding fees).
+	 */
+	amount: number;
+	/**
+	 * Total fees for the swap (inc receiver's fees if applicable)
+	 */
+	fees: number;
+	/**
+	 * Keyset ID used to prepare the outputs.
+	 */
+	keysetId: string;
+	/**
+	 * Input Proofs for this transaction.
+	 */
+	inputs: Proof[];
+	/**
+	 * Blinding data to construct proofs to send.
+	 */
+	sendOutputs?: OutputDataLike[];
+	/**
+	 * Blinding data to construct proofs to keep.
+	 */
+	keepOutputs?: OutputDataLike[];
+	/**
+	 * Proofs not selected for this transaction (can be returned to storage).
+	 */
+	unselectedProofs?: Proof[];
 };
