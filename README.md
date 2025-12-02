@@ -239,6 +239,10 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
 
 ```ts
 const { keep, send } = await wallet.ops.send(5, myProofs).run();
+
+// Or use prepare() instead of run() to do a dry run preview first
+const preview = await wallet.ops.send(5, myProofs).prepare();
+const { keep, send } = await wallet.completeSwap(preview);
 ```
 
 - Uses wallet policy for both `send` and `keep`.
@@ -325,6 +329,10 @@ const { keep, send } = await wallet.ops
 
 ```ts
 const proofs = await wallet.ops.receive(token).run();
+
+// Or use prepare() instead of run() to do a dry run preview first
+const preview = await wallet.ops.receive(token).prepare();
+const { keep } = await wallet.completeSwap(preview);
 ```
 
 #### 2) Deterministic receive with DLEQ requirement
@@ -422,9 +430,6 @@ const { quote, change } = await wallet.ops.meltBolt11(meltQuote, myProofs).run()
 const { quote, change } = await wallet.ops
 	.meltBolt12(meltQuote, myProofs)
 	.asDeterministic() // counter=0 => auto-reserve
-	.onChangeOutputsCreated((blanks) => {
-		// Persist blanks and later call wallet.completeMelt(blanks)
-	})
 	.onCountersReserved((info) => console.log('Reserved', info))
 	.run();
 ```
@@ -433,7 +438,6 @@ const { quote, change } = await wallet.ops
 - Change outputs are deterministic.
 - Callback hooks let you persist state for retry later.
 - If you prefer global subscriptions, use:
-  - onChangeOutputsCreated -> wallet.on.meltBlanksCreated()
   - onCountersReserved -> wallet.on.countersReserved()
 
 ---
@@ -589,7 +593,6 @@ await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456
 **Subscriptions:**
 
 - `wallet.on.countersReserved(cb, { signal })` – deterministic counter reservations
-- `wallet.on.meltBlanksCreated(cb, { signal })` – NUT-08 blanks before melt
 - `wallet.on.mintQuoteUpdates(ids, onUpdate, onErr, { signal })` – live mint quote updates
 - `wallet.on.meltQuoteUpdates(ids, onUpdate, onErr, { signal })` – live melt quote updates
 - `wallet.on.proofStateUpdates(proofs, onUpdate, onErr, { signal })` – push updates
@@ -681,7 +684,6 @@ ac.abort();
 
 ```ts
 const cancelAll = wallet.on.group();
-cancelAll.add(wallet.on.meltBlanksCreated((b) => cacheBlanks(b)));
 cancelAll.add(wallet.on.mintQuoteUpdates(ids, onMint, onErr));
 cancelAll();
 // safe to call multiple times
@@ -691,7 +693,7 @@ cancelAll();
 
 ### Note: Builder hooks vs Global events
 
-`WalletOps` builders include per-operation hooks (onCountersReserved, onChangeOutputsCreated) that fire during a single transaction build.
+`WalletOps` builders include per-operation hooks (onCountersReserved) that fire during a single transaction build.
 
 `WalletEvents` provides global subscriptions `(wallet.on.*)` that can outlive a single builder call.
 

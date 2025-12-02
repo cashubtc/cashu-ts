@@ -14,20 +14,13 @@ import {
 	type ReceiveConfig,
 	type MintProofsConfig,
 	type MeltProofsConfig,
-	type MeltPayload,
-	type MeltQuotePayload,
-	type MintPayload,
-	type MintQuotePayload,
-	type MPPOption,
-	type MeltQuoteOptions,
 	type SwapTransaction,
-	type Bolt12MintQuotePayload,
-	type SwapPayload,
 	type MeltProofsResponse,
 	type SendResponse,
 	type RestoreConfig,
 	type SecretsPolicy,
 	type SwapPreview,
+	type MeltBlanks,
 } from './types';
 import {
 	type CounterSource,
@@ -60,20 +53,22 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
-import { CheckStateEnum, type ProofState } from '../model/types/proof-state';
+import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { MintKeys, MintKeyset } from '../model/types/keyset';
-
-// mint wire DTOs and enums
 import type {
 	GetInfoResponse,
-	MintQuoteResponse,
-	PartialMintQuoteResponse,
-	LockedMintQuoteResponse,
-	Bolt12MintQuoteResponse,
-	NUT05MeltQuoteResponse,
+	MeltRequest,
+	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Request,
 	MeltQuoteBolt11Response,
 	MeltQuoteBolt12Response,
-} from '../mint/types';
+	MintRequest,
+	MintQuoteBolt11Response,
+	MintQuoteBolt12Response,
+	MintQuoteBolt11Request,
+	MintQuoteBolt12Request,
+	SwapRequest,
+} from '../model/types';
 
 // model helpers
 import { OutputData, type OutputDataLike } from '../model/OutputData';
@@ -692,7 +687,7 @@ class Wallet {
 			sortedKeepVector,
 			// outputs, // <-- removed for security
 		});
-		const payload: SwapPayload = {
+		const payload: SwapRequest = {
 			inputs,
 			outputs,
 		};
@@ -1389,7 +1384,7 @@ class Wallet {
 	/**
 	 * @deprecated Use createMintQuoteBolt11()
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response> {
 		return this.createMintQuoteBolt11(amount, description);
 	}
 
@@ -1403,7 +1398,10 @@ class Wallet {
 	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
 	 *   specified amount and unit.
 	 */
-	async createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuoteBolt11(
+		amount: number,
+		description?: string,
+	): Promise<MintQuoteBolt11Response> {
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1412,7 +1410,7 @@ class Wallet {
 			}
 		}
 
-		const mintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
 			amount: amount,
 			description: description,
@@ -1434,10 +1432,10 @@ class Wallet {
 		amount: number,
 		pubkey: string,
 		description?: string,
-	): Promise<LockedMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
-		const mintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
 			amount: amount,
 			description: description,
@@ -1471,14 +1469,14 @@ class Wallet {
 			amount?: number;
 			description?: string;
 		},
-	): Promise<Bolt12MintQuoteResponse> {
+	): Promise<MintQuoteBolt12Response> {
 		// Check if mint supports description for bolt12
 		const mintInfo = this.getMintInfo();
 		if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
 			this.fail('Mint does not support description for bolt12');
 		}
 
-		const mintQuotePayload: Bolt12MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt12Request = {
 			pubkey: pubkey,
 			unit: this._unit,
 			amount: options?.amount,
@@ -1495,9 +1493,7 @@ class Wallet {
 	/**
 	 * @deprecated Use checkMintQuoteBolt11()
 	 */
-	async checkMintQuote(
-		quote: string | MintQuoteResponse,
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+	async checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response> {
 		return this.checkMintQuoteBolt11(quote);
 	}
 
@@ -1508,8 +1504,8 @@ class Wallet {
 	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	async checkMintQuoteBolt11(
-		quote: string | MintQuoteResponse,
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+		quote: string | MintQuoteBolt11Response,
+	): Promise<MintQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const baseRes = await this.mint.checkMintQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
@@ -1524,7 +1520,7 @@ class Wallet {
 	 * @param quote Quote ID.
 	 * @returns The latest mint quote for the given quote ID.
 	 */
-	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
+	async checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response> {
 		return this.mint.checkMintQuoteBolt12(quote);
 	}
 
@@ -1537,7 +1533,7 @@ class Wallet {
 	 */
 	async mintProofs(
 		amount: number,
-		quote: string | MintQuoteResponse,
+		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1555,7 +1551,7 @@ class Wallet {
 	 */
 	async mintProofsBolt11(
 		amount: number,
-		quote: string | MintQuoteResponse,
+		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1574,7 +1570,7 @@ class Wallet {
 	 */
 	async mintProofsBolt12(
 		amount: number,
-		quote: Bolt12MintQuoteResponse,
+		quote: MintQuoteBolt12Response,
 		privkey: string,
 		config?: { keysetId?: string },
 		outputType?: OutputType,
@@ -1599,7 +1595,7 @@ class Wallet {
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		amount: number,
-		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
+		quote: string | (T extends 'bolt11' ? MintQuoteBolt11Response : MintQuoteBolt12Response),
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1631,7 +1627,7 @@ class Wallet {
 		// Create outputs and mint payload
 		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
-		const mintPayload: MintPayload = {
+		const mintPayload: MintRequest = {
 			outputs: blindedMessages,
 			quote: typeof quote === 'string' ? quote : quote.quote,
 		};
@@ -1678,7 +1674,7 @@ class Wallet {
 	 *   reserve.
 	 */
 	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteBolt11Response> {
-		const meltQuotePayload: MeltQuotePayload = {
+		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
 		};
@@ -1738,16 +1734,10 @@ class Wallet {
 			!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit),
 			`Mint does not support MPP for bolt11 and ${this._unit}`,
 		);
-		const mppOption: MPPOption = {
-			amount: millisatPartialAmount,
-		};
-		const meltOptions: MeltQuoteOptions = {
-			mpp: mppOption,
-		};
-		const meltQuotePayload: MeltQuotePayload = {
+		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
-			options: meltOptions,
+			options: { mpp: { amount: millisatPartialAmount } },
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return { ...meltQuote, request: invoice, unit: this._unit };
@@ -1869,7 +1859,7 @@ class Wallet {
 	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	async prepareMelt<TQuote extends NUT05MeltQuoteResponse>(
+	async prepareMelt<TQuote extends MeltQuoteBaseResponse>(
 		method: string,
 		meltQuote: TQuote,
 		proofsToSend: Proof[],
@@ -1934,10 +1924,22 @@ class Wallet {
 			quote: meltQuote,
 		};
 
-		// Fire event(s) after preview creation
+		// Fire legacy event(s) after preview creation
+		// Note: These events are deprecated and should be removed in a future version
 		if (outputData.length > 0) {
-			this.safeCallback(onChangeOutputsCreated, meltPreview, { op: 'meltProofs' });
-			this.on._emitMeltBlanksCreated(meltPreview); // global callback
+			const blanks: MeltBlanks<TQuote> = {
+				method: method as 'bolt11' | 'bolt12',
+				payload: {
+					quote: meltQuote.quote,
+					inputs: proofsToSend,
+					outputs: outputData.map((d) => d.blindedMessage),
+				},
+				outputData,
+				keyset,
+				quote: meltQuote,
+			};
+			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
+			this.on._emitMeltBlanksCreated(blanks); // global callback
 		}
 
 		return meltPreview;
@@ -1947,20 +1949,24 @@ class Wallet {
 	 * Completes a pending melt by calling the melt endpoint and constructing change proofs.
 	 *
 	 * @remarks
-	 * Use with a MeltPreview returned from prepareMelt or from the meltBlanksCreated or
-	 * onChangeOutputsCreated callback. This method lets you sign P2PK locked proofs before melting.
-	 * If the payment is pending or unpaid, the change array will be empty.
-	 * @param meltPreview The blanks from onChangeOutputsCreated.
+	 * Use with a MeltPreview returned from prepareMelt or the legacy MeltBlanks object returned by
+	 * the meltBlanksCreated or onChangeOutputsCreated callback. This method lets you sign P2PK locked
+	 * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
+	 * @param meltPreview The preview from prepareMelt().
 	 * @param privkey The private key(s) for signing.
 	 * @param preferAsync Optional override to set 'respond-async' header.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<TQuote extends NUT05MeltQuoteResponse>(
-		meltPreview: MeltPreview<TQuote>,
+	async completeMelt<TQuote extends MeltQuoteBaseResponse>(
+		meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>,
 		privkey?: string | string[],
 		preferAsync?: boolean,
 	): Promise<MeltProofsResponse<TQuote>> {
+		// Convert from legacy MeltBlanks if needed
+		meltPreview = this.maybeConvertMeltBlanks(meltPreview);
+
+		// Extract vars from MeltPreview
 		let inputs = meltPreview.inputs;
 		const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
 		const quote = meltPreview.quote.quote;
@@ -1975,10 +1981,10 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Construct melt payload
-		const meltPayload: MeltPayload = { quote, inputs, outputs };
+		const meltPayload: MeltRequest = { quote, inputs, outputs };
 
 		// Make melt call (note: bolt11 has legacy data handling)
-		const meltResponse: NUT05MeltQuoteResponse =
+		const meltResponse: MeltQuoteBaseResponse =
 			meltPreview.method === 'bolt11'
 				? await this.mint.meltBolt11(meltPayload, { preferAsync })
 				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
@@ -1995,7 +2001,11 @@ class Wallet {
 		const change =
 			meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
 
-		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+		if (preferAsync) {
+			this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
+		} else {
+			this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+		}
 
 		const mergedQuote = {
 			...meltPreview.quote,
@@ -2003,6 +2013,30 @@ class Wallet {
 		} as TQuote;
 
 		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
+	}
+
+	/**
+	 * Helper to ease transition from MeltBlanks to MeltPreview.
+	 */
+	private maybeConvertMeltBlanks<TQuote extends MeltQuoteBaseResponse>(
+		melt: MeltPreview<TQuote> | MeltBlanks<TQuote>,
+	): MeltPreview<TQuote> {
+		// New shape already, just return as is
+		if (!('payload' in melt)) {
+			return melt;
+		}
+		// Legacy MeltBlanks, adapt it to MeltPreview
+		this._logger.warn(
+			'MeltBlanks objects and the meltBlanksCreated / onChangeOutputsCreated events are deprecated. Please use wallet.prepareMelt() to create a MeltPreview instead.',
+		);
+		const { method, payload, outputData, keyset, quote } = melt;
+		return {
+			method,
+			inputs: payload.inputs,
+			outputData,
+			keysetId: keyset.id,
+			quote,
+		};
 	}
 
 	// -----------------------------------------------------------------

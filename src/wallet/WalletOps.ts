@@ -1,10 +1,10 @@
 import {
-	type MintQuoteResponse,
-	type Bolt12MintQuoteResponse,
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBolt12Response,
-	type NUT05MeltQuoteResponse,
-} from '../mint/types';
+	type MeltQuoteBaseResponse,
+	type MintQuoteBolt12Response,
+	type MintQuoteBolt11Response,
+} from '../model/types';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
@@ -18,14 +18,15 @@ import {
 	type OnCountersReserved,
 	type MeltProofsConfig,
 	type MeltProofsResponse,
+	type MeltPreview,
 } from './types';
 import type { Wallet } from './Wallet';
 
 export type MintMethod = 'bolt11' | 'bolt12';
 
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
-	? string | MintQuoteResponse
-	: Bolt12MintQuoteResponse;
+	? string | MintQuoteBolt11Response
+	: MintQuoteBolt12Response;
 
 /**
  * Fluent operations builder for a Wallet instance.
@@ -269,6 +270,8 @@ export class SendBuilder {
 	/**
 	 * Prepare the swap to send.
 	 *
+	 * @remarks
+	 * Call `wallet.completeSwap(SwapPreview)` to complete the send.
 	 * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
 	 */
 	async prepare() {
@@ -467,6 +470,8 @@ export class ReceiveBuilder {
 	/**
 	 * Prepare the swap to receive.
 	 *
+	 * @remarks
+	 * Call `wallet.completeSwap(SwapPreview)` to complete the receive.
 	 * @returns A SwapPreview containing inputs, outputs, amount, and fee.
 	 */
 	async prepare() {
@@ -632,7 +637,7 @@ export class MintBuilder<
 	async run(this: MintBuilder<M, true>) {
 		// BOLT 11
 		if (this.method === 'bolt11') {
-			const quote = this.quote as string | MintQuoteResponse;
+			const quote = this.quote as string | MintQuoteBolt11Response;
 			// For object quotes, enforce privkey when the quote is locked
 			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
@@ -641,7 +646,7 @@ export class MintBuilder<
 		}
 
 		// BOLT 12
-		const bolt12 = this.quote as Bolt12MintQuoteResponse;
+		const bolt12 = this.quote as MintQuoteBolt12Response;
 		if (!this.config.privkey) {
 			throw new Error('privkey is required for BOLT12 mint quotes');
 		}
@@ -671,14 +676,11 @@ export class MintBuilder<
  * await wallet.ops
  * 	.meltBolt12(quote12, proofs)
  * 	.asDeterministic() // counter 0 auto reserves
- * 	.onChangeOutputsCreated((blanks) => {
- * 		// Persist blanks and retry later with wallet.completeMelt(blanks)
- * 	})
  * 	.onCountersReserved((info) => console.log('Reserved', info))
  * 	.run();
  * ```
  */
-export class MeltBuilder<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> {
+export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 
@@ -778,11 +780,29 @@ export class MeltBuilder<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11
 	 * @remarks
 	 * You can persist these blanks and later call `wallet.completeMelt(blanks)` to finalize and
 	 * recover change once the invoice/offer is paid.
+	 * @deprecated Use prepare() instead of run() and store the MeltPreview instead.
 	 * @param cb Callback invoked with the created blanks payload.
 	 */
 	onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>) {
 		this.config.onChangeOutputsCreated = cb;
 		return this;
+	}
+
+	/**
+	 * Prepare the melt.
+	 *
+	 * @remarks
+	 * Call `wallet.completeMelt(MeltPreview)` to complete the melt.
+	 * @returns A MeltPreview containing inputs, outputs, amount, and fee.
+	 */
+	async prepare(): Promise<MeltPreview<TQuote>> {
+		return await this.wallet.prepareMelt<TQuote>(
+			this.method,
+			this.quote,
+			this.proofs,
+			this.config,
+			this.outputType,
+		);
 	}
 
 	/**

@@ -9,7 +9,6 @@ import {
 	type Proof,
 	type MeltQuoteBolt11Response,
 	MeltQuoteState,
-	type MintQuoteResponse,
 	MintQuoteState,
 	type MintKeys,
 	MintKeyset,
@@ -21,12 +20,13 @@ import {
 	ConsoleLogger,
 	OutputConfig,
 	MeltProofsConfig,
-	MeltPreview,
-	Bolt12MeltQuoteResponse,
+	MeltQuoteBolt12Response,
 	AuthProvider,
+	MintQuoteBolt11Response,
+	MeltBlanks,
 } from '../../src';
 
-import { bytesToNumber, sumProofs } from '../../src/utils';
+import { bytesToNumber } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
@@ -400,7 +400,7 @@ describe('test info', () => {
 		);
 		const wallet = new Wallet(mint, { unit: 'sat' });
 		await wallet.loadMint();
-		const info = await wallet.getMintInfo();
+		const info = wallet.getMintInfo();
 
 		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
 		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(true);
@@ -1195,9 +1195,7 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const result = await wallet.mintProofsBolt11(1, '').catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		await expect(wallet.mintProofsBolt11(1, '')).rejects.toThrow('Invalid response from mint');
 	});
 });
 
@@ -1525,19 +1523,16 @@ describe('send', () => {
 		);
 		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
-
-		const result = await wallet
-			.send(1, [
+		await expect(
+			wallet.send(1, [
 				{
 					id: '00bd033559de27d0',
 					amount: 2,
 					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 				},
-			])
-			.catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+			]),
+		).rejects.toThrow('Invalid response from mint');
 	});
 	test('test send with proofsWeHave', async () => {
 		server.use(
@@ -1884,7 +1879,7 @@ describe('WebSocket Updates', () => {
 		await wallet.loadMint();
 
 		const state = await new Promise(async (res, rej) => {
-			const callback = (p: MintQuoteResponse) => {
+			const callback = (p: MintQuoteBolt11Response) => {
 				if (p.state === MintQuoteState.PAID) {
 					res(p);
 				}
@@ -2481,6 +2476,9 @@ describe('melt proofs', () => {
 		expect(response.change).toHaveLength(0);
 	});
 
+	/**
+	 * @deprecated
+	 */
 	test('test melt proofs with callback for blanks', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
@@ -2529,10 +2527,10 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltPreview | undefined;
+		let capturedBlanks: MeltBlanks | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks as MeltPreview;
+				capturedBlanks = blanks as MeltBlanks;
 			},
 		};
 		const response = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2540,10 +2538,10 @@ describe('melt proofs', () => {
 		expect(capturedBlanks).toBeDefined();
 		expect(capturedBlanks!.method).toBe('bolt11');
 		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
-		expect(capturedBlanks!.keysetId).toBe('00bd033559de27d0');
+		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
 		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
 		expect(capturedBlanks!.quote.quote).toBe('test_melt_quote');
-		expect(capturedBlanks!.inputs).toHaveLength(2);
+		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
 
 		// Response still completes sync
 		expect(response.change).toHaveLength(2);
@@ -2606,10 +2604,10 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		let capturedBlanks: MeltPreview | undefined;
+		let capturedBlanks: MeltBlanks | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks as MeltPreview;
+				capturedBlanks = blanks as MeltBlanks;
 			},
 		};
 		const initialResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2695,7 +2693,7 @@ describe('melt proofs', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt12)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
 			await wallet.loadMint();
-			const meltQuote: Bolt12MeltQuoteResponse = {
+			const meltQuote: MeltQuoteBolt12Response = {
 				quote: 'test_melt_quote',
 				amount: 10,
 				fee_reserve: 3,
@@ -2780,7 +2778,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: Bolt12MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt12Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2845,9 +2843,9 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
+			'Invalid response from mint',
+		);
 	});
 
 	test('test melt proofs mismatch signatures', async () => {

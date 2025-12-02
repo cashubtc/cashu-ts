@@ -1,8 +1,8 @@
 import { test, describe, expect } from 'vitest';
-import { MintPayload } from '../../src/wallet/types';
 import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { secp256k1 } from '@noble/curves/secp256k1';
+import { MintRequest } from '../../src';
 
 describe('mint quote signatures', () => {
 	test('valid signature verification', () => {
@@ -37,7 +37,7 @@ describe('mint quote signatures', () => {
 			],
 			signature:
 				'd4b386f21f7aa7172f0994ee6e4dd966539484247ea71c99b81b8e09b1bb2acbc0026a43c221fd773471dc30d6a32b04692e6837ddaccf0830a63128308e4ee0',
-		} as MintPayload;
+		} as MintRequest;
 		const sig = mintRequest.signature!;
 		const quote = mintRequest.quote;
 		const pubkey = '03d56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
@@ -76,7 +76,7 @@ describe('mint quote signatures', () => {
 			],
 			signature:
 				'cb2b8e7ea69362dfe2a07093f2bbc319226db33db2ef686c940b5ec976bcbfc78df0cd35b3e998adf437b09ee2c950bd66dfe9eb64abd706e43ebc7c669c36c3',
-		} as MintPayload;
+		} as MintRequest;
 		const sig = mintRequest.signature!;
 		const quote = mintRequest.quote;
 		const pubkey = '03d56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
@@ -113,7 +113,7 @@ describe('mint quote signatures', () => {
 					B_: '02209fc2873f28521cbdde7f7b3bb1521002463f5979686fd156f23fe6a8aa2b79',
 				},
 			],
-		} as MintPayload;
+		} as MintRequest;
 		const quote = mintRequest.quote;
 		const privkey = 'd56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
 		const pubkey = bytesToHex(secp256k1.getPublicKey(hexToBytes(privkey)));

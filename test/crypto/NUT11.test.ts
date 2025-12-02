@@ -560,9 +560,9 @@ describe('test p2pk verify', () => {
 describe('P2BK fixed-vector ECDH tweak', () => {
 	test('recomputes r and signs with derived k', () => {
 		// From your stdout (integration)
-		const pubKeyAlice = '02201ced66da54f918074abb60ccd55aa51b3c917d268ddebb392f1fb7737e73c2';
+		// const pubKeyAlice = '02201ced66da54f918074abb60ccd55aa51b3c917d268ddebb392f1fb7737e73c2';
 		const pubKeyBob = '02afe83b2e52fb6a8e812e345252ef93cef8ca9f3267e64a5779da0c20a8d19aaf';
-		const privKeyAlice = '8e41503e855ba9b08dd0883ab2f70ac2f66147489002e0c933d9e6f6db79505a';
+		// const privKeyAlice = '8e41503e855ba9b08dd0883ab2f70ac2f66147489002e0c933d9e6f6db79505a';
 		const privKeyBob = '834b0304b83bb285b99982a83a3c1b6ebe0257171c3998a99fb5c7973164fa5d';
 
 		// Setup the Proof

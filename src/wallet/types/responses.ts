@@ -1,10 +1,9 @@
-import { type MeltQuoteBolt11Response, type NUT05MeltQuoteResponse } from '../../mint/types';
-import { type Proof } from '../../model/types/proof';
+import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
 /**
  * Response after paying a Lightning invoice.
  */
-export type MeltProofsResponse<TQuote extends NUT05MeltQuoteResponse = MeltQuoteBolt11Response> = {
+export type MeltProofsResponse<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> = {
 	/**
 	 * If false, the proofs have not been invalidated and the payment can be tried later again with
 	 * the same proofs.
