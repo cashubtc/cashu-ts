@@ -39,16 +39,14 @@ import {
 	OutputType,
 	P2PKBuilder,
 	MintQuoteBaseResponse,
-} from '../src';
-import ws from 'ws';
-import {
 	getDecodedToken,
 	getEncodedToken,
 	getEncodedTokenV4,
 	hexToNumber,
 	numberToHexPadded64,
 	sumProofs,
-} from '../src/utils';
+} from '../src';
+import ws from 'ws';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha2';
 dns.setDefaultResultOrder('ipv4first');
