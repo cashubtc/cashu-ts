@@ -1695,7 +1695,10 @@ class Wallet {
 	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
 	 *   reserve.
 	 */
-	async createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+	async createMeltQuoteBolt11(
+		invoice: string,
+		amountMsat?: number,
+	): Promise<MeltQuoteBolt11Response> {
 		if (amountMsat != null && invoiceHasAmountInHRP(invoice)) {
 			throw new Error(
 				'amountMsat supplied but invoice already contains an amount, Leave amountMsat undefined for non-zero invoices.',
