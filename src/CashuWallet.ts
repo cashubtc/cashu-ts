@@ -302,6 +302,19 @@ class CashuWallet {
 	}
 
 	/**
+	 * Asserts amount is a positive integer.
+	 *
+	 * @param amount To check.
+	 * @param op Caller method name (or other identifier) for debug.
+	 * @throws If not.
+	 */
+	private assertAmount(amount: unknown, op: string): asserts amount is number {
+		if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+			throw new Error(`Amount must be a positive integer, method: ${op}`);
+		}
+	}
+
+	/**
 	 * Receive an encoded or raw Cashu token (only supports single tokens. It will only process the
 	 * first token in the token array)
 	 *
@@ -372,6 +385,7 @@ class CashuWallet {
 			privkey,
 			outputData,
 		} = options || {};
+		this.assertAmount(amount, 'send');
 		if (includeDleq) {
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
@@ -420,6 +434,7 @@ class CashuWallet {
 	 * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
 	 */
 	selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees = false): SendResponse {
+		this.assertAmount(amountToSend, 'selectProofsToSend');
 		// Init vars
 		const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
 		const MAX_OVRPCT = 0; // Acceptable close match overage (percent)
@@ -762,6 +777,7 @@ class CashuWallet {
 	 * @returns Promise of the change- and send-proofs.
 	 */
 	async swap(amount: number, proofs: Proof[], options?: SwapOptions): Promise<SendResponse> {
+		this.assertAmount(amount, 'swap');
 		let { outputAmounts } = options || {};
 		const { includeFees, keysetId, counter, pubkey, privkey, proofsWeHave, outputData, p2pk } =
 			options || {};
@@ -965,6 +981,7 @@ class CashuWallet {
 	 *   specified amount and unit.
 	 */
 	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+		this.assertAmount(amount, 'createMintQuote');
 		const mintQuotePayload: MintQuotePayload = {
 			unit: this._unit,
 			amount: amount,
@@ -988,6 +1005,7 @@ class CashuWallet {
 		pubkey: string,
 		description?: string,
 	): Promise<LockedMintQuoteResponse> {
+		this.assertAmount(amount, 'createLockedMintQuote');
 		const { supported } = (await this.lazyGetMintInfo()).isSupported(20);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-20');
@@ -1175,6 +1193,7 @@ class CashuWallet {
 		invoice: string,
 		millisatPartialAmount: number,
 	): Promise<MeltQuoteResponse> {
+		this.assertAmount(millisatPartialAmount, 'createMultiPathMeltQuote');
 		const { supported, params } = (await this.lazyGetMintInfo()).isSupported(15);
 		if (!supported) {
 			throw new Error('Mint does not support NUT-15');
@@ -1659,6 +1678,7 @@ class CashuWallet {
 		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
 		options?: MintProofOptions & { privateKey?: string },
 	): Promise<Proof[]> {
+		this.assertAmount(amount, '_mintProofs');
 		let { outputAmounts } = options || {};
 		const { counter, pubkey, p2pk, keysetId, proofsWeHave, outputData, privateKey } = options || {};
 
