@@ -421,6 +421,81 @@ describe('test info', () => {
 		await usdWallet.loadMint();
 		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
 	});
+	test('supportsAmountless() correctly detects amountless option in melt methods', async () => {
+		const info = new MintInfo({
+			name: 'Test Mint',
+			pubkey: '0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679',
+			version: 'Nutshell/0.16.3',
+			contact: [
+				{ method: 'email', info: 'contact@me.com' },
+				{ method: 'twitter', info: '@me' },
+				{ method: 'nostr', info: 'npub1337' },
+			],
+			nuts: {
+				4: {
+					disabled: false,
+					methods: [
+						{
+							method: 'bolt11',
+							unit: 'sat',
+							min_amount: 0,
+							max_amount: 0,
+						},
+					],
+				},
+				5: {
+					disabled: false,
+					methods: [
+						{
+							method: 'bolt11',
+							unit: 'sat',
+							min_amount: 100,
+							max_amount: 10000,
+							options: { amountless: true },
+						},
+						{
+							method: 'bolt11',
+							unit: 'sat',
+							min_amount: 100,
+							max_amount: 10000,
+							options: { description: true },
+						},
+					],
+				},
+			},
+		});
+
+		expect(info.supportsAmountless('bolt11', 'sat')).toBe(true);
+
+		// method/unit not matching any amountless option → false
+		expect(info.supportsAmountless('onchain', 'sat')).toBe(false);
+
+		// same method/unit but missing options.amountless → false
+		const info2 = new MintInfo({
+			name: 'Test Mint',
+			pubkey: '0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679',
+			version: 'Nutshell/0.16.3',
+			contact: [
+				{ method: 'email', info: 'contact@me.com' },
+				{ method: 'twitter', info: '@me' },
+				{ method: 'nostr', info: 'npub1337' },
+			],
+			nuts: {
+				4: {
+					disabled: false,
+					methods: [{ method: 'bolt11', unit: 'sat', min_amount: 0, max_amount: 0 }],
+				},
+				5: {
+					disabled: false,
+					methods: [
+						{ method: 'bolt11', unit: 'sat', min_amount: 0, max_amount: 0 }, // no options.amountless
+					],
+				},
+			},
+		});
+
+		expect(info2.supportsAmountless('bolt11', 'sat')).toBe(false);
+	});
 });
 
 describe('test fees', () => {
