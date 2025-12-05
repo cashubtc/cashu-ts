@@ -1,6 +1,4 @@
-import { bytesToHex, hexToBytes, type PrivKey, randomBytes } from '@noble/curves/utils';
-import { sha256 } from '@noble/hashes/sha2';
-import { schnorr } from '@noble/curves/secp256k1';
+import { bytesToHex, randomBytes } from '@noble/curves/utils';
 
 export type SecretKind = 'P2PK' | 'HTLC' | (string & {}); // union with any string
 
@@ -128,7 +126,7 @@ export function getSecretData(secret: Secret | string): SecretData {
  * @param secret - The Proof secret.
  * @returns - SecretData.data.
  */
-export function getData(secret: Secret | string): string {
+export function getDataField(secret: Secret | string): string {
 	const { data } = getSecretData(secret);
 	return data;
 }
@@ -197,38 +195,3 @@ export function getTagInt(secret: Secret | string, key: string): number | undefi
 	const n = Number.parseInt(v, 10);
 	return Number.isFinite(n) ? n : undefined;
 }
-
-// ------------------------------
-// Signing
-// ------------------------------
-
-/**
- * Signs a message string using Schnorr.
- *
- * @remarks
- * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
- * (auxRand) each time it is called.
- * @param message - The message to sign.
- * @param privateKey - The private key to sign with.
- * @returns The signature in hex format.
- */
-export const signMessage = (message: string, privateKey: PrivKey): string => {
-	const msghash = sha256(new TextEncoder().encode(message));
-	const sig = schnorr.sign(msghash, privateKey); // auxRand is random by default
-	return bytesToHex(sig);
-};
-
-/**
- * Verifies a Schnorr signature on a message.
- *
- * @param signature - The Schnorr signature (hex-encoded).
- * @param message - The message to verify.
- * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
- * @returns True if the signature is valid, false otherwise.
- */
-export const verifyMessage = (message: string, pubkey: string, signature: string): boolean => {
-	const msghash = sha256(new TextEncoder().encode(message));
-	// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
-	const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
-	return schnorr.verify(signature, msghash, hexToBytes(pubkeyX));
-};

@@ -1,5 +1,5 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
 import { randomBytes, bytesToHex, type PrivKey, utf8ToBytes } from '@noble/curves/utils';
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
@@ -184,4 +184,82 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
 		secret: new TextEncoder().encode(proof.secret),
 		witness: proof.witness ? (JSON.parse(proof.witness) as P2PKWitness) : undefined,
 	};
+};
+
+/**
+ * Signs a message string using Schnorr.
+ *
+ * @remarks
+ * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
+ * (auxRand) each time it is called.
+ * @param message - The message to sign.
+ * @param privateKey - The private key to sign with.
+ * @returns The signature in hex format.
+ */
+export const signMessage = (message: string, privateKey: PrivKey): string => {
+	const msghash = sha256(new TextEncoder().encode(message));
+	const sig = schnorr.sign(msghash, privateKey); // auxRand is random by default
+	return bytesToHex(sig);
+};
+
+/**
+ * Verifies a Schnorr signature on a message.
+ *
+ * @remarks
+ * This function swallows Schnorr verification errors (eg invalid signature / pubkey format) and
+ * treats them as false. If you want to throw such errors, use the throws param.
+ * @param signature - The Schnorr signature (hex-encoded).
+ * @param message - The message to verify.
+ * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
+ * @param throws - True: throws on error, False: swallows errors and returns false.
+ * @returns True if the signature is valid, false otherwise.
+ * @throws If throws param is true and error is encountered.
+ */
+export const verifySignature = (
+	signature: string,
+	message: string,
+	pubkey: string,
+	throws: boolean = false,
+): boolean => {
+	try {
+		const msghash = sha256(new TextEncoder().encode(message));
+		// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
+		const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
+		return schnorr.verify(signature, msghash, hexToBytes(pubkeyX));
+	} catch (e) {
+		if (throws) {
+			throw e;
+		}
+	}
+	return false; // default fail
+};
+
+/**
+ * Checks enough unique pubkeys have signed a message.
+ *
+ * @param signatures - The Schnorr signature(s) (hex-encoded).
+ * @param message - The message to verify.
+ * @param pubkey - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to check.
+ * @param threshold - The minimum number of unique witnesses required.
+ * @returns True if the witness threshold was reached, false otherwise.
+ */
+export const hasRequiredWitnesses = (
+	signatures: string[],
+	message: string,
+	pubkeys: string[],
+	threshold: number = 1,
+): boolean => {
+	let signatories = 0;
+	// Loop through witness pubkeys to see if any of the signatures belong to them.
+	// We need to do this as Schnorr signatures are non-deterministic (auxRand).
+	// so we count the number of valid witnesses, not the number of valid signatures
+	for (const pubkey of pubkeys) {
+		const hasSigned = signatures.some((sig) => {
+			return verifySignature(sig, message, pubkey);
+		});
+		if (hasSigned) {
+			signatories++;
+		}
+	}
+	return signatories >= threshold;
 };

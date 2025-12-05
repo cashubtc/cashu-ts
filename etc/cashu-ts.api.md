@@ -8,6 +8,9 @@ import { PrivKey } from '@noble/curves/utils';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 
 // @public
+export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
+
+// @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
     // (undocumented)
@@ -171,11 +174,20 @@ export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: U
 // @public
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
 
+// @public
+export function createHTLCHash(preimage?: string): {
+    hash: string;
+    preimage: string;
+};
+
+// @public
+export const createHTLCsecret: (hash: string, tags?: string[][]) => string;
+
 // @public (undocumented)
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
 
-// @public (undocumented)
-export const createP2PKsecret: (pubkey: string) => string;
+// @public
+export function createP2PKsecret(pubkey: string, tags?: string[][]): string;
 
 // @public @deprecated (undocumented)
 export function createRandomBlindedMessage(_deprecated?: PrivKey): BlindedMessage;
@@ -185,6 +197,9 @@ export function createRandomRawBlindedMessage(): RawBlindedMessage;
 
 // @public (undocumented)
 export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
+
+// @public
+export function createSecret(kind: SecretKind, data: string, tags?: string[][]): string;
 
 // @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
@@ -238,6 +253,9 @@ export type DLEQ = {
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
+
+// @public
+export function getDataField(secret: Secret | string): string;
 
 // @public
 export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]): Token;
@@ -336,29 +354,56 @@ export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[]
 // @public (undocumented)
 export const getKeysetIdInt: (keysetId: string) => bigint;
 
-// @public
+// @public @deprecated (undocumented)
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[];
 
 // @public
-export function getP2PKLocktime(secretStr: string | Secret): number;
+export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[];
 
 // @public
-export function getP2PKNSigs(secretStr: string | Secret): number;
+export function getP2PKLockState(secret: Secret | string, nowSeconds?: number): LockState;
 
 // @public
-export function getP2PKSigFlag(secretStr: string | Secret): SigFlag;
+export function getP2PKLocktime(secret: string | Secret): number;
 
 // @public
-export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[];
+export function getP2PKNSigs(secret: string | Secret): number;
 
 // @public
-export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[];
+export function getP2PKNSigsRefund(secret: string | Secret): number;
 
 // @public
-export const getP2PKWitnessSignatures: (witness: string | P2PKWitness | undefined) => string[];
+export function getP2PKSigFlag(secret: string | Secret): SigFlag;
+
+// @public
+export function getP2PKWitnessPubkeys(secret: string | Secret): string[];
+
+// @public
+export function getP2PKWitnessRefundkeys(secret: string | Secret): string[];
+
+// @public
+export function getP2PKWitnessSignatures(witness: string | P2PKWitness | undefined): string[];
 
 // @public (undocumented)
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
+
+// @public
+export function getSecretData(secret: Secret | string): SecretData;
+
+// @public
+export function getSecretKind(secret: Secret | string): SecretKind;
+
+// @public
+export function getTag(secret: Secret | string, key: string): string[] | undefined;
+
+// @public
+export function getTagInt(secret: Secret | string, key: string): number | undefined;
+
+// @public
+export function getTags(secret: Secret | string): string[][];
+
+// @public
+export function getTagScalar(secret: Secret | string, key: string): string | undefined;
 
 // @public
 export function getTokenMetadata(token: string): TokenMetadata;
@@ -379,7 +424,13 @@ export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint>;
 export function hasNonHexId(p: Proof | Proof[]): boolean;
 
 // @public
-export const hasP2PKSignedProof: (pubkey: string, proof: Proof) => boolean;
+export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: string): boolean;
+
+// @public
+export const hasRequiredWitnesses: (signatures: string[], message: string, pubkeys: string[], threshold?: number) => boolean;
+
+// @public
+export function hasTag(secret: Secret | string, key: string): boolean;
 
 // @public
 export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
@@ -482,6 +533,9 @@ export type KeysetPair = {
 
 // @public @deprecated (undocumented)
 export type LockedMintQuoteResponse = MeltQuoteBolt11Response;
+
+// @public (undocumented)
+export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
 // @public (undocumented)
 export interface Logger {
@@ -1153,8 +1207,14 @@ export type P2PKWitness = {
     signatures?: string[];
 };
 
-// @public (undocumented)
-export const parseP2PKSecret: (secret: string | Uint8Array) => Secret;
+// @public
+export function parseP2PKSecret(secret: string | Secret): Secret;
+
+// @public @deprecated (undocumented)
+export function parseP2PKSecret(secret: Uint8Array): Secret;
+
+// @public
+export function parseSecret(secret: string | Secret): Secret;
 
 // @public @deprecated
 export type PartialMeltQuoteResponse = MeltQuoteBolt11Response;
@@ -1346,14 +1406,20 @@ export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_sta
 export function sanitizeUrl(url: string): string;
 
 // @public (undocumented)
-export type Secret = [WellKnownSecret, SecretData];
+export type Secret = [SecretKind, SecretData];
 
 // @public (undocumented)
-export type SecretData = {
-    nonce: string;
+export interface SecretData {
+    // (undocumented)
     data: string;
+    // (undocumented)
+    nonce: string;
+    // (undocumented)
     tags?: string[][];
-};
+}
+
+// @public (undocumented)
+export type SecretKind = 'P2PK' | 'HTLC' | (string & {});
 
 // @public (undocumented)
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
@@ -1467,16 +1533,19 @@ export interface SharedOutputTypeProps {
 // @public (undocumented)
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
+// @public
+export const signMessage: (message: string, privateKey: PrivKey) => string;
+
 // @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
-export const signP2PKProof: (proof: Proof, privateKey: string, message?: string) => Proof;
+export function signP2PKProof(proof: Proof, privateKey: string, message?: string): Proof;
 
 // @public
-export const signP2PKProofs: (proofs: Proof[], privateKey: string | string[], logger?: Logger, message?: string) => Proof[];
+export function signP2PKProofs(proofs: Proof[], privateKey: string | string[], logger?: Logger, message?: string): Proof[];
 
-// @public
+// @public @deprecated
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 
 // @public (undocumented)
@@ -1591,14 +1660,17 @@ export function verifyKeysetId(keys: MintKeys): boolean;
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
-// @public
+// @public @deprecated
 export const verifyP2PKSecretSignature: (signature: string, secret: string, pubkey: string) => boolean;
 
-// @public (undocumented)
-export const verifyP2PKSig: (proof: Proof) => boolean;
+// @public
+export function verifyP2PKSig(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public (undocumented)
 export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
+
+// @public
+export const verifySignature: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public
 export class Wallet {
@@ -1770,7 +1842,7 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export type WellKnownSecret = 'P2PK';
 
 // @public (undocumented)
