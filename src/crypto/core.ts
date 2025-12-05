@@ -186,6 +186,10 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
 	};
 };
 
+// ------------------------------
+// Schnorr Signing / Verififcaton
+// ------------------------------
+
 /**
  * Signs a message string using Schnorr.
  *
@@ -196,7 +200,7 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
  * @param privateKey - The private key to sign with.
  * @returns The signature in hex format.
  */
-export const signMessage = (message: string, privateKey: PrivKey): string => {
+export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
 	const msghash = sha256(new TextEncoder().encode(message));
 	const sig = schnorr.sign(msghash, privateKey); // auxRand is random by default
 	return bytesToHex(sig);
@@ -215,7 +219,7 @@ export const signMessage = (message: string, privateKey: PrivKey): string => {
  * @returns True if the signature is valid, false otherwise.
  * @throws If throws param is true and error is encountered.
  */
-export const verifySignature = (
+export const schnorrVerifyMessage = (
 	signature: string,
 	message: string,
 	pubkey: string,
@@ -235,31 +239,42 @@ export const verifySignature = (
 };
 
 /**
+ * Returns the set of unique public keys that have produced a valid Schnorr signature for a given
+ * message.
+ *
+ * @param signatures - The Schnorr signature(s) (hex-encoded).
+ * @param message - The message to verify.
+ * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
+ *   check.
+ * @returns Array of public keys who validly signed, duplicates removed.
+ */
+export function getValidSigners(
+	signatures: string[],
+	message: string,
+	pubkeys: string[],
+): string[] {
+	const uniquePubs = Array.from(new Set(pubkeys));
+	return uniquePubs.filter((pubkey) =>
+		signatures.some((sig) => schnorrVerifyMessage(sig, message, pubkey)),
+	);
+}
+
+/**
  * Checks enough unique pubkeys have signed a message.
  *
  * @param signatures - The Schnorr signature(s) (hex-encoded).
  * @param message - The message to verify.
- * @param pubkey - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to check.
+ * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
+ *   check.
  * @param threshold - The minimum number of unique witnesses required.
  * @returns True if the witness threshold was reached, false otherwise.
  */
-export const hasRequiredWitnesses = (
+export const meetsSignerThreshold = (
 	signatures: string[],
 	message: string,
 	pubkeys: string[],
 	threshold: number = 1,
 ): boolean => {
-	let signatories = 0;
-	// Loop through witness pubkeys to see if any of the signatures belong to them.
-	// We need to do this as Schnorr signatures are non-deterministic (auxRand).
-	// so we count the number of valid witnesses, not the number of valid signatures
-	for (const pubkey of pubkeys) {
-		const hasSigned = signatures.some((sig) => {
-			return verifySignature(sig, message, pubkey);
-		});
-		if (hasSigned) {
-			signatories++;
-		}
-	}
-	return signatories >= threshold;
+	const validSigners = getValidSigners(signatures, message, pubkeys);
+	return validSigners.length >= threshold;
 };

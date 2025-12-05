@@ -31,13 +31,13 @@ example:
 
 ```ts
 import { signP2PKProofs } from '@cashu/cashu-ts/crypto/client/NUT11';
-import { verifyP2PKSig } from '@cashu/cashu-ts/crypto/mint/NUT11';
+import { isP2PKSpendAuthorised } from '@cashu/cashu-ts/crypto/mint/NUT11';
 ```
 
 is now:
 
 ```ts
-import { signP2PKProofs, verifyP2PKSig } from '@cashu/cashu-ts';
+import { signP2PKProofs, isP2PKSpendAuthorised } from '@cashu/cashu-ts';
 ```
 
 Some crypto types have been deduplicated to the main library types:

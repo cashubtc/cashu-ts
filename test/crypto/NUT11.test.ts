@@ -14,12 +14,12 @@ import {
 	getP2PKSigFlag,
 	getP2PKWitnessSignatures,
 	Secret,
-	verifyP2PKSig,
+	isP2PKSpendAuthorised,
 	getPubKeyFromPrivKey,
 	createRandomSecretKey,
 	hasP2PKSignedProof,
-	signMessage,
-	verifySignature,
+	schnorrSignMessage,
+	schnorrVerifyMessage,
 	deriveP2BKBlindedPubkeys,
 	P2BK_DST,
 	buildP2PKSigAllMessage,
@@ -57,7 +57,7 @@ describe('test create p2pk secret', () => {
 			secret: secretStr,
 		};
 		const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
-		const verify = verifyP2PKSig(signedProof);
+		const verify = isP2PKSpendAuthorised(signedProof);
 		expect(verify).toBe(true);
 	});
 
@@ -80,8 +80,8 @@ describe('test create p2pk secret', () => {
 		const proofs = [proof1, proof2];
 
 		const signedProofs = signP2PKProofs(proofs, bytesToHex(PRIVKEY));
-		const verify0 = verifyP2PKSig(signedProofs[0]);
-		const verify1 = verifyP2PKSig(signedProofs[1]);
+		const verify0 = isP2PKSpendAuthorised(signedProofs[0]);
+		const verify1 = isP2PKSpendAuthorised(signedProofs[1]);
 		expect(verify0).toBe(true);
 		expect(verify1).toBe(true);
 	});
@@ -109,8 +109,8 @@ describe('test create p2pk secret', () => {
 		const proofs = [proof1, proof2];
 
 		const signedProofs = signP2PKProofs(proofs, [bytesToHex(PRIVKEY), bytesToHex(PRIVKEY2)]);
-		const verify0 = verifyP2PKSig(signedProofs[0]);
-		const verify1 = verifyP2PKSig(signedProofs[1]);
+		const verify0 = isP2PKSpendAuthorised(signedProofs[0]);
+		const verify1 = isP2PKSpendAuthorised(signedProofs[1]);
 		expect(verify0).toBe(true);
 		expect(verify1).toBe(true);
 	});
@@ -138,8 +138,8 @@ describe('test create p2pk secret', () => {
 		const proofs = [proof1, proof2];
 		expect(hasP2PKSignedProof(PUBKEY, proof1)).toBe(false);
 		const signedProofs = signP2PKProofs(proofs, [bytesToHex(PRIVKEY), bytesToHex(PRIVKEY2)]);
-		const verify0 = verifyP2PKSig(signedProofs[0]);
-		const verify1 = verifyP2PKSig(signedProofs[1]);
+		const verify0 = isP2PKSpendAuthorised(signedProofs[0]);
+		const verify1 = isP2PKSpendAuthorised(signedProofs[1]);
 		expect(verify0).toBe(true);
 		expect(verify1).toBe(true);
 	});
@@ -149,7 +149,7 @@ describe('test create p2pk secret', () => {
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["pubkeys","${PUBKEY2}"]]}]`;
-		const secretStr2 = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","1"],["pubkeys","${PUBKEY2}"]]}]`;
+		const secretStr2 = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY2}","tags":[["n_sigs","1"]]}]`;
 		const proof1: Proof = {
 			amount: 1,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
@@ -167,10 +167,10 @@ describe('test create p2pk secret', () => {
 		const proofs = [proof1, proof2];
 
 		const signedProofs = signP2PKProofs(proofs, [bytesToHex(PRIVKEY)]);
-		const verify0 = verifyP2PKSig(signedProofs[0]);
-		expect(verify0).toBe(false);
-		const verify1 = verifyP2PKSig(signedProofs[1]);
-		expect(verify1).toBe(true);
+		const verify0 = isP2PKSpendAuthorised(signedProofs[0]);
+		expect(verify0).toBe(false); // 2 required, 1 given
+		const verify1 = isP2PKSpendAuthorised(signedProofs[1]);
+		expect(verify1).toBe(false); // 1 required, wrong one given
 	});
 
 	test('verify unlocked proofs and bad witness', async () => {
@@ -183,7 +183,7 @@ describe('test create p2pk secret', () => {
 			witness: { signatures: ['foo'] },
 		};
 		// const signedProofs = signP2PKProofs([proof1], [bytesToHex(PRIVKEY)]);
-		expect(verifyP2PKSig(proof1, new ConsoleLogger('debug'))).toBe(true);
+		expect(isP2PKSpendAuthorised(proof1, new ConsoleLogger('debug'))).toBe(true);
 		expect(hasP2PKSignedProof(PUBKEY, proof1)).toBe(false);
 	});
 });
@@ -439,7 +439,7 @@ describe('test signP2PKProof', () => {
 		};
 		// first signing
 		const signedProof = signP2PKProof(proof, bytesToHex(PRIVKEY));
-		const verify = verifyP2PKSig(signedProof);
+		const verify = isP2PKSpendAuthorised(signedProof);
 		expect(verify).toBe(true);
 		expect((signedProof.witness as P2PKWitness).signatures).toHaveLength(2);
 		// try signing again
@@ -479,7 +479,7 @@ describe('test signP2PKProof', () => {
 				'{"signatures":["60f3c9b766770b46caac1d27e1ae6b77c8866ebaeba0b9489fe6a15a837eaa6fcd6eaa825499c72ac342983983fd3ba3a8a41f56677cc99ffd73da68b59e1383"]}',
 		};
 		const signedProof = signP2PKProof(proof, PRIVKEY2);
-		const verify = verifyP2PKSig(signedProof);
+		const verify = isP2PKSpendAuthorised(signedProof);
 		expect(verify).toBe(true);
 		expect((signedProof.witness as P2PKWitness).signatures).toHaveLength(2);
 	});
@@ -535,7 +535,7 @@ describe('test p2pk verify', () => {
 				randomBytes(32),
 			)}"}]`,
 		};
-		expect(verifyP2PKSig(proof)).toBe(false);
+		expect(isP2PKSpendAuthorised(proof)).toBe(false);
 	});
 });
 
@@ -583,7 +583,7 @@ describe('P2BK fixed-vector ECDH tweak', () => {
 		};
 
 		const [signed] = signP2PKProofs([proof], privKeyBob);
-		expect(verifyP2PKSig(signed as any)).toBe(true);
+		expect(isP2PKSpendAuthorised(signed as any)).toBe(true);
 		// Also assert witness actually got added
 		expect((signed as any).witness?.signatures?.length).toBeGreaterThan(0);
 	});
@@ -610,7 +610,7 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 
 		// Bob signs using derived k; verify succeeds and witness is present
 		const [signed] = signP2PKProofs([proof], pBob);
-		expect(verifyP2PKSig(signed)).toBe(true);
+		expect(isP2PKSpendAuthorised(signed)).toBe(true);
 		expect(getP2PKWitnessSignatures((signed as any).witness).length).toBeGreaterThan(0);
 	});
 
@@ -631,12 +631,12 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 
 		// Only Alice signs -> insufficient (witness added, but verify = false)
 		const [oneSigned] = signP2PKProofs([structuredClone(base)], pAlice);
-		expect(verifyP2PKSig(oneSigned)).toBe(false);
+		expect(isP2PKSpendAuthorised(oneSigned)).toBe(false);
 		expect(getP2PKWitnessSignatures(oneSigned.witness).length).toBe(1);
 
 		// Both Alice & Bob sign -> satisfies 2-of-2
 		const [twoSigned] = signP2PKProofs([structuredClone(base)], [pAlice, pBob]);
-		expect(verifyP2PKSig(twoSigned)).toBe(true);
+		expect(isP2PKSpendAuthorised(twoSigned)).toBe(true);
 		expect(getP2PKWitnessSignatures(twoSigned.witness).length).toBe(2);
 	});
 });
@@ -664,36 +664,36 @@ describe('NUT-11 helper edge cases', () => {
 	});
 });
 
-describe('verifySignature & hasP2PKSignedProof', () => {
+describe('schnorrVerifyMessage & hasP2PKSignedProof', () => {
 	test('direct verify works with 33-byte compressed pubkey and fails with wrong pubkey', () => {
 		const priv = schnorr.utils.randomSecretKey();
 		const pubCompressed = bytesToHex(getPubKeyFromPrivKey(priv)); // 33 bytes (66 hex)
 		const secret = `["P2PK",{"nonce":"aa","data":"${pubCompressed}"}]`;
-		const sig = signMessage(secret, priv);
+		const sig = schnorrSignMessage(secret, priv);
 
-		expect(verifySignature(sig, secret, pubCompressed)).toBe(true);
+		expect(schnorrVerifyMessage(sig, secret, pubCompressed)).toBe(true);
 
 		const wrongPriv = schnorr.utils.randomSecretKey();
 		const wrongPubCompressed = bytesToHex(getPubKeyFromPrivKey(wrongPriv));
-		expect(verifySignature(sig, secret, wrongPubCompressed)).toBe(false);
+		expect(schnorrVerifyMessage(sig, secret, wrongPubCompressed)).toBe(false);
 	});
 
 	test('logs and returns false on invalid pubkey hex', () => {
 		const secret = `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`;
-		const sig = signMessage(secret, PRIVKEY);
-		expect(verifySignature(sig, secret, 'nothex')).toBe(false);
+		const sig = schnorrSignMessage(secret, PRIVKEY);
+		expect(schnorrVerifyMessage(sig, secret, 'nothex')).toBe(false);
 	});
 
 	test('returns false on invalid signature hex', () => {
 		const secret = `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`;
-		expect(verifySignature('foo', secret, PUBKEY)).toBe(false);
+		expect(schnorrVerifyMessage('foo', secret, PUBKEY)).toBe(false);
 	});
 
 	test('hasP2PKSignedProof true/false/no-witness', () => {
 		const priv = schnorr.utils.randomSecretKey();
 		const pub = bytesToHex(getPubKeyFromPrivKey(priv));
 		const secret = `["P2PK",{"nonce":"aa","data":"${pub}"}]`;
-		const sig = signMessage(secret, priv);
+		const sig = schnorrSignMessage(secret, priv);
 
 		const proofWithMatch: Proof = {
 			amount: 1,
@@ -733,7 +733,7 @@ describe('verifySignature & hasP2PKSignedProof', () => {
 			hasP2PKSignedProof(PUBKEY, proof);
 		}).toThrow(/Cannot verify a SIG_ALL proof/);
 		expect(() => {
-			verifyP2PKSig(proof);
+			isP2PKSpendAuthorised(proof);
 		}).toThrow(/Cannot verify a SIG_ALL proof/);
 	});
 });
@@ -862,7 +862,7 @@ describe('buildP2PKSigAllMessage, SIG_ALL aggregation', () => {
 		expect(message).toBe(
 			'["P2PK",{"nonce":"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303","data":"030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1","tags":[["sigflag","SIG_ALL"]]}]02c97ee3d1db41cf0a3ddb601724be8711a032950811bf326f8219c50c4808d3cd2038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39',
 		);
-		expect(verifySignature(sig, message, pub)).toBeTruthy();
+		expect(schnorrVerifyMessage(sig, message, pub)).toBeTruthy();
 	});
 
 	test('replicates NUT-11 SIG_ALL test vectors for melt', () => {
@@ -887,7 +887,7 @@ describe('buildP2PKSigAllMessage, SIG_ALL aggregation', () => {
 		expect(message).toBe(
 			'["P2PK",{"nonce":"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de","data":"029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835","tags":[["sigflag","SIG_ALL"]]}]02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b0038ec853d65ae1b79b5cdbc2774150b2cb288d6d26e12958a16fb33c32d9a86c39cF8911fzT88aEi1d-6boZZkq5lYxbUSVs-HbJxK0',
 		);
-		expect(verifySignature(sig, message, pub)).toBeTruthy();
+		expect(schnorrVerifyMessage(sig, message, pub)).toBeTruthy();
 	});
 });
 
@@ -1062,13 +1062,13 @@ describe('SIG_ALL, all three message formats are actually signed', () => {
 		// 6. For each message variant, there must be at least one signature that verifies
 		//    against that specific message and this pubkey.
 		for (const msg of messages) {
-			const hasValid = sigs.some((sig) => verifySignature(sig, msg, pubCompressed));
+			const hasValid = sigs.some((sig) => schnorrVerifyMessage(sig, msg, pubCompressed));
 			expect(hasValid).toBe(true);
 		}
 
 		// Optional extra: none of these signatures should verify against the bare secret,
 		// which would indicate we mistakenly signed proof.secret instead of the message.
-		const anyOnSecret = sigs.some((sig) => verifySignature(sig, secret, pubCompressed));
+		const anyOnSecret = sigs.some((sig) => schnorrVerifyMessage(sig, secret, pubCompressed));
 		expect(anyOnSecret).toBe(false);
 	});
 });

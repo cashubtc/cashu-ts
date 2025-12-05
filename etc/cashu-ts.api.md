@@ -409,6 +409,9 @@ export function getTagScalar(secret: Secret | string, key: string): string | und
 export function getTokenMetadata(token: string): TokenMetadata;
 
 // @public
+export function getValidSigners(signatures: string[], message: string, pubkeys: string[]): string[];
+
+// @public
 export function handleTokens(token: string): Token;
 
 // @public
@@ -425,9 +428,6 @@ export function hasNonHexId(p: Proof | Proof[]): boolean;
 
 // @public
 export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: string): boolean;
-
-// @public
-export const hasRequiredWitnesses: (signatures: string[], message: string, pubkeys: string[], threshold?: number) => boolean;
 
 // @public
 export function hasTag(secret: Secret | string, key: string): boolean;
@@ -462,6 +462,9 @@ export function invoiceHasAmountInHRP(invoice: string): boolean;
 
 // @public (undocumented)
 export function isObj(v: unknown): v is object;
+
+// @public
+export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public (undocumented)
 export function isValidHex(str: string): boolean;
@@ -558,6 +561,9 @@ export type LogLevel = 'error' | 'warn' | 'info' | 'debug' | 'trace';
 
 // @public
 export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof: Proof): string[];
+
+// @public
+export const meetsSignerThreshold: (signatures: string[], message: string, pubkeys: string[], threshold?: number) => boolean;
 
 // @public @deprecated (undocumented)
 export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
@@ -1200,7 +1206,26 @@ export type P2PKOptions = {
 };
 
 // @public (undocumented)
+export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
+
+// @public (undocumented)
 export type P2PKTag = [key: string, ...values: string[]];
+
+// @public (undocumented)
+export interface P2PKVerificationResult {
+    // (undocumented)
+    eligibleSigners: number;
+    // (undocumented)
+    lockState: LockState;
+    // (undocumented)
+    path: P2PKSpendingPath;
+    // (undocumented)
+    receivedSigners: string[];
+    // (undocumented)
+    requiredSigners: number;
+    // (undocumented)
+    success: boolean;
+}
 
 // @public
 export type P2PKWitness = {
@@ -1405,6 +1430,12 @@ export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_sta
 // @public (undocumented)
 export function sanitizeUrl(url: string): string;
 
+// @public
+export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
+
+// @public
+export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
+
 // @public (undocumented)
 export type Secret = [SecretKind, SecretData];
 
@@ -1533,9 +1564,6 @@ export interface SharedOutputTypeProps {
 // @public (undocumented)
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
-// @public
-export const signMessage: (message: string, privateKey: PrivKey) => string;
-
 // @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
@@ -1663,14 +1691,14 @@ export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedM
 // @public @deprecated
 export const verifyP2PKSecretSignature: (signature: string, secret: string, pubkey: string) => boolean;
 
+// @public @deprecated (undocumented)
+export function verifyP2PKSig(proof: Proof): boolean;
+
 // @public
-export function verifyP2PKSig(proof: Proof, logger?: Logger, message?: string): boolean;
+export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
 // @public (undocumented)
 export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
-
-// @public
-export const verifySignature: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public
 export class Wallet {

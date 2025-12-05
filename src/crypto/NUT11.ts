@@ -1,7 +1,7 @@
 import { type PrivKey, bytesToHex } from '@noble/curves/utils';
 import { schnorr } from '@noble/curves/secp256k1';
 import { type P2PKWitness, type Proof } from '../model/types';
-import { hasRequiredWitnesses, signMessage, verifySignature } from './core';
+import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage } from './core';
 import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OutputDataLike } from '../model/OutputData';
@@ -20,6 +20,17 @@ import {
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
+
+export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
+
+export interface P2PKVerificationResult {
+	success: boolean;
+	path: P2PKSpendingPath;
+	lockState: LockState;
+	requiredSigners: number;
+	eligibleSigners: number;
+	receivedSigners: string[]; // hex pubkeys that actually signed
+}
 
 // ------------------------------
 // NUT-11 Secrets
@@ -63,8 +74,8 @@ export function parseP2PKSecret(secret: string | Uint8Array | Secret): Secret {
  * Returns the expected witness public keys from a NUT-11 P2PK secret.
  *
  * @remarks
- * Does not tell you the pathway (Locktime or Refund MultiSig), only the keys that CAN sign. If no
- * keys are returned, the proof is unlocked.
+ * Does not tell you the pathway (Locktime or Refund MultiSig), only the keys that CAN currently
+ * sign. If no keys are returned, the proof is unlocked.
  * @param secretStr - The NUT-11 P2PK secret.
  * @returns Array of public keys or empty array.
  * @throws If secret is not P2PK.
@@ -167,8 +178,10 @@ export function getP2PKLockState(
 /**
  * Returns the number of Locktime signatures required for a NUT-11 P2PK secret.
  *
+ * @remarks
+ * Returns `0` if the proof is unlocked and spendable by anyone (locktime EXPIRED, no refund keys).
  * @param secret - The NUT-11 P2PK secret.
- * @returns Number of Locktime signatories (n_sigs) required or 0 if unlocked.
+ * @returns Number of Locktime signatories (n_sigs) required or `0` if unlocked.
  * @throws If secret is not P2PK.
  */
 export function getP2PKNSigs(secret: string | Secret): number {
@@ -176,7 +189,7 @@ export function getP2PKNSigs(secret: string | Secret): number {
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	// Locking applies except when NO refund keys AND lock is expired
 	if (!refundKeys.length && lockState == 'EXPIRED') {
-		return 0; // lock inactive
+		return 0; // proof unlocked
 	}
 	return getTagInt(secret, 'n_sigs') ?? 1;
 }
@@ -184,8 +197,12 @@ export function getP2PKNSigs(secret: string | Secret): number {
 /**
  * Returns the number of Refund signatures required for a NUT-11 P2PK secret.
  *
+ * @remarks
+ * Returns `0` if the refund lock is currently inactive.
+ *
+ * Proof may still be locked - use: getP2PKNSigs() to check!
  * @param secret - The NUT-11 P2PK secret.
- * @returns Number of Refund signatories (n_sigs_refund) required, or 0 if lock is inactive.
+ * @returns Number of Refund signatories (n_sigs_refund) required, or `0` if lock is inactive.
  * @throws If secret is not P2PK.
  */
 export function getP2PKNSigsRefund(secret: string | Secret): number {
@@ -195,7 +212,7 @@ export function getP2PKNSigsRefund(secret: string | Secret): number {
 	if (refundKeys.length && lockState == 'EXPIRED') {
 		return getTagInt(secret, 'n_sigs_refund') ?? 1;
 	}
-	return 0; // lock inactive
+	return 0; // refund lock inactive
 }
 
 /**
@@ -297,7 +314,7 @@ export function signP2PKProof(proof: Proof, privateKey: string, message?: string
 	// Check if the public key has already signed
 	const signatures = getP2PKWitnessSignatures(proof.witness);
 	const alreadySigned = signatures.some((sig) => {
-		return verifySignature(sig, message, pubkey);
+		return schnorrVerifyMessage(sig, message, pubkey);
 	});
 
 	if (alreadySigned) {
@@ -305,7 +322,7 @@ export function signP2PKProof(proof: Proof, privateKey: string, message?: string
 	}
 
 	// Add new signature
-	const signature = signMessage(message, privateKey);
+	const signature = schnorrSignMessage(message, privateKey);
 	return { ...proof, witness: { signatures: [...signatures, signature] } };
 }
 
@@ -331,7 +348,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 	// See if any of the signatures belong to this pubkey. We need to do this
 	// as Schnorr signatures are non-deterministic (see: signMessage)
 	return signatures.some((sig) => {
-		return verifySignature(sig, message, pubkey);
+		return schnorrVerifyMessage(sig, message, pubkey);
 	});
 }
 
@@ -343,17 +360,23 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
  * 1. Normal path: signatures from the main pubkeys (always valid)
  * 2. Refund path: signatures from refund pubkeys (only valid after locktime)
  *
+ * In addition, if the lock has expired and no refund keys are present, the proof is considered
+ * unlocked and spendable without witness signatures.
+ *
+ * @remarks
+ * Returns a detailed P2PKVerificationResult showing the conditions. If you just want a boolean
+ * result, use isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
  * @param message - Optional. The message to sign (for SIG_ALL)
- * @returns True if the witness threshold was reached, false otherwise.
+ * @returns A P2PKVerificationResult describing the spending outcome.
  * @throws If verification is impossible.
  */
-export function verifyP2PKSig(
+export function verifyP2PKSpendingConditions(
 	proof: Proof,
 	logger: Logger = NULL_LOGGER,
 	message?: string,
-): boolean {
+): P2PKVerificationResult {
 	// Check if message is needed
 	if (isP2PKSigAll([proof]) && !message) {
 		logger.error('Cannot verify a SIG_ALL proof without the message to sign');
@@ -364,22 +387,31 @@ export function verifyP2PKSig(
 	message = message ?? proof.secret; // default message is proof secret
 	const secret: Secret = parseP2PKSecret(proof.secret);
 	const signatures = getP2PKWitnessSignatures(proof.witness);
+	const lockState: LockState = getP2PKLockState(secret);
+	const mainKeys = getP2PKWitnessPubkeys(secret);
+	const nsigs = getP2PKNSigs(secret);
+	const mainSigners = getValidSigners(signatures, message, mainKeys);
+	const resultBase = {
+		success: true,
+		path: 'MAIN' as P2PKSpendingPath,
+		lockState,
+		requiredSigners: nsigs,
+		eligibleSigners: mainKeys.length,
+		receivedSigners: mainSigners,
+	};
+	let result: P2PKVerificationResult = resultBase;
 
 	// Verify the normal pathway (main pubkeys)
-	const locktimeKeys = getP2PKWitnessPubkeys(secret);
-	if (locktimeKeys.length) {
-		const nSigs = getP2PKNSigs(secret);
-		if (hasRequiredWitnesses(signatures, message, locktimeKeys, nSigs)) {
-			logger.debug('Spending condition satisfied via main pubkeys');
-			return true; // verified
-		}
+	if (mainKeys.length && nsigs > 0 && mainSigners.length >= nsigs) {
+		logger.debug('Spending condition satisfied via main pubkeys', { result });
+		return result; // success, MAIN pathway
 	}
 
 	// Check locktime status, continue only if expired
-	const lockState: LockState = getP2PKLockState(secret);
 	if (lockState != 'EXPIRED') {
-		logger.debug('P2PK lock enabled, but threshold not met by main pubkeys', { lockState });
-		return false; // failed
+		result = { ...resultBase, success: false, path: 'FAILED' };
+		logger.debug('P2PK lock enabled, but threshold not met by main pubkeys', { result });
+		return result; // failed, MAIN pathway
 	}
 
 	// Verify the refund pathway
@@ -387,21 +419,46 @@ export function verifyP2PKSig(
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	if (refundKeys.length) {
 		const nSigsRefund = getP2PKNSigsRefund(secret);
-		if (hasRequiredWitnesses(signatures, message, refundKeys, nSigsRefund)) {
-			logger.debug('Spending condition satisfied via refund pubkeys');
-			return true; // verified
+		const refundSigners = getValidSigners(signatures, message, refundKeys);
+		const refundBase: P2PKVerificationResult = {
+			...resultBase,
+			path: 'REFUND',
+			requiredSigners: nSigsRefund,
+			eligibleSigners: refundKeys.length,
+			receivedSigners: refundSigners,
+		};
+		if (nSigsRefund > 0 && refundSigners.length >= nSigsRefund) {
+			result = refundBase;
+			logger.debug('Spending condition satisfied via refund pubkeys', { result });
+			return result; // success, REFUND pathway
 		}
 		// Still here?
-		logger.debug('Spending threshold not met by refund pubkeys', {
-			lockState,
-			refundKeys: refundKeys.length,
-		});
-		return false; // failed
+		result = { ...refundBase, success: false, path: 'FAILED' };
+		logger.debug('Spending threshold not met by refund pubkeys', { result });
+		return result; // failed, REFUND pathway
 	}
 
 	// No spending conditions
-	logger.debug('No refund pubkeys, anyone can spend.');
-	return true;
+	result = { ...resultBase, path: 'UNLOCKED' };
+	logger.debug('No refund pubkeys, anyone can spend.', { result });
+	return result; // success, UNLOCKED
+}
+
+/**
+ * Verify P2PK spending conditions for a single input.
+ *
+ * @param proof - The Proof to check.
+ * @param logger - Optional logger (default: NULL_LOGGER)
+ * @param message - Optional. The message to sign (for SIG_ALL)
+ * @returns True if the witness threshold was reached, false otherwise.
+ * @throws If verification is impossible.
+ */
+export function isP2PKSpendAuthorised(
+	proof: Proof,
+	logger: Logger = NULL_LOGGER,
+	message?: string,
+): boolean {
+	return verifyP2PKSpendingConditions(proof, logger, message).success;
 }
 
 // ------------------------------
@@ -581,28 +638,23 @@ export type WellKnownSecret = 'P2PK';
 /**
  * Signs a P2PK secret using Schnorr.
  *
- * @deprecated Use signMessage()
+ * @deprecated Use schnorrSignMessage()
  */
 export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
-	return signMessage(secret, privateKey);
+	return schnorrSignMessage(secret, privateKey);
 };
 
 /**
  * Verifies a Schnorr signature on a P2PK secret.
  *
- * @deprecated Use verifySignature()
+ * @deprecated Use schnorrVerifyMessage()
  */
 export const verifyP2PKSecretSignature = (
 	signature: string,
 	secret: string,
 	pubkey: string,
 ): boolean => {
-	try {
-		return verifySignature(signature, secret, pubkey);
-	} catch {
-		// ignore failures
-	}
-	return false;
+	return schnorrVerifyMessage(signature, secret, pubkey);
 };
 
 /**
@@ -610,4 +662,11 @@ export const verifyP2PKSecretSignature = (
  */
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[] {
 	return getP2PKExpectedWitnessPubkeys(secretStr);
+}
+
+/**
+ * @deprecated Use isP2PKSpendAuthorised or verifyP2PKSpendingConditions instead.
+ */
+export function verifyP2PKSig(proof: Proof): boolean {
+	return isP2PKSpendAuthorised(proof);
 }
