@@ -616,6 +616,28 @@ describe('WalletOps builders', () => {
 	// --------------------------- MeltBuilder -----------------------------------
 
 	describe('MeltBuilder', () => {
+		it('supports wallet.prepareMelt', async () => {
+			const cb = vi.fn();
+			await ops
+				.meltBolt11(melt11, proofs)
+				.privkey('12345')
+				.keyset('kid')
+				.onCountersReserved(cb)
+				.prepare();
+
+			expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
+			const [method, q, ps, cfg, maybeOT] = wallet.prepareMelt.mock.calls[0];
+
+			expect(method).toBe('bolt11');
+			expect(q).toBe(melt11);
+			expect(ps).toBe(proofs);
+
+			expect(cfg).toBeDefined();
+			expect(cfg).toMatchObject({ keysetId: 'kid' });
+			expect(typeof (cfg as MeltProofsConfig).onCountersReserved).toBe('function');
+
+			expect(maybeOT).toBeUndefined();
+		});
 		it('bolt11: calls wallet.prepareMelt and completeMelt with config only when no OutputType was set', async () => {
 			const cb = vi.fn();
 			await ops
