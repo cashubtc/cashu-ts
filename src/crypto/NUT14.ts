@@ -1,7 +1,7 @@
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/curves/utils';
 import { sha256 } from '@noble/hashes/sha2';
 import { type HTLCWitness, type Proof } from '../model/types';
-import { type Logger, NULL_LOGGER, ConsoleLogger } from '../logger';
+import { type Logger, NULL_LOGGER } from '../logger';
 import { type P2PKVerificationResult, verifyP2PKSpendingConditions } from './NUT11';
 import {
 	assertSecretKind,
@@ -24,9 +24,9 @@ import {
  * @param hash - The HTLC hash to add to Secret.data.
  * @param tags - Optional. Additional P2PK tags.
  */
-export const createHTLCsecret = (hash: string, tags?: string[][]): string => {
+export function createHTLCsecret(hash: string, tags?: string[][]): string {
 	return createSecret('HTLC', hash, tags);
-};
+}
 
 /**
  * Parse an HTLC Secret and validate NUT-10 shape.
@@ -92,7 +92,6 @@ export function verifyHTLCSpendingConditions(
 	logger: Logger = NULL_LOGGER,
 	message?: string,
 ): P2PKVerificationResult {
-	logger = new ConsoleLogger('debug');
 	// Init
 	let result: P2PKVerificationResult;
 	message = message ?? proof.secret; // default message is proof secret

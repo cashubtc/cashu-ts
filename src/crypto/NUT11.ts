@@ -1,6 +1,6 @@
 import { type PrivKey, bytesToHex } from '@noble/curves/utils';
 import { schnorr } from '@noble/curves/secp256k1';
-import { type P2PKWitness, type Proof } from '../model/types';
+import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage } from './core';
 import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
@@ -30,6 +30,14 @@ export interface P2PKVerificationResult {
 	eligibleSigners: number;
 	receivedSigners: string[]; // hex pubkeys that actually signed
 }
+
+/**
+ * @internal
+ */
+type WitnessData = {
+	preimage?: string;
+	signatures: string[];
+};
 
 // ------------------------------
 // NUT-11 Secrets
@@ -116,7 +124,7 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
 
 	// Add data field if P2PK
 	let data: string = '';
-	if (getSecretKind(secret) == 'P2PK') {
+	if (getSecretKind(secret) === 'P2PK') {
 		data = getDataField(secret);
 	}
 
@@ -191,7 +199,7 @@ export function getP2PKNSigs(secretStr: string | Secret): number {
 	const lockState: LockState = getP2PKLockState(secret);
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	// Locking applies except when NO refund keys AND lock is expired
-	if (!refundKeys.length && lockState == 'EXPIRED') {
+	if (!refundKeys.length && lockState === 'EXPIRED') {
 		return 0; // proof unlocked
 	}
 	return getTagInt(secret, 'n_sigs') ?? 1;
@@ -213,7 +221,7 @@ export function getP2PKNSigsRefund(secretStr: string | Secret): number {
 	const lockState: LockState = getP2PKLockState(secret);
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	// Refund lock applies if there are refund keys AND lock is expired
-	if (refundKeys.length && lockState == 'EXPIRED') {
+	if (refundKeys.length && lockState === 'EXPIRED') {
 		return getTagInt(secret, 'n_sigs_refund') ?? 1;
 	}
 	return 0; // refund lock inactive
@@ -238,18 +246,39 @@ export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
  * @param witness From Proof.
  * @returns Array of witness signatures.
  */
-export function getP2PKWitnessSignatures(witness: string | P2PKWitness | undefined): string[] {
-	if (!witness) return [];
-	if (typeof witness === 'string') {
-		try {
-			const parsed = JSON.parse(witness) as P2PKWitness;
-			return parsed.signatures || [];
-		} catch (e) {
-			console.error('Failed to parse witness string:', e);
-			return [];
-		}
+export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
+	return parseWitnessData(witness)?.signatures ?? [];
+}
+
+/**
+ * Normalise Proof.witness into a WitnessData object.
+ *
+ * @param witness From Proof.
+ * @returns WitnessData object or undefined.
+ * @internal
+ */
+function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
+	if (!witness) return undefined;
+	let parsed: Partial<HTLCWitness & P2PKWitness>;
+	try {
+		parsed =
+			typeof witness === 'string'
+				? (JSON.parse(witness) as Partial<HTLCWitness & P2PKWitness>)
+				: witness;
+	} catch (e) {
+		console.error('Failed to parse witness string:', e);
+		return undefined;
 	}
-	return witness.signatures || [];
+	const data: WitnessData = {
+		// always normalise signatures to an array
+		signatures: parsed.signatures ?? [],
+	};
+
+	// Only set preimage if it is a non empty string
+	if (typeof parsed.preimage === 'string' && parsed.preimage.length > 0) {
+		data.preimage = parsed.preimage;
+	}
+	return data;
 }
 
 // ------------------------------
@@ -327,7 +356,12 @@ export function signP2PKProof(proof: Proof, privateKey: string, message?: string
 
 	// Add new signature
 	const signature = schnorrSignMessage(message, privateKey);
-	return { ...proof, witness: { signatures: [...signatures, signature] } };
+	const witness = parseWitnessData(proof.witness);
+	const newWitness: WitnessData = {
+		...(witness && witness.preimage !== undefined ? { preimage: witness.preimage } : {}),
+		signatures: [...(witness?.signatures ?? []), signature],
+	};
+	return { ...proof, witness: newWitness };
 }
 
 /**
@@ -412,7 +446,7 @@ export function verifyP2PKSpendingConditions(
 	}
 
 	// Check locktime status, continue only if expired
-	if (lockState != 'EXPIRED') {
+	if (lockState !== 'EXPIRED') {
 		result = { ...resultBase, success: false, path: 'FAILED' };
 		logger.debug('P2PK lock enabled, but threshold not met by main pubkeys', { result });
 		return result; // failed, MAIN pathway

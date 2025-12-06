@@ -181,7 +181,7 @@ export function createHTLCHash(preimage?: string): {
 };
 
 // @public
-export const createHTLCsecret: (hash: string, tags?: string[][]) => string;
+export function createHTLCsecret(hash: string, tags?: string[][]): string;
 
 // @public (undocumented)
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
@@ -385,7 +385,7 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[];
 export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[];
 
 // @public
-export function getP2PKWitnessSignatures(witness: string | P2PKWitness | undefined): string[];
+export function getP2PKWitnessSignatures(witness: Proof['witness']): string[];
 
 // @public (undocumented)
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
