@@ -142,6 +142,7 @@ describe('P2PKBuilder.toOptions()', () => {
 			.requireLockSignatures(2)
 			.requireRefundSignatures(1)
 			.sigAll()
+			.addHashlock('foo')
 			.toOptions();
 
 		const rebuilt = P2PKBuilder.fromOptions(original).toOptions();

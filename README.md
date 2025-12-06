@@ -477,6 +477,7 @@ new P2PKBuilder()
   .requireRefundSignatures(n: number)     // n of m for refund keys
   .addTag(key: string, values?: string[] | string) // add single tag (eg: NutZap 'e')
   .addTags(tags: P2PKTag[]) // add multiple tags at once
+  .addHashlock(hashlock: string) // for NUT-14 "HTLC" kind secrets
   .toOptions(): P2PKOptions;
 
 P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder

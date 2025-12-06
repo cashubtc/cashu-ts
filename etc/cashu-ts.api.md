@@ -1175,6 +1175,7 @@ export const P2BK_DST: Uint8Array<ArrayBufferLike>;
 
 // @public (undocumented)
 export class P2PKBuilder {
+    addHashlock(hashlock: string): this;
     // (undocumented)
     addLockPubkey(pk: string | string[]): this;
     // (undocumented)
@@ -1209,6 +1210,7 @@ export type P2PKOptions = {
     additionalTags?: P2PKTag[];
     blindKeys?: boolean;
     sigFlag?: SigFlag;
+    hashlock?: string;
 };
 
 // @public (undocumented)

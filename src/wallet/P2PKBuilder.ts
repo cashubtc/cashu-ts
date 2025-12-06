@@ -29,6 +29,7 @@ export class P2PKBuilder {
 	private extraTags: P2PKTag[] = [];
 	private _blindKeys?: boolean;
 	private sigFlag?: SigFlag;
+	private hashlock?: string;
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
@@ -81,6 +82,14 @@ export class P2PKBuilder {
 		return this;
 	}
 
+	/**
+	 * Converts a `P2PK` output into a NUT-14 `HTLC` kind output.
+	 */
+	addHashlock(hashlock: string) {
+		this.hashlock = hashlock;
+		return this;
+	}
+
 	toOptions(): P2PKOptions {
 		const locks = Array.from(this.lockSet);
 		const refunds = Array.from(this.refundSet);
@@ -113,6 +122,7 @@ export class P2PKBuilder {
 			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
 			...(this._blindKeys ? { blindKeys: true } : {}),
 			...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
+			...(this.hashlock ? { hashlock: this.hashlock } : {}),
 		};
 
 		// Ensure the secret is valid (not too long etc)
@@ -134,6 +144,7 @@ export class P2PKBuilder {
 		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
 		if (opts.blindKeys) b.blindKeys();
 		if (opts.sigFlag == 'SIG_ALL') b.sigAll();
+		if (opts.hashlock) b.addHashlock(opts.hashlock);
 		return b;
 	}
 }

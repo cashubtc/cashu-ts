@@ -153,19 +153,30 @@ export class OutputData implements OutputDataLike {
 			1,
 			Math.min(p2pk.requiredRefundSignatures ?? 1, refundKeys.length || 1),
 		);
+		// Sanity check - we always need at least one locking key
+		if (lockKeys.length === 0) {
+			throw new Error('P2PK requires at least one pubkey');
+		}
 
 		// Init vars
-		let data = lockKeys[0];
-		let pubkeys = lockKeys.slice(1);
+		const isHTLC = typeof p2pk.hashlock === 'string' && p2pk.hashlock.length > 0;
+		let data = isHTLC ? (p2pk.hashlock as string) : lockKeys[0];
+		let pubkeys = isHTLC ? lockKeys : lockKeys.slice(1);
 		let refund = refundKeys;
 
 		// Optional key blinding (P2BK)
 		let Ehex: string | undefined;
 		if (p2pk.blindKeys) {
-			const ordered = [data, ...pubkeys, ...refundKeys];
+			const ordered = [...lockKeys, ...refundKeys];
 			const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, keysetId);
-			data = blinded[0];
-			pubkeys = blinded.slice(1, lockKeys.length);
+			if (isHTLC) {
+				// hashlock is in data, all locking keys into pubkeys
+				pubkeys = blinded.slice(0, lockKeys.length);
+			} else {
+				// first locking key in data, rest into pubkeys
+				data = blinded[0];
+				pubkeys = blinded.slice(1, lockKeys.length);
+			}
 			refund = blinded.slice(lockKeys.length);
 			Ehex = _E;
 		}
@@ -206,11 +217,12 @@ export class OutputData implements OutputDataLike {
 		}
 
 		// Construct secret
+		const kind = isHTLC ? 'HTLC' : 'P2PK';
 		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
-			'P2PK',
+			kind,
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: data,
+				data,
 				tags,
 			},
 		];

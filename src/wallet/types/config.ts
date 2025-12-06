@@ -115,6 +115,7 @@ export type P2PKOptions = {
 	additionalTags?: P2PKTag[];
 	blindKeys?: boolean; // default false
 	sigFlag?: SigFlag;
+	hashlock?: string; // NUT-14 (HTLC)
 };
 
 export type P2PKTag = [key: string, ...values: string[]];
