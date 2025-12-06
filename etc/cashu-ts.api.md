@@ -279,6 +279,9 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string;
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
+export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined;
+
+// @public
 export type GetInfoResponse = {
     name: string;
     pubkey: string;
@@ -361,25 +364,25 @@ export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): stri
 export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[];
 
 // @public
-export function getP2PKLockState(secret: Secret | string, nowSeconds?: number): LockState;
+export function getP2PKLockState(secretStr: Secret | string, nowSeconds?: number): LockState;
 
 // @public
-export function getP2PKLocktime(secret: string | Secret): number;
+export function getP2PKLocktime(secretStr: string | Secret): number;
 
 // @public
-export function getP2PKNSigs(secret: string | Secret): number;
+export function getP2PKNSigs(secretStr: string | Secret): number;
 
 // @public
-export function getP2PKNSigsRefund(secret: string | Secret): number;
+export function getP2PKNSigsRefund(secretStr: string | Secret): number;
 
 // @public
-export function getP2PKSigFlag(secret: string | Secret): SigFlag;
+export function getP2PKSigFlag(secretStr: string | Secret): SigFlag;
 
 // @public
-export function getP2PKWitnessPubkeys(secret: string | Secret): string[];
+export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[];
 
 // @public
-export function getP2PKWitnessRefundkeys(secret: string | Secret): string[];
+export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[];
 
 // @public
 export function getP2PKWitnessSignatures(witness: string | P2PKWitness | undefined): string[];
@@ -459,6 +462,9 @@ export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>,
 
 // @public
 export function invoiceHasAmountInHRP(invoice: string): boolean;
+
+// @public
+export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public (undocumented)
 export function isObj(v: unknown): v is object;
@@ -1233,6 +1239,9 @@ export type P2PKWitness = {
 };
 
 // @public
+export function parseHTLCSecret(secret: string | Secret): Secret;
+
+// @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
 
 // @public @deprecated (undocumented)
@@ -1681,6 +1690,12 @@ export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: Wei
 export const verifyDLEQProof_reblind: (secret: Uint8Array, // secret
 dleq: DLEQ, C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
 A: WeierstrassPoint<bigint>) => boolean;
+
+// @public
+export function verifyHTLCHash(preimage: string, hash: string): boolean;
+
+// @public
+export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
 // @public @deprecated
 export function verifyKeysetId(keys: MintKeys): boolean;

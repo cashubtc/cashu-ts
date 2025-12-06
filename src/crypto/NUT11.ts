@@ -14,7 +14,6 @@ import {
 	createSecret,
 	type Secret,
 	getSecretKind,
-	parseSecret,
 } from './NUT10';
 
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
@@ -63,7 +62,8 @@ export function parseP2PKSecret(secret: string | Uint8Array | Secret): Secret {
 	if (secret instanceof Uint8Array) {
 		secret = new TextDecoder().decode(secret);
 	}
-	return assertSecretKind('P2PK', secret);
+	// HTLC extends P2PK, so we include it in our expected list.
+	return assertSecretKind(['P2PK', 'HTLC'], secret);
 }
 
 // ------------------------------
@@ -82,8 +82,8 @@ export function parseP2PKSecret(secret: string | Uint8Array | Secret): Secret {
  */
 export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[] {
 	try {
-		const secret: Secret = parseP2PKSecret(secretStr);
-		const lockState: LockState = getP2PKLockState(secretStr);
+		const secret: Secret = parseP2PKSecret(secretStr); // decode JSON once
+		const lockState: LockState = getP2PKLockState(secret);
 		const locktimeKeys = getP2PKWitnessPubkeys(secret);
 		const refundKeys = getP2PKWitnessRefundkeys(secret);
 
@@ -107,12 +107,12 @@ export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): strin
  * Returns ALL locktime witnesses from a NUT-11 P2PK secret NB: Does not specify if they are
  * expected to sign - see: getP2PKExpectedWitnessPubkeys()
  *
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @returns Array of public key(s or empty array.
  * @throws If secret is not P2PK.
  */
-export function getP2PKWitnessPubkeys(secret: string | Secret): string[] {
-	secret = parseSecret(secret); // decode JSON once
+export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
+	const secret = parseP2PKSecret(secretStr); // decode JSON once
 
 	// Add data field if P2PK
 	let data: string = '';
@@ -130,23 +130,24 @@ export function getP2PKWitnessPubkeys(secret: string | Secret): string[] {
  * Returns ALL refund witnesses from a NUT-11 P2PK secret NB: Does not specify if they are expected
  * to sign - see: getP2PKExpectedWitnessPubkeys()
  *
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @returns Array of public keys or empty array.
  * @throws If secret is not P2PK.
  */
-export function getP2PKWitnessRefundkeys(secret: string | Secret): string[] {
+export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
+	const secret = parseP2PKSecret(secretStr);
 	return getTag(secret, 'refund') ?? [];
 }
 
 /**
  * Returns the locktime from a NUT-11 P2PK secret or Infinity if no locktime.
  *
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @returns The locktime unix timestamp or Infinity (permanent lock)
  * @throws If secret is not P2PK.
  */
-export function getP2PKLocktime(secret: string | Secret): number {
-	assertSecretKind('P2PK', secret);
+export function getP2PKLocktime(secretStr: string | Secret): number {
+	const secret = parseP2PKSecret(secretStr);
 	const ts = getTagInt(secret, 'locktime');
 	if (ts === undefined || !Number.isFinite(ts) || ts <= 0) {
 		return Infinity;
@@ -161,13 +162,14 @@ export function getP2PKLocktime(secret: string | Secret): number {
  * - ACTIVE: now < locktime.
  * - EXPIRED: now >= locktime.
  *
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @param nowSeconds - Optional. The unix timestamp in seconds (Default: now)
  */
 export function getP2PKLockState(
-	secret: Secret | string,
+	secretStr: Secret | string,
 	nowSeconds: number = Math.floor(Date.now() / 1000),
 ): LockState {
+	const secret = parseP2PKSecret(secretStr);
 	const locktime = getP2PKLocktime(secret);
 	if (!Number.isFinite(locktime)) {
 		return 'PERMANENT';
@@ -180,11 +182,12 @@ export function getP2PKLockState(
  *
  * @remarks
  * Returns `0` if the proof is unlocked and spendable by anyone (locktime EXPIRED, no refund keys).
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @returns Number of Locktime signatories (n_sigs) required or `0` if unlocked.
  * @throws If secret is not P2PK.
  */
-export function getP2PKNSigs(secret: string | Secret): number {
+export function getP2PKNSigs(secretStr: string | Secret): number {
+	const secret = parseP2PKSecret(secretStr);
 	const lockState: LockState = getP2PKLockState(secret);
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	// Locking applies except when NO refund keys AND lock is expired
@@ -201,11 +204,12 @@ export function getP2PKNSigs(secret: string | Secret): number {
  * Returns `0` if the refund lock is currently inactive.
  *
  * Proof may still be locked - use: getP2PKNSigs() to check!
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @returns Number of Refund signatories (n_sigs_refund) required, or `0` if lock is inactive.
  * @throws If secret is not P2PK.
  */
-export function getP2PKNSigsRefund(secret: string | Secret): number {
+export function getP2PKNSigsRefund(secretStr: string | Secret): number {
+	const secret = parseP2PKSecret(secretStr);
 	const lockState: LockState = getP2PKLockState(secret);
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	// Refund lock applies if there are refund keys AND lock is expired
@@ -218,12 +222,12 @@ export function getP2PKNSigsRefund(secret: string | Secret): number {
 /**
  * Returns the sigflag from a NUT-11 P2PK secret.
  *
- * @param secret - The NUT-11 P2PK secret.
+ * @param secretStr - The NUT-11 P2PK secret.
  * @returns The sigflag or 'SIG_INPUTS' (default)
  * @throws If secret is not P2PK.
  */
-export function getP2PKSigFlag(secret: string | Secret): SigFlag {
-	assertSecretKind('P2PK', secret);
+export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
+	const secret = parseP2PKSecret(secretStr);
 	const flag = getTagScalar(secret, 'sigflag');
 	return flag === 'SIG_ALL' ? 'SIG_ALL' : 'SIG_INPUTS';
 }
@@ -504,14 +508,13 @@ export function assertSigAllInputs(inputs: Proof[]): void {
 	if (inputs.length === 0) throw new Error('No proofs');
 	// Check first proof
 	const first = parseP2PKSecret(inputs[0].secret);
-	if (first[0] !== 'P2PK') throw new Error('Not a P2PK secret');
 	if (getP2PKSigFlag(first) !== 'SIG_ALL') throw new Error('First proof is not SIG_ALL');
 	const data0 = first[1].data;
 	const tags0 = JSON.stringify(first[1].tags ?? []);
 	// Compare remaining proofs
 	for (let i = 1; i < inputs.length; i++) {
 		const si = parseP2PKSecret(inputs[i].secret);
-		if (si[0] !== 'P2PK') throw new Error(`Proof #${i + 1} is not P2PK`);
+		if (si[0] !== first[0]) throw new Error(`Proof #${i + 1} is not ${first[0]}`);
 		if (getP2PKSigFlag(si) !== 'SIG_ALL') throw new Error(`Proof #${i + 1} is not SIG_ALL`);
 		if (si[1].data !== data0) throw new Error('SIG_ALL inputs must share identical Secret.data');
 		if (JSON.stringify(si[1].tags ?? []) !== tags0)
@@ -521,6 +524,8 @@ export function assertSigAllInputs(inputs: Proof[]): void {
 
 /**
  * Message aggregation for SIG_ALL.
+ *
+ * NOTE: Use `assertSigAllInputs()` to ensure valid message inputs.
  *
  * @remarks
  * Melt transactions MUST include the quoteId.
