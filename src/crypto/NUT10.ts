@@ -56,8 +56,9 @@ export function parseSecret(secret: string | Secret): Secret {
 	if (
 		!Array.isArray(parsed) ||
 		parsed.length !== 2 ||
-		typeof parsed[0] !== 'string' ||
-		typeof parsed[1] !== 'object' ||
+		typeof parsed[0] !== 'string' || // kind
+		typeof parsed[1] !== 'object' || // data
+		parsed[0].trim().length === 0 ||
 		parsed[1] === null
 	) {
 		throw new Error('Invalid NUT-10 secret');
@@ -65,6 +66,19 @@ export function parseSecret(secret: string | Secret): Secret {
 	const [kind, data] = parsed as [SecretKind, Record<string, unknown>];
 	if (typeof data.nonce !== 'string' || typeof data.data !== 'string') {
 		throw new Error('Invalid NUT-10 secret nonce / data');
+	}
+	if (data.tags) {
+		// Check data.tags is an array
+		if (!Array.isArray(data.tags)) {
+			throw new Error('Invalid NUT-10 secret tags');
+		}
+		// Check individual tags are non-empty arrays of strings
+		const invalid = data.tags.some(
+			(t) => !Array.isArray(t) || t.length === 0 || t.some((tt) => typeof tt !== 'string'),
+		);
+		if (invalid) {
+			throw new Error('Invalid NUT-10 tag(s)');
+		}
 	}
 
 	return [

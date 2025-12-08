@@ -47,6 +47,22 @@ describe('NUT10 module core functions', () => {
 		}).toThrow(/Invalid NUT-10 secret/);
 	});
 
+	test('parseSecret throws for invalid NUT-10 secret (tags not array)', () => {
+		const secretStr =
+			'["HTLC",{"nonce":"c9b0fabb8007c0db4bef64d5d128cdcf3c79e8bb780c3294adf4c88e96c32647","data":"123","tags":{"pubkeys":"039e6ec7e922abb4162235b3a42965eb11510b07b7461f6b1a17478b1c9c64d100","locktime":"1"}}]';
+		expect(() => {
+			parseHTLCSecret(secretStr);
+		}).toThrow(/Invalid NUT-10 secret/);
+	});
+
+	test('parseSecret throws for invalid NUT-10 secret (tags not string)', () => {
+		const secretStr =
+			'["HTLC",{"nonce":"c9b0fabb8007c0db4bef64d5d128cdcf3c79e8bb780c3294adf4c88e96c32647","data":"123","tags":[["pubkeys","039e6ec7e922abb4162235b3a42965eb11510b07b7461f6b1a17478b1c9c64d100"],["locktime","1"],["refund","02ce1bbd2c9a4be8029c9a6435ad601c45677f5cde81f8a7f0ed535e0039d0eb6c","03c43c00ff57f63cfa9e732f0520c342123e21331d0121139f1b636921eeec095f"],["n_sigs_refund",2],["sigflag","SIG_ALL"]]}]';
+		expect(() => {
+			parseHTLCSecret(secretStr);
+		}).toThrow(/Invalid NUT-10 tag/);
+	});
+
 	test('hasTag finds tags', () => {
 		expect(hasTag(proof.secret, 'locktime')).toBeTruthy();
 		expect(hasTag(proof.secret, 'n_sigs_refund')).toBeTruthy();
