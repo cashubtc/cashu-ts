@@ -1293,6 +1293,15 @@ class PaymentRequest_2 {
 export { PaymentRequest_2 as PaymentRequest }
 
 // @public (undocumented)
+export type PaymentRequestPayload = {
+    id?: string;
+    memo?: string;
+    unit: string;
+    mint: string;
+    proofs: Proof[];
+};
+
+// @public (undocumented)
 export type PaymentRequestTransport = {
     type: PaymentRequestTransportType;
     target: string;

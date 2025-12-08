@@ -68,6 +68,7 @@ export * from './utils/core';
 export { PaymentRequest } from './model/PaymentRequest';
 export { PaymentRequestTransportType } from './wallet/types';
 export type {
+	PaymentRequestPayload,
 	PaymentRequestTransport,
 	RawPaymentRequest,
 	RawTransport,
