@@ -74,7 +74,8 @@ export function parseSecret(secret: string | Secret): Secret {
 		}
 		// Check individual tags are non-empty arrays of strings
 		const invalid = data.tags.some(
-			(t) => !Array.isArray(t) || t.length === 0 || t.some((tt) => typeof tt !== 'string'),
+			(t) =>
+				!Array.isArray(t) || t.length === 0 || t.some((tt) => typeof tt !== 'string' || !tt.length),
 		);
 		if (invalid) {
 			throw new Error('Invalid NUT-10 tag(s)');

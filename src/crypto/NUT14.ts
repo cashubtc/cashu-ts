@@ -51,14 +51,14 @@ export function parseHTLCSecret(secret: string | Secret): Secret {
  * @throws If the preimage supplied is not a 64-char hex string.
  */
 export function createHTLCHash(preimage?: string): { hash: string; preimage: string } {
-  const hasPreimage = preimage !== undefined;
-  if (hasPreimage && !/^[0-9a-f]{64}$/i.test(preimage)) {
-    throw new Error('Preimage must be a 64 character hexadecimal string (32 bytes).');
-  }
-  // Create hash
-  const piBytes = hasPreimage ? hexToBytes(preimage) : randomBytes(32);
-  const hash = bytesToHex(sha256(piBytes));
-  return { hash, preimage: bytesToHex(piBytes) };
+	const hasPreimage = preimage !== undefined;
+	if (hasPreimage && !/^[0-9a-f]{64}$/i.test(preimage)) {
+		throw new Error('Preimage must be a 64 character hexadecimal string (32 bytes).');
+	}
+	// Create hash
+	const piBytes = hasPreimage ? hexToBytes(preimage) : randomBytes(32);
+	const hash = bytesToHex(sha256(piBytes));
+	return { hash, preimage: bytesToHex(piBytes) };
 }
 
 /**
