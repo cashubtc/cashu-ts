@@ -21,19 +21,19 @@ export class KeyChain {
 	) {
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this.unit = unit;
+		// Optional preload
 		if (cachedKeysets && cachedKeys) {
-			// Normalize and preload if both are provided
-			const arrayOfKeys = Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys];
-			this.buildKeychain(cachedKeysets, arrayOfKeys);
+			this.loadFromCache(cachedKeysets, cachedKeys);
 		}
 	}
 
 	/**
-	 * Single entry point to load or refresh keysets and keys for the unit.
+	 * Asynchronously load keysets and keys from the mint.
 	 *
 	 * @remarks
-	 * Fetches in parallel, filters by unit, assigns keys.
-	 * @param forceRefresh If true, refetch even if loaded.
+	 * Intended for callers that want the freshest data from the mint and can use an asynchronous
+	 * path.
+	 * @param forceRefresh If true, re-fetches data even if already loaded.
 	 */
 	async init(forceRefresh?: boolean): Promise<void> {
 		// Skip if already loaded, unless force
@@ -52,6 +52,21 @@ export class KeyChain {
 	}
 
 	/**
+	 * Synchronously load keysets and keys from cached data.
+	 *
+	 * @remarks
+	 * Does not hit the network. Intended for callers that already have MintKeyset and MintKeys data
+	 * and need a synchronous path.
+	 */
+	loadFromCache(cachedKeysets: MintKeyset[], cachedKeys: MintKeys[] | MintKeys): void {
+		const arrayOfKeys = Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys];
+		this.buildKeychain(cachedKeysets, arrayOfKeys);
+
+		// Smoke test
+		this.getCheapestKeyset();
+	}
+
+	/**
 	 * Builds keychain from Mint Keyset and Keys data.
 	 *
 	 * @param allKeysets Keyset data from mint.getKeySets() API.
@@ -63,6 +78,9 @@ export class KeyChain {
 
 		// Filter and create Keysets for unit
 		const unitKeysets = allKeysets.filter((k: MintKeyset) => k.unit === this.unit);
+		if (!unitKeysets.length) {
+			throw new Error(`No Keysets found for unit: ${this.unit}`);
+		}
 		unitKeysets.forEach((k: MintKeyset) => {
 			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk, k.final_expiry);
 		});

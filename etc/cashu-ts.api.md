@@ -498,6 +498,7 @@ export class KeyChain {
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
+    loadFromCache(cachedKeysets: MintKeyset[], cachedKeys: MintKeys[] | MintKeys): void;
 }
 
 // @public
@@ -804,6 +805,8 @@ export type MintContactInfo = {
 // @public (undocumented)
 export class MintInfo {
     constructor(info: GetInfoResponse);
+    // (undocumented)
+    get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
     // (undocumented)
@@ -1784,9 +1787,10 @@ export class Wallet {
         pending: Proof[];
         spent: Proof[];
     }>;
-    readonly keyChain: KeyChain;
+    get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
+    loadMintFromCache(mintInfo: GetInfoResponse, keysets: MintKeyset[], keys: MintKeys[] | MintKeys): void;
     // (undocumented)
     get logger(): Logger;
     // @deprecated (undocumented)

@@ -194,7 +194,7 @@ describe('KeyChain initialization', () => {
 		);
 
 		const keyChain = new KeyChain(mint, unit);
-		await expect(keyChain.init()).rejects.toThrow('KeyChain not initialized');
+		await expect(keyChain.init()).rejects.toThrow(/No Keysets found for unit/);
 	});
 
 	test('should preload from cache and match original getCache', async () => {

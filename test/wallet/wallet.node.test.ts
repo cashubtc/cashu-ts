@@ -285,7 +285,7 @@ describe('test wallet init', () => {
 
 	test('should throw when accessing getters before loadMint', () => {
 		const wallet = new Wallet(mintUrl, { unit });
-		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
+		expect(() => wallet.getMintInfo()).toThrow(/Mint info not initialized; call loadMint/);
 		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
 		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
 	});
@@ -373,6 +373,19 @@ describe('test info', () => {
 			],
 		});
 		expect(info).toEqual(new MintInfo(mintInfoResp));
+		expect(info.cache).toEqual(mintInfoResp);
+		expect(info.contact).toEqual(mintInfoResp.contact);
+		expect(info.description).toEqual(mintInfoResp.description);
+		expect(info.description_long).toEqual(mintInfoResp.description_long);
+		expect(info.name).toEqual(mintInfoResp.name);
+		expect(info.pubkey).toEqual(mintInfoResp.pubkey);
+		expect(info.nuts).toEqual(mintInfoResp.nuts);
+		expect(info.version).toEqual(mintInfoResp.version);
+		expect(info.motd).toEqual(mintInfoResp.motd);
+		expect(info.supportsBolt12Description).toBeFalsy();
+		expect(() => {
+			info.isSupported(1 as any);
+		}).toThrow(/nut is not supported/);
 	});
 	test('test info with deprecated contact field', async () => {
 		// mintInfoRespDeprecated is the same as mintInfoResp but with the contact field in the old format
@@ -417,8 +430,8 @@ describe('test info', () => {
 			'sat-quote',
 		);
 
-		const usdWallet = new Wallet(mint, { ...MINTCACHE, unit: 'usd' });
-		await usdWallet.loadMint();
+		const usdWallet = new Wallet(mint, { unit: 'usd' });
+		usdWallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
 		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
 	});
 	test('supportsAmountless() correctly detects amountless option in melt methods', async () => {
@@ -3041,7 +3054,7 @@ describe('bindKeyset & withKeyset', () => {
 		// Next call during loadMint(true) -> loses keys
 		spy.mockReturnValueOnce(ks(boundId, unit, false));
 
-		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys after refresh');
+		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys');
 	});
 });
 
