@@ -529,6 +529,7 @@ class Wallet {
 			secretsPolicy: this._secretsPolicy,
 			logger: this._logger,
 			counterSource: opts?.counterSource ?? this._counterSource,
+			...this._keyChain.getCache(),
 		});
 		// Load mint info from our caches
 		const { keysets, keys } = this._keyChain.getCache();
