@@ -15,7 +15,6 @@ import type {
 	DeprecatedToken,
 	Keys,
 	MintKeys,
-	MintKeyset,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -25,7 +24,6 @@ import type {
 	V4ProofTemplate,
 } from '../model/types';
 import { Bytes } from './Bytes';
-import { type Keyset } from '../wallet';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -391,7 +389,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * @param token An encoded cashu token (cashuAey...)
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
+export function getDecodedToken<T extends { id: string }>(tokenString: string, keysets?: T[]) {
 	// remove prefixes
 	const token = removePrefix(tokenString);
 	const tokenObj = handleTokens(token);
@@ -650,12 +648,7 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Check that the keyset hashes to the specified ID.
- *
- * @deprecated Now part of Keyset class.
- * @param keys The keyset to be verified.
- * @returns True if the verification was successful, false otherwise.
- * @throws Error if the keyset ID version is unrecognized.
+ * @deprecated Use Keyset class instead: Keyset.verify()
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
 	const isBase64 = isBase64String(keys.id);
@@ -676,10 +669,10 @@ export function verifyKeysetId(keys: MintKeys): boolean {
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
  */
-function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): Proof[] {
-	const newProofs = [];
+function mapShortKeysetIds<T extends { id: string }>(proofs: Proof[], keysets?: T[]): Proof[] {
+	const newProofs: Proof[] = [];
 	for (const proof of proofs) {
-		let idBytes;
+		let idBytes: Uint8Array;
 		try {
 			idBytes = hexToBytes(proof.id);
 		} catch {
@@ -725,7 +718,7 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): 
  * @returns True if verification succeeded, false otherwise.
  * @throws Error if @param proof does not match any key in @param keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
+export function hasValidDleq<T extends { keys: Keys }>(proof: Proof, keyset: T): boolean {
 	if (proof.dleq == undefined) {
 		return false;
 	}

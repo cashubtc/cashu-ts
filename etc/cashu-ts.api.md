@@ -258,7 +258,9 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 export function getDataField(secret: Secret | string): string;
 
 // @public
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]): Token;
+export function getDecodedToken<T extends {
+    id: string;
+}>(tokenString: string, keysets?: T[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
@@ -436,7 +438,9 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 export function hasTag(secret: Secret | string, key: string): boolean;
 
 // @public
-export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
+export function hasValidDleq<T extends {
+    keys: Keys;
+}>(proof: Proof, keyset: T): boolean;
 
 // @public
 export function hexToNumber(hex: string): bigint;
@@ -509,11 +513,13 @@ export type Keys = {
 // @public (undocumented)
 export class Keyset {
     constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number, final_expiry?: number);
+    // @deprecated (undocumented)
     get active(): boolean;
     // (undocumented)
     get expiry(): number | undefined;
     // (undocumented)
     get fee(): number;
+    // @deprecated (undocumented)
     get final_expiry(): number | undefined;
     // (undocumented)
     get hasHexId(): boolean;
@@ -521,6 +527,7 @@ export class Keyset {
     get hasKeys(): boolean;
     // (undocumented)
     get id(): string;
+    // @deprecated (undocumented)
     get input_fee_ppk(): number;
     // (undocumented)
     get isActive(): boolean;
@@ -1711,7 +1718,7 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean;
 // @public
 export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
-// @public @deprecated
+// @public @deprecated (undocumented)
 export function verifyKeysetId(keys: MintKeys): boolean;
 
 // @public (undocumented)

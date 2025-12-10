@@ -1,4 +1,4 @@
-import { isValidHex, deriveKeysetId } from '../utils';
+import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
 import { type MintKeyset, type MintKeys } from '../model/types';
 import { hexToBytes } from '@noble/curves/utils';
 
@@ -61,21 +61,21 @@ export class Keyset {
 	}
 
 	/**
-	 * For compat with v2 MintKeyset type.
+	 * @deprecated Use isActive instead.
 	 */
 	get active(): boolean {
 		return this._active;
 	}
 
 	/**
-	 * For compat with v2 MintKeyset type.
+	 * @deprecated Use fee instead.
 	 */
 	get input_fee_ppk(): number {
 		return this._input_fee_ppk ?? 0;
 	}
 
 	/**
-	 * For compat with v2 MintKeyset type.
+	 * @deprecated Use expiry instead.
 	 */
 	get final_expiry(): number | undefined {
 		return this._final_expiry;
@@ -121,8 +121,15 @@ export class Keyset {
 		if (!this.hasKeys) {
 			return false;
 		}
-		const versionByte = hexToBytes(this._id)[0];
-		const derivedId = deriveKeysetId(this._keys, this._unit, this._final_expiry, versionByte);
+		const isDeprecatedBase64 = isBase64String(this._id) && !this.hasHexId;
+		const versionByte = this.hasHexId ? hexToBytes(this._id)[0] : 0;
+		const derivedId = deriveKeysetId(
+			this._keys,
+			this._unit,
+			this._final_expiry,
+			versionByte,
+			isDeprecatedBase64,
+		);
 		return derivedId === this._id;
 	}
 }
