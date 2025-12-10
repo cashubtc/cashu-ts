@@ -1,6 +1,11 @@
 import { Keyset } from './Keyset';
 import { Mint } from '../mint';
-import type { MintKeyset, MintKeys, MintAllKeysets, MintActiveKeys } from '../model/types/keyset';
+import type {
+	MintKeyset,
+	MintKeys,
+	GetKeysetsResponse,
+	GetKeysResponse,
+} from '../model/types/keyset';
 import { isValidHex } from '../utils';
 
 /**
@@ -43,7 +48,7 @@ export class KeyChain {
 		}
 
 		// Fetch keys and keysets in parallel
-		const [allKeysetsResponse, allKeysResponse]: [MintAllKeysets, MintActiveKeys] =
+		const [allKeysetsResponse, allKeysResponse]: [GetKeysetsResponse, GetKeysResponse] =
 			await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
 		this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);

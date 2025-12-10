@@ -359,6 +359,16 @@ export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[]
 // @public (undocumented)
 export const getKeysetIdInt: (keysetId: string) => bigint;
 
+// @public
+export type GetKeysetsResponse = {
+    keysets: MintKeyset[];
+};
+
+// @public
+export type GetKeysResponse = {
+    keysets: MintKeys[];
+};
+
 // @public @deprecated (undocumented)
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[];
 
@@ -754,8 +764,8 @@ export class Mint {
     createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     disconnectWebSocket(): void;
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
-    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
-    getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
+    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
+    getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse>;
     getLazyMintInfo(): Promise<MintInfo>;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
@@ -780,15 +790,11 @@ export class Mint {
     get webSocketConnection(): WSConnection | undefined;
 }
 
-// @public
-export type MintActiveKeys = {
-    keysets: MintKeys[];
-};
+// @public @deprecated (undocumented)
+export type MintActiveKeys = GetKeysResponse;
 
-// @public
-export type MintAllKeysets = {
-    keysets: MintKeyset[];
-};
+// @public @deprecated (undocumented)
+export type MintAllKeysets = GetKeysetsResponse;
 
 // @public
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {

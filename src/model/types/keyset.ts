@@ -5,9 +5,9 @@
 export type Keys = { [amount: number]: string };
 
 /**
- * An array of mint keysets.
+ * NUT-01 Keys API response (/v1/keys)
  */
-export type MintActiveKeys = {
+export type GetKeysResponse = {
 	/**
 	 * Keysets.
 	 */
@@ -15,9 +15,9 @@ export type MintActiveKeys = {
 };
 
 /**
- * An array of mint keyset entries.
+ * NUT-02 Keysets API response (/v1/keysets)
  */
-export type MintAllKeysets = {
+export type GetKeysetsResponse = {
 	/**
 	 * Keysets.
 	 */

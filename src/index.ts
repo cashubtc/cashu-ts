@@ -45,6 +45,7 @@ export type * from './mint/types/payloads';
 export type * from './mint/types/responses';
 
 // Shared models & primitives
+export type * from './model/types/_deprecated';
 export type * from './model/types/blinded';
 export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
