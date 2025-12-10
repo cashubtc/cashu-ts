@@ -523,14 +523,17 @@ class Wallet {
 	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
 	public withKeyset(id: string, opts?: { counterSource?: CounterSource }): Wallet {
-		return new Wallet(this.mint, {
+		const newWallet = new Wallet(this.mint, {
 			keysetId: id,
 			bip39seed: this._seed,
 			secretsPolicy: this._secretsPolicy,
 			logger: this._logger,
 			counterSource: opts?.counterSource ?? this._counterSource,
-			...this._keyChain.getCache(),
 		});
+		// Load mint info from our caches
+		const { keysets, keys } = this._keyChain.getCache();
+		newWallet.loadMintFromCache(this.getMintInfo().cache, keysets, keys);
+		return newWallet;
 	}
 
 	/**

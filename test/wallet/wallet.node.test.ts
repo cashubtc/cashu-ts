@@ -32,6 +32,7 @@ import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
 import { NULL_LOGGER } from '../../src/logger';
 import { MINTCACHE } from '../consts';
+import { EphemeralCounterSource } from '../../src/wallet';
 
 injectWebSocketImpl(WebSocket);
 
@@ -3019,8 +3020,13 @@ describe('bindKeyset & withKeyset', () => {
 
 		const current = wallet.keysetId;
 		const w2 = wallet.withKeyset(current);
-		expect(w2).not.toBe(wallet);
+		expect(w2).not.toBe(wallet); // new instance
 		expect(w2.keysetId).toBe(current);
+		expect(w2.getMintInfo()).toStrictEqual(wallet.getMintInfo()); // same mintinfo
+		expect(w2.keyChain).toStrictEqual(wallet.keyChain); // same keychain data
+		expect(() => {
+			w2.keyChain.getCheapestKeyset();
+		}).not.toThrow(); // smoke test
 
 		// mutate original binding; w2 should remain unchanged
 		const otherId = '00dd000000000000';
