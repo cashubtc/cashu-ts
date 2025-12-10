@@ -522,6 +522,8 @@ export class Keyset {
     // @deprecated (undocumented)
     get final_expiry(): number | undefined;
     // (undocumented)
+    static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
+    // (undocumented)
     get hasHexId(): boolean;
     // (undocumented)
     get hasKeys(): boolean;
@@ -1130,11 +1132,20 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createDeterministicData<T extends {
+        id: string;
+        keys: Keys;
+    }>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createP2PKData(p2pk: P2PKOptions, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createP2PKData<T extends {
+        id: string;
+        keys: Keys;
+    }>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createRandomData<T extends {
+        id: string;
+        keys: Keys;
+    }>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)

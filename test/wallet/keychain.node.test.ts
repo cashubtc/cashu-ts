@@ -127,6 +127,30 @@ describe('KeyChain initialization', () => {
 		expect(active.final_expiry).toBe(1754296607);
 	});
 
+	test('should initialize with mintUrl and load keys and keysets', async () => {
+		const keyChain = new KeyChain('http://localhost:3338', unit);
+		await keyChain.init();
+
+		// Verify keysets loaded and filtered by unit
+		const keysets = keyChain.getKeysets();
+		expect(keysets).toHaveLength(4); // All from dummy, assuming same unit
+		expect(keysets.map((k) => k.id)).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id));
+
+		// Verify keys assigned
+		const keysForFirst = keyChain.getKeyset('00bd033559de27d0').toMintKeys();
+		expect(keysForFirst).toEqual(dummyKeysResp.keysets[0]);
+
+		// Verify active keyset (lowest fee, active, hex ID)
+		const active = keyChain.getCheapestKeyset();
+		expect(active.id).toBe('00bd033559de27d0'); // Fee 0, hex ID
+		expect(active.fee).toBe(0);
+		expect(active.hasHexId).toBe(true);
+		expect(isValidHex(active.id)).toBe(true);
+
+		// Verify final_expiry assigned
+		expect(active.final_expiry).toBe(1754296607);
+	});
+
 	test('should skip loading if already initialized unless forceRefresh', async () => {
 		const keyChain = new KeyChain(mint, unit);
 		const spyGetKeySets = vi.spyOn(mint, 'getKeySets');

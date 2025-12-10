@@ -1,4 +1,5 @@
 import {
+	type Keys,
 	type MintKeys,
 	type Proof,
 	type SerializedBlindedMessage,
@@ -134,10 +135,10 @@ export class OutputData implements OutputDataLike {
 		return serializedProof;
 	}
 
-	static createP2PKData(
+	static createP2PKData<T extends { id: string; keys: Keys }>(
 		p2pk: P2PKOptions,
 		amount: number,
-		keyset: MintKeys | Keyset,
+		keyset: T,
 		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -253,7 +254,11 @@ export class OutputData implements OutputDataLike {
 		return od;
 	}
 
-	static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]) {
+	static createRandomData<T extends { id: string; keys: Keys }>(
+		amount: number,
+		keyset: T,
+		customSplit?: number[],
+	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -269,11 +274,11 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
-	static createDeterministicData(
+	static createDeterministicData<T extends { id: string; keys: Keys }>(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
-		keyset: MintKeys | Keyset,
+		keyset: T,
 		customSplit?: number[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);

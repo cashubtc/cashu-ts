@@ -61,24 +61,24 @@ export class Keyset {
 	}
 
 	/**
-	 * @deprecated Use isActive instead.
+	 * @deprecated Use `isActive` instead.
 	 */
 	get active(): boolean {
-		return this._active;
+		return this.isActive;
 	}
 
 	/**
-	 * @deprecated Use fee instead.
+	 * @deprecated Use `fee` instead.
 	 */
 	get input_fee_ppk(): number {
-		return this._input_fee_ppk ?? 0;
+		return this.fee;
 	}
 
 	/**
-	 * @deprecated Use expiry instead.
+	 * @deprecated Use `expiry` instead.
 	 */
 	get final_expiry(): number | undefined {
-		return this._final_expiry;
+		return this.expiry;
 	}
 
 	/**
@@ -131,5 +131,29 @@ export class Keyset {
 			isDeprecatedBase64,
 		);
 		return derivedId === this._id;
+	}
+
+	static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset {
+		const ks = new Keyset(meta.id, meta.unit, meta.active, meta.input_fee_ppk, meta.final_expiry);
+
+		// Sanity checks
+		if (keys) {
+			if (keys.id !== meta.id) {
+				throw new Error(`Mismatched keyset ids: meta=${meta.id}, keys=${keys.id}`);
+			}
+			if (keys.unit !== meta.unit) {
+				throw new Error(`Mismatched keyset units: meta=${meta.unit}, keys=${keys.unit}`);
+			}
+			if (
+				keys.final_expiry !== undefined &&
+				meta.final_expiry !== undefined &&
+				keys.final_expiry !== meta.final_expiry
+			) {
+				throw new Error(`Mismatched keyset expiry for id=${meta.id}`);
+			}
+			// All good
+			ks.keys = keys.keys;
+		}
+		return ks;
 	}
 }

@@ -1,6 +1,7 @@
 import { Keyset } from './Keyset';
 import { Mint } from '../mint';
 import type { MintKeyset, MintKeys, MintAllKeysets, MintActiveKeys } from '../model/types/keyset';
+import { isValidHex } from '../utils';
 
 /**
  * Manages the unit-specific keysets for a Mint.
@@ -76,32 +77,33 @@ export class KeyChain {
 		// Clear existing keysets to avoid stale data
 		this.keysets = {};
 
-		// Filter and create Keysets for unit
-		const unitKeysets = allKeysets.filter((k: MintKeyset) => k.unit === this.unit);
+		// Filter Keysets / Keys by unit
+		const unitKeysets = allKeysets.filter((k) => k.unit === this.unit);
 		if (!unitKeysets.length) {
 			throw new Error(`No Keysets found for unit: ${this.unit}`);
 		}
-		unitKeysets.forEach((k: MintKeyset) => {
-			this.keysets[k.id] = new Keyset(k.id, k.unit, k.active, k.input_fee_ppk, k.final_expiry);
-		});
+		const keysMap = new Map(allKeys.filter((k) => k.unit === this.unit).map((k) => [k.id, k]));
 
-		// Create map of keys filtered by unit for fast lookup
-		const keysMap = new Map<string, MintKeys>(
-			allKeys.filter((k) => k.unit === this.unit).map((k) => [k.id, k]),
-		);
+		// Build keysets
+		for (const meta of unitKeysets) {
+			let keyset: Keyset;
 
-		// Assign keys and validate active hex keysets
-		// Note: Non-hex and inactive keysets should not have keys
-		Object.values(this.keysets).forEach((keyset) => {
-			if (!keyset.hasHexId || !keyset.isActive) return;
-			const mk = keysMap.get(keyset.id);
-			if (mk) {
-				keyset.keys = mk.keys;
-				if (!keyset.verify()) {
-					throw new Error(`Keyset verification failed for ID ${keyset.id}`);
-				}
+			// Note: only active hex keysets should have keys
+			if (meta.active && isValidHex(meta.id)) {
+				const mk = keysMap.get(meta.id);
+				keyset = Keyset.fromMintApi(meta, mk);
+			} else {
+				keyset = Keyset.fromMintApi(meta);
 			}
-		});
+
+			// Validate active hex keysets
+			if (keyset.hasKeys && !keyset.verify()) {
+				throw new Error(`Keyset verification failed for ID ${keyset.id}`);
+			}
+
+			// Add to keychain
+			this.keysets[keyset.id] = keyset;
+		}
 	}
 
 	/**
