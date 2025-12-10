@@ -1699,10 +1699,13 @@ class Wallet {
 		invoice: string,
 		amountMsat?: number,
 	): Promise<MeltQuoteBolt11Response> {
-		if (amountMsat != null && invoiceHasAmountInHRP(invoice)) {
-			throw new Error(
-				'amountMsat supplied but invoice already contains an amount, Leave amountMsat undefined for non-zero invoices.',
+		if (amountMsat !== undefined) {
+			this.failIf(
+				invoiceHasAmountInHRP(invoice),
+				'amountMsat supplied but invoice already contains an amount. Leave amountMsat undefined for non-zero invoices.',
 			);
+
+			this.assertAmount(amountMsat, 'createMeltQuoteBolt11');
 		}
 
 		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
@@ -1711,7 +1714,7 @@ class Wallet {
 			unit: this._unit,
 			request: invoice,
 
-			...(supportsAmountless && amountMsat
+			...(supportsAmountless && amountMsat !== undefined
 				? {
 						options: {
 							amountless: {

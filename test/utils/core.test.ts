@@ -832,6 +832,9 @@ describe('invoiceHasAmountInHRP()', () => {
 
 			//uppercase LN — should be valid as BOLT11 is case insensitive
 			'lNbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa',
+
+			//pico invoice — should be valid as BOLT11 is case insensitive
+			'lnbc9678785340p1pwmna7lpp5gc3xfm08u9qy06djf8dfflhugl6p7lgza6dsjxq454gxhj9t7a0sd8dgfkx7cmtwd68yetpd5s9xar0wfjn5gpc8qhrsdfq24f5ggrxdaezqsnvda3kkum5wfjkzmfqf3jkgem9wgsyuctwdus9xgrcyqcjcgpzgfskx6eqf9hzqnteypzxz7fzypfhg6trddjhygrcyqezcgpzfysywmm5ypxxjemgw3hxjmn8yptk7untd9hxwg3q2d6xjcmtv4ezq7pqxgsxzmnyyqcjqmt0wfjjq6t5v4khxsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsxqyjw5qcqp2rzjq0gxwkzc8w6323m55m4jyxcjwmy7stt9hwkwe2qxmy8zpsgg7jcuwz87fcqqeuqqqyqqqqlgqqqqn3qq9q9qrsgqrvgkpnmps664wgkp43l22qsgdw4ve24aca4nymnxddlnp8vh9v2sdxlu5ywdxefsfvm0fq3sesf08uf6q9a2ke0hc9j6z6wlxg5z5kqpu2v9wz',
 		];
 
 		withAmount.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(true));
@@ -841,6 +844,7 @@ describe('invoiceHasAmountInHRP()', () => {
 		const invalid = [
 			'lnbc0210n1...', // leading zero in amount → invalid per spec
 			'lnsomething', // incomplete HRP
+			'lnbc9678785340p1pwmna7lpp5g...', // pico invoice — case insensitive
 		];
 
 		invalid.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
