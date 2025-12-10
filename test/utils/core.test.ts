@@ -844,7 +844,7 @@ describe('invoiceHasAmountInHRP()', () => {
 		const invalid = [
 			'lnbc0210n1...', // leading zero in amount → invalid per spec
 			'lnsomething', // incomplete HRP
-			'lnbc9678785340p1pwmna7lpp5g...', // pico invoice — case insensitive
+			'lnbc9678785343p1pwmna7lpp5g...', // pico invoice — case insensitive
 		];
 
 		invalid.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
