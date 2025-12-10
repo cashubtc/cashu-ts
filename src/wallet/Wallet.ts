@@ -238,7 +238,7 @@ class Wallet {
 		this._keyChain = new KeyChain(this.mint, this._unit);
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
 
-		// Deprecated: cache init - to be removed later
+		// @todo: Deprecated cache init - to be removed with deprecated options
 		if (options?.keysets && options?.keys && options?.mintInfo) {
 			this.loadMintFromCache(options.mintInfo, options.keysets, options.keys);
 		}
@@ -2163,7 +2163,7 @@ class Wallet {
 		const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
 			hashToCurve(enc.encode(p.secret)).toHex(true),
 		);
-		// TODO: Replace this with a value from the info endpoint of the mint eventually
+		// @todo: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
 		const states: ProofState[] = [];
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {
