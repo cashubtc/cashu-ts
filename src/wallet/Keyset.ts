@@ -121,7 +121,7 @@ export class Keyset {
 		if (!this.hasKeys) {
 			return false;
 		}
-		return Keyset.verifyKeys({
+		return Keyset.verifyKeysetId({
 			id: this._id,
 			unit: this._unit,
 			final_expiry: this._final_expiry,
@@ -136,7 +136,7 @@ export class Keyset {
 	 * This mirrors the internal Keyset.verify logic but works directly on the NUT-01 /v1/keys
 	 * response shape.
 	 */
-	static verifyKeys(keys: MintKeys): boolean {
+	static verifyKeysetId(keys: MintKeys): boolean {
 		if (!keys.keys || Object.keys(keys.keys).length === 0) {
 			return false;
 		}

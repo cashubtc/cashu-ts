@@ -551,7 +551,7 @@ export class Keyset {
     // (undocumented)
     get unit(): string;
     verify(): boolean;
-    static verifyKeys(keys: MintKeys): boolean;
+    static verifyKeysetId(keys: MintKeys): boolean;
 }
 
 // @public (undocumented)
