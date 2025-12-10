@@ -648,9 +648,11 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * @deprecated Use Keyset class instead: Keyset.verify()
+ * @deprecated Use Keyset.verifyKeys(keys), or init a Keyset and call keyset.verify().
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
+	// Note: we are NOT calling Keyset.verifyKeys() here as that would couple
+	// the utils class to Keyset, and risks circular dependencies.
 	const isBase64 = isBase64String(keys.id);
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
 	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;

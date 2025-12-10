@@ -121,16 +121,35 @@ export class Keyset {
 		if (!this.hasKeys) {
 			return false;
 		}
-		const isDeprecatedBase64 = isBase64String(this._id) && !this.hasHexId;
-		const versionByte = this.hasHexId ? hexToBytes(this._id)[0] : 0;
+		return Keyset.verifyKeys({
+			id: this._id,
+			unit: this._unit,
+			final_expiry: this._final_expiry,
+			keys: this._keys,
+		});
+	}
+
+	/**
+	 * Verifies that a MintKeys DTO has a correct id for its keys/unit/expiry.
+	 *
+	 * @remarks
+	 * This mirrors the internal Keyset.verify logic but works directly on the NUT-01 /v1/keys
+	 * response shape.
+	 */
+	static verifyKeys(keys: MintKeys): boolean {
+		if (!keys.keys || Object.keys(keys.keys).length === 0) {
+			return false;
+		}
+		const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
+		const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
 		const derivedId = deriveKeysetId(
-			this._keys,
-			this._unit,
-			this._final_expiry,
+			keys.keys,
+			keys.unit,
+			keys.final_expiry,
 			versionByte,
 			isDeprecatedBase64,
 		);
-		return derivedId === this._id;
+		return derivedId === keys.id;
 	}
 
 	static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset {
