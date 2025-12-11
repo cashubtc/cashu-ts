@@ -90,12 +90,13 @@ const mintUrl = 'http://localhost:3338';
 const wallet1 = new Wallet(mintUrl); // unit is 'sat'
 await wallet1.loadMint(); // wallet is now ready to use
 
-const cache = wallet1.keyChain.getCache(); // persist keychain data in your app
-const mintInfo = wallet1.getMintInfo().cache; // persist mint info in your app
+// Persist these in your app
+const keychainCache = wallet1.keyChain.cache; // KeyChainCache
+const mintInfoCache = wallet1.getMintInfo().cache; // GetInfoResponse
 
-// Advanced: With cached mint data (reduces API calls)
-const wallet2 = new Wallet(cache.mintUrl, { unit: cache.unit });
-wallet2.loadMintFromCache(mintInfo, cache.keysets, cache.keys);
+// Advanced: With cached mint data (avoids network calls on startup)
+const wallet2 = new Wallet(keychainCache.mintUrl, { unit: keychainCache.unit });
+wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 // wallet2 is now ready to use
 ```
 

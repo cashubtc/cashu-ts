@@ -11,7 +11,6 @@ import {
 	MeltQuoteState,
 	MintQuoteState,
 	type MintKeys,
-	MintKeyset,
 	deriveKeysetId,
 	getDecodedToken,
 	injectWebSocketImpl,
@@ -32,7 +31,6 @@ import { hexToBytes } from '@noble/curves/utils';
 import { randomBytes } from '@noble/hashes/utils';
 import { NULL_LOGGER } from '../../src/logger';
 import { MINTCACHE } from '../consts';
-import { EphemeralCounterSource } from '../../src/wallet';
 
 injectWebSocketImpl(WebSocket);
 
@@ -141,7 +139,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -189,7 +187,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -245,7 +243,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -324,7 +322,7 @@ describe('test wallet init', () => {
 		]);
 		const keysets = wallet.keyChain.getKeysets();
 		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
@@ -383,7 +381,7 @@ describe('test info', () => {
 		expect(info.nuts).toEqual(mintInfoResp.nuts);
 		expect(info.version).toEqual(mintInfoResp.version);
 		expect(info.motd).toEqual(mintInfoResp.motd);
-		expect(info.supportsBolt12Description).toBeFalsy();
+		expect(info.supportsNut04Description('bolt12', 'sat')).toBeFalsy();
 		expect(() => {
 			info.isSupported(1 as any);
 		}).toThrow(/nut is not supported/);
@@ -432,7 +430,9 @@ describe('test info', () => {
 		);
 
 		const usdWallet = new Wallet(mint, { unit: 'usd' });
-		usdWallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+		const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
+		usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
+		// console.log('usdWallet', usdWallet.keyChain.cache);
 		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
 	});
 	test('supportsAmountless() correctly detects amountless option in melt methods', async () => {

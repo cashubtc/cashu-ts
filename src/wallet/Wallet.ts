@@ -54,7 +54,7 @@ import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import type { MintKeys, MintKeyset } from '../model/types/keyset';
+import type { KeyChainCache, MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
 	GetInfoResponse,
 	MeltRequest,
@@ -238,9 +238,17 @@ class Wallet {
 		this._keyChain = new KeyChain(this.mint, this._unit);
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
 
-		// @todo: Deprecated cache init - to be removed with deprecated options
+		// @todo: Deprecated cache init - to be removed with deprecated constructor options
 		if (options?.keysets && options?.keys && options?.mintInfo) {
-			this.loadMintFromCache(options.mintInfo, options.keysets, options.keys);
+			const allKeys = Array.isArray(options.keys) ? options.keys : [options.keys];
+			// Convert Mint DTOs to KeyChainCache
+			const cache: KeyChainCache = KeyChain.mintToCacheDTO(
+				this._unit,
+				this.mint.mintUrl,
+				options.keysets,
+				allKeys,
+			);
+			this.loadMintFromCache(options.mintInfo, cache);
 		}
 	}
 
@@ -318,15 +326,14 @@ class Wallet {
 	 * Load mint information, keysets, and keys from cached data.
 	 *
 	 * @remarks
-	 * Use this when you already have cached mint info and key data and want to avoid network calls.
+	 * Use this when you already have cached mint info and keychain cache and want to avoid network
+	 * calls.
+	 *
+	 * The `cache` argument should usually come from `wallet.keyChain.cache`.
 	 */
-	loadMintFromCache(
-		mintInfo: GetInfoResponse,
-		keysets: MintKeyset[],
-		keys: MintKeys[] | MintKeys,
-	): void {
+	loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
 		this._mintInfo = new MintInfo(mintInfo);
-		this._keyChain.loadFromCache(keysets, keys);
+		this._keyChain.loadFromCache(cache);
 		this.finishInit();
 	}
 
@@ -336,7 +343,7 @@ class Wallet {
 	private finishInit(): void {
 		// Go Keychain?
 		const cheapestId = this._keyChain.getCheapestKeyset().id;
-		this._logger.debug('KeyChain', { keychain: this._keyChain.getCache() });
+		this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
 
 		// Bind the cheapest keyset if needed
 		if (this._boundKeysetId === PENDING_KEYSET_ID) {
@@ -532,8 +539,7 @@ class Wallet {
 			...this._keyChain.getCache(),
 		});
 		// Load mint info from our caches
-		const { keysets, keys } = this._keyChain.getCache();
-		newWallet.loadMintFromCache(this.getMintInfo().cache, keysets, keys);
+		newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
 		return newWallet;
 	}
 

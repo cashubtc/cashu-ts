@@ -502,6 +502,14 @@ export type JsonRpcReqParams = {
 // @public
 export class KeyChain {
     constructor(mint: string | Mint, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
+    get cache(): KeyChainCache;
+    static cacheToMintDTO(cache: KeyChainCache): {
+        keysets: MintKeyset[];
+        keys: MintKeys[];
+    };
+    static fromCache(mint: string | Mint, cache: KeyChainCache): KeyChain;
+    getAllKeys(): MintKeys[];
+    // @deprecated
     getCache(): {
         keysets: MintKeyset[];
         keys: MintKeys[];
@@ -512,8 +520,16 @@ export class KeyChain {
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
-    loadFromCache(cachedKeysets: MintKeyset[], cachedKeys: MintKeys[] | MintKeys): void;
+    loadFromCache(cache: KeyChainCache): void;
+    static mintToCacheDTO(unit: string, mintUrl: string, allKeysets: MintKeyset[], allKeys: MintKeys[]): KeyChainCache;
 }
+
+// @public
+export type KeyChainCache = {
+    keysets: KeysetCache[];
+    unit: string;
+    mintUrl: string;
+};
 
 // @public
 export type Keys = {
@@ -553,6 +569,11 @@ export class Keyset {
     verify(): boolean;
     static verifyKeysetId(keys: MintKeys): boolean;
 }
+
+// @public
+export type KeysetCache = MintKeyset & {
+    keys?: Keys;
+};
 
 // @public (undocumented)
 export type KeysetPair = {
@@ -1815,7 +1836,7 @@ export class Wallet {
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
-    loadMintFromCache(mintInfo: GetInfoResponse, keysets: MintKeyset[], keys: MintKeys[] | MintKeys): void;
+    loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void;
     // (undocumented)
     get logger(): Logger;
     // @deprecated (undocumented)

@@ -6,6 +6,6 @@ import { type GetKeysetsResponse, type GetKeysResponse } from './keyset';
 export type MintActiveKeys = GetKeysResponse;
 
 /**
- * @deprecated - Use GetKeysResponse.
+ * @deprecated - Use GetKeysetsResponse.
  */
 export type MintAllKeysets = GetKeysetsResponse;

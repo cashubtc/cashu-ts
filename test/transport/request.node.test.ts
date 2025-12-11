@@ -38,7 +38,7 @@ describe('requests', () => {
 			}),
 		);
 		const wallet = new Wallet(mintUrl);
-		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		await wallet.checkMeltQuoteBolt11('test');
 
 		expect(headers!).toBeDefined();
@@ -62,7 +62,7 @@ describe('requests', () => {
 		);
 
 		const wallet = new Wallet(mintUrl);
-		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 
 		await wallet.checkMeltQuoteBolt11('test');
@@ -79,7 +79,7 @@ describe('requests', () => {
 		);
 
 		const wallet = new Wallet(mintUrl);
-		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrowError(HttpResponseError);
 	});
 	test('handles NetworkError on network failure', async () => {
@@ -91,7 +91,7 @@ describe('requests', () => {
 		);
 
 		const wallet = new Wallet(mintUrl);
-		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(NetworkError);
 	});
 
@@ -105,7 +105,7 @@ describe('requests', () => {
 		);
 
 		const wallet = new Wallet(mintUrl);
-		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		const promise = wallet.checkMeltQuoteBolt11('test');
 		await expect(promise).rejects.toThrow(MintOperationError);
 		// assert that the error message is set correctly by the code

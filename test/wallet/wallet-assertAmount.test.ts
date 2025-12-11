@@ -5,7 +5,7 @@ import { MINTCACHE } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
 const wallet = new Wallet(mintUrl) as any;
-wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keysets, MINTCACHE.keys);
+wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 const expMsg = 'Amount must be a positive integer';
 
 describe('assertInteger', () => {

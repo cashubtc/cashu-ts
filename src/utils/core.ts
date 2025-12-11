@@ -392,10 +392,10 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  *
  * ```ts
  * // Simple:
- * const token - getDecodedToken(tokenString, keysets);
+ * const token = getDecodedToken(tokenString, keysets);
  *
  * // Strongly typed: (keysets param is a Keyset)
- * const token - getDecodedToken<Keyset>(tokenString, keysets);
+ * const token = getDecodedToken<Keyset>(tokenString, keysets);
  * ```
  *
  * @param token An encoded cashu token (cashuB...)
@@ -698,7 +698,8 @@ export function verifyKeysetId(keys: MintKeys): boolean {
  * const proofs = mapShortKeysetIds<Keyset>(proofs, keysets);
  * ```
  *
- * @param token An encoded cashu token (cashuB...)
+ * @param proofs Array of Proofs.
+ * @param keysets Array of Keysets to be used for verification.
  * @returns Array of Proofs with full keyset IDs.
  */
 function mapShortKeysetIds<T extends { id: string }>(proofs: Proof[], keysets?: T[]): Proof[] {
