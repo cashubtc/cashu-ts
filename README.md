@@ -25,6 +25,7 @@ Wallet Features:
 - [x] transaction builder (WalletOps)
 - [x] deterministic counters (with callbacks for persistence)
 - [x] wallet event subscriptions (WalletEvents)
+- [x] clear and blind authentication (AuthManager / AuthProvider)
 - [ ] ...
 
 Implemented [NUTs](https://github.com/cashubtc/nuts/):
@@ -39,9 +40,21 @@ Implemented [NUTs](https://github.com/cashubtc/nuts/):
 - [x] [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md)
 - [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
 - [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
+- [x] [NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md)
 - [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
+- [x] [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md)
+- [x] [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md)
+- [x] [NUT-14](https://github.com/cashubtc/nuts/blob/main/14.md)
+- [ ] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md)
+- [ ] [NUT-16](https://github.com/cashubtc/nuts/blob/main/16.md)
+- [x] [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md)
 - [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md)
+- [ ] [NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)
+- [x] [NUT-20](https://github.com/cashubtc/nuts/blob/main/20.md)
+- [x] [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md)
+- [x] [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md)
 - [x] [NUT-23](https://github.com/cashubtc/nuts/blob/main/23.md)
+- [ ] [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md)
 - [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md)
 
 Supported token formats:
@@ -477,6 +490,7 @@ new P2PKBuilder()
   .requireRefundSignatures(n: number)     // n of m for refund keys
   .addTag(key: string, values?: string[] | string) // add single tag (eg: NutZap 'e')
   .addTags(tags: P2PKTag[]) // add multiple tags at once
+  .addHashlock(hashlock: string) // for NUT-14 "HTLC" kind secrets
   .toOptions(): P2PKOptions;
 
 P2PKBuilder.fromOptions(opts: P2PKOptions): P2PKBuilder
