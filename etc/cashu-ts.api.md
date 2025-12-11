@@ -1159,27 +1159,18 @@ export interface OutputConfig {
 }
 
 // @public (undocumented)
-export class OutputData implements OutputDataLike<MintKeys | Keyset> {
+export class OutputData implements OutputDataLike<KeyLike> {
     constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData<T extends {
-        id: string;
-        keys: Keys;
-    }>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createDeterministicData<T extends KeyLike>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createP2PKData<T extends {
-        id: string;
-        keys: Keys;
-    }>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createP2PKData<T extends KeyLike>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData<T extends {
-        id: string;
-        keys: Keys;
-    }>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createRandomData<T extends KeyLike>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -1190,7 +1181,7 @@ export class OutputData implements OutputDataLike<MintKeys | Keyset> {
     secret: Uint8Array;
     static sumOutputAmounts(outputs: OutputDataLike[]): number;
     // (undocumented)
-    toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset): Proof;
+    toProof(sig: SerializedBlindedSignature, keyset: KeyLike): Proof;
 }
 
 // @public (undocumented)

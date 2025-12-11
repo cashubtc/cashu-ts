@@ -96,7 +96,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 	return e;
 }
 
-export class OutputData implements OutputDataLike<MintKeys | Keyset> {
+export class OutputData implements OutputDataLike<KeyLike> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -111,7 +111,7 @@ export class OutputData implements OutputDataLike<MintKeys | Keyset> {
 		this.blindedMessage = blindedMessage;
 	}
 
-	toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset) {
+	toProof(sig: SerializedBlindedSignature, keyset: KeyLike) {
 		let dleq: DLEQ | undefined;
 		if (sig.dleq) {
 			dleq = {
@@ -146,7 +146,7 @@ export class OutputData implements OutputDataLike<MintKeys | Keyset> {
 		return serializedProof;
 	}
 
-	static createP2PKData<T extends { id: string; keys: Keys }>(
+	static createP2PKData<T extends KeyLike>(
 		p2pk: P2PKOptions,
 		amount: number,
 		keyset: T,
@@ -265,11 +265,7 @@ export class OutputData implements OutputDataLike<MintKeys | Keyset> {
 		return od;
 	}
 
-	static createRandomData<T extends { id: string; keys: Keys }>(
-		amount: number,
-		keyset: T,
-		customSplit?: number[],
-	) {
+	static createRandomData<T extends KeyLike>(amount: number, keyset: T, customSplit?: number[]) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -285,7 +281,7 @@ export class OutputData implements OutputDataLike<MintKeys | Keyset> {
 		);
 	}
 
-	static createDeterministicData<T extends { id: string; keys: Keys }>(
+	static createDeterministicData<T extends KeyLike>(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
