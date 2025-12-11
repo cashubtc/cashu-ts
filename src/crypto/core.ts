@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
-import { randomBytes, bytesToHex, hexToBytes, type PrivKey } from '@noble/curves/utils';
+import { randomBytes, bytesToHex, type PrivKey, utf8ToBytes } from '@noble/curves/utils';
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 
@@ -44,7 +44,7 @@ export type SerializedProof = {
 	witness?: string;
 };
 
-const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
+const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
 
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
 	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
