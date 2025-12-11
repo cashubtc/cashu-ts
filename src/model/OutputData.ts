@@ -17,7 +17,7 @@ import {
 	type DLEQ,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 
 // TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.

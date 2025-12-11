@@ -1,6 +1,6 @@
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
@@ -494,7 +494,7 @@ export function deriveKeysetId(
 			.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
 			.map(([, pubKey]: [unknown, string]) => pubKey)
 			.reduce((prev: string, curr: string) => prev + curr, '');
-		const hash = sha256(pubkeysConcat);
+		const hash = sha256(Bytes.fromString(pubkeysConcat));
 		const b64 = Bytes.toBase64(hash);
 		return b64.slice(0, 12);
 	}

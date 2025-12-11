@@ -1,7 +1,7 @@
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { type SerializedBlindedSignature } from './types/index';
 import { type DLEQ } from '../crypto';
-import { bytesToHex } from '@noble/hashes/utils';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { numberToHexPadded64 } from '../utils';
 
 class BlindedSignature {
