@@ -90,6 +90,6 @@
 	"dependencies": {
 		"@noble/curves": "^2.0.1",
 		"@noble/hashes": "^2.0.0",
-		"@scure/bip32": "^1.5.0"
+		"@scure/bip32": "^2.0.1"
 	}
 }
