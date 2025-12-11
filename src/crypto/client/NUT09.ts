@@ -1,5 +1,5 @@
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha2';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { getKeysetIdInt } from '../common';
 import { HDKey } from '@scure/bip32';
 import { Bytes } from '../../utils/Bytes';

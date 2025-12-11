@@ -1,7 +1,7 @@
-import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { bytesToNumber, encodeBase64toUint8, hexToNumber } from '../util/utils';
 import { Bytes } from '../../utils/Bytes';
 
@@ -24,7 +24,7 @@ export type Keyset = {
 };
 
 export type BlindSignature = {
-	C_: ProjPointType<bigint>;
+	C_: WeierstrassPoint<bigint>;
 	amount: number;
 	id: string;
 };
@@ -42,7 +42,7 @@ export type DLEQ = {
 };
 
 export type Proof = {
-	C: ProjPointType<bigint>;
+	C: WeierstrassPoint<bigint>;
 	secret: Uint8Array;
 	amount: number;
 	id: string;
@@ -85,7 +85,7 @@ export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
 const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
 
-export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
+export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
 	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
 	const counter = new Uint32Array(1);
 	const maxIterations = 2 ** 16;
@@ -101,18 +101,18 @@ export function hashToCurve(secret: Uint8Array): ProjPointType<bigint> {
 	throw new Error('No valid point found');
 }
 
-export function hash_e(pubkeys: Array<ProjPointType<bigint>>): Uint8Array {
+export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array {
 	const hexStrings = pubkeys.map((p) => p.toHex(false));
 	const e_ = hexStrings.join('');
 	return sha256(new TextEncoder().encode(e_));
 }
 
 export function pointFromBytes(bytes: Uint8Array) {
-	return secp256k1.ProjectivePoint.fromHex(bytesToHex(bytes));
+	return secp256k1.Point.fromHex(bytesToHex(bytes));
 }
 
 export function pointFromHex(hex: string) {
-	return secp256k1.ProjectivePoint.fromHex(hex);
+	return secp256k1.Point.fromHex(hex);
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
@@ -127,7 +127,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 };
 
 export function createRandomPrivateKey() {
-	return secp256k1.utils.randomPrivateKey();
+	return secp256k1.utils.randomSecretKey();
 }
 
 export function serializeMintKeys(mintKeys: MintKeys): SerializedMintKeys {

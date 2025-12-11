@@ -7,7 +7,7 @@ import {
 } from './types';
 import { blindMessage, constructProofFromPromise, serializeProof } from '../crypto/client/index';
 import { BlindedMessage } from './BlindedMessage';
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { type DLEQ, pointFromHex } from '../crypto/common/index';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 import { deriveBlindingFactor, deriveSecret } from '../crypto/client/NUT09';

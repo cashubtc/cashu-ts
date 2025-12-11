@@ -3,8 +3,8 @@ import { CashuWallet } from '../src/CashuWallet';
 import dns from 'node:dns';
 import { MintQuoteState, Proof, Bolt12MintQuoteResponse } from '../src/model/types/index';
 import { sumProofs } from '../src/utils';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
 dns.setDefaultResultOrder('ipv4first');
 

@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/curves/abstract/utils';
+import { hexToBytes } from '@noble/curves/utils.js';
 import { describe, expect, test } from 'vitest';
 import { blindMessage, unblindSignature } from '../../../src/crypto/client';
 import { bytesToNumber } from '../../../src/crypto/util/utils';

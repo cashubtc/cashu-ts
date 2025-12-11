@@ -1,5 +1,5 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/hashes/utils';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 import { hash_e, pointFromBytes, pointFromHex } from '../../../src/crypto/common/index';
 import {

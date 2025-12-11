@@ -4,7 +4,7 @@ import { CashuWallet } from '../src/CashuWallet';
 import dns from 'node:dns';
 import { test, describe, expect } from 'vitest';
 import { vi } from 'vitest';
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
 	CheckStateEnum,
 	MeltQuoteState,
@@ -23,11 +23,10 @@ import {
 	getEncodedTokenV4,
 	hexToNumber,
 	numberToHexPadded64,
-	splitAmount,
 	sumProofs,
 } from '../src/utils';
 import { OutputData, OutputDataFactory } from '../src/model/OutputData';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =

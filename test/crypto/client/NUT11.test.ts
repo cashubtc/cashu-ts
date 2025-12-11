@@ -1,5 +1,5 @@
-import { schnorr } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/curves/abstract/utils';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 import { createP2PKsecret, signP2PKProof, signP2PKProofs } from '../../../src/crypto/client/NUT11';
 import { parseP2PKSecret } from '../../../src/crypto/common/NUT11';

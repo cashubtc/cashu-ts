@@ -1,5 +1,5 @@
-import { type ProjPointType } from '@noble/curves/abstract/weierstrass';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToNumber } from '../util/utils';
 import {
 	type BlindSignature,
@@ -26,12 +26,12 @@ export type KeysetWithKeys = Keyset & {
 };
 
 export function createBlindSignature(
-	B_: ProjPointType<bigint>,
+	B_: WeierstrassPoint<bigint>,
 	privateKey: Uint8Array,
 	amount: number,
 	id: string,
 ): BlindSignature {
-	const C_: ProjPointType<bigint> = B_.multiply(bytesToNumber(privateKey));
+	const C_: WeierstrassPoint<bigint> = B_.multiply(bytesToNumber(privateKey));
 	return { C_, amount, id };
 }
 
@@ -68,7 +68,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 }
 
 export function verifyProof(proof: Proof, privKey: Uint8Array): boolean {
-	const Y: ProjPointType<bigint> = hashToCurve(proof.secret);
-	const aY: ProjPointType<bigint> = Y.multiply(bytesToNumber(privKey));
+	const Y: WeierstrassPoint<bigint> = hashToCurve(proof.secret);
+	const aY: WeierstrassPoint<bigint> = Y.multiply(bytesToNumber(privKey));
 	return aY.equals(proof.C);
 }

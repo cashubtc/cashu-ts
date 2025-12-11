@@ -1,7 +1,7 @@
-import { type PrivKey, bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
-import { sha256 } from '@noble/hashes/sha256';
-import { schnorr } from '@noble/curves/secp256k1';
-import { randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 import { parseP2PKSecret } from '../common/NUT11';
 import { type Secret, type Witness } from '../common/index';
 import { type P2PKWitness, type Proof } from '../../model/types/index';
@@ -18,14 +18,14 @@ export const createP2PKsecret = (pubkey: string): string => {
 	return JSON.stringify(newSecret);
 };
 
-export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
-	const msghash = sha256(secret);
+export const signP2PKSecret = (secret: string, privateKey: Uint8Array): string => {
+	const msghash = sha256(new TextEncoder().encode(secret));
 	const sig = schnorr.sign(msghash, privateKey);
 	return bytesToHex(sig);
 };
 
-export const signBlindedMessage = (B_: string, privateKey: PrivKey): string => {
-	const msgHash = sha256(B_);
+export const signBlindedMessage = (B_: string, privateKey: Uint8Array): string => {
+	const msgHash = sha256(new TextEncoder().encode(B_));
 	const sig = schnorr.sign(msgHash, privateKey);
 	return bytesToHex(sig);
 };
@@ -44,10 +44,10 @@ export const verifyP2PKSecretSignature = (
 	pubkey: string,
 ): boolean => {
 	try {
-		const msghash = sha256(secret);
+		const msghash = sha256(new TextEncoder().encode(secret));
 		// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
 		const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
-		if (schnorr.verify(signature, msghash, hexToBytes(pubkeyX))) {
+		if (schnorr.verify(hexToBytes(signature), msghash, hexToBytes(pubkeyX))) {
 			return true;
 		}
 	} catch (e) {
@@ -271,10 +271,12 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 	if (parsed[0] !== 'P2PK') {
 		throw new Error('not a P2PK secret');
 	}
+	// Convert hex string to Uint8Array
+	const privateKeyBytes = hexToBytes(privateKey);
 	// Check if the private key is required to sign by checking its
 	// X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
 	// NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
-	const pubkey = bytesToHex(schnorr.getPublicKey(privateKey)); // x-only
+	const pubkey = bytesToHex(schnorr.getPublicKey(privateKeyBytes)); // x-only
 	const witnesses = getP2PKExpectedKWitnessPubkeys(parsed);
 	if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
 		throw new Error(`Signature not required from [02|03]${pubkey}`);
@@ -292,12 +294,12 @@ export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
 		throw new Error(`Proof already signed by [02|03]${pubkey}`);
 	}
 	// Add new signature
-	const signature = signP2PKSecret(proof.secret, privateKey);
+	const signature = signP2PKSecret(proof.secret, privateKeyBytes);
 	signatures.push(signature);
 	return { ...proof, witness: { signatures } };
 };
 
-export const getSignedOutput = (output: BlindedMessage, privateKey: PrivKey): BlindedMessage => {
+export const getSignedOutput = (output: BlindedMessage, privateKey: Uint8Array): BlindedMessage => {
 	const B_ = output.B_.toHex(true);
 	const signature = signBlindedMessage(B_, privateKey);
 	output.witness = { signatures: [signature] };
@@ -306,7 +308,7 @@ export const getSignedOutput = (output: BlindedMessage, privateKey: PrivKey): Bl
 
 export const getSignedOutputs = (
 	outputs: BlindedMessage[],
-	privateKey: string,
+	privateKey: Uint8Array,
 ): BlindedMessage[] => {
 	return outputs.map((o) => getSignedOutput(o, privateKey));
 };

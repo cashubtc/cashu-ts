@@ -1,8 +1,8 @@
 import { test, describe, expect } from 'vitest';
 import { MintPayload } from '../src/model/types/wallet/payloads';
 import { signMintQuote, verifyMintQuoteSignature } from '../src/crypto/client/NUT20';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 
 describe('mint quote signatures', () => {
 	test('valid signature verification', () => {

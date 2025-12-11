@@ -1,4 +1,4 @@
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { Proof, pointFromHex } from '../../../src/crypto/common';
 import { verifyP2PKSig } from '../../../src/crypto/mint/NUT11';
 import { describe, expect, test } from 'vitest';

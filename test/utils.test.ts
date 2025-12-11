@@ -5,7 +5,7 @@ import * as utils from '../src/utils';
 import { PUBKEYS } from './consts';
 import { createDLEQProof } from '../src/crypto/mint/NUT12';
 import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../src/utils';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { createBlindSignature, getPubKeyFromPrivKey } from '../src/crypto/mint';
 import { pointFromBytes } from '../src/crypto/common';
 
