@@ -553,7 +553,6 @@ export class Keyset {
     get fee(): number;
     // @deprecated (undocumented)
     get final_expiry(): number | undefined;
-    // (undocumented)
     static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
     // (undocumented)
     get hasHexId(): boolean;

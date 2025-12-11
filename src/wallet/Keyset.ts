@@ -150,6 +150,13 @@ export class Keyset {
 		return derivedId === keys.id;
 	}
 
+	/**
+	 * Create a Keyset from Mint API DTOs.
+	 *
+	 * @param meta The MintKeyset metadata from GetKeysetsResponse.
+	 * @param keys The MintKeys from GetKeysResponse.
+	 * @returns Keyset instance.
+	 */
 	static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset {
 		const ks = new Keyset(meta.id, meta.unit, meta.active, meta.input_fee_ppk, meta.final_expiry);
 
