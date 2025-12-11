@@ -115,7 +115,7 @@ export class Keyset {
 	/**
 	 * Verifies that the keyset's ID matches the derived ID from its keys, unit, and expiry.
 	 *
-	 * @returns True if verification succeeds, false otherwise (e.g., no keys or mismatch).
+	 * @returns True if verification succeeds, false otherwise (e.g: no keys or mismatch).
 	 */
 	verify(): boolean {
 		if (!this.hasKeys) {
@@ -132,9 +132,7 @@ export class Keyset {
 	/**
 	 * Verifies that a MintKeys DTO has a correct id for its keys/unit/expiry.
 	 *
-	 * @remarks
-	 * This mirrors the internal Keyset.verify logic but works directly on the NUT-01 /v1/keys
-	 * response shape.
+	 * @returns True if verification succeeds, false otherwise (e.g: no keys or mismatch).
 	 */
 	static verifyKeysetId(keys: MintKeys): boolean {
 		if (!keys.keys || Object.keys(keys.keys).length === 0) {
