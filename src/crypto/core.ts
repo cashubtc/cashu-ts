@@ -103,7 +103,8 @@ export function createBlindSignature(
 	amount: number,
 	id: string,
 ): BlindSignature {
-	const C_: WeierstrassPoint<bigint> = B_.multiply(bytesToNumber(privateKey));
+	const a = secp256k1.Point.Fn.fromBytes(privateKey);
+	const C_: WeierstrassPoint<bigint> = B_.multiply(a);
 	return { C_, amount, id };
 }
 
@@ -139,7 +140,7 @@ export function createRandomRawBlindedMessage(): RawBlindedMessage {
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
-		r = bytesToNumber(createRandomSecretKey());
+		r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey());
 	}
 	const rG = secp256k1.Point.BASE.multiply(r);
 	const B_ = Y.add(rG);
