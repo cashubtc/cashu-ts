@@ -1,7 +1,13 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
-import { randomBytes, bytesToHex, type PrivKey, utf8ToBytes } from '@noble/curves/utils';
+import {
+	randomBytes,
+	bytesToHex,
+	type PrivKey,
+	utf8ToBytes,
+	hexToBytes,
+} from '@noble/curves/utils';
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 
@@ -104,7 +110,7 @@ export function createBlindSignature(
 /**
  * @deprecated - Use createRandomRawBlindedMessage()
  */
-export function createRandomBlindedMessage(_deprecated?: PrivKey): BlindedMessage {
+export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage {
 	void _deprecated; // intentionally unused
 	return createRandomRawBlindedMessage();
 }

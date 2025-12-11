@@ -190,7 +190,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 export function createP2PKsecret(pubkey: string, tags?: string[][]): string;
 
 // @public @deprecated (undocumented)
-export function createRandomBlindedMessage(_deprecated?: PrivKey): BlindedMessage;
+export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage;
 
 // @public
 export function createRandomRawBlindedMessage(): RawBlindedMessage;
