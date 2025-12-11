@@ -1,6 +1,6 @@
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { type RawProof, createRandomSecretKey, hashToCurve } from './core';
 import { HDKey } from '@scure/bip32';
 import { deriveKeysetId, bytesToNumber } from '../utils';

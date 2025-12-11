@@ -1,4 +1,4 @@
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import {
 	pointFromHex,
 	deriveP2BKSecretKey,
@@ -6,7 +6,7 @@ import {
 	deriveP2BKSecretKeys,
 } from '../../src/crypto';
 import { hexToNumber, numberToHexPadded64 } from '../../src/utils';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 
 describe('blinded pubkeys & scalar arithmetic', () => {
@@ -96,7 +96,7 @@ describe('deriveP2BKSecretKey with expectedPub hints', () => {
 		const Pprime = compFromScalar(k1); // valid blinded key
 		const Pself = compFromScalar(p); // compressed P = p·G
 		// Build 02||x(p) from Schnorr API
-		const xonly = schnorr.getPublicKey(pHex); // 32-byte x of even-Y lift
+		const xonly = schnorr.getPublicKey(hexToBytes(pHex)); // 32-byte x of even-Y lift
 		const expectedFromX = new Uint8Array(33);
 		expectedFromX[0] = 0x02;
 		expectedFromX.set(xonly, 1);

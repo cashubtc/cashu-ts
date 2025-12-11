@@ -1,13 +1,13 @@
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha2';
-import {
-	randomBytes,
-	bytesToHex,
-	type PrivKey,
-	utf8ToBytes,
-	hexToBytes,
-} from '@noble/curves/utils';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+
+/**
+ * Private key type - can be hex string or Uint8Array.
+ */
+export type PrivKey = Uint8Array | string;
 import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 
@@ -203,12 +203,13 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
  * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
  * (auxRand) each time it is called.
  * @param message - The message to sign.
- * @param privateKey - The private key to sign with.
+ * @param privateKey - The private key to sign with (hex string or Uint8Array).
  * @returns The signature in hex format.
  */
 export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
 	const msghash = sha256(new TextEncoder().encode(message));
-	const sig = schnorr.sign(msghash, privateKey); // auxRand is random by default
+	const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
+	const sig = schnorr.sign(msghash, privKeyBytes); // auxRand is random by default
 	return bytesToHex(sig);
 };
 
@@ -235,7 +236,7 @@ export const schnorrVerifyMessage = (
 		const msghash = sha256(new TextEncoder().encode(message));
 		// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
 		const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
-		return schnorr.verify(signature, msghash, hexToBytes(pubkeyX));
+		return schnorr.verify(hexToBytes(signature), msghash, hexToBytes(pubkeyX));
 	} catch (e) {
 		if (throws) {
 			throw e;

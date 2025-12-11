@@ -4,8 +4,7 @@
 
 ```ts
 
-import { PrivKey } from '@noble/curves/utils';
-import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
+import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
@@ -1332,6 +1331,9 @@ export type PostRestoreResponse = {
     outputs: SerializedBlindedMessage[];
     signatures: SerializedBlindedSignature[];
 };
+
+// @public
+export type PrivKey = Uint8Array | string;
 
 // @public
 export type Proof = {

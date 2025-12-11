@@ -17,7 +17,7 @@ import {
 	invoiceHasAmountInHRP,
 	numberToHexPadded64,
 } from '../../src/utils';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
 const keys: Keys = {};
 for (let i = 1; i <= 2048; i *= 2) {

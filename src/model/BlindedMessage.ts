@@ -1,5 +1,5 @@
 import { type SerializedBlindedMessage } from './types/index';
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 class BlindedMessage {
 	amount: number;

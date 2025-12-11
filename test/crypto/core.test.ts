@@ -1,4 +1,4 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
 	hashToCurve,
 	pointFromHex,
@@ -14,9 +14,9 @@ import {
 	pointFromBytes,
 } from '../../src/crypto';
 import { bytesToNumber } from '../../src/utils';
-import { hexToBytes, bytesToHex } from '@noble/hashes/utils';
+import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
-import { sha256 } from '@noble/hashes/sha2';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { verifyProof } from '../../src/crypto/NUT01';
 
 const SECRET_MESSAGE = 'test_message';

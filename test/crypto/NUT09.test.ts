@@ -1,4 +1,4 @@
-import { bytesToHex } from '@noble/curves/utils';
+import { bytesToHex } from '@noble/curves/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
 import { deriveSecret, getKeysetIdInt } from '../../src/crypto';
