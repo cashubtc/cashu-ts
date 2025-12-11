@@ -15,7 +15,6 @@ import type {
 	DeprecatedToken,
 	Keys,
 	MintKeys,
-	MintKeyset,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -25,7 +24,6 @@ import type {
 	V4ProofTemplate,
 } from '../model/types';
 import { Bytes } from './Bytes';
-import { type Keyset } from '../wallet';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -388,21 +386,36 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 /**
  * Helper function to decode cashu tokens into object.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @example The `keysets` param accepts any object with an `id` key.
+ *
+ * You can strongly type keysets via the generic if you wish:
+ *
+ * ```ts
+ * // Simple:
+ * const token = getDecodedToken(tokenString, keysets);
+ *
+ * // Strongly typed: (keysets param is a Keyset)
+ * const token = getDecodedToken<Keyset>(tokenString, keysets);
+ * ```
+ *
+ * @param token An encoded cashu token (cashuB...)
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
+export function getDecodedToken<T extends { id: string }>(
+	tokenString: string,
+	keysets?: T[],
+): Token {
 	// remove prefixes
-	const token = removePrefix(tokenString);
-	const tokenObj = handleTokens(token);
-	tokenObj.proofs = mapShortKeysetIds(tokenObj.proofs, keysets);
-	return tokenObj;
+	const tokenStr = removePrefix(tokenString);
+	const token: Token = handleTokens(tokenStr);
+	token.proofs = mapShortKeysetIds(token.proofs, keysets);
+	return token;
 }
 
 /**
  * Returns the metadata of a cashu token.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
  * @returns Token metadata.
  */
 export function getTokenMetadata(token: string): TokenMetadata {
@@ -430,7 +443,7 @@ export function getTokenMetadata(token: string): TokenMetadata {
 /**
  * Helper function to decode different versions of cashu tokens into an object.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
  * @returns Cashu Token object.
  */
 export function handleTokens(token: string): Token {
@@ -650,14 +663,11 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Check that the keyset hashes to the specified ID.
- *
- * @deprecated Now part of Keyset class.
- * @param keys The keyset to be verified.
- * @returns True if the verification was successful, false otherwise.
- * @throws Error if the keyset ID version is unrecognized.
+ * @deprecated Use Keyset.verifyKeysetId(keys), or init a Keyset and call keyset.verify().
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
+	// Note: we are NOT redirecting to Keyset.verifyKeysetId() here as that would
+	// couple the utils class to Keyset, and risks circular dependencies.
 	const isBase64 = isBase64String(keys.id);
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
 	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
@@ -675,11 +685,27 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 /**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
+ *
+ * @example The `keysets` param accepts any object with an `id` key.
+ *
+ * You can strongly type keysets via the generic if you wish:
+ *
+ * ```ts
+ * // Simple
+ * const proofs = mapShortKeysetIds(proofs, keysets);
+ *
+ * // Strongly typed (keysets param is a Keyset)
+ * const proofs = mapShortKeysetIds<Keyset>(proofs, keysets);
+ * ```
+ *
+ * @param proofs Array of Proofs.
+ * @param keysets Array of Keysets to be used for verification.
+ * @returns Array of Proofs with full keyset IDs.
  */
-function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): Proof[] {
-	const newProofs = [];
+function mapShortKeysetIds<T extends { id: string }>(proofs: Proof[], keysets?: T[]): Proof[] {
+	const newProofs: Proof[] = [];
 	for (const proof of proofs) {
-		let idBytes;
+		let idBytes: Uint8Array;
 		try {
 			idBytes = hexToBytes(proof.id);
 		} catch {
@@ -720,12 +746,24 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): 
 /**
  * Checks that the proof has a valid DLEQ proof according to keyset `keys`
  *
+ * @example The `keyset` param accepts any object with a `keys` key.
+ *
+ * You can strongly type keyset via the generic if you wish:
+ *
+ * ```ts
+ * // Simple
+ * const isValid = hasValidDleq(proof, keyset);
+ *
+ * // Strongly typed (keyset param is a Keyset)
+ * const isValid = hasValidDleq<Keyset>(proof, keyset);
+ * ```
+ *
  * @param proof The proof subject to verification.
  * @param keyset The Mint's keyset to be used for verification.
  * @returns True if verification succeeded, false otherwise.
  * @throws Error if @param proof does not match any key in @param keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
+export function hasValidDleq<T extends { keys: Keys }>(proof: Proof, keyset: T): boolean {
 	if (proof.dleq == undefined) {
 		return false;
 	}

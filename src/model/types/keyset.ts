@@ -5,9 +5,9 @@
 export type Keys = { [amount: number]: string };
 
 /**
- * An array of mint keysets.
+ * NUT-01 Keys API response (/v1/keys)
  */
-export type MintActiveKeys = {
+export type GetKeysResponse = {
 	/**
 	 * Keysets.
 	 */
@@ -15,9 +15,9 @@ export type MintActiveKeys = {
 };
 
 /**
- * An array of mint keyset entries.
+ * NUT-02 Keysets API response (/v1/keysets)
  */
-export type MintAllKeysets = {
+export type GetKeysetsResponse = {
 	/**
 	 * Keysets.
 	 */
@@ -72,4 +72,40 @@ export type MintKeyset = {
 	 * Expiry of the keyset.
 	 */
 	final_expiry?: number;
+};
+
+/**
+ * Cached view of a keyset.
+ *
+ * @remarks
+ * This is basically MintKeyset, with optional "keys" field for active, verified keysets.
+ */
+export type KeysetCache = MintKeyset & {
+	/**
+	 * Optional. Keys for this keyset, if available.
+	 *
+	 * Present only when keyset is active and keys have been verified.
+	 */
+	keys?: Keys;
+};
+
+/**
+ * Cached view of a KeyChain.
+ *
+ * @remarks
+ * This is the preferred format for persisting and restoring keychain state.
+ */
+export type KeyChainCache = {
+	/**
+	 * Flattened keysets and, optionally, their keys.
+	 */
+	keysets: KeysetCache[];
+	/**
+	 * The unit this keychain is for, for example 'sat', 'usd'.
+	 */
+	unit: string;
+	/**
+	 * Mint URL that this cache belongs to.
+	 */
+	mintUrl: string;
 };

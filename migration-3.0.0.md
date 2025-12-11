@@ -137,7 +137,7 @@ The following wallet methods are affected:
 - `wallet.getKeys(id?)` -> `wallet.keyChain.getKeyset(id?)`
 - `wallet.getActiveKeyset()` -> `wallet.keyChain.getCheapestKeyset()`
 - `wallet.getKeySets()` -> `wallet.keyChain.getKeysets()`
-- `wallet.getAllKeys()` -> `wallet.keyChain.getCache().keys`
+- `wallet.getAllKeys()` -> `wallet.keyChain.getAllKeys()`
 
 ### on[Mint|Melt|Proof]\* events
 

@@ -258,7 +258,9 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 export function getDataField(secret: Secret | string): string;
 
 // @public
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]): Token;
+export function getDecodedToken<T extends {
+    id: string;
+}>(tokenString: string, keysets?: T[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
@@ -357,6 +359,16 @@ export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[]
 // @public (undocumented)
 export const getKeysetIdInt: (keysetId: string) => bigint;
 
+// @public
+export type GetKeysetsResponse = {
+    keysets: MintKeyset[];
+};
+
+// @public
+export type GetKeysResponse = {
+    keysets: MintKeys[];
+};
+
 // @public @deprecated (undocumented)
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[];
 
@@ -436,7 +448,9 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 export function hasTag(secret: Secret | string, key: string): boolean;
 
 // @public
-export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean;
+export function hasValidDleq<T extends {
+    keys: Keys;
+}>(proof: Proof, keyset: T): boolean;
 
 // @public
 export function hexToNumber(hex: string): bigint;
@@ -488,6 +502,14 @@ export type JsonRpcReqParams = {
 // @public
 export class KeyChain {
     constructor(mint: string | Mint, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
+    get cache(): KeyChainCache;
+    static cacheToMintDTO(cache: KeyChainCache): {
+        keysets: MintKeyset[];
+        keys: MintKeys[];
+    };
+    static fromCache(mint: string | Mint, cache: KeyChainCache): KeyChain;
+    getAllKeys(): MintKeys[];
+    // @deprecated
     getCache(): {
         keysets: MintKeyset[];
         keys: MintKeys[];
@@ -498,7 +520,22 @@ export class KeyChain {
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
+    loadFromCache(cache: KeyChainCache): void;
+    static mintToCacheDTO(unit: string, mintUrl: string, allKeysets: MintKeyset[], allKeys: MintKeys[]): KeyChainCache;
 }
+
+// @public
+export type KeyChainCache = {
+    keysets: KeysetCache[];
+    unit: string;
+    mintUrl: string;
+};
+
+// @public
+export type KeyLike = {
+    id: string;
+    keys: Keys;
+};
 
 // @public
 export type Keys = {
@@ -508,18 +545,22 @@ export type Keys = {
 // @public (undocumented)
 export class Keyset {
     constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number, final_expiry?: number);
+    // @deprecated (undocumented)
     get active(): boolean;
     // (undocumented)
     get expiry(): number | undefined;
     // (undocumented)
     get fee(): number;
+    // @deprecated (undocumented)
     get final_expiry(): number | undefined;
+    static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
     // (undocumented)
     get hasHexId(): boolean;
     // (undocumented)
     get hasKeys(): boolean;
     // (undocumented)
     get id(): string;
+    // @deprecated (undocumented)
     get input_fee_ppk(): number;
     // (undocumented)
     get isActive(): boolean;
@@ -531,7 +572,13 @@ export class Keyset {
     // (undocumented)
     get unit(): string;
     verify(): boolean;
+    static verifyKeysetId(keys: MintKeys): boolean;
 }
+
+// @public
+export type KeysetCache = MintKeyset & {
+    keys?: Keys;
+};
 
 // @public (undocumented)
 export type KeysetPair = {
@@ -744,8 +791,8 @@ export class Mint {
     createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
     disconnectWebSocket(): void;
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
-    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<MintActiveKeys>;
-    getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets>;
+    getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
+    getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse>;
     getLazyMintInfo(): Promise<MintInfo>;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
@@ -770,15 +817,11 @@ export class Mint {
     get webSocketConnection(): WSConnection | undefined;
 }
 
-// @public
-export type MintActiveKeys = {
-    keysets: MintKeys[];
-};
+// @public @deprecated (undocumented)
+export type MintActiveKeys = GetKeysResponse;
 
-// @public
-export type MintAllKeysets = {
-    keysets: MintKeyset[];
-};
+// @public @deprecated (undocumented)
+export type MintAllKeysets = GetKeysetsResponse;
 
 // @public
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
@@ -804,6 +847,8 @@ export type MintContactInfo = {
 // @public (undocumented)
 export class MintInfo {
     constructor(info: GetInfoResponse);
+    // (undocumented)
+    get cache(): GetInfoResponse;
     // (undocumented)
     get contact(): MintContactInfo[];
     // (undocumented)
@@ -1113,18 +1158,18 @@ export interface OutputConfig {
 }
 
 // @public (undocumented)
-export class OutputData implements OutputDataLike {
+export class OutputData implements OutputDataLike<KeyLike> {
     constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData(amount: number, seed: Uint8Array, counter: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createDeterministicData<T extends KeyLike>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createP2PKData(p2pk: P2PKOptions, amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createP2PKData<T extends KeyLike>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]): OutputData[];
+    static createRandomData<T extends KeyLike>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -1135,14 +1180,14 @@ export class OutputData implements OutputDataLike {
     secret: Uint8Array;
     static sumOutputAmounts(outputs: OutputDataLike[]): number;
     // (undocumented)
-    toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset): Proof;
+    toProof(sig: SerializedBlindedSignature, keyset: KeyLike): Proof;
 }
 
 // @public (undocumented)
-export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+export type OutputDataFactory<TKeyset extends KeyLike = MintKeys | Keyset> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
 
 // @public (undocumented)
-export interface OutputDataLike {
+export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1150,7 +1195,7 @@ export interface OutputDataLike {
     // (undocumented)
     secret: Uint8Array;
     // (undocumented)
-    toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
+    toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
 }
 
 // @public
@@ -1708,7 +1753,7 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean;
 // @public
 export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
-// @public @deprecated
+// @public @deprecated (undocumented)
 export function verifyKeysetId(keys: MintKeys): boolean;
 
 // @public (undocumented)
@@ -1784,9 +1829,10 @@ export class Wallet {
         pending: Proof[];
         spent: Proof[];
     }>;
-    readonly keyChain: KeyChain;
+    get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;
+    loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void;
     // (undocumented)
     get logger(): Logger;
     // @deprecated (undocumented)

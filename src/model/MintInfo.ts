@@ -165,6 +165,9 @@ export class MintInfo {
 
 	// ---------- getters ----------
 
+	get cache(): GetInfoResponse {
+		return this._mintInfo;
+	}
 	get contact() {
 		return this._mintInfo.contact;
 	}

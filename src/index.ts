@@ -45,6 +45,7 @@ export type * from './mint/types/payloads';
 export type * from './mint/types/responses';
 
 // Shared models & primitives
+export type * from './model/types/_deprecated';
 export type * from './model/types/blinded';
 export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
@@ -81,7 +82,7 @@ export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export { MintOperationError, NetworkError, HttpResponseError } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
-export { OutputData } from './model/OutputData';
+export { OutputData, type KeyLike } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';

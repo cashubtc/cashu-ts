@@ -1,4 +1,5 @@
 import {
+	type Keys,
 	type MintKeys,
 	type Proof,
 	type SerializedBlindedMessage,
@@ -20,15 +21,26 @@ import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 
-export interface OutputDataLike {
+/**
+ * Minimal key carrier shape for OutputData helpers.
+ *
+ * Any type with `id`, and `keys` can be used as TKeyset in OutputDataLike and OutputDataFactory,
+ * including MintKeys and wallet Keyset.
+ */
+export type KeyLike = { id: string; keys: Keys };
+
+export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
+	toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
 }
 
-export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+export type OutputDataFactory<TKeyset extends KeyLike = MintKeys | Keyset> = (
+	amount: number,
+	keys: TKeyset,
+) => OutputDataLike<TKeyset>;
 
 /**
  * Core P2PK tags that must not be settable in additional tags.
@@ -84,7 +96,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 	return e;
 }
 
-export class OutputData implements OutputDataLike {
+export class OutputData implements OutputDataLike<KeyLike> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -99,7 +111,7 @@ export class OutputData implements OutputDataLike {
 		this.blindedMessage = blindedMessage;
 	}
 
-	toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset) {
+	toProof(sig: SerializedBlindedSignature, keyset: KeyLike) {
 		let dleq: DLEQ | undefined;
 		if (sig.dleq) {
 			dleq = {
@@ -134,10 +146,10 @@ export class OutputData implements OutputDataLike {
 		return serializedProof;
 	}
 
-	static createP2PKData(
+	static createP2PKData<T extends KeyLike>(
 		p2pk: P2PKOptions,
 		amount: number,
-		keyset: MintKeys | Keyset,
+		keyset: T,
 		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -253,7 +265,7 @@ export class OutputData implements OutputDataLike {
 		return od;
 	}
 
-	static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]) {
+	static createRandomData<T extends KeyLike>(amount: number, keyset: T, customSplit?: number[]) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -269,11 +281,11 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
-	static createDeterministicData(
+	static createDeterministicData<T extends KeyLike>(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
-		keyset: MintKeys | Keyset,
+		keyset: T,
 		customSplit?: number[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);

@@ -124,7 +124,31 @@ describe('KeyChain initialization', () => {
 		expect(isValidHex(active.id)).toBe(true);
 
 		// Verify final_expiry assigned
-		expect(active.final_expiry).toBe(1754296607);
+		expect(active.expiry).toBe(1754296607);
+	});
+
+	test('should initialize with mintUrl and load keys and keysets', async () => {
+		const keyChain = new KeyChain('http://localhost:3338', unit);
+		await keyChain.init();
+
+		// Verify keysets loaded and filtered by unit
+		const keysets = keyChain.getKeysets();
+		expect(keysets).toHaveLength(4); // All from dummy, assuming same unit
+		expect(keysets.map((k) => k.id)).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id));
+
+		// Verify keys assigned
+		const keysForFirst = keyChain.getKeyset('00bd033559de27d0').toMintKeys();
+		expect(keysForFirst).toEqual(dummyKeysResp.keysets[0]);
+
+		// Verify active keyset (lowest fee, active, hex ID)
+		const active = keyChain.getCheapestKeyset();
+		expect(active.id).toBe('00bd033559de27d0'); // Fee 0, hex ID
+		expect(active.fee).toBe(0);
+		expect(active.hasHexId).toBe(true);
+		expect(isValidHex(active.id)).toBe(true);
+
+		// Verify final_expiry assigned
+		expect(active.expiry).toBe(1754296607);
 	});
 
 	test('should skip loading if already initialized unless forceRefresh', async () => {
@@ -194,40 +218,45 @@ describe('KeyChain initialization', () => {
 		);
 
 		const keyChain = new KeyChain(mint, unit);
-		await expect(keyChain.init()).rejects.toThrow('KeyChain not initialized');
+		await expect(keyChain.init()).rejects.toThrow(/No Keysets found for unit/);
 	});
 
-	test('should preload from cache and match original getCache', async () => {
+	test('should preload from cache and match original cache', async () => {
 		const originalChain = new KeyChain(mint, unit);
 		await originalChain.init();
-		const originalCache = originalChain.getCache();
-		console.log('originalCache', originalCache);
 
-		// Instantiate new KeyChain with cached data (arrays)
-		const cachedChain = new KeyChain(mint, unit, originalCache.keysets, originalCache.keys);
+		// New consolidated cache shape
+		const originalCache = originalChain.cache;
+		// console.log('originalCache', originalCache);
 
-		// Verify preloaded without init()
+		// Instantiate new KeyChain from consolidated cache
+		const cachedChain = KeyChain.fromCache(mint, originalCache);
+
+		// Verify preloaded without calling init()
 		const cachedActive = cachedChain.getCheapestKeyset();
 		expect(cachedActive.id).toBe(originalChain.getCheapestKeyset().id);
 		expect(cachedActive.fee).toBe(0);
 		expect(cachedChain.getKeysets().length).toBe(originalChain.getKeysets().length);
 
-		// Get cache from cachedChain and compare
-		const newCache = cachedChain.getCache();
+		// Round-trip cache check
+		const newCache = cachedChain.cache;
 		expect(newCache).toEqual(originalCache);
 	});
 
-	test('should preload from single cached keys object', async () => {
+	test('should preload from single cached keys object (legacy constructor cache)', async () => {
 		const originalChain = new KeyChain(mint, unit);
 		await originalChain.init();
-		const originalCache = originalChain.getCache();
+
+		// Legacy Mint DTO cache shape
+		const legacyCache = originalChain.getCache();
 
 		// Use only the first keys object as single MintKeys
-		const singleKeys = originalCache.keys[0];
+		const singleKeys = legacyCache.keys[0];
 
 		// Filter keysets to match the single keys' ID for consistency
-		const matchingKeysets = originalCache.keysets.filter((ks) => ks.id === singleKeys.id);
+		const matchingKeysets = legacyCache.keysets.filter((ks) => ks.id === singleKeys.id);
 
+		// Deprecated constructor path using Mint DTOs
 		const cachedChain = new KeyChain(mint, unit, matchingKeysets, singleKeys);
 
 		// Verify preloaded

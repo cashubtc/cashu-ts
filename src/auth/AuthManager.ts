@@ -5,8 +5,8 @@ import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
 import type {
 	GetInfoResponse,
-	MintActiveKeys,
-	MintAllKeysets,
+	GetKeysResponse,
+	GetKeysetsResponse,
 	Proof,
 	SerializedBlindedSignature,
 } from '../model/types';
@@ -327,11 +327,11 @@ export class AuthManager implements AuthProvider {
 		if (!this.keychain) {
 			// fetch blind keysets and keys for unit 'auth'
 			const [allKeysets, allKeys] = await Promise.all([
-				this.req<MintAllKeysets>({
+				this.req<GetKeysetsResponse>({
 					endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keysets'),
 					method: 'GET',
 				}),
-				this.req<MintActiveKeys>({
+				this.req<GetKeysResponse>({
 					endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys'),
 					method: 'GET',
 				}),
