@@ -386,15 +386,28 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 /**
  * Helper function to decode cashu tokens into object.
  *
+ * @example
+ * The `keysets` param accepts any object with an `id` key.
+ *
+ * You can strongly type keysets via the generic if you wish:
+ *
+ *    ```ts
+ *    // Simple:
+ *    const token - getDecodedToken(tokenString, keysets);
+ *
+ *    // Strongly typed: (keysets param is a Keyset)
+ *    const token - getDecodedToken<Keyset>(tokenString, keysets);
+ *    ```
+ *
  * @param token An encoded cashu token (cashuAey...)
  * @returns Cashu token object.
  */
-export function getDecodedToken<T extends { id: string }>(tokenString: string, keysets?: T[]) {
+export function getDecodedToken<T extends { id: string }>(tokenString: string, keysets?: T[]): Token {
 	// remove prefixes
-	const token = removePrefix(tokenString);
-	const tokenObj = handleTokens(token);
-	tokenObj.proofs = mapShortKeysetIds(tokenObj.proofs, keysets);
-	return tokenObj;
+	const tokenStr = removePrefix(tokenString);
+	const token: Token = handleTokens(tokenStr);
+	token.proofs = mapShortKeysetIds(token.proofs, keysets);
+	return token;
 }
 
 /**
@@ -670,6 +683,22 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 /**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
+ *
+ * @example
+ * The `keysets` param accepts any object with an `id` key.
+ *
+ * You can strongly type keysets via the generic if you wish:
+ *
+ *    ```ts
+ *    // Simple
+ *    const proofs = mapShortKeysetIds(proofs, keysets);
+ *
+ *    // Strongly typed (keysets param is a Keyset)
+ *    const proofs = mapShortKeysetIds<Keyset>(proofs, keysets);
+ *    ```
+ *
+ * @param token An encoded cashu token (cashuAey...)
+ * @returns Array of Proofs with full keyset IDs.
  */
 function mapShortKeysetIds<T extends { id: string }>(proofs: Proof[], keysets?: T[]): Proof[] {
 	const newProofs: Proof[] = [];
@@ -714,6 +743,19 @@ function mapShortKeysetIds<T extends { id: string }>(proofs: Proof[], keysets?: 
 
 /**
  * Checks that the proof has a valid DLEQ proof according to keyset `keys`
+ *
+ * @example
+ * The `keyset` param accepts any object with an `keys` key.
+ *
+ * You can strongly type keyset via the generic if you wish:
+ *
+ *    ```ts
+ *    // Simple
+ *    const isValid = hasValidDleq(proof, keyset);
+ *
+ *    // Strongly typed (keyset param is a Keyset)
+ *    const isValid = hasValidDleq<Keyset>(proof, keyset);
+ *    ```
  *
  * @param proof The proof subject to verification.
  * @param keyset The Mint's keyset to be used for verification.
