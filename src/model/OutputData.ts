@@ -21,15 +21,26 @@ import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 
-export interface OutputDataLike {
+/**
+ * Minimal key carrier shape for OutputData helpers.
+ *
+ * Any type with `id`, and `keys` can be used as TKeyset in OutputDataLike and OutputDataFactory,
+ * including MintKeys and wallet Keyset.
+ */
+export type KeyLike = { id: string; keys: Keys };
+
+export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
+	toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
 }
 
-export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+export type OutputDataFactory<TKeyset extends KeyLike = MintKeys | Keyset> = (
+	amount: number,
+	keys: TKeyset,
+) => OutputDataLike<TKeyset>;
 
 /**
  * Core P2PK tags that must not be settable in additional tags.
@@ -85,7 +96,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 	return e;
 }
 
-export class OutputData implements OutputDataLike {
+export class OutputData implements OutputDataLike<MintKeys | Keyset> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;

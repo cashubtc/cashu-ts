@@ -532,6 +532,12 @@ export type KeyChainCache = {
 };
 
 // @public
+export type KeyLike = {
+    id: string;
+    keys: Keys;
+};
+
+// @public
 export type Keys = {
     [amount: number]: string;
 };
@@ -1153,7 +1159,7 @@ export interface OutputConfig {
 }
 
 // @public (undocumented)
-export class OutputData implements OutputDataLike {
+export class OutputData implements OutputDataLike<MintKeys | Keyset> {
     constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
@@ -1188,10 +1194,10 @@ export class OutputData implements OutputDataLike {
 }
 
 // @public (undocumented)
-export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+export type OutputDataFactory<TKeyset extends KeyLike = MintKeys | Keyset> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
 
 // @public (undocumented)
-export interface OutputDataLike {
+export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1199,7 +1205,7 @@ export interface OutputDataLike {
     // (undocumented)
     secret: Uint8Array;
     // (undocumented)
-    toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
+    toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
 }
 
 // @public
