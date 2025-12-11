@@ -11,7 +11,12 @@ import { test, describe, expect } from 'vitest';
 import { MintKeys, type Keys, type Proof, type Token } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
-import { hasValidDleq, hexToNumber, numberToHexPadded64 } from '../../src/utils';
+import {
+	hasValidDleq,
+	hexToNumber,
+	invoiceHasAmountInHRP,
+	numberToHexPadded64,
+} from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils';
 
 const keys: Keys = {};
@@ -806,5 +811,42 @@ describe('test deprecated base64 keyset id derivation', () => {
 
 		const verified = utils.verifyKeysetId(mintKeys);
 		expect(verified).toBe(true);
+	});
+});
+
+describe('invoiceHasAmountInHRP()', () => {
+	test('detects amountless invoices correctly', () => {
+		const amountless = [
+			'lnbc1p53lqw7pp5d8ntp7kfaqcqtxfgks0n32xd4lng2hhx5z3gvfcm9teyn4vee35sdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqr8pqsp5wdg4qaq6ktrvfm4z99ry98y4qrmg3krnc4mhf2rwce230hyyeu4s9qxpqysgqgz7lt5hnxcq3wrpd5qe64a37msj0lhqfa0ky6ppagyedd79lz86zrcg20p78csjtqv3sc2m06uu24ykh8q0jzhu30yr820sysh9wv8gpz44nvz',
+		];
+		amountless.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
+	});
+
+	test('detects invoices with amount', () => {
+		const withAmount = [
+			// 21 sats (210n → valid)
+			'lnbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa',
+
+			// 1 BTC — no multiplier
+			'lnbc11p53lqsgpp5mxs67qwmh34wu3jy7um8u490n2dtgy7dsrhzpdup008g8ygj2eysdp82pshjgr5dusyymrfde4jq4mpd3kx2',
+
+			//uppercase LN — should be valid as BOLT11 is case insensitive
+			'lNbc210n1p53lq0wpp5tsmnj3c6znsdyu5v8t2k3y8xw33m9hnd6exzwspxa4pqz3hze8rsdp82pshjgr5dusyymrfde4jq4mpd3kx2apq24ek2uscqzpuxqrwzqsp5jgr8l0yx8zpxfez9hns5t25j9m90yrzjz34gpacssd6lwr7an40q9qxpqysgqws7g2g9hh6awk2n6vhzpqjyf6matulx0cc0ct099nz6kudzv8xmy9clu4kyvurrt99zkr7y03hse85c2jvm7jm8qlqnvzawudn4e3vsq0m6qpa',
+
+			//pico invoice — should be valid last digit of amount is 0
+			'lnbc9678785340p1pwmna7lpp5gc3xfm08u9qy06djf8dfflhugl6p7lgza6dsjxq454gxhj9t7a0sd8dgfkx7cmtwd68yetpd5s9xar0wfjn5gpc8qhrsdfq24f5ggrxdaezqsnvda3kkum5wfjkzmfqf3jkgem9wgsyuctwdus9xgrcyqcjcgpzgfskx6eqf9hzqnteypzxz7fzypfhg6trddjhygrcyqezcgpzfysywmm5ypxxjemgw3hxjmn8yptk7untd9hxwg3q2d6xjcmtv4ezq7pqxgsxzmnyyqcjqmt0wfjjq6t5v4khxsp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygsxqyjw5qcqp2rzjq0gxwkzc8w6323m55m4jyxcjwmy7stt9hwkwe2qxmy8zpsgg7jcuwz87fcqqeuqqqyqqqqlgqqqqn3qq9q9qrsgqrvgkpnmps664wgkp43l22qsgdw4ve24aca4nymnxddlnp8vh9v2sdxlu5ywdxefsfvm0fq3sesf08uf6q9a2ke0hc9j6z6wlxg5z5kqpu2v9wz',
+		];
+
+		withAmount.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(true));
+	});
+
+	test('rejects malformed or invalid HRP structure', () => {
+		const invalid = [
+			'lnbc0210n1...', // leading zero in amount → invalid per spec
+			'lnsomething', // incomplete HRP
+			'lnbc9678785343p1pwmna7lpp5g...', // pico invoice — amount not ending with 0
+		];
+
+		invalid.forEach((inv) => expect(invoiceHasAmountInHRP(inv)).toBe(false));
 	});
 });

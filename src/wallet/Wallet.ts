@@ -80,6 +80,7 @@ import {
 	splitAmount,
 	sumProofs,
 	sanitizeUrl,
+	invoiceHasAmountInHRP,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
 
@@ -1680,8 +1681,8 @@ class Wallet {
 	/**
 	 * @deprecated Use createMeltQuoteBolt11.
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteBolt11Response> {
-		return this.createMeltQuoteBolt11(invoice);
+	async createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+		return this.createMeltQuoteBolt11(invoice, amountMsat);
 	}
 
 	/**
@@ -1689,13 +1690,39 @@ class Wallet {
 	 * to pay a Lightning invoice.
 	 *
 	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @param amountMsat Optional amount in millisatoshis to attach for amountless invoices, must not
+	 *   be provided for invoices that already encode an amount.
 	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
 	 *   reserve.
 	 */
-	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteBolt11Response> {
+	async createMeltQuoteBolt11(
+		invoice: string,
+		amountMsat?: number,
+	): Promise<MeltQuoteBolt11Response> {
+		if (amountMsat !== undefined) {
+			this.failIf(
+				invoiceHasAmountInHRP(invoice),
+				'amountMsat supplied but invoice already contains an amount. Leave amountMsat undefined for non-zero invoices.',
+			);
+
+			this.assertAmount(amountMsat, 'createMeltQuoteBolt11');
+		}
+
+		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
+
 		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
+
+			...(supportsAmountless && amountMsat !== undefined
+				? {
+						options: {
+							amountless: {
+								amount_msat: amountMsat,
+							},
+						},
+					}
+				: {}),
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return {
