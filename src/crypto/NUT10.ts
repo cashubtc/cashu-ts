@@ -1,4 +1,4 @@
-import { bytesToHex, randomBytes } from '@noble/curves/utils';
+import { bytesToHex, randomBytes } from '@noble/curves/utils.js';
 
 export type SecretKind = 'P2PK' | 'HTLC' | (string & {}); // union with any string
 

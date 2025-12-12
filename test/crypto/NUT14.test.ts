@@ -10,8 +10,8 @@ import {
 	verifyHTLCHash,
 } from '../../src/crypto';
 import { Proof } from '../../src';
-import { schnorr } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/curves/utils';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/curves/utils.js';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));

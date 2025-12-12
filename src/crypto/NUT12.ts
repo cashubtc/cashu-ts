@@ -1,8 +1,7 @@
 import { type DLEQ, hash_e, hashToCurve, createRandomSecretKey } from './core';
-import { bytesToNumber } from '../utils';
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
-import { numberToBytesBE } from '@noble/curves/utils';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 
 function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
 	if (arr1.length !== arr2.length) return false;
@@ -18,10 +17,12 @@ export const verifyDLEQProof = (
 	C_: WeierstrassPoint<bigint>,
 	A: WeierstrassPoint<bigint>,
 ) => {
-	const sG = secp256k1.Point.BASE.multiply(secp256k1.Point.Fn.fromBytes(dleq.s));
-	const eA = A.multiply(bytesToNumber(dleq.e));
-	const sB_ = B_.multiply(bytesToNumber(dleq.s));
-	const eC_ = C_.multiply(bytesToNumber(dleq.e));
+	const s = secp256k1.Point.Fn.fromBytes(dleq.s);
+	const e = secp256k1.Point.Fn.fromBytes(dleq.e);
+	const sG = secp256k1.Point.BASE.multiply(s);
+	const eA = A.multiply(e);
+	const sB_ = B_.multiply(s);
+	const eC_ = C_.multiply(e);
 	const R_1 = sG.subtract(eA); // R1 = sG - eA
 	const R_2 = sB_.subtract(eC_); // R2 = sB' - eC'
 	const hash = hash_e([R_1, R_2, A, C_]); // e == hash(R1, R2, A, C')

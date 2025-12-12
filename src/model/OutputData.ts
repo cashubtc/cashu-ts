@@ -17,7 +17,7 @@ import {
 	type DLEQ,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 
 export interface OutputDataLike {
@@ -282,6 +282,10 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
+	/**
+	 * @throws May throw if blinding factor is out of range. Caller should catch, increment counter,
+	 *   and retry per BIP32-style derivation.
+	 */
 	static createSingleDeterministicData(
 		amount: number,
 		seed: Uint8Array,
@@ -291,6 +295,8 @@ export class OutputData implements OutputDataLike {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
+		// Note: bytesToNumber is used here so invalid values bubble up as throws
+		// for BIP32-style retry logic (caller increments counter and retries).
 		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
