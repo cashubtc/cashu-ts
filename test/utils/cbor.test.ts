@@ -1,5 +1,5 @@
 import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
-import { hexToBytes } from '@noble/curves/utils';
+import { hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes

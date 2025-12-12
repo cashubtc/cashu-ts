@@ -1,5 +1,5 @@
-import { schnorr, secp256k1 } from '@noble/curves/secp256k1';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test, vi } from 'vitest';
 import {
 	createP2PKsecret,
@@ -32,7 +32,7 @@ import {
 	isHTLCSpendAuthorised,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
-import { sha256 } from '@noble/hashes/sha2';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { OutputData, OutputDataLike, BlindedMessage } from '../../src';
 import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
 
@@ -482,7 +482,7 @@ describe('test signP2PKProof', () => {
 	});
 	test('sign with 02-prepended Nostr key', async () => {
 		const PRIVKEY2 = '622320785910d6aac0d5406ce1b6ef1640ab97c2acdea6a246eb6859decd6230'; // produces an Odd Y-parity pubkey
-		const PUBKEY2 = '02' + bytesToHex(schnorr.getPublicKey(PRIVKEY2)); // Prepended x-only pubkey
+		const PUBKEY2 = '02' + bytesToHex(schnorr.getPublicKey(hexToBytes(PRIVKEY2))); // Prepended x-only pubkey
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(hexToBytes(PRIVKEY2))); // full 33-byte pubkey
 		expect(PUBKEY3).toMatch(/^03/); // Verify it really is an odd Y-parity key
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY2}"}]`;

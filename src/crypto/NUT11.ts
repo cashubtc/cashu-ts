@@ -1,7 +1,7 @@
-import { type PrivKey, bytesToHex } from '@noble/curves/utils';
-import { schnorr } from '@noble/curves/secp256k1';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
-import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage } from './core';
+import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
 import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OutputDataLike } from '../model/OutputData';
@@ -338,7 +338,7 @@ export function signP2PKProof(proof: Proof, privateKey: string, message?: string
 	// Check if the private key is required to sign by checking its
 	// X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
 	// NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
-	const pubkey = bytesToHex(schnorr.getPublicKey(privateKey)); // x-only
+	const pubkey = bytesToHex(schnorr.getPublicKey(hexToBytes(privateKey))); // x-only
 	const witnesses = getP2PKExpectedWitnessPubkeys(secret);
 	if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
 		throw new Error(`Signature not required from [02|03]${pubkey}`);

@@ -1,8 +1,8 @@
 import { type DLEQ, hash_e, hashToCurve, createRandomSecretKey } from './core';
 import { bytesToNumber } from '../utils';
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
-import { numberToBytesBE } from '@noble/curves/utils';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 
 function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
 	if (arr1.length !== arr2.length) return false;

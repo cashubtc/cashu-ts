@@ -1,7 +1,7 @@
-import { schnorr } from '@noble/curves/secp256k1';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { type SerializedBlindedMessage } from '../model/types';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 function constructMessage(quote: string, blindedMessages: SerializedBlindedMessage[]): Uint8Array {
 	let message = quote;

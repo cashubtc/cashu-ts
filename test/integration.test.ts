@@ -20,7 +20,7 @@
 
 import dns from 'node:dns';
 import { vi, test, describe, expect } from 'vitest';
-import { secp256k1, schnorr } from '@noble/curves/secp256k1';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import {
 	Mint,
 	Wallet,
@@ -47,8 +47,8 @@ import {
 	sumProofs,
 } from '../src';
 import ws from 'ws';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const mintUrl = 'http://localhost:3338';
