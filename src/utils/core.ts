@@ -389,7 +389,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  * Helper function to decode cashu tokens into object.
  *
  * @param token An encoded cashu token (cashuB...)
- * @param keysets Optional. Array of full keyset IDs.
+ * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
  * @returns Cashu token object.
  */
 export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
@@ -685,8 +685,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
  * Mint.
  *
  * @param proofs Array of Proofs.
- * @param keysets. Optional. Array of keyset IDs or an object containing keyset ID as: {"id":
- *   string}, such as: Keyset, MintKeys, KeysetCache, MintKeyset.
+ * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
  * @returns Array of Proofs with full keyset IDs.
  */
 function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly string[]): Proof[];
