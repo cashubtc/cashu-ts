@@ -1,4 +1,4 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
 	deriveKeysetId,
 	hashToCurve,
@@ -7,15 +7,15 @@ import {
 	serializeMintKeys,
 	SerializedMintKeys,
 } from '../../../src/crypto/common';
-import { bytesToHex } from '@noble/curves/abstract/utils';
-import { hexToBytes } from '@noble/hashes/utils';
+import { bytesToHex } from '@noble/curves/utils.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { PUBKEYS } from '../consts';
 import { describe, expect, test } from 'vitest';
 import { constructProofFromPromise, createRandomBlindedMessage } from '../../../src/crypto/client';
 import { createBlindSignature, verifyProof } from '../../../src/crypto/mint';
 describe('test crypto scheme', () => {
 	test('Test crypto scheme', async () => {
-		const mintPrivKey = secp256k1.utils.randomPrivateKey();
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
 		const mintPubKey = secp256k1.getPublicKey(mintPrivKey, true);
 
 		//Wallet(Bob)

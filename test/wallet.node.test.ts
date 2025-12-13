@@ -17,8 +17,8 @@ import { Server, WebSocket } from 'mock-socket';
 import { injectWebSocketImpl } from '../src/ws';
 import { MintInfo } from '../src/model/MintInfo';
 import { OutputData } from '../src/model/OutputData';
-import { hexToBytes } from '@noble/curves/abstract/utils';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/curves/utils.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 import { type Logger } from '../src/logger';
 
 injectWebSocketImpl(WebSocket);

@@ -140,8 +140,8 @@
 		"ws": "^8.16.0"
 	},
 	"dependencies": {
-		"@noble/curves": "^1.9.5",
-		"@noble/hashes": "^1.5.0",
+		"@noble/curves": "^2.0.1",
+		"@noble/hashes": "^2.0.1",
 		"@scure/bip32": "^1.5.0"
 	}
 }

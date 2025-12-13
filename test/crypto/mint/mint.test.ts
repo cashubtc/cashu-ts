@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { blindMessage } from '../../../src/crypto/client';
 import { createBlindSignature, createNewMintKeys } from '../../../src/crypto/mint';
 import { hexToNumber } from '../../../src/crypto/util/utils';

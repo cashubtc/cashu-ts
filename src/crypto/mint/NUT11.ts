@@ -1,5 +1,6 @@
-import { schnorr } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha256';
+import { schnorr } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { hexToBytes } from '@noble/curves/utils.js';
 import { parseP2PKSecret } from '../common/NUT11';
 import {
 	getP2PKExpectedKWitnessPubkeys,
@@ -48,8 +49,8 @@ export const verifyP2PKSigOutput = (output: BlindedMessage, publicKey: string): 
 		throw new Error('could not verify signature, no witness provided');
 	}
 	return schnorr.verify(
-		output.witness.signatures[0],
-		sha256(output.B_.toHex(true)),
-		publicKey.slice(2),
+		hexToBytes(output.witness.signatures[0]),
+		sha256(new TextEncoder().encode(output.B_.toHex(true))),
+		hexToBytes(publicKey.slice(2)),
 	);
 };

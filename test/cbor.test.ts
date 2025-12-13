@@ -1,5 +1,5 @@
 import { decodeCBOR, encodeCBOR } from '../src/cbor';
-import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 import { Bytes } from '../src/utils/Bytes';
 

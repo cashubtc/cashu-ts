@@ -1,0 +1,40 @@
+{
+	"name": "testapp",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"test": "jest"
+	},
+	"devDependencies": {
+		"jest": "^29.0.0",
+		"babel-jest": "^29.0.0",
+		"@babel/preset-env": "^7.0.0",
+		"@babel/preset-typescript": "^7.0.0"
+	},
+	"jest": {
+		"preset": "react-native",
+		"testEnvironment": "node",
+		"transformIgnorePatterns": [
+			"node_modules/(?!(@noble|@cashu)/)"
+		],
+		"moduleNameMapper": {
+			"^(\\.{1,2}/.*)\\.js$": "$1"
+		},
+		"transform": {
+			"^.+\\.(js|ts|tsx)$": [
+				"babel-jest",
+				{
+					"presets": [
+						[
+							"@babel/preset-env",
+							{
+								"modules": "auto"
+							}
+						],
+						"@babel/preset-typescript"
+					]
+				}
+			]
+		}
+	}
+}

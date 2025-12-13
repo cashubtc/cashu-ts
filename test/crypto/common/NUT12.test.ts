@@ -1,5 +1,5 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToHex } from '@noble/hashes/utils';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 import { hash_e, pointFromBytes, pointFromHex } from '../../../src/crypto/common/index';
 import {
@@ -26,7 +26,7 @@ describe('test hash_e', () => {
 
 describe('test DLEQ scheme', () => {
 	test('test DLEQ scheme: Alice verifies', async () => {
-		const mintPrivKey = secp256k1.utils.randomPrivateKey();
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
 		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
 
 		// Wallet(Alice)
@@ -41,7 +41,7 @@ describe('test DLEQ scheme', () => {
 		expect(isValid).toBe(true);
 	});
 	test('test DLEQ scheme: Carol verifies', async () => {
-		const mintPrivKey = secp256k1.utils.randomPrivateKey();
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
 		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
 
 		// Wallet(Alice)
