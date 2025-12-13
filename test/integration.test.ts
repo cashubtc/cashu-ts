@@ -236,10 +236,10 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint, { unit });
 
-		const privKeyAlice = secp256k1.utils.randomPrivateKey();
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
 		const pubKeyAlice = secp256k1.getPublicKey(privKeyAlice);
 
-		const privKeyBob = secp256k1.utils.randomPrivateKey();
+		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const request = await wallet.createMintQuote(128);
@@ -309,7 +309,7 @@ describe('mint api', () => {
 		const mint = new CashuMint(mintUrl);
 		const wallet = new CashuWallet(mint);
 
-		const privKeyBob = secp256k1.utils.randomPrivateKey();
+		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 
 		const mintRequest = await wallet.createMintQuote(3000);

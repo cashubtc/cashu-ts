@@ -34,9 +34,9 @@ async function runReactNativeTest() {
 		const rnProjectDir = path.join(tempDir, 'TestApp');
 		process.chdir(rnProjectDir);
 
-		// Step 4: Install TypeScript deps for TS support in RN/Jest
+		// Step 4: Install TypeScript deps and Jest for TS support in RN/Jest
 		execSync(
-			'npm i --save-dev typescript @tsconfig/react-native @types/jest @types/react @types/react-native @types/react-test-renderer',
+			'npm i --save-dev typescript @tsconfig/react-native @types/jest @types/react @types/react-native @types/react-test-renderer jest babel-jest @babel/preset-env @babel/preset-typescript react-native',
 			{ stdio: 'inherit' },
 		);
 
@@ -47,10 +47,13 @@ async function runReactNativeTest() {
 			filter: (src) => !src.endsWith('run-test.js'),
 		});
 
-		// Step 6: Install the packed package
+		// Step 6: Install all dependencies (including Jest from React Native)
+		execSync('npm install', { stdio: 'inherit' });
+
+		// Step 7: Install the packed package
 		execSync(`npm i ${tgzPath}`, { stdio: 'inherit' });
 
-		// Step 7: Run RN tests (Jest will pick up __tests__/cashu.test.ts and compile TS)
+		// Step 8: Run RN tests (Jest will pick up __tests__/cashu.test.ts and compile TS)
 		execSync('npm test', { stdio: 'inherit' });
 		console.log('React Native test passed!');
 	} catch (error) {

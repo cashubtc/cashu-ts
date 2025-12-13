@@ -28,7 +28,11 @@ export function createRandomBlindedMessage(privateKey?: Uint8Array): BlindedMess
 	);
 }
 
-export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: Uint8Array): BlindedMessage {
+export function blindMessage(
+	secret: Uint8Array,
+	r?: bigint,
+	privateKey?: Uint8Array,
+): BlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
 		r = bytesToNumber(secp256k1.utils.randomSecretKey());

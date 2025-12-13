@@ -262,17 +262,17 @@ export const signP2PKProofs = (
  * requires a signature from the key.
  *
  * @param proof - A proof to sign.
- * @param privateKey - A single private key.
+ * @param privateKey - A single private key (hex string or Uint8Array).
  * @throws Error if signature is not required or proof is already signed.
  */
-export const signP2PKProof = (proof: Proof, privateKey: string): Proof => {
+export const signP2PKProof = (proof: Proof, privateKey: string | Uint8Array): Proof => {
 	// Check secret is P2PK
 	const parsed: Secret = parseP2PKSecret(proof.secret);
 	if (parsed[0] !== 'P2PK') {
 		throw new Error('not a P2PK secret');
 	}
-	// Convert hex string to Uint8Array
-	const privateKeyBytes = hexToBytes(privateKey);
+	// Convert hex string to Uint8Array, or use Uint8Array directly
+	const privateKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
 	// Check if the private key is required to sign by checking its
 	// X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
 	// NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
