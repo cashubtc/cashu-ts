@@ -1,12 +1,11 @@
 import {
-	type Keys,
-	type MintKeys,
+	type HasKeysetKeys,
 	type Proof,
 	type SerializedBlindedMessage,
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type P2PKOptions, type Keyset } from '../wallet';
+import { type P2PKOptions } from '../wallet';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -21,15 +20,16 @@ import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
 import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 
-/**
- * Minimal key carrier shape for OutputData helpers.
- *
- * Any type with `id`, and `keys` can be used as TKeyset in OutputDataLike and OutputDataFactory,
- * including MintKeys and wallet Keyset.
- */
-export type KeyLike = { id: string; keys: Keys };
+// TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
+// For now the generic preserves the relationship between factory input type and `toProof` keyset type,
+// and keeps narrower implementations assignable under `strictFunctionTypes`.
 
-export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
+/**
+ * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
+ * the call site, use `OutputDataLike<YourType>`. In v4 we may simplify this further by fixing the
+ * keyset type to `HasKeysetKeys` and removing the generic.
+ */
+export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -37,7 +37,12 @@ export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
 	toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
 }
 
-export type OutputDataFactory<TKeyset extends KeyLike = MintKeys | Keyset> = (
+/**
+ * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
+ * the call site, use `OutputDataLike<YourType>`. In v4 we may simplify this further by fixing the
+ * keyset type to `HasKeysetKeys` and removing the generic.
+ */
+export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
 	amount: number,
 	keys: TKeyset,
 ) => OutputDataLike<TKeyset>;
@@ -96,7 +101,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 	return e;
 }
 
-export class OutputData implements OutputDataLike<KeyLike> {
+export class OutputData implements OutputDataLike<HasKeysetKeys> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -111,7 +116,7 @@ export class OutputData implements OutputDataLike<KeyLike> {
 		this.blindedMessage = blindedMessage;
 	}
 
-	toProof(sig: SerializedBlindedSignature, keyset: KeyLike) {
+	toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
 		let dleq: DLEQ | undefined;
 		if (sig.dleq) {
 			dleq = {
@@ -146,7 +151,7 @@ export class OutputData implements OutputDataLike<KeyLike> {
 		return serializedProof;
 	}
 
-	static createP2PKData<T extends KeyLike>(
+	static createP2PKData<T extends HasKeysetKeys>(
 		p2pk: P2PKOptions,
 		amount: number,
 		keyset: T,
@@ -265,7 +270,11 @@ export class OutputData implements OutputDataLike<KeyLike> {
 		return od;
 	}
 
-	static createRandomData<T extends KeyLike>(amount: number, keyset: T, customSplit?: number[]) {
+	static createRandomData<T extends HasKeysetKeys>(
+		amount: number,
+		keyset: T,
+		customSplit?: number[],
+	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -281,7 +290,7 @@ export class OutputData implements OutputDataLike<KeyLike> {
 		);
 	}
 
-	static createDeterministicData<T extends KeyLike>(
+	static createDeterministicData<T extends HasKeysetKeys>(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,

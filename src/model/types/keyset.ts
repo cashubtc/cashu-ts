@@ -5,6 +5,21 @@
 export type Keys = { [amount: number]: string };
 
 /**
+ * Minimal key carrier shape for low level helpers.
+ *
+ * Any type with Keyset `id` can be used, including MintKeyset, MintKeys, HasKeysetKeys, Keyset,
+ * KeysetCache.
+ */
+export type HasKeysetId = { id: string };
+
+/**
+ * Minimal key carrier shape for low level helpers.
+ *
+ * Any type with `id`, and `keys` can be used, including MintKeys, KeysetCache and Keyset.
+ */
+export type HasKeysetKeys = { id: string; keys: Keys };
+
+/**
  * NUT-01 Keys API response (/v1/keys)
  */
 export type GetKeysResponse = {

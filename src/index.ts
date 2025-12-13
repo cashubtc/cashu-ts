@@ -82,7 +82,7 @@ export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export { MintOperationError, NetworkError, HttpResponseError } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
-export { OutputData, type KeyLike } from './model/OutputData';
+export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';

@@ -23,6 +23,7 @@ import {
 	AuthProvider,
 	MintQuoteBolt11Response,
 	MeltBlanks,
+	HasKeysetKeys,
 } from '../../src';
 
 import { bytesToNumber } from '../../src/utils';
@@ -892,7 +893,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const customFactory = (amount: number, keyset: MintKeys): OutputData => {
+		const customFactory = (amount: number, keyset: HasKeysetKeys): OutputData => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
 		const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });

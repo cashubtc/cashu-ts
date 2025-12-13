@@ -8,7 +8,7 @@ import {
 	getPubKeyFromPrivKey,
 } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
-import { MintKeys, type Keys, type Proof, type Token } from '../../src';
+import { MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
 import {
@@ -621,13 +621,7 @@ describe('test zero-knowledge utilities', () => {
 			unit: 'sat',
 			keys: { [2]: pubkey.toHex(true) },
 		};
-		let exc: Error | undefined = undefined;
-		try {
-			hasValidDleq(serializedProof, keyset);
-		} catch (e) {
-			exc = e;
-		}
-		expect(exc).toEqual(new Error('undefined key for amount 1'));
+		expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
 	});
 });
 
@@ -809,7 +803,7 @@ describe('test deprecated base64 keyset id derivation', () => {
 			keys: keys,
 		} as MintKeys;
 
-		const verified = utils.verifyKeysetId(mintKeys);
+		const verified = Keyset.verifyKeysetId(mintKeys);
 		expect(verified).toBe(true);
 	});
 });

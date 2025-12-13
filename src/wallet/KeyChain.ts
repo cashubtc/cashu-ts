@@ -154,7 +154,7 @@ export class KeyChain {
 	loadFromCache(cache: KeyChainCache): void {
 		if (cache.unit !== this.unit) {
 			throw new Error(
-				`KeyChain unit mismatch in cache, expected '${this.unit}', got '${cache.unit}'`,
+				`KeyChain unit mismatch in cache, expected '${this.unit}', got '${cache.unit}' from ${cache.mintUrl}`,
 			);
 		}
 
@@ -271,6 +271,16 @@ export class KeyChain {
 		return this.getKeysets()
 			.map((k) => k.toMintKeys())
 			.filter((mk): mk is MintKeys => mk !== null);
+	}
+
+	/**
+	 * Returns all the keyset IDs in this KeyChain.
+	 *
+	 * @returns Array of keyset IDs.
+	 * @throws If uninitialized.
+	 */
+	getAllKeysetIds(): string[] {
+		return this.getKeysets().map((k) => k.id);
 	}
 
 	// ---------------------------------------------------------------------

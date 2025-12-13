@@ -238,7 +238,7 @@ class Wallet {
 		this._keyChain = new KeyChain(this.mint, this._unit);
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
 
-		// @todo: Deprecated cache init - to be removed with deprecated constructor options
+		// TODO: Deprecated cache init - to be removed with deprecated constructor options
 		if (options?.keysets && options?.keys && options?.mintInfo) {
 			const allKeys = Array.isArray(options.keys) ? options.keys : [options.keys];
 			// Convert Mint DTOs to KeyChainCache
@@ -1372,7 +1372,10 @@ class Wallet {
 	 */
 	public decodeToken(token: string): Token {
 		const keysets = this._keyChain.getKeysets();
-		return getDecodedToken(token, keysets);
+		return getDecodedToken(
+			token,
+			keysets.map((k) => k.id),
+		);
 	}
 
 	// -----------------------------------------------------------------
@@ -2169,7 +2172,7 @@ class Wallet {
 		const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
 			hashToCurve(enc.encode(p.secret)).toHex(true),
 		);
-		// @todo: Replace this with a value from the info endpoint of the mint eventually
+		// TODO: Replace this with a value from the info endpoint of the mint eventually
 		const BATCH_SIZE = 100;
 		const states: ProofState[] = [];
 		for (let i = 0; i < Ys.length; i += BATCH_SIZE) {

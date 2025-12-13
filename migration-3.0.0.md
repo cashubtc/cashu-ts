@@ -106,6 +106,28 @@ The builder makes intent explicit and eliminates the need for extra boilerplate.
 
 See the [README](./README.md) and [integration tests](./test/integration.test.ts) for more usage examples.
 
+### OutputDataLike / OutputDataFactory
+
+`OutputData` helpers only require `id` and `keys`, so `OutputDataLike` and `OutputDataFactory` now default to `HasKeysetKeys`, which just includes `id` and `keys`.
+
+This may show up as a TypeScript error when assigning a factory that takes `MintKeys` to `OutputDataFactory` without a type argument.
+
+If you want richer typing at the call site, use the new generics: `OutputDataLike<YourType>` and `OutputDataFactory<YourType>`.
+
+For example, if your custom factory is typed to MintKeys, declare it as `OutputDataFactory<MintKeys>`.
+
+```ts
+// Factory typed to MintKeys
+const customFactory: OutputDataFactory<MintKeys> = (amount, keyset) => {
+	return OutputData.createRandomData(amount, keyset)[0];
+};
+
+// Factory typed to default (HasKeysetKeys: { id, keys })
+const customFactory: OutputDataFactory = (amount, keysetKeys) => {
+	return OutputData.createRandomData(amount, keysetKeys)[0];
+};
+```
+
 ### Logger
 
 `LogLevel` is no longer exported as a `const` object with uppercase values.

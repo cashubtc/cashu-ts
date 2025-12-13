@@ -243,6 +243,21 @@ describe('KeyChain initialization', () => {
 		expect(newCache).toEqual(originalCache);
 	});
 
+	test('should throw if keychain unit does not match cache unit', async () => {
+		const originalChain = new KeyChain(mint, unit);
+		await originalChain.init();
+
+		// New consolidated cache shape
+		const originalCache = originalChain.cache;
+		// console.log('originalCache', originalCache);
+
+		// Instantiate new KeyChain from consolidated cache
+		const cachedChain = new KeyChain(mint, 'usd');
+		expect(() => cachedChain.loadFromCache(originalCache)).toThrow(
+			/KeyChain unit mismatch in cache/,
+		);
+	});
+
 	test('should preload from single cached keys object (legacy constructor cache)', async () => {
 		const originalChain = new KeyChain(mint, unit);
 		await originalChain.init();
@@ -257,12 +272,16 @@ describe('KeyChain initialization', () => {
 		const matchingKeysets = legacyCache.keysets.filter((ks) => ks.id === singleKeys.id);
 
 		// Deprecated constructor path using Mint DTOs
-		const cachedChain = new KeyChain(mint, unit, matchingKeysets, singleKeys);
+		const cachedChain = new KeyChain(mint, unit, matchingKeysets, singleKeys); // single value
+		const cachedChain2 = new KeyChain(mint, unit, matchingKeysets, [singleKeys]); // array already
 
 		// Verify preloaded
 		const cachedActive = cachedChain.getCheapestKeyset();
 		expect(cachedActive.id).toBe(singleKeys.id);
 		expect(cachedChain.getKeysets().length).toBe(1);
+		const cachedActive2 = cachedChain2.getCheapestKeyset();
+		expect(cachedActive2.id).toBe(singleKeys.id);
+		expect(cachedChain2.getKeysets().length).toBe(1);
 	});
 });
 
@@ -323,6 +342,12 @@ describe('KeyChain getters', () => {
 		expect(list.map((k) => k.id).sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
 	});
 
+	test('should get keyset IDs', () => {
+		const list = keyChain.getAllKeysetIds();
+		expect(list).toHaveLength(4);
+		expect(list.sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
+	});
+
 	test('should throw getters if not initialized', () => {
 		const uninitChain = new KeyChain(mint, unit);
 		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
@@ -336,5 +361,32 @@ describe('Keyset', () => {
 		const keyset = new Keyset('testid', 'sat', true, undefined, undefined);
 		expect(keyset.fee).toBe(0);
 		expect(keyset.input_fee_ppk).toBe(0);
+	});
+	test('verifyKeysetId should return false if verifying keyset with no keys', () => {
+		const badKeyset = { ...dummyKeysResp.keysets[0], keys: {} };
+		const verify = Keyset.verifyKeysetId(badKeyset);
+		expect(verify).toBeFalsy();
+	});
+	test('fromMintApi should load if keys / meta match', () => {
+		const keyset = Keyset.fromMintApi(dummyKeysetResp.keysets[0], dummyKeysResp.keysets[0]);
+		expect(keyset.id).toBe(dummyKeysetResp.keysets[0].id);
+	});
+	test('fromMintApi should throw if keys / meta mismatched unit', () => {
+		const badKeys = { ...dummyKeysResp.keysets[0], unit: 'usd' };
+		expect(() => Keyset.fromMintApi(dummyKeysetResp.keysets[0], badKeys)).toThrow(
+			/Mismatched keyset units/,
+		);
+	});
+	test('fromMintApi should throw if keys / meta mismatched ID', () => {
+		const badKeys = { ...dummyKeysResp.keysets[0], id: '00bad' };
+		expect(() => Keyset.fromMintApi(dummyKeysetResp.keysets[0], badKeys)).toThrow(
+			/Mismatched keyset ids/,
+		);
+	});
+	test('fromMintApi should throw if keys / meta mismatched final_expiry', () => {
+		const badKeys = { ...dummyKeysResp.keysets[0], final_expiry: 123 };
+		expect(() => Keyset.fromMintApi(dummyKeysetResp.keysets[0], badKeys)).toThrow(
+			/Mismatched keyset expiry/,
+		);
 	});
 });

@@ -436,7 +436,7 @@ class Mint {
 		);
 
 		// Runtime shape check for basic MeltQuoteBaseResponse
-		// @todo - Tests need updating before we can do full shape check!
+		// TODO: - Tests need updating before we can do full shape check!
 		if (
 			!isObj(data) //||
 			// typeof data.quote !== 'string' ||

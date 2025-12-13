@@ -258,9 +258,10 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 export function getDataField(secret: Secret | string): string;
 
 // @public
-export function getDecodedToken<T extends {
-    id: string;
-}>(tokenString: string, keysets?: T[]): Token;
+export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
+
+// @public @deprecated (undocumented)
+export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
@@ -439,6 +440,17 @@ export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array;
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint>;
 
 // @public
+export type HasKeysetId = {
+    id: string;
+};
+
+// @public
+export type HasKeysetKeys = {
+    id: string;
+    keys: Keys;
+};
+
+// @public
 export function hasNonHexId(p: Proof | Proof[]): boolean;
 
 // @public
@@ -448,9 +460,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 export function hasTag(secret: Secret | string, key: string): boolean;
 
 // @public
-export function hasValidDleq<T extends {
-    keys: Keys;
-}>(proof: Proof, keyset: T): boolean;
+export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean;
 
 // @public
 export function hexToNumber(hex: string): bigint;
@@ -509,6 +519,7 @@ export class KeyChain {
     };
     static fromCache(mint: string | Mint, cache: KeyChainCache): KeyChain;
     getAllKeys(): MintKeys[];
+    getAllKeysetIds(): string[];
     // @deprecated
     getCache(): {
         keysets: MintKeyset[];
@@ -529,12 +540,6 @@ export type KeyChainCache = {
     keysets: KeysetCache[];
     unit: string;
     mintUrl: string;
-};
-
-// @public
-export type KeyLike = {
-    id: string;
-    keys: Keys;
 };
 
 // @public
@@ -1158,18 +1163,18 @@ export interface OutputConfig {
 }
 
 // @public (undocumented)
-export class OutputData implements OutputDataLike<KeyLike> {
+export class OutputData implements OutputDataLike<HasKeysetKeys> {
     constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData<T extends KeyLike>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createDeterministicData<T extends HasKeysetKeys>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createP2PKData<T extends KeyLike>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createP2PKData<T extends HasKeysetKeys>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
-    static createRandomData<T extends KeyLike>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createRandomData<T extends HasKeysetKeys>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -1180,14 +1185,14 @@ export class OutputData implements OutputDataLike<KeyLike> {
     secret: Uint8Array;
     static sumOutputAmounts(outputs: OutputDataLike[]): number;
     // (undocumented)
-    toProof(sig: SerializedBlindedSignature, keyset: KeyLike): Proof;
+    toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
 }
 
-// @public (undocumented)
-export type OutputDataFactory<TKeyset extends KeyLike = MintKeys | Keyset> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
+// @public
+export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
 
-// @public (undocumented)
-export interface OutputDataLike<TKeyset extends KeyLike = MintKeys | Keyset> {
+// @public
+export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
