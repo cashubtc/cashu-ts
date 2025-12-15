@@ -394,7 +394,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
  */
 export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
 /**
- * @deprecated Pass keyset ids as `string[]` instead.
+ * @deprecated Pass keyset ids as `string[]` instead, eg: using KeyChain.getAllKeysetIds()
  */
 export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
 export function getDecodedToken(

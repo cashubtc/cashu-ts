@@ -26,8 +26,11 @@ import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
 
 /**
  * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
- * the call site, use `OutputDataLike<YourType>`. In v4 we may simplify this further by fixing the
- * keyset type to `HasKeysetKeys` and removing the generic.
+ * the call site, use `OutputDataLike<YourType>`.
+ *
+ * @remarks
+ * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
+ * removing the generic.
  */
 export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
 	blindedMessage: SerializedBlindedMessage;
@@ -39,8 +42,11 @@ export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
 
 /**
  * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
- * the call site, use `OutputDataLike<YourType>`. In v4 we may simplify this further by fixing the
- * keyset type to `HasKeysetKeys` and removing the generic.
+ * the call site, use `OutputDataLike<YourType>`.
+ *
+ * @remarks
+ * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
+ * removing the generic.
  */
 export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
 	amount: number,

@@ -1371,11 +1371,8 @@ class Wallet {
 	 * @returns Token object.
 	 */
 	public decodeToken(token: string): Token {
-		const keysets = this._keyChain.getKeysets();
-		return getDecodedToken(
-			token,
-			keysets.map((k) => k.id),
-		);
+		const keysetIds = this._keyChain.getAllKeysetIds();
+		return getDecodedToken(token, keysetIds);
 	}
 
 	// -----------------------------------------------------------------
