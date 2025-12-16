@@ -54,7 +54,7 @@ import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import type { MintKeys, MintKeyset } from '../model/types/keyset';
+import type { KeyChainCache, MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
 	GetInfoResponse,
 	MeltRequest,
@@ -109,10 +109,6 @@ class Wallet {
 	 */
 	public readonly mint: Mint;
 	/**
-	 * KeyChain instance - contains wallet keysets/keys.
-	 */
-	public readonly keyChain: KeyChain;
-	/**
 	 * Entry point for the builder.
 	 *
 	 * @example
@@ -139,6 +135,7 @@ class Wallet {
 	 * Developer-friendly counters API.
 	 */
 	public readonly counters: WalletCounters;
+	private _keyChain: KeyChain;
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';
 	private _mintInfo: MintInfo | undefined = undefined;
@@ -164,6 +161,9 @@ class Wallet {
 	 * Splitting, `denominationTarget` guides proof splits, default is 3. Override coin selection with
 	 * `selectProofs` if needed. Logging defaults to a null logger.
 	 *
+	 * @remarks
+	 * The options.keys, options.keysets, options.mintInfo options are deprecated. Use
+	 * wallet.loadMintFromCache() after init to load cached mint data.
 	 * @param mint Mint instance or URL.
 	 * @param options Optional settings.
 	 * @param options.unit Wallet unit, default 'sat'.
@@ -174,9 +174,9 @@ class Wallet {
 	 *   precedence over counterInit. Use when you need persistence across processes or devices.
 	 * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
 	 *   counterSource is also provided.
-	 * @param options.keys Cached keys for this unit, only used when `keysets` is also provided.
-	 * @param options.keysets Cached keysets for this unit, only used when `keys` is also provided.
-	 * @param options.mintInfo Optional cached mint info.
+	 * @param options.keys DEPRECATED: Use `wallet.loadMintFromCache` after init.
+	 * @param options.keysets DEPRECATED: Use `wallet.loadMintFromCache` after init.
+	 * @param options.mintInfo DEPRECATED: Use `wallet.loadMintFromCache` after init.
 	 * @param options.denominationTarget Target proofs per denomination, default 3.
 	 * @param options.selectProofs Custom proof selection function.
 	 * @param options.logger Logger instance, default null logger.
@@ -191,8 +191,17 @@ class Wallet {
 			secretsPolicy?: SecretsPolicy; // optional, auto
 			counterSource?: CounterSource; // optional, otherwise ephemeral
 			counterInit?: Record<string, number>; // optional, starting "next" per keyset
+			/**
+			 * @deprecated Use `wallet.loadMintFromCache` after init.
+			 */
 			keys?: MintKeys[] | MintKeys;
+			/**
+			 * @deprecated Use `wallet.loadMintFromCache` after init.
+			 */
 			keysets?: MintKeyset[];
+			/**
+			 * @deprecated Use `wallet.loadMintFromCache` after init.
+			 */
 			mintInfo?: GetInfoResponse;
 			denominationTarget?: number;
 			selectProofs?: SelectProofs; // optional override
@@ -226,9 +235,21 @@ class Wallet {
 			this._counterSource = new EphemeralCounterSource(options?.counterInit);
 		}
 		this.counters = new WalletCounters(this._counterSource);
-		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
-		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
+		this._keyChain = new KeyChain(this.mint, this._unit);
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
+
+		// TODO: Deprecated cache init - to be removed with deprecated constructor options
+		if (options?.keysets && options?.keys && options?.mintInfo) {
+			const allKeys = Array.isArray(options.keys) ? options.keys : [options.keys];
+			// Convert Mint DTOs to KeyChainCache
+			const cache: KeyChainCache = KeyChain.mintToCacheDTO(
+				this._unit,
+				this.mint.mintUrl,
+				options.keysets,
+				allKeys,
+			);
+			this.loadMintFromCache(options.mintInfo, cache);
+		}
 	}
 
 	// Convenience wrappers for "log and throw"
@@ -273,8 +294,11 @@ class Wallet {
 	}
 
 	/**
-	 * Load mint information, keysets, and keys. Must be called before using other methods.
+	 * Load mint information, keysets, and keys.
 	 *
+	 * @remarks
+	 * Must be called before using other methods, unless loading mint from cache. See:
+	 * `loadMintFromCache`.
 	 * @param forceRefresh If true, re-fetches data even if cached.
 	 * @throws If fetching mint info, keysets, or keys fails.
 	 */
@@ -292,23 +316,59 @@ class Wallet {
 		}
 
 		// Load KeyChain
-		promises.push(this.keyChain.init(forceRefresh).then(() => null));
+		promises.push(this._keyChain.init(forceRefresh).then(() => null));
 
 		await Promise.all(promises);
-		this._logger.debug('KeyChain', { keychain: this.keyChain.getCache() });
+		this.finishInit();
+	}
 
+	/**
+	 * Load mint information, keysets, and keys from cached data.
+	 *
+	 * @remarks
+	 * Use this when you already have cached mint info and keychain cache and want to avoid network
+	 * calls.
+	 *
+	 * The `cache` argument should usually come from `wallet.keyChain.cache`.
+	 */
+	loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
+		this._mintInfo = new MintInfo(mintInfo);
+		this._keyChain.loadFromCache(cache);
+		this.finishInit();
+	}
+
+	/**
+	 * Finishes wiring up the wallet instance and checks we are "Go for launch".
+	 */
+	private finishInit(): void {
+		// Go Keychain?
+		const cheapestId = this._keyChain.getCheapestKeyset().id;
+		this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
+
+		// Bind the cheapest keyset if needed
 		if (this._boundKeysetId === PENDING_KEYSET_ID) {
-			this._boundKeysetId = this.keyChain.getCheapestKeyset().id;
+			this._boundKeysetId = cheapestId;
 		} else {
-			// Ensure the bound id is still present and keyed
-			const k = this.keyChain.getKeyset(this._boundKeysetId);
-			this.failIf(!k.hasKeys, 'Wallet keyset has no keys after refresh', { keyset: k.id });
+			const k = this._keyChain.getKeyset(this._boundKeysetId);
+			this.failIf(!k.hasKeys, 'Wallet keyset has no keys', { keyset: k.id });
 		}
+
+		// Go Mintinfo?
+		this.getMintInfo();
 	}
 
 	// -----------------------------------------------------------------
 	// Section: Getters
 	// -----------------------------------------------------------------
+
+	/**
+	 * Get the wallet's KeyChain.
+	 *
+	 * @returns The Keychain.
+	 */
+	get keyChain(): KeyChain {
+		return this._keyChain;
+	}
 
 	/**
 	 * Get the wallet's unit.
@@ -328,7 +388,10 @@ class Wallet {
 	 * @throws If mint info is not initialized.
 	 */
 	getMintInfo(): MintInfo {
-		this.failIfNullish(this._mintInfo, 'Mint info not initialized; call loadMint first');
+		this.failIfNullish(
+			this._mintInfo,
+			'Mint info not initialized; call loadMint or loadMintFromCache first',
+		);
 		return this._mintInfo;
 	}
 
@@ -336,7 +399,10 @@ class Wallet {
 	 * The keyset ID bound to this wallet instance.
 	 */
 	get keysetId(): string {
-		this.failIf(this._boundKeysetId === PENDING_KEYSET_ID, 'Wallet not initialised, call loadMint');
+		this.failIf(
+			this._boundKeysetId === PENDING_KEYSET_ID,
+			'Wallet not initialised, call loadMint or loadMintFromCache first',
+		);
 		return this._boundKeysetId;
 	}
 
@@ -358,7 +424,7 @@ class Wallet {
 	 * @throws If the keyset is not found, has no keys, or its unit differs from the wallet.
 	 */
 	public getKeyset(id?: string): Keyset {
-		const keyset = this.keyChain.getKeyset(id ?? this.keysetId);
+		const keyset = this._keyChain.getKeyset(id ?? this.keysetId);
 		this.failIf(keyset.unit !== this._unit, 'Keyset unit does not match wallet unit', {
 			keyset: keyset.id,
 			unit: keyset.unit,
@@ -436,7 +502,7 @@ class Wallet {
 	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
 	public bindKeyset(id: string): void {
-		const ks = this.keyChain.getKeyset(id);
+		const ks = this._keyChain.getKeyset(id);
 		this.failIf(ks.unit !== this._unit, 'Keyset unit does not match wallet unit', {
 			keyset: ks.id,
 			unit: ks.unit,
@@ -464,14 +530,16 @@ class Wallet {
 	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
 	public withKeyset(id: string, opts?: { counterSource?: CounterSource }): Wallet {
-		return new Wallet(this.mint, {
+		const newWallet = new Wallet(this.mint, {
 			keysetId: id,
 			bip39seed: this._seed,
 			secretsPolicy: this._secretsPolicy,
 			logger: this._logger,
 			counterSource: opts?.counterSource ?? this._counterSource,
-			...this.keyChain.getCache(),
 		});
+		// Load mint info from our caches
+		newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
+		return newWallet;
 	}
 
 	/**
@@ -800,7 +868,7 @@ class Wallet {
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		if (requireDleq) {
 			for (const p of proofs) {
-				const ks = this.keyChain.getKeyset(p.id);
+				const ks = this._keyChain.getKeyset(p.id);
 				if (!hasValidDleq(p, ks)) {
 					this.fail('Token contains proofs with invalid or missing DLEQ');
 				}
@@ -1172,7 +1240,7 @@ class Wallet {
 		const { keep, send } = this._selectProofs(
 			proofs,
 			amountToSend,
-			this.keyChain,
+			this._keyChain,
 			includeFees,
 			exactMatch,
 		);
@@ -1246,11 +1314,11 @@ class Wallet {
 		try {
 			// We need the proof's keyset so use keyChain here
 			// We must NOT fallback to wallet's keyset
-			return this.keyChain.getKeyset(proof.id).fee;
+			return this._keyChain.getKeyset(proof.id).fee;
 		} catch (e) {
 			this.fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, {
 				e,
-				keychain: this.keyChain.getKeysets(),
+				keychain: this._keyChain.getKeysets(),
 			});
 		}
 	}
@@ -1265,7 +1333,7 @@ class Wallet {
 	getFeesForKeyset(nInputs: number, keysetId: string): number {
 		try {
 			// We must NOT fallback to wallet's keyset
-			const feePPK = this.keyChain.getKeyset(keysetId).fee;
+			const feePPK = this._keyChain.getKeyset(keysetId).fee;
 			return Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0));
 		} catch (e) {
 			this.fail(`No keyset found with ID ${keysetId}`, { e });
@@ -1303,8 +1371,8 @@ class Wallet {
 	 * @returns Token object.
 	 */
 	public decodeToken(token: string): Token {
-		const keysets = this.keyChain.getKeysets();
-		return getDecodedToken(token, keysets);
+		const keysetIds = this._keyChain.getAllKeysetIds();
+		return getDecodedToken(token, keysetIds);
 	}
 
 	// -----------------------------------------------------------------

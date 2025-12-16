@@ -11,7 +11,7 @@ import type {
 	CheckStatePayload,
 	PostRestorePayload,
 } from './types';
-import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
+import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
 import request, {
 	ConnectionManager,
 	type WSConnection,
@@ -436,7 +436,7 @@ class Mint {
 		);
 
 		// Runtime shape check for basic MeltQuoteBaseResponse
-		// @todo - Tests need updating before we can do full shape check!
+		// TODO: - Tests need updating before we can do full shape check!
 		if (
 			!isObj(data) //||
 			// typeof data.quote !== 'string' ||
@@ -544,7 +544,7 @@ class Mint {
 		keysetId?: string,
 		mintUrl?: string,
 		customRequest?: RequestFn,
-	): Promise<MintActiveKeys> {
+	): Promise<GetKeysResponse> {
 		const targetUrl = mintUrl || this._mintUrl;
 		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
@@ -552,7 +552,7 @@ class Mint {
 			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
 		}
 		const requestInstance = customRequest ?? this._request;
-		const data = await requestInstance<MintActiveKeys>({
+		const data = await requestInstance<GetKeysResponse>({
 			endpoint: keysetId
 				? joinUrls(targetUrl, '/v1/keys', keysetId)
 				: joinUrls(targetUrl, '/v1/keys'),
@@ -572,9 +572,11 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns All the mint's past and current keysets.
 	 */
-	async getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets> {
+	async getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse> {
 		const requestInstance = customRequest ?? this._request;
-		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(this._mintUrl, '/v1/keysets') });
+		return requestInstance<GetKeysetsResponse>({
+			endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
+		});
 	}
 
 	/**

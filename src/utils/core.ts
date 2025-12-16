@@ -15,7 +15,6 @@ import type {
 	DeprecatedToken,
 	Keys,
 	MintKeys,
-	MintKeyset,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -23,9 +22,10 @@ import type {
 	V4DLEQTemplate,
 	V4InnerToken,
 	V4ProofTemplate,
+	HasKeysetKeys,
+	HasKeysetId,
 } from '../model/types';
 import { Bytes } from './Bytes';
-import { type Keyset } from '../wallet';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -388,21 +388,32 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 /**
  * Helper function to decode cashu tokens into object.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
+ * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
+export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
+/**
+ * @deprecated Pass keyset ids as `string[]` instead, eg: using KeyChain.getAllKeysetIds()
+ */
+export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
+export function getDecodedToken(
+	tokenString: string,
+	keysetOrIds?: ReadonlyArray<string | HasKeysetId>,
+): Token {
+	// normalize to array of strings
+	const keysetIds = (keysetOrIds ?? []).map((ks) => (typeof ks === 'string' ? ks : ks.id));
 	// remove prefixes
-	const token = removePrefix(tokenString);
-	const tokenObj = handleTokens(token);
-	tokenObj.proofs = mapShortKeysetIds(tokenObj.proofs, keysets);
-	return tokenObj;
+	const tokenStr = removePrefix(tokenString);
+	const token: Token = handleTokens(tokenStr);
+	token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
+	return token;
 }
 
 /**
  * Returns the metadata of a cashu token.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
  * @returns Token metadata.
  */
 export function getTokenMetadata(token: string): TokenMetadata {
@@ -430,7 +441,7 @@ export function getTokenMetadata(token: string): TokenMetadata {
 /**
  * Helper function to decode different versions of cashu tokens into an object.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
  * @returns Cashu Token object.
  */
 export function handleTokens(token: string): Token {
@@ -650,14 +661,11 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Check that the keyset hashes to the specified ID.
- *
- * @deprecated Now part of Keyset class.
- * @param keys The keyset to be verified.
- * @returns True if the verification was successful, false otherwise.
- * @throws Error if the keyset ID version is unrecognized.
+ * @deprecated Use Keyset.verifyKeysetId(keys), or init a Keyset and call keyset.verify().
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
+	// Note: we are NOT redirecting to Keyset.verifyKeysetId() here as that would
+	// couple the utils class to Keyset, and risks circular dependencies.
 	const isBase64 = isBase64String(keys.id);
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
 	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
@@ -675,11 +683,25 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 /**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
+ *
+ * @param proofs Array of Proofs.
+ * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
+ * @returns Array of Proofs with full keyset IDs.
  */
-function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): Proof[] {
-	const newProofs = [];
+function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly string[]): Proof[];
+/**
+ * @deprecated Pass keyset ids as `string[]` instead.
+ */
+function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly HasKeysetId[]): Proof[];
+function mapShortKeysetIds(
+	proofs: Proof[],
+	keysetOrIds?: ReadonlyArray<string | HasKeysetId>,
+): Proof[] {
+	// normalize to array of keyset ids
+	const keysetIds = (keysetOrIds ?? []).map((ks) => (typeof ks === 'string' ? ks : ks.id));
+	const newProofs: Proof[] = [];
 	for (const proof of proofs) {
-		let idBytes;
+		let idBytes: Uint8Array;
 		try {
 			idBytes = hexToBytes(proof.id);
 		} catch {
@@ -691,14 +713,14 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): 
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
 		} else if (idBytes[0] === 0x01) {
-			if (!keysets) {
+			if (!keysetIds) {
 				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
 			}
 			// Look for a match: prefix(keyset ID) == short ID
 			let found = false;
-			for (const keyset of keysets) {
-				if (proof.id === keyset.id.slice(0, proof.id.length)) {
-					proof.id = keyset.id;
+			for (const keyset of keysetIds) {
+				if (proof.id === keyset.slice(0, proof.id.length)) {
+					proof.id = keyset;
 					newProofs.push(proof);
 					found = true;
 					break;
@@ -721,11 +743,11 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): 
  * Checks that the proof has a valid DLEQ proof according to keyset `keys`
  *
  * @param proof The proof subject to verification.
- * @param keyset The Mint's keyset to be used for verification.
+ * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
  * @returns True if verification succeeded, false otherwise.
- * @throws Error if @param proof does not match any key in @param keyset.
+ * @throws Throws if the proof amount does not match any key in the provided keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
+export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
 	if (proof.dleq == undefined) {
 		return false;
 	}
@@ -735,7 +757,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
 		r: hexToNumber(proof.dleq.r ?? '00'),
 	} as DLEQ;
 	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-		throw new Error(`undefined key for amount ${proof.amount}`);
+		throw new Error(`Undefined key for amount ${proof.amount} in keyset ${keyset.id}`);
 	}
 	const key = keyset.keys[proof.amount];
 	return verifyDLEQProof_reblind(

@@ -80,7 +80,7 @@ There are a number of ways to instantiate a wallet, depending on your needs.
 
 Wallet classes are mostly stateless, so you can instantiate and throw them away as needed. Your app must therefore manage state, such as fetching and storing proofs in a database.
 
-NB: You must always call `loadMint()` after instantiating a wallet.
+NB: You must always call `loadMint()` or `loadMintFromCache` after instantiating a wallet.
 
 ```typescript
 import { Wallet } from '@cashu/cashu-ts';
@@ -89,15 +89,15 @@ import { Wallet } from '@cashu/cashu-ts';
 const mintUrl = 'http://localhost:3338';
 const wallet1 = new Wallet(mintUrl); // unit is 'sat'
 await wallet1.loadMint(); // wallet is now ready to use
-const cache = wallet1.keyChain.getCache(); // persist mint data in your app
 
-// Advanced: With cached mint data (reduces API calls)
-const wallet2 = new Wallet(cache.mintUrl, {
-	unit: cache.unit,
-	keysets: cache.keysets,
-	keys: cache.keys,
-});
-await wallet2.loadMint(); // wallet2 is now ready to use
+// Persist these in your app
+const keychainCache = wallet1.keyChain.cache; // KeyChainCache
+const mintInfoCache = wallet1.getMintInfo().cache; // GetInfoResponse
+
+// Advanced: With cached mint data (avoids network calls on startup)
+const wallet2 = new Wallet(keychainCache.mintUrl, { unit: keychainCache.unit });
+wallet2.loadMintFromCache(mintInfoCache, keychainCache);
+// wallet2 is now ready to use
 ```
 
 ### Logging

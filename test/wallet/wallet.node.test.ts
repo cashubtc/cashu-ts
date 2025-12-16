@@ -11,7 +11,6 @@ import {
 	MeltQuoteState,
 	MintQuoteState,
 	type MintKeys,
-	MintKeyset,
 	deriveKeysetId,
 	getDecodedToken,
 	injectWebSocketImpl,
@@ -24,6 +23,7 @@ import {
 	AuthProvider,
 	MintQuoteBolt11Response,
 	MeltBlanks,
+	HasKeysetKeys,
 } from '../../src';
 
 import { bytesToNumber } from '../../src/utils';
@@ -140,7 +140,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -188,7 +188,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -244,7 +244,7 @@ describe('test wallet init', () => {
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
 		expect(keys[0]).toEqual({
@@ -285,7 +285,7 @@ describe('test wallet init', () => {
 
 	test('should throw when accessing getters before loadMint', () => {
 		const wallet = new Wallet(mintUrl, { unit });
-		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
+		expect(() => wallet.getMintInfo()).toThrow(/Mint info not initialized; call loadMint/);
 		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
 		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
 	});
@@ -323,7 +323,7 @@ describe('test wallet init', () => {
 		]);
 		const keysets = wallet.keyChain.getKeysets();
 		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
@@ -373,6 +373,19 @@ describe('test info', () => {
 			],
 		});
 		expect(info).toEqual(new MintInfo(mintInfoResp));
+		expect(info.cache).toEqual(mintInfoResp);
+		expect(info.contact).toEqual(mintInfoResp.contact);
+		expect(info.description).toEqual(mintInfoResp.description);
+		expect(info.description_long).toEqual(mintInfoResp.description_long);
+		expect(info.name).toEqual(mintInfoResp.name);
+		expect(info.pubkey).toEqual(mintInfoResp.pubkey);
+		expect(info.nuts).toEqual(mintInfoResp.nuts);
+		expect(info.version).toEqual(mintInfoResp.version);
+		expect(info.motd).toEqual(mintInfoResp.motd);
+		expect(info.supportsNut04Description('bolt12', 'sat')).toBeFalsy();
+		expect(() => {
+			info.isSupported(1 as any);
+		}).toThrow(/nut is not supported/);
 	});
 	test('test info with deprecated contact field', async () => {
 		// mintInfoRespDeprecated is the same as mintInfoResp but with the contact field in the old format
@@ -417,8 +430,10 @@ describe('test info', () => {
 			'sat-quote',
 		);
 
-		const usdWallet = new Wallet(mint, { ...MINTCACHE, unit: 'usd' });
-		await usdWallet.loadMint();
+		const usdWallet = new Wallet(mint, { unit: 'usd' });
+		const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
+		usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
+		// console.log('usdWallet', usdWallet.keyChain.cache);
 		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
 	});
 	test('supportsAmountless() correctly detects amountless option in melt methods', async () => {
@@ -878,7 +893,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const customFactory = (amount: number, keyset: MintKeys): OutputData => {
+		const customFactory = (amount: number, keyset: HasKeysetKeys): OutputData => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
 		const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });
@@ -3006,8 +3021,13 @@ describe('bindKeyset & withKeyset', () => {
 
 		const current = wallet.keysetId;
 		const w2 = wallet.withKeyset(current);
-		expect(w2).not.toBe(wallet);
+		expect(w2).not.toBe(wallet); // new instance
 		expect(w2.keysetId).toBe(current);
+		expect(w2.getMintInfo()).toStrictEqual(wallet.getMintInfo()); // same mintinfo
+		expect(w2.keyChain).toStrictEqual(wallet.keyChain); // same keychain data
+		expect(() => {
+			w2.keyChain.getCheapestKeyset();
+		}).not.toThrow(); // smoke test
 
 		// mutate original binding; w2 should remain unchanged
 		const otherId = '00dd000000000000';
@@ -3041,7 +3061,7 @@ describe('bindKeyset & withKeyset', () => {
 		// Next call during loadMint(true) -> loses keys
 		spy.mockReturnValueOnce(ks(boundId, unit, false));
 
-		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys after refresh');
+		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys');
 	});
 });
 
