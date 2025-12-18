@@ -1,6 +1,6 @@
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
 import { decodeBech32mToBytes } from '../utils/bech32m';
-import { decodeTLV, type DecodedTLVPaymentRequest } from '../utils/tlv';
+import { decodeTLV } from '../utils/tlv';
 import type {
 	RawPaymentRequest,
 	RawTransport,
@@ -73,6 +73,13 @@ export class PaymentRequest {
 		return this.transport?.find((t: PaymentRequestTransport) => t.type === type);
 	}
 
+	/**
+	 * Creates a PaymentRequest from a raw payment request. Supports both creqA and creqB versions.
+	 *
+	 * @param rawPaymentRequest - The raw payment request string to create a PaymentRequest from.
+	 * @returns A PaymentRequest object.
+	 * @throws An error if the raw payment request is not supported.
+	 */
 	static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest {
 		const transports = rawPaymentRequest.t
 			? rawPaymentRequest.t.map((t: RawTransport) => ({
@@ -108,7 +115,17 @@ export class PaymentRequest {
 		if (lowerRequest.startsWith('creqb')) {
 			const data = decodeBech32mToBytes(lowerRequest);
 			const decoded = decodeTLV(data);
-			return this.fromTLVRequest(decoded);
+			return new PaymentRequest(
+				decoded.transports,
+				decoded.id,
+				decoded.amount !== undefined ? Number(decoded.amount) : undefined,
+				decoded.unit,
+				decoded.mints,
+				decoded.description,
+				decoded.singleUse ?? false,
+				undefined,
+				false,
+			);
 		}
 
 		// Version A: CBOR encoding (creqA...)
@@ -123,19 +140,5 @@ export class PaymentRequest {
 		const data = encodeBase64toUint8(encodedData);
 		const decoded = decodeCBOR(data) as RawPaymentRequest;
 		return this.fromRawRequest(decoded);
-	}
-
-	static fromTLVRequest(decoded: DecodedTLVPaymentRequest): PaymentRequest {
-		return new PaymentRequest(
-			decoded.transports,
-			decoded.id,
-			decoded.amount !== undefined ? Number(decoded.amount) : undefined,
-			decoded.unit,
-			decoded.mints,
-			decoded.description,
-			decoded.singleUse ?? false,
-			undefined, // nut10 not yet implemented for TLV
-			false, // nut26 not yet implemented for TLV
-		);
 	}
 }
