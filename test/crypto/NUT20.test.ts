@@ -1,7 +1,7 @@
 import { test, describe, expect } from 'vitest';
 import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { MintRequest } from '../../src';
 
 describe('mint quote signatures', () => {

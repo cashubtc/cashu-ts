@@ -28,8 +28,8 @@ import {
 
 import { bytesToNumber } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
-import { hexToBytes } from '@noble/curves/utils';
-import { randomBytes } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/curves/utils.js';
+import { randomBytes } from '@noble/hashes/utils.js';
 import { NULL_LOGGER } from '../../src/logger';
 import { MINTCACHE } from '../consts';
 

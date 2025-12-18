@@ -4,8 +4,7 @@
 
 ```ts
 
-import { PrivKey } from '@noble/curves/utils';
-import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
+import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
@@ -1384,6 +1383,9 @@ export type PostRestoreResponse = {
 };
 
 // @public
+export type PrivKey = Uint8Array | string;
+
+// @public
 export type Proof = {
     id: string;
     amount: number;
@@ -1638,10 +1640,10 @@ export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
-export function signP2PKProof(proof: Proof, privateKey: string, message?: string): Proof;
+export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof;
 
 // @public
-export function signP2PKProofs(proofs: Proof[], privateKey: string | string[], logger?: Logger, message?: string): Proof[];
+export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[], logger?: Logger, message?: string): Proof[];
 
 // @public @deprecated
 export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;

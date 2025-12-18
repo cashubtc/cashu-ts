@@ -1,9 +1,9 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { Bytes, bytesToNumber, hexToNumber, numberToHexPadded64 } from '../utils';
 import { pointFromHex } from './core';
-import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
-import { sha256 } from '@noble/hashes/sha2';
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
+import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 /**
  * BIP340-style domain separation tag (DST) for P2BK.
@@ -134,7 +134,7 @@ export function deriveP2BKSecretKey(
 	}
 	if (blindPubkey.length !== 33) throw new Error('blindPubkey must be 33 bytes');
 	// Decode P′, compute R and unblind
-	const P_ = secp256k1.Point.fromHex(blindPubkey); // valid point
+	const P_ = secp256k1.Point.fromHex(bytesToHex(blindPubkey)); // valid point
 	const R = secp256k1.Point.BASE.multiply(r); // R = r·G
 	const P = P_.subtract(R); // P = P_ - R
 	if (P.equals(secp256k1.Point.ZERO)) return null;

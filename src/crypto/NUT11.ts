@@ -1,7 +1,7 @@
-import { type PrivKey, bytesToHex } from '@noble/curves/utils';
-import { schnorr } from '@noble/curves/secp256k1';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
-import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage } from './core';
+import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
 import { deriveP2BKSecretKeys } from './NUT26';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OutputDataLike } from '../model/OutputData';
@@ -291,7 +291,7 @@ function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
  * @remarks
  * NB: Will only sign if the proof requires a signature from the key.
  * @param proofs - An array of proofs to sign.
- * @param privateKey - A single private key or array of private keys.
+ * @param privateKey - A single private key or array of private keys (hex string or Uint8Array).
  * @param logger - Optional logger (default: NULL_LOGGER)
  * @param message - Optional. The message to sign (for SIG_ALL)
  * @returns Signed proofs.
@@ -299,12 +299,15 @@ function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
  */
 export function signP2PKProofs(
 	proofs: Proof[],
-	privateKey: string | string[],
+	privateKey: PrivKey | PrivKey[],
 	logger: Logger = NULL_LOGGER,
 	message?: string,
 ): Proof[] {
+	// Convert to hex strings for maybeDeriveP2BKPrivateKeys
+	const toHex = (k: PrivKey): string => (typeof k === 'string' ? k : bytesToHex(k));
+	const privateKeyHex = Array.isArray(privateKey) ? privateKey.map(toHex) : toHex(privateKey);
 	return proofs.map((proof, index) => {
-		const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKey, proof);
+		const privateKeys: string[] = maybeDeriveP2BKPrivateKeys(privateKeyHex, proof);
 		let signedProof = proof;
 		for (const priv of privateKeys) {
 			try {
@@ -326,19 +329,20 @@ export function signP2PKProofs(
  * @remarks
  * Will only sign if the proof requires a signature from the key.
  * @param proof - A proof to sign.
- * @param privateKey - A single private key.
+ * @param privateKey - A single private key (hex string or Uint8Array).
  * @param message - Optional. The message to sign (for SIG_ALL)
  * @returns Signed proofs.
  * @throws Error if signature is not required or proof is already signed.
  */
-export function signP2PKProof(proof: Proof, privateKey: string, message?: string): Proof {
+export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof {
 	const secret: Secret = parseP2PKSecret(proof.secret);
 	message = message ?? proof.secret; // default message is secret
 
 	// Check if the private key is required to sign by checking its
 	// X-only pubkey (no 02/03 prefix) against the expected witness pubkeys
 	// NB: Nostr pubkeys prepend 02 by convention, ignoring actual Y-parity
-	const pubkey = bytesToHex(schnorr.getPublicKey(privateKey)); // x-only
+	const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
+	const pubkey = bytesToHex(schnorr.getPublicKey(privKeyBytes)); // x-only
 	const witnesses = getP2PKExpectedWitnessPubkeys(secret);
 	if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
 		throw new Error(`Signature not required from [02|03]${pubkey}`);
