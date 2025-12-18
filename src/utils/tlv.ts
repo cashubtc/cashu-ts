@@ -43,11 +43,11 @@ const TAG_NUT10 = 0x08;
 /**
  * Transport Sub-TLV Tag definitions.
  *
- * | Sub-Tag | Field     | Type    | Description                                        |
- * | ------- | --------- | ------- | -------------------------------------------------- |
- * | 0x01    | kind      | u8      | Transport type: 0=in-band, 1=nostr, 2=http_post    |
- * | 0x02    | target    | bytes   | Transport target (hex for nostr, string otherwise) |
- * | 0x03    | tag_tuple | sub-TLV | Generic tag tuple (repeatable)                     |
+ * | Sub-Tag | Field     | Type    | Description                                       |
+ * | ------- | --------- | ------- | ------------------------------------------------- |
+ * | 0x01    | kind      | u8      | Transport type: 0=nostr, 1=http_post              |
+ * | 0x02    | target    | bytes   | Transport target (pubkey for nostr, URL for post) |
+ * | 0x03    | tag_tuple | sub-TLV | Generic tag tuple (repeatable)                    |
  */
 const TRANSPORT_TAG_KIND = 0x01;
 const TRANSPORT_TAG_TARGET = 0x02;
