@@ -1,4 +1,6 @@
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
+import { decodeBech32mToBytes } from '../utils/bech32m';
+import { decodeTLV, type DecodedTLVPaymentRequest } from '../utils/tlv';
 import type {
 	RawPaymentRequest,
 	RawTransport,
@@ -100,6 +102,16 @@ export class PaymentRequest {
 	}
 
 	static fromEncodedRequest(encodedRequest: string): PaymentRequest {
+		const lowerRequest = encodedRequest.toLowerCase();
+
+		// Version B: bech32m + TLV encoding (creqb...)
+		if (lowerRequest.startsWith('creqb')) {
+			const data = decodeBech32mToBytes(lowerRequest);
+			const decoded = decodeTLV(data);
+			return this.fromTLVRequest(decoded);
+		}
+
+		// Version A: CBOR encoding (creqA...)
 		if (!encodedRequest.startsWith('creq')) {
 			throw new Error('unsupported pr: invalid prefix');
 		}
@@ -111,5 +123,19 @@ export class PaymentRequest {
 		const data = encodeBase64toUint8(encodedData);
 		const decoded = decodeCBOR(data) as RawPaymentRequest;
 		return this.fromRawRequest(decoded);
+	}
+
+	static fromTLVRequest(decoded: DecodedTLVPaymentRequest): PaymentRequest {
+		return new PaymentRequest(
+			decoded.transports,
+			decoded.id,
+			decoded.amount !== undefined ? Number(decoded.amount) : undefined,
+			decoded.unit,
+			decoded.mints,
+			decoded.description,
+			decoded.singleUse ?? false,
+			undefined, // nut10 not yet implemented for TLV
+			false, // nut26 not yet implemented for TLV
+		);
 	}
 }
