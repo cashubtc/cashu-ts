@@ -279,7 +279,7 @@ class Wallet {
 	}
 
 	/**
-	 * Asserts amount is a positive integer.
+	 * Asserts amount is a positive, safe integer.
 	 *
 	 * @param amount To check.
 	 * @param op Caller method name (or other identifier) for debug.
@@ -291,6 +291,7 @@ class Wallet {
 			'Amount must be a positive integer',
 			{ op, amount },
 		);
+		this.failIf(!Number.isSafeInteger(amount), 'Amount must be a safe integer', { op, amount });
 	}
 
 	/**
