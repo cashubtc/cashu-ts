@@ -3,6 +3,23 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { configDefaults } from 'vitest/config';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const deps = Object.keys(require('./package.json').dependencies || {});
+
+// these deps are ESM only, bundling avoids CJS requiring ESM
+const ESM_ONLY_DEPS = ['@noble/curves', '@noble/hashes', '@scure/bip32'];
+
+function shouldExternalise(id: string) {
+	const isDep = deps.some((dep) => id === dep || id.startsWith(`${dep}/`));
+	if (!isDep) return false;
+
+	const isEsmOnly = ESM_ONLY_DEPS.some((dep) => id === dep || id.startsWith(`${dep}/`));
+	if (isEsmOnly) return false;
+
+	return true;
+}
 
 export default defineConfig({
 	build: {
@@ -34,13 +51,7 @@ export default defineConfig({
 					: `${entryName}.${format === 'es' ? 'es.js' : 'cjs'}`,
 		},
 		rollupOptions: {
-			external:
-				process.env.BUILD_FORMAT === 'iife'
-					? []
-					: (id) =>
-							Object.keys(require('./package.json').dependencies || {}).some(
-								(dep) => id === dep || id.startsWith(`${dep}/`),
-							),
+			external: process.env.BUILD_FORMAT === 'iife' ? [] : shouldExternalise,
 		},
 		sourcemap: true,
 	},
