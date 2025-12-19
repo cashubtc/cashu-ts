@@ -1,6 +1,7 @@
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
-import { decodeBech32mToBytes } from '../utils/bech32m';
-import { decodeTLV } from '../utils/tlv';
+import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
+import { decodeTLV, encodeTLV } from '../utils/tlv';
+import type { DecodedTLVPaymentRequest, Nut10SpendingCondition } from '../utils/tlv';
 import type {
 	RawPaymentRequest,
 	RawTransport,
@@ -62,11 +63,49 @@ export class PaymentRequest {
 		return rawRequest;
 	}
 
-	toEncodedRequest() {
+	toEncodedRequest(): string {
 		const rawRequest: RawPaymentRequest = this.toRawRequest();
 		const data = encodeCBOR(rawRequest);
 		const encodedData = Bytes.toBase64(data);
 		return 'creq' + 'A' + encodedData;
+	}
+
+	/**
+	 * Encodes the payment request to creqA format (CBOR).
+	 *
+	 * @returns A base64 encoded payment request string with 'creqA' prefix.
+	 */
+	toEncodedCreqA(): string {
+		return this.toEncodedRequest();
+	}
+
+	/**
+	 * Encodes the payment request to creqB format (TLV + bech32m).
+	 *
+	 * @returns A bech32m encoded payment request string with 'CREQB' prefix.
+	 */
+	toEncodedCreqB(): string {
+		const tlvRequest: DecodedTLVPaymentRequest = {
+			id: this.id,
+			amount: this.amount !== undefined ? BigInt(this.amount) : undefined,
+			unit: this.unit,
+			singleUse: this.singleUse,
+			mints: this.mints,
+			description: this.description,
+			transports: this.transport,
+			nut10: this.nut10
+				? [
+						{
+							kind: this.nut10.kind,
+							data: this.nut10.data,
+							tags: this.nut10.tags,
+						} as Nut10SpendingCondition,
+					]
+				: undefined,
+		};
+
+		const tlvBytes = encodeTLV(tlvRequest);
+		return encodeBech32m('creqb', tlvBytes).toUpperCase();
 	}
 
 	getTransport(type: PaymentRequestTransportType) {
