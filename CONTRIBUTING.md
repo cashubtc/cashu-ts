@@ -94,8 +94,8 @@ npm run test-integration
 
 - **TS sources** use extensionless imports.
 - **Runtime ESM** (`lib/**/*.js`) must have `.js` on relative imports.
-- **Type declarations** (`lib/types/**/*.d.ts`) must stay **extensionless**.
-- Our `post-process-dts.js` intentionally skips `.d.ts` to keep API Extractor happy.
+- **Runtime CJS** (`lib/**/*.cjs`) may omit extensions, Node does not require them.
+- **Type declarations** (`lib/types/**/*.d.ts`) are a rolled up file (no relative imports/re-exports).
 
 ---
 
