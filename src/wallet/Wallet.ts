@@ -1178,6 +1178,10 @@ class Wallet {
 
 		// Execute swap
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		this.failIf(
+			signatures.length < swapTransaction.outputData.length,
+			`Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}`,
+		);
 
 		// Construct proofs
 		const keyset = this.getKeyset(swapPreview.keysetId);
