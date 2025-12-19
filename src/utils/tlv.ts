@@ -1,8 +1,15 @@
 import { bech32 } from '@scure/base';
-import type {
-	PaymentRequestTransport,
-	PaymentRequestTransportType,
-} from '../wallet/types/payment-requests';
+import type { PaymentRequestTransport } from '../wallet/types/payment-requests';
+import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
+
+/**
+ * NUT-10 Spending Condition structure.
+ */
+export type Nut10SpendingCondition = {
+	kind: string;
+	data: string;
+	tags?: string[][];
+};
 
 /**
  * Decoded TLV Payment Request structure.
@@ -15,6 +22,7 @@ export type DecodedTLVPaymentRequest = {
 	mints?: string[];
 	description?: string;
 	transports?: PaymentRequestTransport[];
+	nut10?: Nut10SpendingCondition[];
 };
 
 /**
@@ -55,6 +63,22 @@ const TRANSPORT_TAG_TAG_TUPLE = 0x03;
 
 const TRANSPORT_KIND_NOSTR = 0;
 const TRANSPORT_KIND_HTTP_POST = 1;
+
+/**
+ * NUT-10 Sub-TLV Tag definitions.
+ *
+ * | Sub-Tag | Field     | Type        | Description                        |
+ * | ------- | --------- | ----------- | ---------------------------------- |
+ * | 0x01    | kind      | u8          | Secret kind (0=P2PK, 1=HTLC, etc.) |
+ * | 0x02    | data      | bytes       | Kind-specific data (UTF-8 encoded) |
+ * | 0x03    | tag_tuple | sub-sub-TLV | Tag tuple (repeatable)             |
+ */
+const NUT10_TAG_KIND = 0x01;
+const NUT10_TAG_DATA = 0x02;
+const NUT10_TAG_TAG_TUPLE = 0x03;
+
+const NUT10_KIND_P2PK = 0;
+const NUT10_KIND_HTLC = 1;
 
 type TLVPart = {
 	tag: number;
@@ -106,7 +130,10 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
 				result.transports.push(parseTransport(part.value));
 				break;
 			case TAG_NUT10:
-				// NUT10 parsing not yet implemented
+				if (!result.nut10) {
+					result.nut10 = [];
+				}
+				result.nut10.push(parseNut10(part.value));
 				break;
 			default:
 				// Ignore unknown tags for forward compatibility
@@ -189,6 +216,17 @@ function transportKindToType(kind: number): PaymentRequestTransportType {
 	}
 }
 
+function nut10KindToType(kind: number): string {
+	switch (kind) {
+		case NUT10_KIND_P2PK:
+			return 'P2PK';
+		case NUT10_KIND_HTLC:
+			return 'HTLC';
+		default:
+			throw new Error(`Unsupported NUT-10 kind: ${kind}`);
+	}
+}
+
 function parseTransport(value: Uint8Array): PaymentRequestTransport {
 	const parts = decodeAllParts(value);
 
@@ -244,6 +282,53 @@ function parseTransport(value: Uint8Array): PaymentRequestTransport {
 }
 
 /**
+ * Parses a NUT-10 spending condition from its TLV value.
+ *
+ * @param value - The NUT-10 sub-TLV value bytes.
+ * @returns Parsed NUT-10 spending condition.
+ */
+function parseNut10(value: Uint8Array): Nut10SpendingCondition {
+	const parts = decodeAllParts(value);
+
+	let kindNum: number | undefined;
+	let data: string | undefined;
+	let tags: string[][] | undefined;
+
+	for (const part of parts) {
+		switch (part.tag) {
+			case NUT10_TAG_KIND:
+				kindNum = parseU8(part.value);
+				break;
+			case NUT10_TAG_DATA:
+				data = parseString(part.value);
+				break;
+			case NUT10_TAG_TAG_TUPLE:
+				if (!tags) {
+					tags = [];
+				}
+				tags.push(parseTagTuple(part.value));
+				break;
+		}
+	}
+
+	if (kindNum === undefined) {
+		throw new Error('NUT-10 spending condition missing required kind field');
+	}
+	if (data === undefined) {
+		throw new Error('NUT-10 spending condition missing required data field');
+	}
+
+	// Return undefined for tags if empty
+	const finalTags = tags && tags.length > 0 ? tags : undefined;
+
+	return {
+		kind: nut10KindToType(kindNum),
+		data,
+		tags: finalTags,
+	};
+}
+
+/**
  * Parses a tag tuple from its TLV value.
  *
  * Tag tuple encoding:
@@ -278,6 +363,309 @@ function parseTagTuple(value: Uint8Array): string[] {
 	}
 
 	return tuple;
+}
+
+/**
+ * Encodes a Payment Request into TLV format.
+ *
+ * @param request - The payment request object to encode.
+ * @returns TLV-encoded data as Uint8Array.
+ */
+export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
+	const parts: Uint8Array[] = [];
+
+	// Encode fields in sequential tag order
+	if (request.id) {
+		parts.push(encodeTLVPart(TAG_ID, encodeString(request.id)));
+	}
+
+	if (request.amount !== undefined) {
+		parts.push(encodeTLVPart(TAG_AMOUNT, encodeU64(request.amount)));
+	}
+
+	if (request.unit) {
+		if (request.unit === 'sat') {
+			parts.push(encodeTLVPart(TAG_UNIT, new Uint8Array([0x00])));
+		} else {
+			parts.push(encodeTLVPart(TAG_UNIT, encodeString(request.unit)));
+		}
+	}
+
+	if (request.singleUse !== undefined) {
+		parts.push(encodeTLVPart(TAG_SINGLE_USE, encodeU8(request.singleUse ? 1 : 0)));
+	}
+
+	// Repeatable: mint
+	if (request.mints && request.mints.length > 0) {
+		for (const mint of request.mints) {
+			parts.push(encodeTLVPart(TAG_MINT, encodeString(mint)));
+		}
+	}
+
+	if (request.description) {
+		parts.push(encodeTLVPart(TAG_DESCRIPTION, encodeString(request.description)));
+	}
+
+	// Repeatable: transport
+	if (request.transports && request.transports.length > 0) {
+		for (const transport of request.transports) {
+			parts.push(encodeTLVPart(TAG_TRANSPORT, encodeTransport(transport)));
+		}
+	}
+
+	// Repeatable: nut10
+	if (request.nut10 && request.nut10.length > 0) {
+		for (const nut10 of request.nut10) {
+			parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(nut10)));
+		}
+	}
+
+	// Concatenate all parts
+	const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+	const result = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const part of parts) {
+		result.set(part, offset);
+		offset += part.length;
+	}
+
+	return result;
+}
+
+/**
+ * Encodes a single TLV part.
+ *
+ * @param tag - The tag byte.
+ * @param value - The value bytes.
+ * @returns Encoded TLV part (tag + length + value).
+ */
+function encodeTLVPart(tag: number, value: Uint8Array): Uint8Array {
+	const length = value.length;
+	if (length > 0xffff) {
+		throw new Error(`TLV value too long: ${length} bytes (max 65535)`);
+	}
+
+	const result = new Uint8Array(3 + length);
+	result[0] = tag;
+	// Write length as big-endian uint16
+	result[1] = (length >> 8) & 0xff;
+	result[2] = length & 0xff;
+	result.set(value, 3);
+
+	return result;
+}
+
+function encodeString(str: string): Uint8Array {
+	return new TextEncoder().encode(str);
+}
+
+function encodeU64(value: bigint): Uint8Array {
+	const buffer = new ArrayBuffer(8);
+	const view = new DataView(buffer);
+	view.setBigUint64(0, value, false); // big-endian
+	return new Uint8Array(buffer);
+}
+
+function encodeU8(value: number): Uint8Array {
+	return new Uint8Array([value]);
+}
+
+function transportTypeToKind(type: PaymentRequestTransportType): number {
+	switch (type) {
+		case PaymentRequestTransportType.NOSTR:
+			return TRANSPORT_KIND_NOSTR;
+		case PaymentRequestTransportType.POST:
+			return TRANSPORT_KIND_HTTP_POST;
+		default:
+			throw new Error(`Unsupported transport type: ${type as string}`);
+	}
+}
+
+function nut10TypeToKind(type: string): number {
+	switch (type) {
+		case 'P2PK':
+			return NUT10_KIND_P2PK;
+		case 'HTLC':
+			return NUT10_KIND_HTLC;
+		default:
+			throw new Error(`Unsupported NUT-10 type: ${type}`);
+	}
+}
+
+/**
+ * Encodes a transport into its TLV sub-structure.
+ *
+ * @param transport - The transport to encode.
+ * @returns Encoded transport sub-TLV.
+ */
+function encodeTransport(transport: PaymentRequestTransport): Uint8Array {
+	const parts: Uint8Array[] = [];
+	const kind = transportTypeToKind(transport.type);
+
+	// Encode kind
+	parts.push(encodeTLVPart(TRANSPORT_TAG_KIND, encodeU8(kind)));
+
+	// Handle target based on transport type
+	let targetBytes: Uint8Array;
+	let relayTags: string[][] = [];
+
+	if (transport.type === PaymentRequestTransportType.NOSTR) {
+		// Decode nprofile to extract pubkey and relays
+		const { pubkey, relays } = decodeNprofile(transport.target);
+		targetBytes = pubkey;
+		// Create relay tags
+		relayTags = relays.map((relay) => ['r', relay]);
+	} else {
+		targetBytes = encodeString(transport.target);
+	}
+
+	// Encode target
+	parts.push(encodeTLVPart(TRANSPORT_TAG_TARGET, targetBytes));
+
+	// Merge relay tags with existing tags (for nostr) and encode
+	const allTags = [...relayTags, ...(transport.tags || [])];
+	if (allTags.length > 0) {
+		for (const tag of allTags) {
+			parts.push(encodeTLVPart(TRANSPORT_TAG_TAG_TUPLE, encodeTagTuple(tag)));
+		}
+	}
+
+	// Concatenate all sub-parts
+	const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+	const result = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const part of parts) {
+		result.set(part, offset);
+		offset += part.length;
+	}
+
+	return result;
+}
+
+/**
+ * Encodes a NUT-10 spending condition into its TLV sub-structure.
+ *
+ * @param nut10 - The NUT-10 spending condition to encode.
+ * @returns Encoded NUT-10 sub-TLV.
+ */
+function encodeNut10(nut10: Nut10SpendingCondition): Uint8Array {
+	const parts: Uint8Array[] = [];
+	const kind = nut10TypeToKind(nut10.kind);
+
+	// Encode kind
+	parts.push(encodeTLVPart(NUT10_TAG_KIND, encodeU8(kind)));
+
+	// Encode data
+	parts.push(encodeTLVPart(NUT10_TAG_DATA, encodeString(nut10.data)));
+
+	// Encode tags if present
+	if (nut10.tags && nut10.tags.length > 0) {
+		for (const tag of nut10.tags) {
+			parts.push(encodeTLVPart(NUT10_TAG_TAG_TUPLE, encodeTagTuple(tag)));
+		}
+	}
+
+	// Concatenate all sub-parts
+	const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+	const result = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const part of parts) {
+		result.set(part, offset);
+		offset += part.length;
+	}
+
+	return result;
+}
+
+/**
+ * Encodes a tag tuple into its TLV value format.
+ *
+ * @param tuple - Array of strings [key, value1, value2, ...].
+ * @returns Encoded tag tuple.
+ */
+function encodeTagTuple(tuple: string[]): Uint8Array {
+	const encoder = new TextEncoder();
+	const parts: Uint8Array[] = [];
+
+	for (const str of tuple) {
+		const encoded = encoder.encode(str);
+		if (encoded.length > 255) {
+			throw new Error(`Tag tuple string too long: ${str} (max 255 bytes)`);
+		}
+		// 1-byte length prefix + string bytes
+		const part = new Uint8Array(1 + encoded.length);
+		part[0] = encoded.length;
+		part.set(encoded, 1);
+		parts.push(part);
+	}
+
+	// Concatenate all parts
+	const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+	const result = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const part of parts) {
+		result.set(part, offset);
+		offset += part.length;
+	}
+
+	return result;
+}
+
+/**
+ * Decodes an nprofile string to extract the pubkey and relay URLs.
+ *
+ * @param nprofile - Bech32m encoded nprofile string.
+ * @returns Object containing pubkey (32 bytes) and array of relay URLs.
+ */
+export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: string[] } {
+	// Decode bech32m
+	const decoded = bech32.decode(nprofile as `${string}1${string}`, 1024);
+	if (decoded.prefix !== 'nprofile') {
+		throw new Error(`Invalid nprofile: expected prefix 'nprofile', got '${decoded.prefix}'`);
+	}
+
+	const tlvData = bech32.fromWords(decoded.words);
+	const data = new Uint8Array(tlvData);
+
+	// Parse TLV structure (1-byte T, 1-byte L format)
+	let pubkey: Uint8Array | undefined;
+	const relays: string[] = [];
+	let offset = 0;
+
+	while (offset < data.length) {
+		if (offset + 2 > data.length) {
+			throw new Error('Nprofile TLV data too short');
+		}
+
+		const tag = data[offset];
+		const length = data[offset + 1];
+		offset += 2;
+
+		if (offset + length > data.length) {
+			throw new Error(`Nprofile TLV value too short: expected ${length} bytes`);
+		}
+
+		const value = data.subarray(offset, offset + length);
+		offset += length;
+
+		if (tag === 0x00) {
+			// Pubkey
+			if (value.length !== 32) {
+				throw new Error(`Invalid pubkey length: expected 32 bytes, got ${value.length}`);
+			}
+			pubkey = value;
+		} else if (tag === 0x01) {
+			// Relay URL
+			relays.push(new TextDecoder().decode(value));
+		}
+		// Ignore unknown tags
+	}
+
+	if (!pubkey) {
+		throw new Error('Nprofile missing required pubkey');
+	}
+
+	return { pubkey, relays };
 }
 
 /**
