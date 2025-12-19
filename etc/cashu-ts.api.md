@@ -1329,6 +1329,8 @@ class PaymentRequest_2 {
     nut26: boolean;
     // (undocumented)
     singleUse: boolean;
+    toEncodedCreqA(): string;
+    toEncodedCreqB(): string;
     // (undocumented)
     toEncodedRequest(): string;
     // (undocumented)
