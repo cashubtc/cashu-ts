@@ -58,7 +58,7 @@ export default defineConfig(({ command }) => {
 
 	// Build ES first (emptyOutDir true), then CJS (emptyOutDir false),
 	// so the second run does not wipe the first output.
-	const emptyOutDir = format !== 'cjs';
+	const emptyOutDir = format === 'es';
 
 	// Emit types on ES and IIFE builds.
 	// IIFE consumer test relies on compile:standalone producing types for the packed tgz.
