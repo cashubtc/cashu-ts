@@ -17,8 +17,10 @@
 		"url": "https://github.com/cashubtc/cashu-ts/issues"
 	},
 	"scripts": {
-		"compile": "vite build && node post-process-dts.js",
-		"compile:standalone": "BUILD_FORMAT=iife vite build && node post-process-dts.js",
+		"compile:es": "BUILD_FORMAT=es vite build",
+		"compile:cjs": "BUILD_FORMAT=cjs vite build",
+		"compile:standalone": "BUILD_FORMAT=iife vite build",
+		"compile": "npm run compile:es && npm run compile:cjs",
 		"test:bundler": "node test/consumer/bundler/run-test.js",
 		"test:commonjs": "node test/consumer/commonjs/run-test.js",
 		"test:iife": "node test/consumer/iife/run-test.js",

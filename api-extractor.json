@@ -169,9 +169,9 @@
 		"compilerMessageReporting": {
 			// suppress module not found warnings as we are post-processing dts imports
 			// to add the .js extension for NodeNext compatibility
-			"TS2307": {
-				"logLevel": "none"
-			},
+			// "TS2307": {
+			// 	"logLevel": "none"
+			// },
 			"default": {
 				"logLevel": "warning"
 			}
