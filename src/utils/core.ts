@@ -353,10 +353,32 @@ function templateFromToken(token: Token): TokenV4Template {
 	return tokenTemplate;
 }
 
+/**
+ * Asserts amount is a valid, safe integer.
+ *
+ * @param amount Value to check.
+ * @param allowZero If false, requires amount > 0 (default: false).
+ */
+/**
+ * @internal
+ */
+export function validateAmount(amount: unknown, allowZero = false): asserts amount is number {
+	if (typeof amount !== 'number' || !Number.isFinite(amount) || !Number.isInteger(amount)) {
+		throw new Error(`Invalid amount: ${String(amount)}`);
+	}
+	if (!Number.isSafeInteger(amount)) {
+		throw new Error(`Amount must be a safe integer: ${amount}`);
+	}
+	if (allowZero ? amount < 0 : amount <= 0) {
+		throw new Error(`Amount must be ${allowZero ? 'non-negative' : 'positive'}: ${amount}`);
+	}
+}
+
 function tokenFromTemplate(template: TokenV4Template): Token {
 	const proofs: Proof[] = [];
 	template.t.forEach((t) =>
 		t.p.forEach((p) => {
+			validateAmount(p.a, true);
 			proofs.push({
 				secret: p.s,
 				C: bytesToHex(p.c),
@@ -453,6 +475,9 @@ export function handleTokens(token: string): Token {
 			throw new Error('Multi entry token are not supported');
 		}
 		const entry = parsedV3Token.token[0];
+		for (const p of entry.proofs) {
+			validateAmount(p.amount, true);
+		}
 		const tokenObj: Token = {
 			mint: entry.mint,
 			proofs: entry.proofs,
