@@ -1,3 +1,11 @@
+/**
+	* @module MyLibrary
+	* * ### Useful Resources
+	* - [Development Guide](https://github.com/cashubtc/cashu-ts/blob/main/DEVELOPER.md)
+	* - [Contributing](https://github.com/cashubtc/cashu-ts/blob/main/CONTRIBUTING.md)
+	* - [Examples](https://github.com/cashubtc/cashu-ts/tree/main/examples)
+	*/
+
 // ==========================
 // Public API Surface
 // ==========================
