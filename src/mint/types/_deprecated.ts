@@ -1,4 +1,5 @@
 import {
+	type MintQuoteBolt11Response,
 	type MintQuoteBolt12Response,
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBolt12Response,
@@ -26,17 +27,17 @@ export type Bolt12MeltQuoteResponse = MeltQuoteBolt12Response;
  *
  * @deprecated - Use MintQuoteBolt11Response or MintQuoteBolt12Response.
  */
-export type PartialMintQuoteResponse = MeltQuoteBolt11Response;
+export type PartialMintQuoteResponse = MintQuoteBolt11Response;
 
 /**
  * @deprecated - Use MintQuoteBolt11Response.
  */
-export type MintQuoteResponse = MeltQuoteBolt11Response;
+export type MintQuoteResponse = MintQuoteBolt11Response;
 
 /**
  * @deprecated - Use MintQuoteBolt11Response.
  */
-export type LockedMintQuoteResponse = MeltQuoteBolt11Response;
+export type LockedMintQuoteResponse = MintQuoteBolt11Response;
 
 /**
  * Response from the mint after requesting a BOLT12 mint quote. Contains a Lightning Network offer

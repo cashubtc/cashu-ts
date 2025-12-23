@@ -592,7 +592,7 @@ export type KeysetPair = {
 };
 
 // @public @deprecated (undocumented)
-export type LockedMintQuoteResponse = MeltQuoteBolt11Response;
+export type LockedMintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
@@ -1037,7 +1037,7 @@ export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | M
 export type MintQuotePayload = MintQuoteBolt11Request;
 
 // @public @deprecated (undocumented)
-export type MintQuoteResponse = MeltQuoteBolt11Response;
+export type MintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 export const MintQuoteState: {
@@ -1305,7 +1305,7 @@ export function parseSecret(secret: string | Secret): Secret;
 export type PartialMeltQuoteResponse = MeltQuoteBolt11Response;
 
 // @public @deprecated
-export type PartialMintQuoteResponse = MeltQuoteBolt11Response;
+export type PartialMintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 class PaymentRequest_2 {
