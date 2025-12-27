@@ -29,20 +29,20 @@ Wallet Features:
 
 Implemented [NUTs](https://github.com/cashubtc/nuts/):
 
-- [x] [NUT-00](https://github.com/cashubtc/nuts/blob/main/00.md)
-- [x] [NUT-01](https://github.com/cashubtc/nuts/blob/main/01.md)
-- [x] [NUT-02](https://github.com/cashubtc/nuts/blob/main/02.md)
-- [x] [NUT-03](https://github.com/cashubtc/nuts/blob/main/03.md)
-- [x] [NUT-04](https://github.com/cashubtc/nuts/blob/main/04.md)
-- [x] [NUT-05](https://github.com/cashubtc/nuts/blob/main/05.md)
-- [x] [NUT-06](https://github.com/cashubtc/nuts/blob/main/06.md)
-- [x] [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md)
-- [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md)
-- [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md)
-- [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md)
-- [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md)
-- [x] [NUT-23](https://github.com/cashubtc/nuts/blob/main/23.md)
-- [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md)
+- [x] [NUT-00](https://github.com/cashubtc/nuts/blob/main/00.md) | Notation, Utilization, and Terminology |
+- [x] [NUT-01](https://github.com/cashubtc/nuts/blob/main/01.md) | Mint public key exchange | 
+- [x] [NUT-02](https://github.com/cashubtc/nuts/blob/main/02.md) | Keysets and fees |
+- [x] [NUT-03](https://github.com/cashubtc/nuts/blob/main/03.md) | Swap tokens |
+- [x] [NUT-04](https://github.com/cashubtc/nuts/blob/main/04.md) | Mint tokens |
+- [x] [NUT-05](https://github.com/cashubtc/nuts/blob/main/05.md) | Melting tokens |
+- [x] [NUT-06](https://github.com/cashubtc/nuts/blob/main/06.md) | Mint information |
+- [x] [NUT-07](https://github.com/cashubtc/nuts/blob/main/07.md) | Token state check |
+- [x] [NUT-08](https://github.com/cashubtc/nuts/blob/main/08.md) | Lightning fee return |
+- [x] [NUT-09](https://github.com/cashubtc/nuts/blob/main/09.md) | Restore signatures |
+- [x] [NUT-11](https://github.com/cashubtc/nuts/blob/main/11.md) | Pay to Public Key (P2PK) |
+- [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) | Payment Requests |
+- [x] [NUT-23](https://github.com/cashubtc/nuts/blob/main/23.md) | BOLT11 |
+- [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md) | BOLT12 |
 
 Supported token formats:
 
