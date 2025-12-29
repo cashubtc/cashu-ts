@@ -74,6 +74,7 @@ import type {
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 
 import {
+	validateAmount,
 	getDecodedToken,
 	getKeepAmounts,
 	hasValidDleq,
@@ -286,12 +287,11 @@ class Wallet {
 	 * @throws If not.
 	 */
 	private assertAmount(amount: unknown, op: string): asserts amount is number {
-		this.failIf(
-			typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0,
-			'Amount must be a positive integer',
-			{ op, amount },
-		);
-		this.failIf(!Number.isSafeInteger(amount), 'Amount must be a safe integer', { op, amount });
+		try {
+			validateAmount(amount, false);
+		} catch (e) {
+			this.fail((e as Error).message, { op, amount });
+		}
 	}
 
 	/**
@@ -864,6 +864,7 @@ class Wallet {
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
+		this.assertAmount(totalAmount, 'prepareSwapToReceive');
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
