@@ -18,7 +18,7 @@ import {
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
+import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
@@ -275,7 +275,7 @@ export class OutputData implements OutputDataLike {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
+		const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
