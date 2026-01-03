@@ -2,7 +2,7 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha2';
 import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils';
-import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
+import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 import { getSignedOutput } from './NUT11';
 
@@ -79,7 +79,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 		keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
 	} else {
 		//legacy keyset compatibility
-		keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+		keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
 	}
 	return keysetIdInt;
 };
@@ -94,14 +94,14 @@ export function createBlindSignature(
 	amount: number,
 	id: string,
 ): BlindSignature {
-	const C_: WeierstrassPoint<bigint> = B_.multiply(bytesToNumber(privateKey));
+	const C_: WeierstrassPoint<bigint> = B_.multiply(Bytes.toBigInt(privateKey));
 	return { C_, amount, id };
 }
 
 export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage {
 	return blindMessage(
 		randomBytes(32),
-		bytesToNumber(secp256k1.utils.randomSecretKey()),
+		Bytes.toBigInt(secp256k1.utils.randomSecretKey()),
 		privateKey,
 	);
 }
@@ -109,7 +109,7 @@ export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage
 export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
-		r = bytesToNumber(secp256k1.utils.randomSecretKey());
+		r = Bytes.toBigInt(secp256k1.utils.randomSecretKey());
 	}
 	const rG = secp256k1.Point.BASE.multiply(r);
 	const B_ = Y.add(rG);

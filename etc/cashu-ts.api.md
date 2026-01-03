@@ -124,7 +124,37 @@ export type Bolt12MintQuoteResponse = {
     amount_issued: number;
 };
 
-// @public
+// @public (undocumented)
+export class Bytes {
+    // (undocumented)
+    static alloc(size: number): Uint8Array;
+    // (undocumented)
+    static compare(a: Uint8Array, b: Uint8Array): number;
+    // (undocumented)
+    static concat(...arrays: Uint8Array[]): Uint8Array;
+    // (undocumented)
+    static equals(a: Uint8Array, b: Uint8Array): boolean;
+    // (undocumented)
+    static fromBase64(base64: string): Uint8Array;
+    // (undocumented)
+    static fromBigInt(value: bigint): Uint8Array;
+    // (undocumented)
+    static fromHex(hex: string): Uint8Array;
+    // (undocumented)
+    static fromString(str: string): Uint8Array;
+    // (undocumented)
+    static toBase64(bytes: Uint8Array): string;
+    // (undocumented)
+    static toBigInt(bytes: Uint8Array): bigint;
+    // (undocumented)
+    static toHex(bytes: Uint8Array): string;
+    // (undocumented)
+    static toString(bytes: Uint8Array): string;
+    // (undocumented)
+    static writeBigUint64BE(value: bigint): Uint8Array;
+}
+
+// @public @deprecated
 export function bytesToNumber(bytes: Uint8Array): bigint;
 
 // @public (undocumented)
@@ -223,6 +253,9 @@ export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage
 export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
 
 // @public (undocumented)
+export function decodeCBOR(data: Uint8Array): ResultValue;
+
+// @public (undocumented)
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
@@ -259,6 +292,24 @@ export type DLEQ = {
     e: Uint8Array;
     r?: bigint;
 };
+
+// @public (undocumented)
+export function encodeBase64ToJson<T extends object>(base64String: string): T;
+
+// @public (undocumented)
+export function encodeBase64toUint8(base64String: string): Uint8Array;
+
+// @public (undocumented)
+export function encodeCBOR(value: unknown): Uint8Array;
+
+// @public (undocumented)
+export function encodeJsonToBase64(jsonObj: unknown): string;
+
+// @public (undocumented)
+export function encodeUint8toBase64(uint8array: Uint8Array): string;
+
+// @public (undocumented)
+export function encodeUint8toBase64Url(bytes: Uint8Array): string;
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
@@ -435,6 +486,9 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 
 // @public (undocumented)
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
+
+// @public (undocumented)
+export function isBase64String(s: string): boolean;
 
 // @public (undocumented)
 export function isObj(v: unknown): v is object;
@@ -1283,6 +1337,16 @@ export type RestoreConfig = {
 };
 
 // @public (undocumented)
+export type ResultObject = {
+    [key: string]: ResultValue;
+};
+
+// Warning: (ae-forgotten-export) The symbol "SimpleValue" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type ResultValue = SimpleValue | number | string | Uint8Array | ResultValue[] | ResultObject;
+
+// @public (undocumented)
 export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
 
 // @public (undocumented)
@@ -1505,6 +1569,9 @@ export type TokenResponse = {
 
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
+
+// @public (undocumented)
+export type ValidDecodedType = Extract<ResultValue, ResultObject>;
 
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;

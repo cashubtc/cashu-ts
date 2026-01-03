@@ -52,7 +52,7 @@ export type { Token, TokenMetadata } from './model/types/token';
 export * from './crypto';
 
 // Core Utils
-export * from './utils/core';
+export * from './utils';
 
 // Payment request facade (tests rely on these at top level)
 export { PaymentRequest } from './model/PaymentRequest';

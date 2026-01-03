@@ -1,5 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
-import { Bytes, bytesToNumber, hexToNumber, numberToHexPadded64 } from '../utils';
+import { Bytes, hexToNumber, numberToHexPadded64 } from '../utils';
 import { pointFromHex } from './core';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils';
 import { sha256 } from '@noble/hashes/sha2';
@@ -187,10 +187,10 @@ function deriveP2BKBlindingTweakFromECDH(
 	const Zx = point.multiply(scalar).toBytes(true).slice(1);
 	const iByte = new Uint8Array([slotIndex & 0xff]);
 	// Derive deterministic blinding factor (r):
-	let r = bytesToNumber(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte)));
+	let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte)));
 	if (r === 0n || r >= secp256k1.Point.CURVE().n) {
 		// Very unlikely to get here!
-		r = bytesToNumber(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte, new Uint8Array([0xff]))));
+		r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte, new Uint8Array([0xff]))));
 		if (r === 0n || r >= secp256k1.Point.CURVE().n) {
 			throw new Error('P2BK: tweak derivation failed');
 		}
