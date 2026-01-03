@@ -175,8 +175,8 @@ export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 /**
  * Converts a bytes array to a number.
  *
- * @deprecated Use {@link Bytes.toBigInt} instead for better performance.
- *             This function is kept for backward compatibility.
+ * @deprecated Use {@link Bytes.toBigInt} instead for better performance. This function is kept for
+ *   backward compatibility.
  * @param bytes To convert to number.
  * @returns Number as bigint.
  */
