@@ -102,4 +102,25 @@ export class Bytes {
 		}
 		return a.length - b.length;
 	}
+
+	static toBigInt(bytes: Uint8Array): bigint {
+		let result = 0n;
+		for (const byte of bytes) {
+			result = (result << 8n) | BigInt(byte);
+		}
+		return result;
+	}
+
+	static fromBigInt(value: bigint): Uint8Array {
+		if (value === 0n) {
+			return new Uint8Array(1);
+		}
+		const bytes: number[] = [];
+		let temp = value;
+		while (temp > 0n) {
+			bytes.unshift(Number(temp & 0xffn));
+			temp >>= 8n;
+		}
+		return new Uint8Array(bytes);
+	}
 }
