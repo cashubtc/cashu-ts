@@ -1965,11 +1965,11 @@ export class WSConnection {
     // @deprecated (undocumented)
     closeSubscription(subId: string): void;
     // (undocumented)
-    connect(): Promise<void>;
+    connect(timeoutMs?: number): Promise<void>;
     // (undocumented)
     createSubscription<TPayload = unknown>(params: Omit<JsonRpcReqParams, 'subId'>, callback: (payload: TPayload) => void, errorCallback: (e: Error) => void): string;
     // (undocumented)
-    ensureConnection(): Promise<void>;
+    ensureConnection(timeoutMs?: number): Promise<void>;
     // (undocumented)
     onClose(callback: (e: CloseEvent) => void): void;
     // (undocumented)
@@ -1978,6 +1978,8 @@ export class WSConnection {
     sendRequest(method: 'unsubscribe', params: {
         subId: string;
     }): void;
+    // (undocumented)
+    setLogger(logger: Logger): void;
     // (undocumented)
     readonly url: URL;
 }

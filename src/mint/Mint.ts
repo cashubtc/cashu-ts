@@ -609,27 +609,31 @@ class Mint {
 	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17.
 	 */
 	async connectWebSocket() {
-		if (this.ws) {
-			await this.ws.ensureConnection();
-		} else {
+		try {
 			const mintUrl = new URL(this._mintUrl);
 			const wsSegment = 'v1/ws';
-			if (mintUrl.pathname) {
-				if (mintUrl.pathname.endsWith('/')) {
-					mintUrl.pathname += wsSegment;
-				} else {
-					mintUrl.pathname += '/' + wsSegment;
-				}
+
+			if (mintUrl.pathname.endsWith('/')) mintUrl.pathname += wsSegment;
+			else mintUrl.pathname += '/' + wsSegment;
+
+			// preserve query params if any, and avoid manual string building
+			mintUrl.protocol = mintUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+			const wsUrl = mintUrl.toString();
+
+			if (!this.ws) {
+				this.ws = ConnectionManager.getInstance().getConnection(wsUrl, this._logger);
 			}
-			this.ws = ConnectionManager.getInstance().getConnection(
-				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`,
-			);
+
+			await this.ws.ensureConnection();
+		} catch (e) {
+			this._logger.error('Failed to connect to WebSocket...', { e });
 			try {
-				await this.ws.connect();
-			} catch (e) {
-				this._logger.error('Failed to connect to WebSocket...', { e });
-				throw new Error('Failed to connect to WebSocket...');
+				this.ws?.close();
+			} catch {
+				// silence
 			}
+			this.ws = undefined;
+			throw new Error('Failed to connect to WebSocket...');
 		}
 	}
 

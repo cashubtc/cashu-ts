@@ -108,10 +108,13 @@ export class WalletEvents {
 		return new Promise((resolve, reject) => {
 			let cancelP: Promise<SubscriptionCanceller> | null = null; // handle to unsub later
 			let to: ReturnType<typeof setTimeout> | null = null; // optional timeout timer
+			let done = false;
 
 			// Common cleanup: cancels subscription, clears timer, detaches abort listener.
 			// If an error is provided, rejects the promise with it.
 			const cleanup = (err?: unknown) => {
+				if (done) return;
+				done = true;
 				cancelSafely(cancelP);
 				if (to) {
 					clearTimeout(to);
@@ -145,6 +148,9 @@ export class WalletEvents {
 				(e) => cleanup(e), // reject if subscription itself errors
 				{ signal: opts?.signal }, // delegate abort to subscription as well
 			);
+
+			// catch errors starting the subscription
+			void cancelP.catch((e) => cleanup(e));
 		});
 	}
 
@@ -432,9 +438,14 @@ export class WalletEvents {
 			let to: ReturnType<typeof setTimeout> | null = null;
 			let lastError: unknown = null;
 			let fullyRegistered = false;
+			let done = false;
 
 			const cleanup = (err?: unknown) => {
-				for (const c of cancels.values()) cancelSafely(c);
+				if (done) return;
+				done = true;
+				for (const c of cancels.values()) {
+					cancelSafely(c);
+				}
 				cancels.clear();
 				if (to) {
 					clearTimeout(to);
@@ -450,12 +461,14 @@ export class WalletEvents {
 				if (opts.signal.aborted) return onAbort();
 				opts.signal.addEventListener('abort', onAbort, { once: true });
 			}
+
 			if (opts?.timeoutMs && opts.timeoutMs > 0) {
 				to = setTimeout(
 					() => cleanup(new Error('Timeout waiting for any mint paid')),
 					opts.timeoutMs,
 				);
 			}
+
 			if (unique.length === 0) return cleanup(new Error('No quote ids provided'));
 
 			for (const quoteId of unique) {
@@ -466,24 +479,47 @@ export class WalletEvents {
 						resolve({ id: quoteId, quote: p });
 					},
 					(e) => {
+						// Catch errors after setup
 						if (opts?.failOnError) {
 							cleanup(e);
 							return;
 						}
 						lastError = e;
+
 						const thisCanceller = cancels.get(quoteId);
 						if (thisCanceller) {
 							cancelSafely(thisCanceller);
 							cancels.delete(quoteId);
 						}
-						// Only decide to fail once we've finished installing all subs
+
 						if (fullyRegistered && cancels.size === 0) {
 							cleanup(lastError ?? new Error('No subscriptions remaining'));
 						}
 					},
 				);
+
 				cancels.set(quoteId, c);
+
+				// Catch errors setting up
+				void c.catch((e) => {
+					if (opts?.failOnError) {
+						cleanup(e);
+						return;
+					}
+					lastError = e;
+
+					const thisCanceller = cancels.get(quoteId);
+					if (thisCanceller) {
+						cancelSafely(thisCanceller);
+						cancels.delete(quoteId);
+					}
+
+					if (fullyRegistered && cancels.size === 0) {
+						cleanup(lastError ?? new Error('No subscriptions remaining'));
+					}
+				});
 			}
+
 			fullyRegistered = true;
 		});
 	}
