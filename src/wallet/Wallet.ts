@@ -74,6 +74,7 @@ import type {
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 
 import {
+	validateAmount,
 	getDecodedToken,
 	getKeepAmounts,
 	hasValidDleq,
@@ -286,12 +287,11 @@ class Wallet {
 	 * @throws If not.
 	 */
 	private assertAmount(amount: unknown, op: string): asserts amount is number {
-		this.failIf(
-			typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0,
-			'Amount must be a positive integer',
-			{ op, amount },
-		);
-		this.failIf(!Number.isSafeInteger(amount), 'Amount must be a safe integer', { op, amount });
+		try {
+			validateAmount(amount, false);
+		} catch (e) {
+			this.fail((e as Error).message, { op, amount });
+		}
 	}
 
 	/**
@@ -457,6 +457,44 @@ class Wallet {
 		keysetId: string,
 		...outputTypes: OutputType[]
 	): Promise<{ outputTypes: OutputType[]; used?: OperationCounters }> {
+		// Get all outputTypes with a manual counter and denominations set.
+		const manual = outputTypes.filter(
+			(ot): ot is Extract<OutputType, { type: 'deterministic' }> =>
+				ot.type === 'deterministic' && ot.counter > 0 && (ot.denominations?.length ?? 0) > 0,
+		);
+
+		// Reject if manual ranges overlap
+		if (manual.length > 1) {
+			const ranges = manual
+				.map((ot) => ({
+					start: ot.counter,
+					end: ot.counter + ot.denominations!.length, // exclusive
+				}))
+				.sort((a, b) => a.start - b.start);
+			for (let i = 1; i < ranges.length; i++) {
+				this.failIf(ranges[i].start < ranges[i - 1].end, 'Manual counter ranges overlap', {
+					keysetId,
+					prev: ranges[i - 1],
+					cur: ranges[i],
+				});
+			}
+		}
+
+		// If any deterministic OutputType has a manual counter (> 0), advance
+		// the counter source so future "auto" allocations do not reuse counters.
+		if (manual.length > 0) {
+			// Get the max counter manually allocated
+			const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
+
+			// Bump cursor to at least the end of the manually allocated range
+			await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
+			this._logger.debug('Counter source advanced to respect manual deterministic counters', {
+				keysetId,
+				maxManualEnd,
+			});
+		}
+
+		// Reserve counters for deterministic outputTypes with auto counter (counter===0))
 		const total = outputTypes.reduce((n, ot) => n + this.countersNeeded(ot), 0);
 		if (total === 0) return { outputTypes };
 
@@ -465,7 +503,7 @@ class Wallet {
 
 		const patched = outputTypes.map((ot): OutputType => {
 			if (ot.type === 'deterministic' && ot.counter === 0) {
-				const need = (ot.denominations ?? []).length;
+				const need = ot.denominations?.length ?? 0;
 				if (need > 0) {
 					const patched: typeof ot = { ...ot, counter: cursor };
 					cursor += need;
@@ -864,6 +902,7 @@ class Wallet {
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
 		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
+		this.assertAmount(totalAmount, 'prepareSwapToReceive');
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -1178,6 +1217,10 @@ class Wallet {
 
 		// Execute swap
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		this.failIf(
+			signatures.length < swapTransaction.outputData.length,
+			`Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}`,
+		);
 
 		// Construct proofs
 		const keyset = this.getKeyset(swapPreview.keysetId);

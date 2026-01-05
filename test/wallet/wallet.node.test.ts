@@ -24,6 +24,7 @@ import {
 	MintQuoteBolt11Response,
 	MeltBlanks,
 	HasKeysetKeys,
+	OutputType,
 } from '../../src';
 
 import { bytesToNumber } from '../../src/utils';
@@ -1797,7 +1798,7 @@ describe('send', () => {
 		const seed = hexToBytes(
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 		);
-		const wallet = new Wallet(mint, { unit, bip39seed: seed });
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
 		await wallet.loadMint();
 
 		const overpayProofs = [
@@ -1819,9 +1820,255 @@ describe('send', () => {
 			keep: { type: 'deterministic', counter: 0 }, // Should auto-offset to send.length
 		};
 		const result = await wallet.send(3, overpayProofs, { includeFees: true }, outputConfig);
+		// Send:  2,1,2 keep: 2 => counter 4
+		expect(await wallet.counters.peekNext('00bd033559de27d0')).toBe(4);
 		// Assert no overlap (e.g., secrets are unique)
 		const allSecrets = [...result.keep, ...result.send].map((p) => p.secret);
 		expect(new Set(allSecrets).size).toBe(allSecrets.length); // No duplicates
+	});
+	test('prepareSwapToSend deterministic counters, manual and auto combos advance cursor and avoid reuse', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+
+		const proofs = [
+			{
+				id: keysetId,
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: keysetId,
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const cases: Array<{
+			name: string;
+			amount: number;
+			includeFees: boolean;
+			outputConfig: OutputConfig;
+		}> = [
+			{
+				name: 'send manual, keep auto',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 16 },
+					keep: { type: 'deterministic', counter: 0 },
+				},
+			},
+			{
+				name: 'send auto, keep manual',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 0 },
+					keep: { type: 'deterministic', counter: 25 },
+				},
+			},
+			{
+				name: 'send auto, keep auto',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 0 },
+					keep: { type: 'deterministic', counter: 0 },
+				},
+			},
+			{
+				name: 'send manual, keep manual (disjoint)',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 50 },
+					keep: { type: 'deterministic', counter: 2 },
+				},
+			},
+			{
+				name: 'send manual, keep auto (no includeFees)',
+				amount: 3,
+				includeFees: false,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 7 },
+					keep: { type: 'deterministic', counter: 0 },
+				},
+			},
+		];
+
+		for (const tc of cases) {
+			const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+			await wallet.loadMint();
+
+			const res = await wallet.prepareSwapToSend(
+				tc.amount,
+				proofs,
+				{ includeFees: tc.includeFees },
+				tc.outputConfig,
+			);
+
+			const sendLen = res.sendOutputs?.length ?? 0;
+			const keepLen = res.keepOutputs?.length ?? 0;
+
+			// No overlap, duplicates would imply reused counters for deterministic outputs
+			const allSecrets = [...(res.keepOutputs ?? []), ...(res.sendOutputs ?? [])].map(
+				(p) => p.secret,
+			);
+			expect(new Set(allSecrets).size).toBe(allSecrets.length);
+
+			const sendOT = tc.outputConfig.send;
+			const keepOT = tc.outputConfig.keep!; // cases all have keep
+
+			const sendIsManual = sendOT.type === 'deterministic' && sendOT.counter > 0;
+			const keepIsManual = keepOT.type === 'deterministic' && keepOT.counter > 0;
+
+			const manualEnds: number[] = [];
+			if (sendOT.type === 'deterministic' && sendOT.counter > 0 && sendLen > 0) {
+				manualEnds.push(sendOT.counter + sendLen);
+			}
+			if (keepOT.type === 'deterministic' && keepOT.counter > 0 && keepLen > 0) {
+				manualEnds.push(keepOT.counter + keepLen);
+			}
+
+			const maxManualEnd = manualEnds.length ? Math.max(...manualEnds) : 0;
+
+			const autoTotal = (sendIsManual ? 0 : sendLen) + (keepIsManual ? 0 : keepLen);
+
+			const expectedNext = maxManualEnd + autoTotal;
+
+			expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext);
+		}
+	});
+
+	test('prepareSwapToSend throws when manual deterministic ranges overlap', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		await wallet.loadMint();
+
+		const proofs = [
+			{
+				id: keysetId,
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: keysetId,
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const outputConfig: OutputConfig = {
+			send: { type: 'deterministic', counter: 5 },
+			keep: { type: 'deterministic', counter: 5 }, // same start, guaranteed overlap if both have outputs
+		};
+
+		await expect(
+			wallet.prepareSwapToSend(3, proofs, { includeFees: true }, outputConfig),
+		).rejects.toThrow('Manual counter ranges overlap');
+	});
+	test('manual counters advances cursor, then auto allocation must not reuse counters', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+
+		const proofs = [
+			{
+				id: keysetId,
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: keysetId,
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		await wallet.loadMint();
+
+		// Op 1: manual send counter, auto keep counter
+		const out1: OutputConfig = {
+			send: { type: 'deterministic', counter: 50 },
+			keep: { type: 'deterministic', counter: 0 },
+		};
+		const res1 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out1);
+
+		const sendLen1 = res1.sendOutputs?.length ?? 0;
+		const keepLen1 = res1.keepOutputs?.length ?? 0;
+
+		expect(sendLen1).toBeGreaterThan(0);
+		expect(keepLen1).toBeGreaterThan(0);
+
+		const secrets1 = [...(res1.keepOutputs ?? []), ...(res1.sendOutputs ?? [])].map(
+			(p) => p.secret,
+		);
+
+		const send1 = out1.send;
+		if (send1.type !== 'deterministic') throw new Error('test setup: send1 must be deterministic');
+		const expectedNext1 = send1.counter + sendLen1 + keepLen1;
+		expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext1);
+
+		// Op 2: both auto, must allocate strictly after op1 cursor, no reuse
+		const out2: OutputConfig = {
+			send: { type: 'deterministic', counter: 0 },
+			keep: { type: 'deterministic', counter: 0 },
+		};
+		const res2 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out2);
+
+		const sendLen2 = res2.sendOutputs?.length ?? 0;
+		const keepLen2 = res2.keepOutputs?.length ?? 0;
+
+		expect(sendLen2).toBeGreaterThan(0);
+
+		const secrets2 = [...(res2.keepOutputs ?? []), ...(res2.sendOutputs ?? [])].map(
+			(p) => p.secret,
+		);
+
+		// No duplicates across both ops, duplicates would imply counter reuse
+		const allSecrets = [...secrets1, ...secrets2];
+		expect(new Set(allSecrets).size).toBe(allSecrets.length);
+
+		const expectedNext2 = expectedNext1 + sendLen2 + keepLen2;
+		expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext2);
 	});
 });
 
