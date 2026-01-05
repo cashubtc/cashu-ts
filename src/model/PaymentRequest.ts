@@ -83,6 +83,7 @@ export class PaymentRequest {
 	 * Encodes the payment request to creqB format (TLV + bech32m).
 	 *
 	 * @returns A bech32m encoded payment request string with 'CREQB' prefix.
+	 * @experimental
 	 */
 	toEncodedCreqB(): string {
 		const tlvRequest: DecodedTLVPaymentRequest = {
