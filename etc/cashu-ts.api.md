@@ -1316,7 +1316,6 @@ class PaymentRequest_2 {
     description?: string | undefined;
     // (undocumented)
     static fromEncodedRequest(encodedRequest: string): PaymentRequest_2;
-    // (undocumented)
     static fromRawRequest(rawPaymentRequest: RawPaymentRequest): PaymentRequest_2;
     // (undocumented)
     getTransport(type: PaymentRequestTransportType): PaymentRequestTransport | undefined;
@@ -1330,6 +1329,8 @@ class PaymentRequest_2 {
     nut26: boolean;
     // (undocumented)
     singleUse: boolean;
+    toEncodedCreqA(): string;
+    toEncodedCreqB(): string;
     // (undocumented)
     toEncodedRequest(): string;
     // (undocumented)
