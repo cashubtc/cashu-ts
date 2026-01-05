@@ -34,12 +34,11 @@ export {
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
-export type { SubscribeOpts, CancellerLike } from './wallet/WalletEvents';
+export type { SubscribeOpts, CancellerLike, SubscriptionCanceller } from './wallet/WalletEvents';
 export type * from './wallet/types/_deprecated';
 export type * from './wallet/types/config';
 export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
-export type { SubscriptionCanceller } from './wallet/types/websocket';
 export type * from './mint/types/_deprecated';
 export type * from './mint/types/payloads';
 export type * from './mint/types/responses';

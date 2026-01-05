@@ -7,10 +7,12 @@ import type {
 	MintQuoteBolt11Response,
 } from '../model/types';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
-import type { MeltBlanks, SubscriptionCanceller } from './types';
+import type { MeltBlanks } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './CounterSource';
 import { safeCallback } from '../logger';
+
+export type SubscriptionCanceller = () => void;
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
