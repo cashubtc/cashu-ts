@@ -1,3 +1,5 @@
+[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Get Token**
+
 # Get token data
 
 ```typescript
@@ -8,5 +10,4 @@ try {
 } catch (_) {
 	console.log('Invalid token');
 }
-```
 ```

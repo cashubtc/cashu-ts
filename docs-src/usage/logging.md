@@ -1,3 +1,5 @@
+[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Logging**
+
 # Logging
 
 By default, cashu-ts does not log to the console. If you want to enable logging for debugging purposes, you can set the `logger` option when creating a wallet or mint. A `ConsoleLogger` is provided, or you can wrap your existing logger to conform to the `Logger` interface:

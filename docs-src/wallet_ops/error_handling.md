@@ -1,3 +1,5 @@
+[Documents](../index.html) › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Error Handling Patterns**
+
 # Error handling patterns
 
 ```ts
