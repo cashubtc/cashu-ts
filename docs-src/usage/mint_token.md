@@ -12,7 +12,7 @@ const mintQuote = await wallet.createMintQuoteBolt11(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state === MintQuoteState.PAID) {
-	const proofs = await wallet.mintProofs(64, mintQuote.quote);
+	const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
 }
 // store proofs in your app ..
 
