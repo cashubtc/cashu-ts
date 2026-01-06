@@ -1,3 +1,5 @@
+[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Create P2PK**
+
 # Create a P2PK locked token and receive it
 
 ```typescript

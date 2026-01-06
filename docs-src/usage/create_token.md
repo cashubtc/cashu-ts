@@ -1,3 +1,5 @@
+[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Create Token**
+
 # Create a token and receive it
 
 ```typescript

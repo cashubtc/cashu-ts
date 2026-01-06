@@ -1,3 +1,5 @@
+[Documents](../index.html) › **Deterministic Counters**
+
 # Deterministic counters (persist, inspect, bump)
 
 Deterministic outputs use per-keyset counters. The wallet reserves them atomically and emits a single event you can use to persist the "next" value in your storage.

@@ -1,3 +1,5 @@
+[Documents](../index.html) › [Wallet Operations](../wallet_ops/wallet_ops.md) › **P2PK Builder API**
+
 # P2PKBuilder API
 
 Small helper that only shapes `P2PKOptions`, it does not create secrets.

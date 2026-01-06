@@ -49,7 +49,7 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 ### [NUTs](https://github.com/cashubtc/nuts/):
 
 This project implements the **7 Mandatory** [NUTs](https://github.com/cashubtc/nuts/) and **15 key** optional NUTs.
-View the full roadmap of planned NUTs in our [Roadmap](./ROADMAP.md)
+View the full roadmap of planned NUTs in our [Roadmap](./docs-src/ROADMAP.md)
 
 ### Token Foramts
 We currently support **V3 (CashuA)** and **V4 (CashuB)** token formats.
@@ -57,16 +57,16 @@ We currently support **V3 (CashuA)** and **V4 (CashuB)** token formats.
 ### Key Wallet Features:
 |  |  |  |
 | :--- | :--- | :--- |
-|  connect to mint | request minting tokens | check spent tokens |
-|  minting | sending / receiving | melting |
-|  AuthManager | AuthProvider | bolt11 / bolt12 |
-|  transaction builder | wallet subscriptions | deterministic counters |
+|  connect to mint | [request minting tokens](./docs-src/usage/mint_token.md) | [check spent tokens](./docs-src/usage/get_token.md) |
+|  [minting](./docs-src/wallet_ops/melt.md) | [sending](./docs-src/wallet_ops/send.md) / [receiving](./docs-src/wallet_ops/receive.md) | [melting](./docs-src/wallet_ops/melt.md) |
+|  AuthManager | AuthProvider | bolt11 / [bolt12](./docs-src/usage/bolt12.md) |
+|  [transaction builder](./docs-src/wallet_ops/wallet_ops.md) | [wallet subscriptions](./docs-src/wallet_events/wallet_events.md) | [deterministic counters](./docs-src/deterministic_counters.md) |
 |  ... and more | | [View Full List](#detailed-specs) |
 
 ## Usage
 
 We provide comprehensive examples categorized by use case:
-- **[Basic Guide](./docs-src/usage/)**: Getting Started, and basic token operations.
+- **[Basic Guide](./docs-src/usage/usage_index.md)**: Getting Started, and basic token operations.
 - **[WalletOps](./docs-src/wallet_ops/wallet_ops.md)**: Translation Builder Usage Recipes.
 - **[WalletEvents](./docs-src/wallet_events/wallet_events.md)**: Event Subscriptions
 - **[Deterministic Counters](./docs-src/deterministic_counters.md)**: Deterministic counters (persist, inspect, bump).
@@ -94,4 +94,4 @@ Use the builder hooks for transaction-local callbacks, and WalletEvents for app-
 Contributions are very welcome.
 
 If you want to contribute, please open an Issue or a PR.
-Please refer to the [CONTRIBUTING.md](CONTRIBUTING.md) file for more info.
+Please refer to [the contributing guide](./docs-src/CONTRIBUTING.md) for more info.

@@ -1,3 +1,5 @@
+[Documents](../index.html) › **Wallet Operations**
+
 # WalletOps – Transaction Builder Usage Recipes
 
 Cashu-TS offers a flexible `WalletOps` builder that makes it simple to construct transactions in a readable and intuitive way.
