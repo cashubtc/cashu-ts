@@ -2,7 +2,7 @@
 
 This document is a quick reference for maintainers and frequent contributors. It complements `CONTRIBUTING.md` (which is contributor-facing) and contains deeper, actionable instructions for setting up, testing, and developing the project.
 
-> [!NOTE]
+> [!IMPORTANT]
 > Create a feature branch from the correct base branch, and target the same branch in your PR.
 >
 > - v3 (current): feature/my-change → development
