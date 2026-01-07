@@ -23,7 +23,7 @@ If upgrading from v2, please review the [migration guide][v3-migration] for brea
 
 This release is in maintenance mode.
 
-It receives critical fixes only.
+It receives critical fixes only, via the [v2-dev branch].
 
 If upgrading from v1, please review the [migration guide][v2-migration] for breaking changes.
 
@@ -41,6 +41,7 @@ This release is now obsolete.
 [v3-latest]: https://github.com/cashubtc/cashu-ts/releases/tag/v3.2.2
 [v2-latest]: https://github.com/cashubtc/cashu-ts/releases/tag/v2.8.1
 [development branch]: https://github.com/cashubtc/cashu-ts/tree/development
+[v2-dev branch]: https://github.com/cashubtc/cashu-ts/tree/v2-dev
 [v1-latest]: https://github.com/cashubtc/cashu-ts/releases/tag/v1.2.1
 [v0-latest]: https://github.com/cashubtc/cashu-ts/releases/tag/v0.9.0
 [v3-migration]: migration-3.0.0.md
