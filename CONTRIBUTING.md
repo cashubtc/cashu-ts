@@ -2,6 +2,12 @@
 
 This file is contributor-facing: quick setup, how to opt in to local hooks, and a short PR checklist. For detailed developer instructions (environment, hooks internals, release process, CI parity, and troubleshooting) see `DEVELOPER.md`.
 
+> [!NOTE]
+> Create a feature branch from the correct base branch, and target the same branch in your PR.
+>
+> - v3 (current): feature/my-change → development
+> - v2 (legacy): feature/my-change → v2-dev
+
 ## Quickstart
 
 ```bash
