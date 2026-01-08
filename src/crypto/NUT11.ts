@@ -681,7 +681,7 @@ export type WellKnownSecret = 'P2PK';
 /**
  * Signs a P2PK secret using Schnorr.
  *
- * @deprecated Use schnorrSignMessage()
+ * @deprecated Use {@link schnorrSignMessage}
  */
 export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
 	return schnorrSignMessage(secret, privateKey);
@@ -690,7 +690,7 @@ export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
 /**
  * Verifies a Schnorr signature on a P2PK secret.
  *
- * @deprecated Use schnorrVerifyMessage()
+ * @deprecated Use {@link schnorrVerifyMessage}
  */
 export const verifyP2PKSecretSignature = (
 	signature: string,
@@ -701,14 +701,14 @@ export const verifyP2PKSecretSignature = (
 };
 
 /**
- * @deprecated - Typo: use getP2PKExpectedWitnessPubkeys() instead.
+ * @deprecated - Typo: use {@link getP2PKExpectedWitnessPubkeys} instead.
  */
 export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[] {
 	return getP2PKExpectedWitnessPubkeys(secretStr);
 }
 
 /**
- * @deprecated Use isP2PKSpendAuthorised or verifyP2PKSpendingConditions instead.
+ * @deprecated Use {@link isP2PKSpendAuthorised} or {@link verifyP2PKSpendingConditions} instead.
  */
 export function verifyP2PKSig(proof: Proof): boolean {
 	return isP2PKSpendAuthorised(proof);

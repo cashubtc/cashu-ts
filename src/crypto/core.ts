@@ -24,7 +24,7 @@ export type RawBlindedMessage = {
 };
 
 /**
- * @deprecated - Use RawBlindedMessage.
+ * @deprecated - Use {@link RawBlindedMessage}.
  */
 export type BlindedMessage = RawBlindedMessage;
 
@@ -109,7 +109,7 @@ export function createBlindSignature(
 }
 
 /**
- * @deprecated - Use createRandomRawBlindedMessage()
+ * @deprecated - Use {@link createRandomRawBlindedMessage}
  */
 export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage {
 	void _deprecated; // intentionally unused
