@@ -432,10 +432,24 @@ describe('test getTokenMetadata', () => {
 });
 
 describe('test keyset derivation', () => {
-	test('derive', () => {
+	test('derive v0', () => {
 		const keys = PUBKEYS;
 		const keysetId = utils.deriveKeysetId(keys);
 		expect(keysetId).toBe('009a1f293253e41e');
+	});
+	test('derive v1', () => {
+		const keys = {
+			'1': '03a40f20667ed53513075dc51e715ff2046cad64eb68960632269ba7f0210e38bc',
+			'2': '03fd4ce5a16b65576145949e6f99f445f8249fee17c606b688b504a849cdc452de',
+			'4': '02648eccfa4c026960966276fa5a4cae46ce0fd432211a4f449bf84f13aa5f8303',
+			'8': '02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528',
+		};
+		const keysetId = utils.deriveKeysetId(keys, {
+			expiry: 2059210353,
+			input_fee_ppk: 100,
+			unit: 'sat',
+		});
+		expect(keysetId).toBe('015ba18a8adcd02e715a58358eb618da4a4b3791151a4bee5e968bb88406ccf76a');
 	});
 });
 
@@ -725,7 +739,7 @@ describe('test deprecated base64 keyset id derivation', () => {
 			'4611686018427387904': '02217ec885b5d75100a20b4337498afefd4ef76e4082cf361d32ae869c695e34a5',
 			'9223372036854775808': '039f14f18f3ceaca7dcf18cd212eaf2656e65c337fc4a98cd4e7c119982338e57a',
 		};
-		const idB64 = utils.deriveKeysetId(keys as unknown as Keys, undefined, undefined, 0, true);
+		const idB64 = utils.deriveKeysetId(keys as unknown as Keys, { isDeprecatedBase64: true });
 		expect(idB64).toBe('9mlfd5vCzgGl');
 	});
 	test('verifies MiniBits base64 keyset id', () => {
