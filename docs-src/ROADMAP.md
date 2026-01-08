@@ -3,11 +3,14 @@
 This document outlines the current and planned features for the project, tracked as **NUTs** (Notation, Utilization, and Terminology). Each NUT represents a specific feature or improvement, with links to detailed specifications.
 
 ### How to Use This Document
+
 - **Completed NUTs**: Marked with a `[x]` and are fully implemented.
 - **Pending NUTs**: Marked with a ⬜ and are planned or in progress.
 - Click on a NUT link to view its detailed specification.
 
 This roadmap will be updated as new features are proposed or completed. Contributions and feedback are welcome!
+
+We are also tracking the project [here](https://github.com/cashubtc/cashu-ts/projects?query=is%3Aopen)
 
 ## [NUTs](https://github.com/cashubtc/nuts/):
 

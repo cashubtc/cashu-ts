@@ -22,4 +22,3 @@ const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSen
 const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 // store proofsToKeep and meltResponse.change in your app ..
 ```
-

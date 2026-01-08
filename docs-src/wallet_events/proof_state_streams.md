@@ -18,4 +18,3 @@ const ac = new AbortController();
 // later
 ac.abort();
 ```
-

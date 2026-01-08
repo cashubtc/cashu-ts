@@ -30,5 +30,3 @@ if (availableAmount > 0) {
 	);
 }
 ```
-
-

@@ -50,4 +50,3 @@ try {
 	console.warn('Not paid in time or aborted', e);
 }
 ```
-

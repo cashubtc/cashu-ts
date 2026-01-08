@@ -9,15 +9,15 @@ You can access `WalletOps` from inside a wallet instance using: `wallet.ops` or 
 > Fluent, single-use builders for **send**, **receive**, **mint** and **melt**.
 > If you don’t customize an output side, the wallet’s policy defaults apply.
 
-
 ## Examples
-| Recipe |
-| :--- |
-| [Send](./send.md) |
-| [Receive](./receive.md) |
-| [Mint](./mint.md) |
-| [Melt](./melt.md) |
-| [P2PKBuilder](./p2pk_builder.md) |
+
+| Recipe                                        |
+| :-------------------------------------------- |
+| [Send](./send.md)                             |
+| [Receive](./receive.md)                       |
+| [Mint](./mint.md)                             |
+| [Melt](./melt.md)                             |
+| [P2PKBuilder](./p2pk_builder.md)              |
 | [Error Handling Pattern](./error_handling.md) |
 
 ## Notes
