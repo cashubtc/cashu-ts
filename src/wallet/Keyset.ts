@@ -125,6 +125,7 @@ export class Keyset {
 			id: this._id,
 			unit: this._unit,
 			final_expiry: this._final_expiry,
+			input_fee_ppk: this._input_fee_ppk,
 			keys: this._keys,
 		});
 	}
@@ -144,6 +145,7 @@ export class Keyset {
 			keys.keys,
 			keys.unit,
 			keys.final_expiry,
+			keys.input_fee_ppk,
 			versionByte,
 			isDeprecatedBase64,
 		);

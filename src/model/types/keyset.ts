@@ -56,6 +56,10 @@ export type MintKeys = {
 	 */
 	final_expiry?: number;
 	/**
+	 * Input fee for keyset (in ppk)
+	 */
+	input_fee_ppk?: number;
+	/**
 	 * Public keys are a dictionary of number and string. The number represents the amount that the
 	 * key signs for.
 	 */

@@ -513,6 +513,7 @@ export function deriveKeysetId(
 	keys: Keys,
 	unit?: string,
 	expiry?: number,
+	input_fee_ppk?: number,
 	versionByte: number = 0,
 	isDeprecatedBase64: boolean = false,
 ) {
@@ -526,32 +527,38 @@ export function deriveKeysetId(
 		return b64.slice(0, 12);
 	}
 
-	let pubkeysConcat = Object.entries(keys)
-		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
-		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
-		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-
-	let hash;
-	let hashHex;
 	switch (versionByte) {
-		case 0:
-			hash = sha256(pubkeysConcat);
-			hashHex = Bytes.toHex(hash).slice(0, 14);
+		case 0: {
+			const pubkeysConcat = Object.entries(keys)
+				.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
+				.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
+				.reduce(
+					(prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr),
+					new Uint8Array(),
+				);
+			const hash = sha256(pubkeysConcat);
+			const hashHex = Bytes.toHex(hash).slice(0, 14);
 			return '00' + hashHex;
-		case 1:
+		}
+		case 1: {
 			if (!unit) {
 				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
-			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Bytes.fromString('unit:' + unit));
-			if (expiry) {
-				pubkeysConcat = mergeUInt8Arrays(
-					pubkeysConcat,
-					Bytes.fromString('final_expiry:' + expiry.toString()),
-				);
+			const sortedEntries = Object.entries(keys).sort(
+				(a: [string, string], b: [string, string]) => +a[0] - +b[0],
+			);
+			let preimage = sortedEntries.map(([amount, pubkey]) => `${amount}:${pubkey}`).join(',');
+			preimage += `|unit:${unit}`;
+			if (input_fee_ppk) {
+				preimage += `|input_fee_ppk:${input_fee_ppk}`;
 			}
-			hash = sha256(pubkeysConcat);
-			hashHex = Bytes.toHex(hash);
+			if (expiry) {
+				preimage += `|final_expiry:${expiry}`;
+			}
+			const hash = sha256(Bytes.fromString(preimage));
+			const hashHex = Bytes.toHex(hash);
 			return '01' + hashHex;
+		}
 		default:
 			throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
 	}
@@ -701,6 +708,7 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 			keys.keys,
 			keys.unit,
 			keys.final_expiry,
+			keys.input_fee_ppk,
 			versionByte,
 			isBase64 && !isValidHex,
 		) === keys.id
@@ -744,20 +752,17 @@ function mapShortKeysetIds(
 				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
 			}
 			// Look for a match: prefix(keyset ID) == short ID
-			let found = false;
-			for (const keyset of keysetIds) {
-				if (proof.id === keyset.slice(0, proof.id.length)) {
-					proof.id = keyset;
-					newProofs.push(proof);
-					found = true;
-					break;
-				}
+			const matches = keysetIds.filter((keyset) => proof.id === keyset.slice(0, proof.id.length));
+			if (matches.length > 1) {
+				throw new Error(`Short keyset ID ${proof.id} is ambiguous.`);
 			}
-			if (!found) {
+			if (matches.length === 0) {
 				throw new Error(
 					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`,
 				);
 			}
+			proof.id = matches[0];
+			newProofs.push(proof);
 		} else {
 			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`);
 		}
