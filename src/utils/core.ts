@@ -519,7 +519,7 @@ export type DeriveKeysetIdOptions = {
  */
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
 /**
- * @deprecated Use the options signature instead:
+ * @deprecated Use the new options signature, which also adds keysets v2 support:
  *
  *       deriveKeysetId(keys, { unit, expiry, versionByte, input_fee_ppk });
  */
@@ -529,7 +529,6 @@ export function deriveKeysetId(
 	expiry?: number,
 	versionByte?: number,
 	isDeprecatedBase64?: boolean,
-	input_fee_ppk?: number,
 ): string;
 export function deriveKeysetId(
 	keys: Keys,

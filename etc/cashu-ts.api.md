@@ -218,7 +218,7 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
 
 // @public @deprecated (undocumented)
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean, input_fee_ppk?: number): string;
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 // @public (undocumented)
 export type DeriveKeysetIdOptions = {
