@@ -68,6 +68,21 @@ Supported token formats:
 
 Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
+### Browser / CDN usage (IIFE)
+
+Cashu TS also ships a standalone browser build (IIFE) that can be consumed directly
+via a CDN such as jsDelivr or unpkg.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@cashu/cashu-ts/lib/cashu-ts.iife.js"></script>
+<script>
+  const { Wallet } = cashuts;
+
+  const wallet = new Wallet('https://example-mint.com');
+  await wallet.loadMint();
+</script>
+```
+
 ### Install
 
 ```shell
