@@ -175,11 +175,13 @@ export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 /**
  * Converts a bytes array to a number.
  *
+ * @deprecated We now use Bytes.toBigInt internally for better performance. This function is kept
+ *   public for backward compatibility.
  * @param bytes To convert to number.
- * @returns Number.
+ * @returns Number as bigint.
  */
 export function bytesToNumber(bytes: Uint8Array): bigint {
-	return hexToNumber(bytesToHex(bytes));
+	return Bytes.toBigInt(bytes);
 }
 
 /**

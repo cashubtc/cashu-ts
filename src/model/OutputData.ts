@@ -18,7 +18,7 @@ import {
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
-import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
+import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 // TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
 // For now the generic preserves the relationship between factory input type and `toProof` keyset type,
@@ -322,9 +322,9 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-		// Note: bytesToNumber is used here so invalid values bubble up as throws
+		// Note: Bytes.toBigInt is used here so invalid values bubble up as throws
 		// for BIP32-style retry logic (caller increments counter and retries).
-		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
+		const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),

@@ -13,7 +13,7 @@ import {
 	hash_e,
 	pointFromBytes,
 } from '../../src/crypto';
-import { bytesToNumber } from '../../src/utils';
+import { Bytes } from '../../src/utils';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -68,7 +68,9 @@ describe('test blinding message', () => {
 		let secretUInt8 = enc.encode(SECRET_MESSAGE);
 		let { B_ } = blindMessage(
 			secretUInt8,
-			bytesToNumber(hexToBytes('0000000000000000000000000000000000000000000000000000000000000001')),
+			Bytes.toBigInt(
+				hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
+			),
 		);
 		expect(B_.toHex(true)).toBe(
 			'025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b',
@@ -79,7 +81,7 @@ describe('test blinding message', () => {
 describe('test unblinding signature', () => {
 	test('testing string 0000....01', async () => {
 		let C_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
-		let r = bytesToNumber(
+		let r = Bytes.toBigInt(
 			hexToBytes('0000000000000000000000000000000000000000000000000000000000000001'),
 		);
 		let A = pointFromHex('020000000000000000000000000000000000000000000000000000000000000001');

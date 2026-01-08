@@ -8,7 +8,7 @@ import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
  * Private key type - can be hex string or Uint8Array.
  */
 export type PrivKey = Uint8Array | string;
-import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
+import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 
 export type BlindSignature = {
@@ -24,7 +24,7 @@ export type RawBlindedMessage = {
 };
 
 /**
- * @deprecated - Use RawBlindedMessage.
+ * @deprecated - Use {@link RawBlindedMessage}.
  */
 export type BlindedMessage = RawBlindedMessage;
 
@@ -88,7 +88,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 		keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
 	} else {
 		//legacy keyset compatibility
-		keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+		keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
 	}
 	return keysetIdInt;
 };
@@ -109,7 +109,7 @@ export function createBlindSignature(
 }
 
 /**
- * @deprecated - Use createRandomRawBlindedMessage()
+ * @deprecated - Use {@link createRandomRawBlindedMessage}
  */
 export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage {
 	void _deprecated; // intentionally unused

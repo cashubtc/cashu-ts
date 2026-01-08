@@ -87,7 +87,7 @@ export type Bolt12MintQuotePayload = MintQuoteBolt12Request;
 // @public @deprecated
 export type Bolt12MintQuoteResponse = MintQuoteBolt12Response;
 
-// @public
+// @public @deprecated
 export function bytesToNumber(bytes: Uint8Array): bigint;
 
 // @public (undocumented)
