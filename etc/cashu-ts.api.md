@@ -182,8 +182,13 @@ export function createHTLCHash(preimage?: string): {
 // @public
 export function createHTLCsecret(hash: string, tags?: string[][]): string;
 
-// @public (undocumented)
-export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array): KeysetPair;
+// @public
+export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array, options?: {
+    expiry?: number;
+    input_fee_ppk?: number;
+    unit?: string;
+    versionByte: number;
+}): KeysetPair;
 
 // @public
 export function createP2PKsecret(pubkey: string, tags?: string[][]): string;
@@ -210,7 +215,19 @@ export function deepEqual<T>(a: T, b: T): boolean;
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, input_fee_ppk?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
+export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
+
+// @public @deprecated (undocumented)
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean, input_fee_ppk?: number): string;
+
+// @public (undocumented)
+export type DeriveKeysetIdOptions = {
+    expiry?: number;
+    input_fee_ppk?: number;
+    unit?: string;
+    versionByte?: number;
+    isDeprecatedBase64?: boolean;
+};
 
 // @public
 export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string, eBytes?: Uint8Array): {

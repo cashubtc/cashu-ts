@@ -497,26 +497,63 @@ export function handleTokens(token: string): Token {
 	throw new Error('Token version is not supported');
 }
 
+export type DeriveKeysetIdOptions = {
+	expiry?: number;
+	input_fee_ppk?: number;
+	unit?: string;
+	versionByte?: number;
+	isDeprecatedBase64?: boolean;
+};
+
 /**
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param unit (optional) the unit of the keyset.
- * @param expiry (optional) expiry of the keyset.
- * @param versionByte (optional) version of the keyset ID. Default is 0.
- * @param isDeprecatedBase64 (optional) true if the keyset ID should be derived as a deprecated v0
- *   base64 keyset ID.
+ * @param options.expiry (optional) expiry of the keyset.
+ * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
+ * @param options.unit (optional) the unit of the keyset. Default: sat.
+ * @param options.versionByte (optional) version of the keyset ID. Default: 1.
+ * @param options.isDeprecatedBase64 (optional) version of the keyset ID. Default: false.
  * @returns Keyset id of the keys.
  * @throws If keyset versionByte is not valid.
+ */
+export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
+/**
+ * @deprecated Use the options signature instead:
+ *
+ *       deriveKeysetId(keys, { unit, expiry, versionByte, input_fee_ppk });
  */
 export function deriveKeysetId(
 	keys: Keys,
 	unit?: string,
 	expiry?: number,
+	versionByte?: number,
+	isDeprecatedBase64?: boolean,
 	input_fee_ppk?: number,
-	versionByte: number = 0,
-	isDeprecatedBase64: boolean = false,
-) {
+): string;
+export function deriveKeysetId(
+	keys: Keys,
+	arg2?: string | DeriveKeysetIdOptions,
+	expiry?: number,
+	versionByte?: number,
+	isDeprecatedBase64?: boolean,
+	input_fee_ppk?: number,
+): string {
+	let unit: string = 'sat';
+	if (arg2 && typeof arg2 === 'object') {
+		// New signature
+		unit = arg2.unit ?? 'sat'; // default: sat
+		expiry = arg2.expiry;
+		versionByte = arg2.versionByte ?? 1; // default: 1
+		input_fee_ppk = arg2.input_fee_ppk;
+		isDeprecatedBase64 = arg2.isDeprecatedBase64 ?? false; // default: false
+	} else {
+		// Deprecated signature
+		unit = arg2 ?? 'sat'; // default: sat
+		versionByte = versionByte ?? 0; // default: 0
+		isDeprecatedBase64 = isDeprecatedBase64 ?? false; // default: false
+	}
+
 	if (isDeprecatedBase64) {
 		const pubkeysConcat = Object.entries(keys)
 			.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
@@ -704,14 +741,13 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
 	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
 	return (
-		deriveKeysetId(
-			keys.keys,
-			keys.unit,
-			keys.final_expiry,
-			keys.input_fee_ppk,
+		deriveKeysetId(keys.keys, {
+			expiry: keys.final_expiry,
+			input_fee_ppk: keys.input_fee_ppk,
+			unit: keys.unit,
 			versionByte,
-			isBase64 && !isValidHex,
-		) === keys.id
+			isDeprecatedBase64: isBase64 && !isValidHex,
+		}) === keys.id
 	);
 }
 

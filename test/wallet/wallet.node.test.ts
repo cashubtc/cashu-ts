@@ -51,12 +51,11 @@ const dummyKeysResp = {
 		},
 	],
 };
-const dummyKeysId = deriveKeysetId(
-	dummyKeysResp.keysets[0].keys,
-	dummyKeysResp.keysets[0].unit,
-	1754296607,
-	1,
-);
+const dummyKeysId = deriveKeysetId(dummyKeysResp.keysets[0].keys, {
+	expiry: 1754296607,
+	unit: dummyKeysResp.keysets[0].unit,
+	versionByte: 0,
+});
 console.log(`dummyKeysId = ${dummyKeysId}`);
 const dummyKeysetResp = {
 	keysets: [
