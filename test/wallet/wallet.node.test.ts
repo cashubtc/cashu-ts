@@ -27,7 +27,7 @@ import {
 	OutputType,
 } from '../../src';
 
-import { bytesToNumber } from '../../src/utils';
+import { Bytes } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
 import { hexToBytes } from '@noble/curves/utils.js';
 import { randomBytes } from '@noble/hashes/utils.js';
@@ -2116,7 +2116,7 @@ describe('deterministic', () => {
 			const hexSeed =
 				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-			const numberR = bytesToNumber(hexToBytes(r));
+			const numberR = Bytes.toBigInt(hexToBytes(r));
 			const decoder = new TextDecoder();
 
 			const data = OutputData.createSingleDeterministicData(
@@ -2152,7 +2152,7 @@ describe('deterministic', () => {
 			const hexSeed =
 				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-			const numberR = bytesToNumber(hexToBytes(r));
+			const numberR = Bytes.toBigInt(hexToBytes(r));
 			const decoder = new TextDecoder();
 
 			const data = OutputData.createSingleDeterministicData(
