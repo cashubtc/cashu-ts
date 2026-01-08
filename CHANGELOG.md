@@ -17,6 +17,24 @@ This is the latest release.
 
 It is actively supported and recommended for new projects.
 
+### New Features
+
+- Transaction builder (WalletOps)
+- Deterministic counters (WalletCounters / CounterSource)
+- Wallet Event Subscriptions (WalletEvents)
+- Clear and Blind Authentication (AuthManager / AuthProvider / OIDCAuth)
+- Wallet Keychain with backup (KeyChain)
+- Wallet load from cache
+- P2PK Settings Builder (P2PKBuilder)
+- RGLI Proof Selection (SelectProofs)
+- Preview Send/Receive/Melt Transactions
+- Bech32 format Payment Requests
+- Pay to Blinded Key (P2BK)
+- SIG_ALL and HTLC support
+- Integrated Crypto Library (replaces @cashu/crypto)
+- Easier proof management (groupProofsByState)
+- Better output handline (OutputType / OutputConfig)
+
 If upgrading from v2, please review the [migration guide][v3-migration] for breaking changes.
 
 ## [v2.8.1][v2-latest]
