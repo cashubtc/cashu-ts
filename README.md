@@ -76,10 +76,10 @@ via a CDN such as jsDelivr or unpkg.
 ```html
 <script src="https://cdn.jsdelivr.net/npm/@cashu/cashu-ts/lib/cashu-ts.iife.js"></script>
 <script>
-  const { Wallet } = cashuts;
+	const { Wallet } = cashuts;
 
-  const wallet = new Wallet('https://example-mint.com');
-  await wallet.loadMint();
+	const wallet = new Wallet('https://example-mint.com');
+	await wallet.loadMint();
 </script>
 ```
 
