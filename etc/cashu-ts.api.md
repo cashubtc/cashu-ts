@@ -210,7 +210,7 @@ export function deepEqual<T>(a: T, b: T): boolean;
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
+export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, input_fee_ppk?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 // @public
 export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string, eBytes?: Uint8Array): {
@@ -958,6 +958,7 @@ export type MintKeys = {
     id: string;
     unit: string;
     final_expiry?: number;
+    input_fee_ppk?: number;
     keys: Keys;
 };
 
