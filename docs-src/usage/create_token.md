@@ -16,4 +16,3 @@ await wallet2.loadMint(); // wallet2 is now ready to use
 const receiveProofs = await wallet2.receive(token);
 // store receiveProofs in your app ..
 ```
-

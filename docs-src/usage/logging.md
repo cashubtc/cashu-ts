@@ -13,4 +13,3 @@ const walletLogger = new ConsoleLogger('debug');
 const wallet = new Wallet(mint, { logger: walletLogger }); // Enable logging for the wallet
 await wallet.loadMint(); // wallet with logging is now ready to use
 ```
-

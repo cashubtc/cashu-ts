@@ -18,4 +18,3 @@ const privkey = '5d...'; // private key for pubkey
 const receiveProofs = await wallet2.receive(token, {privkey});
 // store receiveProofs in your app ..
 ```
-

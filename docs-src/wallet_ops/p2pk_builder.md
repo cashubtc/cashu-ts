@@ -31,4 +31,4 @@ import { P2PKBuilder } from '@cashu/cashu-ts';
 const p2pk = new P2PKBuilder().addLockPubkey('02abc...').lockUntil(1_712_345_678).toOptions();
 
 await wallet.ops.send(5, proofs).asP2PK(p2pk).run();
-
+```

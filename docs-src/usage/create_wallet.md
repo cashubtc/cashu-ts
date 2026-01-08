@@ -25,4 +25,3 @@ const wallet2 = new Wallet(keychainCache.mintUrl, { unit: keychainCache.unit });
 wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 // wallet2 is now ready to use
 ```
-

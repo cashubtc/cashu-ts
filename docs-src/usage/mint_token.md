@@ -15,5 +15,4 @@ if (mintQuoteChecked.state === MintQuoteState.PAID) {
 	const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
 }
 // store proofs in your app ..
-
 ```

@@ -44,40 +44,14 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 // wallet2 is now ready to use
 ```
 
-## Specs and Features:
-
-### [NUTs](https://github.com/cashubtc/nuts/):
-
-This project implements the **7 Mandatory** [NUTs](https://github.com/cashubtc/nuts/) and **15 key** optional NUTs.
-View the full roadmap of planned NUTs in our [Roadmap](./docs-src/ROADMAP.md)
-
-### Token Foramts
-We currently support **V3 (CashuA)** and **V4 (CashuB)** token formats.
-
-### Key Wallet Features:
-|  |  |  |
-| :--- | :--- | :--- |
-|  connect to mint | [request minting tokens](./docs-src/usage/mint_token.md) | [check spent tokens](./docs-src/usage/get_token.md) |
-|  [minting](./docs-src/wallet_ops/melt.md) | [sending](./docs-src/wallet_ops/send.md) / [receiving](./docs-src/wallet_ops/receive.md) | [melting](./docs-src/wallet_ops/melt.md) |
-|  AuthManager | AuthProvider | bolt11 / [bolt12](./docs-src/usage/bolt12.md) |
-|  [transaction builder](./docs-src/wallet_ops/wallet_ops.md) | [wallet subscriptions](./docs-src/wallet_events/wallet_events.md) | [deterministic counters](./docs-src/deterministic_counters.md) |
-|  ... and more | | [View Full List](#detailed-specs) |
-
 ## Usage
 
 We provide comprehensive examples categorized by use case:
+
 - **[Basic Guide](./docs-src/usage/usage_index.md)**: Getting Started, and basic token operations.
 - **[WalletOps](./docs-src/wallet_ops/wallet_ops.md)**: Translation Builder Usage Recipes.
 - **[WalletEvents](./docs-src/wallet_events/wallet_events.md)**: Event Subscriptions
 - **[Deterministic Counters](./docs-src/deterministic_counters.md)**: Deterministic counters (persist, inspect, bump).
-
-Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
-
-### Browser usage (standalone build)
-
-Cashu TS provides a standalone browser build (IIFE) intended for demos and
-non-bundler usage. The standalone bundle is published as part of GitHub Releases rather than the npm
-package.
 
 ### Note: Builder hooks vs Global events
 
@@ -87,11 +61,22 @@ package.
 
 Use the builder hooks for transaction-local callbacks, and WalletEvents for app-wide subscriptions.
 
+### Browser usage (standalone build)
+
+Cashu TS provides a standalone browser build (IIFE) intended for demos and
+non-bundler usage. The standalone bundle is published as part of GitHub Releases rather than the npm
+package.
+
 ---
 
 ## Contribute
 
 Contributions are very welcome.
 
-If you want to contribute, please open an Issue or a PR.
+If you want to contribute, please open an [Issue](https://github.com/cashubtc/cashu-ts/issues) or a [PR](https://github.com/cashubtc/cashu-ts/pulls).
+We are also tracking the status with [projects](https://github.com/cashubtc/cashu-ts/projects?query=is%3Aopen).
 Please refer to [the contributing guide](./docs-src/CONTRIBUTING.md) for more info.
+
+## Contact & Maintainers
+
+Feel free to join the [matrix server](https://matrix.to/#/#dev:matrix.cashu.space) or [telegram channel](https://t.me/CashuBTC)
