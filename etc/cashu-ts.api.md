@@ -9,6 +9,11 @@ import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 // @public
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
+// Warning: (ae-internal-missing-underscore) The name "assertSigAllInputs" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal
+export function assertSigAllInputs(inputs: Proof[]): void;
+
 // @public
 export class AuthManager implements AuthProvider {
     constructor(mintUrl: string, opts?: AuthManagerOptions);
@@ -86,6 +91,21 @@ export type Bolt12MintQuotePayload = MintQuoteBolt12Request;
 
 // @public @deprecated
 export type Bolt12MintQuoteResponse = MintQuoteBolt12Response;
+
+// Warning: (ae-internal-missing-underscore) The name "buildInterimP2PKSigAllMessage" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal @deprecated
+export function buildInterimP2PKSigAllMessage(inputs: Proof[], outputs: OutputDataLike[], quoteId?: string): string;
+
+// Warning: (ae-internal-missing-underscore) The name "buildLegacyP2PKSigAllMessage" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal @deprecated
+export function buildLegacyP2PKSigAllMessage(inputs: Proof[], outputs: OutputDataLike[], quoteId?: string): string;
+
+// Warning: (ae-internal-missing-underscore) The name "buildP2PKSigAllMessage" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal
+export function buildP2PKSigAllMessage(inputs: Proof[], outputs: OutputDataLike[], quoteId?: string): string;
 
 // @public @deprecated
 export function bytesToNumber(bytes: Uint8Array): bigint;
@@ -491,6 +511,11 @@ export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: s
 
 // @public (undocumented)
 export function isObj(v: unknown): v is object;
+
+// Warning: (ae-internal-missing-underscore) The name "isP2PKSigAll" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal
+export function isP2PKSigAll(inputs: Proof[]): boolean;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
@@ -1747,6 +1772,11 @@ export type TokenResponse = {
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
+// Warning: (ae-internal-missing-underscore) The name "validateAmount" should be prefixed with an underscore because the declaration is marked as @internal
+//
+// @internal (undocumented)
+export function validateAmount(amount: unknown, allowZero?: boolean): asserts amount is number;
+
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
 
@@ -1889,6 +1919,10 @@ export class WalletCounters {
 export class WalletEvents {
     constructor(wallet: Wallet);
     countersReserved(cb: (payload: OperationCounters) => void, opts?: SubscribeOpts): SubscriptionCanceller;
+    // @internal (undocumented)
+    _emitCountersReserved(payload: OperationCounters): void;
+    // @internal (undocumented)
+    _emitMeltBlanksCreated(payload: MeltBlanks<MeltQuoteBaseResponse>): void;
     group(): SubscriptionCanceller & {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;

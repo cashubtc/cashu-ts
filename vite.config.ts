@@ -90,7 +90,9 @@ export default defineConfig(({ command }) => {
 						dts({
 							tsconfigPath: './tsconfig.json',
 							outDir: 'lib/types',
-							rollupTypes: true,
+							// rollupTypes disabled - API Extractor handles dts rollup
+							// for proper TSDoc release tag support (@alpha, @beta)
+							rollupTypes: false,
 						}),
 					]
 				: []),

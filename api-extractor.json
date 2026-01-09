@@ -53,77 +53,41 @@
 
 	/**
 	 * Configures how the .d.ts rollup file will be generated.
+	 *
+	 * API Extractor handles dtsRollup to properly support TSDoc release tags:
+	 * - @alpha: Included in alpha builds (untrimmed), excluded from public builds
+	 * - @beta: Included in alpha and beta builds, excluded from public builds
+	 * - @public: Included in all builds (default if no tag)
+	 * - @internal: Excluded from all builds
 	 */
 	"dtsRollup": {
-		/**
-		 * (REQUIRED) Whether to generate the .d.ts rollup file.
-		 */
-		"enabled": false
+		"enabled": true,
 
 		/**
-		 * Specifies the output path for a .d.ts rollup file to be generated without any trimming.
-		 * This file will include all declarations that are exported by the main entry point.
-		 *
-		 * If the path is an empty string, then this file will not be written.
-		 *
-		 * The path is resolved relative to the folder of the config file that contains the setting; to change this,
-		 * prepend a folder token such as "<projectFolder>".
-		 *
-		 * SUPPORTED TOKENS: <projectFolder>, <packageName>, <unscopedPackageName>
-		 * DEFAULT VALUE: "<projectFolder>/dist/<unscopedPackageName>.d.ts"
+		 * Untrimmed file includes all exports (@public, @beta, @alpha).
+		 * Overwrites vite-plugin-dts output to include @alpha items.
 		 */
-		// "untrimmedFilePath": "<projectFolder>/dist/<unscopedPackageName>.d.ts",
+		"untrimmedFilePath": "<projectFolder>/lib/types/index.d.ts",
 
 		/**
-		 * Specifies the output path for a .d.ts rollup file to be generated with trimming for an "alpha" release.
-		 * This file will include only declarations that are marked as "@public", "@beta", or "@alpha".
-		 *
-		 * If the path is an empty string, then this file will not be written.
-		 *
-		 * The path is resolved relative to the folder of the config file that contains the setting; to change this,
-		 * prepend a folder token such as "<projectFolder>".
-		 *
-		 * SUPPORTED TOKENS: <projectFolder>, <packageName>, <unscopedPackageName>
-		 * DEFAULT VALUE: ""
+		 * Alpha-trimmed includes @public, @beta, and @alpha (excludes @internal).
 		 */
-		// "alphaTrimmedFilePath": "<projectFolder>/dist/<unscopedPackageName>-alpha.d.ts",
+		"alphaTrimmedFilePath": "<projectFolder>/lib/types/cashu-ts-alpha.d.ts",
 
 		/**
-		 * Specifies the output path for a .d.ts rollup file to be generated with trimming for a "beta" release.
-		 * This file will include only declarations that are marked as "@public" or "@beta".
-		 *
-		 * If the path is an empty string, then this file will not be written.
-		 *
-		 * The path is resolved relative to the folder of the config file that contains the setting; to change this,
-		 * prepend a folder token such as "<projectFolder>".
-		 *
-		 * SUPPORTED TOKENS: <projectFolder>, <packageName>, <unscopedPackageName>
-		 * DEFAULT VALUE: ""
+		 * Beta-trimmed includes only @public and @beta (excludes @alpha, @internal).
 		 */
-		// "betaTrimmedFilePath": "<projectFolder>/dist/<unscopedPackageName>-beta.d.ts",
+		"betaTrimmedFilePath": "<projectFolder>/lib/types/cashu-ts-beta.d.ts",
 
 		/**
-		 * Specifies the output path for a .d.ts rollup file to be generated with trimming for a "public" release.
-		 * This file will include only declarations that are marked as "@public".
-		 *
-		 * If the path is an empty string, then this file will not be written.
-		 *
-		 * The path is resolved relative to the folder of the config file that contains the setting; to change this,
-		 * prepend a folder token such as "<projectFolder>".
-		 *
-		 * SUPPORTED TOKENS: <projectFolder>, <packageName>, <unscopedPackageName>
-		 * DEFAULT VALUE: ""
+		 * Public-trimmed includes only @public (excludes @alpha, @beta, @internal).
 		 */
-		// "publicTrimmedFilePath": "<projectFolder>/dist/<unscopedPackageName>-public.d.ts",
+		"publicTrimmedFilePath": "<projectFolder>/lib/types/cashu-ts-public.d.ts",
 
 		/**
-		 * When a declaration is trimmed, by default it will be replaced by a code comment such as
-		 * "Excluded from this release type: exampleMember".  Set "omitTrimmingComments" to true to remove the
-		 * declaration completely.
-		 *
-		 * DEFAULT VALUE: false
+		 * Include comments showing which members were trimmed (helpful for debugging).
 		 */
-		// "omitTrimmingComments": true
+		"omitTrimmingComments": false
 	},
 
 	/**
