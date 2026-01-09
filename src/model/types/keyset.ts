@@ -52,13 +52,17 @@ export type MintKeys = {
 	 */
 	unit: string;
 	/**
-	 * Expiry of the keyset.
+	 * Whether the keyset is active or not.
 	 */
-	final_expiry?: number;
+	active?: boolean;
 	/**
 	 * Input fee for keyset (in ppk)
 	 */
 	input_fee_ppk?: number;
+	/**
+	 * Expiry of the keyset.
+	 */
+	final_expiry?: number;
 	/**
 	 * Public keys are a dictionary of number and string. The number represents the amount that the
 	 * key signs for.
@@ -86,7 +90,6 @@ export type MintKeyset = {
 	 * Input fee for keyset (in ppk)
 	 */
 	input_fee_ppk?: number;
-
 	/**
 	 * Expiry of the keyset.
 	 */

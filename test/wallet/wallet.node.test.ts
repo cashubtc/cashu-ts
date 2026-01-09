@@ -44,6 +44,9 @@ const dummyKeysResp = {
 		{
 			id: '00bd033559de27d0',
 			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+			final_expiry: 1754296607,
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
@@ -64,6 +67,7 @@ const dummyKeysetResp = {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
+			final_expiry: 1754296607,
 		},
 	],
 };
@@ -131,26 +135,13 @@ describe('test wallet init', () => {
 		const keysets = wallet.keyChain.getKeysets();
 		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
-		expect(keysets[0].toMintKeyset()).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			active: true,
-			input_fee_ppk: 0,
-			final_expiry: undefined,
-		});
+		expect(keysets[0].toMintKeyset()).toEqual(dummyKeysetResp.keysets[0]);
 
 		// Verify keys
 		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
-		expect(keys[0]).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		});
+		expect(keys[0]).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset ID
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
@@ -184,21 +175,14 @@ describe('test wallet init', () => {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
-			final_expiry: undefined,
+			final_expiry: 1754296607,
 		});
 
 		// Verify keys
 		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
-		expect(keys[0]).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		});
+		expect(keys[0]).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset ID
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
@@ -240,21 +224,14 @@ describe('test wallet init', () => {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
-			final_expiry: undefined,
+			final_expiry: 1754296607,
 		});
 
 		// Verify keys
 		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
-		expect(keys[0]).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		});
+		expect(keys[0]).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset ID
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;

@@ -974,8 +974,9 @@ export class MintInfo {
 export type MintKeys = {
     id: string;
     unit: string;
-    final_expiry?: number;
+    active?: boolean;
     input_fee_ppk?: number;
+    final_expiry?: number;
     keys: Keys;
 };
 
