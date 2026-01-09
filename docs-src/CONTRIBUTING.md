@@ -49,6 +49,40 @@ Tip: a common local workflow before pushing is to run `npm run prtasks` and, for
 
 This project uses API-Extractor in CI. For details on `npm run api:check` and `npm run api:update` and the correct workflow for updating API reports, see `DEVELOPER.md`.
 
+## Code documentation conventions
+
+### TSDoc release tags
+
+When adding new features that are subject to change, use the `@experimental` tag in TSDoc comments:
+
+```typescript
+/**
+ * This function does something new and exciting.
+ *
+ * @experimental This API is subject to change.
+ */
+export function myNewFeature(): void {
+	// ...
+}
+```
+
+**Why `@experimental` instead of `@alpha` or `@beta`?**
+
+Our vite build process excludes `@alpha` and `@beta` tagged items from the public API. Using `@experimental` allows us to surface new features while clearly flagging them as subject to change.
+
+### TODO comments
+
+Use `// TODO:` comments to mark areas needing future attention, such as deprecated code blocks or planned improvements:
+
+```typescript
+// TODO: Remove this deprecated method in v4.0
+export function oldMethod(): void {
+	// ...
+}
+```
+
+This convention allows common editor plugins like [Better Comments](https://marketplace.visualstudio.com/items?itemName=aaron-bond.better-comments) to highlight these areas for easy identification.
+
 ## Integration tests
 
 These tests expect a local mint at `http://localhost:3338`. Use the Make targets below to start one, you will need Docker installed locally, for example via Homebrew or Docker Desktop.
