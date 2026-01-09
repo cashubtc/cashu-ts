@@ -108,6 +108,9 @@ export class Keyset {
 		return {
 			id: this._id,
 			unit: this._unit,
+			active: this._active,
+			input_fee_ppk: this._input_fee_ppk,
+			final_expiry: this._final_expiry,
 			keys: this._keys,
 		};
 	}
@@ -124,8 +127,9 @@ export class Keyset {
 		return Keyset.verifyKeysetId({
 			id: this._id,
 			unit: this._unit,
-			final_expiry: this._final_expiry,
+			active: this._active,
 			input_fee_ppk: this._input_fee_ppk,
+			final_expiry: this._final_expiry,
 			keys: this._keys,
 		});
 	}
