@@ -124,14 +124,7 @@ export class Keyset {
 		if (!this.hasKeys) {
 			return false;
 		}
-		return Keyset.verifyKeysetId({
-			id: this._id,
-			unit: this._unit,
-			active: this._active,
-			input_fee_ppk: this._input_fee_ppk,
-			final_expiry: this._final_expiry,
-			keys: this._keys,
-		});
+		return Keyset.verifyKeysetId(this.toMintKeys()!);
 	}
 
 	/**
