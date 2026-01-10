@@ -328,6 +328,13 @@ export type GetInfoResponse = {
         '17'?: {
             supported: WebSocketSupport[];
         };
+        '19'?: {
+            ttl: number | null;
+            cached_endpoints: Array<{
+                method: 'GET' | 'POST';
+                path: string;
+            }>;
+        };
         '20'?: {
             supported: boolean;
         };
@@ -879,6 +886,11 @@ export class MintInfo {
         params?: MPPMethod[];
     };
     // (undocumented)
+    isSupported(num: 19): {
+        supported: boolean;
+        params?: Nut19Policy;
+    };
+    // (undocumented)
     get motd(): string | undefined;
     // (undocumented)
     get name(): string;
@@ -918,6 +930,13 @@ export class MintInfo {
         };
         '17'?: {
             supported: WebSocketSupport[];
+        };
+        '19'?: {
+            ttl: number | null;
+            cached_endpoints: Array<{
+                method: "GET" | "POST";
+                path: string;
+            }>;
         };
         '20'?: {
             supported: boolean;
@@ -1490,7 +1509,7 @@ export type RequestArgs = {
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 // @public (undocumented)
 export type RestoreConfig = {
@@ -1984,6 +2003,10 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
+
+// Warnings were encountered during analysis:
+//
+// lib/types/index.d.ts:2012:14 - (ae-forgotten-export) The symbol "Nut19Policy" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
