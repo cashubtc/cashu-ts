@@ -12,9 +12,6 @@ export type RequestArgs = {
 	logger?: Logger;
 };
 
-const MAX_CACHED_RETRIES = 10;
-const MAX_RETRY_DELAY = 60000;
-
 export type RequestOptions = RequestArgs &
 	Omit<RequestInit, 'body' | 'headers'> &
 	Partial<Nut19Policy>;
@@ -58,6 +55,10 @@ export function setRequestLogger(logger: Logger): void {
  * Internal function that handles retry logic for NUT-19 cached endpoints. Non-cached endpoints are
  * executed directly without retries.
  */
+const MAX_CACHED_RETRIES = 10;
+const MAX_DELAY = 5000; // 5 secs
+const BASE_DELAY = 100; // 100 ms
+
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	const { ttl, cached_endpoints, endpoint } = options;
 
@@ -87,7 +88,8 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 				const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
 				if (shouldRetry) {
-					const cappedDelay = Math.min(Math.pow(2, retries) * 1000, MAX_RETRY_DELAY);
+					const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
+
 					const delay = Math.random() * cappedDelay;
 
 					if (totalElapsedTime + delay > ttl) {
