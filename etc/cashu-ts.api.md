@@ -4,9 +4,6 @@
 
 ```ts
 
-import { MintContactInfo as MintContactInfo_2 } from './types';
-import { SendResponse as SendResponse_2 } from './types';
-import { SwapPreview as SwapPreview_2 } from './types';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -864,7 +861,7 @@ export class MintInfo {
     // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
-    get contact(): MintContactInfo_2[];
+    get contact(): MintContactInfo[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
@@ -1484,7 +1481,7 @@ export class ReceiveBuilder {
     asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview_2>;
+    prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
     requireDleq(on?: boolean): this;
@@ -1574,10 +1571,10 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview_2>;
+    prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
-    run(): Promise<SendResponse_2>;
+    run(): Promise<SendResponse>;
 }
 
 // @public
@@ -2009,7 +2006,7 @@ export class WSConnection {
 
 // Warnings were encountered during analysis:
 //
-// lib/types/index.d.ts:2015:14 - (ae-forgotten-export) The symbol "Nut19Policy" needs to be exported by the entry point index.d.ts
+// lib/types/index.d.ts:2012:14 - (ae-forgotten-export) The symbol "Nut19Policy" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
