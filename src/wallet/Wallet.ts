@@ -48,6 +48,7 @@ import { WalletEvents } from './WalletEvents';
 import { WalletCounters } from './WalletCounters';
 import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
+import { setGlobalRequestOptions } from '../transport';
 
 // shared primitives and options
 import type { Proof } from '../model/types/proof';
@@ -355,7 +356,16 @@ class Wallet {
 		}
 
 		// Go Mintinfo?
-		this.getMintInfo();
+		const mintInfo = this.getMintInfo();
+
+		// Set up NUT-19 cache retry if supported
+		const nut19 = mintInfo.isSupported(19);
+		if (nut19.supported && nut19.params) {
+			setGlobalRequestOptions({
+				ttl: nut19.params.ttl,
+				cached_endpoints: nut19.params.cached_endpoints,
+			});
+		}
 	}
 
 	// -----------------------------------------------------------------

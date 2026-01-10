@@ -45,6 +45,7 @@ import {
 	hexToNumber,
 	numberToHexPadded64,
 	sumProofs,
+	NetworkError,
 } from '../src';
 import ws from 'ws';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
@@ -926,5 +927,119 @@ describe('Wallet Restore', () => {
 		expect(restoredProofs).toEqual(proofs);
 		expect(sumProofs(restoredProofs)).toBe(70);
 		expect(lastCounterWithSignature).toBe(7);
+	});
+});
+
+describe('CDK Mint NUT-19 Cache Tests', () => {
+	// only cdk mint has nut19 enabled by default with sqlite backend
+	async function shouldRunCDKTests(): Promise<boolean> {
+		try {
+			const mint = new Mint(mintUrl);
+			const info = await mint.getInfo();
+			return info.version.startsWith('cdk-mintd');
+		} catch {
+			return false;
+		}
+	}
+
+	test('mint tokens with NUT-19 cache retry on network failure', async () => {
+		if (!(await shouldRunCDKTests())) {
+			console.log('Skipping test - not CDK mint');
+			return;
+		}
+
+		const wallet = new Wallet(mintUrl, { unit: 'sat' });
+		await wallet.loadMint();
+
+		const mintInfo = wallet.getMintInfo();
+		const nut19 = mintInfo.isSupported(19);
+		expect(nut19.supported).toBe(true);
+
+		// create mint quote first
+		const request = await wallet.createMintQuoteBolt11(100);
+		await untilMintQuotePaid(wallet, request);
+
+		// mock fetch for the mint operation
+		let fetchCallCount = 0;
+		const ogFetch = global.fetch;
+		const mockFetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+			if (typeof url === 'string' && url.includes('/v1/mint/bolt11') && init?.method === 'POST') {
+				if (fetchCallCount++ <= 1) {
+					throw new NetworkError('gm');
+				}
+			}
+			return ogFetch(url, init);
+		});
+		global.fetch = mockFetch;
+
+		try {
+			// mint with NUT-19 cache retry - should handle network failure
+			const proofs = await wallet.mintProofsBolt11(100, request.quote);
+			expect(proofs).toBeDefined();
+			expect(sumProofs(proofs)).toBe(100);
+			expect(fetchCallCount).toBe(3); // 1 + 2 retries
+		} finally {
+			// restore original fetch
+			global.fetch = ogFetch;
+		}
+	});
+
+	test('NUT-19 cache respects ttl limits during network failures', async () => {
+		if (!(await shouldRunCDKTests())) {
+			console.log('Skipping test - not CDK mint');
+			return;
+		}
+
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+
+		const mintInfo = wallet.getMintInfo();
+		const nut19 = mintInfo.isSupported(19);
+		expect(nut19.supported).toBe(true);
+
+		const req = await wallet.createMintQuoteBolt11(100);
+		await untilMintQuotePaid(wallet, req);
+
+		// mock fetch to always fail
+		let fetchCallCount = 0;
+		const ogFetch = global.fetch;
+		const mockFetch = vi.fn(async () => {
+			fetchCallCount++;
+			throw new NetworkError('gm');
+		});
+		global.fetch = mockFetch;
+
+		try {
+			// should eventually give up due to TTL
+			await expect(wallet.mintProofsBolt11(100, req.quote)).rejects.toThrow(NetworkError);
+			expect(fetchCallCount).toBeGreaterThan(1);
+			expect(fetchCallCount).toBeLessThan(15);
+		} finally {
+			global.fetch = ogFetch;
+		}
+	}, 30500); // cdk mint has 30s ttl by default
+
+	test('Requests to endpoints not specified in NUT19 in MintInfo should not be replayed', async () => {
+		if (!(await shouldRunCDKTests())) {
+			console.log('Skipping test - not CDK mint');
+			return;
+		}
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+
+		let fetchCallCount = 0;
+		const ogFetch = global.fetch;
+		const mockFetch = vi.fn(async () => {
+			fetchCallCount++;
+			throw new NetworkError('gm');
+		});
+		global.fetch = mockFetch;
+
+		try {
+			await expect(wallet.mint.getKeys()).rejects.toThrow(NetworkError);
+			expect(fetchCallCount).toBe(1); // single request, without retries
+		} finally {
+			global.fetch = ogFetch;
+		}
 	});
 });
