@@ -4,6 +4,9 @@
 
 ```ts
 
+import { MintContactInfo as MintContactInfo_2 } from './types';
+import { SendResponse as SendResponse_2 } from './types';
+import { SwapPreview as SwapPreview_2 } from './types';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -327,6 +330,13 @@ export type GetInfoResponse = {
         };
         '17'?: {
             supported: WebSocketSupport[];
+        };
+        '19'?: {
+            ttl: number | null;
+            cached_endpoints: Array<{
+                method: 'GET' | 'POST';
+                path: string;
+            }>;
         };
         '20'?: {
             supported: boolean;
@@ -854,7 +864,7 @@ export class MintInfo {
     // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
-    get contact(): MintContactInfo[];
+    get contact(): MintContactInfo_2[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
@@ -877,6 +887,11 @@ export class MintInfo {
     isSupported(num: 15): {
         supported: boolean;
         params?: MPPMethod[];
+    };
+    // (undocumented)
+    isSupported(num: 19): {
+        supported: boolean;
+        params?: Nut19Policy;
     };
     // (undocumented)
     get motd(): string | undefined;
@@ -918,6 +933,13 @@ export class MintInfo {
         };
         '17'?: {
             supported: WebSocketSupport[];
+        };
+        '19'?: {
+            ttl: number | null;
+            cached_endpoints: Array<{
+                method: "GET" | "POST";
+                path: string;
+            }>;
         };
         '20'?: {
             supported: boolean;
@@ -1462,7 +1484,7 @@ export class ReceiveBuilder {
     asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview>;
+    prepare(): Promise<SwapPreview_2>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
     requireDleq(on?: boolean): this;
@@ -1490,7 +1512,7 @@ export type RequestArgs = {
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 // @public (undocumented)
 export type RestoreConfig = {
@@ -1552,10 +1574,10 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview>;
+    prepare(): Promise<SwapPreview_2>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
-    run(): Promise<SendResponse>;
+    run(): Promise<SendResponse_2>;
 }
 
 // @public
@@ -1984,6 +2006,10 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
+
+// Warnings were encountered during analysis:
+//
+// lib/types/index.d.ts:2015:14 - (ae-forgotten-export) The symbol "Nut19Policy" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

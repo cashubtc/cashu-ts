@@ -3,6 +3,7 @@ import {
 	type MPPMethod,
 	type SwapMethod,
 	type WebSocketSupport,
+	type Nut19Policy,
 } from './types';
 
 type Method = 'GET' | 'POST';
@@ -125,13 +126,14 @@ export class MintInfo {
 			return {
 				supported: true,
 				params: {
-					// map null to infinity, if not null map seconds to milliseconds
+					// map null to infinity, if not null map seconds to milliseconds.
+					// this way ttl is always a number
 					ttl:
 						typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl)
 							? Math.max(rawPolicy.ttl, 0) * 1000
 							: Infinity,
-					cached_endpoints: rawPolicy.cached_endpoints
-				} as Nut19Policy
+					cached_endpoints: rawPolicy.cached_endpoints,
+				} as Nut19Policy,
 			};
 		}
 		return { supported: false };
