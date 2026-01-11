@@ -93,14 +93,14 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 					const delay = Math.random() * cappedDelay;
 
 					if (totalElapsedTime + delay > ttl) {
-						requestLogger.error('Network Error: request abandoned after #{retries} retries', {
+						requestLogger.error(`Network Error: request abandoned after ${retries} retries`, {
 							e,
 							retries,
 						});
 						throw e;
 					}
 					retries++;
-					requestLogger.info('Network Error: attempting retry #{retries} in {delay}ms', {
+					requestLogger.info(`Network Error: attempting retry ${retries} in {delay}ms`, {
 						e,
 						retries,
 						delay,
@@ -110,7 +110,7 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 					return retry();
 				}
 			}
-			requestLogger.error('Request failed and could not be retried', { e });
+			requestLogger.error(`Request failed and could not be retried`, { e });
 			throw e;
 		}
 	};
