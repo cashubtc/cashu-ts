@@ -63,7 +63,7 @@ describe('requests', () => {
 			}),
 		);
 
-		try{
+		try {
 			const wallet = new Wallet(mintUrl);
 			wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 			setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
@@ -120,8 +120,8 @@ describe('requests', () => {
 
 	describe('NUT-19 Cache retry logic', () => {
 		afterEach(() => {
-			vi.restoreAllMocks()
-		})
+			vi.restoreAllMocks();
+		});
 		test('does not retry for non-cached endpoints', async () => {
 			const endpoint = mintUrl + '/v1/mint/quote';
 
@@ -297,19 +297,48 @@ describe('requests', () => {
 				http.get(endpoint, () => {
 					requestCount++;
 					// MAX_CACHED_RETRIES
-					if (requestCount < 10) {
-						return Response.error();
-					}
-					return HttpResponse.json({ keysets: [] });
+					return Response.error();
 				}),
 			);
 
-			const result = await request({
-				endpoint,
-				...retryPolicy,
-			});
+			await expect(
+				request({
+					endpoint,
+					...retryPolicy,
+				}),
+			).rejects.toThrow(NetworkError);
+
 			expect(requestCount).toBe(10);
-			expect(result).toEqual({ keysets: [] });
+		});
+
+		test('Worst time scenario smaller than 7s', async () => {
+			const timer = performance.now();
+			const endpoint = mintUrl + '/v1/keys';
+
+			const retryPolicy: Nut19Policy = {
+				ttl: Infinity,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			// set jitter to 1, so we can get the longest time possible
+			vi.spyOn(Math, 'random').mockReturnValue(1);
+
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, () => {
+					requestCount++;
+					return Response.error();
+				}),
+			);
+
+			await expect(
+				request({
+					endpoint,
+					...retryPolicy,
+				}),
+			).rejects.toThrow(NetworkError);
+
+			expect(requestCount).toBe(10);
+			expect(performance.now() - timer).toBeLessThan(7000);
 		});
 	});
-});
+}, 7500);

@@ -51,14 +51,14 @@ export function setRequestLogger(logger: Logger): void {
 	requestLogger = logger;
 }
 
+const MAX_CACHED_RETRIES = 9; // 10 requests total
+const MAX_DELAY = 1000; // 1 sec
+const BASE_DELAY = 100; // 100 ms
+
 /**
  * Internal function that handles retry logic for NUT-19 cached endpoints. Non-cached endpoints are
  * executed directly without retries.
  */
-const MAX_CACHED_RETRIES = 10;
-const MAX_DELAY = 5000; // 5 secs
-const BASE_DELAY = 100; // 100 ms
-
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	const { ttl, cached_endpoints, endpoint } = options;
 
