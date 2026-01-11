@@ -1102,6 +1102,15 @@ export type NUT10Option = {
 };
 
 // @public (undocumented)
+export type Nut19Policy = {
+    ttl: number;
+    cached_endpoints: Array<{
+        method: 'GET' | 'POST';
+        path: string;
+    }>;
+} | null;
+
+// @public (undocumented)
 export class OIDCAuth {
     constructor(discoveryUrl: string, opts?: OIDCAuthOptions);
     addTokenListener(fn: (t: TokenResponse) => void | Promise<void>): void;
@@ -2003,10 +2012,6 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
-
-// Warnings were encountered during analysis:
-//
-// lib/types/index.d.ts:2012:14 - (ae-forgotten-export) The symbol "Nut19Policy" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

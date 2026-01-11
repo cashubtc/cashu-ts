@@ -63,14 +63,18 @@ describe('requests', () => {
 			}),
 		);
 
-		const wallet = new Wallet(mintUrl);
-		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
-		setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
+		try{
+			const wallet = new Wallet(mintUrl);
+			wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+			setGlobalRequestOptions({ headers: { 'x-cashu': 'xyz-123-abc' } });
 
-		await wallet.checkMeltQuoteBolt11('test');
+			await wallet.checkMeltQuoteBolt11('test');
 
-		expect(headers!).toBeDefined();
-		expect(headers!.get('x-cashu')).toContain('xyz-123-abc');
+			expect(headers!).toBeDefined();
+			expect(headers!.get('x-cashu')).toContain('xyz-123-abc');
+		} finally {
+			setGlobalRequestOptions({});
+		}
 	});
 
 	test('handles HttpResponseError on non-200 response', async () => {
@@ -115,6 +119,9 @@ describe('requests', () => {
 	});
 
 	describe('NUT-19 Cache retry logic', () => {
+		afterEach(() => {
+			vi.restoreAllMocks()
+		})
 		test('does not retry for non-cached endpoints', async () => {
 			const endpoint = mintUrl + '/v1/mint/quote';
 
