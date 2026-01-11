@@ -50,7 +50,7 @@ import {
 	type MintQuoteBolt11Request,
 	type MintQuoteBolt12Request,
 	type SwapRequest,
-	type Nut19Policy
+	type Nut19Policy,
 } from '../model/types';
 
 /**
