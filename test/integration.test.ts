@@ -101,9 +101,9 @@ function expectBlindedSecretDataToEqualECDH(
 		// r = SHA-256(DST || Zx || kid || i=0) mod n, retry once if zero
 		const DST = new TextEncoder().encode('Cashu_P2BK_v1');
 		const kid = hexToBytes(p.id);
-		let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, ...kid, 0x00])));
+		let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, 0x00])));
 		if (r === 0n) {
-			r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, ...kid, 0x00, 0xff])));
+			r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...DST, ...Zx, 0x00, 0xff])));
 			if (r === 0n) throw new Error('P2BK: tweak derivation failed in test');
 		}
 
