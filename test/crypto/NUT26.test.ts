@@ -165,37 +165,36 @@ describe('deriveP2BKSecretKey with expectedPub hints', () => {
 });
 
 describe('P2BK test vectors, public API only', () => {
-	test('reconstructs spend key from E, P′, keyset_id, and Bob’s privkey', () => {
-		const keysetIdHex = '009a1f293253e41e'; // ASCII hex string from mint
+	test('reconstructs spend key from E, P′, and Bob’s privkey', () => {
 		const eHex = '1cedb9df0c6872188b560ace9e35fd55c2532d53e19ae65b46159073886482ca';
 		const Ehex = '02a8cda4cf448bfce9a9e46e588c06ea1780fcb94e3bbdf3277f42995d403a8b0c'; // proof.p2pk_e
 		const pubKeyBob = '02771fed6cb88aaac38b8b32104a942bf4b8f4696bc361171b3c7d06fa2ebddf06';
 		const privKeyBob = 'ad37e8abd800be3e8272b14045873f4353327eedeb702b72ddcc5c5adff5129c';
 		const allSlotsBlinded = [
-			'03f221b62aa21ee45982d14505de2b582716ae95c265168f586dc547f0ea8f135f', // slot 0
-			'0299692178029fe08c49e8123bb0e84d6e960b27f82c8aed43013526489d46c0d5',
-			'03ae189850bda004f9723e17372c99ff9df9e29750d2147d40efb45ac8ab2cdd2c',
-			'03109838d718fbe02e9458ffa423f25bae0388146542534f8e2a094de6f7b697fa',
-			'0339d5ed7ea93292e60a4211b2daf20dff53f050835614643a43edccc35c8313db',
-			'0237861efcd52fe959bce07c33b5607aeae0929749b8339f68ba4365f2fb5d2d8d',
-			'026d5500988a62cde23096047db61e9fb5ef2fea5c521019e23862108ea4e14d72',
-			'039024fd20b26e73143509537d7c18595cfd101da4b18bb86ddd30e944aac6ef1b',
-			'03017ec4218ca2ed0fbe050e3f1a91221407bf8c896b803a891c3a52d162867ef8',
-			'0380dc0d2c79249e47b5afb61b7d40e37b9b0370ec7c80b50c62111021b886ab31',
-			'0261a8a32e718f5f27610a2b7c2069d6bab05d1ead7da21aa9dd2a3c758bdf6479', // slot 10
+			'03b7c03eb05a0a539cfc438e81bcf38b65b7bb8685e8790f9b853bfe3d77ad5315', // slot 0
+			'0352fb6d93360b7c2538eedf3c861f32ea5883fceec9f3e573d9d84377420da838',
+			'03667361ca925065dcafea0a705ba49e75bdd7975751fcc933e05953463c79fff1',
+			'02aca3ed09382151250b38c85087ae0a1436a057b40f824a5569ba353d40347d08',
+			'02cd397bd6e326677128f1b0e5f1d745ad89b933b1b8671e947592778c9fc2301d',
+			'0394140369aae01dbaf74977ccbb09b3a9cf2252c274c791ac734a331716f1f7d4',
+			'03480f28e8f8775d56a4254c7e0dfdd5a6ecd6318c757fcec9e84c1b48ada0666d',
+			'02f8a7be813f7ba2253d09705cc68c703a9fd785a055bf8766057fc6695ec80efc',
+			'03aa5446aaf07ca9730b233f5c404fd024ef92e3787cd1c34c81c0778fe23c59e9',
+			'037f82d4e0a79b0624a58ef7181344b95afad8acf4275dad49bcd39c189b73ece2',
+			'032371fc0eef6885062581a3852494e2eab8f384b7dd196281b85b77f94770fac5', // slot 10
 		];
 		const allDerivedKeysSk2 = [
-			'947e08ad9df6c97ed96627d70e447f1238540da5ac2a25cf208614287592b4d2',
-			'179ea3cde066aa0374f50b94eeb06ffbf0a29c3273c4f1ea02196f2b8ecf01f8',
-			'57b50c84bd8770ea13ec753e014b861158d82b6d8780c40bb113eb1debb25b21',
-			'942bd385db07bac3363fd108dbb3cf87abf94c3765c935172fdb957ffc80a752',
-			'489ee9606197c9b4196af631208847df1b078e6107fa65812f731515a5a068c4',
-			'453d579e395c18e26b96ee1d25f61e83b29f4a6cdb3dd6563936bf0a17e7b9d6',
-			'8ca811f3295ffe9be11f51c5b68bb948e9cbb95e0d49509e5bc68599b170fc1d',
-			'85f94ae2af5fce40b3b3ab5b0d341f7a139811dae5e59b4b19154dadfa1dfbf0',
-			'975c9327940142bcdaea53d832d9f70ad2e2c8a550bbefff702df24edabe1fec',
-			'221680d85033229c36347ee8ee4f09bb965b6914993f020bcfa557c5c8fbd942',
-			'8901023cd187dd7f1403e4f70cd8d16eb44e3f1a44371f738266263742ddd7d4',
+			'47051623754422cb04bc24c0cfe2c1ddc8db1fcc18f0aa4b477df4aca2adc20e',
+			'9d1ffe00e1da5af5c882b1ea5ec8c18893e09349803c3c9e552823490af22458',
+			'2770cf9f49f1f26eaef29d56a85483e8aabb2f3f1a6bec28ffa065a756bbfdb1',
+			'3fb40b854bd11bff639eef1f0a98c91a1097a194a6d2a24da1b01bb3396434fc',
+			'b20aebb812d38e7c9e7267039463fc46757c7f4f33b10d1bb440ea91481736fd',
+			'fbb9e1275e948b592ae46d1a15d2beef73fcee23d4917e6626e77ced20b14031',
+			'1667bb8f98715782e0e68e788554cf9a61cbb094d557710fc92fd1e08b1007e2',
+			'044581a5616dfae8723650a1ca702164ff23c0a311db5a6eb5bc32da1d39d287',
+			'a0130fb2ca958732d3451cf247726d8749af46a4e77a54b1e3a96ce3a76fcef2',
+			'20f9299d129e8468bd55c37388adde124313d39621f9281012352edbdb138b35',
+			'f0ab6866fe2da5054db05098b008b042fd0af7b42ca8547137e652137bd6dfb9',
 		];
 		const P_0 = allSlotsBlinded[0]; // secret.data (slot 0)
 		// Check sender side blinds ok
@@ -213,7 +212,6 @@ describe('P2BK test vectors, public API only', () => {
 				pubKeyBob,
 				pubKeyBob, // slot 10
 			],
-			keysetIdHex,
 			hexToBytes(eHex), // fixed ephemeral secret
 		);
 		expect(calcE).toEqual(Ehex);
@@ -224,7 +222,6 @@ describe('P2BK test vectors, public API only', () => {
 			Ehex,
 			privKeyBob,
 			allSlotsBlinded, // all slots
-			keysetIdHex, // API hex-decodes internally
 		);
 		expect(derived).toHaveLength(11);
 		// expected pub (p.G): 03771fed6cb88aaac38b8b32104a942bf4b8f4696bc361171b3c7d06fa2ebddf06

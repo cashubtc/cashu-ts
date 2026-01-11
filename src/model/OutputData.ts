@@ -191,7 +191,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		let Ehex: string | undefined;
 		if (p2pk.blindKeys) {
 			const ordered = [...lockKeys, ...refundKeys];
-			const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, keysetId);
+			const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered);
 			if (isHTLC) {
 				// hashlock is in data, all locking keys into pubkeys
 				pubkeys = blinded.slice(0, lockKeys.length);

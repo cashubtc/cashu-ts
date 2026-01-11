@@ -28,7 +28,6 @@ describe('payment requests', () => {
 				data: 'pubkey',
 				tags: [['tag', 'tag-value']],
 			} as NUT10Option,
-			true, // NUT26 (P2BK)
 		);
 		const pr = request.toEncodedRequest();
 		expect(pr).toBeDefined();
@@ -49,7 +48,6 @@ describe('payment requests', () => {
 		expect(decodedRequest.nut10?.kind).toBe('P2PK');
 		expect(decodedRequest.nut10?.data).toBe('pubkey');
 		expect(decodedRequest.nut10?.tags).toStrictEqual([['tag', 'tag-value']]);
-		expect(decodedRequest.nut26).toBe(true);
 
 		const decodedRequestClassConstructor = PaymentRequest.fromEncodedRequest(pr);
 		expect(decodedRequestClassConstructor).toStrictEqual(decodedRequest);

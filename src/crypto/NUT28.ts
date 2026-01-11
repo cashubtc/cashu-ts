@@ -21,7 +21,6 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
  *
  * This is the Sender side API.
  * @param pubkeys Ordered SEC1 compressed pubkeys, [data, ...pubkeys, ...refund]
- * @param keysetId Hex keyset identifier, bound into the tweak.
  * @param eBytes Optional. Fixed ephemeral secret key to use (eg for SIG_ALL / testing)
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
  * @throws If a blinded key is at infinity.
@@ -29,7 +28,6 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
  */
 export function deriveP2BKBlindedPubkeys(
 	pubkeys: string[],
-	keysetId: string,
 	eBytes?: Uint8Array,
 ): { blinded: string[]; Ehex: string } {
 	if (!pubkeys.length) return { blinded: [], Ehex: '' };
@@ -37,11 +35,10 @@ export function deriveP2BKBlindedPubkeys(
 	eBytes = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
 	const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
 	const E = secp256k1.getPublicKey(eBytes, true); // SEC1 compressed (bytes)
-	const kid = hexToBytes(keysetId);
 	// Blind each pubkey in turn
 	const blinded = pubkeys.map((pubkey, i) => {
 		const P = pointFromHex(pubkey);
-		const r = deriveP2BKBlindingTweakFromECDH(P, e, kid, i);
+		const r = deriveP2BKBlindingTweakFromECDH(P, e, i);
 		const P_ = P.add(secp256k1.Point.BASE.multiply(r));
 		if (P_.equals(secp256k1.Point.ZERO)) throw new Error('Blinded key at infinity');
 		return P_.toHex(true);
@@ -63,7 +60,6 @@ export function deriveP2BKBlindedPubkeys(
  * @param Ehex Ephemeral public key (E) as SEC1 hex.
  * @param privateKey Secret key or array of secret keys, hex.
  * @param blindPubKey Blinded public key or array of blinded public keys, hex.
- * @param keysetIdHex Keyset identifier as hex.
  * @returns Array of derived secret keys as 64 char hex.
  * @experimental
  */
@@ -71,18 +67,16 @@ export function deriveP2BKSecretKeys(
 	Ehex: string,
 	privateKey: string | string[],
 	blindPubKey: string | string[],
-	keysetIdHex: string,
 ): string[] {
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
 	const pubs = Array.isArray(blindPubKey) ? blindPubKey : [blindPubKey];
 	const out = new Set<string>();
 	const E = secp256k1.Point.fromHex(Ehex);
-	const kid = hexToBytes(keysetIdHex);
 	for (const privHex of privs) {
 		const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
 		const P = secp256k1.getPublicKey(hexToBytes(privHex), true); // 33 bytes, validates on curve
 		pubs.forEach((hexP_, i) => {
-			const r = deriveP2BKBlindingTweakFromECDH(E, p, kid, i);
+			const r = deriveP2BKBlindingTweakFromECDH(E, p, i);
 			const P_ = hexToBytes(hexP_);
 			const kHex = deriveP2BKSecretKey(privHex, r, P_, P);
 			if (kHex) out.add(kHex); // add only when this priv matches this P′
@@ -158,7 +152,7 @@ export function deriveP2BKSecretKey(
  * @remarks
  * Computes the shared point Z = scalar·point, takes its 32 byte x coordinate Zx, then derives:
  *
- *     rᵢ = SHA - 256(P2BK_DST || Zx || keysetId || i); // all inputs as raw bytes
+ *     rᵢ = SHA - 256(P2BK_DST || Zx || i); // all inputs as raw bytes
  *
  * If the result reduces to zero, or is >= curve order (n), retries once with an extra 0xff byte
  * appended to the message. Throws if the retry also reduces to zero.
@@ -171,7 +165,6 @@ export function deriveP2BKSecretKey(
  * Both yield the same Z and therefore the same r thanks to the magic of ECDH!
  * @param point Ephemeral public key (E) or recipient public key (P)
  * @param scalar Private scalar (p) or ephemeral scalar (e) in [1, n − 1]
- * @param keysetId Keyset identifier as raw bytes.
  * @param slotIndex Zero based slot index, only lowest 8 bits (0–255) are used.
  * @returns Tweak (r) in [1, n − 1]
  * @throws If r reduces to zero after the retry.
@@ -180,7 +173,6 @@ export function deriveP2BKSecretKey(
 function deriveP2BKBlindingTweakFromECDH(
 	point: WeierstrassPoint<bigint>, // E or P
 	scalar: bigint, // p or e
-	keysetId: Uint8Array, // kid
 	slotIndex: number, // i
 ): bigint {
 	// Calculate x-only ECDH shared point (Zx)
@@ -189,10 +181,10 @@ function deriveP2BKBlindingTweakFromECDH(
 	// Derive deterministic blinding factor (r):
 	// Note: Bytes.toBigInt is safe here because we explicitly guard against
 	// out-of-range values below, throwing rather than silently normalizing.
-	let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte)));
+	let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte)));
 	if (r === 0n || r >= secp256k1.Point.CURVE().n) {
 		// Very unlikely to get here!
-		r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte, new Uint8Array([0xff]))));
+		r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
 		if (r === 0n || r >= secp256k1.Point.CURVE().n) {
 			throw new Error('P2BK: tweak derivation failed');
 		}
