@@ -1,6 +1,8 @@
+[Documents](../index.html) › **Contribution Guide**
+
 # Contribution Guide
 
-This file is contributor-facing: quick setup, how to opt in to local hooks, and a short PR checklist. For detailed developer instructions (environment, hooks internals, release process, CI parity, and troubleshooting) see `DEVELOPER.md`.
+This file is contributor-facing: quick setup, how to opt in to local hooks, and a short PR checklist. For detailed developer instructions (environment, hooks internals, release process, CI parity, and troubleshooting) see [the developer guide](./DEVELOPER.md).
 
 ## Quickstart
 
@@ -99,4 +101,4 @@ npm run test-integration
 
 ---
 
-Thanks for contributing — please open Issues or PRs if anything is unclear.
+Thanks for contributing — please open [Issues](https://github.com/cashubtc/cashu-ts/issues) or [Pull Requests](https://github.com/cashubtc/cashu-ts/pulls) if anything is unclear.
