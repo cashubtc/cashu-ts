@@ -68,6 +68,12 @@ Supported token formats:
 
 Go to the [docs](https://cashubtc.github.io/cashu-ts/docs/main) for detailed usage, or have a look at the [integration tests](./test/integration.test.ts) for examples on how to implement a wallet.
 
+### Browser usage (standalone build)
+
+Cashu TS provides a standalone browser build (IIFE) intended for demos and
+non-bundler usage. The standalone bundle is published as part of GitHub Releases rather than the npm
+package.
+
 ### Install
 
 ```shell
