@@ -10,3 +10,5 @@ vitest.workspace.ts
 tsconfig.json
 src
 examples
+/lib/cashu-ts.iife.js
+/lib/cashu-ts.iife.js.map
