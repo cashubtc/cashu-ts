@@ -2,7 +2,7 @@ import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey } from './core';
-import { deriveP2BKSecretKeys } from './NUT26';
+import { deriveP2BKSecretKeys } from './NUT28';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OutputDataLike } from '../model/OutputData';
 import {
@@ -527,8 +527,7 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
 	// Extract pubkeys and keyset ID from proof
 	const secret = parseP2PKSecret(proof.secret);
 	const pubs = [...getP2PKWitnessPubkeys(secret), ...getP2PKWitnessRefundkeys(secret)];
-	const kid = proof.id; // keyset id is hex
-	return deriveP2BKSecretKeys(Ehex, privs, pubs, kid);
+	return deriveP2BKSecretKeys(Ehex, privs, pubs);
 }
 
 // ------------------------------

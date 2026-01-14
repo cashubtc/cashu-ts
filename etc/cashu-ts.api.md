@@ -213,7 +213,7 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
 
 // @public
-export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string, eBytes?: Uint8Array): {
+export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array): {
     blinded: string[];
     Ehex: string;
 };
@@ -222,7 +222,7 @@ export function deriveP2BKBlindedPubkeys(pubkeys: string[], keysetId: string, eB
 export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | bigint, blindPubkey?: Uint8Array, naturalPub?: Uint8Array): string | null;
 
 // @public
-export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[], keysetIdHex: string): string[];
+export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[]): string[];
 
 // @public (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
@@ -1309,7 +1309,7 @@ export type PartialMintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, nut26?: boolean);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
     // (undocumented)
     amount?: number | undefined;
     // (undocumented)
@@ -1325,8 +1325,6 @@ class PaymentRequest_2 {
     mints?: string[] | undefined;
     // (undocumented)
     nut10?: NUT10Option | undefined;
-    // (undocumented)
-    nut26: boolean;
     // (undocumented)
     singleUse: boolean;
     toEncodedCreqA(): string;
@@ -1433,7 +1431,6 @@ export type RawPaymentRequest = {
     d?: string;
     t?: RawTransport[];
     nut10?: RawNUT10Option;
-    nut26?: boolean;
 };
 
 // @public (undocumented)
