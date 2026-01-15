@@ -100,7 +100,7 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 						throw e;
 					}
 					retries++;
-					requestLogger.info(`Network Error: attempting retry ${retries} in {delay}ms`, {
+					requestLogger.info(`Network Error: attempting retry ${retries} in ${delay}ms`, {
 						e,
 						retries,
 						delay,
