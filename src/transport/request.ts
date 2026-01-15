@@ -85,7 +85,7 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 		} catch (e) {
 			if (e instanceof NetworkError) {
 				const totalElapsedTime = Date.now() - startTime;
-				const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
+				const shouldRetry = retries < MAX_CACHED_RETRIES && totalElapsedTime < ttl;
 
 				if (shouldRetry) {
 					const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
