@@ -2055,19 +2055,19 @@ class Wallet {
 				denominations,
 			});
 
-			// Build effective OutputType and merge denominations
-			if (outputType.type === 'custom') {
-				this.fail('Custom OutputType not supported for melt change (must be 0-sat blanks)');
+			let meltOT: OutputType = outputType;
+			// When user provides custom outputType use it without modification.
+			if (outputType.type !== 'custom') {
+				meltOT = { ...outputType, denominations };
+				// Assign counter atomically if OutputType is deterministic
+				// and the counter is zero (auto-assign)
+				const autoCounters = await this.addCountersToOutputTypes(keyset.id, meltOT);
+				[meltOT] = autoCounters.outputTypes;
+				if (autoCounters.used) {
+					this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
+				}
+				this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
 			}
-			let meltOT: OutputType = { ...outputType, denominations };
-			// Assign counter atomically if OutputType is deterministic
-			// and the counter is zero (auto-assign)
-			const autoCounters = await this.addCountersToOutputTypes(keyset.id, meltOT);
-			[meltOT] = autoCounters.outputTypes;
-			if (autoCounters.used) {
-				this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
-			}
-			this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
 
 			// Generate the blank outputs (no fees as we are receiving change)
 			// Remember, zero amount + zero denomination passes splitAmount validation
