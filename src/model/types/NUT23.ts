@@ -26,7 +26,7 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
 	/**
 	 * Amount requested for mint quote.
 	 */
-	amount?: number;
+	amount: number;
 	/**
 	 * State of the mint quote.
 	 */
