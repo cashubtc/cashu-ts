@@ -1,8 +1,8 @@
-import { randomBytes } from '@noble/curves/utils';
+import { randomBytes } from '@noble/curves/utils.js';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
-import type { GetInfoResponse } from '../mint/types';
 import { Bytes, encodeUint8toBase64Url } from '../utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { type GetInfoResponse } from '../model/types';
 
 export type OIDCConfig = {
 	issuer: string;

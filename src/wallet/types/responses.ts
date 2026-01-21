@@ -1,15 +1,14 @@
-import { type MeltQuoteResponse } from '../../mint/types';
-import { type Proof } from '../../model/types/proof';
+import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
 /**
  * Response after paying a Lightning invoice.
  */
-export type MeltProofsResponse = {
+export type MeltProofsResponse<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> = {
 	/**
 	 * If false, the proofs have not been invalidated and the payment can be tried later again with
 	 * the same proofs.
 	 */
-	quote: MeltQuoteResponse;
+	quote: TQuote;
 	/**
 	 * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
 	 */

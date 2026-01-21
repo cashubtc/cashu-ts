@@ -1,10 +1,15 @@
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { sha256 } from '@noble/hashes/sha2';
-import { type PrivKey, randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils';
-import { Bytes, bytesToNumber, hexToNumber, encodeBase64toUint8 } from '../utils';
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+
+/**
+ * Private key type - can be hex string or Uint8Array.
+ */
+export type PrivKey = Uint8Array | string;
+import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
-import { getSignedOutput } from './NUT11';
 
 export type BlindSignature = {
 	C_: WeierstrassPoint<bigint>;
@@ -12,12 +17,16 @@ export type BlindSignature = {
 	id: string;
 };
 
-export type BlindedMessage = {
+export type RawBlindedMessage = {
 	B_: WeierstrassPoint<bigint>;
 	r: bigint;
 	secret: Uint8Array;
-	witness?: P2PKWitness;
 };
+
+/**
+ * @deprecated - Use {@link RawBlindedMessage}.
+ */
+export type BlindedMessage = RawBlindedMessage;
 
 export type DLEQ = {
 	s: Uint8Array; // signature
@@ -41,7 +50,7 @@ export type SerializedProof = {
 	witness?: string;
 };
 
-const DOMAIN_SEPARATOR = hexToBytes('536563703235366b315f48617368546f43757276655f43617368755f');
+const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
 
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
 	const msgToHash = sha256(Bytes.concat(DOMAIN_SEPARATOR, secret));
@@ -79,7 +88,7 @@ export const getKeysetIdInt = (keysetId: string): bigint => {
 		keysetIdInt = hexToNumber(keysetId) % BigInt(2 ** 31 - 1);
 	} else {
 		//legacy keyset compatibility
-		keysetIdInt = bytesToNumber(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
+		keysetIdInt = Bytes.toBigInt(encodeBase64toUint8(keysetId)) % BigInt(2 ** 31 - 1);
 	}
 	return keysetIdInt;
 };
@@ -94,28 +103,47 @@ export function createBlindSignature(
 	amount: number,
 	id: string,
 ): BlindSignature {
-	const C_: WeierstrassPoint<bigint> = B_.multiply(bytesToNumber(privateKey));
+	const a = secp256k1.Point.Fn.fromBytes(privateKey);
+	const C_: WeierstrassPoint<bigint> = B_.multiply(a);
 	return { C_, amount, id };
 }
 
-export function createRandomBlindedMessage(privateKey?: PrivKey): BlindedMessage {
-	return blindMessage(
-		randomBytes(32),
-		bytesToNumber(secp256k1.utils.randomSecretKey()),
-		privateKey,
-	);
+/**
+ * @deprecated - Use {@link createRandomRawBlindedMessage}
+ */
+export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage {
+	void _deprecated; // intentionally unused
+	return createRandomRawBlindedMessage();
 }
 
-export function blindMessage(secret: Uint8Array, r?: bigint, privateKey?: PrivKey): BlindedMessage {
+/**
+ * Creates a random blinded message.
+ *
+ * @remarks
+ * The secret is a UTF-8 encoded 64-character lowercase hex string, generated from 32 random bytes
+ * as recommended by NUT-00.
+ * @returns A RawBlindedMessage: {B_, r, secret}
+ */
+export function createRandomRawBlindedMessage(): RawBlindedMessage {
+	const secretStr = bytesToHex(randomBytes(32)); // 64 char ASCII hex string
+	const secretBytes = new TextEncoder().encode(secretStr); // UTF-8 of the hex
+	return blindMessage(secretBytes);
+}
+
+/**
+ * Blind a secret message.
+ *
+ * @param secret A UTF-8 byte encoded string.
+ * @param r Optional. Deterministic blinding scalar to use (eg: for testing / seeded)
+ * @returns A RawBlindedMessage: {B_, r, secret}
+ */
+export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage {
 	const Y = hashToCurve(secret);
 	if (!r) {
-		r = bytesToNumber(secp256k1.utils.randomSecretKey());
+		r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey());
 	}
 	const rG = secp256k1.Point.BASE.multiply(r);
 	const B_ = Y.add(rG);
-	if (privateKey !== undefined) {
-		return getSignedOutput({ B_, r, secret }, privateKey);
-	}
 	return { B_, r, secret };
 }
 
@@ -163,4 +191,98 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
 		secret: new TextEncoder().encode(proof.secret),
 		witness: proof.witness ? (JSON.parse(proof.witness) as P2PKWitness) : undefined,
 	};
+};
+
+// ------------------------------
+// Schnorr Signing / Verififcaton
+// ------------------------------
+
+/**
+ * Signs a message string using Schnorr.
+ *
+ * @remarks
+ * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
+ * (auxRand) each time it is called.
+ * @param message - The message to sign.
+ * @param privateKey - The private key to sign with (hex string or Uint8Array).
+ * @returns The signature in hex format.
+ */
+export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
+	const msghash = sha256(new TextEncoder().encode(message));
+	const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
+	const sig = schnorr.sign(msghash, privKeyBytes); // auxRand is random by default
+	return bytesToHex(sig);
+};
+
+/**
+ * Verifies a Schnorr signature on a message.
+ *
+ * @remarks
+ * This function swallows Schnorr verification errors (eg invalid signature / pubkey format) and
+ * treats them as false. If you want to throw such errors, use the throws param.
+ * @param signature - The Schnorr signature (hex-encoded).
+ * @param message - The message to verify.
+ * @param pubkey - The Cashu P2PK public key (hex-encoded, X-only or with 02/03 prefix).
+ * @param throws - True: throws on error, False: swallows errors and returns false.
+ * @returns True if the signature is valid, false otherwise.
+ * @throws If throws param is true and error is encountered.
+ */
+export const schnorrVerifyMessage = (
+	signature: string,
+	message: string,
+	pubkey: string,
+	throws: boolean = false,
+): boolean => {
+	try {
+		const msghash = sha256(new TextEncoder().encode(message));
+		// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
+		const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
+		return schnorr.verify(hexToBytes(signature), msghash, hexToBytes(pubkeyX));
+	} catch (e) {
+		if (throws) {
+			throw e;
+		}
+	}
+	return false; // default fail
+};
+
+/**
+ * Returns the set of unique public keys that have produced a valid Schnorr signature for a given
+ * message.
+ *
+ * @param signatures - The Schnorr signature(s) (hex-encoded).
+ * @param message - The message to verify.
+ * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
+ *   check.
+ * @returns Array of public keys who validly signed, duplicates removed.
+ */
+export function getValidSigners(
+	signatures: string[],
+	message: string,
+	pubkeys: string[],
+): string[] {
+	const uniquePubs = Array.from(new Set(pubkeys));
+	return uniquePubs.filter((pubkey) =>
+		signatures.some((sig) => schnorrVerifyMessage(sig, message, pubkey)),
+	);
+}
+
+/**
+ * Checks enough unique pubkeys have signed a message.
+ *
+ * @param signatures - The Schnorr signature(s) (hex-encoded).
+ * @param message - The message to verify.
+ * @param pubkeys - The Cashu P2PK public key(s) (hex-encoded, X-only or with 02/03 prefix) to
+ *   check.
+ * @param threshold - The minimum number of unique witnesses required.
+ * @returns True if the witness threshold was reached, false otherwise.
+ */
+export const meetsSignerThreshold = (
+	signatures: string[],
+	message: string,
+	pubkeys: string[],
+	threshold: number = 1,
+): boolean => {
+	const validSigners = getValidSigners(signatures, message, pubkeys);
+	return validSigners.length >= threshold;
 };

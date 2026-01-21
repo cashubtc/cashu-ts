@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import {
 	blindMessage,
 	createBlindSignature,
@@ -7,7 +7,7 @@ import {
 	deserializeMintKeys,
 	SerializedMintKeys,
 } from '../../src/crypto';
-import { PUBKEYS, TEST_PRIV_KEY_PUBS } from './consts';
+import { PUBKEYS, TEST_PRIV_KEY_PUBS } from '../consts';
 import { describe, expect, test } from 'vitest';
 import { hexToNumber } from '../../src/utils';
 
@@ -28,12 +28,14 @@ describe('new mint keys', () => {
 	test('mint keys from seed', async () => {
 		const keys = createNewMintKeys(64, new TextEncoder().encode('TEST_PRIVATE_KEY'));
 		const serialized = serializeMintKeys(keys.pubKeys);
-		console.log(serialized);
+		// console.log(serialized);
+		expect(keys.keysetId).toBe(
+			'01b705798f95060bade4eb73f65aa3020fc51be05ba85dcb74b97b93c03b9c65f9',
+		);
 		expect(serialized).toEqual(TEST_PRIV_KEY_PUBS);
 
 		const randomkeys = createNewMintKeys(64);
 		const serializedRandom = serializeMintKeys(randomkeys.pubKeys);
-
 		expect(serializedRandom).not.toEqual(PUBKEYS);
 		expect(serializedRandom).toHaveProperty('288230376151711744');
 	});

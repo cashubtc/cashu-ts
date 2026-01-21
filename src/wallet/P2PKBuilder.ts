@@ -1,5 +1,6 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 import { type P2PKOptions, type P2PKTag } from './types/config';
+import { type SigFlag } from '../crypto';
 
 // Accept 33 byte compressed (02|03...), or 32 byte x-only,
 // normalised to lowercase 33 byte with 02 prefix for x only
@@ -27,6 +28,8 @@ export class P2PKBuilder {
 	private nSigsRefund?: number;
 	private extraTags: P2PKTag[] = [];
 	private _blindKeys?: boolean;
+	private sigFlag?: SigFlag;
+	private hashlock?: string;
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
@@ -67,10 +70,23 @@ export class P2PKBuilder {
 		return this;
 	}
 	/**
-	 * @alpha
+	 * @experimental
 	 */
 	blindKeys() {
 		this._blindKeys = true;
+		return this;
+	}
+
+	sigAll() {
+		this.sigFlag = 'SIG_ALL';
+		return this;
+	}
+
+	/**
+	 * Converts a `P2PK` output into a NUT-14 `HTLC` kind output.
+	 */
+	addHashlock(hashlock: string) {
+		this.hashlock = hashlock;
 		return this;
 	}
 
@@ -105,6 +121,8 @@ export class P2PKBuilder {
 			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
 			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
 			...(this._blindKeys ? { blindKeys: true } : {}),
+			...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
+			...(this.hashlock ? { hashlock: this.hashlock } : {}),
 		};
 
 		// Ensure the secret is valid (not too long etc)
@@ -125,6 +143,8 @@ export class P2PKBuilder {
 			b.requireRefundSignatures(opts.requiredRefundSignatures);
 		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
 		if (opts.blindKeys) b.blindKeys();
+		if (opts.sigFlag == 'SIG_ALL') b.sigAll();
+		if (opts.hashlock) b.addHashlock(opts.hashlock);
 		return b;
 	}
 }

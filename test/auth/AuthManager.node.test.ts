@@ -1,7 +1,7 @@
 // tests/auth/AuthManager.node.test.ts
 
 // 1) Mock FIRST, and define everything INSIDE the factory (no outer refs)
-import { vi, describe, test, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, test, expect, beforeEach, afterEach, Mock, MockInstance } from 'vitest';
 
 vi.mock('../../src/wallet', () => {
 	// Define a constructor-style mock to ensure `new KeyChain(...)` yields an
@@ -23,7 +23,6 @@ vi.mock('../../src/wallet', () => {
 // 2) Now import everything else
 import * as wallet from '../../src/wallet';
 import { AuthManager } from '../../src/auth/AuthManager';
-import type { RequestFn } from '../../src/transport';
 import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
 import { OutputData } from '../../src/model/OutputData';
@@ -75,14 +74,14 @@ function fakeInfo({
 /* --------------------------
  * Per-test state
  * -------------------------- */
-let reqSpy: vi.MockedFunction<RequestFn>;
-let hasValidDleqSpy: vi.SpyInstance;
+let reqSpy: ReturnType<typeof vi.fn>;
+let hasValidDleqSpy: MockInstance;
 
 beforeEach(() => {
 	reqSpy = vi.fn();
 	hasValidDleqSpy = vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
 
-	const KeyChainMock = (wallet as any).KeyChain as vi.Mock;
+	const KeyChainMock = (wallet as any).KeyChain as Mock;
 	if (vi.isMockFunction(KeyChainMock)) KeyChainMock.mockClear();
 });
 
@@ -246,7 +245,7 @@ describe('AuthManager: init fetches info then builds KeyChain via wallet mock', 
 
 		expect(am['info']).toBeTruthy();
 
-		const KeyChainMock = (wallet as any).KeyChain as vi.Mock;
+		const KeyChainMock = (wallet as any).KeyChain as Mock;
 		expect(vi.isMockFunction(KeyChainMock)).toBe(true);
 		expect(KeyChainMock).toHaveBeenCalledTimes(1);
 		expect(KeyChainMock).toHaveBeenCalledWith(
@@ -452,7 +451,6 @@ describe('topUp error branches', () => {
 
 test('getBatMaxMint throws if mint info not loaded', () => {
 	const am = new AuthManager(mintUrl, { request: reqSpy });
-	// @ts-expect-error privat
 	expect(() => am['getBatMaxMint']()).toThrow('mint info not loaded');
 });
 

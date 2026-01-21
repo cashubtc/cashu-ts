@@ -102,4 +102,36 @@ export class Bytes {
 		}
 		return a.length - b.length;
 	}
+
+	static toBigInt(bytes: Uint8Array): bigint {
+		let result = 0n;
+		for (const byte of bytes) {
+			result = (result << 8n) | BigInt(byte);
+		}
+		return result;
+	}
+
+	static fromBigInt(value: bigint): Uint8Array {
+		if (value < 0n) {
+			throw new RangeError('value must be non-negative');
+		}
+		if (value === 0n) {
+			return new Uint8Array([0]);
+		}
+		// Calculate Uint8Array length
+		let temp = value;
+		let length = 0;
+		while (temp > 0n) {
+			length++;
+			temp >>= 8n;
+		}
+		// Fill it from the end (big endian)
+		const out = new Uint8Array(length);
+		temp = value;
+		for (let i = length - 1; i >= 0; i--) {
+			out[i] = Number(temp & 0xffn);
+			temp >>= 8n;
+		}
+		return out;
+	}
 }

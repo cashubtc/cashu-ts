@@ -1,7 +1,14 @@
+export type * from './_deprecated';
 export type * from './blinded';
 export type * from './jsonrpc';
 export type * from './keyset';
-export * from './proof-state';
+export type * from './NUT03';
+export * from './NUT04';
+export * from './NUT05';
+export type * from './NUT06';
+export * from './NUT07';
+export type * from './NUT23';
+export type * from './NUT25';
 export type * from './proof';
 export type * from './token';
 export type * from './token.v4';

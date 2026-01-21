@@ -1,6 +1,7 @@
 {
 	"$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
 	"mainEntryPointFilePath": "<projectFolder>/lib/types/index.d.ts",
+	"newlineKind": "lf",
 	"bundledPackages": [],
 
 	"apiReport": {
@@ -168,9 +169,9 @@
 		"compilerMessageReporting": {
 			// suppress module not found warnings as we are post-processing dts imports
 			// to add the .js extension for NodeNext compatibility
-			"TS2307": {
-				"logLevel": "none"
-			},
+			// "TS2307": {
+			// 	"logLevel": "none"
+			// },
 			"default": {
 				"logLevel": "warning"
 			}
