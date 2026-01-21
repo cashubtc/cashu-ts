@@ -15,6 +15,9 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 		{
 			id: '00bd033559de27d0',
 			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+			final_expiry: 1754296607,
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
@@ -23,11 +26,16 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 		{
 			id: '009a1f293253e41e',
 			unit: 'sat',
+			active: true,
+			input_fee_ppk: 2,
+			final_expiry: undefined,
 			keys: PUBKEYS,
 		},
 		{
 			id: 'invalidbase64',
 			unit: 'sat',
+			active: true,
+			input_fee_ppk: 1,
 			keys: {
 				1: '03pubkey1invalid',
 				2: '03pubkey2invalid',
@@ -36,6 +44,8 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 		{
 			id: '00inactive',
 			unit: 'sat',
+			active: false,
+			input_fee_ppk: 0,
 			keys: {
 				1: '03pubkey1inactive',
 				2: '03pubkey2inactive',

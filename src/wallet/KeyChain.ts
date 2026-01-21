@@ -109,8 +109,10 @@ export class KeyChain {
 			.map((k) => ({
 				id: k.id,
 				unit: k.unit,
-				keys: k.keys,
+				active: k.active,
+				input_fee_ppk: k.input_fee_ppk,
 				final_expiry: k.final_expiry,
+				keys: k.keys,
 			}));
 
 		return { keysets, keys };
