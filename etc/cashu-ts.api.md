@@ -187,7 +187,7 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
     expiry?: number;
     input_fee_ppk?: number;
     unit?: string;
-    versionByte: number;
+    versionByte?: number;
 }): KeysetPair;
 
 // @public
