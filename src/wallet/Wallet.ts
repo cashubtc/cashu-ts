@@ -2044,9 +2044,12 @@ class Wallet {
 			quoteAmount: meltQuote.amount,
 		});
 
+		if (outputType.type === 'custom') {
+			outputData = outputType.data;
+		}
 		// Create NUT-08 blanks for return of Lightning fee change
 		// Note: zero amount + zero denomination passes splitAmount validation
-		if (feeReserve > 0) {
+		else if (feeReserve > 0) {
 			let count = Math.ceil(Math.log2(feeReserve)) || 1;
 			if (count < 0) count = 0; // Prevents: -Infinity
 			const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
@@ -2055,10 +2058,6 @@ class Wallet {
 				denominations,
 			});
 
-			// Build effective OutputType and merge denominations
-			if (outputType.type === 'custom') {
-				this.fail('Custom OutputType not supported for melt change (must be 0-sat blanks)');
-			}
 			let meltOT: OutputType = { ...outputType, denominations };
 			// Assign counter atomically if OutputType is deterministic
 			// and the counter is zero (auto-assign)
@@ -2068,7 +2067,6 @@ class Wallet {
 				this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
 			}
 			this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
-
 			// Generate the blank outputs (no fees as we are receiving change)
 			// Remember, zero amount + zero denomination passes splitAmount validation
 			outputData = this.createOutputData(0, keyset, meltOT);
