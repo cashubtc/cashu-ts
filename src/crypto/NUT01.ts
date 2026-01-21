@@ -64,7 +64,7 @@ export function createNewMintKeys(
 		expiry?: number;
 		input_fee_ppk?: number;
 		unit?: string;
-		versionByte: number;
+		versionByte?: number;
 	},
 ): KeysetPair {
 	const { expiry, input_fee_ppk, unit = 'sat', versionByte = 1 } = options || {};
