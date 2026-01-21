@@ -1,10 +1,12 @@
-import { hmac } from '@noble/hashes/hmac';
-import { sha256 } from '@noble/hashes/sha2';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { getKeysetIdInt } from './core';
 import { HDKey } from '@scure/bip32';
 import { Bytes, isBase64String } from '../utils';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
+
+const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
 enum DerivationType {
 	SECRET = 0,
@@ -63,8 +65,22 @@ const derive = (
 			message = Bytes.concat(message, Bytes.fromHex('01'));
 	}
 
-	// Step 2: Compute HMAC-SHA256
-	return hmac(sha256, seed, message);
+	const hmacDigest = hmac(sha256, seed, message);
+
+	if (secretOrBlinding === DerivationType.BLINDING_FACTOR) {
+		const x = Bytes.toBigInt(hmacDigest);
+		// Optimization: single subtraction instead of modulo
+		// Probability of HMAC >= SECP256K1_N is ~2^-128
+		if (x >= SECP256K1_N) {
+			return Bytes.fromBigInt(x - SECP256K1_N);
+		}
+		if (x === 0n) {
+			throw new Error('Derived invalid blinding scalar r == 0');
+		}
+		return hmacDigest;
+	}
+
+	return hmacDigest;
 };
 
 const derive_deprecated = (

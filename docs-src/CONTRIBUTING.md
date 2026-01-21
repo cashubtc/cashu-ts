@@ -1,6 +1,8 @@
+[Documents](../index.html) › **Contribution Guide**
+
 # Contribution Guide
 
-This file is contributor-facing: quick setup, how to opt in to local hooks, and a short PR checklist. For detailed developer instructions (environment, hooks internals, release process, CI parity, and troubleshooting) see `DEVELOPER.md`.
+This file is contributor-facing: quick setup, how to opt in to local hooks, and a short PR checklist. For detailed developer instructions (environment, hooks internals, release process, CI parity, and troubleshooting) see [the developer guide](./DEVELOPER.md).
 
 ## Quickstart
 
@@ -46,6 +48,40 @@ Tip: a common local workflow before pushing is to run `npm run prtasks` and, for
 ## API Extractor
 
 This project uses API-Extractor in CI. For details on `npm run api:check` and `npm run api:update` and the correct workflow for updating API reports, see `DEVELOPER.md`.
+
+## Code documentation conventions
+
+### TSDoc release tags
+
+When adding new features that are subject to change, use the `@experimental` tag in TSDoc comments:
+
+```typescript
+/**
+ * This function does something new and exciting.
+ *
+ * @experimental This API is subject to change.
+ */
+export function myNewFeature(): void {
+	// ...
+}
+```
+
+**Why `@experimental` instead of `@alpha` or `@beta`?**
+
+Our vite build process excludes `@alpha` and `@beta` tagged items from the public API. Using `@experimental` allows us to surface new features while clearly flagging them as subject to change.
+
+### TODO comments
+
+Use `// TODO:` comments to mark areas needing future attention, such as deprecated code blocks or planned improvements:
+
+```typescript
+// TODO: Remove this deprecated method in v4.0
+export function oldMethod(): void {
+	// ...
+}
+```
+
+This convention allows common editor plugins like [Better Comments](https://marketplace.visualstudio.com/items?itemName=aaron-bond.better-comments) to highlight these areas for easy identification.
 
 ## Integration tests
 
@@ -94,9 +130,9 @@ npm run test-integration
 
 - **TS sources** use extensionless imports.
 - **Runtime ESM** (`lib/**/*.js`) must have `.js` on relative imports.
-- **Type declarations** (`lib/types/**/*.d.ts`) must stay **extensionless**.
-- Our `post-process-dts.js` intentionally skips `.d.ts` to keep API Extractor happy.
+- **Runtime CJS** (`lib/**/*.cjs`) may omit extensions, Node does not require them.
+- **Type declarations** (`lib/types/**/*.d.ts`) are a rolled up file (no relative imports/re-exports).
 
 ---
 
-Thanks for contributing — please open Issues or PRs if anything is unclear.
+Thanks for contributing — please open [Issues](https://github.com/cashubtc/cashu-ts/issues) or [Pull Requests](https://github.com/cashubtc/cashu-ts/pulls) if anything is unclear.

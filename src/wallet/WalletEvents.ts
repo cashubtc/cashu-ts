@@ -1,15 +1,18 @@
 import type { Wallet } from './Wallet';
-import type { Proof, ProofState } from '../model/types';
-import {
-	MintQuoteState,
-	MeltQuoteState,
-	type MintQuoteResponse,
-	type MeltQuoteResponse,
-} from '../mint/types';
-import type { MeltBlanks, SubscriptionCanceller } from './types';
+import type {
+	Proof,
+	ProofState,
+	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Response,
+	MintQuoteBolt11Response,
+} from '../model/types';
+import { MintQuoteState, MeltQuoteState } from '../model/types';
+import type { MeltBlanks } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './CounterSource';
 import { safeCallback } from '../logger';
+
+export type SubscriptionCanceller = () => void;
 
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -69,7 +72,7 @@ export class WalletEvents {
 	private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
 
 	// Callbacks registered for Melt blanks created events
-	private meltBlanksHandlers = new Set<(payload: MeltBlanks) => void>();
+	private meltBlanksHandlers = new Set<(payload: MeltBlanks<MeltQuoteBaseResponse>) => void>();
 
 	// Binds an abort signal to each subscription canceller
 	private withAbort(
@@ -107,10 +110,13 @@ export class WalletEvents {
 		return new Promise((resolve, reject) => {
 			let cancelP: Promise<SubscriptionCanceller> | null = null; // handle to unsub later
 			let to: ReturnType<typeof setTimeout> | null = null; // optional timeout timer
+			let done = false;
 
 			// Common cleanup: cancels subscription, clears timer, detaches abort listener.
 			// If an error is provided, rejects the promise with it.
 			const cleanup = (err?: unknown) => {
+				if (done) return;
+				done = true;
 				cancelSafely(cancelP);
 				if (to) {
 					clearTimeout(to);
@@ -144,6 +150,9 @@ export class WalletEvents {
 				(e) => cleanup(e), // reject if subscription itself errors
 				{ signal: opts?.signal }, // delegate abort to subscription as well
 			);
+
+			// catch errors starting the subscription
+			void cancelP.catch((e) => cleanup(e));
 		});
 	}
 
@@ -195,9 +204,11 @@ export class WalletEvents {
 	 * does not await your handler.
 	 *
 	 * Typical use: persist `payload` so you can later call `wallet.completeMelt(payload)`.
+	 *
+	 * @deprecated Use wallet.prepareMelt() and store the MeltPreview instead.
 	 */
 	public meltBlanksCreated(
-		cb: (payload: MeltBlanks) => void,
+		cb: (payload: MeltBlanks<MeltQuoteBaseResponse>) => void,
 		opts?: SubscribeOpts,
 	): SubscriptionCanceller {
 		this.meltBlanksHandlers.add(cb);
@@ -208,7 +219,7 @@ export class WalletEvents {
 	/**
 	 * @internal
 	 */
-	public _emitMeltBlanksCreated(payload: MeltBlanks) {
+	public _emitMeltBlanksCreated(payload: MeltBlanks<MeltQuoteBaseResponse>) {
 		for (const h of this.meltBlanksHandlers) {
 			safeCallback(h, payload, this.wallet.logger, { event: 'meltBlanksCreated' });
 		}
@@ -224,7 +235,7 @@ export class WalletEvents {
 	 */
 	async mintQuoteUpdates(
 		ids: string[],
-		cb: (p: MintQuoteResponse) => void,
+		cb: (p: MintQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -248,7 +259,7 @@ export class WalletEvents {
 	 */
 	async mintQuotePaid(
 		id: string,
-		cb: (p: MintQuoteResponse) => void,
+		cb: (p: MintQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -272,7 +283,7 @@ export class WalletEvents {
 	 */
 	async meltQuoteUpdates(
 		ids: string[],
-		cb: (p: MeltQuoteResponse) => void,
+		cb: (p: MeltQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -296,7 +307,7 @@ export class WalletEvents {
 	 */
 	async meltQuotePaid(
 		id: string,
-		cb: (p: MeltQuoteResponse) => void,
+		cb: (p: MeltQuoteBolt11Response) => void,
 		err: (e: Error) => void,
 		opts?: SubscribeOpts,
 	): Promise<SubscriptionCanceller> {
@@ -378,13 +389,13 @@ export class WalletEvents {
 	 * @param opts Optional controls.
 	 * @param opts.signal AbortSignal to cancel the wait early.
 	 * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
-	 * @returns A promise that resolves with the latest `MintQuoteResponse` once PAID.
+	 * @returns A promise that resolves with the latest `MintQuoteBolt11Response` once PAID.
 	 */
 	onceMintPaid(
 		id: string,
 		opts?: { signal?: AbortSignal; timeoutMs?: number },
-	): Promise<MintQuoteResponse> {
-		return this.waitUntilPaid<MintQuoteResponse>(
+	): Promise<MintQuoteBolt11Response> {
+		return this.waitUntilPaid<MintQuoteBolt11Response>(
 			this.mintQuotePaid.bind(this),
 			id,
 			opts,
@@ -417,21 +428,26 @@ export class WalletEvents {
 	 * @param opts.signal AbortSignal to cancel the wait early.
 	 * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
 	 * @param opts.failOnError When true, reject on first error. Default false.
-	 * @returns A promise resolving to the id that won and its `MintQuoteResponse`.
+	 * @returns A promise resolving to the id that won and its `MintQuoteBolt11Response`.
 	 */
 	onceAnyMintPaid(
 		ids: string[],
 		opts?: { signal?: AbortSignal; timeoutMs?: number; failOnError?: boolean },
-	): Promise<{ id: string; quote: MintQuoteResponse }> {
+	): Promise<{ id: string; quote: MintQuoteBolt11Response }> {
 		return new Promise((resolve, reject) => {
 			const unique = Array.from(new Set(ids));
 			const cancels: Map<string, CancellerLike> = new Map();
 			let to: ReturnType<typeof setTimeout> | null = null;
 			let lastError: unknown = null;
 			let fullyRegistered = false;
+			let done = false;
 
 			const cleanup = (err?: unknown) => {
-				for (const c of cancels.values()) cancelSafely(c);
+				if (done) return;
+				done = true;
+				for (const c of cancels.values()) {
+					cancelSafely(c);
+				}
 				cancels.clear();
 				if (to) {
 					clearTimeout(to);
@@ -447,12 +463,14 @@ export class WalletEvents {
 				if (opts.signal.aborted) return onAbort();
 				opts.signal.addEventListener('abort', onAbort, { once: true });
 			}
+
 			if (opts?.timeoutMs && opts.timeoutMs > 0) {
 				to = setTimeout(
 					() => cleanup(new Error('Timeout waiting for any mint paid')),
 					opts.timeoutMs,
 				);
 			}
+
 			if (unique.length === 0) return cleanup(new Error('No quote ids provided'));
 
 			for (const quoteId of unique) {
@@ -463,24 +481,47 @@ export class WalletEvents {
 						resolve({ id: quoteId, quote: p });
 					},
 					(e) => {
+						// Catch errors after setup
 						if (opts?.failOnError) {
 							cleanup(e);
 							return;
 						}
 						lastError = e;
+
 						const thisCanceller = cancels.get(quoteId);
 						if (thisCanceller) {
 							cancelSafely(thisCanceller);
 							cancels.delete(quoteId);
 						}
-						// Only decide to fail once we've finished installing all subs
+
 						if (fullyRegistered && cancels.size === 0) {
 							cleanup(lastError ?? new Error('No subscriptions remaining'));
 						}
 					},
 				);
+
 				cancels.set(quoteId, c);
+
+				// Catch errors setting up
+				void c.catch((e) => {
+					if (opts?.failOnError) {
+						cleanup(e);
+						return;
+					}
+					lastError = e;
+
+					const thisCanceller = cancels.get(quoteId);
+					if (thisCanceller) {
+						cancelSafely(thisCanceller);
+						cancels.delete(quoteId);
+					}
+
+					if (fullyRegistered && cancels.size === 0) {
+						cleanup(lastError ?? new Error('No subscriptions remaining'));
+					}
+				});
 			}
+
 			fullyRegistered = true;
 		});
 	}
@@ -506,13 +547,13 @@ export class WalletEvents {
 	 * @param opts Optional controls.
 	 * @param opts.signal AbortSignal to cancel the wait early.
 	 * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
-	 * @returns A promise that resolves with the `MeltQuoteResponse` once PAID.
+	 * @returns A promise that resolves with the `MeltQuoteBolt11Response` once PAID.
 	 */
 	onceMeltPaid(
 		id: string,
 		opts?: { signal?: AbortSignal; timeoutMs?: number },
-	): Promise<MeltQuoteResponse> {
-		return this.waitUntilPaid<MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt11Response> {
+		return this.waitUntilPaid<MeltQuoteBolt11Response>(
 			this.meltQuotePaid.bind(this),
 			id,
 			opts,

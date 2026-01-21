@@ -82,6 +82,7 @@ describe('P2PKBuilder.toOptions()', () => {
 		expect(o1.locktime).toBeTypeOf('number');
 		expect(o2.locktime).toBeTypeOf('number');
 		expect(o2.locktime).toBe(nowSec + 60);
+		expect(o2.sigFlag).toBe(undefined);
 	});
 
 	it('clamps requiredSignatures to available lock keys and omits when <= 1', () => {
@@ -140,6 +141,8 @@ describe('P2PKBuilder.toOptions()', () => {
 			.addRefundPubkey([comp('c', '02')])
 			.requireLockSignatures(2)
 			.requireRefundSignatures(1)
+			.sigAll()
+			.addHashlock('foo')
 			.toOptions();
 
 		const rebuilt = P2PKBuilder.fromOptions(original).toOptions();
@@ -154,6 +157,7 @@ describe('P2PKBuilder.toOptions()', () => {
 		expect('requiredRefundSignatures' in round).toBe(false);
 		expect('locktime' in round).toBe(false);
 		expect('refundKeys' in round).toBe(false);
+		expect('sigFlag' in round).toBe(false);
 	});
 
 	it('fromOptions applies requiredRefundSignatures when provided', () => {
@@ -201,6 +205,7 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 			.lockUntil(ms)
 			.requireLockSignatures(5) // clamp to unique lock count
 			.requireRefundSignatures(1) // omitted when <= 1
+			.sigAll()
 			.toOptions();
 
 		// expected, all lower case, x only normalised to 02 prefix, duplicates removed, order preserved
@@ -211,6 +216,7 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 		expect(opts.pubkey).toEqual(expLocks);
 		expect(opts.refundKeys).toEqual(expRefunds);
 		expect(opts.locktime).toBe(ms / 1000); // ms to seconds
+		expect(opts.sigFlag).toEqual('SIG_ALL');
 
 		// clamp, two unique lock keys
 		expect(opts.requiredSignatures).toBe(2);

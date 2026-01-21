@@ -4,7 +4,7 @@ import { beforeAll, afterAll, beforeEach, afterEach, describe, test, expect, vi 
 
 import { OIDCAuth, type OIDCConfig, type TokenResponse } from '../../src/auth/OIDCAuth';
 import { Bytes, encodeUint8toBase64Url } from '../../src/utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 const ISSUER = 'http://idp.local/realms/cashu';
 const OIDC_BASE = 'http://oidc.local';

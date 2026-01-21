@@ -1,5 +1,5 @@
 import { decodeCBOR, encodeCBOR, Bytes } from '../../src/utils';
-import { hexToBytes } from '@noble/curves/utils';
+import { hexToBytes } from '@noble/curves/utils.js';
 import { test, describe, expect } from 'vitest';
 // Note: do NOT import 'fs' or 'path' at top-level — the browser test runner
 // will attempt to import them and Vite externalizes those modules which causes
@@ -448,7 +448,7 @@ describe('cbor encoder', () => {
 			}
 		}) as any;
 		(globalThis as any).TextEncoder = function () {
-			return { encode: (s: string) => ({ length: 4294967296 }) as any };
+			return { encode: (_s: string) => ({ length: 4294967296 }) as any };
 		};
 		try {
 			expect(() => encodeCBOR('x' as any)).toThrow(/String too long to encode/);
@@ -539,7 +539,7 @@ describe('CBOR Test Vectors', () => {
 	// Use the vector's `cbor` (base64) in the test title so it's obvious which vector is running.
 	const _vectorRows = _vectors.map((v, i) => [`CBOR vector ${v.cbor}`, v, i]);
 
-	test.each(_vectorRows)('%s', (_title, vector, index) => {
+	test.each(_vectorRows)('%s', (_title, vector, _index) => {
 		const { hex } = vector as any;
 
 		// Skip vectors that contain indefinite/streaming markers (these are

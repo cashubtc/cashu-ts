@@ -3,8 +3,13 @@ import request, { type RequestFn } from '../transport';
 import { joinUrls, hasValidDleq, encodeJsonToBase64, Bytes } from '../utils';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
-import type { MintActiveKeys, MintAllKeysets, Proof } from '../model/types';
-import { type GetInfoResponse, type BlindAuthMintResponse } from '../mint/types';
+import type {
+	GetInfoResponse,
+	GetKeysResponse,
+	GetKeysetsResponse,
+	Proof,
+	SerializedBlindedSignature,
+} from '../model/types';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
 import { KeyChain, type Keyset } from '../wallet';
@@ -36,6 +41,13 @@ type StoredTokens = {
 	 * Epoch timestamp (ms).
 	 */
 	expiresAt?: number;
+};
+
+/**
+ * Response from the mint after blind auth minting.
+ */
+type BlindAuthMintResponse = {
+	signatures: SerializedBlindedSignature[];
 };
 
 /**
@@ -315,11 +327,11 @@ export class AuthManager implements AuthProvider {
 		if (!this.keychain) {
 			// fetch blind keysets and keys for unit 'auth'
 			const [allKeysets, allKeys] = await Promise.all([
-				this.req<MintAllKeysets>({
+				this.req<GetKeysetsResponse>({
 					endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keysets'),
 					method: 'GET',
 				}),
-				this.req<MintActiveKeys>({
+				this.req<GetKeysResponse>({
 					endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/keys'),
 					method: 'GET',
 				}),

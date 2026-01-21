@@ -1,6 +1,6 @@
 name: Publish Package to npmjs
 permissions:
-  contents: read
+  contents: write
   id-token: write
 on:
   release:
@@ -30,3 +30,12 @@ jobs:
       - run: npm publish --provenance --tag ${{ steps.npm-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm run build:standalone
+      - name: Upload standalone bundle assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "./lib/cashu-ts.iife.js" \
+            "./lib/cashu-ts.iife.js.map" \
+            "./lib/types/index.d.ts"

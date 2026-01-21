@@ -7,12 +7,10 @@ import {
 	Wallet,
 	CheckStateEnum,
 	type Proof,
-	type MeltQuoteResponse,
+	type MeltQuoteBolt11Response,
 	MeltQuoteState,
-	type MintQuoteResponse,
 	MintQuoteState,
 	type MintKeys,
-	MintKeyset,
 	deriveKeysetId,
 	getDecodedToken,
 	injectWebSocketImpl,
@@ -21,15 +19,20 @@ import {
 	ConsoleLogger,
 	OutputConfig,
 	MeltProofsConfig,
-	MeltBlanks,
-	Bolt12MeltQuoteResponse,
+	MeltQuoteBolt12Response,
 	AuthProvider,
+	MintQuoteBolt11Response,
+	MeltBlanks,
+	HasKeysetKeys,
+	OutputType,
 } from '../../src';
 
-import { bytesToNumber, sumProofs } from '../../src/utils';
+import { Bytes } from '../../src/utils';
 import { Server, WebSocket } from 'mock-socket';
-import { hexToBytes } from '@noble/curves/utils';
-import { randomBytes } from '@noble/hashes/utils';
+import { hexToBytes } from '@noble/curves/utils.js';
+import { randomBytes } from '@noble/hashes/utils.js';
+import { NULL_LOGGER } from '../../src/logger';
+import { MINTCACHE } from '../consts';
 
 injectWebSocketImpl(WebSocket);
 
@@ -41,6 +44,9 @@ const dummyKeysResp = {
 		{
 			id: '00bd033559de27d0',
 			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+			final_expiry: 1754296607,
 			keys: {
 				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
 				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
@@ -48,12 +54,11 @@ const dummyKeysResp = {
 		},
 	],
 };
-const dummyKeysId = deriveKeysetId(
-	dummyKeysResp.keysets[0].keys,
-	dummyKeysResp.keysets[0].unit,
-	1754296607,
-	1,
-);
+const dummyKeysId = deriveKeysetId(dummyKeysResp.keysets[0].keys, {
+	expiry: 1754296607,
+	unit: dummyKeysResp.keysets[0].unit,
+	versionByte: 0,
+});
 console.log(`dummyKeysId = ${dummyKeysId}`);
 const dummyKeysetResp = {
 	keysets: [
@@ -62,6 +67,7 @@ const dummyKeysetResp = {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
+			final_expiry: 1754296607,
 		},
 	],
 };
@@ -129,26 +135,13 @@ describe('test wallet init', () => {
 		const keysets = wallet.keyChain.getKeysets();
 		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
 		expect(keysets).toHaveLength(1);
-		expect(keysets[0].toMintKeyset()).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			active: true,
-			input_fee_ppk: 0,
-			final_expiry: undefined,
-		});
+		expect(keysets[0].toMintKeyset()).toEqual(dummyKeysetResp.keysets[0]);
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
-		expect(keys[0]).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		});
+		expect(keys[0]).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset ID
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
@@ -182,21 +175,14 @@ describe('test wallet init', () => {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
-			final_expiry: undefined,
+			final_expiry: 1754296607,
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
-		expect(keys[0]).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		});
+		expect(keys[0]).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset ID
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
@@ -238,21 +224,14 @@ describe('test wallet init', () => {
 			unit: 'sat',
 			active: true,
 			input_fee_ppk: 0,
-			final_expiry: undefined,
+			final_expiry: 1754296607,
 		});
 
 		// Verify keys
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		expect(keys).toHaveLength(1);
-		expect(keys[0]).toEqual({
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		});
+		expect(keys[0]).toEqual(dummyKeysResp.keysets[0]);
 
 		// Verify active keyset ID
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
@@ -283,9 +262,16 @@ describe('test wallet init', () => {
 
 	test('should throw when accessing getters before loadMint', () => {
 		const wallet = new Wallet(mintUrl, { unit });
-		expect(() => wallet.getMintInfo()).toThrow('Mint info not initialized; call loadMint first');
+		expect(() => wallet.getMintInfo()).toThrow(/Mint info not initialized; call loadMint/);
 		expect(() => wallet.keyChain.getKeysets()).toThrow('KeyChain not initialized');
 		expect(() => wallet.keyChain.getCheapestKeyset().id).toThrow('KeyChain not initialized');
+	});
+
+	test('should return getters', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+		expect(wallet.logger).toBe(NULL_LOGGER);
+		expect(wallet.unit).toBe('sat');
 	});
 
 	test('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
@@ -314,7 +300,7 @@ describe('test wallet init', () => {
 		]);
 		const keysets = wallet.keyChain.getKeysets();
 		expect(keysets.map((k) => k.toMintKeyset())).toEqual(dummyKeysetResp.keysets);
-		const keys = wallet.keyChain.getCache().keys;
+		const keys = wallet.keyChain.getAllKeys();
 		expect(keys).toEqual(dummyKeysResp.keysets);
 		const keysetId = wallet.keyChain.getCheapestKeyset().id;
 		expect(keysetId).toBe('00bd033559de27d0');
@@ -364,6 +350,19 @@ describe('test info', () => {
 			],
 		});
 		expect(info).toEqual(new MintInfo(mintInfoResp));
+		expect(info.cache).toEqual(mintInfoResp);
+		expect(info.contact).toEqual(mintInfoResp.contact);
+		expect(info.description).toEqual(mintInfoResp.description);
+		expect(info.description_long).toEqual(mintInfoResp.description_long);
+		expect(info.name).toEqual(mintInfoResp.name);
+		expect(info.pubkey).toEqual(mintInfoResp.pubkey);
+		expect(info.nuts).toEqual(mintInfoResp.nuts);
+		expect(info.version).toEqual(mintInfoResp.version);
+		expect(info.motd).toEqual(mintInfoResp.motd);
+		expect(info.supportsNut04Description('bolt12', 'sat')).toBeFalsy();
+		expect(() => {
+			info.isSupported(1 as any);
+		}).toThrow(/nut is not supported/);
 	});
 	test('test info with deprecated contact field', async () => {
 		// mintInfoRespDeprecated is the same as mintInfoResp but with the contact field in the old format
@@ -392,7 +391,7 @@ describe('test info', () => {
 		);
 		const wallet = new Wallet(mint, { unit: 'sat' });
 		await wallet.loadMint();
-		const info = await wallet.getMintInfo();
+		const info = wallet.getMintInfo();
 
 		expect(info.supportsNut04Description('bolt11', 'sat')).toBe(true);
 		expect(info.supportsNut04Description('bolt11', 'usd')).toBe(true);
@@ -408,33 +407,86 @@ describe('test info', () => {
 			'sat-quote',
 		);
 
-		// Define a USD keyset for next test
-		const mintCache = {
-			keysets: [
-				{
-					id: '00bd033559de27d0',
-					unit: 'usd',
-					active: true,
-					input_fee_ppk: 0,
-					final_expiry: undefined,
-				},
-			] as MintKeyset[],
-			keys: [
-				{
-					id: '00bd033559de27d0',
-					unit: 'usd',
-					keys: {
-						'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-						'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-					},
-				},
-			] as MintKeys[],
-			unit: 'usd',
-			mintInfo: mintInfoResp,
-		};
-		const usdWallet = new Wallet(mint, mintCache);
-		await usdWallet.loadMint();
+		const usdWallet = new Wallet(mint, { unit: 'usd' });
+		const usdKeychainCache = { ...MINTCACHE.keychainCache, unit: 'usd' };
+		usdWallet.loadMintFromCache(MINTCACHE.mintInfo, usdKeychainCache);
+		// console.log('usdWallet', usdWallet.keyChain.cache);
 		await expect(usdWallet.createMintQuoteBolt11(1000, 'usd description')).resolves.toBeDefined();
+	});
+	test('supportsAmountless() correctly detects amountless option in melt methods', async () => {
+		const info = new MintInfo({
+			name: 'Test Mint',
+			pubkey: '0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679',
+			version: 'Nutshell/0.16.3',
+			contact: [
+				{ method: 'email', info: 'contact@me.com' },
+				{ method: 'twitter', info: '@me' },
+				{ method: 'nostr', info: 'npub1337' },
+			],
+			nuts: {
+				4: {
+					disabled: false,
+					methods: [
+						{
+							method: 'bolt11',
+							unit: 'sat',
+							min_amount: 0,
+							max_amount: 0,
+						},
+					],
+				},
+				5: {
+					disabled: false,
+					methods: [
+						{
+							method: 'bolt11',
+							unit: 'sat',
+							min_amount: 100,
+							max_amount: 10000,
+							options: { amountless: true },
+						},
+						{
+							method: 'bolt11',
+							unit: 'sat',
+							min_amount: 100,
+							max_amount: 10000,
+							options: { description: true },
+						},
+					],
+				},
+			},
+		});
+
+		expect(info.supportsAmountless('bolt11', 'sat')).toBe(true);
+
+		// method/unit not matching any amountless option → false
+		expect(info.supportsAmountless('onchain', 'sat')).toBe(false);
+
+		// same method/unit but missing options.amountless → false
+		const info2 = new MintInfo({
+			name: 'Test Mint',
+			pubkey: '0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679',
+			version: 'Nutshell/0.16.3',
+			contact: [
+				{ method: 'email', info: 'contact@me.com' },
+				{ method: 'twitter', info: '@me' },
+				{ method: 'nostr', info: 'npub1337' },
+			],
+			nuts: {
+				4: {
+					disabled: false,
+					methods: [{ method: 'bolt11', unit: 'sat', min_amount: 0, max_amount: 0 }],
+				},
+				5: {
+					disabled: false,
+					methods: [
+						{ method: 'bolt11', unit: 'sat', min_amount: 0, max_amount: 0 }, // no options.amountless
+					],
+				},
+			},
+		});
+
+		expect(info2.supportsAmountless('bolt11', 'sat')).toBe(false);
 	});
 });
 
@@ -448,7 +500,7 @@ describe('test fees', () => {
 					fee_reserve: 20,
 					payment_preimage: null,
 					state: 'UNPAID',
-				} as MeltQuoteResponse);
+				} as MeltQuoteBolt11Response);
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
@@ -818,7 +870,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const customFactory = (amount: number, keyset: MintKeys): OutputData => {
+		const customFactory = (amount: number, keyset: HasKeysetKeys): OutputData => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
 		const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });
@@ -1187,9 +1239,7 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const result = await wallet.mintProofsBolt11(1, '').catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		await expect(wallet.mintProofsBolt11(1, '')).rejects.toThrow('Invalid response from mint');
 	});
 });
 
@@ -1517,19 +1567,16 @@ describe('send', () => {
 		);
 		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
-
-		const result = await wallet
-			.send(1, [
+		await expect(
+			wallet.send(1, [
 				{
 					id: '00bd033559de27d0',
 					amount: 2,
 					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
 					C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 				},
-			])
-			.catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+			]),
+		).rejects.toThrow('Invalid response from mint');
 	});
 	test('test send with proofsWeHave', async () => {
 		server.use(
@@ -1727,7 +1774,7 @@ describe('send', () => {
 		const seed = hexToBytes(
 			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
 		);
-		const wallet = new Wallet(mint, { unit, bip39seed: seed });
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
 		await wallet.loadMint();
 
 		const overpayProofs = [
@@ -1749,9 +1796,255 @@ describe('send', () => {
 			keep: { type: 'deterministic', counter: 0 }, // Should auto-offset to send.length
 		};
 		const result = await wallet.send(3, overpayProofs, { includeFees: true }, outputConfig);
+		// Send:  2,1,2 keep: 2 => counter 4
+		expect(await wallet.counters.peekNext('00bd033559de27d0')).toBe(4);
 		// Assert no overlap (e.g., secrets are unique)
 		const allSecrets = [...result.keep, ...result.send].map((p) => p.secret);
 		expect(new Set(allSecrets).size).toBe(allSecrets.length); // No duplicates
+	});
+	test('prepareSwapToSend deterministic counters, manual and auto combos advance cursor and avoid reuse', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+
+		const proofs = [
+			{
+				id: keysetId,
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: keysetId,
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const cases: Array<{
+			name: string;
+			amount: number;
+			includeFees: boolean;
+			outputConfig: OutputConfig;
+		}> = [
+			{
+				name: 'send manual, keep auto',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 16 },
+					keep: { type: 'deterministic', counter: 0 },
+				},
+			},
+			{
+				name: 'send auto, keep manual',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 0 },
+					keep: { type: 'deterministic', counter: 25 },
+				},
+			},
+			{
+				name: 'send auto, keep auto',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 0 },
+					keep: { type: 'deterministic', counter: 0 },
+				},
+			},
+			{
+				name: 'send manual, keep manual (disjoint)',
+				amount: 3,
+				includeFees: true,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 50 },
+					keep: { type: 'deterministic', counter: 2 },
+				},
+			},
+			{
+				name: 'send manual, keep auto (no includeFees)',
+				amount: 3,
+				includeFees: false,
+				outputConfig: {
+					send: { type: 'deterministic', counter: 7 },
+					keep: { type: 'deterministic', counter: 0 },
+				},
+			},
+		];
+
+		for (const tc of cases) {
+			const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+			await wallet.loadMint();
+
+			const res = await wallet.prepareSwapToSend(
+				tc.amount,
+				proofs,
+				{ includeFees: tc.includeFees },
+				tc.outputConfig,
+			);
+
+			const sendLen = res.sendOutputs?.length ?? 0;
+			const keepLen = res.keepOutputs?.length ?? 0;
+
+			// No overlap, duplicates would imply reused counters for deterministic outputs
+			const allSecrets = [...(res.keepOutputs ?? []), ...(res.sendOutputs ?? [])].map(
+				(p) => p.secret,
+			);
+			expect(new Set(allSecrets).size).toBe(allSecrets.length);
+
+			const sendOT = tc.outputConfig.send;
+			const keepOT = tc.outputConfig.keep!; // cases all have keep
+
+			const sendIsManual = sendOT.type === 'deterministic' && sendOT.counter > 0;
+			const keepIsManual = keepOT.type === 'deterministic' && keepOT.counter > 0;
+
+			const manualEnds: number[] = [];
+			if (sendOT.type === 'deterministic' && sendOT.counter > 0 && sendLen > 0) {
+				manualEnds.push(sendOT.counter + sendLen);
+			}
+			if (keepOT.type === 'deterministic' && keepOT.counter > 0 && keepLen > 0) {
+				manualEnds.push(keepOT.counter + keepLen);
+			}
+
+			const maxManualEnd = manualEnds.length ? Math.max(...manualEnds) : 0;
+
+			const autoTotal = (sendIsManual ? 0 : sendLen) + (keepIsManual ? 0 : keepLen);
+
+			const expectedNext = maxManualEnd + autoTotal;
+
+			expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext);
+		}
+	});
+
+	test('prepareSwapToSend throws when manual deterministic ranges overlap', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		await wallet.loadMint();
+
+		const proofs = [
+			{
+				id: keysetId,
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: keysetId,
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const outputConfig: OutputConfig = {
+			send: { type: 'deterministic', counter: 5 },
+			keep: { type: 'deterministic', counter: 5 }, // same start, guaranteed overlap if both have outputs
+		};
+
+		await expect(
+			wallet.prepareSwapToSend(3, proofs, { includeFees: true }, outputConfig),
+		).rejects.toThrow('Manual counter ranges overlap');
+	});
+	test('manual counters advances cursor, then auto allocation must not reuse counters', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 600 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+
+		const proofs = [
+			{
+				id: keysetId,
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+			{
+				id: keysetId,
+				amount: 8,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		await wallet.loadMint();
+
+		// Op 1: manual send counter, auto keep counter
+		const out1: OutputConfig = {
+			send: { type: 'deterministic', counter: 50 },
+			keep: { type: 'deterministic', counter: 0 },
+		};
+		const res1 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out1);
+
+		const sendLen1 = res1.sendOutputs?.length ?? 0;
+		const keepLen1 = res1.keepOutputs?.length ?? 0;
+
+		expect(sendLen1).toBeGreaterThan(0);
+		expect(keepLen1).toBeGreaterThan(0);
+
+		const secrets1 = [...(res1.keepOutputs ?? []), ...(res1.sendOutputs ?? [])].map(
+			(p) => p.secret,
+		);
+
+		const send1 = out1.send;
+		if (send1.type !== 'deterministic') throw new Error('test setup: send1 must be deterministic');
+		const expectedNext1 = send1.counter + sendLen1 + keepLen1;
+		expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext1);
+
+		// Op 2: both auto, must allocate strictly after op1 cursor, no reuse
+		const out2: OutputConfig = {
+			send: { type: 'deterministic', counter: 0 },
+			keep: { type: 'deterministic', counter: 0 },
+		};
+		const res2 = await wallet.prepareSwapToSend(3, proofs, { includeFees: true }, out2);
+
+		const sendLen2 = res2.sendOutputs?.length ?? 0;
+		const keepLen2 = res2.keepOutputs?.length ?? 0;
+
+		expect(sendLen2).toBeGreaterThan(0);
+
+		const secrets2 = [...(res2.keepOutputs ?? []), ...(res2.sendOutputs ?? [])].map(
+			(p) => p.secret,
+		);
+
+		// No duplicates across both ops, duplicates would imply counter reuse
+		const allSecrets = [...secrets1, ...secrets2];
+		expect(new Set(allSecrets).size).toBe(allSecrets.length);
+
+		const expectedNext2 = expectedNext1 + sendLen2 + keepLen2;
+		expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext2);
 	});
 });
 
@@ -1799,7 +2092,7 @@ describe('deterministic', () => {
 			const hexSeed =
 				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-			const numberR = bytesToNumber(hexToBytes(r));
+			const numberR = Bytes.toBigInt(hexToBytes(r));
 			const decoder = new TextDecoder();
 
 			const data = OutputData.createSingleDeterministicData(
@@ -1835,7 +2128,7 @@ describe('deterministic', () => {
 			const hexSeed =
 				'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8';
 
-			const numberR = bytesToNumber(hexToBytes(r));
+			const numberR = Bytes.toBigInt(hexToBytes(r));
 			const decoder = new TextDecoder();
 
 			const data = OutputData.createSingleDeterministicData(
@@ -1876,7 +2169,7 @@ describe('WebSocket Updates', () => {
 		await wallet.loadMint();
 
 		const state = await new Promise(async (res, rej) => {
-			const callback = (p: MintQuoteResponse) => {
+			const callback = (p: MintQuoteBolt11Response) => {
 				if (p.state === MintQuoteState.PAID) {
 					res(p);
 				}
@@ -1915,7 +2208,7 @@ describe('WebSocket Updates', () => {
 		await wallet.loadMint();
 
 		const state = await new Promise(async (res, rej) => {
-			const callback = (p: MeltQuoteResponse) => {
+			const callback = (p: MeltQuoteBolt11Response) => {
 				console.log(p);
 				if (p.state === MeltQuoteState.PAID) {
 					res(p);
@@ -2350,7 +2643,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit, logger });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2398,7 +2691,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 12,
 			fee_reserve: 0,
@@ -2442,7 +2735,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2473,6 +2766,9 @@ describe('melt proofs', () => {
 		expect(response.change).toHaveLength(0);
 	});
 
+	/**
+	 * @deprecated
+	 */
 	test('test melt proofs with callback for blanks', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
@@ -2497,7 +2793,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2524,7 +2820,7 @@ describe('melt proofs', () => {
 		let capturedBlanks: MeltBlanks | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks;
+				capturedBlanks = blanks as MeltBlanks;
 			},
 		};
 		const response = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2534,9 +2830,8 @@ describe('melt proofs', () => {
 		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
 		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
 		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
-		expect(capturedBlanks!.payload.quote).toBe('test_melt_quote');
+		expect(capturedBlanks!.quote.quote).toBe('test_melt_quote');
 		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
-		expect(capturedBlanks!.payload.outputs).toHaveLength(2);
 
 		// Response still completes sync
 		expect(response.change).toHaveLength(2);
@@ -2575,7 +2870,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2602,7 +2897,7 @@ describe('melt proofs', () => {
 		let capturedBlanks: MeltBlanks | undefined;
 		const config: MeltProofsConfig = {
 			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks;
+				capturedBlanks = blanks as MeltBlanks;
 			},
 		};
 		const initialResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
@@ -2620,11 +2915,89 @@ describe('melt proofs', () => {
 		expect(completedResponse.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
 
+	test('custom OutputType is used as-is in prepareMelt', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+		const data: OutputData[] = [
+			new OutputData(
+				{
+					amount: 0,
+					B_: '0280999e99569db86fff252e9fe235d5ab0583c5e48e9a6d30b7159ddb2354a664',
+					id: '00bd033559de27d0',
+				},
+				BigInt('98121968294344218843445436832971329830403131138970027258925944949754607239194'),
+				Uint8Array.from([
+					50, 57, 102, 56, 100, 55, 54, 101, 102, 97, 54, 49, 54, 99, 51, 102, 97, 48, 57, 49, 99,
+					100, 55, 48, 98, 57, 57, 99, 98, 99, 53, 52, 51, 52, 56, 99, 57, 101, 51, 98, 101, 100,
+					48, 100, 56, 48, 52, 55, 101, 101, 101, 55, 55, 100, 55, 57, 55, 53, 50, 57, 52, 97, 56,
+					51,
+				]),
+			),
+			new OutputData(
+				{
+					amount: 0,
+					B_: '0366a12d8f642a9209b2a2b62dd46133d67c61395758760b037526d8ea6ebb0b58',
+					id: '00bd033559de27d0',
+				},
+				BigInt('91654934695124838981374963092507707719762522706574178484674131180622854636768'),
+				Uint8Array.from([
+					102, 102, 48, 100, 56, 97, 98, 53, 100, 101, 97, 97, 101, 51, 57, 55, 101, 50, 53, 102,
+					57, 51, 53, 55, 54, 100, 102, 51, 100, 102, 52, 102, 102, 97, 100, 50, 102, 52, 50, 98,
+					99, 53, 53, 97, 49, 54, 98, 102, 99, 53, 50, 51, 56, 51, 48, 56, 49, 50, 53, 102, 48, 97,
+					51, 101,
+				]),
+			),
+		];
+
+		const customOutputType: OutputType = {
+			type: 'custom',
+			data: data,
+		};
+		const meltQuote: MeltQuoteBolt11Response = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			payment_preimage: null,
+			unit: 'sat',
+		};
+
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+
+		const meltTxn = await wallet.prepareMelt(
+			'bolt11',
+			meltQuote,
+			proofsToSend,
+			undefined,
+			customOutputType,
+		);
+
+		// Verify that the custom OutputType was used as-is
+		expect(meltTxn.outputData.length).toEqual(2);
+		expect(meltTxn.outputData[0].blindedMessage).toEqual(customOutputType.data[0].blindedMessage);
+		expect(meltTxn.outputData[1].blindedMessage).toEqual(customOutputType.data[1].blindedMessage);
+	});
+
 	describe('melt, NUT-08 blanks', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt11)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
 			await wallet.loadMint();
-			const meltQuote: MeltQuoteResponse = {
+			const meltQuote: MeltQuoteBolt11Response = {
 				quote: 'test_melt_quote',
 				amount: 10,
 				fee_reserve: 3, // ceil(log2(3)) = 2 blanks expected
@@ -2688,7 +3061,7 @@ describe('melt proofs', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt12)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
 			await wallet.loadMint();
-			const meltQuote: Bolt12MeltQuoteResponse = {
+			const meltQuote: MeltQuoteBolt12Response = {
 				quote: 'test_melt_quote',
 				amount: 10,
 				fee_reserve: 3,
@@ -2773,7 +3146,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: Bolt12MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt12Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2814,7 +3187,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 3,
@@ -2838,9 +3211,9 @@ describe('melt proofs', () => {
 				C: 'C2',
 			},
 		];
-		const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend).catch((e) => e);
-
-		expect(result).toEqual(new Error('bad response'));
+		await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
+			'Invalid response from mint',
+		);
 	});
 
 	test('test melt proofs mismatch signatures', async () => {
@@ -2872,7 +3245,7 @@ describe('melt proofs', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteResponse = {
+		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
 			amount: 10,
 			fee_reserve: 2,
@@ -2949,8 +3322,13 @@ describe('bindKeyset & withKeyset', () => {
 
 		const current = wallet.keysetId;
 		const w2 = wallet.withKeyset(current);
-		expect(w2).not.toBe(wallet);
+		expect(w2).not.toBe(wallet); // new instance
 		expect(w2.keysetId).toBe(current);
+		expect(w2.getMintInfo()).toStrictEqual(wallet.getMintInfo()); // same mintinfo
+		expect(w2.keyChain).toStrictEqual(wallet.keyChain); // same keychain data
+		expect(() => {
+			w2.keyChain.getCheapestKeyset();
+		}).not.toThrow(); // smoke test
 
 		// mutate original binding; w2 should remain unchanged
 		const otherId = '00dd000000000000';
@@ -2984,7 +3362,7 @@ describe('bindKeyset & withKeyset', () => {
 		// Next call during loadMint(true) -> loses keys
 		spy.mockReturnValueOnce(ks(boundId, unit, false));
 
-		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys after refresh');
+		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys');
 	});
 });
 
@@ -2998,7 +3376,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3042,7 +3420,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3178,7 +3556,7 @@ describe('async melt preference header', () => {
 			request: invoice,
 			state: 'UNPAID',
 			fee_reserve: 0,
-		} as MeltQuoteResponse;
+		} as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',

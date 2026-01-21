@@ -20,7 +20,7 @@
 
 import dns from 'node:dns';
 import { vi, test, describe, expect } from 'vitest';
-import { secp256k1, schnorr } from '@noble/curves/secp256k1';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import {
 	Mint,
 	Wallet,
@@ -38,19 +38,17 @@ import {
 	OutputConfig,
 	OutputType,
 	P2PKBuilder,
-	ConsoleLogger,
-} from '../src';
-import ws from 'ws';
-import {
+	MintQuoteBaseResponse,
 	getDecodedToken,
 	getEncodedToken,
 	getEncodedTokenV4,
 	hexToNumber,
 	numberToHexPadded64,
 	sumProofs,
-} from '../src/utils';
-import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils';
-import { sha256 } from '@noble/hashes/sha2';
+} from '../src';
+import ws from 'ws';
+import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const mintUrl = 'http://localhost:3338';
@@ -66,7 +64,7 @@ vi.setConfig({
 });
 
 // Helper to wait until mint quote is paid
-async function untilMintQuotePaid(wallet, quote) {
+async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteBaseResponse) {
 	try {
 		await wallet.on.onceMintPaid(quote.quote, {
 			timeoutMs: 6_000,
@@ -264,11 +262,11 @@ describe('mint api', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 		const privKeyAlice = secp256k1.utils.randomSecretKey();
-		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
 		await untilMintQuotePaid(wallet, request);
@@ -294,6 +292,40 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
+	test('send and receive p2pk with SIG_ALL', async () => {
+		const wallet = new Wallet(mintUrl, { unit });
+		await wallet.loadMint();
+		const privKeyAlice = secp256k1.utils.randomSecretKey();
+		// const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		const privKeyBob = secp256k1.utils.randomSecretKey();
+		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
+		// Mint some proofs
+		const request = await wallet.createMintQuoteBolt11(128);
+		await untilMintQuotePaid(wallet, request);
+		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
+		// Send them P2PK locked to Bob
+		const p2pk = new P2PKBuilder().addLockPubkey(pubKeyBob).sigAll().toOptions();
+		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pk).includeFees().run();
+		expectNUT10SecretDataToEqual(send, pubKeyBob);
+		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
+		const txn = await wallet.prepareSwapToReceive(encoded);
+		// Try and receive them with Alice's secret key (should fail)
+		const result = await wallet.completeSwap(txn, bytesToHex(privKeyAlice)).catch((e) => e);
+		expect(result).toBeInstanceOf(MintOperationError);
+		const e = result as MintOperationError;
+		expect(e.name).toBe('MintOperationError');
+		expect([11000, 20008]).toContain(e.code); // nutshell + cdk
+		expect(e.message.toLowerCase()).toMatch(/no witness|signatures not provided/); // nutshell + cdk
+		// Try and receive them with Bob's secret key (should suceed)
+		const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
+		expect(
+			keep.reduce((curr, acc) => {
+				return curr + acc.amount;
+			}, 0),
+		).toBe(64);
+	});
 	test('send and receive p2pk with additional tags', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
@@ -305,7 +337,7 @@ describe('mint api', () => {
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
 		await untilMintQuotePaid(wallet, request);
-		const mintedProofs = await wallet.mintProofs(128, request.quote);
+		const mintedProofs = await wallet.mintProofsBolt11(128, request.quote);
 
 		// Send them P2PK locked to Alice, with extra tags
 		const p2pk = new P2PKBuilder()
@@ -342,15 +374,15 @@ describe('mint api', () => {
 		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
-		const privKeyAlice = secp256k1.utils.randomSecretKey();
-		const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
+		// const privKeyAlice = secp256k1.utils.randomSecretKey();
+		// const pubKeyAlice = bytesToHex(secp256k1.getPublicKey(privKeyAlice));
 
 		const privKeyBob = secp256k1.utils.randomSecretKey();
 		const pubKeyBob = bytesToHex(secp256k1.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
-		console.log('privKeyAlice:', bytesToHex(privKeyAlice));
-		console.log('privKeyBob:', bytesToHex(privKeyBob));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
+		// console.log('privKeyAlice:', bytesToHex(privKeyAlice));
+		// console.log('privKeyBob:', bytesToHex(privKeyBob));
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
@@ -360,14 +392,14 @@ describe('mint api', () => {
 		// Send them P2BK locked to Bob
 		const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
 		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
-		console.log('P2BK SEND', send);
+		// console.log('P2BK SEND', send);
 		expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
-		console.log('P2BK token', encoded);
+		// console.log('P2BK token', encoded);
 
 		// Try and receive them with Bob's secret key (should suceed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
-		console.log('P2BK RECEIVE', proofs);
+		// console.log('P2BK RECEIVE', proofs);
 		expect(
 			proofs.reduce((curr, acc) => {
 				return curr + acc.amount;
@@ -376,17 +408,17 @@ describe('mint api', () => {
 	});
 
 	test('send and receive p2bk SCHNORR', async () => {
-		const wallet = new Wallet(mintUrl, { unit, logger: new ConsoleLogger('debug') });
+		const wallet = new Wallet(mintUrl, { unit });
 		await wallet.loadMint();
 
-		const privKeyAlice = schnorr.utils.randomSecretKey();
-		const pubKeyAlice = '02' + bytesToHex(schnorr.getPublicKey(privKeyAlice));
+		// const privKeyAlice = schnorr.utils.randomSecretKey();
+		// const pubKeyAlice = '02' + bytesToHex(schnorr.getPublicKey(privKeyAlice));
 		const privKeyBob = schnorr.utils.randomSecretKey();
 		const pubKeyBob = '02' + bytesToHex(schnorr.getPublicKey(privKeyBob));
-		console.log('pubKeyAlice:', pubKeyAlice);
-		console.log('pubKeyBob:', pubKeyBob);
-		console.log('privKeyAlice:', bytesToHex(privKeyAlice));
-		console.log('privKeyBob:', bytesToHex(privKeyBob));
+		// console.log('pubKeyAlice:', pubKeyAlice);
+		// console.log('pubKeyBob:', pubKeyBob);
+		// console.log('privKeyAlice:', bytesToHex(privKeyAlice));
+		// console.log('privKeyBob:', bytesToHex(privKeyBob));
 
 		// Mint some proofs
 		const request = await wallet.createMintQuoteBolt11(128);
@@ -396,14 +428,14 @@ describe('mint api', () => {
 		// Send them P2BK locked to Bob
 		const p2pkOpts = new P2PKBuilder().addLockPubkey(pubKeyBob).blindKeys().toOptions();
 		const { send } = await wallet.ops.send(64, mintedProofs).asP2PK(p2pkOpts).run();
-		console.log('P2BK SEND', send);
+		// console.log('P2BK SEND', send);
 		expectBlindedSecretDataToEqualECDH(send, privKeyBob, pubKeyBob);
 		const encoded = getEncodedToken({ mint: mintUrl, proofs: send });
-		console.log('P2BK token', encoded);
+		// console.log('P2BK token', encoded);
 
 		// Try and receive them with Bob's secret key (should suceed)
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
-		console.log('P2BK RECEIVE', proofs);
+		// console.log('P2BK RECEIVE', proofs);
 
 		expect(
 			proofs.reduce((curr, acc) => {
@@ -411,7 +443,6 @@ describe('mint api', () => {
 			}, 0),
 		).toBe(63);
 	});
-
 	test('mint and melt p2pk', async () => {
 		const invoice =
 			'lnbc20u1p5tnrdtsp5xaus66jztyj4f4m9wuza7ay9994d5dals6dluvw80dduhhulgxvspp5gsdp48uz9x20etle8j7muweujzxd2w4ay2v6cwzwjy7pff44r4gqhp5jujtt4hgd57c5hskstzkjkxqtfmctfvpfc3wmt3h42a9f2p9sqcsxq9z0rgqcqpnrzjqvxr759n8jl5226n47zw6325pyffxqlpyrjh9ztswvnglhrmtcsfzrw8mqqqf2cqqqqqqqlgqqqqzhsqjq9qxpqysgq2rtnpkqzmwmuf6cw653s63552qf0hgst6xzdywkgekhz836ayrz572cm72r7ejj7w0ktgldlwfu33fpr9dxywx5wqy4tte7smpa9q4gqaaydvv';
@@ -433,6 +464,32 @@ describe('mint api', () => {
 		const signedProofs = wallet.signP2PKProofs(proofs, bytesToHex(privKeyBob));
 		const response = await wallet.meltProofsBolt11(meltRequest, signedProofs);
 		expect(response).toBeDefined();
+		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
+	});
+	test('mint and melt p2pk SIG_ALL', async () => {
+		const invoice =
+			'lnbc200n1p530wtspp59anj2yqy6v3695js9ny96upv38unwz7g44p6z75wm5cqufe2dy5qdqqcqzzsxqyz5vqsp5qzr39dz38km5xu2q7yyh0d5g4vfmwlxnvyklnth4h456gyfx7lsq9qxpqysgqx6fw02a2mfvf6eldlgajer9tz4f39clsstzhs37s0r3u7c5mdl59q9qnuqrt7wqje4uxd7lzjas9vz7g0xkc3kk3an7cj99609gy9ksq3qgwdt';
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+		const privKeyBob = secp256k1.utils.randomSecretKey();
+		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
+		const mintRequest = await wallet.createMintQuoteBolt11(50);
+		await untilMintQuotePaid(wallet, mintRequest);
+		const proofs = await wallet.ops
+			.mintBolt11(50, mintRequest.quote)
+			.asP2PK({
+				pubkey: bytesToHex(pubKeyBob),
+				sigFlag: 'SIG_ALL',
+			})
+			.run();
+		// console.log('input proofs', proofs);
+		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
+		const fee = meltRequest.fee_reserve;
+		expect(fee).toBeGreaterThan(0);
+		const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
+		const response = await wallet.completeMelt(melt, bytesToHex(privKeyBob));
+		expect(response).toBeDefined();
+		// console.log('melt response', response);
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
 	test('mint deterministic', async () => {
@@ -517,10 +574,10 @@ describe('mint api', () => {
 			wallet.on.mintQuotePaid(quote.quote, res, rej);
 		});
 		const proofs = await wallet.mintProofsBolt11(63, quote.quote);
-		console.log(
-			'proofs',
-			proofs.map((p) => p.amount),
-		);
+		// console.log(
+		// 	'proofs',
+		// 	proofs.map((p) => p.amount),
+		// );
 		await new Promise<ProofState>((res) => {
 			wallet.on.proofStateUpdates(
 				proofs,
@@ -581,7 +638,7 @@ describe('dleq', () => {
 		const mintRequest = await wallet.createMintQuoteBolt11(8);
 		await untilMintQuotePaid(wallet, mintRequest);
 		const proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
-		const { send } = wallet.sendOffline(4, proofs, { requireDleq: true });
+		const { send } = wallet.sendOffline(8, proofs, { requireDleq: true });
 		send.forEach((p) => {
 			expect(p.dleq).toBeDefined();
 			expect(p.dleq?.r).toBeDefined();
@@ -593,6 +650,7 @@ describe('dleq', () => {
 		const encodedToken = getEncodedTokenV4(token);
 		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 		expect(newProofs).toBeDefined();
+		expect(sumProofs(newProofs)).toEqual(7); // after 1 sat fee
 	});
 	test('send strip dleq', async () => {
 		const wallet = new Wallet(mintUrl);
@@ -825,8 +883,8 @@ describe('Keep Vector and Reordering', () => {
 			send: { type: 'random', denominations: testSendAmounts },
 		};
 		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
-		console.log(send.map((p) => p.amount));
-		console.log(keep.map((p) => p.amount));
+		// console.log(send.map((p) => p.amount));
+		// console.log(keep.map((p) => p.amount));
 		send.forEach((p, i) => expect(p.amount).toBe(testSendAmounts[i]));
 		keep.forEach((p, i) => expect(p.amount).toBe(expectedKeep[i]));
 	});
@@ -844,14 +902,14 @@ describe('Keep Vector and Reordering', () => {
 			send: { type: 'random', denominations: testSendAmounts },
 		};
 		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
-		console.log(
-			'send',
-			send.map((p) => p.amount),
-		);
-		console.log(
-			'keep',
-			keep.map((p) => p.amount),
-		);
+		// console.log(
+		// 	'send',
+		// 	send.map((p) => p.amount),
+		// );
+		// console.log(
+		// 	'keep',
+		// 	keep.map((p) => p.amount),
+		// );
 		send.forEach((p, i) => expect(p.amount).toBe(expectedSend[i]));
 		keep.forEach((p, i) => expect(p.amount).toBe(testKeepAmounts[i]));
 	});

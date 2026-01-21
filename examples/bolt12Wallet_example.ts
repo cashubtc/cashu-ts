@@ -1,7 +1,7 @@
 import dns from 'node:dns';
-import { Wallet, MintQuoteState, Bolt12MintQuoteResponse, Proof, sumProofs } from '../src';
-import { secp256k1 } from '@noble/curves/secp256k1';
-import { bytesToHex, randomBytes } from '@noble/hashes/utils';
+import { Wallet, MintQuoteState, MintQuoteBolt12Response, Proof, sumProofs } from '../src';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -85,7 +85,7 @@ const waitForMintQuote = async (wallet: Wallet, quoteId: string): Promise<Proof[
 		const quote = await wallet.checkMintQuoteBolt11(quoteId);
 
 		if (quote.state === MintQuoteState.PAID) {
-			return await wallet.mintProofs(INITIAL_MINT_AMOUNT, quoteId);
+			return await wallet.mintProofsBolt11(INITIAL_MINT_AMOUNT, quoteId);
 		} else if (quote.state === MintQuoteState.ISSUED) {
 			throw new Error('Quote has already been issued');
 		}
@@ -134,7 +134,7 @@ const payBolt12Offer = async (
 
 const mintFromBolt12Quote = async (
 	wallet: Wallet,
-	quote: Bolt12MintQuoteResponse,
+	quote: MintQuoteBolt12Response,
 ): Promise<Proof[]> => {
 	const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);
 	const availableToMint = updatedQuote.amount_paid - updatedQuote.amount_issued;

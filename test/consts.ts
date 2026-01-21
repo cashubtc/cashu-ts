@@ -1,3 +1,64 @@
+import { KeyChain, KeyChainCache, MintKeys, MintKeyset } from '../src';
+
+export const MINTINFORESP = JSON.parse(
+	'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. It uses a FakeWallet, all your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[{"method":"email","info":"contact@me.com"},{"method":"twitter","info":"@me"},{"method":"nostr","info":"npub1337"}],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","icon_url":"https://image.nostr.build/46ee47763c345d2cfa3317f042d332003f498ee281fb42808d47a7d3b9585911.png","time":1731684933,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","options":{"description":true}},{"method":"bolt11","unit":"usd","options":{"description":true}},{"method":"bolt11","unit":"eur","options":{"description":true}},{"method":"bolt12","unit":"sat","options":{"description":true}},{"method":"bolt12","unit":"usd","options":{"description":true}},{"method":"bolt12","unit":"eur","options":{"description":true}}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"},{"method":"bolt11","unit":"eur"},{"method":"bolt12","unit":"sat"},{"method":"bolt12","unit":"usd"},{"method":"bolt12","unit":"eur"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"eur","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt12","unit":"sat","commands":["bolt12_melt_quote","proof_state","bolt12_mint_quote"]},{"method":"bolt12","unit":"usd","commands":["bolt12_melt_quote","proof_state","bolt12_mint_quote"]},{"method":"bolt12","unit":"eur","commands":["bolt12_melt_quote","proof_state","bolt12_mint_quote"]}]}}}',
+);
+
+/**
+ * Returns an object with keychain/mint data for tests.
+ *
+ * {mintUrl, unit, keysets, keys, mintinfo, keychainCache}
+ */
+export const MINTCACHE = (() => {
+	const keysets = [
+		{
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			active: true,
+			input_fee_ppk: 0,
+			final_expiry: undefined,
+		},
+		{
+			id: '00bd033559de27d0',
+			unit: 'usd',
+			active: true,
+			input_fee_ppk: 0,
+			final_expiry: undefined,
+		},
+	] as MintKeyset[];
+	const keys = [
+		{
+			id: '00bd033559de27d0',
+			unit: 'sat',
+			keys: {
+				'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			},
+		},
+		{
+			id: '00bd033559de27d0',
+			unit: 'usd',
+			keys: {
+				'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+				'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+			},
+		},
+	] as MintKeys[];
+	const unit = 'sat';
+	const mintUrl = 'http://localhost:3338';
+	const mintInfo = MINTINFORESP;
+	const keychainCache: KeyChainCache = KeyChain.mintToCacheDTO(unit, mintUrl, keysets, keys);
+
+	return {
+		mintUrl,
+		unit,
+		keysets,
+		keys,
+		mintInfo,
+		keychainCache,
+	};
+})();
+
 export const PUBKEYS = {
 	'1': '02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104',
 	'2': '03b0f36d6d47ce14df8a7be9137712c42bcdd960b19dd02f1d4a9703b1f31d7513',
@@ -63,4 +124,71 @@ export const PUBKEYS = {
 	'2305843009213693952': '0366c51883c60f37f3a74d05e725791efd98773eb143a98aa8808915b0ffe23c6d',
 	'4611686018427387904': '020d25d8c67e59395983569cf5a7b86f13cccf95a7b4d374bc40ffac04c6437b86',
 	'9223372036854775808': '023c84c0895cc0e827b348ea0a62951ca489a5e436f3ea7545f3c1d5f1bea1c866',
+};
+
+export const TEST_PRIV_KEY_PUBS = {
+	'1': '02d1c7f1ddcfca91d424a703045caaa0904f95ff1ab35ce87c6d6c2ed2cac188be',
+	'2': '03cc057a096fcf4df0d4b6939f1d710381e0ff5a90cf6746db5753a2f61765a2d8',
+	'4': '0356e3c36e44f040f63534de5e48f223eef033c7240ac6d320dd80ecf1f0fda388',
+	'8': '03f27486f94e25a39db231bcb09598d6158883befa14ca78b73bf3f29d1c92468a',
+	'16': '034b58d19018e6a37ec4976c12726428bde099a9e80a381966ccea542bc0c7a5f7',
+	'32': '039b45640085db5a2dea64c79210a387c8246c6ec4673717b7ceca959e38ba0ca6',
+	'64': '0252100214bd5e5973d7969eae55998314136ba80de1810fc94e891b4b49695316',
+	'128': '02fc612139450502395bf31ac1d17bea5f17cae2ff312f99e075eda1fe86e46128',
+	'256': '024d9fde17585af4b4b77825f92fa131a73e1a14024b4c00d17e93b5b9434e17c0',
+	'512': '0388272ed1670895f95d620739dd12be9f561e387c16924873fa9c6d616e25e8a3',
+	'1024': '0291acc2765a09a0a5873646c35b2128d1c340bb39934ab5717815be0b3cbab166',
+	'2048': '020c7526ff808012cfda30fbe39704216bdf53b0807c4a1ec6f48ecd7824a20428',
+	'4096': '03f9743bd7942468236562e998090d69b094f5bec5cd00e0c237d55ef4ae0689ea',
+	'8192': '026c18e37d31c9af548d8ac1dbf568567c129bcb0a909c473b87fccc51a72af595',
+	'16384': '0286b8a962effd7ab6315c9ebbafb4e064af00b1a4d5436839221afba0a8d41e48',
+	'32768': '0322c065fa8b3f10e05c5debb5e67da16e78ea2153d4f32a8d1f2786ec87d32cce',
+	'65536': '023b7749a2cb78edb7801e5c76693e9ab8a4a379c084ec5481da48f7b7a0f52ed0',
+	'131072': '025a2780d38219567c57dd9cc67d530fedadafa2a3edbfa3bc04be5beeadefcbda',
+	'262144': '022f9511c5454805cb6d68cf065514dc4a438824d5eefde6e6b9d4da78f165d818',
+	'524288': '02ddcb07dfed79841b609cf3a024892ff3f4364f6971452e7dc2fa9ac5e57d3cea',
+	'1048576': '021881501c2cdb8ae888d5eb084eda0e84eb23d5e90e8e76f6fab24293af413d0a',
+	'2097152': '039d5e0a5882f8e9abb910ae0f6688beaf6671da2d594b12a31f8ff58fd37c7cca',
+	'4194304': '03c19a1968544a47eec487706f26075e980abdbe47fe65da95350c6de1c2555f40',
+	'8388608': '035ce8a4344fb7990639e3c352cdff563356f7103a3b4597417e9213650b0e806c',
+	'16777216': '030b640636d63aaa1c02a60b66296c6e6b3897829c8bdea0d16e8d07f167fb420b',
+	'33554432': '0315160b5c73ae4c38f234a39206674746b40930a5f4522e66c130f69992ff62fe',
+	'67108864': '031e08bc834387adc788a3b7f85487b3cbb97bfea35405bf70825dfb7327155e15',
+	'134217728': '03597e4b95ab04ebfb2c7eee7738e1c3ebc075a0c87bb601937be1e2320b3ab4e5',
+	'268435456': '02f9a7c9cfdd87bc264f68f67d61438227fa2d6510c191a48e2b48ba165d664816',
+	'536870912': '03e09863c8128eaf2cb440875807ff123ad11d60e86fc5d5571afad8dbbf561388',
+	'1073741824': '0301a9d86f654842c9dc7c4bd4d7e71f3de2103d792d16b0521e3f5fcfc69b4cf9',
+	'2147483648': '02b4e5b49099cf57094709c2470c0d5a1eb69f3908e4bfb6cdb443ec23a7998119',
+	'4294967296': '024626ce89594a1c95e96b1d89f8a6f7660971eaa55ac12ce195887e243e6caed9',
+	'8589934592': '03cfdb4e1d2abce4101ad08de3251590e923d7d0b95ded80c23145bc60fc052e77',
+	'17179869184': '035932f44809e58b410ba080f51c0010f9c45d9472c3aa43c01ee8d1cbd2d5d27c',
+	'34359738368': '03f24263422a124f204f70461bb86db90fd3fec06ab65d3f4158a752c750aaea7b',
+	'68719476736': '03669823b45cb347589010830654d9dc5bdb6fcedc2538f29559cd504946101ef8',
+	'137438953472': '026f737bc4328158aa5039a32f031f6f0ceec4bc8fefa3140a16ba83e7b351fff4',
+	'274877906944': '0304bb98a43303d3ad7a598e92a33f36f228651af7aea214f4c9e8acf59116572a',
+	'549755813888': '03f035b0ff3041511ca2ff8b1bdc58aca56843f65a49608ea00b83a38028a8ceef',
+	'1099511627776': '023c23e21635730fae4c81707e6abbdf9b96671848cfdbff419de4cf084f5edb5f',
+	'2199023255552': '03dde1be251845196398f5b146159da510f9db3004394cfed50a97e0d5c2c93046',
+	'4398046511104': '031db467f84df02a8dedf3fb129b2770efe6bc7614c9d7e4864cc932015e295045',
+	'8796093022208': '027883cef3e250b3da128445854ffe769b139a664e335b431cff292994fa7d482e',
+	'17592186044416': '02a7747adb0c103c4802cfe2c2637904353d354ae0f4a2ba09ed546e6bcbfeb042',
+	'35184372088832': '03a2233dd08b8ddce663a52cba36eb545ec622c35e8d7761ee20b306392d6d3aaa',
+	'70368744177664': '0356a17a777db61f4008dac3a3829740c75270b2579b59aa34ddb3749213c2bdef',
+	'140737488355328': '0203c6e9d35001014716bdbfa3dd2f658302ce00adf9b40660d7893486fd2ae013',
+	'281474976710656': '03b1a6822f5abb6154b73ef770e055b0da84cef8d28ecd9e38c82d6d9bde498fe2',
+	'562949953421312': '0260a5558f77e8dd1d54bcc0fdd08e502d197b983c12d9e41fdbcb392dad504106',
+	'1125899906842624': '03da6735efabc22b362c185850d333bd8e6805cb1245126a87600cc7d22adc753d',
+	'2251799813685248': '02035081e04d9032d3eb270ad4b63096202e6f27da4c38ca6e4f1666e4e733475e',
+	'4503599627370496': '02d5405911214631563cad150f788597fbd4b6d213dc7abfdcf29d65f90bf5656c',
+	'9007199254740992': '0315f6720e22c78c2e385a13230caf8a7cf154bf49f96de5d8a7851907efc7fd26',
+	'18014398509481984': '02b70375448f4223ca8b6f4aae4d807f9b067580165c5a485b2704e28769c17306',
+	'36028797018963968': '022c5e6882a90ec6f71feb16c991dfe092939d2653323031118f0c8db36ca01621',
+	'72057594037927936': '0361068b0ba064f8172d7cf32656fe0ab07676f3f82e846925e045779fc2596abe',
+	'144115188075855872': '03f6bf63129134a674ecfcd15d74c0752e16a50d83558bef476dbe8614fd07595f',
+	'288230376151711744': '025e840abbc82cef1118e94d5978451eecd259d054548a3112163a246e1e6f00a1',
+	'576460752303423488': '03caee52ec40165d5229c9553279b0d3e425364dd6d2db952026e7dc00fa726384',
+	'1152921504606846976': '03d1b72879be99991ad91874c7e7b4427412046b5a4b4e43cee15c9bdad69945f8',
+	'2305843009213693952': '020610228ba1688231b315043e1bc2f7cc47693a3424d5cd99f7c0fc0cd00e0b74',
+	'4611686018427387904': '03081edb26708acb5ce633d5dd5b64d061766d85805ba33cbc5d963821c1cc07f0',
+	'9223372036854775808': '035c602fbc798cdb2fe4354a6694c754e368819e5352f7b697f076a9fe82dbe954',
 };

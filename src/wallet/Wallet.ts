@@ -6,7 +6,7 @@
  */
 
 import {
-	type MeltBlanks,
+	type MeltPreview,
 	type OutputType,
 	type OutputConfig,
 	type SendConfig,
@@ -14,19 +14,13 @@ import {
 	type ReceiveConfig,
 	type MintProofsConfig,
 	type MeltProofsConfig,
-	type MeltPayload,
-	type MeltQuotePayload,
-	type MintPayload,
-	type MintQuotePayload,
-	type MPPOption,
-	type MeltQuoteOptions,
 	type SwapTransaction,
-	type Bolt12MintQuotePayload,
-	type SwapPayload,
 	type MeltProofsResponse,
 	type SendResponse,
 	type RestoreConfig,
 	type SecretsPolicy,
+	type SwapPreview,
+	type MeltBlanks,
 } from './types';
 import {
 	type CounterSource,
@@ -35,7 +29,16 @@ import {
 	type CounterRange,
 } from './CounterSource';
 
-import { signMintQuote, signP2PKProofs, hashToCurve } from '../crypto';
+import {
+	signMintQuote,
+	signP2PKProofs as cryptoSignP2PKProofs,
+	hashToCurve,
+	isP2PKSigAll,
+	buildP2PKSigAllMessage,
+	assertSigAllInputs,
+	buildLegacyP2PKSigAllMessage,
+	buildInterimP2PKSigAllMessage,
+} from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
 import { KeyChain } from './KeyChain';
@@ -50,31 +53,35 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
-import { CheckStateEnum, type ProofState } from '../model/types/proof-state';
-import type { MintKeys, MintKeyset } from '../model/types/keyset';
-
-// mint wire DTOs and enums
+import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
+import type { KeyChainCache, MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
 	GetInfoResponse,
-	MintQuoteResponse,
-	MeltQuoteResponse,
-	PartialMintQuoteResponse,
-	PartialMeltQuoteResponse,
-	LockedMintQuoteResponse,
-	Bolt12MintQuoteResponse,
-	Bolt12MeltQuoteResponse,
-} from '../mint/types';
+	MeltRequest,
+	MeltQuoteBaseResponse,
+	MeltQuoteBolt11Request,
+	MeltQuoteBolt11Response,
+	MeltQuoteBolt12Response,
+	MintRequest,
+	MintQuoteBolt11Response,
+	MintQuoteBolt12Response,
+	MintQuoteBolt11Request,
+	MintQuoteBolt12Request,
+	SwapRequest,
+} from '../model/types';
 
 // model helpers
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 
 import {
+	validateAmount,
 	getDecodedToken,
 	getKeepAmounts,
 	hasValidDleq,
 	splitAmount,
 	sumProofs,
 	sanitizeUrl,
+	invoiceHasAmountInHRP,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
 
@@ -103,10 +110,6 @@ class Wallet {
 	 */
 	public readonly mint: Mint;
 	/**
-	 * KeyChain instance - contains wallet keysets/keys.
-	 */
-	public readonly keyChain: KeyChain;
-	/**
 	 * Entry point for the builder.
 	 *
 	 * @example
@@ -133,6 +136,7 @@ class Wallet {
 	 * Developer-friendly counters API.
 	 */
 	public readonly counters: WalletCounters;
+	private _keyChain: KeyChain;
 	private _seed: Uint8Array | undefined = undefined;
 	private _unit = 'sat';
 	private _mintInfo: MintInfo | undefined = undefined;
@@ -158,6 +162,9 @@ class Wallet {
 	 * Splitting, `denominationTarget` guides proof splits, default is 3. Override coin selection with
 	 * `selectProofs` if needed. Logging defaults to a null logger.
 	 *
+	 * @remarks
+	 * The options.keys, options.keysets, options.mintInfo options are deprecated. Use
+	 * wallet.loadMintFromCache() after init to load cached mint data.
 	 * @param mint Mint instance or URL.
 	 * @param options Optional settings.
 	 * @param options.unit Wallet unit, default 'sat'.
@@ -168,9 +175,9 @@ class Wallet {
 	 *   precedence over counterInit. Use when you need persistence across processes or devices.
 	 * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
 	 *   counterSource is also provided.
-	 * @param options.keys Cached keys for this unit, only used when `keysets` is also provided.
-	 * @param options.keysets Cached keysets for this unit, only used when `keys` is also provided.
-	 * @param options.mintInfo Optional cached mint info.
+	 * @param options.keys DEPRECATED: Use `wallet.loadMintFromCache` after init.
+	 * @param options.keysets DEPRECATED: Use `wallet.loadMintFromCache` after init.
+	 * @param options.mintInfo DEPRECATED: Use `wallet.loadMintFromCache` after init.
 	 * @param options.denominationTarget Target proofs per denomination, default 3.
 	 * @param options.selectProofs Custom proof selection function.
 	 * @param options.logger Logger instance, default null logger.
@@ -185,8 +192,17 @@ class Wallet {
 			secretsPolicy?: SecretsPolicy; // optional, auto
 			counterSource?: CounterSource; // optional, otherwise ephemeral
 			counterInit?: Record<string, number>; // optional, starting "next" per keyset
+			/**
+			 * @deprecated Use `wallet.loadMintFromCache` after init.
+			 */
 			keys?: MintKeys[] | MintKeys;
+			/**
+			 * @deprecated Use `wallet.loadMintFromCache` after init.
+			 */
 			keysets?: MintKeyset[];
+			/**
+			 * @deprecated Use `wallet.loadMintFromCache` after init.
+			 */
 			mintInfo?: GetInfoResponse;
 			denominationTarget?: number;
 			selectProofs?: SelectProofs; // optional override
@@ -220,9 +236,21 @@ class Wallet {
 			this._counterSource = new EphemeralCounterSource(options?.counterInit);
 		}
 		this.counters = new WalletCounters(this._counterSource);
-		this.keyChain = new KeyChain(this.mint, this._unit, options?.keysets, options?.keys);
-		this._mintInfo = options?.mintInfo ? new MintInfo(options.mintInfo) : this._mintInfo;
+		this._keyChain = new KeyChain(this.mint, this._unit);
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
+
+		// TODO: Deprecated cache init - to be removed with deprecated constructor options
+		if (options?.keysets && options?.keys && options?.mintInfo) {
+			const allKeys = Array.isArray(options.keys) ? options.keys : [options.keys];
+			// Convert Mint DTOs to KeyChainCache
+			const cache: KeyChainCache = KeyChain.mintToCacheDTO(
+				this._unit,
+				this.mint.mintUrl,
+				options.keysets,
+				allKeys,
+			);
+			this.loadMintFromCache(options.mintInfo, cache);
+		}
 	}
 
 	// Convenience wrappers for "log and throw"
@@ -252,8 +280,26 @@ class Wallet {
 	}
 
 	/**
-	 * Load mint information, keysets, and keys. Must be called before using other methods.
+	 * Asserts amount is a positive, safe integer.
 	 *
+	 * @param amount To check.
+	 * @param op Caller method name (or other identifier) for debug.
+	 * @throws If not.
+	 */
+	private assertAmount(amount: unknown, op: string): asserts amount is number {
+		try {
+			validateAmount(amount, false);
+		} catch (e) {
+			this.fail((e as Error).message, { op, amount });
+		}
+	}
+
+	/**
+	 * Load mint information, keysets, and keys.
+	 *
+	 * @remarks
+	 * Must be called before using other methods, unless loading mint from cache. See:
+	 * `loadMintFromCache`.
 	 * @param forceRefresh If true, re-fetches data even if cached.
 	 * @throws If fetching mint info, keysets, or keys fails.
 	 */
@@ -271,23 +317,59 @@ class Wallet {
 		}
 
 		// Load KeyChain
-		promises.push(this.keyChain.init(forceRefresh).then(() => null));
+		promises.push(this._keyChain.init(forceRefresh).then(() => null));
 
 		await Promise.all(promises);
-		this._logger.debug('KeyChain', { keychain: this.keyChain.getCache() });
+		this.finishInit();
+	}
 
+	/**
+	 * Load mint information, keysets, and keys from cached data.
+	 *
+	 * @remarks
+	 * Use this when you already have cached mint info and keychain cache and want to avoid network
+	 * calls.
+	 *
+	 * The `cache` argument should usually come from `wallet.keyChain.cache`.
+	 */
+	loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
+		this._mintInfo = new MintInfo(mintInfo);
+		this._keyChain.loadFromCache(cache);
+		this.finishInit();
+	}
+
+	/**
+	 * Finishes wiring up the wallet instance and checks we are "Go for launch".
+	 */
+	private finishInit(): void {
+		// Go Keychain?
+		const cheapestId = this._keyChain.getCheapestKeyset().id;
+		this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
+
+		// Bind the cheapest keyset if needed
 		if (this._boundKeysetId === PENDING_KEYSET_ID) {
-			this._boundKeysetId = this.keyChain.getCheapestKeyset().id;
+			this._boundKeysetId = cheapestId;
 		} else {
-			// Ensure the bound id is still present and keyed
-			const k = this.keyChain.getKeyset(this._boundKeysetId);
-			this.failIf(!k.hasKeys, 'Wallet keyset has no keys after refresh', { keyset: k.id });
+			const k = this._keyChain.getKeyset(this._boundKeysetId);
+			this.failIf(!k.hasKeys, 'Wallet keyset has no keys', { keyset: k.id });
 		}
+
+		// Go Mintinfo?
+		this.getMintInfo();
 	}
 
 	// -----------------------------------------------------------------
 	// Section: Getters
 	// -----------------------------------------------------------------
+
+	/**
+	 * Get the wallet's KeyChain.
+	 *
+	 * @returns The Keychain.
+	 */
+	get keyChain(): KeyChain {
+		return this._keyChain;
+	}
 
 	/**
 	 * Get the wallet's unit.
@@ -307,7 +389,10 @@ class Wallet {
 	 * @throws If mint info is not initialized.
 	 */
 	getMintInfo(): MintInfo {
-		this.failIfNullish(this._mintInfo, 'Mint info not initialized; call loadMint first');
+		this.failIfNullish(
+			this._mintInfo,
+			'Mint info not initialized; call loadMint or loadMintFromCache first',
+		);
 		return this._mintInfo;
 	}
 
@@ -315,7 +400,10 @@ class Wallet {
 	 * The keyset ID bound to this wallet instance.
 	 */
 	get keysetId(): string {
-		this.failIf(this._boundKeysetId === PENDING_KEYSET_ID, 'Wallet not initialised, call loadMint');
+		this.failIf(
+			this._boundKeysetId === PENDING_KEYSET_ID,
+			'Wallet not initialised, call loadMint or loadMintFromCache first',
+		);
 		return this._boundKeysetId;
 	}
 
@@ -337,7 +425,7 @@ class Wallet {
 	 * @throws If the keyset is not found, has no keys, or its unit differs from the wallet.
 	 */
 	public getKeyset(id?: string): Keyset {
-		const keyset = this.keyChain.getKeyset(id ?? this.keysetId);
+		const keyset = this._keyChain.getKeyset(id ?? this.keysetId);
 		this.failIf(keyset.unit !== this._unit, 'Keyset unit does not match wallet unit', {
 			keyset: keyset.id,
 			unit: keyset.unit,
@@ -369,6 +457,44 @@ class Wallet {
 		keysetId: string,
 		...outputTypes: OutputType[]
 	): Promise<{ outputTypes: OutputType[]; used?: OperationCounters }> {
+		// Get all outputTypes with a manual counter and denominations set.
+		const manual = outputTypes.filter(
+			(ot): ot is Extract<OutputType, { type: 'deterministic' }> =>
+				ot.type === 'deterministic' && ot.counter > 0 && (ot.denominations?.length ?? 0) > 0,
+		);
+
+		// Reject if manual ranges overlap
+		if (manual.length > 1) {
+			const ranges = manual
+				.map((ot) => ({
+					start: ot.counter,
+					end: ot.counter + ot.denominations!.length, // exclusive
+				}))
+				.sort((a, b) => a.start - b.start);
+			for (let i = 1; i < ranges.length; i++) {
+				this.failIf(ranges[i].start < ranges[i - 1].end, 'Manual counter ranges overlap', {
+					keysetId,
+					prev: ranges[i - 1],
+					cur: ranges[i],
+				});
+			}
+		}
+
+		// If any deterministic OutputType has a manual counter (> 0), advance
+		// the counter source so future "auto" allocations do not reuse counters.
+		if (manual.length > 0) {
+			// Get the max counter manually allocated
+			const maxManualEnd = Math.max(...manual.map((ot) => ot.counter + ot.denominations!.length));
+
+			// Bump cursor to at least the end of the manually allocated range
+			await this._counterSource.advanceToAtLeast(keysetId, maxManualEnd);
+			this._logger.debug('Counter source advanced to respect manual deterministic counters', {
+				keysetId,
+				maxManualEnd,
+			});
+		}
+
+		// Reserve counters for deterministic outputTypes with auto counter (counter===0))
 		const total = outputTypes.reduce((n, ot) => n + this.countersNeeded(ot), 0);
 		if (total === 0) return { outputTypes };
 
@@ -377,7 +503,7 @@ class Wallet {
 
 		const patched = outputTypes.map((ot): OutputType => {
 			if (ot.type === 'deterministic' && ot.counter === 0) {
-				const need = (ot.denominations ?? []).length;
+				const need = ot.denominations?.length ?? 0;
 				if (need > 0) {
 					const patched: typeof ot = { ...ot, counter: cursor };
 					cursor += need;
@@ -415,7 +541,7 @@ class Wallet {
 	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
 	public bindKeyset(id: string): void {
-		const ks = this.keyChain.getKeyset(id);
+		const ks = this._keyChain.getKeyset(id);
 		this.failIf(ks.unit !== this._unit, 'Keyset unit does not match wallet unit', {
 			keyset: ks.id,
 			unit: ks.unit,
@@ -443,14 +569,16 @@ class Wallet {
 	 * @throws If keyset not found, if it has no keys loaded, or if its unit is not the wallet unit.
 	 */
 	public withKeyset(id: string, opts?: { counterSource?: CounterSource }): Wallet {
-		return new Wallet(this.mint, {
+		const newWallet = new Wallet(this.mint, {
 			keysetId: id,
 			bip39seed: this._seed,
 			secretsPolicy: this._secretsPolicy,
 			logger: this._logger,
 			counterSource: opts?.counterSource ?? this._counterSource,
-			...this.keyChain.getCache(),
 		});
+		// Load mint info from our caches
+		newWallet.loadMintFromCache(this.getMintInfo().cache, this._keyChain.cache);
+		return newWallet;
 	}
 
 	/**
@@ -661,13 +789,15 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Sort ASC by amount for privacy, but keep indices to return order afterwards
+		// But ONLY if the transaction is NOT SIG_ALL (as order is fixed for signing)
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
-		const indices = mergedBlindingData
-			.map((_, i) => i)
-			.sort(
+		const indices = mergedBlindingData.map((_, i) => i);
+		if (!isP2PKSigAll(inputs)) {
+			indices.sort(
 				(a, b) =>
 					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
 			);
+		}
 		const keepVector: boolean[] = [
 			...Array.from({ length: keepOutputs.length }, () => true),
 			...Array.from({ length: sendOutputs.length }, () => false),
@@ -680,7 +810,7 @@ class Wallet {
 			sortedKeepVector,
 			// outputs, // <-- removed for security
 		});
-		const payload: SwapPayload = {
+		const payload: SwapRequest = {
 			inputs,
 			outputs,
 		};
@@ -719,7 +849,40 @@ class Wallet {
 		config?: ReceiveConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
-		const { keysetId, privkey, requireDleq, proofsWeHave, onCountersReserved } = config || {};
+		// Prepare and complete the send
+		const txn = await this.prepareSwapToReceive(token, config, outputType);
+		const { keep } = await this.completeSwap(txn, config?.privkey);
+		return keep;
+	}
+
+	/**
+	 * Prepare A Receive Transaction.
+	 *
+	 * @remarks
+	 * Allows you to preview fees for a receive, get concrete outputs for P2PK SIG_ALL transactions,
+	 * and do any pre-swap tasks (such as marking proofs in-flight etc)
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSwapToReceive(token, { requireDleq: true });
+	 * const fees = txn.fees;
+	 *
+	 * // Complete transaction
+	 * const { keep } = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param token Token string or decoded token.
+	 * @param config Optional receive config.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns SwapPreview with metadata for swap transaction.
+	 */
+	async prepareSwapToReceive(
+		token: Token | string,
+		config?: ReceiveConfig,
+		outputType?: OutputType,
+	): Promise<SwapPreview> {
+		const { keysetId, requireDleq, proofsWeHave, onCountersReserved } = config || {};
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
 		// Decode and validate token
@@ -738,20 +901,14 @@ class Wallet {
 		let proofs: Proof[] = [];
 		({ proofs } = decodedToken);
 		const totalAmount = sumProofs(proofs);
-		if (totalAmount === 0) {
-			return [];
-		}
-
-		// Sign proofs if needed
-		if (privkey) {
-			proofs = this.signP2PKProofs(proofs, privkey);
-		}
+		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
+		this.assertAmount(totalAmount, 'prepareSwapToReceive');
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		if (requireDleq) {
 			for (const p of proofs) {
-				const ks = this.keyChain.getKeyset(p.id);
+				const ks = this._keyChain.getKeyset(p.id);
 				if (!hasValidDleq(p, ks)) {
 					this.fail('Token contains proofs with invalid or missing DLEQ');
 				}
@@ -759,9 +916,10 @@ class Wallet {
 		}
 
 		// Shape receive output type and denominations
-		const netAmount = totalAmount - this.getFeesForProofs(proofs);
+		const swapFee = this.getFeesForProofs(proofs);
+		const amount = totalAmount - swapFee;
 		let receiveOT = this.configureOutputs(
-			netAmount,
+			amount,
 			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
@@ -779,19 +937,15 @@ class Wallet {
 
 		// Create outputs and execute swap
 		const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
-		const swapTransaction = this.createSwapTransaction(proofs, outputs, []);
-		const { signatures } = await this.mint.swap(swapTransaction.payload);
 
-		// Construct and return proofs
-		const proofsReceived = swapTransaction.outputData.map((d, i) =>
-			d.toProof(signatures[i], keyset),
-		);
-		const orderedProofs: Proof[] = [];
-		swapTransaction.sortedIndices.forEach((s, o) => {
-			orderedProofs[s] = proofsReceived[o];
-		});
-		this._logger.debug('RECEIVE COMPLETED', { amounts: orderedProofs.map((p) => p.amount) });
-		return orderedProofs;
+		// Return SwapPreview
+		return {
+			amount,
+			fees: swapFee,
+			keysetId: keyset.id,
+			inputs: proofs,
+			keepOutputs: outputs,
+		} as SwapPreview;
 	}
 
 	/**
@@ -808,6 +962,7 @@ class Wallet {
 	 * @throws Throws if the send cannot be completed offline.
 	 */
 	sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
+		this.assertAmount(amount, 'sendOffline');
 		const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
@@ -824,8 +979,6 @@ class Wallet {
 	/**
 	 * Send proofs with online swap if necessary.
 	 *
-	 * @remarks
-	 * If proofs are P2PK-locked to your public key, call signP2PKProofs first to sign them.
 	 * @example
 	 *
 	 * ```typescript
@@ -855,7 +1008,8 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
-		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+		this.assertAmount(amount, 'send');
+		const { keysetId, includeFees = false } = config || {};
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
 			send: this.defaultOutputType(),
@@ -906,6 +1060,48 @@ class Wallet {
 			const message = e instanceof Error ? e.message : 'Unknown error';
 			this._logger.debug('ExactMatch offline selection failed.', { e: message });
 		}
+
+		// Prepare and complete the send
+		const txn = await this.prepareSwapToSend(amount, proofs, config, outputConfig);
+		return await this.completeSwap(txn, config?.privkey);
+	}
+
+	/**
+	 * Prepare A Send Transaction.
+	 *
+	 * @remarks
+	 * Allows you to preview fees for a send, get concrete outputs for P2PK SIG_ALL transactions, and
+	 * do any pre-swap tasks (such as marking proofs in-flight etc)
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
+	 * const fees = txn.fees;
+	 *
+	 * // Complete transaction
+	 * const { keep, send } = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param amount Amount to send (receiver gets this net amount).
+	 * @param proofs Array of proofs to split.
+	 * @param config Optional parameters for the swap.
+	 * @returns SwapPreview with metadata for swap transaction.
+	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
+	 */
+	async prepareSwapToSend(
+		amount: number,
+		proofs: Proof[],
+		config?: SendConfig,
+		outputConfig?: OutputConfig,
+	): Promise<SwapPreview> {
+		const { keysetId, includeFees = false, onCountersReserved } = config || {};
+
+		// Fallback to policy defaults if no outputConfig
+		outputConfig = outputConfig ?? {
+			send: this.defaultOutputType(),
+			keep: this.defaultOutputType(),
+		};
 
 		// Fetch keys
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -968,11 +1164,66 @@ class Wallet {
 		const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
 		const keepOutputs = this.createOutputData(keepAmount, keyset, keepOT);
 
+		// Return SwapPreview
+		return {
+			amount,
+			fees: swapFee,
+			keysetId: keyset.id,
+			inputs: selectedProofs,
+			sendOutputs,
+			keepOutputs,
+			unselectedProofs,
+		} as SwapPreview;
+	}
+
+	/**
+	 * Complete a prepared swap transaction.
+	 *
+	 * @example
+	 *
+	 * ```typescript
+	 * // Prepare transaction
+	 * const txn = await wallet.prepareSwapToSend(5, proofs, { includeFees: true });
+	 *
+	 * // Complete transaction
+	 * const result = await wallet.completeSwap(txn);
+	 * ```
+	 *
+	 * @param swapPreview With metadata for swap transaction.
+	 * @param privkey The private key(s) for signing.
+	 * @returns SendResponse with keep/send proofs.
+	 */
+	async completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse> {
+		const keepOutputs: OutputDataLike[] = swapPreview?.keepOutputs ? swapPreview.keepOutputs : [];
+		const sendOutputs: OutputDataLike[] = swapPreview.sendOutputs ? swapPreview.sendOutputs : [];
+		const unselectedProofs: Proof[] = swapPreview.unselectedProofs
+			? swapPreview.unselectedProofs
+			: [];
+
+		// Sign proofs if needed
+		if (privkey) {
+			swapPreview.inputs = this.signP2PKProofs(swapPreview.inputs, privkey, [
+				...keepOutputs,
+				...sendOutputs,
+			]);
+		}
+
+		// Create swap transaction
+		const swapTransaction = this.createSwapTransaction(
+			swapPreview.inputs,
+			keepOutputs,
+			sendOutputs,
+		);
+
 		// Execute swap
-		const swapTransaction = this.createSwapTransaction(selectedProofs, keepOutputs, sendOutputs);
 		const { signatures } = await this.mint.swap(swapTransaction.payload);
+		this.failIf(
+			signatures.length < swapTransaction.outputData.length,
+			`Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}`,
+		);
 
 		// Construct proofs
+		const keyset = this.getKeyset(swapPreview.keysetId);
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const reorderedProofs = Array(swapProofs.length);
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
@@ -999,8 +1250,9 @@ class Wallet {
 			send: sendProofs,
 		};
 	}
+
 	/**
-	 * Swap is an alias of send.
+	 * @deprecated - Use send()
 	 */
 	public readonly swap = this.send.bind(this);
 
@@ -1028,10 +1280,11 @@ class Wallet {
 		includeFees = false,
 		exactMatch = false,
 	): SendResponse {
+		this.assertAmount(amountToSend, 'selectProofsToSend');
 		const { keep, send } = this._selectProofs(
 			proofs,
 			amountToSend,
-			this.keyChain,
+			this._keyChain,
 			includeFees,
 			exactMatch,
 		);
@@ -1045,11 +1298,41 @@ class Wallet {
 	 * Call this method before operations like send if the proofs are P2PK-locked and need unlocking.
 	 * This is a public wrapper for signing.
 	 * @param proofs The proofs to sign.
-	 * @param privkey The private key for signing.
+	 * @param privkey The private key(s) for signing.
+	 * @param outputData Optional. For signing of SIG_ALL transactions.
+	 * @param quoteId Optional. For signing SIG_ALL melt transactions.
 	 * @returns Signed proofs.
 	 */
-	signP2PKProofs(proofs: Proof[], privkey: string | string[]): Proof[] {
-		return signP2PKProofs(proofs, privkey);
+	signP2PKProofs(
+		proofs: Proof[],
+		privkey: string | string[],
+		outputData?: OutputDataLike[],
+		quoteId?: string,
+	): Proof[] {
+		// Normal case, sign everything as usual
+		if (!isP2PKSigAll(proofs)) {
+			return cryptoSignP2PKProofs(proofs, privkey, this._logger);
+		}
+
+		// Ensure SIG_ALL conditions are met
+		this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
+		assertSigAllInputs(proofs);
+
+		// SIG_ALL is in flux currently, so let's generate all known message formats
+		// and sign the first proof only against each message...
+		const [first, ...rest] = proofs;
+		let signedFirst = first;
+		const messages = [
+			buildLegacyP2PKSigAllMessage(proofs, outputData, quoteId),
+			buildInterimP2PKSigAllMessage(proofs, outputData, quoteId),
+			buildP2PKSigAllMessage(proofs, outputData, quoteId),
+		];
+		for (const msg of messages) {
+			signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
+		}
+
+		// Return the proofs in same order as before
+		return [signedFirst, ...rest];
 	}
 
 	/**
@@ -1075,11 +1358,11 @@ class Wallet {
 		try {
 			// We need the proof's keyset so use keyChain here
 			// We must NOT fallback to wallet's keyset
-			return this.keyChain.getKeyset(proof.id).fee;
+			return this._keyChain.getKeyset(proof.id).fee;
 		} catch (e) {
 			this.fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, {
 				e,
-				keychain: this.keyChain.getKeysets(),
+				keychain: this._keyChain.getKeysets(),
 			});
 		}
 	}
@@ -1094,7 +1377,7 @@ class Wallet {
 	getFeesForKeyset(nInputs: number, keysetId: string): number {
 		try {
 			// We must NOT fallback to wallet's keyset
-			const feePPK = this.keyChain.getKeyset(keysetId).fee;
+			const feePPK = this._keyChain.getKeyset(keysetId).fee;
 			return Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0));
 		} catch (e) {
 			this.fail(`No keyset found with ID ${keysetId}`, { e });
@@ -1132,8 +1415,8 @@ class Wallet {
 	 * @returns Token object.
 	 */
 	public decodeToken(token: string): Token {
-		const keysets = this.keyChain.getKeysets();
-		return getDecodedToken(token, keysets);
+		const keysetIds = this._keyChain.getAllKeysetIds();
+		return getDecodedToken(token, keysetIds);
 	}
 
 	// -----------------------------------------------------------------
@@ -1231,7 +1514,7 @@ class Wallet {
 	/**
 	 * @deprecated Use createMintQuoteBolt11()
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response> {
 		return this.createMintQuoteBolt11(amount, description);
 	}
 
@@ -1245,7 +1528,11 @@ class Wallet {
 	 * @returns The mint will return a mint quote with a Lightning invoice for minting tokens of the
 	 *   specified amount and unit.
 	 */
-	async createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteResponse> {
+	async createMintQuoteBolt11(
+		amount: number,
+		description?: string,
+	): Promise<MintQuoteBolt11Response> {
+		this.assertAmount(amount, 'createMintQuoteBolt11');
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1254,7 +1541,7 @@ class Wallet {
 			}
 		}
 
-		const mintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
 			amount: amount,
 			description: description,
@@ -1276,10 +1563,11 @@ class Wallet {
 		amount: number,
 		pubkey: string,
 		description?: string,
-	): Promise<LockedMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
+		this.assertAmount(amount, 'createLockedMintQuote');
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
-		const mintQuotePayload: MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
 			amount: amount,
 			description: description,
@@ -1313,14 +1601,14 @@ class Wallet {
 			amount?: number;
 			description?: string;
 		},
-	): Promise<Bolt12MintQuoteResponse> {
+	): Promise<MintQuoteBolt12Response> {
 		// Check if mint supports description for bolt12
 		const mintInfo = this.getMintInfo();
 		if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
 			this.fail('Mint does not support description for bolt12');
 		}
 
-		const mintQuotePayload: Bolt12MintQuotePayload = {
+		const mintQuotePayload: MintQuoteBolt12Request = {
 			pubkey: pubkey,
 			unit: this._unit,
 			amount: options?.amount,
@@ -1337,9 +1625,7 @@ class Wallet {
 	/**
 	 * @deprecated Use checkMintQuoteBolt11()
 	 */
-	async checkMintQuote(
-		quote: string | MintQuoteResponse,
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+	async checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response> {
 		return this.checkMintQuoteBolt11(quote);
 	}
 
@@ -1350,8 +1636,8 @@ class Wallet {
 	 * @returns The mint will create and return a Lightning invoice for the specified amount.
 	 */
 	async checkMintQuoteBolt11(
-		quote: string | MintQuoteResponse,
-	): Promise<MintQuoteResponse | PartialMintQuoteResponse> {
+		quote: string | MintQuoteBolt11Response,
+	): Promise<MintQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const baseRes = await this.mint.checkMintQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
@@ -1366,7 +1652,7 @@ class Wallet {
 	 * @param quote Quote ID.
 	 * @returns The latest mint quote for the given quote ID.
 	 */
-	async checkMintQuoteBolt12(quote: string): Promise<Bolt12MintQuoteResponse> {
+	async checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response> {
 		return this.mint.checkMintQuoteBolt12(quote);
 	}
 
@@ -1379,7 +1665,7 @@ class Wallet {
 	 */
 	async mintProofs(
 		amount: number,
-		quote: string | MintQuoteResponse,
+		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1397,7 +1683,7 @@ class Wallet {
 	 */
 	async mintProofsBolt11(
 		amount: number,
-		quote: string | MintQuoteResponse,
+		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -1416,7 +1702,7 @@ class Wallet {
 	 */
 	async mintProofsBolt12(
 		amount: number,
-		quote: Bolt12MintQuoteResponse,
+		quote: MintQuoteBolt12Response,
 		privkey: string,
 		config?: { keysetId?: string },
 		outputType?: OutputType,
@@ -1441,13 +1727,13 @@ class Wallet {
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
 		amount: number,
-		quote: string | (T extends 'bolt11' ? MintQuoteResponse : Bolt12MintQuoteResponse),
+		quote: string | (T extends 'bolt11' ? MintQuoteBolt11Response : MintQuoteBolt12Response),
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
+		this.assertAmount(amount, `_mintProofs: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
-		this.failIf(amount <= 0, 'Invalid mint amount: must be positive', { amount });
 
 		// Shape output type and denominations for our proofs
 		// we are receiving, so no includeFees.
@@ -1473,7 +1759,7 @@ class Wallet {
 		// Create outputs and mint payload
 		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
-		const mintPayload: MintPayload = {
+		const mintPayload: MintRequest = {
 			outputs: blindedMessages,
 			quote: typeof quote === 'string' ? quote : quote.quote,
 		};
@@ -1507,8 +1793,8 @@ class Wallet {
 	/**
 	 * @deprecated Use createMeltQuoteBolt11.
 	 */
-	async createMeltQuote(invoice: string): Promise<MeltQuoteResponse> {
-		return this.createMeltQuoteBolt11(invoice);
+	async createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+		return this.createMeltQuoteBolt11(invoice, amountMsat);
 	}
 
 	/**
@@ -1516,13 +1802,39 @@ class Wallet {
 	 * to pay a Lightning invoice.
 	 *
 	 * @param invoice LN invoice that needs to get a fee estimate.
+	 * @param amountMsat Optional amount in millisatoshis to attach for amountless invoices, must not
+	 *   be provided for invoices that already encode an amount.
 	 * @returns The mint will create and return a melt quote for the invoice with an amount and fee
 	 *   reserve.
 	 */
-	async createMeltQuoteBolt11(invoice: string): Promise<MeltQuoteResponse> {
-		const meltQuotePayload: MeltQuotePayload = {
+	async createMeltQuoteBolt11(
+		invoice: string,
+		amountMsat?: number,
+	): Promise<MeltQuoteBolt11Response> {
+		if (amountMsat !== undefined) {
+			this.failIf(
+				invoiceHasAmountInHRP(invoice),
+				'amountMsat supplied but invoice already contains an amount. Leave amountMsat undefined for non-zero invoices.',
+			);
+
+			this.assertAmount(amountMsat, 'createMeltQuoteBolt11');
+		}
+
+		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
+
+		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
+
+			...(supportsAmountless && amountMsat !== undefined
+				? {
+						options: {
+							amountless: {
+								amount_msat: amountMsat,
+							},
+						},
+					}
+				: {}),
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return {
@@ -1545,7 +1857,7 @@ class Wallet {
 	async createMeltQuoteBolt12(
 		offer: string,
 		amountMsat?: number,
-	): Promise<Bolt12MeltQuoteResponse> {
+	): Promise<MeltQuoteBolt12Response> {
 		return this.mint.createMeltQuoteBolt12({
 			unit: this._unit,
 			request: offer,
@@ -1573,23 +1885,18 @@ class Wallet {
 	async createMultiPathMeltQuote(
 		invoice: string,
 		millisatPartialAmount: number,
-	): Promise<MeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
+		this.assertAmount(millisatPartialAmount, 'createMultiPathMeltQuote');
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(
 			!params?.some((p) => p.method === 'bolt11' && p.unit === this._unit),
 			`Mint does not support MPP for bolt11 and ${this._unit}`,
 		);
-		const mppOption: MPPOption = {
-			amount: millisatPartialAmount,
-		};
-		const meltOptions: MeltQuoteOptions = {
-			mpp: mppOption,
-		};
-		const meltQuotePayload: MeltQuotePayload = {
+		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
-			options: meltOptions,
+			options: { mpp: { amount: millisatPartialAmount } },
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return { ...meltQuote, request: invoice, unit: this._unit };
@@ -1602,9 +1909,7 @@ class Wallet {
 	/**
 	 * @deprecated Use checkMeltQuoteBolt11()
 	 */
-	async checkMeltQuote(
-		quote: string | MeltQuoteResponse,
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+	async checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response> {
 		return this.checkMeltQuoteBolt11(quote);
 	}
 
@@ -1615,8 +1920,8 @@ class Wallet {
 	 * @returns The mint will return an existing melt quote.
 	 */
 	async checkMeltQuoteBolt11(
-		quote: string | MeltQuoteResponse,
-	): Promise<MeltQuoteResponse | PartialMeltQuoteResponse> {
+		quote: string | MeltQuoteBolt11Response,
+	): Promise<MeltQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 		const meltQuote = await this.mint.checkMeltQuoteBolt11(quoteId);
 		if (typeof quote === 'string') {
@@ -1631,7 +1936,7 @@ class Wallet {
 	 * @param quote ID of the melt quote.
 	 * @returns The mint will return an existing melt quote.
 	 */
-	async checkMeltQuoteBolt12(quote: string): Promise<Bolt12MeltQuoteResponse> {
+	async checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response> {
 		return this.mint.checkMeltQuoteBolt12(quote);
 	}
 
@@ -1643,12 +1948,12 @@ class Wallet {
 	 * @deprecated Use meltProofsBolt11()
 	 */
 	async meltProofs(
-		meltQuote: MeltQuoteResponse,
+		meltQuote: MeltQuoteBolt11Response,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
+		return this.meltProofsBolt11(meltQuote, proofsToSend, config, outputType);
 	}
 
 	/**
@@ -1664,12 +1969,14 @@ class Wallet {
 	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofsBolt11(
-		meltQuote: MeltQuoteResponse,
+		meltQuote: MeltQuoteBolt11Response,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt11', meltQuote, proofsToSend, config, outputType);
+	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
+		const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
+		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
+		return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey, preferAsync);
 	}
 
 	/**
@@ -1685,36 +1992,39 @@ class Wallet {
 	 * @returns MeltProofsResponse with quote and change proofs.
 	 */
 	async meltProofsBolt12(
-		meltQuote: Bolt12MeltQuoteResponse,
+		meltQuote: MeltQuoteBolt12Response,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
-		return this._meltProofs('bolt12', meltQuote, proofsToSend, config, outputType);
+	): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
+		const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
+		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
+		return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey, preferAsync);
 	}
 
 	/**
-	 * Melt proofs for a given melt quote created with the bolt11 or bolt12 method.
+	 * Prepare A Melt Transaction.
 	 *
 	 * @remarks
-	 * Creates NUT-08 blanks (1-sat) for Lightning fee return. Get these by setting a
-	 * config.onChangeOutputsCreated callback for async melting. @see completeMelt.
+	 * Allows you to preview fees for a melt, get concrete outputs for P2PK SIG_ALL melts, and do any
+	 * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for
+	 * Lightning fee return and returns a MeltPreview, which you can melt using completeMelt.
 	 * @param method Payment method of the quote.
-	 * @param meltQuote The bolt11 or bolt12 melt quote.
+	 * @param meltQuote The melt quote.
 	 * @param proofsToSend Proofs to melt.
 	 * @param config Optional (keysetId, onChangeOutputsCreated).
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns MeltProofsResponse.
-	 * @throws If params are invalid or mint returns errors.
+	 * @returns MeltPreview.
+	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	private async _meltProofs<T extends 'bolt11' | 'bolt12'>(
-		method: T,
-		meltQuote: T extends 'bolt11' ? MeltQuoteResponse : Bolt12MeltQuoteResponse,
+	async prepareMelt<TQuote extends MeltQuoteBaseResponse>(
+		method: string,
+		meltQuote: TQuote,
 		proofsToSend: Proof[],
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
-	): Promise<MeltProofsResponse> {
+	): Promise<MeltPreview<TQuote>> {
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -1728,15 +2038,18 @@ class Wallet {
 		let outputData: OutputDataLike[] = [];
 
 		// bolt11 does not allow partial payment, and although bolt12 could, mints
-		// like CDK forbids it. So let's fail loudly up front...
+		// like CDK forbid it. So let's fail loudly up front...
 		this.failIf(feeReserve < 0, 'Not enough proofs to cover amount + fee reserve', {
 			sendAmount,
 			quoteAmount: meltQuote.amount,
 		});
 
+		if (outputType.type === 'custom') {
+			outputData = outputType.data;
+		}
 		// Create NUT-08 blanks for return of Lightning fee change
 		// Note: zero amount + zero denomination passes splitAmount validation
-		if (feeReserve > 0) {
+		else if (feeReserve > 0) {
 			let count = Math.ceil(Math.log2(feeReserve)) || 1;
 			if (count < 0) count = 0; // Prevents: -Infinity
 			const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
@@ -1745,10 +2058,6 @@ class Wallet {
 				denominations,
 			});
 
-			// Build effective OutputType and merge denominations
-			if (outputType.type === 'custom') {
-				this.fail('Custom OutputType not supported for melt change (must be 0-sat blanks)');
-			}
 			let meltOT: OutputType = { ...outputType, denominations };
 			// Assign counter atomically if OutputType is deterministic
 			// and the counter is zero (auto-assign)
@@ -1758,26 +2067,30 @@ class Wallet {
 				this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
 			}
 			this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
-
 			// Generate the blank outputs (no fees as we are receiving change)
 			// Remember, zero amount + zero denomination passes splitAmount validation
 			outputData = this.createOutputData(0, keyset, meltOT);
 		}
 
-		// Prepare proofs for mint
-		proofsToSend = this._prepareInputsForMint(proofsToSend);
-
-		const meltPayload: MeltPayload = {
-			quote: meltQuote.quote,
+		// Create melt preview
+		const meltPreview: MeltPreview<TQuote> = {
+			method,
 			inputs: proofsToSend,
-			outputs: outputData.map((d) => d.blindedMessage),
+			outputData,
+			keysetId: keyset.id,
+			quote: meltQuote,
 		};
 
-		// Fire event(s) after blanks creation
+		// Fire legacy event(s) after preview creation
+		// Note: These events are deprecated and should be removed in a future version
 		if (outputData.length > 0) {
-			const blanks: MeltBlanks = {
-				method,
-				payload: meltPayload,
+			const blanks: MeltBlanks<TQuote> = {
+				method: method as 'bolt11' | 'bolt12',
+				payload: {
+					quote: meltQuote.quote,
+					inputs: proofsToSend,
+					outputs: outputData.map((d) => d.blindedMessage),
+				},
 				outputData,
 				keyset,
 				quote: meltQuote,
@@ -1786,60 +2099,100 @@ class Wallet {
 			this.on._emitMeltBlanksCreated(blanks); // global callback
 		}
 
-		// Proceed with melt, setting preferredAsync header if an onChangeOutputsCreated callback was used
-		let meltResponse;
-		const preferAsync: boolean = typeof onChangeOutputsCreated === 'function';
-		if (method === 'bolt12') {
-			meltResponse = await this.mint.meltBolt12(meltPayload, { preferAsync });
-		} else {
-			meltResponse = await this.mint.meltBolt11(meltPayload, { preferAsync });
-		}
-
-		// Sanity check mint didn't send too many signatures before mapping
-		// Should not happen, except in case of a broken or malicious mint
-		this.failIf(
-			(meltResponse.change?.length ?? 0) > outputData.length,
-			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${outputData.length} blanks were provided`,
-		);
-
-		// Construct change if provided (empty if pending/not paid; shorter ok if less overfee)
-		const change = meltResponse.change?.map((s, i) => outputData[i].toProof(s, keyset)) ?? [];
-		this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
-		return { quote: { ...meltResponse, unit: meltQuote.unit, request: meltQuote.request }, change };
+		return meltPreview;
 	}
 
 	/**
-	 * Completes a pending melt by re-calling the melt endpoint and constructing change proofs.
+	 * Completes a pending melt by calling the melt endpoint and constructing change proofs.
 	 *
 	 * @remarks
-	 * Use with blanks from onChangeOutputsCreated to retry pending melts. Works for Bolt11/Bolt12.
-	 * Returns change proofs if paid, else empty change.
-	 * @param blanks The blanks from onChangeOutputsCreated.
+	 * Use with a MeltPreview returned from prepareMelt or the legacy MeltBlanks object returned by
+	 * the meltBlanksCreated or onChangeOutputsCreated callback. This method lets you sign P2PK locked
+	 * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
+	 * @param meltPreview The preview from prepareMelt().
+	 * @param privkey The private key(s) for signing.
+	 * @param preferAsync Optional override to set 'respond-async' header.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<T extends MeltQuoteResponse>(
-		blanks: MeltBlanks<T>,
-	): Promise<MeltProofsResponse> {
-		const meltResponse =
-			blanks.method === 'bolt12'
-				? await this.mint.meltBolt12(blanks.payload)
-				: await this.mint.meltBolt11(blanks.payload);
+	async completeMelt<TQuote extends MeltQuoteBaseResponse>(
+		meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>,
+		privkey?: string | string[],
+		preferAsync?: boolean,
+	): Promise<MeltProofsResponse<TQuote>> {
+		// Convert from legacy MeltBlanks if needed
+		meltPreview = this.maybeConvertMeltBlanks(meltPreview);
 
-		// Check for too many signatures before mapping
+		// Extract vars from MeltPreview
+		let inputs = meltPreview.inputs;
+		const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
+		const quote = meltPreview.quote.quote;
+		const keyset = this.getKeyset(meltPreview.keysetId);
+
+		// Sign proofs if needed
+		if (privkey) {
+			inputs = this.signP2PKProofs(inputs, privkey, meltPreview.outputData, quote);
+		}
+
+		// Prepare proofs for mint
+		inputs = this._prepareInputsForMint(inputs);
+
+		// Construct melt payload
+		const meltPayload: MeltRequest = { quote, inputs, outputs };
+
+		// Make melt call (note: bolt11 has legacy data handling)
+		const meltResponse: MeltQuoteBaseResponse =
+			meltPreview.method === 'bolt11'
+				? await this.mint.meltBolt11(meltPayload, { preferAsync })
+				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
+						preferAsync,
+					});
+
+		// Check for too many blind signatures before mapping
 		this.failIf(
-			(meltResponse.change?.length ?? 0) > blanks.outputData.length,
-			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${blanks.outputData.length} blanks were provided`,
+			(meltResponse.change?.length ?? 0) > meltPreview.outputData.length,
+			`Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${meltPreview.outputData.length} blanks were provided`,
 		);
 
 		// Construct change (shorter ok)
 		const change =
-			meltResponse.change?.map((s, i) => blanks.outputData[i].toProof(s, blanks.keyset)) ?? [];
+			meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
 
-		this._logger.debug('COMPLETE MELT', { changeAmounts: change.map((p) => p.amount) });
+		if (preferAsync) {
+			this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
+		} else {
+			this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+		}
+
+		const mergedQuote = {
+			...meltPreview.quote,
+			...meltResponse,
+		} as TQuote;
+
+		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
+	}
+
+	/**
+	 * Helper to ease transition from MeltBlanks to MeltPreview.
+	 */
+	private maybeConvertMeltBlanks<TQuote extends MeltQuoteBaseResponse>(
+		melt: MeltPreview<TQuote> | MeltBlanks<TQuote>,
+	): MeltPreview<TQuote> {
+		// New shape already, just return as is
+		if (!('payload' in melt)) {
+			return melt;
+		}
+		// Legacy MeltBlanks, adapt it to MeltPreview
+		this._logger.warn(
+			'MeltBlanks objects and the meltBlanksCreated / onChangeOutputsCreated events are deprecated. Please use wallet.prepareMelt() to create a MeltPreview instead.',
+		);
+		const { method, payload, outputData, keyset, quote } = melt;
 		return {
-			quote: { ...meltResponse, unit: blanks.quote.unit, request: blanks.quote.request },
-			change,
+			method,
+			inputs: payload.inputs,
+			outputData,
+			keysetId: keyset.id,
+			quote,
 		};
 	}
 

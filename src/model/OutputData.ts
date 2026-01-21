@@ -1,11 +1,11 @@
 import {
-	type MintKeys,
+	type HasKeysetKeys,
 	type Proof,
 	type SerializedBlindedMessage,
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type P2PKOptions, type Keyset } from '../wallet';
+import { type P2PKOptions } from '../wallet';
 import {
 	blindMessage,
 	constructProofFromPromise,
@@ -17,18 +17,41 @@ import {
 	type DLEQ,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils';
-import { bytesToNumber, numberToHexPadded64, splitAmount } from '../utils';
+import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
+import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
-export interface OutputDataLike {
+// TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
+// For now the generic preserves the relationship between factory input type and `toProof` keyset type,
+// and keeps narrower implementations assignable under `strictFunctionTypes`.
+
+/**
+ * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
+ * the call site, use `OutputDataLike<YourType>`.
+ *
+ * @remarks
+ * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
+ * removing the generic.
+ */
+export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	toProof: (signature: SerializedBlindedSignature, keyset: MintKeys | Keyset) => Proof;
+	toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
 }
 
-export type OutputDataFactory = (amount: number, keys: MintKeys | Keyset) => OutputDataLike;
+/**
+ * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
+ * the call site, use `OutputDataLike<YourType>`.
+ *
+ * @remarks
+ * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
+ * removing the generic.
+ */
+export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
+	amount: number,
+	keys: TKeyset,
+) => OutputDataLike<TKeyset>;
 
 /**
  * Core P2PK tags that must not be settable in additional tags.
@@ -84,7 +107,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 	return e;
 }
 
-export class OutputData implements OutputDataLike {
+export class OutputData implements OutputDataLike<HasKeysetKeys> {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -99,7 +122,7 @@ export class OutputData implements OutputDataLike {
 		this.blindedMessage = blindedMessage;
 	}
 
-	toProof(sig: SerializedBlindedSignature, keyset: MintKeys | Keyset) {
+	toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
 		let dleq: DLEQ | undefined;
 		if (sig.dleq) {
 			dleq = {
@@ -134,10 +157,10 @@ export class OutputData implements OutputDataLike {
 		return serializedProof;
 	}
 
-	static createP2PKData(
+	static createP2PKData<T extends HasKeysetKeys>(
 		p2pk: P2PKOptions,
 		amount: number,
-		keyset: MintKeys | Keyset,
+		keyset: T,
 		customSplit?: number[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -153,19 +176,30 @@ export class OutputData implements OutputDataLike {
 			1,
 			Math.min(p2pk.requiredRefundSignatures ?? 1, refundKeys.length || 1),
 		);
+		// Sanity check - we always need at least one locking key
+		if (lockKeys.length === 0) {
+			throw new Error('P2PK requires at least one pubkey');
+		}
 
 		// Init vars
-		let data = lockKeys[0];
-		let pubkeys = lockKeys.slice(1);
+		const isHTLC = typeof p2pk.hashlock === 'string' && p2pk.hashlock.length > 0;
+		let data = isHTLC ? (p2pk.hashlock as string) : lockKeys[0];
+		let pubkeys = isHTLC ? lockKeys : lockKeys.slice(1);
 		let refund = refundKeys;
 
 		// Optional key blinding (P2BK)
 		let Ehex: string | undefined;
 		if (p2pk.blindKeys) {
-			const ordered = [data, ...pubkeys, ...refundKeys];
+			const ordered = [...lockKeys, ...refundKeys];
 			const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered, keysetId);
-			data = blinded[0];
-			pubkeys = blinded.slice(1, lockKeys.length);
+			if (isHTLC) {
+				// hashlock is in data, all locking keys into pubkeys
+				pubkeys = blinded.slice(0, lockKeys.length);
+			} else {
+				// first locking key in data, rest into pubkeys
+				data = blinded[0];
+				pubkeys = blinded.slice(1, lockKeys.length);
+			}
 			refund = blinded.slice(lockKeys.length);
 			Ehex = _E;
 		}
@@ -192,6 +226,10 @@ export class OutputData implements OutputDataLike {
 			}
 		}
 
+		if (p2pk.sigFlag == 'SIG_ALL') {
+			tags.push(['sigflag', 'SIG_ALL']);
+		}
+
 		// Append additional tags if any
 		if (p2pk.additionalTags?.length) {
 			const normalized = p2pk.additionalTags.map(([k, ...vals]) => {
@@ -202,11 +240,12 @@ export class OutputData implements OutputDataLike {
 		}
 
 		// Construct secret
+		const kind = isHTLC ? 'HTLC' : 'P2PK';
 		const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
-			'P2PK',
+			kind,
 			{
 				nonce: bytesToHex(randomBytes(32)),
-				data: data,
+				data,
 				tags,
 			},
 		];
@@ -237,7 +276,11 @@ export class OutputData implements OutputDataLike {
 		return od;
 	}
 
-	static createRandomData(amount: number, keyset: MintKeys | Keyset, customSplit?: number[]) {
+	static createRandomData<T extends HasKeysetKeys>(
+		amount: number,
+		keyset: T,
+		customSplit?: number[],
+	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -253,11 +296,11 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
-	static createDeterministicData(
+	static createDeterministicData<T extends HasKeysetKeys>(
 		amount: number,
 		seed: Uint8Array,
 		counter: number,
-		keyset: MintKeys | Keyset,
+		keyset: T,
 		customSplit?: number[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -266,6 +309,10 @@ export class OutputData implements OutputDataLike {
 		);
 	}
 
+	/**
+	 * @throws May throw if blinding factor is out of range. Caller should catch, increment counter,
+	 *   and retry per BIP32-style derivation.
+	 */
 	static createSingleDeterministicData(
 		amount: number,
 		seed: Uint8Array,
@@ -275,7 +322,9 @@ export class OutputData implements OutputDataLike {
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-		const deterministicR = bytesToNumber(deriveBlindingFactor(seed, keysetId, counter));
+		// Note: Bytes.toBigInt is used here so invalid values bubble up as throws
+		// for BIP32-style retry logic (caller increments counter and retries).
+		const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),

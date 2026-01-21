@@ -1,3 +1,11 @@
+/**
+ * @module MyLibrary
+ * * ### Useful Resources
+ * - [Development Guide](https://github.com/cashubtc/cashu-ts/blob/main/docs-src/DEVELOPER.md)
+ * - [Contributing](https://github.com/cashubtc/cashu-ts/blob/main/docs-src/CONTRIBUTING.md)
+ * - [Examples](https://github.com/cashubtc/cashu-ts/tree/main/examples)
+ */
+
 // ==========================
 // Public API Surface
 // ==========================
@@ -10,6 +18,8 @@ export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {
+	type MintMethod,
+	type MintQuoteFor,
 	SendBuilder,
 	ReceiveBuilder,
 	MintBuilder,
@@ -32,19 +42,27 @@ export {
 
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
-export type { SubscribeOpts, CancellerLike } from './wallet/WalletEvents';
+export type { SubscribeOpts, CancellerLike, SubscriptionCanceller } from './wallet/WalletEvents';
+export type * from './wallet/types/_deprecated';
 export type * from './wallet/types/config';
 export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
-export type { SubscriptionCanceller } from './wallet/types/websocket';
+export type * from './mint/types/_deprecated';
 export type * from './mint/types/payloads';
-export * from './mint/types/responses';
+export type * from './mint/types/responses';
 
 // Shared models & primitives
+export type * from './model/types/_deprecated';
 export type * from './model/types/blinded';
 export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
-export * from './model/types/proof-state';
+export type * from './model/types/NUT03';
+export * from './model/types/NUT04';
+export * from './model/types/NUT05';
+export type * from './model/types/NUT06';
+export * from './model/types/NUT07';
+export type * from './model/types/NUT23';
+export type * from './model/types/NUT25';
 export type * from './model/types/proof';
 export type { Token, TokenMetadata } from './model/types/token';
 
@@ -58,6 +76,7 @@ export * from './utils/core';
 export { PaymentRequest } from './model/PaymentRequest';
 export { PaymentRequestTransportType } from './wallet/types';
 export type {
+	PaymentRequestPayload,
 	PaymentRequestTransport,
 	RawPaymentRequest,
 	RawTransport,

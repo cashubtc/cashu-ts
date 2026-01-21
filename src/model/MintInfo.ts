@@ -3,7 +3,7 @@ import {
 	type MPPMethod,
 	type SwapMethod,
 	type WebSocketSupport,
-} from '../mint/types';
+} from './types';
 
 type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
@@ -11,7 +11,7 @@ type Endpoint = { method: Method; path: string };
 type ProtectedIndex = {
 	cache: Record<string, boolean>; // "METHOD /v1/foo"
 	exact: Array<{ method: Method; path: string }>;
-	regex: Array<{ method: Method; regex: RegExp }>;
+	prefix: Array<{ method: Method; path: string }>;
 };
 
 export class MintInfo {
@@ -21,8 +21,6 @@ export class MintInfo {
 	private readonly _protected22?: ProtectedIndex;
 	// NUT-21, Clear-auth protected endpoints
 	private readonly _protected21?: ProtectedIndex;
-	// detects regex intent
-	private readonly REGEX_METACHAR = /[\\^$.*+?()[\]{}|]/;
 
 	constructor(info: GetInfoResponse) {
 		this._mintInfo = info;
@@ -82,11 +80,11 @@ export class MintInfo {
 		if (typeof cached === 'boolean') return cached;
 
 		const exactHit = idx.exact.some((e) => e.method === method && e.path === path);
-		const regexHit = exactHit
+		const prefixHit = exactHit
 			? false
-			: idx.regex.some((e) => e.method === method && e.regex.test(path));
+			: idx.prefix.some((e) => e.method === method && path.startsWith(e.path));
 
-		const res = exactHit || regexHit;
+		const res = exactHit || prefixHit;
 		idx.cache[cacheKey] = res;
 		return res;
 	}
@@ -142,29 +140,28 @@ export class MintInfo {
 		if (!endpoints || endpoints.length === 0) return undefined;
 
 		const exact: ProtectedIndex['exact'] = [];
-		const regex: ProtectedIndex['regex'] = [];
-		const metachar = this.REGEX_METACHAR;
+		const prefix: ProtectedIndex['prefix'] = [];
 
 		for (const e of endpoints) {
-			const looksRegex = e.path.startsWith('^') || e.path.endsWith('$') || metachar.test(e.path);
-			if (looksRegex) {
-				try {
-					regex.push({ method: e.method, regex: new RegExp(e.path) });
-					continue;
-				} catch {
-					// fall back to exact on malformed patterns
-				}
+			let p = e.path;
+			if (p.startsWith('^')) p = p.slice(1);
+			if (p.endsWith('$')) p = p.slice(0, -1);
+			if (p.endsWith('.*')) {
+				prefix.push({ method: e.method, path: p.slice(0, -2) });
+			} else {
+				exact.push({ method: e.method, path: p });
 			}
-			exact.push({ method: e.method, path: e.path });
 		}
 
-		// plain object avoids the unsafe any from Object.create(null)
 		const cache: Record<string, boolean> = {};
-		return { cache, exact, regex };
+		return { cache, exact, prefix };
 	}
 
 	// ---------- getters ----------
 
+	get cache(): GetInfoResponse {
+		return this._mintInfo;
+	}
 	get contact() {
 		return this._mintInfo.contact;
 	}
@@ -210,6 +207,16 @@ export class MintInfo {
 				met.method === method &&
 				(unit ? met.unit === unit : true) &&
 				(met.options?.description === true || met.description === true),
+		);
+	}
+
+	supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
+		const meltMethods = this._mintInfo?.nuts?.[5]?.methods ?? [];
+
+		if (!Array.isArray(meltMethods)) return false;
+
+		return meltMethods.some(
+			(met) => met.method === method && met.unit === unit && met.options?.amountless === true,
 		);
 	}
 }

@@ -11,10 +11,10 @@ FAKE_DELAY ?= 1
 RATE_LIMIT_PM ?= 200
 
 # Pin versions, use digests when you can
-CDK_IMAGE ?= cashubtc/mintd:0.13.4
+CDK_IMAGE ?= cashubtc/mintd:0.14.3
 CDK_NAME  ?= cashu-dev-cdk
 
-NUT_IMAGE ?= cashubtc/nutshell:0.18.1
+NUT_IMAGE ?= cashubtc/nutshell:0.18.2
 NUT_NAME  ?= cashu-dev-nutshell
 
 # Auto default to amd64 on arm hosts, can be overridden

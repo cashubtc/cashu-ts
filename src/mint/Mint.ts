@@ -6,30 +6,12 @@
  * Wallet class when you pass in the mint url.
  */
 import type {
-	GetInfoResponse,
-	PartialMintQuoteResponse,
-	MeltQuoteResponse,
-	PartialMeltQuoteResponse,
-	Bolt12MintQuoteResponse,
-	Bolt12MeltQuoteResponse,
-	CheckStateResponse,
 	PostRestoreResponse,
 	SwapResponse,
 	CheckStatePayload,
 	PostRestorePayload,
-	MintResponse,
-	ApiError,
 } from './types';
-import type { MintActiveKeys, MintAllKeysets } from '../model/types/keyset';
-import type {
-	MintQuotePayload,
-	MintPayload,
-	MeltQuotePayload,
-	MeltPayload,
-	SwapPayload,
-	Bolt12MintQuotePayload,
-} from '../wallet/types';
-import { MeltQuoteState } from './types';
+import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
 import request, {
 	ConnectionManager,
 	type WSConnection,
@@ -48,9 +30,27 @@ import {
 } from '../legacy/nut-04';
 import { handleMintInfoContactFieldDeprecated } from '../legacy/nut-06';
 import { MintInfo } from '../model/MintInfo';
-import { type Logger, NULL_LOGGER } from '../logger';
+import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
+import {
+	type MintQuoteBolt11Response,
+	type MintQuoteBolt12Response,
+	type MeltQuoteBaseResponse,
+	type MeltQuoteBolt11Response,
+	type MeltQuoteBolt12Response,
+	MeltQuoteState,
+	type MintResponse,
+	type GetInfoResponse,
+	type MeltRequest,
+	type CheckStateResponse,
+	type MeltQuoteBolt11Request,
+	type MeltQuoteBolt12Request,
+	type MintRequest,
+	type MintQuoteBolt11Request,
+	type MintQuoteBolt12Request,
+	type SwapRequest,
+} from '../model/types';
 
 /**
  * Class represents Cashu Mint API.
@@ -151,7 +151,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Signed outputs.
 	 */
-	async swap(swapPayload: SwapPayload, customRequest?: RequestFn): Promise<SwapResponse> {
+	async swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse> {
 		const data = await this.requestWithAuth<SwapResponse>(
 			'POST',
 			'/v1/swap',
@@ -160,8 +160,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'swap' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -175,11 +175,11 @@ class Mint {
 	 * @returns A new mint quote containing a payment request for the specified amount and unit.
 	 */
 	async createMintQuoteBolt11(
-		mintQuotePayload: MintQuotePayload,
+		mintQuotePayload: MintQuoteBolt11Request,
 		customRequest?: RequestFn,
-	): Promise<PartialMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('POST', '/v1/mint/quote/bolt11', { requestBody: mintQuotePayload }, customRequest);
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
 		return data;
@@ -194,10 +194,10 @@ class Mint {
 	 * @returns A mint quote containing a BOLT12 offer.
 	 */
 	async createMintQuoteBolt12(
-		mintQuotePayload: Bolt12MintQuotePayload,
+		mintQuotePayload: MintQuoteBolt12Request,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MintQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MintQuoteResponse>(
+	): Promise<MintQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MintQuoteBolt12Response>(
 			'POST',
 			'/v1/mint/quote/bolt12',
 			{ requestBody: mintQuotePayload },
@@ -216,9 +216,9 @@ class Mint {
 	async checkMintQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<PartialMintQuoteResponse> {
+	): Promise<MintQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMintQuoteResponse & MintQuoteResponsePaidDeprecated
+			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('GET', `/v1/mint/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
@@ -235,8 +235,8 @@ class Mint {
 	async checkMintQuoteBolt12(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MintQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MintQuoteResponse>(
+	): Promise<MintQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MintQuoteBolt12Response>(
 			'GET',
 			`/v1/mint/quote/bolt12/${quote}`,
 			{},
@@ -252,7 +252,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures.
 	 */
-	async mintBolt11(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
+	async mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
 		const data = await this.requestWithAuth<MintResponse>(
 			'POST',
 			'/v1/mint/bolt11',
@@ -261,8 +261,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -275,7 +275,7 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures for the requested outputs.
 	 */
-	async mintBolt12(mintPayload: MintPayload, customRequest?: RequestFn): Promise<MintResponse> {
+	async mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
 		const data = await this.requestWithAuth<MintResponse>(
 			'POST',
 			'/v1/mint/bolt12',
@@ -284,8 +284,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt12' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -299,11 +299,11 @@ class Mint {
 	 * @returns The melt quote response.
 	 */
 	async createMeltQuoteBolt11(
-		meltQuotePayload: MeltQuotePayload,
+		meltQuotePayload: MeltQuoteBolt11Request,
 		customRequest?: RequestFn,
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			PartialMeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('POST', '/v1/melt/quote/bolt11', { requestBody: meltQuotePayload }, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -314,8 +314,8 @@ class Mint {
 			typeof data?.fee_reserve !== 'number' ||
 			typeof data?.quote !== 'string'
 		) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'createMeltQuoteBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 		return data;
 	}
@@ -329,10 +329,10 @@ class Mint {
 	 * @returns Melt quote with amount, fee reserve, and payment state.
 	 */
 	async createMeltQuoteBolt12(
-		meltQuotePayload: MeltQuotePayload,
+		meltQuotePayload: MeltQuoteBolt12Request,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MeltQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'POST',
 			'/v1/melt/quote/bolt12',
 			{ requestBody: meltQuotePayload },
@@ -351,9 +351,9 @@ class Mint {
 	async checkMeltQuoteBolt11(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<PartialMeltQuoteResponse> {
+	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.requestWithAuth<
-			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
+			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('GET', `/v1/melt/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
@@ -366,8 +366,8 @@ class Mint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'checkMeltQuoteBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -384,14 +384,72 @@ class Mint {
 	async checkMeltQuoteBolt12(
 		quote: string,
 		customRequest?: RequestFn,
-	): Promise<Bolt12MeltQuoteResponse> {
-		const response = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
+	): Promise<MeltQuoteBolt12Response> {
+		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'GET',
 			`/v1/melt/quote/bolt12/${quote}`,
 			{},
 			customRequest,
 		);
 		return response;
+	}
+
+	/**
+	 * Generic method to melt tokens using any payment method endpoint.
+	 *
+	 * @remarks
+	 * This method enables support for custom payment methods without modifying the Mint class. It
+	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
+	 * the common fields: quote, amount, fee_reserve, state, expiry.
+	 * @example
+	 *
+	 * ```ts
+	 * const response = await mint.melt('bolt11', { quote: 'q1', inputs: [...], outputs: [...] });
+	 * const response = await mint.melt('custom-payment', { quote: 'c1', inputs: [...], outputs: [...] });
+	 * ```
+	 *
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param meltPayload The melt payload containing inputs and optional outputs.
+	 * @param options.customRequest Optional override for the request function.
+	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @returns A response object with at least the required melt quote fields.
+	 */
+	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
+		method: string,
+		meltPayload: MeltRequest,
+		options?: {
+			customRequest?: RequestFn;
+			preferAsync?: boolean;
+		},
+	): Promise<MeltQuoteBaseResponse & TRes> {
+		// Set headers as needed
+		const headers: Record<string, string> = {
+			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		};
+		// Validate method string and make request
+		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
+		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
+			'POST',
+			`/v1/melt/${method}`,
+			{ requestBody: meltPayload, headers },
+			options?.customRequest,
+		);
+
+		// Runtime shape check for basic MeltQuoteBaseResponse
+		// TODO: - Tests need updating before we can do full shape check!
+		if (
+			!isObj(data) //||
+			// typeof data.quote !== 'string' ||
+			// typeof data.amount !== 'number' ||
+			// typeof data.unit !== 'string' ||
+			// typeof data.expiry !== 'number' ||
+			// !Object.values(MeltQuoteState).includes(data.state)
+		) {
+			this._logger.error('Invalid response from mint...', { data, op: 'melt' });
+			throw new Error('Invalid response from mint');
+		}
+
+		return data;
 	}
 
 	/**
@@ -405,26 +463,13 @@ class Mint {
 	 * @returns The melt response.
 	 */
 	async meltBolt11(
-		meltPayload: MeltPayload,
+		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<PartialMeltQuoteResponse> {
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		const response = await this.requestWithAuth<
-			MeltQuoteResponse & MeltQuoteResponsePaidDeprecated
-		>(
-			'POST',
-			'/v1/melt/bolt11',
-			{
-				requestBody: meltPayload,
-				headers,
-			},
-			options?.customRequest,
-		);
+	): Promise<MeltQuoteBolt11Response> {
+		const response = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 
 		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
 
@@ -433,8 +478,8 @@ class Mint {
 			typeof data?.state !== 'string' ||
 			!Object.values(MeltQuoteState).includes(data.state)
 		) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'meltBolt11' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -451,25 +496,13 @@ class Mint {
 	 * @returns Payment result with state and optional change signatures.
 	 */
 	async meltBolt12(
-		meltPayload: MeltPayload,
+		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
 			preferAsync?: boolean;
 		},
-	): Promise<Bolt12MeltQuoteResponse> {
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		const data = await this.requestWithAuth<Bolt12MeltQuoteResponse>(
-			'POST',
-			'/v1/melt/bolt12',
-			{
-				requestBody: meltPayload,
-				headers,
-			},
-			options?.customRequest,
-		);
-		return data;
+	): Promise<MeltQuoteBolt12Response> {
+		return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
 	}
 
 	/**
@@ -491,8 +524,8 @@ class Mint {
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.states)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'check' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -511,7 +544,7 @@ class Mint {
 		keysetId?: string,
 		mintUrl?: string,
 		customRequest?: RequestFn,
-	): Promise<MintActiveKeys> {
+	): Promise<GetKeysResponse> {
 		const targetUrl = mintUrl || this._mintUrl;
 		// backwards compatibility for base64 encoded keyset ids
 		if (keysetId) {
@@ -519,15 +552,15 @@ class Mint {
 			keysetId = keysetId.replace(/\//g, '_').replace(/\+/g, '-');
 		}
 		const requestInstance = customRequest ?? this._request;
-		const data = await requestInstance<MintActiveKeys>({
+		const data = await requestInstance<GetKeysResponse>({
 			endpoint: keysetId
 				? joinUrls(targetUrl, '/v1/keys', keysetId)
 				: joinUrls(targetUrl, '/v1/keys'),
 		});
 
 		if (!isObj(data) || !Array.isArray(data.keysets)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'getKeys' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -539,9 +572,11 @@ class Mint {
 	 * @param customRequest Optional override for the request function.
 	 * @returns All the mint's past and current keysets.
 	 */
-	async getKeySets(customRequest?: RequestFn): Promise<MintAllKeysets> {
+	async getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse> {
 		const requestInstance = customRequest ?? this._request;
-		return requestInstance<MintAllKeysets>({ endpoint: joinUrls(this._mintUrl, '/v1/keysets') });
+		return requestInstance<GetKeysetsResponse>({
+			endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
+		});
 	}
 
 	/**
@@ -563,8 +598,8 @@ class Mint {
 		});
 
 		if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
-			const errDetail = isObj(data) && 'detail' in data ? (data as ApiError).detail : undefined;
-			throw new Error(errDetail ?? 'bad response');
+			this._logger.error('Invalid response from mint...', { data, op: 'restore' });
+			throw new Error('Invalid response from mint');
 		}
 
 		return data;
@@ -574,27 +609,31 @@ class Mint {
 	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17.
 	 */
 	async connectWebSocket() {
-		if (this.ws) {
-			await this.ws.ensureConnection();
-		} else {
+		try {
 			const mintUrl = new URL(this._mintUrl);
 			const wsSegment = 'v1/ws';
-			if (mintUrl.pathname) {
-				if (mintUrl.pathname.endsWith('/')) {
-					mintUrl.pathname += wsSegment;
-				} else {
-					mintUrl.pathname += '/' + wsSegment;
-				}
+
+			if (mintUrl.pathname.endsWith('/')) mintUrl.pathname += wsSegment;
+			else mintUrl.pathname += '/' + wsSegment;
+
+			// preserve query params if any, and avoid manual string building
+			mintUrl.protocol = mintUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+			const wsUrl = mintUrl.toString();
+
+			if (!this.ws) {
+				this.ws = ConnectionManager.getInstance().getConnection(wsUrl, this._logger);
 			}
-			this.ws = ConnectionManager.getInstance().getConnection(
-				`${mintUrl.protocol === 'https:' ? 'wss' : 'ws'}://${mintUrl.host}${mintUrl.pathname}`,
-			);
+
+			await this.ws.ensureConnection();
+		} catch (e) {
+			this._logger.error('Failed to connect to WebSocket...', { e });
 			try {
-				await this.ws.connect();
-			} catch (e) {
-				this._logger.error('Failed to connect to WebSocket...', { e });
-				throw new Error('Failed to connect to WebSocket...');
+				this.ws?.close();
+			} catch {
+				// silence
 			}
+			this.ws = undefined;
+			throw new Error('Failed to connect to WebSocket...');
 		}
 	}
 
@@ -668,6 +707,14 @@ class Mint {
 			method,
 			headers,
 		});
+	}
+
+	private isValidMethodString(method: unknown): boolean {
+		// Is a string at least one character long, containing only 0-9, a-z, _ or -
+		if (typeof method === 'string' && /^[a-z0-9_-]+$/.test(method)) {
+			return true;
+		}
+		return false;
 	}
 }
 

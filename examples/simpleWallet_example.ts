@@ -1,8 +1,8 @@
 import dns from 'node:dns';
 import {
-	PartialMeltQuoteResponse,
+	MeltQuoteBolt11Response,
 	MeltQuoteState,
-	MintQuoteResponse,
+	MintQuoteBolt11Response,
 	MintQuoteState,
 	Proof,
 	Token,
@@ -34,8 +34,8 @@ const runWalletExample = async () => {
 		await wallet.loadMint();
 
 		//we can store the mint information, in case we later want to initialize the wallet without requesting the mint info again.
-		const mintInfo = wallet.getMintInfo();
-		const keyCache = wallet.keyChain.getCache();
+		const mintInfo = wallet.getMintInfo().cache;
+		const keyCache = wallet.keyChain.cache;
 		console.log(mintInfo, keyCache);
 
 		// ++++++++ Minting some ecash +++++++++++++
@@ -60,26 +60,16 @@ const runWalletExample = async () => {
 
 			console.log('Invoice to pay, in order to fullfill the quote: ' + quote.request);
 
-			//check if an error occurred in the creation of the quote
-			if (quote.error) {
-				console.error(quote.error, quote.code, quote.detail);
-				return;
-			}
-
 			// After some time of waiting, let's ask the mint if the request has been fullfilled.
 			setTimeout(async () => await checkMintQuote(quote), 1000);
 
-			const checkMintQuote = async (q: MintQuoteResponse) => {
+			const checkMintQuote = async (q: MintQuoteBolt11Response) => {
 				// with this call, we can check the current status of a given quote
 				console.log('Checking the status of the quote: ' + q.quote);
 				const quote = await wallet.checkMintQuoteBolt11(q.quote);
-				if (quote.error) {
-					console.error(quote.error, quote.code, quote.detail);
-					return;
-				}
 				if (quote.state === MintQuoteState.PAID) {
 					//if the quote was paid, we can ask the mint to issue the signatures for the ecash
-					const response = await wallet.mintProofs(mintAmount, quote.quote);
+					const response = await wallet.mintProofsBolt11(mintAmount, quote.quote);
 					console.log(`minted proofs: ${response.map((p) => p.amount).join(', ')} sats`);
 
 					// let's store the proofs in the storage we previously created
@@ -183,28 +173,19 @@ const runWalletExample = async () => {
 			sentProofs.push(...send);
 
 			// and initiate the melting process with the prepared proofs.
-			const { change } = await wallet.meltProofs(quote, send);
+			const { change } = await wallet.meltProofsBolt11(quote, send);
 
 			//in case we overpaid for lightning fees, the mint will return the owed amount in ecash
 			proofs.push(...change);
-
-			if (quote.error) {
-				console.error(quote.error, quote.code, quote.detail);
-				return;
-			}
 
 			// After giving the mint some time to fullfil the melt request,
 			// we can check on the status
 			setTimeout(async () => await checkMeltQuote(quote), 1000);
 
-			const checkMeltQuote = async (q: PartialMeltQuoteResponse) => {
+			const checkMeltQuote = async (q: MeltQuoteBolt11Response) => {
 				// we can check on the status of the quote.
 				const quote = await wallet.checkMeltQuoteBolt11(q.quote);
 
-				if (quote.error) {
-					console.error(quote.error, quote.code, quote.detail);
-					return;
-				}
 				if (quote.state === MeltQuoteState.PAID) {
 					// if the request has succeeded, we should receive the preimage for the paid invoice.
 					console.log(

@@ -1,6 +1,6 @@
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils';
-import { sha256 } from '@noble/hashes/sha2';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import {
 	encodeBase64ToJson,
 	encodeBase64toUint8,
@@ -15,7 +15,6 @@ import type {
 	DeprecatedToken,
 	Keys,
 	MintKeys,
-	MintKeyset,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -23,9 +22,10 @@ import type {
 	V4DLEQTemplate,
 	V4InnerToken,
 	V4ProofTemplate,
+	HasKeysetKeys,
+	HasKeysetId,
 } from '../model/types';
 import { Bytes } from './Bytes';
-import { type Keyset } from '../wallet';
 
 /**
  * Splits the amount into denominations of the provided keyset.
@@ -175,11 +175,13 @@ export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
 /**
  * Converts a bytes array to a number.
  *
+ * @deprecated We now use Bytes.toBigInt internally for better performance. This function is kept
+ *   public for backward compatibility.
  * @param bytes To convert to number.
- * @returns Number.
+ * @returns Number as bigint.
  */
 export function bytesToNumber(bytes: Uint8Array): bigint {
-	return hexToNumber(bytesToHex(bytes));
+	return Bytes.toBigInt(bytes);
 }
 
 /**
@@ -353,10 +355,32 @@ function templateFromToken(token: Token): TokenV4Template {
 	return tokenTemplate;
 }
 
+/**
+ * Asserts amount is a valid, safe integer.
+ *
+ * @param amount Value to check.
+ * @param allowZero If false, requires amount > 0 (default: false).
+ */
+/**
+ * @internal
+ */
+export function validateAmount(amount: unknown, allowZero = false): asserts amount is number {
+	if (typeof amount !== 'number' || !Number.isFinite(amount) || !Number.isInteger(amount)) {
+		throw new Error(`Invalid amount: ${String(amount)}`);
+	}
+	if (!Number.isSafeInteger(amount)) {
+		throw new Error(`Amount must be a safe integer: ${amount}`);
+	}
+	if (allowZero ? amount < 0 : amount <= 0) {
+		throw new Error(`Amount must be ${allowZero ? 'non-negative' : 'positive'}: ${amount}`);
+	}
+}
+
 function tokenFromTemplate(template: TokenV4Template): Token {
 	const proofs: Proof[] = [];
 	template.t.forEach((t) =>
 		t.p.forEach((p) => {
+			validateAmount(p.a, true);
 			proofs.push({
 				secret: p.s,
 				C: bytesToHex(p.c),
@@ -388,21 +412,32 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 /**
  * Helper function to decode cashu tokens into object.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
+ * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysets?: MintKeyset[] | Keyset[]) {
+export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
+/**
+ * @deprecated Pass keyset ids as `string[]` instead, eg: using KeyChain.getAllKeysetIds()
+ */
+export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
+export function getDecodedToken(
+	tokenString: string,
+	keysetOrIds?: ReadonlyArray<string | HasKeysetId>,
+): Token {
+	// normalize to array of strings
+	const keysetIds = (keysetOrIds ?? []).map((ks) => (typeof ks === 'string' ? ks : ks.id));
 	// remove prefixes
-	const token = removePrefix(tokenString);
-	const tokenObj = handleTokens(token);
-	tokenObj.proofs = mapShortKeysetIds(tokenObj.proofs, keysets);
-	return tokenObj;
+	const tokenStr = removePrefix(tokenString);
+	const token: Token = handleTokens(tokenStr);
+	token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
+	return token;
 }
 
 /**
  * Returns the metadata of a cashu token.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
  * @returns Token metadata.
  */
 export function getTokenMetadata(token: string): TokenMetadata {
@@ -430,7 +465,7 @@ export function getTokenMetadata(token: string): TokenMetadata {
 /**
  * Helper function to decode different versions of cashu tokens into an object.
  *
- * @param token An encoded cashu token (cashuAey...)
+ * @param token An encoded cashu token (cashuB...)
  * @returns Cashu Token object.
  */
 export function handleTokens(token: string): Token {
@@ -442,6 +477,9 @@ export function handleTokens(token: string): Token {
 			throw new Error('Multi entry token are not supported');
 		}
 		const entry = parsedV3Token.token[0];
+		for (const p of entry.proofs) {
+			validateAmount(p.amount, true);
+		}
 		const tokenObj: Token = {
 			mint: entry.mint,
 			proofs: entry.proofs,
@@ -459,61 +497,104 @@ export function handleTokens(token: string): Token {
 	throw new Error('Token version is not supported');
 }
 
+export type DeriveKeysetIdOptions = {
+	expiry?: number;
+	input_fee_ppk?: number;
+	unit?: string;
+	versionByte?: number;
+	isDeprecatedBase64?: boolean;
+};
+
 /**
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param unit (optional) the unit of the keyset.
- * @param expiry (optional) expiry of the keyset.
- * @param versionByte (optional) version of the keyset ID. Default is 0.
- * @param isDeprecatedBase64 (optional) true if the keyset ID should be derived as a deprecated v0
- *   base64 keyset ID.
+ * @param options.expiry (optional) expiry of the keyset.
+ * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
+ * @param options.unit (optional) the unit of the keyset. Default: sat.
+ * @param options.versionByte (optional) version of the keyset ID. Default: 1.
+ * @param options.isDeprecatedBase64 (optional) version of the keyset ID. Default: false.
  * @returns Keyset id of the keys.
  * @throws If keyset versionByte is not valid.
+ */
+export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
+/**
+ * @deprecated Use the new options signature, which also adds keysets v2 support:
+ *
+ *       deriveKeysetId(keys, { unit, expiry, versionByte, input_fee_ppk });
  */
 export function deriveKeysetId(
 	keys: Keys,
 	unit?: string,
 	expiry?: number,
-	versionByte: number = 0,
-	isDeprecatedBase64: boolean = false,
-) {
+	versionByte?: number,
+	isDeprecatedBase64?: boolean,
+): string;
+export function deriveKeysetId(
+	keys: Keys,
+	arg2?: string | DeriveKeysetIdOptions,
+	expiry?: number,
+	versionByte?: number,
+	isDeprecatedBase64?: boolean,
+	input_fee_ppk?: number,
+): string {
+	let unit: string = 'sat';
+	if (arg2 && typeof arg2 === 'object') {
+		// New signature
+		unit = arg2.unit ?? 'sat'; // default: sat
+		expiry = arg2.expiry;
+		versionByte = arg2.versionByte ?? 1; // default: 1
+		input_fee_ppk = arg2.input_fee_ppk;
+		isDeprecatedBase64 = arg2.isDeprecatedBase64 ?? false; // default: false
+	} else {
+		// Deprecated signature
+		unit = arg2 ?? 'sat'; // default: sat
+		versionByte = versionByte ?? 0; // default: 0
+		isDeprecatedBase64 = isDeprecatedBase64 ?? false; // default: false
+	}
+
 	if (isDeprecatedBase64) {
 		const pubkeysConcat = Object.entries(keys)
-			.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
-			.map(([, pubKey]: [unknown, string]) => pubKey)
+			.sort(([amountA], [amountB]) => Number(amountA) - Number(amountB))
+			.map(([, pubKey]) => pubKey)
 			.reduce((prev: string, curr: string) => prev + curr, '');
-		const hash = sha256(pubkeysConcat);
+		const hash = sha256(Bytes.fromString(pubkeysConcat));
 		const b64 = Bytes.toBase64(hash);
 		return b64.slice(0, 12);
 	}
 
-	let pubkeysConcat = Object.entries(keys)
-		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
-		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
-		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-
-	let hash;
-	let hashHex;
 	switch (versionByte) {
-		case 0:
-			hash = sha256(pubkeysConcat);
-			hashHex = Bytes.toHex(hash).slice(0, 14);
+		case 0: {
+			const pubkeysConcat = Object.entries(keys)
+				.sort(([amountA], [amountB]) => Number(amountA) - Number(amountB))
+				.map(([, pubKey]) => hexToBytes(pubKey))
+				.reduce(
+					(prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr),
+					new Uint8Array(),
+				);
+			const hash = sha256(pubkeysConcat);
+			const hashHex = Bytes.toHex(hash).slice(0, 14);
 			return '00' + hashHex;
-		case 1:
+		}
+		case 1: {
 			if (!unit) {
 				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
-			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Bytes.fromString('unit:' + unit));
-			if (expiry) {
-				pubkeysConcat = mergeUInt8Arrays(
-					pubkeysConcat,
-					Bytes.fromString('final_expiry:' + expiry.toString()),
-				);
+			const sortedEntries = Object.entries(keys).sort(
+				([amountA], [amountB]) => Number(amountA) - Number(amountB),
+			);
+			let preimage = sortedEntries.map(([amount, pubkey]) => `${amount}:${pubkey}`).join(',');
+			preimage += `|unit:${unit}`;
+			if (input_fee_ppk) {
+				preimage += `|input_fee_ppk:${input_fee_ppk}`;
 			}
-			hash = sha256(pubkeysConcat);
-			hashHex = Bytes.toHex(hash);
+			if (expiry) {
+				preimage += `|final_expiry:${expiry}`;
+			}
+			const hash = sha256(Bytes.fromString(preimage));
+			const hashHex = Bytes.toHex(hash);
 			return '01' + hashHex;
+		}
 		default:
 			throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
 	}
@@ -650,36 +731,47 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * Check that the keyset hashes to the specified ID.
- *
- * @deprecated Now part of Keyset class.
- * @param keys The keyset to be verified.
- * @returns True if the verification was successful, false otherwise.
- * @throws Error if the keyset ID version is unrecognized.
+ * @deprecated Use Keyset.verifyKeysetId(keys), or init a Keyset and call keyset.verify().
  */
 export function verifyKeysetId(keys: MintKeys): boolean {
+	// Note: we are NOT redirecting to Keyset.verifyKeysetId() here as that would
+	// couple the utils class to Keyset, and risks circular dependencies.
 	const isBase64 = isBase64String(keys.id);
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
 	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
 	return (
-		deriveKeysetId(
-			keys.keys,
-			keys.unit,
-			keys.final_expiry,
+		deriveKeysetId(keys.keys, {
+			expiry: keys.final_expiry,
+			input_fee_ppk: keys.input_fee_ppk,
+			unit: keys.unit,
 			versionByte,
-			isBase64 && !isValidHex,
-		) === keys.id
+			isDeprecatedBase64: isBase64 && !isValidHex,
+		}) === keys.id
 	);
 }
 
 /**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
+ *
+ * @param proofs Array of Proofs.
+ * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
+ * @returns Array of Proofs with full keyset IDs.
  */
-function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): Proof[] {
-	const newProofs = [];
+function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly string[]): Proof[];
+/**
+ * @deprecated Pass keyset ids as `string[]` instead.
+ */
+function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly HasKeysetId[]): Proof[];
+function mapShortKeysetIds(
+	proofs: Proof[],
+	keysetOrIds?: ReadonlyArray<string | HasKeysetId>,
+): Proof[] {
+	// normalize to array of keyset ids
+	const keysetIds = (keysetOrIds ?? []).map((ks) => (typeof ks === 'string' ? ks : ks.id));
+	const newProofs: Proof[] = [];
 	for (const proof of proofs) {
-		let idBytes;
+		let idBytes: Uint8Array;
 		try {
 			idBytes = hexToBytes(proof.id);
 		} catch {
@@ -691,24 +783,21 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): 
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
 		} else if (idBytes[0] === 0x01) {
-			if (!keysets) {
+			if (!keysetIds) {
 				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
 			}
 			// Look for a match: prefix(keyset ID) == short ID
-			let found = false;
-			for (const keyset of keysets) {
-				if (proof.id === keyset.id.slice(0, proof.id.length)) {
-					proof.id = keyset.id;
-					newProofs.push(proof);
-					found = true;
-					break;
-				}
+			const matches = keysetIds.filter((keyset) => proof.id === keyset.slice(0, proof.id.length));
+			if (matches.length > 1) {
+				throw new Error(`Short keyset ID ${proof.id} is ambiguous.`);
 			}
-			if (!found) {
+			if (matches.length === 0) {
 				throw new Error(
 					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`,
 				);
 			}
+			proof.id = matches[0];
+			newProofs.push(proof);
 		} else {
 			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`);
 		}
@@ -721,11 +810,11 @@ function mapShortKeysetIds(proofs: Proof[], keysets?: MintKeyset[] | Keyset[]): 
  * Checks that the proof has a valid DLEQ proof according to keyset `keys`
  *
  * @param proof The proof subject to verification.
- * @param keyset The Mint's keyset to be used for verification.
+ * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
  * @returns True if verification succeeded, false otherwise.
- * @throws Error if @param proof does not match any key in @param keyset.
+ * @throws Throws if the proof amount does not match any key in the provided keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
+export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
 	if (proof.dleq == undefined) {
 		return false;
 	}
@@ -735,7 +824,7 @@ export function hasValidDleq(proof: Proof, keyset: MintKeys | Keyset): boolean {
 		r: hexToNumber(proof.dleq.r ?? '00'),
 	} as DLEQ;
 	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-		throw new Error(`undefined key for amount ${proof.amount}`);
+		throw new Error(`Undefined key for amount ${proof.amount} in keyset ${keyset.id}`);
 	}
 	const key = keyset.keys[proof.amount];
 	return verifyDLEQProof_reblind(
@@ -813,4 +902,12 @@ function removePrefix(token: string): string {
 		token = token.slice(prefix.length);
 	});
 	return token;
+}
+
+/**
+ * Detects whether a BOLT-11 Lightning invoice encodes a non-zero amount in the Human-Readable Part
+ * (HRP).
+ */
+export function invoiceHasAmountInHRP(invoice: string): boolean {
+	return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/i.test(invoice);
 }
