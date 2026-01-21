@@ -2939,6 +2939,84 @@ describe('melt proofs', () => {
 		expect(completedResponse.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
 
+	test('custom OutputType is used as-is in prepareMelt', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+		const data: OutputData[] = [
+			new OutputData(
+				{
+					amount: 0,
+					B_: '0280999e99569db86fff252e9fe235d5ab0583c5e48e9a6d30b7159ddb2354a664',
+					id: '00bd033559de27d0',
+				},
+				BigInt('98121968294344218843445436832971329830403131138970027258925944949754607239194'),
+				Uint8Array.from([
+					50, 57, 102, 56, 100, 55, 54, 101, 102, 97, 54, 49, 54, 99, 51, 102, 97, 48, 57, 49, 99,
+					100, 55, 48, 98, 57, 57, 99, 98, 99, 53, 52, 51, 52, 56, 99, 57, 101, 51, 98, 101, 100,
+					48, 100, 56, 48, 52, 55, 101, 101, 101, 55, 55, 100, 55, 57, 55, 53, 50, 57, 52, 97, 56,
+					51,
+				]),
+			),
+			new OutputData(
+				{
+					amount: 0,
+					B_: '0366a12d8f642a9209b2a2b62dd46133d67c61395758760b037526d8ea6ebb0b58',
+					id: '00bd033559de27d0',
+				},
+				BigInt('91654934695124838981374963092507707719762522706574178484674131180622854636768'),
+				Uint8Array.from([
+					102, 102, 48, 100, 56, 97, 98, 53, 100, 101, 97, 97, 101, 51, 57, 55, 101, 50, 53, 102,
+					57, 51, 53, 55, 54, 100, 102, 51, 100, 102, 52, 102, 102, 97, 100, 50, 102, 52, 50, 98,
+					99, 53, 53, 97, 49, 54, 98, 102, 99, 53, 50, 51, 56, 51, 48, 56, 49, 50, 53, 102, 48, 97,
+					51, 101,
+				]),
+			),
+		];
+
+		const customOutputType: OutputType = {
+			type: 'custom',
+			data: data,
+		};
+		const meltQuote: MeltQuoteBolt11Response = {
+			quote: 'test_melt_quote',
+			amount: 10,
+			fee_reserve: 3,
+			request: 'bolt11request',
+			state: MeltQuoteState.UNPAID,
+			expiry: 1234567890,
+			payment_preimage: null,
+			unit: 'sat',
+		};
+
+		const proofsToSend: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 8,
+				secret: 'secret1',
+				C: 'C1',
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 5,
+				secret: 'secret2',
+				C: 'C2',
+			},
+		];
+
+		const meltTxn = await wallet.prepareMelt(
+			'bolt11',
+			meltQuote,
+			proofsToSend,
+			undefined,
+			customOutputType,
+		);
+
+		// Verify that the custom OutputType was used as-is
+		expect(meltTxn.outputData.length).toEqual(2);
+		expect(meltTxn.outputData[0].blindedMessage).toEqual(customOutputType.data[0].blindedMessage);
+		expect(meltTxn.outputData[1].blindedMessage).toEqual(customOutputType.data[1].blindedMessage);
+	});
+
 	describe('melt, NUT-08 blanks', () => {
 		test('includes zero-amount blanks covering fee reserve (bolt11)', async () => {
 			const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
