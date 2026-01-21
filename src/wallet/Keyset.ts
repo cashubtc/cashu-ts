@@ -125,6 +125,7 @@ export class Keyset {
 			id: this._id,
 			unit: this._unit,
 			final_expiry: this._final_expiry,
+			input_fee_ppk: this._input_fee_ppk,
 			keys: this._keys,
 		});
 	}
@@ -140,13 +141,13 @@ export class Keyset {
 		}
 		const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
 		const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
-		const derivedId = deriveKeysetId(
-			keys.keys,
-			keys.unit,
-			keys.final_expiry,
+		const derivedId = deriveKeysetId(keys.keys, {
+			input_fee_ppk: keys.input_fee_ppk,
+			expiry: keys.final_expiry,
+			unit: keys.unit,
 			versionByte,
 			isDeprecatedBase64,
-		);
+		});
 		return derivedId === keys.id;
 	}
 

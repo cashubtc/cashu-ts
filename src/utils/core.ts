@@ -497,61 +497,104 @@ export function handleTokens(token: string): Token {
 	throw new Error('Token version is not supported');
 }
 
+export type DeriveKeysetIdOptions = {
+	expiry?: number;
+	input_fee_ppk?: number;
+	unit?: string;
+	versionByte?: number;
+	isDeprecatedBase64?: boolean;
+};
+
 /**
  * Returns the keyset id of a set of keys.
  *
  * @param keys Keys object to derive keyset id from.
- * @param unit (optional) the unit of the keyset.
- * @param expiry (optional) expiry of the keyset.
- * @param versionByte (optional) version of the keyset ID. Default is 0.
- * @param isDeprecatedBase64 (optional) true if the keyset ID should be derived as a deprecated v0
- *   base64 keyset ID.
+ * @param options.expiry (optional) expiry of the keyset.
+ * @param options.input_fee_ppk (optional) Input fee for keyset (in ppk)
+ * @param options.unit (optional) the unit of the keyset. Default: sat.
+ * @param options.versionByte (optional) version of the keyset ID. Default: 1.
+ * @param options.isDeprecatedBase64 (optional) version of the keyset ID. Default: false.
  * @returns Keyset id of the keys.
  * @throws If keyset versionByte is not valid.
+ */
+export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
+/**
+ * @deprecated Use the new options signature, which also adds keysets v2 support:
+ *
+ *       deriveKeysetId(keys, { unit, expiry, versionByte, input_fee_ppk });
  */
 export function deriveKeysetId(
 	keys: Keys,
 	unit?: string,
 	expiry?: number,
-	versionByte: number = 0,
-	isDeprecatedBase64: boolean = false,
-) {
+	versionByte?: number,
+	isDeprecatedBase64?: boolean,
+): string;
+export function deriveKeysetId(
+	keys: Keys,
+	arg2?: string | DeriveKeysetIdOptions,
+	expiry?: number,
+	versionByte?: number,
+	isDeprecatedBase64?: boolean,
+	input_fee_ppk?: number,
+): string {
+	let unit: string = 'sat';
+	if (arg2 && typeof arg2 === 'object') {
+		// New signature
+		unit = arg2.unit ?? 'sat'; // default: sat
+		expiry = arg2.expiry;
+		versionByte = arg2.versionByte ?? 1; // default: 1
+		input_fee_ppk = arg2.input_fee_ppk;
+		isDeprecatedBase64 = arg2.isDeprecatedBase64 ?? false; // default: false
+	} else {
+		// Deprecated signature
+		unit = arg2 ?? 'sat'; // default: sat
+		versionByte = versionByte ?? 0; // default: 0
+		isDeprecatedBase64 = isDeprecatedBase64 ?? false; // default: false
+	}
+
 	if (isDeprecatedBase64) {
 		const pubkeysConcat = Object.entries(keys)
-			.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
-			.map(([, pubKey]: [unknown, string]) => pubKey)
+			.sort(([amountA], [amountB]) => Number(amountA) - Number(amountB))
+			.map(([, pubKey]) => pubKey)
 			.reduce((prev: string, curr: string) => prev + curr, '');
 		const hash = sha256(Bytes.fromString(pubkeysConcat));
 		const b64 = Bytes.toBase64(hash);
 		return b64.slice(0, 12);
 	}
 
-	let pubkeysConcat = Object.entries(keys)
-		.sort((a: [string, string], b: [string, string]) => +a[0] - +b[0])
-		.map(([, pubKey]: [unknown, string]) => hexToBytes(pubKey))
-		.reduce((prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr), new Uint8Array());
-
-	let hash;
-	let hashHex;
 	switch (versionByte) {
-		case 0:
-			hash = sha256(pubkeysConcat);
-			hashHex = Bytes.toHex(hash).slice(0, 14);
+		case 0: {
+			const pubkeysConcat = Object.entries(keys)
+				.sort(([amountA], [amountB]) => Number(amountA) - Number(amountB))
+				.map(([, pubKey]) => hexToBytes(pubKey))
+				.reduce(
+					(prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr),
+					new Uint8Array(),
+				);
+			const hash = sha256(pubkeysConcat);
+			const hashHex = Bytes.toHex(hash).slice(0, 14);
 			return '00' + hashHex;
-		case 1:
+		}
+		case 1: {
 			if (!unit) {
 				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
-			pubkeysConcat = mergeUInt8Arrays(pubkeysConcat, Bytes.fromString('unit:' + unit));
-			if (expiry) {
-				pubkeysConcat = mergeUInt8Arrays(
-					pubkeysConcat,
-					Bytes.fromString('final_expiry:' + expiry.toString()),
-				);
+			const sortedEntries = Object.entries(keys).sort(
+				([amountA], [amountB]) => Number(amountA) - Number(amountB),
+			);
+			let preimage = sortedEntries.map(([amount, pubkey]) => `${amount}:${pubkey}`).join(',');
+			preimage += `|unit:${unit}`;
+			if (input_fee_ppk) {
+				preimage += `|input_fee_ppk:${input_fee_ppk}`;
 			}
-			hash = sha256(pubkeysConcat);
-			hashHex = Bytes.toHex(hash);
+			if (expiry) {
+				preimage += `|final_expiry:${expiry}`;
+			}
+			const hash = sha256(Bytes.fromString(preimage));
+			const hashHex = Bytes.toHex(hash);
 			return '01' + hashHex;
+		}
 		default:
 			throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
 	}
@@ -697,13 +740,13 @@ export function verifyKeysetId(keys: MintKeys): boolean {
 	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
 	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
 	return (
-		deriveKeysetId(
-			keys.keys,
-			keys.unit,
-			keys.final_expiry,
+		deriveKeysetId(keys.keys, {
+			expiry: keys.final_expiry,
+			input_fee_ppk: keys.input_fee_ppk,
+			unit: keys.unit,
 			versionByte,
-			isBase64 && !isValidHex,
-		) === keys.id
+			isDeprecatedBase64: isBase64 && !isValidHex,
+		}) === keys.id
 	);
 }
 
@@ -744,20 +787,17 @@ function mapShortKeysetIds(
 				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
 			}
 			// Look for a match: prefix(keyset ID) == short ID
-			let found = false;
-			for (const keyset of keysetIds) {
-				if (proof.id === keyset.slice(0, proof.id.length)) {
-					proof.id = keyset;
-					newProofs.push(proof);
-					found = true;
-					break;
-				}
+			const matches = keysetIds.filter((keyset) => proof.id === keyset.slice(0, proof.id.length));
+			if (matches.length > 1) {
+				throw new Error(`Short keyset ID ${proof.id} is ambiguous.`);
 			}
-			if (!found) {
+			if (matches.length === 0) {
 				throw new Error(
 					`Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`,
 				);
 			}
+			proof.id = matches[0];
+			newProofs.push(proof);
 		} else {
 			throw new Error(`Unknown keyset ID version: ${idBytes[0]}`);
 		}
