@@ -11,7 +11,7 @@
 
 ## PR Tasks
 
-- [x] Open PR
+- [x] Open PR (base: `development` branch)
 - [ ] run `npm run test` --> no failing unit tests
 - [ ] run `npm run lint` --> no warnings or errors
 - [ ] run `npm run format`
