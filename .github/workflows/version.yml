@@ -30,7 +30,7 @@ jobs:
       - run: npm publish --provenance --tag ${{ steps.npm-tag.outputs.tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - run: npm run build:standalone
+      - run: npm run compile:standalone
       - name: Upload standalone bundle assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
