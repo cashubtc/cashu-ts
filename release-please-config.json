@@ -1,0 +1,11 @@
+{
+	"packages": {
+		".": {
+			"release-type": "node",
+			"package-name": "cashu-ts",
+			"initial-version": "3.3.0",
+			"bootstrap-sha": "f6fbb6bb8f892eb7fa300171255c84edc7f2aada"
+		}
+	},
+	"$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/resources/schema.json"
+}

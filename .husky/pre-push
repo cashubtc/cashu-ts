@@ -1,5 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
 
 echo "Running pre-push: full PR tasks (lint, format, api:update, tests)"
 
@@ -9,9 +9,6 @@ if ! command -v npm >/dev/null 2>&1; then
 fi
 
 echo "-> npm run prtasks"
-if ! npm run prtasks; then
-  echo "pre-push checks failed. Push aborted." >&2
-  exit 1
-fi
+npm run prtasks || { echo "pre-push checks failed. Push aborted." >&2; exit 1; }
 
 echo "Pre-push checks passed."

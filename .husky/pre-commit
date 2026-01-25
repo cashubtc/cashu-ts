@@ -1,24 +1,19 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
 
 echo "Quick pre-commit: lint + format"
 
+# Ensure npm is available
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm not found in PATH. Install Node.js/npm before committing." >&2
   exit 1
 fi
 
 echo "-> npm run lint"
-if ! npm run lint; then
-  echo "Lint failed. Commit aborted." >&2
-  exit 1
-fi
+npm run lint || { echo "Lint failed. Commit aborted." >&2; exit 1; }
 
 echo "-> npm run format"
-if ! npm run format; then
-  echo "Format failed." >&2
-  exit 1
-fi
+npm run format || { echo "Format failed." >&2; exit 1; }
 
 # If formatting changed files, stage them
 if [ -n "$(git status --porcelain)" ]; then
@@ -29,10 +24,7 @@ fi
 # Optional: run the full prtasks if explicitly requested by env var
 if [ "${FULL_PRECOMMIT:-0}" = "1" ]; then
   echo "Running full prtasks (opt-in)..."
-  if ! npm run prtasks; then
-    echo "Full prtasks failed. Commit aborted." >&2
-    exit 1
-  fi
+  npm run prtasks || { echo "Full prtasks failed. Commit aborted." >&2; exit 1; }
 fi
 
 echo "Pre-commit quick checks passed."
