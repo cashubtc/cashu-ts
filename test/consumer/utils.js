@@ -102,7 +102,7 @@ async function copyFixtureDir({ fixtureDir, tempDir, label }) {
 function initAndInstall({ tempDir, installDepsCommand, tgzPath }) {
 	npmExec('npm init -y', tempDir);
 	if (installDepsCommand) npmExec(`${installDepsCommand} --no-fund --no-audit --silent`, tempDir);
-	npmExec(`npm i ${tgzPath} --no-fund --no-audit --silent`, tempDir);
+	npmExec(`npm i ${tgzPath} --no-fund --no-audit --silent --ignore-scripts`, tempDir);
 }
 
 function showTscConfig(tempDir, label) {
