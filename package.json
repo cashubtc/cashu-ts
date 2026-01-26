@@ -41,7 +41,7 @@
 		"setup-hooks": "chmod +x scripts/install-git-hooks.sh && ./scripts/install-git-hooks.sh",
 		"uninstall-hooks": "git config --local --unset core.hooksPath && [ \"${REMOVE_GITHOOKS:-0}\" = \"1\" ] && rm -rf .githooks || echo 'To remove the installed hooks set REMOVE_GITHOOKS=1'",
 		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status",
-		"prepare": "test -d .git && husky || exit 0",
+		"prepare": "husky || true",
 		"setup-git": "git config commit.template .gitmessage",
 		"postinstall": "npm run setup-git",
 		"migrate-hooks": "REMOVE_GITHOOKS=1 npm run uninstall-hooks && npm install"
