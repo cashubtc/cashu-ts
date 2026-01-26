@@ -40,7 +40,11 @@
 		"api:update": "npm run compile && api-extractor run --local",
 		"setup-hooks": "chmod +x scripts/install-git-hooks.sh && ./scripts/install-git-hooks.sh",
 		"uninstall-hooks": "git config --local --unset core.hooksPath && [ \"${REMOVE_GITHOOKS:-0}\" = \"1\" ] && rm -rf .githooks || echo 'To remove the installed hooks set REMOVE_GITHOOKS=1'",
-		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status"
+		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status",
+		"prepare": "husky",
+		"setup-git": "git config commit.template .gitmessage",
+		"postinstall": "npm run setup-git",
+		"migrate-hooks": "REMOVE_GITHOOKS=1 npm run uninstall-hooks && npm install"
 	},
 	"exports": {
 		".": {
@@ -56,6 +60,8 @@
 	"author": "gandlaf21",
 	"license": "MIT",
 	"devDependencies": {
+		"@commitlint/cli": "^20.3.1",
+		"@commitlint/config-conventional": "^20.3.1",
 		"@eslint/js": "^9.31.0",
 		"@microsoft/api-extractor": "^7.52.4",
 		"@types/node-fetch": "^2.6.4",
@@ -71,6 +77,7 @@
 		"eslint-plugin-n": "^17.21.1",
 		"eslint-plugin-promise": "^7.2.1",
 		"globals": "^16.3.0",
+		"husky": "^9.1.7",
 		"mock-socket": "^9.3.1",
 		"msw": "^2.12.4",
 		"node-fetch": "^3.3.2",

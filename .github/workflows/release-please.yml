@@ -1,0 +1,22 @@
+name: release-please
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          release-type: node
+
+      - name: Publish/Tag Actions
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          echo "The release PR was merged, we need to figure what else to do here... npm publish, docs..."
