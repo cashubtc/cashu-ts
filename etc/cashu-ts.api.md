@@ -117,6 +117,14 @@ export interface AuthProvider {
 }
 
 // @public
+export type BatchMintRequest = {
+    quotes: string[];
+    quote_amounts: Amount[];
+    outputs: SerializedBlindedMessage[];
+    signatures?: Array<string | null>;
+};
+
+// @public
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public (undocumented)
@@ -777,7 +785,9 @@ export class Mint {
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     }): Promise<MintResponse & TRes>;
     mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBolt11Batch(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBolt12Batch(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
@@ -1816,6 +1826,7 @@ export class Wallet {
         selectProofs?: SelectProofs;
         logger?: Logger;
     });
+    batchMintProofsBolt11(quotes: Array<Pick<MintQuoteBolt11Response, 'amount' | 'quote'>>, signatures?: Array<string | null>, config?: Omit<MintProofsConfig, 'privkey'>, outputType?: OutputType): Promise<Proof[]>;
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
