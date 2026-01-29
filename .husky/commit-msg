@@ -1,5 +1,11 @@
 if ! npx --no -- commitlint --edit "$1"; then
-  echo -e "\n\033[31mCommit failed!\033[0m Your message was:"
-  cat "$1"
-  exit 1
+    echo -e "\n\033[31m❌ Commit failed!\033[0m Your message does not follow Conventional Commits."
+    echo -e "--------------------------------------------------"
+    echo -e "Your message was:"
+    cat "$1"
+    echo -e "--------------------------------------------------"
+    echo -e "\033[32m💡 To fix and retry, run:\033[0m"
+    echo -e "   git commit --edit --file=.git/COMMIT_EDITMSG"
+    echo -e "--------------------------------------------------\n"
+    exit 1
 fi

@@ -15,8 +15,3 @@ jobs:
         id: release
         with:
           release-type: node
-
-      - name: Publish/Tag Actions
-        if: ${{ steps.release.outputs.release_created }}
-        run: |
-          echo "The release PR was merged, we need to figure what else to do here... npm publish, docs..."
