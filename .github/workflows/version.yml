@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22.x'
@@ -39,3 +42,23 @@ jobs:
             "./lib/cashu-ts.iife.js" \
             "./lib/cashu-ts.iife.js.map" \
             "./lib/types/index.d.ts"
+      - name: Create release PR to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_BRANCH="release/${{ github.event.release.tag_name }}"
+          PR_NUMBER=$(gh pr list --state open --base main --head "$RELEASE_BRANCH" --json number --jq '.[0].number')
+          if [ -n "$PR_NUMBER" ]; then
+            exit 0
+          fi
+          REMOTE_SHA=$(git ls-remote --heads origin "$RELEASE_BRANCH" | cut -f1)
+          if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$(git rev-parse HEAD)" ]; then
+            exit 1
+          fi
+          git checkout -b "$RELEASE_BRANCH"
+          git push --set-upstream origin "$RELEASE_BRANCH"
+          gh pr create \
+            --title "Release ${{ github.event.release.tag_name }}" \
+            --body "Merge release tag ${{ github.event.release.tag_name }} into main." \
+            --base main \
+            --head "$RELEASE_BRANCH"
