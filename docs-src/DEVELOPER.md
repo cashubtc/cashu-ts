@@ -3,6 +3,7 @@
 # Developer Guide
 
 This document is a quick reference for maintainers and frequent contributors. It complements [the contributor guide](./CONTRIBUTING.md) (which is contributor-facing) and contains deeper, actionable instructions for setting up, testing, and developing the project.
+We use Husky to manage our git hooks. When you install dependencies, the environment is automatically configured. See the Hooks section below for more info.
 
 ## Quickstart (one-time)
 
@@ -17,8 +18,6 @@ npm ci
 # prepare browser dependencies for integration tests (one-time)
 npm run test:prepare
 
-# opt in to local hooks (optional)
-npm run setup-hooks
 ```
 
 Developing branch
@@ -66,45 +65,45 @@ This callout is important — please don't skip it when moving between major bra
 
 ## Hooks internals (how the installer works)
 
-Layout
+During the install process [husky](https://typicode.github.io/husky/) was installed and setup for pre-commit, pre-push, and commit-msg hooks.
+We also automatically configured your local `git config commit.template` to use our project's `.gitmessage`.
 
-- Tracked hook sources: `scripts/hooks/` (kept non-executable in the repo)
-- Installer target: `.githooks/` (ignored by git; created by `scripts/install-git-hooks.sh`)
-- Installer behaviour:
-  - copies `scripts/hooks/*` -> `.githooks/`
-  - makes the copied files executable
-  - sets `git config --local core.hooksPath .githooks`
+### Commit Message Convention
 
-Why this pattern
+This project follows the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is **required** because it powers our automated versioning and changelog generation.
 
-- Avoids mode-only diffs on tracked files while providing a one-command opt-in experience.
-- Keeps the repo sources auditable and prevents automatic global changes.
+- **Format:** `<type>(<scope>): <description>`
+- **Common Types:**
+  - `feat`: A new feature (triggers a MINOR version bump).
+  - `fix`: A bug fix (triggers a PATCH version bump).
+  - `docs`: Documentation changes only.
+  - `chore`: Maintenance tasks or library updates.
+- **Commit Template:** We provide a `.gitmessage` template to help you structure your messages. This is automatically configured as your local `commit.template` when you run `npm install`.
 
-Useful commands
+If your message doesn't fit the format, the commit-msg hook will prevent the commit.
+
+#### Pro-Tip: Recovering a Failed Commit
+
+If your commit fails the `commitlint` check, don't worry—you don't have to retype it!
+
+**The Quick Fix:**
+Git saves your last failed commit message in `.git/COMMIT_EDITMSG`. You can quickly recover it with:
 
 ```bash
-# opt-in (makes and runs the installer)
-npm run setup-hooks
-
-# undo opt-in (revert to default hooks path)
-# NOTE: removing the installed hooks directory is destructive. The uninstall
-# script unsets the local hooks path by default. To also remove the
-# `.githooks/` directory set the guard variable explicitly to avoid an
-# accidental `rm -rf`:
-
-# unset hooks path only
-npm run uninstall-hooks
-
-# unset hooks path AND remove installed hooks (explicit opt-in)
-REMOVE_GITHOOKS=1 npm run uninstall-hooks
+git commit -t .git/COMMIT_EDITMSG
 ```
 
-Authoring hooks
+### Migrate Hooks
 
-- Edit tracked sources in `scripts/hooks/` and keep them POSIX-friendly where possible.
-- When changing hook behaviour, document the change in `CONTRIBUTING.md` and consider adding tests or examples.
+We previously offered hooks as opt-in. If you had that configured we offer a migrate-hooks command.
 
-## Pre-commit vs pre-push strategy
+```bash
+npm run migrate-hooks
+```
+
+This runs `npm run uninstall-hooks` and `npm install`.
+
+### Pre-commit vs pre-push strategy
 
 - `pre-commit`: quick feedback (lint + format) — fast to avoid blocking developers.
   - Opt-in full run: set `FULL_PRECOMMIT=1` for a single commit when you want the full suite locally.
@@ -298,6 +297,15 @@ Guidelines:
 
 - New feature PRs for v3 should target the `development` branch.
 - If you need to backport a feature to v2, open a separate PR targeting `dev-v2` (do not mix both in a single PR).
+
+### Automated Releases (release-please)
+
+We use [release-please](https://github.com/googleapis/release-please) to automate our release cycle.
+
+- **The Release PR:** Every time a Pull Request is merged into `main`, `release-please` will automatically create or update a "Release PR."
+- **Changelog Automation:** This PR tracks all `feat` and `fix` commits since the last release and compiles them into a `CHANGELOG.md`.
+- **Versioning:** It uses Semantic Versioning (SemVer) to calculate the next version number based on the nature of your commits (e.g., a `feat` triggers a `0.1.0` to `0.2.0` jump).
+- **Cutting a Release:** When a maintainer merges the Release PR, the system automatically creates a GitHub Release and tags the repository.
 
 ### Releases
 
