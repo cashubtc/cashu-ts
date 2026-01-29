@@ -1,0 +1,8 @@
+/* Hides the automatic breadcrumb bar at the top */
+.tsd-breadcrumb {
+	display: none !important;
+}
+
+.tsd-page-title {
+	display: none !important;
+}

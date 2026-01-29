@@ -1,0 +1,205 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>DEVELOPER | Cashu-TS - v3.3.0</title><meta name="description" content="Documentation for Cashu-TS"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><link rel="stylesheet" href="../assets/custom.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar"><div class="tsd-toolbar-contents container"><a href="../index.html" class="title">Cashu-TS - v3.3.0</a><div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/><ul role="listbox" id="tsd-search-results"></ul><div id="tsd-search-status" aria-live="polite" aria-atomic="true"><div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header><div class="container container-main"><div class="col-content"><div class="tsd-page-title"><ul class="tsd-breadcrumb" aria-label="Breadcrumb"><li><a href="" aria-current="page">DEVELOPER</a></li></ul></div><div class="tsd-panel tsd-typography"><p><a href="../index.html">Documents</a> › <strong>Developer Guide</strong></p>
+<h1 id="developer-guide" class="tsd-anchor-link">Developer Guide<a href="#developer-guide" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h1><p>This document is a quick reference for maintainers and frequent contributors. It complements <a href="CONTRIBUTING.html">the contributor guide</a> (which is contributor-facing) and contains deeper, actionable instructions for setting up, testing, and developing the project.</p>
+<h2 id="quickstart-one-time" class="tsd-anchor-link">Quickstart (one-time)<a href="#quickstart-one-time" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><pre><code class="bash"><span class="hl-5"># clone</span><br/><span class="hl-0">git</span><span class="hl-1"> </span><span class="hl-2">clone</span><span class="hl-1"> </span><span class="hl-2">https://github.com/cashubtc/cashu-ts.git</span><br/><span class="hl-0">cd</span><span class="hl-1"> </span><span class="hl-2">cashu-ts</span><br/><br/><span class="hl-5"># install exact dependencies used by CI</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">ci</span><br/><br/><span class="hl-5"># prepare browser dependencies for integration tests (one-time)</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test:prepare</span><br/><br/><span class="hl-5"># opt in to local hooks (optional)</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">setup-hooks</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Developing branch</p>
+<p>Please develop new features against the <code>development</code> branch (v3). After cloning, switch to it and pull the latest changes:</p>
+<pre><code class="bash"><span class="hl-5"># switch to the development branch for v3 work</span><br/><span class="hl-0">git</span><span class="hl-1"> </span><span class="hl-2">checkout</span><span class="hl-1"> </span><span class="hl-2">development</span><br/><span class="hl-0">git</span><span class="hl-1"> </span><span class="hl-2">pull</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If you are backporting fixes to the v2 line, use the <code>dev-v2</code> branch instead.</p>
+<p>Notes:</p>
+<ul>
+<li><code>npm ci</code> requires a package-lock.json and produces a reproducible node_modules tree.</li>
+<li>Node requirement: see <code>package.json</code> (engine: <code>node &gt;=22.4.0</code>). Use <code>nvm</code>, <code>volta</code>, or <code>asdf</code> to pin your local Node version.</li>
+</ul>
+<h3 id="⚠️-important--run-npm-ci-after-switching-major-branches" class="tsd-anchor-link">⚠️ Important — run <code>npm ci</code> after switching major branches<a href="#⚠️-important--run-npm-ci-after-switching-major-branches" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><p>When switching between major branches (for example <code>development</code> for v3 and <code>dev-v2</code> for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running <code>api-extractor</code>.</p>
+<p>Always run a clean install after switching major branches to ensure <code>node_modules</code> matches the checked-in lockfile:</p>
+<pre><code class="bash"><span class="hl-5"># after checkout</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">ci</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If you still see strange build or extractor errors, do a full refresh of dependencies:</p>
+<pre><code class="bash"><span class="hl-0">rm</span><span class="hl-1"> </span><span class="hl-6">-rf</span><span class="hl-1"> </span><span class="hl-2">node_modules</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">ci</span>
+</code><button type="button">Copy</button></pre>
+
+<p>This callout is important — please don't skip it when moving between major branches, it saves a lot of time debugging mysterious build/test failures.</p>
+<h2 id="environment--toolchain" class="tsd-anchor-link">Environment &amp; toolchain<a href="#environment--toolchain" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<li>Node: &gt;=22.4.0</li>
+<li>Recommended tools: <code>npm</code> (node package manager), <code>git</code>, optional <code>nvm</code>/<code>volta</code> for Node version management.</li>
+<li>Optional: Playwright browsers for integration tests (<code>npm run test:prepare</code>).</li>
+</ul>
+<h2 id="hooks-internals-how-the-installer-works" class="tsd-anchor-link">Hooks internals (how the installer works)<a href="#hooks-internals-how-the-installer-works" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Layout</p>
+<ul>
+<li>Tracked hook sources: <code>scripts/hooks/</code> (kept non-executable in the repo)</li>
+<li>Installer target: <code>.githooks/</code> (ignored by git; created by <code>scripts/install-git-hooks.sh</code>)</li>
+<li>Installer behaviour:
+<ul>
+<li>copies <code>scripts/hooks/*</code> -&gt; <code>.githooks/</code></li>
+<li>makes the copied files executable</li>
+<li>sets <code>git config --local core.hooksPath .githooks</code></li>
+</ul>
+</li>
+</ul>
+<p>Why this pattern</p>
+<ul>
+<li>Avoids mode-only diffs on tracked files while providing a one-command opt-in experience.</li>
+<li>Keeps the repo sources auditable and prevents automatic global changes.</li>
+</ul>
+<p>Useful commands</p>
+<pre><code class="bash"><span class="hl-5"># opt-in (makes and runs the installer)</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">setup-hooks</span><br/><br/><span class="hl-5"># undo opt-in (revert to default hooks path)</span><br/><span class="hl-5"># NOTE: removing the installed hooks directory is destructive. The uninstall</span><br/><span class="hl-5"># script unsets the local hooks path by default. To also remove the</span><br/><span class="hl-5"># `.githooks/` directory set the guard variable explicitly to avoid an</span><br/><span class="hl-5"># accidental `rm -rf`:</span><br/><br/><span class="hl-5"># unset hooks path only</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">uninstall-hooks</span><br/><br/><span class="hl-5"># unset hooks path AND remove installed hooks (explicit opt-in)</span><br/><span class="hl-4">REMOVE_GITHOOKS</span><span class="hl-1">=</span><span class="hl-2">1</span><span class="hl-1"> </span><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">uninstall-hooks</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Authoring hooks</p>
+<ul>
+<li>Edit tracked sources in <code>scripts/hooks/</code> and keep them POSIX-friendly where possible.</li>
+<li>When changing hook behaviour, document the change in <code>CONTRIBUTING.md</code> and consider adding tests or examples.</li>
+</ul>
+<h2 id="pre-commit-vs-pre-push-strategy" class="tsd-anchor-link">Pre-commit vs pre-push strategy<a href="#pre-commit-vs-pre-push-strategy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<li><code>pre-commit</code>: quick feedback (lint + format) — fast to avoid blocking developers.
+<ul>
+<li>Opt-in full run: set <code>FULL_PRECOMMIT=1</code> for a single commit when you want the full suite locally.</li>
+</ul>
+</li>
+<li><code>pre-push</code>: runs full PR checks (<code>npm run prtasks</code>) to ensure the full suite runs before pushing.</li>
+</ul>
+<p>This keeps commits fast while ensuring pushes execute the heavier checks.</p>
+<h2 id="running-the-full-pr-checks-locally" class="tsd-anchor-link">Running the full PR checks locally<a href="#running-the-full-pr-checks-locally" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The repo includes a convenience script:</p>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">prtasks</span>
+</code><button type="button">Copy</button></pre>
+
+<p>This runs (in order): lint, format, api:update (compile + api-extractor), tests, and <code>git status</code>.</p>
+<p>Caution: <code>api:update</code> can modify generated files (e.g. API reports). Inspect and commit any intended changes.</p>
+<h3 id="local-pre-push-workflow-recommended" class="tsd-anchor-link">Local pre-push workflow (recommended)<a href="#local-pre-push-workflow-recommended" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><p>Many maintainers prefer to run the full PR checks locally before pushing. A common, reliable workflow:</p>
+<ol>
+<li>Start a local mint (for integration tests). An example docker-compose is available at <code>examples/auth_mint/docker-compose.yml</code>:</li>
+</ol>
+<pre><code class="bash"><span class="hl-5"># from the repo root</span><br/><span class="hl-0">docker</span><span class="hl-1"> </span><span class="hl-2">compose</span><span class="hl-1"> </span><span class="hl-6">-f</span><span class="hl-1"> </span><span class="hl-2">examples/auth_mint/docker-compose.yml</span><span class="hl-1"> </span><span class="hl-2">up</span><span class="hl-1"> </span><span class="hl-6">-d</span>
+</code><button type="button">Copy</button></pre>
+
+<ol start="2">
+<li>Run the full PR tasks (lint, format, api:update, tests):</li>
+</ol>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">prtasks</span>
+</code><button type="button">Copy</button></pre>
+
+<ol start="3">
+<li>Run the integration tests against the local mint:</li>
+</ol>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test-integration</span>
+</code><button type="button">Copy</button></pre>
+
+<p>3a. (Optional but recommended) Run the consumer smoke tests used by CI:</p>
+<pre><code class="bash"><span class="hl-5"># runs all consumer smoke tests (bundler, commonjs, iife, nodenext, reactnative)</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test:consumer</span>
+</code><button type="button">Copy</button></pre>
+
+<p><strong>Note</strong>: the consumer smoke tests are run in CI but are intentionally not part of <code>prtasks</code> to avoid adding noise to every local run; running <code>npm run test:consumer</code> locally before pushing helps reproduce CI behavior.</p>
+<p>The <code>test:consumer</code> aggregator runs the following scripts (you can run them individually):</p>
+<ul>
+<li><code>npm run test:bundler</code> — smoke test using the bundler consumer</li>
+<li><code>npm run test:commonjs</code> — smoke test for CommonJS consumers</li>
+<li><code>npm run test:iife</code> — smoke test for IIFE (standalone) build</li>
+<li><code>npm run test:nodenext</code> — smoke test for Node ESM consumers</li>
+<li><code>npm run test:reactnative</code> — smoke test for React Native consumer</li>
+</ul>
+<p>Run the individual script if you want to isolate failures or speed up debugging.</p>
+<ol start="4">
+<li>When finished, stop the local mint:</li>
+</ol>
+<pre><code class="bash"><span class="hl-0">docker</span><span class="hl-1"> </span><span class="hl-2">compose</span><span class="hl-1"> </span><span class="hl-6">-f</span><span class="hl-1"> </span><span class="hl-2">examples/auth_mint/docker-compose.yml</span><span class="hl-1"> </span><span class="hl-2">down</span>
+</code><button type="button">Copy</button></pre>
+
+<p>This pattern (run <code>npm run prtasks</code> and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.</p>
+<h2 id="integration-mints-makefile--ci" class="tsd-anchor-link">Integration mints (Makefile &amp; CI)<a href="#integration-mints-makefile--ci" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><p>The repository provides Makefile targets that make it easy to spin up the most popular cashu mints (currently cdk and nutshell). These are used in the CI for integration testing and made available locally. Use the Makefile as the single source of truth for the pinned Docker image versions.</p>
+<p>Spin up / tear down locally</p>
+<pre><code class="bash"><span class="hl-5"># start the mint (uses Makefile defaults unless you override)</span><br/><span class="hl-4">DEV</span><span class="hl-1">=</span><span class="hl-2">1</span><span class="hl-1"> </span><span class="hl-0">make</span><span class="hl-1"> </span><span class="hl-2">cdk-up</span><br/><br/><span class="hl-5"># stop the mint</span><br/><span class="hl-4">DEV</span><span class="hl-1">=</span><span class="hl-2">1</span><span class="hl-1"> </span><span class="hl-0">make</span><span class="hl-1"> </span><span class="hl-2">cdk-down</span><br/><br/><span class="hl-5"># start nutshell</span><br/><span class="hl-4">DEV</span><span class="hl-1">=</span><span class="hl-2">1</span><span class="hl-1"> </span><span class="hl-0">make</span><span class="hl-1"> </span><span class="hl-2">nutshell-up</span><br/><span class="hl-5"># stop nutshell</span><br/><span class="hl-4">DEV</span><span class="hl-1">=</span><span class="hl-2">1</span><span class="hl-1"> </span><span class="hl-0">make</span><span class="hl-1"> </span><span class="hl-2">nutshell-down</span>
+</code><button type="button">Copy</button></pre>
+
+<h4 id="override-behavior" class="tsd-anchor-link">Override behavior<a href="#override-behavior" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><ul>
+<li>To test a different image or container name locally you can override the Makefile variables on the command line. Example:</li>
+</ul>
+<pre><code class="bash"><span class="hl-5"># run a specific mint image with a custom container name</span><br/><span class="hl-4">CDK_IMAGE</span><span class="hl-1">=</span><span class="hl-2">cashubtc/mintd:0.13.4</span><span class="hl-1"> </span><span class="hl-4">CDK_NAME</span><span class="hl-1">=</span><span class="hl-2">my-local-mint</span><span class="hl-1"> </span><span class="hl-4">DEV</span><span class="hl-1">=</span><span class="hl-2">1</span><span class="hl-1"> </span><span class="hl-0">make</span><span class="hl-1"> </span><span class="hl-2">cdk-up</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="ci-integration-notes" class="tsd-anchor-link">CI integration notes<a href="#ci-integration-notes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><ul>
+<li>CI workflows call the same Makefile targets (for example <code>make cdk-up</code> / <code>make nutshell-up</code>) so the runtime behavior in CI matches local usage.</li>
+<li>Renovate is configured to update pinned image tags in the Makefile (the canonical source of truth). The Renovate regex intentionally matches semver-like tags (no <code>latest</code>) so PRs will update numeric tags.</li>
+<li>Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs <code>npm run test-integration</code>.</li>
+</ul>
+<h4 id="practical-checklist-before-running-integration-tests-locally" class="tsd-anchor-link">Practical checklist before running integration tests locally:<a href="#practical-checklist-before-running-integration-tests-locally" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h4><ol>
+<li>Ensure dependencies are installed: <code>npm ci</code></li>
+<li>Prepare browser artifacts if needed: <code>npm run test:prepare</code></li>
+<li>Start the mint(s): <code>DEV=1 make cdk-up</code> (and/or <code>DEV=1 make nutshell-up</code>)</li>
+<li>Run the integration tests: <code>npm run test-integration</code></li>
+<li>When finished, tear down: <code>DEV=1 make cdk-down</code> / <code>DEV=1 make nutshell-down</code></li>
+</ol>
+<h2 id="api-extractor-workflow" class="tsd-anchor-link">API Extractor workflow<a href="#api-extractor-workflow" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<li>Use <code>npm run api:check</code> to create a temporary API report and compare it to the recorded status-quo at <code>/etc/cashu-ts.api.md</code>.</li>
+<li>Use <code>npm run api:update</code> to update the <code>/etc</code> status-quo when a public API change is intended.</li>
+</ul>
+<p>When running <code>api:update</code> locally:</p>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">api:update</span><br/><span class="hl-5"># inspect changes under /etc</span><br/><span class="hl-0">git</span><span class="hl-1"> </span><span class="hl-2">add</span><span class="hl-1"> </span><span class="hl-2">/etc/cashu-ts.api.md</span><br/><span class="hl-0">git</span><span class="hl-1"> </span><span class="hl-2">commit</span><span class="hl-1"> </span><span class="hl-6">-m</span><span class="hl-1"> </span><span class="hl-2">&quot;docs(api): update API report&quot;</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If <code>api:update</code> modifies generated code or types, run the test/build steps and ensure CI passes.</p>
+<h2 id="tests-and-debugging" class="tsd-anchor-link">Tests and debugging<a href="#tests-and-debugging" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Run unit tests (node + browser) locally:</p>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">test</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="code-coverage" class="tsd-anchor-link">Code coverage<a href="#code-coverage" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><p>The <code>npm test</code> script runs Vitest with coverage enabled (<code>--coverage</code>) and emits reports
+into the <code>coverage/</code> directory.</p>
+<p>After the run you can open the HTML report locally (<code>coverage/index.html</code>) in
+your browser to inspect per-file metrics.</p>
+<p>CI also publishes code coverage; the project site hosts the latest report (see the
+README badge/link for the public report).</p>
+<h3 id="test-file-naming-convention" class="tsd-anchor-link">Test file naming convention<a href="#test-file-naming-convention" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><p>If a test requires Node-only features, name the file with <code>.node.</code> in the filename
+(for example <code>cbor.node.test.ts</code>). The Vite/Vitest configuration will then
+skip browser testing for that file and run it only in the Node environment.
+Likewise, you can use <code>.browser.</code> in the filename to mark a test as
+browser-only (we currently don't have any browser-only tests, but the convention is supported).</p>
+<h3 id="focused-testing" class="tsd-anchor-link">Focused Testing<a href="#focused-testing" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><p>Run only node tests or a single test file with vitest (useful for rapid iteration):</p>
+<pre><code class="bash"><span class="hl-0">npx</span><span class="hl-1"> </span><span class="hl-2">vitest</span><span class="hl-1"> </span><span class="hl-6">--run</span><span class="hl-1"> </span><span class="hl-6">--filter</span><span class="hl-1"> &lt;</span><span class="hl-2">patter</span><span class="hl-1">n&gt;</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="integration--playwright-tests" class="tsd-anchor-link">Integration / Playwright tests:<a href="#integration--playwright-tests" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test:prepare</span><br/><span class="hl-5"># then run the integration tests</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">test-integration</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If tests are flaky locally, run with increased verbosity or use <code>--run --inspect</code> / <code>--watch</code> where supported.</p>
+<h2 id="updating-dependencies" class="tsd-anchor-link">Updating dependencies<a href="#updating-dependencies" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<li>To add a dependency and update the lockfile:</li>
+</ul>
+<pre><code class="bash"><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1"> &lt;</span><span class="hl-2">pk</span><span class="hl-1">g&gt; </span><span class="hl-6">--save</span><br/><span class="hl-5"># or for dev dependencies</span><br/><span class="hl-0">npm</span><span class="hl-1"> </span><span class="hl-2">install</span><span class="hl-1"> &lt;</span><span class="hl-2">pk</span><span class="hl-1">g&gt; </span><span class="hl-6">--save-dev</span>
+</code><button type="button">Copy</button></pre>
+
+<ul>
+<li>Commit the updated <code>package-lock.json</code> (CI will use that exact lockfile).</li>
+<li>In CI and reproducible environments, prefer <code>npm ci</code>.</li>
+</ul>
+<h2 id="versioning--release-strategy" class="tsd-anchor-link">Versioning &amp; release strategy<a href="#versioning--release-strategy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Cashu-TS uses semantic versioning. The repository maintains a <code>development</code> branch for the current major (v3) and a <code>dev-v2</code> branch for critical fixes to the v2 line.</p>
+<p>Guidelines:</p>
+<ul>
+<li>New feature PRs for v3 should target the <code>development</code> branch.</li>
+<li>If you need to backport a feature to v2, open a separate PR targeting <code>dev-v2</code> (do not mix both in a single PR).</li>
+</ul>
+<h3 id="releases" class="tsd-anchor-link">Releases<a href="#releases" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3><p>Releases should be done by the robots, inside the workflow files.
+However, here are the release steps for manual flow.</p>
+<p>Release steps (manual flow):</p>
+<ol>
+<li><code>git checkout development &amp;&amp; git pull</code> — ensure development is up to date</li>
+<li><code>npm version &lt;major | minor | patch&gt;</code> — create a new release commit &amp; tag</li>
+<li><code>git push &amp;&amp; git push --tags</code> — push commit and tag</li>
+<li>Create a new release on GitHub, targeting the new tag</li>
+<li>CI will build and publish to npm (with provenance)</li>
+<li><code>git checkout main &amp;&amp; git pull &amp;&amp; git merge &lt;tag&gt;</code> — merge the tag into <code>main</code></li>
+</ol>
+<p>Note: increment the major if there are breaking API changes. Otherwise increment the minor for new features and patch for hotfixes.</p>
+<h2 id="troubleshooting-common-issues" class="tsd-anchor-link">Troubleshooting (common issues)<a href="#troubleshooting-common-issues" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><ul>
+<li>
+<p>If you see strange compile or api-extractor errors after switching branches: run <code>npm ci</code> to ensure <code>node_modules</code> matches the checked-in lockfile. If problems persist, try removing <code>node_modules</code> and running <code>npm ci</code> again.</p>
+</li>
+<li>
+<p>To reproduce CI locally (fast): run <code>npm run prtasks</code>. This runs the same suite used for PRs and helps surface issues that CI would catch.</p>
+</li>
+</ul>
+<h2 id="contact--maintainers" class="tsd-anchor-link">Contact &amp; maintainers<a href="#contact--maintainers" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2><p>Feel free to join the <a href="https://matrix.to/#/#dev:matrix.cashu.space">matrix server</a> or <a href="https://t.me/CashuBTC">telegram channel</a></p>
+</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#developer-guide"><span>Developer <wbr/>Guide</span></a><ul><li><a href="#quickstart-one-time"><span>Quickstart (one-<wbr/>time)</span></a></li><li><ul><li><a href="#⚠️-important--run-npm-ci-after-switching-major-branches"><span>⚠️ <wbr/>Important — run npm ci after switching major branches</span></a></li></ul></li><li><a href="#environment--toolchain"><span>Environment &amp; toolchain</span></a></li><li><a href="#hooks-internals-how-the-installer-works"><span>Hooks internals (how the installer works)</span></a></li><li><a href="#pre-commit-vs-pre-push-strategy"><span>Pre-<wbr/>commit vs pre-<wbr/>push strategy</span></a></li><li><a href="#running-the-full-pr-checks-locally"><span>Running the full <wbr/>PR checks locally</span></a></li><li><ul><li><a href="#local-pre-push-workflow-recommended"><span>Local pre-<wbr/>push workflow (recommended)</span></a></li></ul></li><li><a href="#integration-mints-makefile--ci"><span>Integration mints (<wbr/>Makefile &amp; <wbr/>CI)</span></a></li><li><ul><li><ul><li><a href="#override-behavior"><span>Override behavior</span></a></li></ul></li><li><a href="#ci-integration-notes"><span>CI integration notes</span></a></li><li><ul><li><a href="#practical-checklist-before-running-integration-tests-locally"><span>Practical checklist before running integration tests locally:</span></a></li></ul></li></ul></li><li><a href="#api-extractor-workflow"><span>API <wbr/>Extractor workflow</span></a></li><li><a href="#tests-and-debugging"><span>Tests and debugging</span></a></li><li><ul><li><a href="#code-coverage"><span>Code coverage</span></a></li><li><a href="#test-file-naming-convention"><span>Test file naming convention</span></a></li><li><a href="#focused-testing"><span>Focused <wbr/>Testing</span></a></li><li><a href="#integration--playwright-tests"><span>Integration / <wbr/>Playwright tests:</span></a></li></ul></li><li><a href="#updating-dependencies"><span>Updating dependencies</span></a></li><li><a href="#versioning--release-strategy"><span>Versioning &amp; release strategy</span></a></li><li><ul><li><a href="#releases"><span>Releases</span></a></li></ul></li><li><a href="#troubleshooting-common-issues"><span>Troubleshooting (common issues)</span></a></li><li><a href="#contact--maintainers"><span>Contact &amp; maintainers</span></a></li></ul></div></details></div><div class="site-menu"><nav class="tsd-navigation"><a href="../modules.html">Cashu-TS - v3.3.0</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer></footer><div class="overlay"></div></body></html>
