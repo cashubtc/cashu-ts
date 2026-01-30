@@ -1,9 +1,10 @@
 name: Generate and Deploy Typedoc
-
+permissions:
+  contents: write
+  id-token: write
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:

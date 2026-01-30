@@ -20,17 +20,13 @@ npm run test:prepare
 
 ```
 
-Developing branch
+### Branching model update:
 
-Please develop new features against the `development` branch (v3). After cloning, switch to it and pull the latest changes:
+This repository no longer uses a separate development branch. All development now happens directly against main.
+The project will continue to support the last prior major release on a version branch. At the time of this change
+main tracks v3, while the v2 linage exists on `dev-v2`.
 
-```bash
-# switch to the development branch for v3 work
-git checkout development
-git pull
-```
-
-If you are backporting fixes to the v2 line, use the `dev-v2` branch instead.
+If you are backporting fixes to the v2 line, please open pull requests against the `dev-v2` branch instead.
 
 Notes:
 
@@ -39,7 +35,7 @@ Notes:
 
 ### ⚠️ Important — run `npm ci` after switching major branches
 
-When switching between major branches (for example `development` for v3 and `dev-v2` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
+When switching between major branches (for example `main` for v3 and `dev-v2` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
 Always run a clean install after switching major branches to ensure `node_modules` matches the checked-in lockfile:
 
@@ -289,39 +285,51 @@ npm install <pkg> --save-dev
 - Commit the updated `package-lock.json` (CI will use that exact lockfile).
 - In CI and reproducible environments, prefer `npm ci`.
 
-## Versioning & release strategy
+## Versioning & Release Strategy
 
-Cashu-TS uses semantic versioning. The repository maintains a `development` branch for the current major (v3) and a `dev-v2` branch for critical fixes to the v2 line.
+Cashu-TS uses semantic versioning.
+The repository uses a single primary development branch, `main`, which represents the current major release (v3).
+All new development is merged into `main` via pull requests.
 
-Guidelines:
+The previous major version (v2) is supported via a long-lived maintenance branch, which is used only for critical fixes.
 
-- New feature PRs for v3 should target the `development` branch.
-- If you need to backport a feature to v2, open a separate PR targeting `dev-v2` (do not mix both in a single PR).
+If you need to backport a feature to v2, open a separate PR targeting `dev-v2` (do not mix both in a single PR).
+
+## Releases
+
+Releases are automated and managed by CI. Maintainers should **not** create releases manually.
 
 ### Automated Releases (release-please)
 
 We use [release-please](https://github.com/googleapis/release-please) to automate our release cycle.
 
-- **The Release PR:** Every time a Pull Request is merged into `main`, `release-please` will automatically create or update a "Release PR."
-- **Changelog Automation:** This PR tracks all `feat` and `fix` commits since the last release and compiles them into a `CHANGELOG.md`.
-- **Versioning:** It uses Semantic Versioning (SemVer) to calculate the next version number based on the nature of your commits (e.g., a `feat` triggers a `0.1.0` to `0.2.0` jump).
-- **Cutting a Release:** When a maintainer merges the Release PR, the system automatically creates a GitHub Release and tags the repository.
+#### How it works
 
-### Releases
+- Every pull request merged into `main` is analyzed by release-please.
+- release-please automatically creates or updates a **Release PR** targeting `main`.
+- The Release PR:
+  - Aggregates all `feat` and `fix` commits since the last release
+  - Updates `CHANGELOG.md`
+  - Calculates the next version using **Semantic Versioning (SemVer)**:
+    - `feat` → minor version bump
+    - `fix` → patch version bump
+    - Breaking changes → major version bump
 
-Releases should be done by the robots, inside the workflow files.
-However, here are the release steps for manual flow.
+#### Cutting a release
 
-Release steps (manual flow):
+- A release is created **by merging the Release PR**.
+- When the Release PR is merged:
+  - A Git tag is created
+  - A GitHub Release is published
+  - CI builds and publishes the package to npm (with provenance)
 
-1. `git checkout development && git pull` — ensure development is up to date
-2. `npm version <major | minor | patch>` — create a new release commit & tag
-3. `git push && git push --tags` — push commit and tag
-4. Create a new release on GitHub, targeting the new tag
-5. CI will build and publish to npm (with provenance)
-6. `git checkout main && git pull && git merge <tag>` — merge the tag into `main`
+**Merging the Release PR is the release action. No additional steps are required.**
 
-Note: increment the major if there are breaking API changes. Otherwise increment the minor for new features and patch for hotfixes.
+### Notes on Versioning
+
+- Follow **Conventional Commits** to ensure correct version bumps.
+- Breaking API changes must be clearly marked to trigger a major version bump.
+- Version numbers are determined automatically by release-please; contributors should not attempt to control versions directly.
 
 ## Troubleshooting (common issues)
 

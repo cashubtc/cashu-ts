@@ -1,7 +1,7 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"enabledManagers": ["regex"],
-	"baseBranch": "development",
+	"baseBranch": "main",
 	"schedule": ["at any time"],
 	"packageRules": [
 		{
