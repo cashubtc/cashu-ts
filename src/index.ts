@@ -61,6 +61,7 @@ export * from './model/types/NUT04';
 export * from './model/types/NUT05';
 export type * from './model/types/NUT06';
 export * from './model/types/NUT07';
+export type * from './model/types/NUT19';
 export type * from './model/types/NUT23';
 export type * from './model/types/NUT25';
 export type * from './model/types/proof';
