@@ -66,4 +66,21 @@ describe('MintInfo protected endpoint matching', () => {
 		expect(info.requiresBlindAuthToken('POST', '/v1/melt/quote/bolt11')).toBe(true);
 		expect(info.requiresBlindAuthToken('POST', '/v1/melt')).toBe(false);
 	});
+
+	it('matches prefix pattern /path/*', () => {
+		const info = new MintInfo({
+			...baseMintInfo,
+			nuts: {
+				22: {
+					protected_endpoints: [{ method: 'GET', path: '/v1/mint/quote/bolt*' }],
+				},
+			},
+		});
+		expect(info.requiresBlindAuthToken('GET', '/v1/mint/quote/bolt11/')).toBe(true);
+		expect(info.requiresBlindAuthToken('GET', '/v1/mint/quote/bolt11/abc123')).toBe(true);
+		expect(info.requiresBlindAuthToken('GET', '/v1/mint/quote/bolt12')).toBe(true);
+		expect(info.requiresBlindAuthToken('GET', '/v1/melt/quote')).toBe(false);
+		expect(info.requiresBlindAuthToken('POST', '/v1/mint/quote/bolt11/abc')).toBe(false);
+		expect(info.requiresBlindAuthToken('GET', '/v1/melt/quote/bolt12')).toBe(false);
+	});
 });
