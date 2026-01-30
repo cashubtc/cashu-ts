@@ -1,0 +1,16 @@
+<type>(<scope>): <subject>
+
+# --- TYPE REFERENCE ---
+# feat:     (Major/Minor) A new feature or change in logic.
+# fix:      (Patch) A bug fix.
+# docs:     Documentation only changes.
+# style:    Changes that do not affect the meaning of code (linting, formatting).
+# refactor: A code change that neither fixes a bug nor adds a feature.
+# perf:     A code change that improves performance.
+# test:     Adding missing tests or correcting existing tests.
+# chore:    Build process, dependencies, or auxiliary tools (Renovate/Husky).
+#
+# --- SCOPE SUGGESTIONS (TS) ---
+# types, deps, core, api, util, tests, ci
+# ----------------------
+# Remember: The subject must be in imperative, present tense: "change" not "changed"

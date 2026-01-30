@@ -4,7 +4,7 @@ permissions:
   id-token: write
 on:
   release:
-    types: [released]
+    types: [published]
 jobs:
   build:
     runs-on: ubuntu-latest
