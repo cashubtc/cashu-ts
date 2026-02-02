@@ -50,9 +50,9 @@ import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 
 // shared primitives and options
-import type { Proof } from '../model/types/proof';
+import type { P2PKWitness, Proof, SigAllSigningPackage } from '../model/types/proof';
 import type { Token } from '../model/types/token';
-import type { SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { KeyChainCache, MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
@@ -84,6 +84,9 @@ import {
 	invoiceHasAmountInHRP,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { schnorr } from '@noble/curves/secp256k1.js';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 
@@ -2262,6 +2265,186 @@ class Wallet {
 			}
 		}
 		return result;
+	}
+
+	// -----------------------------------------------------------------
+	// Section: SigAll Multi-Party Signing
+	// -----------------------------------------------------------------
+
+	/**
+	 * Extracts a signing package from a SwapPreview for multi-party SIG_ALL coordination.
+	 *
+	 * @remarks
+	 * This creates a minimal, serializable package that can be passed to other signers. Secrets and
+	 * blinding factors are NOT included - only what's needed to reconstruct the exact SIG_ALL message
+	 * and produce signatures.
+	 * @param preview SwapPreview from prepareSwapToSend or prepareSwapToReceive.
+	 * @returns SigAllSigningPackage for distribution to signers.
+	 */
+	extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPackage {
+		// Collect all outputs (keep + send) in the order they will appear in the transaction
+		const allOutputs = [...(preview.keepOutputs || []), ...(preview.sendOutputs || [])];
+
+		return {
+			version: 'cashu-sigall-v1',
+			type: 'swap',
+			inputs: preview.inputs,
+			outputs: allOutputs.map((o) => ({
+				amount: o.blindedMessage.amount,
+				blindedMessage: o.blindedMessage,
+			})),
+			messageDigest: this.computeSigAllDigest(preview.inputs, allOutputs),
+		};
+	}
+
+	/**
+	 * Extracts a signing package from a MeltPreview for multi-party SIG_ALL coordination.
+	 *
+	 * @param preview MeltPreview from prepareMelt.
+	 * @returns SigAllSigningPackage for distribution to signers.
+	 */
+	extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(
+		preview: MeltPreview<TQuote>,
+	): SigAllSigningPackage {
+		return {
+			version: 'cashu-sigall-v1',
+			type: 'melt',
+			quote: preview.quote.quote,
+			inputs: preview.inputs,
+			outputs: preview.outputData.map((o) => ({
+				amount: o.blindedMessage.amount,
+				blindedMessage: o.blindedMessage,
+			})),
+			messageDigest: this.computeSigAllDigest(preview.inputs, preview.outputData),
+		};
+	}
+
+	/**
+	 * Signs a SigAllSigningPackage and returns it with signatures attached.
+	 *
+	 * @remarks
+	 * Signs all three SIG_ALL message formats for backward compatibility. Other parties can call this
+	 * sequentially to add their signatures.
+	 * @param pkg The signing package (from extract*SigningPackage or another signer)
+	 * @param privkey Private key to sign with.
+	 * @returns Package with signatures appended.
+	 */
+	signSigningPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
+		// Use satisfies to ensure we have at least blindedMessage, then cast
+		const minimalOutputs = pkg.outputs.map((o) => ({
+			blindedMessage: o.blindedMessage,
+		})) satisfies Array<{ blindedMessage: SerializedBlindedMessage }>;
+
+		const messages = [
+			buildLegacyP2PKSigAllMessage(
+				pkg.inputs,
+				minimalOutputs as unknown as OutputDataLike[],
+				pkg.quote,
+			),
+			buildInterimP2PKSigAllMessage(
+				pkg.inputs,
+				minimalOutputs as unknown as OutputDataLike[],
+				pkg.quote,
+			),
+			buildP2PKSigAllMessage(pkg.inputs, minimalOutputs as unknown as OutputDataLike[], pkg.quote),
+		];
+
+		const newSigs: string[] = [];
+		for (const msg of messages) {
+			const sig = this.signSingleMessage(msg, privkey);
+			newSigs.push(sig);
+		}
+
+		return {
+			...pkg,
+			witness: {
+				signatures: [...(pkg.witness?.signatures || []), ...newSigs],
+			},
+		};
+	}
+
+	/**
+	 * Merges signatures from a signing package back into a SwapPreview.
+	 *
+	 * @remarks
+	 * Injects collected signatures into the first proof's witness for mint submission. Call this
+	 * after all parties have signed.
+	 * @param pkg Signing package with collected signatures.
+	 * @param preview Original SwapPreview.
+	 * @returns SwapPreview ready for completeSwap.
+	 */
+	mergeSignaturesToSwapPreview(pkg: SigAllSigningPackage, preview: SwapPreview): SwapPreview {
+		if (!pkg.witness?.signatures.length) {
+			this.fail('No signatures to merge');
+		}
+
+		// Inject into first proof only (NUT-11 convention)
+		const updatedInputs = preview.inputs.map((p, idx) => {
+			if (idx !== 0) return p;
+			return {
+				...p,
+				witness: {
+					...(typeof p.witness === 'object' ? p.witness : {}),
+					signatures: pkg.witness!.signatures,
+				} as P2PKWitness,
+			};
+		});
+
+		return {
+			...preview,
+			inputs: updatedInputs,
+		};
+	}
+
+	/**
+	 * Merges signatures from a signing package back into a MeltPreview.
+	 *
+	 * @param pkg Signing package with collected signatures.
+	 * @param preview Original MeltPreview.
+	 * @returns MeltPreview ready for completeMelt.
+	 */
+	mergeSignaturesToMeltPreview<TQuote extends MeltQuoteBaseResponse>(
+		pkg: SigAllSigningPackage,
+		preview: MeltPreview<TQuote>,
+	): MeltPreview<TQuote> {
+		if (!pkg.witness?.signatures.length) {
+			this.fail('No signatures to merge');
+		}
+
+		const updatedInputs = preview.inputs.map((p, idx) => {
+			if (idx !== 0) return p;
+			return {
+				...p,
+				witness: {
+					...(typeof p.witness === 'object' ? p.witness : {}),
+					signatures: pkg.witness!.signatures,
+				} as P2PKWitness,
+			};
+		});
+
+		return {
+			...preview,
+			inputs: updatedInputs,
+		};
+	}
+
+	/**
+	 * Internal: Computes the canonical SIG_ALL message digest for verification.
+	 */
+	private computeSigAllDigest(inputs: Proof[], outputs: OutputDataLike[]): string {
+		// Use the same serialization as buildP2PKSigAllMessage for consistency
+		const message = buildP2PKSigAllMessage(inputs, outputs);
+		return bytesToHex(sha256(new TextEncoder().encode(message)));
+	}
+
+	/**
+	 * Internal: Sign a single message with a private key. Extracted from cryptoSignP2PKProofs logic.
+	 */
+	private signSingleMessage(message: string, privkey: string): string {
+		const msgBytes = hexToBytes(message);
+		const keyBytes = hexToBytes(privkey);
+		const signature = schnorr.sign(msgBytes, keyBytes);
+		return bytesToHex(signature);
 	}
 }
 
