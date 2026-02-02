@@ -190,17 +190,13 @@ export class KeyChain {
 		for (const meta of unitKeysets) {
 			let keyset: Keyset;
 
-			// Only active hex keysets should have keys
-			if (meta.active && isValidHex(meta.id)) {
-				const mk = keysMap.get(meta.id);
-				keyset = Keyset.fromMintApi(meta, mk);
-			} else {
-				keyset = Keyset.fromMintApi(meta);
-			}
+			// Add keys if we have them
+			const mk = keysMap.get(meta.id);
+			keyset = mk ? Keyset.fromMintApi(meta, mk) : Keyset.fromMintApi(meta);
 
-			// Validate active keysets with keys
+			// Discard unverifed keys
 			if (keyset.hasKeys && !keyset.verify()) {
-				throw new Error(`Keyset verification failed for ID ${keyset.id}`);
+				keyset.keys = {};
 			}
 
 			// Add to keychain

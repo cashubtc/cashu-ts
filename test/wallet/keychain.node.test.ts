@@ -197,7 +197,7 @@ describe('KeyChain initialization', () => {
 		await expect(keyChain.init()).rejects.toThrow('No active keyset found');
 	});
 
-	test('should throw if keyset verification fails', async () => {
+	test('should remove keys if verification fails', async () => {
 		// Create mismatched data by changing ID but keeping keys the same (derived ID won't match)
 		const mismatchedKeysetResp = JSON.parse(JSON.stringify(dummyKeysetResp));
 		const mismatchedKeysResp = JSON.parse(JSON.stringify(dummyKeysResp));
@@ -217,7 +217,9 @@ describe('KeyChain initialization', () => {
 		);
 
 		const keyChain = new KeyChain(mint, unit);
-		await expect(keyChain.init()).rejects.toThrow(`Keyset verification failed for ID ${newId}`);
+		await keyChain.init();
+		expect(keyChain.getKeyset('00bd033559de27d1').id).toEqual('00bd033559de27d1');
+		expect(keyChain.getKeyset('00bd033559de27d1').keys).toEqual({});
 	});
 
 	test('should throw if no active keyset found after init', async () => {
