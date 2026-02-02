@@ -194,7 +194,8 @@ describe('KeyChain initialization', () => {
 		);
 
 		const keyChain = new KeyChain(mint, unit);
-		await expect(keyChain.init()).rejects.toThrow('No active keyset found');
+		await keyChain.init();
+		expect(() => keyChain.getCheapestKeyset()).toThrow('No active keyset found');
 	});
 
 	test('should remove keys if verification fails', async () => {

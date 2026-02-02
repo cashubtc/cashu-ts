@@ -317,7 +317,7 @@ class Wallet {
 		}
 
 		// Load KeyChain
-		promises.push(this._keyChain.init(forceRefresh).then(() => null));
+		promises.push(this._keyChain.init(forceRefresh));
 
 		await Promise.all(promises);
 		this.finishInit();
@@ -1473,9 +1473,12 @@ class Wallet {
 		count: number,
 		config?: RestoreConfig,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-		const { keysetId } = config || {};
-		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
+		const { keysetId } = config || {};
+
+		// Ensure we have keys - wallet only loads active keysets by default
+		await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
 		// create deterministic blank outputs for unknown restore amounts
 		// Note: zero amount + zero denomination passes splitAmount validation
