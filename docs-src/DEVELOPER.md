@@ -20,13 +20,13 @@ npm run test:prepare
 
 ```
 
-### Branching model update:
+### Branching model update
 
 This repository no longer uses a separate development branch. All development now happens directly against main.
 The project will continue to support the last prior major release on a version branch. At the time of this change
-main tracks v3, while the v2 linage exists on `dev-v2`.
+main tracks v3, while the v2 linage exists on `v2-dev`.
 
-If you are backporting fixes to the v2 line, please open pull requests against the `dev-v2` branch instead.
+If you are backporting fixes to the v2 line, please open pull requests against the `v2-dev` branch instead.
 
 Notes:
 
@@ -35,7 +35,7 @@ Notes:
 
 ### ⚠️ Important — run `npm ci` after switching major branches
 
-When switching between major branches (for example `main` for v3 and `dev-v2` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
+When switching between major branches (for example `main` for v3 and `v2-dev` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
 Always run a clean install after switching major branches to ensure `node_modules` matches the checked-in lockfile:
 
@@ -130,13 +130,13 @@ Many maintainers prefer to run the full PR checks locally before pushing. A comm
 docker compose -f examples/auth_mint/docker-compose.yml up -d
 ```
 
-2. Run the full PR tasks (lint, format, api:update, tests):
+1. Run the full PR tasks (lint, format, api:update, tests):
 
 ```bash
 npm run prtasks
 ```
 
-3. Run the integration tests against the local mint:
+1. Run the integration tests against the local mint:
 
 ```bash
 npm run test-integration
@@ -161,7 +161,7 @@ The `test:consumer` aggregator runs the following scripts (you can run them indi
 
 Run the individual script if you want to isolate failures or speed up debugging.
 
-4. When finished, stop the local mint:
+1. When finished, stop the local mint:
 
 ```bash
 docker compose -f examples/auth_mint/docker-compose.yml down
@@ -203,7 +203,7 @@ CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
 - Renovate is configured to update pinned image tags in the Makefile (the canonical source of truth). The Renovate regex intentionally matches semver-like tags (no `latest`) so PRs will update numeric tags.
 - Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs `npm run test-integration`.
 
-#### Practical checklist before running integration tests locally:
+#### Practical checklist before running integration tests locally
 
 1. Ensure dependencies are installed: `npm ci`
 2. Prepare browser artifacts if needed: `npm run test:prepare`
@@ -262,7 +262,7 @@ Run only node tests or a single test file with vitest (useful for rapid iteratio
 npx vitest --run --filter <pattern>
 ```
 
-### Integration / Playwright tests:
+### Integration / Playwright tests
 
 ```bash
 npm run test:prepare
@@ -293,7 +293,7 @@ All new development is merged into `main` via pull requests.
 
 The previous major version (v2) is supported via a long-lived maintenance branch, which is used only for critical fixes.
 
-If you need to backport a feature to v2, open a separate PR targeting `dev-v2` (do not mix both in a single PR).
+If you need to backport a feature to v2, open a separate PR targeting `v2-dev` (do not mix both in a single PR).
 
 ## Releases
 
