@@ -7,4 +7,5 @@ test/__screenshots__
 .DS_Store
 *.tgz
 
+.githooks
 .husky/_
