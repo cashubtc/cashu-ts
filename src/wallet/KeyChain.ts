@@ -184,7 +184,7 @@ export class KeyChain {
 			const keyset = mk ? Keyset.fromMintApi(meta, mk) : Keyset.fromMintApi(meta);
 
 			// Discard unverifed keys
-			if (keyset.hasKeys && !keyset.verify()) {
+			if (!keyset.verify()) {
 				keyset.keys = {};
 			}
 
