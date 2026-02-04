@@ -86,7 +86,7 @@ export function deriveP2BKSecretKeys(
 }
 
 /**
- * Derive a blinded secret key per NUT-26.
+ * Derive a blinded secret key per NUT-28.
  *
  * Unblinds the pubkey (P = P_ - r·G), verifies x-coord against the naturalPub x(P) == x(p·G), then
  * choose skStd = (p + rᵢ) mod n if parity(P) == parity(p·G), otherwise skNeg = (-p + rᵢ) mod n.

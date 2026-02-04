@@ -1388,7 +1388,7 @@ class Wallet {
 	 * Prepares inputs for a mint operation.
 	 *
 	 * @remarks
-	 * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-26) for privacy and serializes witnesses.
+	 * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-28) for privacy and serializes witnesses.
 	 * Returns an array of new proof objects - does not mutate the originals.
 	 * @param proofs The proofs to prepare.
 	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
