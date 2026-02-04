@@ -38,6 +38,7 @@ import {
 	assertSigAllInputs,
 	buildLegacyP2PKSigAllMessage,
 	buildInterimP2PKSigAllMessage,
+	schnorrSignMessage,
 } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
@@ -2326,7 +2327,6 @@ class Wallet {
 			if (pkg.digests.current) newSigs.push(this.signHexDigest(pkg.digests.current, privkey));
 		} else {
 			// Legacy fallback: reconstruct messages from package (requires full proof data).
-			// Newer sanitized packages include digests and won't reach this branch.
 			this._signLegacyPackage(pkg, privkey, newSigs);
 		}
 
@@ -2367,7 +2367,7 @@ class Wallet {
 	}
 
 	/**
-	 * Internal: Merges collected signatures into the first proof's witness (NUT-11 convention).
+	 * Merges collected signatures into the first proof's witness (NUT-11 convention).
 	 *
 	 * @remarks
 	 * Both Swap and Melt transactions use the same signature injection pattern: all signatures go
@@ -2395,7 +2395,7 @@ class Wallet {
 	}
 
 	/**
-	 * Internal: Signs package without digests by reconstructing all three message formats.
+	 * Signs package without digests by reconstructing all three message formats.
 	 *
 	 * @remarks
 	 * Used only when digests are unavailable (legacy packages). Reconstructs messages from package
@@ -2423,13 +2423,13 @@ class Wallet {
 		const interimMsg = buildInterimP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
 		const currentMsg = buildP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
 
-		newSigs.push(this.signSingleMessage(legacyMsg, privkey));
-		newSigs.push(this.signSingleMessage(interimMsg, privkey));
-		newSigs.push(this.signSingleMessage(currentMsg, privkey));
+		newSigs.push(schnorrSignMessage(legacyMsg, privkey));
+		newSigs.push(schnorrSignMessage(interimMsg, privkey));
+		newSigs.push(schnorrSignMessage(currentMsg, privkey));
 	}
 
 	/**
-	 * Internal: Unified extractor for swap and melt signing packages.
+	 * Unified extractor for swap and melt signing packages.
 	 *
 	 * @remarks
 	 * Sanitizes inputs, computes all three SIG_ALL format digests, and returns a signing package
@@ -2467,7 +2467,7 @@ class Wallet {
 	}
 
 	/**
-	 * Internal: Computes all three SIG_ALL message digests (legacy, interim, current).
+	 * Computes all three SIG_ALL message digests (legacy, interim, current).
 	 *
 	 * @remarks
 	 * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
@@ -2490,18 +2490,6 @@ class Wallet {
 			interim: bytesToHex(sha256(new TextEncoder().encode(interimMsg))),
 			current: bytesToHex(sha256(new TextEncoder().encode(currentMsg))),
 		};
-	}
-
-	/**
-	 * Internal: Sign a single message with a private key. Extracted from cryptoSignP2PKProofs logic.
-	 */
-	private signSingleMessage(message: string, privkey: string): string {
-		// Sign a raw message string by hashing it (sha256) and signing the hash.
-		// Mirrors `schnorrSignMessage` behaviour in crypto/core.
-		const msghash = sha256(new TextEncoder().encode(message));
-		const keyBytes = hexToBytes(privkey);
-		const signature = schnorr.sign(msghash, keyBytes);
-		return bytesToHex(signature);
 	}
 
 	private signHexDigest(hexDigest: string, privkey: string): string {

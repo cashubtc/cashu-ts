@@ -61,40 +61,24 @@ export type HTLCWitness = {
 /**
  * Represents a signing package for SigAll multi-party signing.
  *
- * This is a wallet-led transport format (NOT sent to mints). It contains only the minimum data
+ * This is a wallet-led transport format, it contains only the minimum data
  * required to reconstruct the SIG_ALL message.
  */
 export type SigAllSigningPackage = {
 	version: 'cashu-sigall-v1';
 	type: 'swap' | 'melt';
 	quote?: string; // melt only
-	// Minimal inputs required for signing transport. We intentionally avoid
-	// including secrets/blinding material in the package to prevent leaking
-	// sensitive data. This contains only identifying information about proofs
-	// that other signers may need (id, public C point and amount).
 	inputs: Array<{
 		id: string;
 		amount: number;
 		C: string;
-	}>;
+	}>; //minimal inputs required for signing transport to prevent leaking sensitive data.
 	outputs: Array<{ amount: number; blindedMessage: SerializedBlindedMessage }>;
-	/**
-	 * Optional hex SHA256 digest of the message-to-sign.
-	 */
-	messageDigest?: string;
-
-	/**
-	 * Optional per-format digests to support signing multiple SIG_ALL formats (legacy / interim /
-	 * current). Each value is hex SHA256 of the canonical message for that format.
-	 */
+	messageDigest?: string; //hex SHA256 digest of the message-to-sign.
 	digests?: {
 		legacy?: string;
 		interim?: string;
 		current: string;
-	};
-
-	/**
-	 * Collected signatures to be injected into the first proof witness.
-	 */
-	witness?: { signatures: string[] };
+	}; //per-format digests to support signing multiple SIG_ALL formats (legacy / interim / current)
+	witness?: { signatures: string[] }; //collected signatures to be injected into the first proof witness.
 };
