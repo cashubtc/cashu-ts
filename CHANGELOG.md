@@ -5,9 +5,7 @@
 
 ### Features
 
-* add new glob prefix wildcard match for nut-21/22 ([3dfcd70](https://github.com/cashubtc/cashu-ts/commit/3dfcd70ff5846c58a8eb0913932c8420b3ad7004))
 * add new glob prefix wildcard match for nut-21/22 ([77c544a](https://github.com/cashubtc/cashu-ts/commit/77c544a411b166612fd4797f07836141404607e9))
-* **ci:** add release automation and husky ([5293eb3](https://github.com/cashubtc/cashu-ts/commit/5293eb393f4644d8fe4678c1a5f924caab16ebcb))
 * **ci:** add release automation and husky ([6bf4492](https://github.com/cashubtc/cashu-ts/commit/6bf44923188defbef2b3a7b98f68fb16d940a6f6))
 
 
