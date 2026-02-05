@@ -2330,6 +2330,11 @@ class Wallet {
 			this._signLegacyPackage(pkg, privkey, newSigs);
 		}
 
+		// validate that signing actually produced signatures
+		if (newSigs.length === 0) {
+			this.fail('No signatures produced during signing');
+		}
+
 		return {
 			...pkg,
 			witness: { signatures: [...(pkg.witness?.signatures || []), ...newSigs] },
@@ -2384,11 +2389,24 @@ class Wallet {
 
 		return proofs.map((p, idx) => {
 			if (idx !== 0) return p;
+
+			let witnessObj: Partial<P2PKWitness> = {};
+			if (typeof p.witness === 'string') {
+				try {
+					witnessObj = (JSON.parse(p.witness) as Partial<P2PKWitness>) || {};
+				} catch {
+					witnessObj = {};
+				}
+			} else if (p.witness) {
+				witnessObj = p.witness;
+			}
+
+			const existingSignatures = Array.isArray(witnessObj.signatures) ? witnessObj.signatures : [];
 			return {
 				...p,
 				witness: {
-					...(typeof p.witness === 'object' ? p.witness : {}),
-					signatures: pkg.witness!.signatures,
+					...witnessObj,
+					signatures: [...existingSignatures, ...pkg.witness!.signatures],
 				} as P2PKWitness,
 			};
 		});
@@ -2446,11 +2464,20 @@ class Wallet {
 		outputs: OutputDataLike[],
 		quoteId?: string,
 	): SigAllSigningPackage {
-		// Sanitize inputs - do NOT include secrets or other private fields.
+		//sanitize inputs - do NOT include secrets or other private fields.
 		const sanitized = inputs.map((p) => ({ id: p.id, amount: p.amount, C: p.C }));
 
-		// Compute all three format digests (legacy, interim, current) for backward compatibility
+		//compute all three format digests (legacy, interim, current) for backward compatibility
 		const digests = this._computeAllSigAllDigests(inputs, outputs, quoteId);
+
+		//verify current digest was computed correctly (catches bugs).
+		const testCurrentMsg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
+		const testCurrentDigest = bytesToHex(sha256(new TextEncoder().encode(testCurrentMsg)));
+		if (digests.current !== testCurrentDigest) {
+			this.fail(
+				'SIG_ALL digest computation mismatch - current digest does not match expected value',
+			);
+		}
 
 		return {
 			version: 'cashu-sigall-v1',
@@ -2493,7 +2520,6 @@ class Wallet {
 	}
 
 	private signHexDigest(hexDigest: string, privkey: string): string {
-		// Sign a precomputed hex SHA256 digest directly (digest -> bytes -> schnorr)
 		const digestBytes = hexToBytes(hexDigest);
 		const keyBytes = hexToBytes(privkey);
 		const signature = schnorr.sign(digestBytes, keyBytes);
