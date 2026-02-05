@@ -1,4 +1,4 @@
-name: Publish Package to npmjs
+name: Publish New Version Release
 
 permissions:
   contents: write
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to publish (optional, e.g. 3.2.1)'
+        description: 'Release tag to publish (optional, e.g. v3.2.1)'
         required: false
 
 jobs:
