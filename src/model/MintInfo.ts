@@ -137,20 +137,31 @@ export class MintInfo {
 	}
 
 	private buildIndex(endpoints?: Endpoint[]): ProtectedIndex | undefined {
-		if (!endpoints || endpoints.length === 0) return undefined;
+		if (!endpoints?.length) return undefined;
 
 		const exact: ProtectedIndex['exact'] = [];
 		const prefix: ProtectedIndex['prefix'] = [];
 
 		for (const e of endpoints) {
 			let p = e.path;
+
+			// Handle deprecated regex formatting (backwards compat)
+			// TODO: remove once mints support revised glob wildcard
+			// See: https://github.com/cashubtc/nuts/pull/334
 			if (p.startsWith('^')) p = p.slice(1);
 			if (p.endsWith('$')) p = p.slice(0, -1);
 			if (p.endsWith('.*')) {
 				prefix.push({ method: e.method, path: p.slice(0, -2) });
-			} else {
-				exact.push({ method: e.method, path: p });
+				continue;
 			}
+
+			// New glob-style wildcard matching
+			if (p.endsWith('*')) {
+				prefix.push({ method: e.method, path: p.slice(0, -1) });
+				continue;
+			}
+
+			exact.push({ method: e.method, path: p });
 		}
 
 		const cache: Record<string, boolean> = {};
