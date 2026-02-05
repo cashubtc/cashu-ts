@@ -61,8 +61,8 @@ export type HTLCWitness = {
 /**
  * Represents a signing package for SigAll multi-party signing.
  *
- * This is a wallet-led transport format, it contains only the minimum data
- * required to reconstruct the SIG_ALL message.
+ * This is a wallet-led transport format, it contains only the minimum data required to reconstruct
+ * the SIG_ALL message.
  */
 export type SigAllSigningPackage = {
 	version: 'cashu-sigall-v1';
