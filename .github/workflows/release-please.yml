@@ -17,3 +17,18 @@ jobs:
         with:
           release-type: node
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+      - name: Update release with GitHub-generated notes
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG='${{ steps.release.outputs.tag_name }}'
+
+          # Swap release-please CHANGELOG format back to GitHub default
+          # so we keep contributor names etc in release notes
+          # GitHub auto-detects previous_tag_name
+          NOTES=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+          -f tag_name="$TAG" \
+          --jq '.body')
+
+          gh release edit "$TAG" --notes "$NOTES"
