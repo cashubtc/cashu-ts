@@ -1,22 +1,36 @@
 name: Publish Package to npmjs
+
 permissions:
   contents: write
   id-token: write
+
 on:
   release:
-    types: [released]
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (optional, e.g. 3.2.1)'
+        required: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo (release tag or manual tag)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name }}
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22.x'
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
+
       - run: npm ci
       - run: npm run compile
+
       - name: Determine npm tag
         id: npm-tag
         run: |
@@ -27,15 +41,34 @@ jobs:
           else
             echo "tag=v${MAJOR_VERSION}-lts" >> $GITHUB_OUTPUT
           fi
-      - run: npm publish --provenance --tag ${{ steps.npm-tag.outputs.tag }}
+
+      - name: Publish to npm (skip if already published)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          PKG=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ steps.npm-tag.outputs.tag }}"
+
+          echo "Checking if ${PKG}@${VERSION} already exists on npm..."
+
+          if npm view "${PKG}@${VERSION}" version >/dev/null 2>&1; then
+            echo "Already published ${PKG}@${VERSION}, skipping npm publish"
+          else
+            npm publish --provenance --tag "${{ steps.npm-tag.outputs.tag }}"
+          fi
+
       - run: npm run compile:standalone
+
       - name: Upload standalone bundle assets
+        if: ${{ inputs.tag || github.event.release.tag_name }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
+          TAG="${{ inputs.tag || github.event.release.tag_name }}"
+          gh release upload "$TAG" --clobber \
             "./lib/cashu-ts.iife.js" \
             "./lib/cashu-ts.iife.js.map" \
             "./lib/types/index.d.ts"
