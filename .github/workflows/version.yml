@@ -72,3 +72,18 @@ jobs:
             "./lib/cashu-ts.iife.js" \
             "./lib/cashu-ts.iife.js.map" \
             "./lib/types/index.d.ts"
+
+      - name: Update release notes to GitHub format
+        if: ${{ inputs.tag || github.event.release.tag_name }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag || github.event.release.tag_name }}"
+
+          # Swap release-please CHANGELOG format back to GitHub default
+          # so we keep contributor names etc in release notes
+          NOTES=$(gh api repos/${{ github.repository }}/releases/generate-notes \
+            -f tag_name="$TAG" \
+            --jq '.body')
+
+          gh release edit "$TAG" --notes "$NOTES"
