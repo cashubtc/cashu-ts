@@ -6,7 +6,7 @@
 ![npm](https://img.shields.io/npm/v/@cashu/cashu-ts)
 ![npm type definitions](https://img.shields.io/npm/types/@cashu/cashu-ts)
 ![npm bundle size](https://img.shields.io/bundlephobia/min/@cashu/cashu-ts)
-![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://cashubtc.github.io/cashu-ts/coverage/main/)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen)](https://cashubtc.github.io/cashu-ts/coverage/main/)
 
 ⚠️ **Don't be reckless:** This project is in early development, it does however work with real sats! Always use amounts you don't mind losing.
 
