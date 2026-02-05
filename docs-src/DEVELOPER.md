@@ -123,11 +123,12 @@ Caution: `api:update` can modify generated files (e.g. API reports). Inspect and
 
 Many maintainers prefer to run the full PR checks locally before pushing. A common, reliable workflow:
 
-1. Start a local mint (for integration tests). An example docker-compose is available at `examples/auth_mint/docker-compose.yml`:
+1. Start a local mint (for integration tests). We have make targets for both CDK's mintd, and Nutshell:
 
 ```bash
 # from the repo root
-docker compose -f examples/auth_mint/docker-compose.yml up -d
+DEV=1 make cdk-up
+# or DEV=1 make nutshell-up
 ```
 
 1. Run the full PR tasks (lint, format, api:update, tests):
@@ -164,7 +165,8 @@ Run the individual script if you want to isolate failures or speed up debugging.
 1. When finished, stop the local mint:
 
 ```bash
-docker compose -f examples/auth_mint/docker-compose.yml down
+DEV=1 make cdk-down
+# or DEV=1 make nutshell-down
 ```
 
 This pattern (run `npm run prtasks` and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.

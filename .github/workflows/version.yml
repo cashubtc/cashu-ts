@@ -68,7 +68,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.tag || github.event.release.tag_name }}"
-          gh release upload "$TAG" \
+          gh release upload "$TAG" --clobber \
             "./lib/cashu-ts.iife.js" \
             "./lib/cashu-ts.iife.js.map" \
             "./lib/types/index.d.ts"
