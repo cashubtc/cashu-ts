@@ -8,7 +8,6 @@ import type {
 	KeyChainCache,
 	KeysetCache,
 } from '../model/types/keyset';
-import { isValidHex } from '../utils';
 
 /**
  * Manages the unit-specific keysets for a Mint.
@@ -20,6 +19,7 @@ export class KeyChain {
 	private mint: Mint;
 	private unit: string;
 	private keysets: { [id: string]: Keyset } = {};
+	private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
 
 	constructor(
 		mint: string | Mint,
@@ -34,9 +34,6 @@ export class KeyChain {
 		if (cachedKeysets && cachedKeys) {
 			const arrayOfKeys = Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys];
 			this.buildKeychain(cachedKeysets, arrayOfKeys);
-
-			// Smoke test, fail fast on bad cache
-			this.getCheapestKeyset();
 		}
 	}
 
@@ -141,9 +138,6 @@ export class KeyChain {
 			await Promise.all([this.mint.getKeySets(), this.mint.getKeys()]);
 
 		this.buildKeychain(allKeysetsResponse.keysets, allKeysResponse.keysets);
-
-		// Smoke test (will throw if init was unsuccessful)
-		this.getCheapestKeyset();
 	}
 
 	/**
@@ -162,9 +156,6 @@ export class KeyChain {
 
 		const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
 		this.buildKeychain(keysets, keys);
-
-		// Smoke test
-		this.getCheapestKeyset();
 	}
 
 	/**
@@ -188,19 +179,13 @@ export class KeyChain {
 
 		// Build keysets
 		for (const meta of unitKeysets) {
-			let keyset: Keyset;
+			// Add keys if we have them
+			const mk = keysMap.get(meta.id);
+			const keyset = mk ? Keyset.fromMintApi(meta, mk) : Keyset.fromMintApi(meta);
 
-			// Only active hex keysets should have keys
-			if (meta.active && isValidHex(meta.id)) {
-				const mk = keysMap.get(meta.id);
-				keyset = Keyset.fromMintApi(meta, mk);
-			} else {
-				keyset = Keyset.fromMintApi(meta);
-			}
-
-			// Validate active keysets with keys
-			if (keyset.hasKeys && !keyset.verify()) {
-				throw new Error(`Keyset verification failed for ID ${keyset.id}`);
+			// Discard unverifed keys
+			if (!keyset.verify()) {
+				keyset.keys = {};
 			}
 
 			// Add to keychain
@@ -246,6 +231,60 @@ export class KeyChain {
 			throw new Error('No active keyset found');
 		}
 		return activeKeysets.sort((a, b) => a.fee - b.fee)[0];
+	}
+
+	/**
+	 * Ensure we have usable keys for a specific keyset id.
+	 *
+	 * @param id Keyset ID.
+	 * @returns Keyset with keys.
+	 * @throws If keyset keys not found or verification fails.
+	 */
+	async ensureKeysetKeys(id: string): Promise<Keyset> {
+		// Check keyset exists
+		const existing = this.keysets[id];
+		if (!existing) {
+			throw new Error(`Keyset '${id}' not found`);
+		}
+
+		// Already usable
+		if (existing.hasKeys) {
+			return existing;
+		}
+
+		// Dedupe concurrent requests
+		const pending = this.pendingKeyFetches.get(id);
+		if (pending) {
+			return await pending;
+		}
+
+		const promise = (async () => {
+			// Get keys for id
+			const res = await this.mint.getKeys(id);
+			const mk = res.keysets.find((k) => k.id === id);
+			if (!mk || !mk.keys || Object.keys(mk.keys).length === 0) {
+				throw new Error(`Mint returned no keys for keyset '${id}'`);
+			}
+
+			// Rebuild from existing meta plus fetched keys
+			const meta = existing.toMintKeyset();
+			const rebuilt = Keyset.fromMintApi(meta, mk);
+			if (!rebuilt.verify()) {
+				throw new Error(`Keyset verification failed for ID ${id}`);
+			}
+
+			// Replace keyset with rebuilt one
+			this.keysets[id] = rebuilt;
+			return rebuilt;
+		})();
+
+		this.pendingKeyFetches.set(id, promise);
+
+		try {
+			return await promise;
+		} finally {
+			this.pendingKeyFetches.delete(id);
+		}
 	}
 
 	/**

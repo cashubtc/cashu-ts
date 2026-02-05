@@ -317,7 +317,7 @@ class Wallet {
 		}
 
 		// Load KeyChain
-		promises.push(this._keyChain.init(forceRefresh).then(() => null));
+		promises.push(this._keyChain.init(forceRefresh));
 
 		await Promise.all(promises);
 		this.finishInit();
@@ -342,16 +342,31 @@ class Wallet {
 	 * Finishes wiring up the wallet instance and checks we are "Go for launch".
 	 */
 	private finishInit(): void {
-		// Go Keychain?
-		const cheapestId = this._keyChain.getCheapestKeyset().id;
 		this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
 
-		// Bind the cheapest keyset if needed
+		// Go Keychain?
 		if (this._boundKeysetId === PENDING_KEYSET_ID) {
-			this._boundKeysetId = cheapestId;
+			try {
+				// Bind the cheapest active keyset
+				this._boundKeysetId = this._keyChain.getCheapestKeyset().id;
+			} catch (e) {
+				// Edge case: mint has no active keysets, so leave wallet unbound
+				// May happen if a mint is closing down and unwinding liabilities
+				this._logger.warn('No active keyset available, wallet remains unbound', {
+					unit: this._unit,
+					err: (e as Error).message,
+				});
+			}
 		} else {
+			// Keyset ID was bound in wallet constructor, so ensure it exists and unit
+			// matches, but do NOT require keys yet. It may be an inactive keyset for
+			// restore, and if so, keys will be fetched async later.
 			const k = this._keyChain.getKeyset(this._boundKeysetId);
-			this.failIf(!k.hasKeys, 'Wallet keyset has no keys', { keyset: k.id });
+			this.failIf(k.unit !== this._unit, 'Keyset unit does not match wallet unit', {
+				keyset: k.id,
+				unit: k.unit,
+				walletUnit: this._unit,
+			});
 		}
 
 		// Go Mintinfo?
@@ -402,7 +417,7 @@ class Wallet {
 	get keysetId(): string {
 		this.failIf(
 			this._boundKeysetId === PENDING_KEYSET_ID,
-			'Wallet not initialised, call loadMint or loadMintFromCache first',
+			'Wallet has no bound keyset. The mint may have no active keysets, or wallet was not initialized via loadMint or loadMintFromCache',
 		);
 		return this._boundKeysetId;
 	}
@@ -1473,9 +1488,12 @@ class Wallet {
 		count: number,
 		config?: RestoreConfig,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-		const { keysetId } = config || {};
-		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
+		const { keysetId } = config || {};
+
+		// Ensure we have keys - wallet only loads active keysets by default
+		await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
 		// create deterministic blank outputs for unknown restore amounts
 		// Note: zero amount + zero denomination passes splitAmount validation

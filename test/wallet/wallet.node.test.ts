@@ -253,7 +253,7 @@ describe('test wallet init', () => {
 
 	test('should throw when retrieving an invalid keyset ID', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
-		await wallet.loadMint();
+		await expect(wallet.loadMint()).resolves.toBeUndefined(); // no throw on load
 
 		expect(() => wallet.keyChain.getKeyset('invalid-keyset-id')).toThrow(
 			"Keyset 'invalid-keyset-id' not found",
@@ -3346,23 +3346,6 @@ describe('bindKeyset & withKeyset', () => {
 		const bound = wallet.keysetId;
 		const k = wallet.getKeyset();
 		expect(k.id).toBe(bound);
-	});
-
-	test('loadMint fails if the bound keyset has no keys after refresh', async () => {
-		const wallet = new Wallet(mint, { unit });
-		await wallet.loadMint();
-
-		const boundId = '00ef000000000000';
-		const spy = vi.spyOn(wallet.keyChain, 'getKeyset');
-
-		// First call for bindKeyset -> has keys
-		spy.mockReturnValueOnce(ks(boundId, unit, true));
-		wallet.bindKeyset(boundId);
-
-		// Next call during loadMint(true) -> loses keys
-		spy.mockReturnValueOnce(ks(boundId, unit, false));
-
-		await expect(wallet.loadMint(true)).rejects.toThrow('Wallet keyset has no keys');
 	});
 });
 

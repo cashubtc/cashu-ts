@@ -133,19 +133,23 @@ export class Keyset {
 	 * @returns True if verification succeeds, false otherwise (e.g: no keys or mismatch).
 	 */
 	static verifyKeysetId(keys: MintKeys): boolean {
-		if (!keys.keys || Object.keys(keys.keys).length === 0) {
+		try {
+			if (!keys.keys || Object.keys(keys.keys).length === 0) return false;
+
+			const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
+			const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
+			const derivedId = deriveKeysetId(keys.keys, {
+				input_fee_ppk: keys.input_fee_ppk,
+				expiry: keys.final_expiry,
+				unit: keys.unit,
+				versionByte,
+				isDeprecatedBase64,
+			});
+
+			return derivedId === keys.id;
+		} catch {
 			return false;
 		}
-		const isDeprecatedBase64 = isBase64String(keys.id) && !isValidHex(keys.id);
-		const versionByte = isValidHex(keys.id) ? hexToBytes(keys.id)[0] : 0;
-		const derivedId = deriveKeysetId(keys.keys, {
-			input_fee_ppk: keys.input_fee_ppk,
-			expiry: keys.final_expiry,
-			unit: keys.unit,
-			versionByte,
-			isDeprecatedBase64,
-		});
-		return derivedId === keys.id;
 	}
 
 	/**

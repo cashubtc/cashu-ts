@@ -533,6 +533,7 @@ export class KeyChain {
         keysets: MintKeyset[];
         keys: MintKeys[];
     };
+    ensureKeysetKeys(id: string): Promise<Keyset>;
     static fromCache(mint: string | Mint, cache: KeyChainCache): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
