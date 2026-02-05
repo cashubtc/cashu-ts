@@ -20,7 +20,7 @@ jobs:
       - name: Update release with GitHub-generated notes
         if: ${{ steps.release.outputs.release_created }}
         env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG='${{ steps.release.outputs.tag_name }}'
 
