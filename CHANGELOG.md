@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.4.1](https://github.com/cashubtc/cashu-ts/compare/v3.4.0...v3.4.1) (2026-02-05)
+
+
+### Bug Fixes
+
+* restore from inactive keyset ([#486](https://github.com/cashubtc/cashu-ts/issues/486)) ([dd3ee5b](https://github.com/cashubtc/cashu-ts/commit/dd3ee5b0613b3f45d7b9378c1471f14c64090f7d))
+
 ## [3.4.0](https://github.com/cashubtc/cashu-ts/compare/v3.3.0...v3.4.0) (2026-02-05)
 
 New style changelog begins, containing features/fixes.
