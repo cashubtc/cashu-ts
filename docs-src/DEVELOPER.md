@@ -3,6 +3,7 @@
 # Developer Guide
 
 This document is a quick reference for maintainers and frequent contributors. It complements [the contributor guide](./CONTRIBUTING.md) (which is contributor-facing) and contains deeper, actionable instructions for setting up, testing, and developing the project.
+We use Husky to manage our git hooks. When you install dependencies, the environment is automatically configured. See the Hooks section below for more info.
 
 ## Quickstart (one-time)
 
@@ -17,21 +18,15 @@ npm ci
 # prepare browser dependencies for integration tests (one-time)
 npm run test:prepare
 
-# opt in to local hooks (optional)
-npm run setup-hooks
 ```
 
-Developing branch
+### Branching model update
 
-Please develop new features against the `development` branch (v3). After cloning, switch to it and pull the latest changes:
+This repository no longer uses a separate development branch. All development now happens directly against main.
+The project will continue to support the last prior major release on a version branch. At the time of this change
+main tracks v3, while the v2 linage exists on `v2-dev`.
 
-```bash
-# switch to the development branch for v3 work
-git checkout development
-git pull
-```
-
-If you are backporting fixes to the v2 line, use the `dev-v2` branch instead.
+If you are backporting fixes to the v2 line, please open pull requests against the `v2-dev` branch instead.
 
 Notes:
 
@@ -40,7 +35,7 @@ Notes:
 
 ### ⚠️ Important — run `npm ci` after switching major branches
 
-When switching between major branches (for example `development` for v3 and `dev-v2` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
+When switching between major branches (for example `main` for v3 and `v2-dev` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
 Always run a clean install after switching major branches to ensure `node_modules` matches the checked-in lockfile:
 
@@ -66,45 +61,45 @@ This callout is important — please don't skip it when moving between major bra
 
 ## Hooks internals (how the installer works)
 
-Layout
+During the install process [husky](https://typicode.github.io/husky/) was installed and setup for pre-commit, pre-push, and commit-msg hooks.
+We also automatically configured your local `git config commit.template` to use our project's `.gitmessage`.
 
-- Tracked hook sources: `scripts/hooks/` (kept non-executable in the repo)
-- Installer target: `.githooks/` (ignored by git; created by `scripts/install-git-hooks.sh`)
-- Installer behaviour:
-  - copies `scripts/hooks/*` -> `.githooks/`
-  - makes the copied files executable
-  - sets `git config --local core.hooksPath .githooks`
+### Commit Message Convention
 
-Why this pattern
+This project follows the [Conventional Commits](https://www.conventionalcommits.org/) specification. This is **required** because it powers our automated versioning and changelog generation.
 
-- Avoids mode-only diffs on tracked files while providing a one-command opt-in experience.
-- Keeps the repo sources auditable and prevents automatic global changes.
+- **Format:** `<type>(<scope>): <description>`
+- **Common Types:**
+  - `feat`: A new feature (triggers a MINOR version bump).
+  - `fix`: A bug fix (triggers a PATCH version bump).
+  - `docs`: Documentation changes only.
+  - `chore`: Maintenance tasks or library updates.
+- **Commit Template:** We provide a `.gitmessage` template to help you structure your messages. This is automatically configured as your local `commit.template` when you run `npm install`.
 
-Useful commands
+If your message doesn't fit the format, the commit-msg hook will prevent the commit.
+
+#### Pro-Tip: Recovering a Failed Commit
+
+If your commit fails the `commitlint` check, don't worry—you don't have to retype it!
+
+**The Quick Fix:**
+Git saves your last failed commit message in `.git/COMMIT_EDITMSG`. You can quickly recover it with:
 
 ```bash
-# opt-in (makes and runs the installer)
-npm run setup-hooks
-
-# undo opt-in (revert to default hooks path)
-# NOTE: removing the installed hooks directory is destructive. The uninstall
-# script unsets the local hooks path by default. To also remove the
-# `.githooks/` directory set the guard variable explicitly to avoid an
-# accidental `rm -rf`:
-
-# unset hooks path only
-npm run uninstall-hooks
-
-# unset hooks path AND remove installed hooks (explicit opt-in)
-REMOVE_GITHOOKS=1 npm run uninstall-hooks
+git commit -t .git/COMMIT_EDITMSG
 ```
 
-Authoring hooks
+### Migrate Hooks
 
-- Edit tracked sources in `scripts/hooks/` and keep them POSIX-friendly where possible.
-- When changing hook behaviour, document the change in `CONTRIBUTING.md` and consider adding tests or examples.
+We previously offered hooks as opt-in. If you had that configured we offer a migrate-hooks command.
 
-## Pre-commit vs pre-push strategy
+```bash
+npm run migrate-hooks
+```
+
+This runs `npm run uninstall-hooks` and `npm install`.
+
+### Pre-commit vs pre-push strategy
 
 - `pre-commit`: quick feedback (lint + format) — fast to avoid blocking developers.
   - Opt-in full run: set `FULL_PRECOMMIT=1` for a single commit when you want the full suite locally.
@@ -128,20 +123,21 @@ Caution: `api:update` can modify generated files (e.g. API reports). Inspect and
 
 Many maintainers prefer to run the full PR checks locally before pushing. A common, reliable workflow:
 
-1. Start a local mint (for integration tests). An example docker-compose is available at `examples/auth_mint/docker-compose.yml`:
+1. Start a local mint (for integration tests). We have make targets for both CDK's mintd, and Nutshell:
 
 ```bash
 # from the repo root
-docker compose -f examples/auth_mint/docker-compose.yml up -d
+DEV=1 make cdk-up
+# or DEV=1 make nutshell-up
 ```
 
-2. Run the full PR tasks (lint, format, api:update, tests):
+1. Run the full PR tasks (lint, format, api:update, tests):
 
 ```bash
 npm run prtasks
 ```
 
-3. Run the integration tests against the local mint:
+1. Run the integration tests against the local mint:
 
 ```bash
 npm run test-integration
@@ -166,10 +162,11 @@ The `test:consumer` aggregator runs the following scripts (you can run them indi
 
 Run the individual script if you want to isolate failures or speed up debugging.
 
-4. When finished, stop the local mint:
+1. When finished, stop the local mint:
 
 ```bash
-docker compose -f examples/auth_mint/docker-compose.yml down
+DEV=1 make cdk-down
+# or DEV=1 make nutshell-down
 ```
 
 This pattern (run `npm run prtasks` and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.
@@ -208,7 +205,7 @@ CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
 - Renovate is configured to update pinned image tags in the Makefile (the canonical source of truth). The Renovate regex intentionally matches semver-like tags (no `latest`) so PRs will update numeric tags.
 - Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs `npm run test-integration`.
 
-#### Practical checklist before running integration tests locally:
+#### Practical checklist before running integration tests locally
 
 1. Ensure dependencies are installed: `npm ci`
 2. Prepare browser artifacts if needed: `npm run test:prepare`
@@ -267,7 +264,7 @@ Run only node tests or a single test file with vitest (useful for rapid iteratio
 npx vitest --run --filter <pattern>
 ```
 
-### Integration / Playwright tests:
+### Integration / Playwright tests
 
 ```bash
 npm run test:prepare
@@ -290,30 +287,51 @@ npm install <pkg> --save-dev
 - Commit the updated `package-lock.json` (CI will use that exact lockfile).
 - In CI and reproducible environments, prefer `npm ci`.
 
-## Versioning & release strategy
+## Versioning & Release Strategy
 
-Cashu-TS uses semantic versioning. The repository maintains a `development` branch for the current major (v3) and a `dev-v2` branch for critical fixes to the v2 line.
+Cashu-TS uses semantic versioning.
+The repository uses a single primary development branch, `main`, which represents the current major release (v3).
+All new development is merged into `main` via pull requests.
 
-Guidelines:
+The previous major version (v2) is supported via a long-lived maintenance branch, which is used only for critical fixes.
 
-- New feature PRs for v3 should target the `development` branch.
-- If you need to backport a feature to v2, open a separate PR targeting `dev-v2` (do not mix both in a single PR).
+If you need to backport a feature to v2, open a separate PR targeting `v2-dev` (do not mix both in a single PR).
 
-### Releases
+## Releases
 
-Releases should be done by the robots, inside the workflow files.
-However, here are the release steps for manual flow.
+Releases are automated and managed by CI. Maintainers should **not** create releases manually.
 
-Release steps (manual flow):
+### Automated Releases (release-please)
 
-1. `git checkout development && git pull` — ensure development is up to date
-2. `npm version <major | minor | patch>` — create a new release commit & tag
-3. `git push && git push --tags` — push commit and tag
-4. Create a new release on GitHub, targeting the new tag
-5. CI will build and publish to npm (with provenance)
-6. `git checkout main && git pull && git merge <tag>` — merge the tag into `main`
+We use [release-please](https://github.com/googleapis/release-please) to automate our release cycle.
 
-Note: increment the major if there are breaking API changes. Otherwise increment the minor for new features and patch for hotfixes.
+#### How it works
+
+- Every pull request merged into `main` is analyzed by release-please.
+- release-please automatically creates or updates a **Release PR** targeting `main`.
+- The Release PR:
+  - Aggregates all `feat` and `fix` commits since the last release
+  - Updates `CHANGELOG.md`
+  - Calculates the next version using **Semantic Versioning (SemVer)**:
+    - `feat` → minor version bump
+    - `fix` → patch version bump
+    - Breaking changes → major version bump
+
+#### Cutting a release
+
+- A release is created **by merging the Release PR**.
+- When the Release PR is merged:
+  - A Git tag is created
+  - A GitHub Release is published
+  - CI builds and publishes the package to npm (with provenance)
+
+**Merging the Release PR is the release action. No additional steps are required.**
+
+### Notes on Versioning
+
+- Follow **Conventional Commits** to ensure correct version bumps.
+- Breaking API changes must be clearly marked to trigger a major version bump.
+- Version numbers are determined automatically by release-please; contributors should not attempt to control versions directly.
 
 ## Troubleshooting (common issues)
 

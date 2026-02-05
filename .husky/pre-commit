@@ -1,0 +1,37 @@
+#!/usr/bin/env sh
+echo "Quick pre-commit: lint + format"
+
+# Ensure npm is available
+if ! command -v npm >/dev/null 2>&1; then
+	echo "npm not found in PATH. Install Node.js/npm before committing." >&2
+	exit 1
+fi
+
+echo "-> npm run lint"
+npm run lint || {
+	echo "Lint failed. Commit aborted." >&2
+	exit 1
+}
+
+echo "-> npm run format"
+npm run format || {
+	echo "Format failed." >&2
+	exit 1
+}
+
+# If formatting changed files, stage them
+if [ -n "$(git status --porcelain)" ]; then
+	echo "Staging formatting changes..."
+	git add -A
+fi
+
+# Optional: run the full prtasks if explicitly requested by env var
+if [ "${FULL_PRECOMMIT:-0}" = "1" ]; then
+	echo "Running full prtasks (opt-in)..."
+	npm run prtasks || {
+		echo "Full prtasks failed. Commit aborted." >&2
+		exit 1
+	}
+fi
+
+echo "Pre-commit quick checks passed."

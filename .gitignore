@@ -8,3 +8,4 @@ test/__screenshots__
 *.tgz
 
 .githooks
+.husky/_
