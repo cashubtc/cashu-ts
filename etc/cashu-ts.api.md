@@ -345,6 +345,13 @@ export type GetInfoResponse = {
         '17'?: {
             supported: WebSocketSupport[];
         };
+        '19'?: {
+            ttl: number | null;
+            cached_endpoints: Array<{
+                method: 'GET' | 'POST';
+                path: string;
+            }>;
+        };
         '20'?: {
             supported: boolean;
         };
@@ -834,6 +841,7 @@ export class Mint {
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
+    setNut19Params(params: Nut19Policy): void;
     swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
@@ -897,6 +905,11 @@ export class MintInfo {
         params?: MPPMethod[];
     };
     // (undocumented)
+    isSupported(num: 19): {
+        supported: boolean;
+        params?: Nut19Policy;
+    };
+    // (undocumented)
     get motd(): string | undefined;
     // (undocumented)
     get name(): string;
@@ -936,6 +949,13 @@ export class MintInfo {
         };
         '17'?: {
             supported: WebSocketSupport[];
+        };
+        '19'?: {
+            ttl: number | null;
+            cached_endpoints: Array<{
+                method: "GET" | "POST";
+                path: string;
+            }>;
         };
         '20'?: {
             supported: boolean;
@@ -1101,6 +1121,15 @@ export type NUT10Option = {
     data: string;
     tags: string[][];
 };
+
+// @public (undocumented)
+export type Nut19Policy = {
+    ttl: number;
+    cached_endpoints: Array<{
+        method: 'GET' | 'POST';
+        path: string;
+    }>;
+} | null;
 
 // @public (undocumented)
 export class OIDCAuth {
@@ -1510,7 +1539,7 @@ export type RequestArgs = {
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
 
 // @public (undocumented)
 export type RestoreConfig = {
