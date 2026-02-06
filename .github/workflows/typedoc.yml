@@ -1,4 +1,4 @@
-name: Generate and Deploy Typedoc
+name: Generate and Deploy Typedoc / Coverage Report
 permissions:
   contents: write
   id-token: write
@@ -24,12 +24,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Compile
+        run: npm run compile
+
+      - name: Prepare Tests
+        run: npm run test:prepare
+
+      - name: Run Tests
+        run: npm test
+
       - name: Generate Typedoc
         run: npm run typedoc
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy Typedoc to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           destination_dir: .
           publish_dir: ./docs
+          cname: cashu-ts.dev
+
+      - name: Deploy Coverage to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          destination_dir: coverage/${{ github.head_ref || github.ref_name }}
+          publish_dir: ./coverage
