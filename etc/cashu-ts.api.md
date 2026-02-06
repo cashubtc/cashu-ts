@@ -1654,6 +1654,31 @@ export interface SharedOutputTypeProps {
     denominations?: number[];
 }
 
+// @public
+export type SigAllSigningPackage = {
+    version: 'cashu-sigall-v1';
+    type: 'swap' | 'melt';
+    quote?: string;
+    inputs: Array<{
+        id: string;
+        amount: number;
+        C: string;
+    }>;
+    outputs: Array<{
+        amount: number;
+        blindedMessage: SerializedBlindedMessage;
+    }>;
+    messageDigest?: string;
+    digests?: {
+        legacy?: string;
+        interim?: string;
+        current: string;
+    };
+    witness?: {
+        signatures: string[];
+    };
+};
+
 // @public (undocumented)
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
@@ -1848,6 +1873,8 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
+    extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(preview: MeltPreview<TQuote>): SigAllSigningPackage;
+    extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPackage;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
     getFeesForProofs(proofs: Proof[]): number;
     getKeyset(id?: string): Keyset;
@@ -1867,6 +1894,8 @@ export class Wallet {
     meltProofs(meltQuote: MeltQuoteBolt11Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt11(meltQuote: MeltQuoteBolt11Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
+    mergeSignaturesToMeltPreview<TQuote extends MeltQuoteBaseResponse>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>): MeltPreview<TQuote>;
+    mergeSignaturesToSwapPreview(pkg: SigAllSigningPackage, preview: SwapPreview): SwapPreview;
     readonly mint: Mint;
     // @deprecated (undocumented)
     mintProofs(amount: number, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
@@ -1888,6 +1917,7 @@ export class Wallet {
     send(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: Proof[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
+    signSigningPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage;
     // @deprecated (undocumented)
     readonly swap: (amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
