@@ -20,6 +20,7 @@ import request, {
 	type RequestOptions,
 } from '../transport';
 import { isObj, joinUrls, sanitizeUrl } from '../utils';
+import { NetworkError } from '../model/Errors';
 import {
 	type MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated,
@@ -51,6 +52,11 @@ import {
 	type MintQuoteBolt12Request,
 	type SwapRequest,
 } from '../model/types';
+
+/**
+ * Cache of mint URLs that block the `Prefer` header via CORS. In-memory only; cleared on refresh.
+ */
+const _corsBlockedMints = new Set<string>();
 
 /**
  * Class represents Cashu Mint API.
@@ -401,6 +407,10 @@ class Mint {
 	 * This method enables support for custom payment methods without modifying the Mint class. It
 	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
 	 * the common fields: quote, amount, fee_reserve, state, expiry.
+	 *
+	 * When `preferAsync` is true, sends `Prefer: respond-async` so the mint can return PENDING. If
+	 * this fails with {@link NetworkError}, the request is retried without the header and the mint URL
+	 * is cached so future calls skip it.
 	 * @example
 	 *
 	 * ```ts
@@ -422,18 +432,70 @@ class Mint {
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBaseResponse & TRes> {
-		// Set headers as needed
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
-		};
-		// Validate method string and make request
+		// Validate method string
 		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
-		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
-			'POST',
-			`/v1/melt/${method}`,
-			{ requestBody: meltPayload, headers },
-			options?.customRequest,
-		);
+
+		// Determine whether to include the Prefer header:
+		// Skip when the mint is already known to block it via CORS.
+		const usePrefer = !!options?.preferAsync && !_corsBlockedMints.has(this._mintUrl);
+
+		const headers: Record<string, string> = {
+			...(usePrefer ? { Prefer: 'respond-async' } : {}),
+		};
+
+		const path = `/v1/melt/${method}`;
+		const customRequest = options?.customRequest;
+		const requestBody = meltPayload;
+		const retryLogMessage = 'Prefer header may have been blocked by CORS, retrying without it';
+		let data: MeltQuoteBaseResponse & TRes;
+
+		if (!usePrefer) {
+			data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
+				'POST',
+				path,
+				{ requestBody },
+				customRequest,
+			);
+		} else {
+			try {
+				data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
+					'POST',
+					path,
+					{ requestBody, headers },
+					customRequest,
+				);
+			} catch (err) {
+				// Only retry when we actually sent the Prefer header and the failure
+				// looks like a CORS preflight rejection (surfaces as NetworkError).
+				if (!(err instanceof NetworkError)) {
+					throw err;
+				}
+
+				this._logger.debug(retryLogMessage, {
+					mintUrl: this._mintUrl,
+				});
+
+				try {
+					data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
+						'POST',
+						path,
+						{ requestBody },
+						customRequest,
+					);
+				} catch {
+					// Retry also failed — genuine network issue. Throw the *original*
+					// error and do NOT cache the mint URL.
+					throw err;
+				}
+
+				// Retry succeeded — the Prefer header was the problem. Cache this mint
+				// so subsequent calls skip the header from the start.
+				_corsBlockedMints.add(this._mintUrl);
+				this._logger.info('Mint cached as CORS-blocking the Prefer header', {
+					mintUrl: this._mintUrl,
+				});
+			}
+		}
 
 		// Runtime shape check for basic MeltQuoteBaseResponse
 		// TODO: - Tests need updating before we can do full shape check!
@@ -457,6 +519,8 @@ class Mint {
 	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
 	 * also contain blank outputs in order to receive back overpaid Lightning fees.
 	 *
+	 * @remarks
+	 * `preferAsync` follows the behavior described in {@link Mint.melt}.
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
 	 * @param options.preferAsync Optional override to set 'respond-async' header.
@@ -490,6 +554,8 @@ class Mint {
 	 * cover the amount plus fee reserves. Optional outputs can be included to receive change for
 	 * overpaid Lightning fees.
 	 *
+	 * @remarks
+	 * `preferAsync` follows the behavior described in {@link Mint.melt}.
 	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
 	 * @param options.customRequest Optional override for the request function.
 	 * @param options.preferAsync Optional override to set 'respond-async' header.

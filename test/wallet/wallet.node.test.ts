@@ -3607,6 +3607,152 @@ describe('async melt preference header', () => {
 		});
 		expect(res.quote.quote).toBe('q-auth-12');
 	});
+
+	test('bolt11: retries without Prefer header on CORS NetworkError', async () => {
+		// Use a unique mint URL so the CORS cache does not affect other tests
+		const corsMintUrl = 'http://cors-retry:3338';
+		server.use(
+			http.get(corsMintUrl + '/v1/info', () => HttpResponse.json(mintInfoResp)),
+			http.get(corsMintUrl + '/v1/keys', () => HttpResponse.json(dummyKeysResp)),
+			http.get(corsMintUrl + '/v1/keysets', () => HttpResponse.json(dummyKeysetResp)),
+		);
+
+		const meltQuote = {
+			quote: 'q-cors-retry',
+			amount: 1,
+			unit: 'sat',
+			request: invoice,
+			state: 'UNPAID',
+			fee_reserve: 0,
+		} as MeltQuoteBolt11Response;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		// Simulate CORS: reject when Prefer header is present, succeed without it
+		server.use(
+			http.post(corsMintUrl + '/v1/melt/bolt11', async ({ request }) => {
+				if (request.headers.get('prefer') === 'respond-async') {
+					return Response.error();
+				}
+				return HttpResponse.json({
+					quote: meltQuote.quote,
+					amount: meltQuote.amount,
+					state: 'UNPAID',
+					change: [],
+				});
+			}),
+		);
+
+		const wallet = new Wallet(corsMintUrl, { unit });
+		await wallet.loadMint();
+
+		const res = await wallet.meltProofsBolt11(meltQuote, proofs, {
+			onChangeOutputsCreated: (_foo) => {},
+		});
+
+		expect(res.quote.quote).toBe(meltQuote.quote);
+	});
+
+	test('bolt11: does not retry on non-NetworkError (e.g. HTTP 500)', async () => {
+		const corsMintUrl = 'http://cors-no-retry:3338';
+		server.use(
+			http.get(corsMintUrl + '/v1/info', () => HttpResponse.json(mintInfoResp)),
+			http.get(corsMintUrl + '/v1/keys', () => HttpResponse.json(dummyKeysResp)),
+			http.get(corsMintUrl + '/v1/keysets', () => HttpResponse.json(dummyKeysetResp)),
+		);
+
+		const meltQuote = {
+			quote: 'q-no-retry-500',
+			amount: 1,
+			unit: 'sat',
+			request: invoice,
+			state: 'UNPAID',
+			fee_reserve: 0,
+		} as MeltQuoteBolt11Response;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		let callCount = 0;
+		server.use(
+			http.post(corsMintUrl + '/v1/melt/bolt11', async () => {
+				callCount++;
+				return new HttpResponse(JSON.stringify({ error: 'Server Error' }), {
+					status: 500,
+				});
+			}),
+		);
+
+		const wallet = new Wallet(corsMintUrl, { unit });
+		await wallet.loadMint();
+
+		await expect(
+			wallet.meltProofsBolt11(meltQuote, proofs, {
+				onChangeOutputsCreated: (_foo) => {},
+			}),
+		).rejects.toThrow();
+
+		// Only one request — no retry for non-NetworkError
+		expect(callCount).toBe(1);
+	});
+
+	test('bolt11: throws original error when retry also fails (genuine network issue)', async () => {
+		const corsMintUrl = 'http://cors-double-fail:3338';
+		server.use(
+			http.get(corsMintUrl + '/v1/info', () => HttpResponse.json(mintInfoResp)),
+			http.get(corsMintUrl + '/v1/keys', () => HttpResponse.json(dummyKeysResp)),
+			http.get(corsMintUrl + '/v1/keysets', () => HttpResponse.json(dummyKeysetResp)),
+		);
+
+		const meltQuote = {
+			quote: 'q-double-fail',
+			amount: 1,
+			unit: 'sat',
+			request: invoice,
+			state: 'UNPAID',
+			fee_reserve: 0,
+		} as MeltQuoteBolt11Response;
+		const proofs = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1,
+				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		// Both attempts fail — genuine network issue, not just CORS
+		let callCount = 0;
+		server.use(
+			http.post(corsMintUrl + '/v1/melt/bolt11', async () => {
+				callCount++;
+				return Response.error();
+			}),
+		);
+
+		const wallet = new Wallet(corsMintUrl, { unit });
+		await wallet.loadMint();
+
+		await expect(
+			wallet.meltProofsBolt11(meltQuote, proofs, {
+				onChangeOutputsCreated: (_foo) => {},
+			}),
+		).rejects.toThrow();
+
+		// Both requests were attempted (initial + retry)
+		expect(callCount).toBe(2);
+	});
 });
 
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
