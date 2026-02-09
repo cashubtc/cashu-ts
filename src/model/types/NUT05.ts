@@ -71,4 +71,8 @@ export type MeltRequest = {
 	 * Optional blanks for fee change. If present, the mint may return signatures in `change`.
 	 */
 	outputs?: SerializedBlindedMessage[];
+	/**
+	 * When true, request async processing from the mint. Note: This is a request, not a guarantee.
+	 */
+	prefer_async?: boolean;
 } & Record<string, unknown>;

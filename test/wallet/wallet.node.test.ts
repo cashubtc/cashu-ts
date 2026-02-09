@@ -3349,8 +3349,8 @@ describe('bindKeyset & withKeyset', () => {
 	});
 });
 
-describe('async melt preference header', () => {
-	test('bolt11: sends Prefer: respond-async when preferAsync is true', async () => {
+describe('async melt preference body', () => {
+	test('bolt11: sends prefer_async when preferAsync is true', async () => {
 		// Arrange: quote and proofs with exact match (no change outputs needed)
 		const meltQuote = {
 			quote: 'q-async-1',
@@ -3372,7 +3372,9 @@ describe('async melt preference header', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
-				expect(prefer).toBe('respond-async');
+				const body = (await request.json()) as { prefer_async?: boolean };
+				expect(prefer).toBeNull();
+				expect(body.prefer_async).toBe(true);
 				return HttpResponse.json({
 					quote: meltQuote.quote,
 					amount: meltQuote.amount,
@@ -3384,8 +3386,6 @@ describe('async melt preference header', () => {
 
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
-
-		// Act: preferAsync -> header should be present
 		const res = await wallet.meltProofsBolt11(meltQuote, proofs, {
 			onChangeOutputsCreated: (_foo) => {},
 		});
@@ -3395,7 +3395,7 @@ describe('async melt preference header', () => {
 		expect(res.change).toHaveLength(0);
 	});
 
-	test('bolt11: does not send Prefer when preferAsync is not set', async () => {
+	test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
 		const meltQuote = {
 			quote: 'q-async-1b',
 			amount: 1,
@@ -3416,7 +3416,9 @@ describe('async melt preference header', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
+				const body = (await request.json()) as { prefer_async?: boolean };
 				expect(prefer).toBeNull();
+				expect(body.prefer_async).toBeUndefined();
 				return HttpResponse.json({
 					quote: meltQuote.quote,
 					amount: meltQuote.amount,
@@ -3434,7 +3436,7 @@ describe('async melt preference header', () => {
 		expect(res.change).toHaveLength(0);
 	});
 
-	test('bolt12: sends Prefer: respond-async when preferAsync is true', async () => {
+	test('bolt12: sends prefer_async when preferAsync is true', async () => {
 		const meltQuote = {
 			quote: 'q-async-12',
 			amount: 1,
@@ -3453,7 +3455,9 @@ describe('async melt preference header', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
-				expect(prefer).toBe('respond-async');
+				const body = (await request.json()) as { prefer_async?: boolean };
+				expect(prefer).toBeNull();
+				expect(body.prefer_async).toBe(true);
 				return HttpResponse.json({ quote: meltQuote.quote, amount: meltQuote.amount, change: [] });
 			}),
 		);
@@ -3468,7 +3472,7 @@ describe('async melt preference header', () => {
 		expect(res.change).toHaveLength(0);
 	});
 
-	test('bolt12: does not send Prefer when preferAsync is not set', async () => {
+	test('bolt12: does not send prefer_async when preferAsync is not set', async () => {
 		const meltQuote = {
 			quote: 'q-async-12b',
 			amount: 1,
@@ -3487,7 +3491,9 @@ describe('async melt preference header', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
+				const body = (await request.json()) as { prefer_async?: boolean };
 				expect(prefer).toBeNull();
+				expect(body.prefer_async).toBeUndefined();
 				return HttpResponse.json({ quote: meltQuote.quote, amount: meltQuote.amount, change: [] });
 			}),
 		);
@@ -3500,7 +3506,7 @@ describe('async melt preference header', () => {
 		expect(res.change).toHaveLength(0);
 	});
 
-	test('bolt11: preferAsync with blind auth sends both Prefer and Blind-auth headers', async () => {
+	test('bolt11: preferAsync with blind auth sends prefer_async and Blind-auth header', async () => {
 		const mintInfo = {
 			name: 'Testnut mint',
 			pubkey: '02abc',
@@ -3518,8 +3524,10 @@ describe('async melt preference header', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
 				const blind = request.headers.get('blind-auth');
-				expect(prefer).toBe('respond-async');
+				const body = (await request.json()) as { prefer_async?: boolean };
+				expect(prefer).toBeNull();
 				expect(blind).toBe('test-token');
+				expect(body.prefer_async).toBe(true);
 				return HttpResponse.json({ quote: 'q-auth-1', amount: 1, state: 'UNPAID', change: [] });
 			}),
 		);
@@ -3555,7 +3563,7 @@ describe('async melt preference header', () => {
 		expect(res.quote.quote).toBe('q-auth-1');
 	});
 
-	test('bolt12: preferAsync with blind auth sends both Prefer and Blind-auth headers', async () => {
+	test('bolt12: preferAsync with blind auth sends prefer_async and Blind-auth header', async () => {
 		const mintInfo = {
 			name: 'Testnut mint',
 			pubkey: '02abc',
@@ -3573,8 +3581,10 @@ describe('async melt preference header', () => {
 			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
 				const blind = request.headers.get('blind-auth');
-				expect(prefer).toBe('respond-async');
+				const body = (await request.json()) as { prefer_async?: boolean };
+				expect(prefer).toBeNull();
 				expect(blind).toBe('test-token');
+				expect(body.prefer_async).toBe(true);
 				return HttpResponse.json({ quote: 'q-auth-12', amount: 1, change: [] });
 			}),
 		);
