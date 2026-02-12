@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">87.89% </span>
+                <span class="strong">87.92% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>334/380</span>
+                <span class='fraction'>335/381</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">79.06% </span>
+                <span class="strong">75% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>68/86</span>
+                <span class='fraction'>63/84</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">87.89% </span>
+                <span class="strong">87.92% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>334/380</span>
+                <span class='fraction'>335/381</span>
             </div>
         
             
@@ -784,7 +784,17 @@
 <a name='L719'></a><a href='#L719'>719</a>
 <a name='L720'></a><a href='#L720'>720</a>
 <a name='L721'></a><a href='#L721'>721</a>
-<a name='L722'></a><a href='#L722'>722</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L722'></a><a href='#L722'>722</a>
+<a name='L723'></a><a href='#L723'>723</a>
+<a name='L724'></a><a href='#L724'>724</a>
+<a name='L725'></a><a href='#L725'>725</a>
+<a name='L726'></a><a href='#L726'>726</a>
+<a name='L727'></a><a href='#L727'>727</a>
+<a name='L728'></a><a href='#L728'>728</a>
+<a name='L729'></a><a href='#L729'>729</a>
+<a name='L730'></a><a href='#L730'>730</a>
+<a name='L731'></a><a href='#L731'>731</a>
+<a name='L732'></a><a href='#L732'>732</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1207,8 +1217,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">21x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">21x</span>
 <span class="cline-any cline-yes">21x</span>
 <span class="cline-any cline-yes">21x</span>
 <span class="cline-any cline-yes">21x</span>
@@ -1251,6 +1265,9 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">12x</span>
 <span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1284,6 +1301,9 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -1918,7 +1938,7 @@ class Mint {
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns A response object with at least the required melt quote fields.
 	 */
 	async melt&lt;TRes extends Record&lt;string, unknown&gt; = Record&lt;string, unknown&gt;&gt;(
@@ -1926,20 +1946,24 @@ class Mint {
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
+			/**
+			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
+			 */
 			preferAsync?: boolean;
 		},
 	): Promise&lt;MeltQuoteBaseResponse &amp; TRes&gt; {
-		// Set headers as needed
-		const headers: Record&lt;string, string&gt; = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		// TODO: remove with deprecated preferAsync option
+		const requestBody: MeltRequest = {
+			...meltPayload,
+			...(<span class="branch-0 cbranch-no" title="branch not covered" >options?.<span class="branch-0 cbranch-no" title="branch not covered" >preferAsync ? {</span> prefer_async: true } : {</span>}),
 		};
 		// Validate method string and make request
 		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
 		const data = await this.requestWithAuth&lt;MeltQuoteBaseResponse &amp; TRes&gt;(
 			'POST',
 			`/v1/melt/${method}`,
-			{ requestBody: meltPayload, headers },
-			options?.customRequest,
+			{ requestBody },
+<span class="branch-0 cbranch-no" title="branch not covered" >			options?.customRequest,</span>
 		);
 &nbsp;
 		// Runtime shape check for basic MeltQuoteBaseResponse
@@ -1966,13 +1990,16 @@ class Mint {
 	 *
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns The melt response.
 	 */
 	async meltBolt11(
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
+			/**
+			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
+			 */
 			preferAsync?: boolean;
 		},
 	): Promise&lt;MeltQuoteBolt11Response&gt; {
@@ -1999,13 +2026,16 @@ class Mint {
 	 *
 	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns Payment result with state and optional change signatures.
 	 */
 	async meltBolt12(
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
+			/**
+			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
+			 */
 			preferAsync?: boolean;
 		},
 	): Promise&lt;MeltQuoteBolt12Response&gt; {
@@ -2233,7 +2263,7 @@ export { Mint };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-12T10:20:59.043Z
+                at 2026-02-12T10:28:18.233Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
