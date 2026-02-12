@@ -21,7 +21,6 @@ export type RawPaymentRequest = {
 	d?: string; // description
 	t?: RawTransport[]; // transports
 	nut10?: RawNUT10Option;
-	nut26?: boolean; // P2BK
 };
 
 export type PaymentRequestTransport = {
