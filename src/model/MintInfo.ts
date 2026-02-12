@@ -9,9 +9,8 @@ type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
 
 type ProtectedIndex = {
-	cache: Record<string, boolean>; // "METHOD /v1/foo"
-	exact: Array<{ method: Method; path: string }>;
-	prefix: Array<{ method: Method; path: string }>;
+	exact: Record<Method, Set<string>>;
+	prefix: Record<Method, string[]>;
 };
 
 export class MintInfo {
@@ -75,18 +74,20 @@ export class MintInfo {
 	private matchesProtected(idx: ProtectedIndex | undefined, method: Method, path: string): boolean {
 		if (!idx) return false;
 
-		const cacheKey = `${method} ${path}`;
-		const cached = idx.cache[cacheKey];
-		if (typeof cached === 'boolean') return cached;
+		// Runtime guard for method
+		const exact = idx.exact[method];
+		const prefix = idx.prefix[method];
+		if (!exact || !prefix) return false;
 
-		const exactHit = idx.exact.some((e) => e.method === method && e.path === path);
-		const prefixHit = exactHit
-			? false
-			: idx.prefix.some((e) => e.method === method && path.startsWith(e.path));
+		// Exact match first
+		if (idx.exact[method].has(path)) return true;
 
-		const res = exactHit || prefixHit;
-		idx.cache[cacheKey] = res;
-		return res;
+		// Prefix match fallback
+		for (const p of idx.prefix[method]) {
+			if (path.startsWith(p)) return true;
+		}
+
+		return false;
 	}
 
 	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
@@ -139,8 +140,8 @@ export class MintInfo {
 	private buildIndex(endpoints?: Endpoint[]): ProtectedIndex | undefined {
 		if (!endpoints?.length) return undefined;
 
-		const exact: ProtectedIndex['exact'] = [];
-		const prefix: ProtectedIndex['prefix'] = [];
+		const exact: ProtectedIndex['exact'] = { GET: new Set(), POST: new Set() };
+		const prefix: ProtectedIndex['prefix'] = { GET: [], POST: [] };
 
 		for (const e of endpoints) {
 			let p = e.path;
@@ -150,22 +151,28 @@ export class MintInfo {
 			// See: https://github.com/cashubtc/nuts/pull/334
 			if (p.startsWith('^')) p = p.slice(1);
 			if (p.endsWith('$')) p = p.slice(0, -1);
+
+			// Deprecated regex prefix formatting (backwards compat)
 			if (p.endsWith('.*')) {
-				prefix.push({ method: e.method, path: p.slice(0, -2) });
+				prefix[e.method].push(p.slice(0, -2));
 				continue;
 			}
 
-			// New glob-style wildcard matching
+			// Glob style prefix match
 			if (p.endsWith('*')) {
-				prefix.push({ method: e.method, path: p.slice(0, -1) });
+				prefix[e.method].push(p.slice(0, -1));
 				continue;
 			}
 
-			exact.push({ method: e.method, path: p });
+			// Exact match
+			exact[e.method].add(p);
 		}
 
-		const cache: Record<string, boolean> = {};
-		return { cache, exact, prefix };
+		// Optional: longer prefixes first for faster early exits
+		prefix.GET.sort((a, b) => b.length - a.length);
+		prefix.POST.sort((a, b) => b.length - a.length);
+
+		return { exact, prefix };
 	}
 
 	// ---------- getters ----------
