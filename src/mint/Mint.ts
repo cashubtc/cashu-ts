@@ -411,7 +411,7 @@ class Mint {
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns A response object with at least the required melt quote fields.
 	 */
 	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
@@ -419,19 +419,23 @@ class Mint {
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
+			/**
+			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
+			 */
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBaseResponse & TRes> {
-		// Set headers as needed
-		const headers: Record<string, string> = {
-			...(options?.preferAsync ? { Prefer: 'respond-async' } : {}),
+		// TODO: remove with deprecated preferAsync option
+		const requestBody: MeltRequest = {
+			...meltPayload,
+			...(options?.preferAsync ? { prefer_async: true } : {}),
 		};
 		// Validate method string and make request
 		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
 		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
-			{ requestBody: meltPayload, headers },
+			{ requestBody },
 			options?.customRequest,
 		);
 
@@ -459,13 +463,16 @@ class Mint {
 	 *
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns The melt response.
 	 */
 	async meltBolt11(
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
+			/**
+			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
+			 */
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt11Response> {
@@ -492,13 +499,16 @@ class Mint {
 	 *
 	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync Optional override to set 'respond-async' header.
+	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns Payment result with state and optional change signatures.
 	 */
 	async meltBolt12(
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
+			/**
+			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
+			 */
 			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt12Response> {

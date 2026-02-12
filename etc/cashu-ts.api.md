@@ -760,6 +760,7 @@ export type MeltRequest = {
     quote: string;
     inputs: Proof[];
     outputs?: SerializedBlindedMessage[];
+    prefer_async?: boolean;
 } & Record<string, unknown>;
 
 // @public (undocumented)

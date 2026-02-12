@@ -492,6 +492,33 @@ describe('mint api', () => {
 		// console.log('melt response', response);
 		expect(response.quote.state == MeltQuoteState.PAID).toBe(true);
 	});
+	test('mint then melt async', async () => {
+		const invoice =
+			'lnbc210n1p5c5sap9qypqqqdqqxqrrsssp5fdhmkt2jzvlsrj5ulta24k9jfk732um5dz6aquwg0vd5lvwv2lmspp5s9eykld2xel0d80le3ntwsc2sj40a2gdue6jlndr7d9dye5ukldq65w60acwhplrvmnwze4lzzzdrvv9awlw5jl4vhxcy7kp46fj5yxjgzx79qlyvl6r9mj9u67ux6utwccx5r6k7w4per2egckw96z6rksq7pnx7v';
+		const wallet = new Wallet(mintUrl);
+		await wallet.loadMint();
+		// Mint some proofs
+		const mintRequest = await wallet.createMintQuoteBolt11(128);
+		await untilMintQuotePaid(wallet, mintRequest);
+		const proofs = await wallet.mintProofsBolt11(128, mintRequest.quote);
+		// prepare to melt
+		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
+		const fee = meltRequest.fee_reserve;
+		expect(fee).toBeGreaterThan(0);
+		const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
+		// complete melt async
+		const response = await wallet.completeMelt(melt, undefined, true);
+		// console.log('melt response', response);
+		expect(response).toBeDefined();
+		if (response.quote.state === MeltQuoteState.PAID) {
+			return; // mint did not allow async, skip rest of test
+		}
+		// Was async, so await completion
+		await wallet.on.onceMeltPaid(response.quote.quote, { timeoutMs: 6_000 });
+		const check = await wallet.checkMeltQuoteBolt11(response.quote);
+		// console.log('melt final response', check);
+		expect(check.state == MeltQuoteState.PAID).toBe(true);
+	});
 	test('mint deterministic', async () => {
 		const hexSeed = bytesToHex(randomBytes(64));
 		const wallet = new Wallet(mintUrl);

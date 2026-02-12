@@ -2129,7 +2129,7 @@ class Wallet {
 	 * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
 	 * @param meltPreview The preview from prepareMelt().
 	 * @param privkey The private key(s) for signing.
-	 * @param preferAsync Optional override to set 'respond-async' header.
+	 * @param preferAsync Optional override to request NUT-06 asynchronous melt.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
@@ -2156,15 +2156,18 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Construct melt payload
-		const meltPayload: MeltRequest = { quote, inputs, outputs };
+		const meltPayload: MeltRequest = {
+			quote,
+			inputs,
+			outputs,
+			...(preferAsync ? { prefer_async: true } : {}),
+		};
 
 		// Make melt call (note: bolt11 has legacy data handling)
 		const meltResponse: MeltQuoteBaseResponse =
 			meltPreview.method === 'bolt11'
-				? await this.mint.meltBolt11(meltPayload, { preferAsync })
-				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
-						preferAsync,
-					});
+				? await this.mint.meltBolt11(meltPayload)
+				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload);
 
 		// Check for too many blind signatures before mapping
 		this.failIf(
