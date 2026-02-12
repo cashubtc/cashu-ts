@@ -3,7 +3,7 @@
 <html lang="en">
 
 <head>
-    <title>Code coverage report for cashu-ts/src/crypto/NUT26.ts</title>
+    <title>Code coverage report for cashu-ts/src/crypto/NUT28.ts</title>
     <meta charset="utf-8" />
     <link rel="stylesheet" href="../../../prettify.css" />
     <link rel="stylesheet" href="../../../base.css" />
@@ -19,13 +19,13 @@
 <body>
 <div class='wrapper'>
     <div class='pad1'>
-        <h1><a href="../../../index.html">All files</a> / <a href="index.html">cashu-ts/src/crypto</a> NUT26.ts</h1>
+        <h1><a href="../../../index.html">All files</a> / <a href="index.html">cashu-ts/src/crypto</a> NUT28.ts</h1>
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">95% </span>
+                <span class="strong">94.73% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>95/100</span>
+                <span class='fraction'>90/95</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">95% </span>
+                <span class="strong">94.73% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>95/100</span>
+                <span class='fraction'>90/95</span>
             </div>
         
             
@@ -256,15 +256,7 @@
 <a name='L191'></a><a href='#L191'>191</a>
 <a name='L192'></a><a href='#L192'>192</a>
 <a name='L193'></a><a href='#L193'>193</a>
-<a name='L194'></a><a href='#L194'>194</a>
-<a name='L195'></a><a href='#L195'>195</a>
-<a name='L196'></a><a href='#L196'>196</a>
-<a name='L197'></a><a href='#L197'>197</a>
-<a name='L198'></a><a href='#L198'>198</a>
-<a name='L199'></a><a href='#L199'>199</a>
-<a name='L200'></a><a href='#L200'>200</a>
-<a name='L201'></a><a href='#L201'>201</a>
-<a name='L202'></a><a href='#L202'>202</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
+<a name='L194'></a><a href='#L194'>194</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
@@ -292,15 +284,12 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
-<span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
@@ -332,10 +321,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">10x</span>
-<span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
 <span class="cline-any cline-yes">10x</span>
@@ -442,8 +428,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">70x</span>
 <span class="cline-any cline-yes">70x</span>
 <span class="cline-any cline-yes">70x</span>
 <span class="cline-any cline-yes">70x</span>
@@ -488,7 +472,6 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
  *
  * This is the Sender side API.
  * @param pubkeys Ordered SEC1 compressed pubkeys, [data, ...pubkeys, ...refund]
- * @param keysetId Hex keyset identifier, bound into the tweak.
  * @param eBytes Optional. Fixed ephemeral secret key to use (eg for SIG_ALL / testing)
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
  * @throws If a blinded key is at infinity.
@@ -496,7 +479,6 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
  */
 export function deriveP2BKBlindedPubkeys(
 	pubkeys: string[],
-	keysetId: string,
 	eBytes?: Uint8Array,
 ): { blinded: string[]; Ehex: string } {
 	if (!pubkeys.length) <span class="branch-0 cbranch-no" title="branch not covered" >return { blinded: [], Ehex: '' };</span>
@@ -504,11 +486,10 @@ export function deriveP2BKBlindedPubkeys(
 	eBytes = eBytes ?? secp256k1.utils.randomSecretKey(); // 32 bytes
 	const e = secp256k1.Point.Fn.fromBytes(eBytes); // bigint in [1..n-1]
 	const E = secp256k1.getPublicKey(eBytes, true); // SEC1 compressed (bytes)
-	const kid = hexToBytes(keysetId);
 	// Blind each pubkey in turn
 	const blinded = pubkeys.map((pubkey, i) =&gt; {
 		const P = pointFromHex(pubkey);
-		const r = deriveP2BKBlindingTweakFromECDH(P, e, kid, i);
+		const r = deriveP2BKBlindingTweakFromECDH(P, e, i);
 		const P_ = P.add(secp256k1.Point.BASE.multiply(r));
 		if (P_.equals(secp256k1.Point.ZERO)) <span class="branch-0 cbranch-no" title="branch not covered" >throw new Error('Blinded key at infinity');</span>
 		return P_.toHex(true);
@@ -530,7 +511,6 @@ export function deriveP2BKBlindedPubkeys(
  * @param Ehex Ephemeral public key (E) as SEC1 hex.
  * @param privateKey Secret key or array of secret keys, hex.
  * @param blindPubKey Blinded public key or array of blinded public keys, hex.
- * @param keysetIdHex Keyset identifier as hex.
  * @returns Array of derived secret keys as 64 char hex.
  * @experimental
  */
@@ -538,18 +518,16 @@ export function deriveP2BKSecretKeys(
 	Ehex: string,
 	privateKey: string | string[],
 	blindPubKey: string | string[],
-	keysetIdHex: string,
 ): string[] {
 	const privs = Array.isArray(privateKey) ? privateKey : [privateKey];
 	const pubs = Array.isArray(blindPubKey) ? <span class="branch-0 cbranch-no" title="branch not covered" >blindPubKey : [blindPubKey];</span>
 	const out = new Set&lt;string&gt;();
 	const E = secp256k1.Point.fromHex(Ehex);
-	const kid = hexToBytes(keysetIdHex);
 	for (const privHex of privs) {
 		const p = secp256k1.Point.Fn.fromBytes(hexToBytes(privHex));
 		const P = secp256k1.getPublicKey(hexToBytes(privHex), true); // 33 bytes, validates on curve
 		pubs.forEach((hexP_, i) =&gt; {
-			const r = deriveP2BKBlindingTweakFromECDH(E, p, kid, i);
+			const r = deriveP2BKBlindingTweakFromECDH(E, p, i);
 			const P_ = hexToBytes(hexP_);
 			const kHex = deriveP2BKSecretKey(privHex, r, P_, P);
 			if (kHex) out.add(kHex); // add only when this priv matches this P′
@@ -559,7 +537,7 @@ export function deriveP2BKSecretKeys(
 }
 &nbsp;
 /**
- * Derive a blinded secret key per NUT-26.
+ * Derive a blinded secret key per NUT-28.
  *
  * Unblinds the pubkey (P = P_ - r·G), verifies x-coord against the naturalPub x(P) == x(p·G), then
  * choose skStd = (p + rᵢ) mod n if parity(P) == parity(p·G), otherwise skNeg = (-p + rᵢ) mod n.
@@ -625,7 +603,7 @@ export function deriveP2BKSecretKey(
  * @remarks
  * Computes the shared point Z = scalar·point, takes its 32 byte x coordinate Zx, then derives:
  *
- *     rᵢ = SHA - 256(P2BK_DST || Zx || keysetId || i); // all inputs as raw bytes
+ *     rᵢ = SHA - 256(P2BK_DST || Zx || i); // all inputs as raw bytes
  *
  * If the result reduces to zero, or is &gt;= curve order (n), retries once with an extra 0xff byte
  * appended to the message. Throws if the retry also reduces to zero.
@@ -638,7 +616,6 @@ export function deriveP2BKSecretKey(
  * Both yield the same Z and therefore the same r thanks to the magic of ECDH!
  * @param point Ephemeral public key (E) or recipient public key (P)
  * @param scalar Private scalar (p) or ephemeral scalar (e) in [1, n − 1]
- * @param keysetId Keyset identifier as raw bytes.
  * @param slotIndex Zero based slot index, only lowest 8 bits (0–255) are used.
  * @returns Tweak (r) in [1, n − 1]
  * @throws If r reduces to zero after the retry.
@@ -647,7 +624,6 @@ export function deriveP2BKSecretKey(
 function deriveP2BKBlindingTweakFromECDH(
 	point: WeierstrassPoint&lt;bigint&gt;, // E or P
 	scalar: bigint, // p or e
-	keysetId: Uint8Array, // kid
 	slotIndex: number, // i
 ): bigint {
 	// Calculate x-only ECDH shared point (Zx)
@@ -656,10 +632,10 @@ function deriveP2BKBlindingTweakFromECDH(
 	// Derive deterministic blinding factor (r):
 	// Note: Bytes.toBigInt is safe here because we explicitly guard against
 	// out-of-range values below, throwing rather than silently normalizing.
-	let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte)));
+	let r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte)));
 	if (r === 0n || r &gt;= secp256k1.Point.CURVE().n) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
 		// Very unlikely to get here!
-<span class="cstat-no" title="statement not covered" >		r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, keysetId, iByte, new Uint8Array([0xff]))));</span>
+<span class="cstat-no" title="statement not covered" >		r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));</span>
 <span class="cstat-no" title="statement not covered" >		if (r === 0n || r &gt;= secp256k1.Point.CURVE().n) {</span>
 <span class="cstat-no" title="statement not covered" >			throw new Error('P2BK: tweak derivation failed');</span>
 <span class="cstat-no" title="statement not covered" >		}</span>
@@ -673,7 +649,7 @@ function deriveP2BKBlindingTweakFromECDH(
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-06T12:39:08.418Z
+                at 2026-02-12T10:19:14.321Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
