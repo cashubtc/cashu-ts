@@ -1,13 +1,13 @@
 # This workflow will do a clean installation of node dependencies, cache/restore them, build the source code and run tests across different versions of node
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
 
-name: Node.js CI
-
+name: Generate Coverage Report
+permissions:
+  contents: write
 on:
   push:
     branches:
       - main
-      - staging
 
 jobs:
   build:
@@ -32,4 +32,4 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           destination_dir: coverage/${{ github.head_ref || github.ref_name }}
-          publish_dir: ./coverage/lcov-report
+          publish_dir: ./coverage

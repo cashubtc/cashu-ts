@@ -28,12 +28,11 @@ import {
 	buildInterimP2PKSigAllMessage,
 	createSecret,
 	getP2PKNSigsRefund,
-	verifyP2PKSpendingConditions,
 	isHTLCSpendAuthorised,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { OutputData, OutputDataLike, BlindedMessage } from '../../src';
+import { OutputDataLike } from '../../src';
 import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
@@ -46,8 +45,7 @@ describe('test create p2pk secret', () => {
 		// console.log(JSON.stringify(decodedSecret))
 		expect(Object.keys(decodedSecret[1]).includes('nonce')).toBe(true);
 		expect(Object.keys(decodedSecret[1]).includes('data')).toBe(true);
-		const secretUint8 = new TextEncoder().encode(secret);
-		const decodedSecret2 = parseP2PKSecret(secretUint8);
+		const decodedSecret2 = parseP2PKSecret(secret);
 		expect(decodedSecret2[0]).toBe('P2PK');
 	});
 	test('sign and verify proof', async () => {
@@ -567,7 +565,7 @@ describe('P2BK fixed-vector ECDH tweak', () => {
 		const idHex = '009a1f293253e41e';
 		const p2pk_e = '02909b0298835a72f5bd08c478a36ead7e3d7594df1148a70fd146a99bd5368772';
 		const secretStr =
-			'["P2PK",{"nonce":"99ee92f310d92932019827217ba1ed9a902529186d7e5ae12f1fd85df5a13ef0","data":"028c7651fc36f8c10287833a2ad78c996febf5213dc7aab798f744f86385e28d9a","tags":[]}]';
+			'["P2PK",{"nonce":"99ee92f310d92932019827217ba1ed9a902529186d7e5ae12f1fd85df5a13ef0","data":"03a0b460e6099f87751c1ca38887aed0586a2a59cb09334f3b4b401c7a2096384f","tags":[]}]';
 		const secret = JSON.parse(secretStr) as ['P2PK', { data: string; tags?: string[][] }];
 
 		// Base pubkey P (Bob) and blinded P′ from secret.data (slot i = 0)
@@ -575,15 +573,12 @@ describe('P2BK fixed-vector ECDH tweak', () => {
 		const Pblnd = secp256k1.Point.fromHex(secret[1].data);
 
 		// ECDH: Z = p*E, r0 = H(DST||X(Z)||kid||i) mod n
-		const kid = hexToBytes(idHex);
 		const E = secp256k1.Point.fromHex(p2pk_e);
 		const pBig = secp256k1.Point.Fn.fromBytes(hexToBytes(privKeyBob));
 		const Z = E.multiply(pBig);
 		const Zx = Z.toBytes(false).slice(1, 33); // 32B X from uncompressed SEC1
 		const i0 = new Uint8Array([0x00]);
-		let r = secp256k1.Point.Fn.fromBytes(
-			sha256(new Uint8Array([...P2BK_DST, ...Zx, ...kid, ...i0])),
-		);
+		let r = secp256k1.Point.Fn.fromBytes(sha256(new Uint8Array([...P2BK_DST, ...Zx, ...i0])));
 
 		// Check blinded point matches P + r·G
 		const expectPprime = P.add(secp256k1.Point.BASE.multiply(r));
@@ -616,7 +611,7 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 		const {
 			blinded: [P0_],
 			Ehex: E,
-		} = deriveP2BKBlindedPubkeys([PBob], kidHex);
+		} = deriveP2BKBlindedPubkeys([PBob]);
 
 		// Minimal P2PK secret with the blinded data key
 		const secret = createP2PKsecret(P0_, []);
@@ -635,7 +630,7 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 		const {
 			blinded: [P0_, P1_],
 			Ehex: E,
-		} = deriveP2BKBlindedPubkeys([PAlice, PBob], kidHex);
+		} = deriveP2BKBlindedPubkeys([PAlice, PBob]);
 
 		// P2PK secret: lock requires 2 signatures across [P0_, P1_]
 		const secret = createP2PKsecret(P0_, [
@@ -660,7 +655,7 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 describe('NUT-11 helper edge cases', () => {
 	test('parseP2PKSecret: Uint8Array input and invalid JSON path', () => {
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`;
-		const parsed = parseP2PKSecret(new TextEncoder().encode(s));
+		const parsed = parseP2PKSecret(s);
 		expect(parsed[0]).toBe('P2PK');
 		expect(() => parseP2PKSecret('not-json')).toThrow("Can't parse secret");
 	});

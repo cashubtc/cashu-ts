@@ -20,7 +20,6 @@ export class PaymentRequest {
 		public description?: string,
 		public singleUse: boolean = false,
 		public nut10?: NUT10Option,
-		public nut26: boolean = false,
 	) {}
 
 	toRawRequest() {
@@ -56,9 +55,6 @@ export class PaymentRequest {
 				d: this.nut10.data,
 				t: this.nut10.tags,
 			};
-		}
-		if (this.nut26) {
-			rawRequest.nut26 = this.nut26;
 		}
 		return rawRequest;
 	}
@@ -144,7 +140,6 @@ export class PaymentRequest {
 			rawPaymentRequest.d,
 			rawPaymentRequest.s,
 			nut10,
-			rawPaymentRequest.nut26,
 		);
 	}
 
@@ -164,7 +159,6 @@ export class PaymentRequest {
 				decoded.description,
 				decoded.singleUse ?? false,
 				undefined,
-				false,
 			);
 		}
 

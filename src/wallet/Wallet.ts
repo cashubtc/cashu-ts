@@ -321,7 +321,7 @@ class Wallet {
 		}
 
 		// Load KeyChain
-		promises.push(this._keyChain.init(forceRefresh).then(() => null));
+		promises.push(this._keyChain.init(forceRefresh));
 
 		await Promise.all(promises);
 		this.finishInit();
@@ -346,16 +346,31 @@ class Wallet {
 	 * Finishes wiring up the wallet instance and checks we are "Go for launch".
 	 */
 	private finishInit(): void {
-		// Go Keychain?
-		const cheapestId = this._keyChain.getCheapestKeyset().id;
 		this._logger.debug('KeyChain', { keychain: this._keyChain.cache });
 
-		// Bind the cheapest keyset if needed
+		// Go Keychain?
 		if (this._boundKeysetId === PENDING_KEYSET_ID) {
-			this._boundKeysetId = cheapestId;
+			try {
+				// Bind the cheapest active keyset
+				this._boundKeysetId = this._keyChain.getCheapestKeyset().id;
+			} catch (e) {
+				// Edge case: mint has no active keysets, so leave wallet unbound
+				// May happen if a mint is closing down and unwinding liabilities
+				this._logger.warn('No active keyset available, wallet remains unbound', {
+					unit: this._unit,
+					err: (e as Error).message,
+				});
+			}
 		} else {
+			// Keyset ID was bound in wallet constructor, so ensure it exists and unit
+			// matches, but do NOT require keys yet. It may be an inactive keyset for
+			// restore, and if so, keys will be fetched async later.
 			const k = this._keyChain.getKeyset(this._boundKeysetId);
-			this.failIf(!k.hasKeys, 'Wallet keyset has no keys', { keyset: k.id });
+			this.failIf(k.unit !== this._unit, 'Keyset unit does not match wallet unit', {
+				keyset: k.id,
+				unit: k.unit,
+				walletUnit: this._unit,
+			});
 		}
 
 		// Go Mintinfo?
@@ -406,7 +421,7 @@ class Wallet {
 	get keysetId(): string {
 		this.failIf(
 			this._boundKeysetId === PENDING_KEYSET_ID,
-			'Wallet not initialised, call loadMint or loadMintFromCache first',
+			'Wallet has no bound keyset. The mint may have no active keysets, or wallet was not initialized via loadMint or loadMintFromCache',
 		);
 		return this._boundKeysetId;
 	}
@@ -1392,7 +1407,7 @@ class Wallet {
 	 * Prepares inputs for a mint operation.
 	 *
 	 * @remarks
-	 * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-26) for privacy and serializes witnesses.
+	 * Internal method; strips DLEQ (NUT-12) and p2pk_e (NUT-28) for privacy and serializes witnesses.
 	 * Returns an array of new proof objects - does not mutate the originals.
 	 * @param proofs The proofs to prepare.
 	 * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
@@ -1477,9 +1492,12 @@ class Wallet {
 		count: number,
 		config?: RestoreConfig,
 	): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {
-		const { keysetId } = config || {};
-		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		this.failIfNullish(this._seed, 'Cashu Wallet must be initialized with a seed to use restore');
+		const { keysetId } = config || {};
+
+		// Ensure we have keys - wallet only loads active keysets by default
+		await this._keyChain.ensureKeysetKeys(keysetId ?? this.keysetId);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 
 		// create deterministic blank outputs for unknown restore amounts
 		// Note: zero amount + zero denomination passes splitAmount validation
@@ -2115,7 +2133,7 @@ class Wallet {
 	 * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
 	 * @param meltPreview The preview from prepareMelt().
 	 * @param privkey The private key(s) for signing.
-	 * @param preferAsync Optional override to set 'respond-async' header.
+	 * @param preferAsync Optional override to request NUT-06 asynchronous melt.
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
@@ -2142,15 +2160,18 @@ class Wallet {
 		inputs = this._prepareInputsForMint(inputs);
 
 		// Construct melt payload
-		const meltPayload: MeltRequest = { quote, inputs, outputs };
+		const meltPayload: MeltRequest = {
+			quote,
+			inputs,
+			outputs,
+			...(preferAsync ? { prefer_async: true } : {}),
+		};
 
 		// Make melt call (note: bolt11 has legacy data handling)
 		const meltResponse: MeltQuoteBaseResponse =
 			meltPreview.method === 'bolt11'
-				? await this.mint.meltBolt11(meltPayload, { preferAsync })
-				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload, {
-						preferAsync,
-					});
+				? await this.mint.meltBolt11(meltPayload)
+				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload);
 
 		// Check for too many blind signatures before mapping
 		this.failIf(
