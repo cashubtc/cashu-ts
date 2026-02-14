@@ -11,6 +11,8 @@ export default tseslint.config(
 		ignores: [
 			'node_modules/**',
 			'dist/**',
+			'dist-scripts/**',
+			'scripts/**',
 			'test/**',
 			'coverage/**',
 			'.jest/**',

@@ -17,6 +17,7 @@
 		"url": "https://github.com/cashubtc/cashu-ts/issues"
 	},
 	"scripts": {
+		"build:scripts": "tsc -p scripts/tsconfig.json",
 		"compile:es": "BUILD_FORMAT=es vite build",
 		"compile:cjs": "BUILD_FORMAT=cjs vite build",
 		"compile:standalone": "BUILD_FORMAT=iife vite build",
@@ -43,7 +44,8 @@
 		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status",
 		"prepare": "husky && [ \"$CI\" != \"true\" ] && npm run setup-git || true",
 		"setup-git": "git config commit.template .gitmessage",
-		"migrate-hooks": "REMOVE_GITHOOKS=1 npm run uninstall-hooks && npm install"
+		"migrate-hooks": "REMOVE_GITHOOKS=1 npm run uninstall-hooks && npm install",
+		"update-docker-versions": "npm run build:scripts && node dist-scripts/UpdateMakefileMintVersion.js"
 	},
 	"exports": {
 		".": {
@@ -63,6 +65,7 @@
 		"@commitlint/config-conventional": "^20.3.1",
 		"@eslint/js": "^9.31.0",
 		"@microsoft/api-extractor": "^7.52.4",
+		"@types/node": "^25.2.3",
 		"@types/node-fetch": "^2.6.4",
 		"@types/ws": "^8.5.10",
 		"@typescript-eslint/eslint-plugin": "^8.38.0",
@@ -88,7 +91,7 @@
 		"tsx": "^4.20.5",
 		"typedoc": "^0.28.8",
 		"typedoc-plugin-pages": "^1.1.0",
-		"typescript": "^5.7.2",
+		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.38.0",
 		"vite": "^7.0.6",
 		"vite-plugin-dts": "^4.5.4",

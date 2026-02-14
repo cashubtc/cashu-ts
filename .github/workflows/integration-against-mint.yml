@@ -5,40 +5,122 @@ on: [push, pull_request]
 jobs:
   cdk-integration-tests:
     runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Start CDK container via Makefile
-        id: start_container
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract CDK versions
+        id: versions
         run: |
           set -euo pipefail
-          CONTAINER_NAME=cdk-integration
-          # use the container name and set that output for later steps
-          DEV=1 CDK_NAME="$CONTAINER_NAME" make cdk-up
-          echo "name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Run shared integration steps (wait, build, test)
+          stable=$(echo "${CDK_IMAGE}" | sed 's/.*://')
+          rc=$(echo "${CDK_IMAGE_RC}" | sed 's/.*://')
+          rc_base=$(echo "$rc" | sed 's/-.*//')
+
+          newest=$(printf "%s\n%s\n" "$stable" "$rc_base" | sort -V | tail -n1)
+
+          if [[ "$newest" == "$rc_base" && "$rc_base" != "$stable" ]]; then
+            echo "run_rc=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_rc=false" >> "$GITHUB_OUTPUT"
+          fi
+
+        env:
+          CDK_IMAGE: ${{ vars.CDK_IMAGE }}
+          CDK_IMAGE_RC: ${{ vars.CDK_IMAGE_RC }}
+
+      # --------------------
+      # Stable
+      # --------------------
+      - name: Start CDK stable
+        id: start_stable
+        run: |
+          set -euo pipefail
+          NAME=cdk-integration
+          DEV=1 CDK_NAME="$NAME" make cdk-stable-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test CDK stable
         uses: ./.github/actions/integration-against-mint
         with:
-          container_name: ${{ steps.start_container.outputs.name }}
+          container_name: ${{ steps.start_stable.outputs.name }}
+
+      # --------------------
+      # RC (conditional)
+      # --------------------
+      - name: Start CDK RC
+        if: steps.versions.outputs.run_rc == 'true'
+        id: start_rc
+        run: |
+          set -euo pipefail
+          NAME=cdk-integration-rc
+          DEV=1 CDK_NAME="$NAME" make cdk-rc-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test CDK RC
+        if: steps.versions.outputs.run_rc == 'true'
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ steps.start_rc.outputs.name }}
 
   nutshell-integration-tests:
     runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Start Nutshell container via Makefile
-        id: start_container
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Nutshell versions
+        id: versions
         run: |
           set -euo pipefail
-          CONTAINER_NAME=nutshell-integration
-          # use the container name and set that output for later steps
-          DEV=1 NUT_NAME="$CONTAINER_NAME" make nutshell-up
-          echo "name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Run shared integration steps (wait, build, test)
+          stable=$(echo "${NUT_IMAGE}" | sed 's/.*://')
+          rc=$(echo "${NUT_IMAGE_RC}" | sed 's/.*://')
+          rc_base=$(echo "$rc" | sed 's/-.*//')
+
+          newest=$(printf "%s\n%s\n" "$stable" "$rc_base" | sort -V | tail -n1)
+
+          if [[ "$newest" == "$rc_base" && "$rc_base" != "$stable" ]]; then
+            echo "run_rc=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_rc=false" >> "$GITHUB_OUTPUT"
+          fi
+
+        env:
+          NUT_IMAGE: ${{ vars.NUT_IMAGE }}
+          NUT_IMAGE_RC: ${{ vars.NUT_IMAGE_RC }}
+
+      # --------------------
+      # Stable
+      # --------------------
+      - name: Start Nutshell stable
+        id: start_stable
+        run: |
+          set -euo pipefail
+          NAME=nutshell-integration
+          DEV=1 NUT_NAME="$NAME" make nutshell-stable-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test Nutshell stable
         uses: ./.github/actions/integration-against-mint
         with:
-          container_name: ${{ steps.start_container.outputs.name }}
+          container_name: ${{ steps.start_stable.outputs.name }}
+
+      # --------------------
+      # RC (conditional)
+      # --------------------
+      - name: Start Nutshell RC
+        if: steps.versions.outputs.run_rc == 'true'
+        id: start_rc
+        run: |
+          set -euo pipefail
+          NAME=nutshell-integration-rc
+          DEV=1 NUT_NAME="$NAME" make nutshell-rc-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test Nutshell RC
+        if: steps.versions.outputs.run_rc == 'true'
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ steps.start_rc.outputs.name }}
