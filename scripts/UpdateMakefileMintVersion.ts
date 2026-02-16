@@ -55,7 +55,7 @@ function writePrOutputs(updates: Update[]): void {
 	const branch =
 		updates.length === 1
 			? `update-${updates[0].name.toLowerCase()}-${updates[0].version.replace(/[:\/]/g, '-')}`
-			: `update-mint-images-${date}`;
+			: `update-mint-images-${date}-${updates[0].version.replace(/[:\/]/g, '-')}`;
 	setGithubOutput('branch', branch);
 }
 
