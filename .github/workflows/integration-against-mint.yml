@@ -37,7 +37,7 @@ jobs:
         id: start_stable
         run: |
           set -euo pipefail
-          NAME=cdk-integration
+          NAME=cashu-dev-cdk
           DEV=1 CDK_NAME="$NAME" make cdk-stable-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
@@ -59,7 +59,7 @@ jobs:
         id: start_rc
         run: |
           set -euo pipefail
-          NAME=cdk-integration-rc
+          NAME=cashu-dev-cdk-rc
           DEV=1 PLATFORM=linux/arm64 CDK_NAME="$NAME" make cdk-rc-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
@@ -109,7 +109,7 @@ jobs:
         id: start_stable
         run: |
           set -euo pipefail
-          NAME=nutshell-integration
+          NAME=cashu-dev-nutshell
           DEV=1 NUT_NAME="$NAME" make nutshell-stable-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
@@ -131,7 +131,7 @@ jobs:
         id: start_rc
         run: |
           set -euo pipefail
-          NAME=nutshell-integration-rc
+          NAME=cashu-dev-nutshell-rc
           DEV=1 PLATFORM=linux/arm64 NUT_NAME="$NAME" make nutshell-rc-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
