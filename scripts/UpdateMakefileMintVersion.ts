@@ -107,18 +107,22 @@ function getLatestRc(tags: string[]): string | null {
 }
 
 function compareSemver(a: string, b: string): number {
-	const parse = (v: string) =>
-		v
-			.split('-')[0]
-			.split('.')
-			.map((x) => parseInt(x, 10));
+	const parse = (v: string) => {
+		const [base, suffix] = v.split('-');
+		const parts = base.split('.').map((x) => parseInt(x, 10));
+		const rcMatch = suffix?.match(/^rc\.(\d+)$/);
+		const rc = rcMatch ? parseInt(rcMatch[1], 10) : null;
+		return { parts, rc };
+	};
 
 	const av = parse(a);
 	const bv = parse(b);
 
 	for (let i = 0; i < 3; i++) {
-		if (av[i] !== bv[i]) return av[i] - bv[i];
+		if (av.parts[i] !== bv.parts[i]) return av.parts[i] - bv.parts[i];
 	}
+
+	if (av.rc !== null && bv.rc !== null) return av.rc - bv.rc;
 
 	return 0;
 }
