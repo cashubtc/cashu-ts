@@ -16,7 +16,7 @@ jobs:
 
           while IFS='=' read -r key value; do
             export "${key}=${value}"
-          done < <(make -s print-mint-images)
+          done < <(DEV=1 make -s print-mint-images)
 
           stable=$(echo "${CDK_IMAGE}" | sed 's/.*://')
           rc=$(echo "${CDK_IMAGE_RC}" | sed 's/.*://')
@@ -77,7 +77,7 @@ jobs:
 
           while IFS='=' read -r key value; do
             export "${key}=${value}"
-          done < <(make -s print-mint-images)
+          done < <(DEV=1 make -s print-mint-images)
 
           stable=$(echo "${NUT_IMAGE}" | sed 's/.*://')
           rc=$(echo "${NUT_IMAGE_RC}" | sed 's/.*://')
