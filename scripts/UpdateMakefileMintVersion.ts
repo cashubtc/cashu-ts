@@ -60,19 +60,25 @@ type DockerTag = {
 
 type DockerHubResponse = {
 	results: DockerTag[];
+	next?: string | null;
 };
 
 async function fetchTags(repo: string): Promise<string[]> {
-	const url = `https://hub.docker.com/v2/repositories/${repo}/tags?page_size=100`;
-	const resp = await fetch(url);
+	let url: string | null = `https://hub.docker.com/v2/repositories/${repo}/tags?page_size=100`;
+	const tags: string[] = [];
 
-	if (!resp.ok) {
-		throw new Error(`Failed to fetch tags for ${repo}: ${resp.statusText}`);
+	while (url) {
+		const resp = await fetch(url);
+		if (!resp.ok) {
+			throw new Error(`Failed to fetch tags for ${repo}: ${resp.statusText}`);
+		}
+
+		const data = (await resp.json()) as DockerHubResponse;
+		tags.push(...data.results.map((t) => t.name));
+		url = data.next ?? null;
 	}
 
-	const data = (await resp.json()) as DockerHubResponse;
-
-	return data.results.map((t) => t.name);
+	return tags;
 }
 
 function semverKey(tag: string): number[] {
