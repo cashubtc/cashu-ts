@@ -9,9 +9,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Extract CDK versions
         id: versions
         run: |
@@ -28,10 +25,12 @@ jobs:
           newest=$(printf "%s\n%s\n" "$stable" "$rc_base" | sort -V | tail -n1)
 
           if [[ "$newest" == "$rc_base" && "$rc_base" != "$stable" ]]; then
-            echo "run_rc=true" >> "$GITHUB_OUTPUT"
+            run_rc="true"
           else
-            echo "run_rc=false" >> "$GITHUB_OUTPUT"
+            run_rc="false"
           fi
+
+          echo "run_rc=$run_rc" >> "$GITHUB_OUTPUT"
 
       # --------------------
       # Stable
@@ -63,7 +62,11 @@ jobs:
         run: |
           set -euo pipefail
           NAME=cashu-dev-cdk-rc
-          DEV=1 PLATFORM=linux/arm64 CDK_NAME="$NAME" make cdk-rc-up
+          PLATFORM=""
+          if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+            PLATFORM="linux/arm64"
+          fi
+          DEV=1 PLATFORM="$PLATFORM" CDK_NAME="$NAME" make cdk-rc-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: Test CDK RC
@@ -84,9 +87,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Extract Nutshell versions
         id: versions
         run: |
@@ -103,10 +103,12 @@ jobs:
           newest=$(printf "%s\n%s\n" "$stable" "$rc_base" | sort -V | tail -n1)
 
           if [[ "$newest" == "$rc_base" && "$rc_base" != "$stable" ]]; then
-            echo "run_rc=true" >> "$GITHUB_OUTPUT"
+            run_rc="true"
           else
-            echo "run_rc=false" >> "$GITHUB_OUTPUT"
+            run_rc="false"
           fi
+
+          echo "run_rc=$run_rc" >> "$GITHUB_OUTPUT"
 
       # --------------------
       # Stable
@@ -138,7 +140,11 @@ jobs:
         run: |
           set -euo pipefail
           NAME=cashu-dev-nutshell-rc
-          DEV=1 PLATFORM=linux/arm64 NUT_NAME="$NAME" make nutshell-rc-up
+          PLATFORM=""
+          if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+            PLATFORM="linux/arm64"
+          fi
+          DEV=1 PLATFORM="$PLATFORM" NUT_NAME="$NAME" make nutshell-rc-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: Test Nutshell RC
