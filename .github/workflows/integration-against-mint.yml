@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           NAME=cdk-integration-rc
-          DEV=1 CDK_NAME="$NAME" make cdk-rc-up
+          DEV=1 PLATFORM=linux/arm64 CDK_NAME="$NAME" make cdk-rc-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: Test CDK RC
@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           NAME=nutshell-integration-rc
-          DEV=1 NUT_NAME="$NAME" make nutshell-rc-up
+          DEV=1 PLATFORM=linux/arm64 NUT_NAME="$NAME" make nutshell-rc-up
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
       - name: Test Nutshell RC
