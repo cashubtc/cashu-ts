@@ -14,6 +14,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          while IFS='=' read -r key value; do
+            export "${key}=${value}"
+          done < <(make -s print-mint-images)
+
           stable=$(echo "${CDK_IMAGE}" | sed 's/.*://')
           rc=$(echo "${CDK_IMAGE_RC}" | sed 's/.*://')
           rc_base=$(echo "$rc" | sed 's/-.*//')
@@ -25,10 +29,6 @@ jobs:
           else
             echo "run_rc=false" >> "$GITHUB_OUTPUT"
           fi
-
-        env:
-          CDK_IMAGE: ${{ vars.CDK_IMAGE }}
-          CDK_IMAGE_RC: ${{ vars.CDK_IMAGE_RC }}
 
       # --------------------
       # Stable
@@ -75,6 +75,10 @@ jobs:
         run: |
           set -euo pipefail
 
+          while IFS='=' read -r key value; do
+            export "${key}=${value}"
+          done < <(make -s print-mint-images)
+
           stable=$(echo "${NUT_IMAGE}" | sed 's/.*://')
           rc=$(echo "${NUT_IMAGE_RC}" | sed 's/.*://')
           rc_base=$(echo "$rc" | sed 's/-.*//')
@@ -86,10 +90,6 @@ jobs:
           else
             echo "run_rc=false" >> "$GITHUB_OUTPUT"
           fi
-
-        env:
-          NUT_IMAGE: ${{ vars.NUT_IMAGE }}
-          NUT_IMAGE_RC: ${{ vars.NUT_IMAGE_RC }}
 
       # --------------------
       # Stable

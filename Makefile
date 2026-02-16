@@ -57,7 +57,7 @@ PLATFORM_FLAG := $(if $(PLATFORM),--platform=$(PLATFORM),)
 # ------------------------
 # CDK Targets
 # ------------------------
-.PHONY: cdk-up cdk-down cdk-stable-up cdk-rc-up cdk-stable-down cdk-rc-down
+.PHONY: cdk-up cdk-down cdk-stable-up cdk-rc-up cdk-stable-down cdk-rc-down print-mint-images
 
 cdk-up:
 	-$(DOCKER) rm -f -v $(CDK_NAME) >/dev/null 2>&1 || true
@@ -80,6 +80,12 @@ cdk-stable-down:
 
 cdk-rc-down:
 	$(MAKE) cdk-down CDK_NAME=cashu-dev-cdk-rc
+
+print-mint-images:
+	@echo "CDK_IMAGE=$(CDK_IMAGE)"
+	@echo "CDK_IMAGE_RC=$(CDK_IMAGE_RC)"
+	@echo "NUT_IMAGE=$(NUT_IMAGE)"
+	@echo "NUT_IMAGE_RC=$(NUT_IMAGE_RC)"
 
 # ------------------------
 # Nutshell Targets
