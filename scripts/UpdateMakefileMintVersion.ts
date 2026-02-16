@@ -21,7 +21,6 @@ const DEPENDENCIES: Dep[] = [
 interface Update {
 	name: string;
 	version: string;
-	branch?: string;
 }
 
 const updates: Update[] = [];
@@ -34,24 +33,30 @@ function setGithubOutput(name: string, value: string) {
 	fs.appendFileSync(outputPath, `${name}<<EOF\n${value}\nEOF\n`);
 }
 
-// Write PR outputs per update
+// Write PR outputs
 function writePrOutputs(updates: Update[]): void {
 	if (updates.length === 0) {
 		setGithubOutput('changed', 'false');
 		return;
 	}
 
-	// For each update, generate a branch and PR outputs
-	updates.forEach((u) => {
-		// Deterministic branch name for this image+version
-		u.branch = `update-${u.name.toLowerCase()}-${u.version.replace(/[:\/]/g, '-')}`;
+	setGithubOutput('changed', 'true');
 
-		// Set GitHub outputs for this image update
-		setGithubOutput('changed', 'true');
-		setGithubOutput('summary', `- ${u.name} → ${u.version}`);
-		setGithubOutput('title', `chore(docker): update ${u.name} to ${u.version}`);
-		setGithubOutput('branch', u.branch);
-	});
+	const summary = updates.map((u) => `- ${u.name} -> ${u.version}`).join('\n');
+	setGithubOutput('summary', summary);
+
+	const title =
+		updates.length === 1
+			? `chore(docker): update ${updates[0].name} to ${updates[0].version}`
+			: 'chore(docker): update mint images';
+	setGithubOutput('title', title);
+
+	const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+	const branch =
+		updates.length === 1
+			? `update-${updates[0].name.toLowerCase()}-${updates[0].version.replace(/[:\/]/g, '-')}`
+			: `update-mint-images-${date}`;
+	setGithubOutput('branch', branch);
 }
 
 type DockerTag = {
