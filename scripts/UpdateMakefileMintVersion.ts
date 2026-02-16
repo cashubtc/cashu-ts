@@ -51,11 +51,11 @@ function writePrOutputs(updates: Update[]): void {
 			: 'chore(docker): update mint images';
 	setGithubOutput('title', title);
 
-	const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+	const date = new Date().toISOString().replace(/\D/g, '');
 	const branch =
 		updates.length === 1
 			? `update-${updates[0].name.toLowerCase()}-${updates[0].version.replace(/[:\/]/g, '-')}`
-			: `update-mint-images-${date}-${updates[0].version.replace(/[:\/]/g, '-')}`;
+			: `update-mint-images-${date}`;
 	setGithubOutput('branch', branch);
 }
 
