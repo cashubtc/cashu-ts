@@ -46,6 +46,11 @@ jobs:
         with:
           container_name: ${{ steps.start_stable.outputs.name }}
 
+      - name: Stop CDK stable
+        run: |
+          set -euo pipefail
+          DEV=1 make cdk-stable-down
+
       # --------------------
       # RC (conditional)
       # --------------------
@@ -63,6 +68,12 @@ jobs:
         uses: ./.github/actions/integration-against-mint
         with:
           container_name: ${{ steps.start_rc.outputs.name }}
+
+      - name: Stop CDK RC
+        if: steps.versions.outputs.run_rc == 'true'
+        run: |
+          set -euo pipefail
+          DEV=1 make cdk-rc-down
 
   nutshell-integration-tests:
     runs-on: ubuntu-24.04
@@ -107,6 +118,11 @@ jobs:
         with:
           container_name: ${{ steps.start_stable.outputs.name }}
 
+      - name: Stop Nutshell stable
+        run: |
+          set -euo pipefail
+          DEV=1 make nutshell-stable-down
+
       # --------------------
       # RC (conditional)
       # --------------------
@@ -124,3 +140,9 @@ jobs:
         uses: ./.github/actions/integration-against-mint
         with:
           container_name: ${{ steps.start_rc.outputs.name }}
+
+      - name: Stop Nutshell RC
+        if: steps.versions.outputs.run_rc == 'true'
+        run: |
+          set -euo pipefail
+          DEV=1 make nutshell-rc-down
