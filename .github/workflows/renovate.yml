@@ -33,7 +33,7 @@ jobs:
         if: steps.update.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           branch: ${{ steps.update.outputs.branch }}
           commit-message: ${{ steps.update.outputs.title }}
           title: ${{ steps.update.outputs.title }}
