@@ -1,4 +1,4 @@
-import { type SerializedBlindedMessage, type SerializedDLEQ } from './blinded';
+import { type SerializedDLEQ } from './blinded';
 
 /**
  * Represents a single Cashu proof.
@@ -56,29 +56,4 @@ export type HTLCWitness = {
 	 * An array of signatures in hex format.
 	 */
 	signatures?: string[];
-};
-
-/**
- * Represents a signing package for SigAll multi-party signing.
- *
- * This is a wallet-led transport format, it contains only the minimum data required to reconstruct
- * the SIG_ALL message.
- */
-export type SigAllSigningPackage = {
-	version: 'cashu-sigall-v1';
-	type: 'swap' | 'melt';
-	quote?: string; // melt only
-	inputs: Array<{
-		id: string;
-		amount: number;
-		C: string;
-	}>; //minimal inputs required for signing transport to prevent leaking sensitive data.
-	outputs: Array<{ amount: number; blindedMessage: SerializedBlindedMessage }>;
-	messageDigest?: string; //hex SHA256 digest of the message-to-sign.
-	digests?: {
-		legacy?: string;
-		interim?: string;
-		current: string;
-	}; //per-format digests to support signing multiple SIG_ALL formats (legacy / interim / current)
-	witness?: { signatures: string[] }; //collected signatures to be injected into the first proof witness.
 };

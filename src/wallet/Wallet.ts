@@ -38,7 +38,6 @@ import {
 	assertSigAllInputs,
 	buildLegacyP2PKSigAllMessage,
 	buildInterimP2PKSigAllMessage,
-	schnorrSignMessage,
 } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
@@ -51,9 +50,9 @@ import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 
 // shared primitives and options
-import type { P2PKWitness, Proof, SigAllSigningPackage } from '../model/types/proof';
+import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
-import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { KeyChainCache, MintKeys, MintKeyset } from '../model/types/keyset';
 import type {
@@ -85,9 +84,6 @@ import {
 	invoiceHasAmountInHRP,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { schnorr } from '@noble/curves/secp256k1.js';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 
@@ -2287,264 +2283,6 @@ class Wallet {
 			}
 		}
 		return result;
-	}
-
-	// -----------------------------------------------------------------
-	// Section: SigAll Multi-Party Signing
-	// -----------------------------------------------------------------
-
-	/**
-	 * Extracts a signing package from a SwapPreview for multi-party SIG_ALL coordination.
-	 *
-	 * @remarks
-	 * This creates a minimal, serializable package that can be passed to other signers. Secrets and
-	 * blinding factors are NOT included - only what's needed to reconstruct the exact SIG_ALL message
-	 * and produce signatures.
-	 * @param preview SwapPreview from prepareSwapToSend or prepareSwapToReceive.
-	 * @returns SigAllSigningPackage for distribution to signers.
-	 */
-	extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPackage {
-		// Merge keep + send outputs in order (both needed for complete transaction message)
-		const allOutputs = [...(preview.keepOutputs || []), ...(preview.sendOutputs || [])];
-		return this._extractSigningPackage('swap', preview.inputs, allOutputs);
-	}
-
-	/**
-	 * Extracts a signing package from a MeltPreview for multi-party SIG_ALL coordination.
-	 *
-	 * @param preview MeltPreview from prepareMelt.
-	 * @returns SigAllSigningPackage for distribution to signers.
-	 */
-	extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(
-		preview: MeltPreview<TQuote>,
-	): SigAllSigningPackage {
-		return this._extractSigningPackage(
-			'melt',
-			preview.inputs,
-			preview.outputData,
-			preview.quote.quote,
-		);
-	}
-
-	/**
-	 * Signs a SigAllSigningPackage and returns it with signatures attached.
-	 *
-	 * @remarks
-	 * Collects signatures by signing all three SIG_ALL message formats for backward compatibility.
-	 * Prefers digest-based signing (safer, avoids secrets) but falls back to message reconstruction
-	 * for legacy packages without digests. Multiple parties can call this sequentially to aggregate
-	 * signatures for multi-party signing.
-	 * @param pkg The signing package (from extract*SigningPackage or another signer)
-	 * @param privkey Private key to sign with.
-	 * @returns Package with signatures appended to witness field.
-	 */
-	signSigningPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
-		const newSigs: string[] = [];
-
-		if (pkg.digests) {
-			// Preferred path: sign precomputed digests (secure, no secrets exposed)
-			if (pkg.digests.legacy) newSigs.push(this.signHexDigest(pkg.digests.legacy, privkey));
-			if (pkg.digests.interim) newSigs.push(this.signHexDigest(pkg.digests.interim, privkey));
-			if (pkg.digests.current) newSigs.push(this.signHexDigest(pkg.digests.current, privkey));
-		} else {
-			// Legacy fallback: reconstruct messages from package (requires full proof data).
-			this._signLegacyPackage(pkg, privkey, newSigs);
-		}
-
-		// validate that signing actually produced signatures
-		if (newSigs.length === 0) {
-			this.fail('No signatures produced during signing');
-		}
-
-		return {
-			...pkg,
-			witness: { signatures: [...(pkg.witness?.signatures || []), ...newSigs] },
-		};
-	}
-
-	/**
-	 * Merges signatures from a signing package back into a SwapPreview.
-	 *
-	 * @remarks
-	 * Injects collected signatures into the first proof's witness for mint submission. Call this
-	 * after all parties have signed.
-	 * @param pkg Signing package with collected signatures.
-	 * @param preview Original SwapPreview.
-	 * @returns SwapPreview ready for completeSwap.
-	 */
-	mergeSignaturesToSwapPreview(pkg: SigAllSigningPackage, preview: SwapPreview): SwapPreview {
-		const updatedInputs = this._mergeSignatures(preview.inputs, pkg);
-		return { ...preview, inputs: updatedInputs };
-	}
-
-	/**
-	 * Merges signatures from a signing package back into a MeltPreview.
-	 *
-	 * @param pkg Signing package with collected signatures.
-	 * @param preview Original MeltPreview.
-	 * @returns MeltPreview ready for completeMelt.
-	 */
-	mergeSignaturesToMeltPreview<TQuote extends MeltQuoteBaseResponse>(
-		pkg: SigAllSigningPackage,
-		preview: MeltPreview<TQuote>,
-	): MeltPreview<TQuote> {
-		const updatedInputs = this._mergeSignatures(preview.inputs, pkg);
-		return { ...preview, inputs: updatedInputs };
-	}
-
-	/**
-	 * Merges collected signatures into the first proof's witness (NUT-11 convention).
-	 *
-	 * @remarks
-	 * Both Swap and Melt transactions use the same signature injection pattern: all signatures go
-	 * into the first proof only. This centralizes that logic.
-	 * @param proofs Proof array from the preview.
-	 * @param pkg Signing package with collected signatures.
-	 * @returns Updated proofs with signatures injected into first proof's witness.
-	 * @throws If no signatures are present in the package.
-	 */
-	private _mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
-		if (!pkg.witness?.signatures.length) {
-			this.fail('No signatures to merge');
-		}
-
-		return proofs.map((p, idx) => {
-			if (idx !== 0) return p;
-
-			let witnessObj: Partial<P2PKWitness> = {};
-			if (typeof p.witness === 'string') {
-				try {
-					witnessObj = (JSON.parse(p.witness) as Partial<P2PKWitness>) || {};
-				} catch {
-					witnessObj = {};
-				}
-			} else if (p.witness) {
-				witnessObj = p.witness;
-			}
-
-			const existingSignatures = Array.isArray(witnessObj.signatures) ? witnessObj.signatures : [];
-			return {
-				...p,
-				witness: {
-					...witnessObj,
-					signatures: [...existingSignatures, ...pkg.witness!.signatures],
-				} as P2PKWitness,
-			};
-		});
-	}
-
-	/**
-	 * Signs package without digests by reconstructing all three message formats.
-	 *
-	 * @remarks
-	 * Used only when digests are unavailable (legacy packages). Reconstructs messages from package
-	 * inputs/outputs and signs each format. Appends signatures to the provided array.
-	 * @param pkg Signing package without digests.
-	 * @param privkey Private key to sign with.
-	 * @param newSigs Array to accumulate signatures (mutated in place)
-	 */
-	private _signLegacyPackage(pkg: SigAllSigningPackage, privkey: string, newSigs: string[]): void {
-		// Construct minimal output objects compatible with build functions.
-		// The build functions expect { blindedMessage: ... } shape for outputs.
-		const minimalOutputs: Array<{ blindedMessage: SerializedBlindedMessage }> = pkg.outputs.map(
-			(o) => ({
-				blindedMessage: o.blindedMessage,
-			}),
-		);
-
-		// Reconstruct all three message formats. Note: pkg.inputs here is sanitized
-		// (no secrets), so we pass through as-is to the build functions which only
-		// use the public fields (id, amount, C).
-		const proofLike = pkg.inputs as unknown as Proof[];
-		const outputLike = minimalOutputs as unknown as OutputDataLike[];
-
-		const legacyMsg = buildLegacyP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
-		const interimMsg = buildInterimP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
-		const currentMsg = buildP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
-
-		newSigs.push(schnorrSignMessage(legacyMsg, privkey));
-		newSigs.push(schnorrSignMessage(interimMsg, privkey));
-		newSigs.push(schnorrSignMessage(currentMsg, privkey));
-	}
-
-	/**
-	 * Unified extractor for swap and melt signing packages.
-	 *
-	 * @remarks
-	 * Sanitizes inputs, computes all three SIG_ALL format digests, and returns a signing package
-	 * ready for distribution to signers.
-	 * @param type Transaction type ('swap' or 'melt')
-	 * @param inputs Proof array from the preview.
-	 * @param outputs OutputDataLike array.
-	 * @param quoteId Optional quote ID for melt transactions.
-	 * @returns SigAllSigningPackage.
-	 */
-	private _extractSigningPackage(
-		type: 'swap' | 'melt',
-		inputs: Proof[],
-		outputs: OutputDataLike[],
-		quoteId?: string,
-	): SigAllSigningPackage {
-		//sanitize inputs - do NOT include secrets or other private fields.
-		const sanitized = inputs.map((p) => ({ id: p.id, amount: p.amount, C: p.C }));
-
-		//compute all three format digests (legacy, interim, current) for backward compatibility
-		const digests = this._computeAllSigAllDigests(inputs, outputs, quoteId);
-
-		//verify current digest was computed correctly (catches bugs).
-		const testCurrentMsg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
-		const testCurrentDigest = bytesToHex(sha256(new TextEncoder().encode(testCurrentMsg)));
-		if (digests.current !== testCurrentDigest) {
-			this.fail(
-				'SIG_ALL digest computation mismatch - current digest does not match expected value',
-			);
-		}
-
-		return {
-			version: 'cashu-sigall-v1',
-			type,
-			...(quoteId ? { quote: quoteId } : {}),
-			inputs: sanitized,
-			outputs: outputs.map((o) => ({
-				amount: o.blindedMessage.amount,
-				blindedMessage: o.blindedMessage,
-			})),
-			messageDigest: digests.current,
-			digests,
-		};
-	}
-
-	/**
-	 * Computes all three SIG_ALL message digests (legacy, interim, current).
-	 *
-	 * @remarks
-	 * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
-	 * @param inputs Proof array.
-	 * @param outputs OutputDataLike array.
-	 * @param quoteId Optional quote ID for melt transactions.
-	 * @returns Object with legacy, interim, and current digests (all hex strings)
-	 */
-	private _computeAllSigAllDigests(
-		inputs: Proof[],
-		outputs: OutputDataLike[],
-		quoteId?: string,
-	): { legacy: string; interim: string; current: string } {
-		const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, outputs, quoteId);
-		const interimMsg = buildInterimP2PKSigAllMessage(inputs, outputs, quoteId);
-		const currentMsg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
-
-		return {
-			legacy: bytesToHex(sha256(new TextEncoder().encode(legacyMsg))),
-			interim: bytesToHex(sha256(new TextEncoder().encode(interimMsg))),
-			current: bytesToHex(sha256(new TextEncoder().encode(currentMsg))),
-		};
-	}
-
-	private signHexDigest(hexDigest: string, privkey: string): string {
-		const digestBytes = hexToBytes(hexDigest);
-		const keyBytes = hexToBytes(privkey);
-		const signature = schnorr.sign(digestBytes, keyBytes);
-		return bytesToHex(signature);
 	}
 }
 
