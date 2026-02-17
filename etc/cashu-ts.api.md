@@ -4,9 +4,6 @@
 
 ```ts
 
-import { MintContactInfo as MintContactInfo_2 } from './types';
-import { SendResponse as SendResponse_2 } from './types';
-import { SwapPreview as SwapPreview_2 } from './types';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -876,7 +873,7 @@ export class MintInfo {
     // (undocumented)
     get cache(): GetInfoResponse;
     // (undocumented)
-    get contact(): MintContactInfo_2[];
+    get contact(): MintContactInfo[];
     // (undocumented)
     get description(): string | undefined;
     // (undocumented)
@@ -1483,7 +1480,7 @@ export class ReceiveBuilder {
     asRandom(denoms?: number[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview_2>;
+    prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
     requireDleq(on?: boolean): this;
@@ -1573,10 +1570,10 @@ export class SendBuilder {
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(): Promise<SwapPreview_2>;
+    prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
     proofsWeHave(p: Proof[]): this;
-    run(): Promise<SendResponse_2>;
+    run(): Promise<SendResponse>;
 }
 
 // @public
