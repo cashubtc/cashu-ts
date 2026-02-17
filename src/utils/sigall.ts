@@ -1,8 +1,11 @@
-import type { P2PKWitness, Proof } from '../model/types/proof';
 import type { OutputDataLike } from '../model/OutputData';
-
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+import type {
+	P2PKWitness,
+	Proof,
+	MeltQuoteBaseResponse,
+	SerializedBlindedMessage,
+} from '../model/types';
+import type { MeltPreview, SwapPreview } from '../wallet/types';
 import {
 	buildLegacyP2PKSigAllMessage,
 	buildInterimP2PKSigAllMessage,
@@ -10,8 +13,8 @@ import {
 	schnorrSignMessage,
 } from '../crypto';
 import { schnorr } from '@noble/curves/secp256k1.js';
-import type { MeltQuoteBaseResponse, SerializedBlindedMessage } from '../model/types';
-import type { MeltPreview, SwapPreview } from '../wallet/types';
+import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 export type SigAllDigests = {
 	legacy: string;
@@ -102,34 +105,93 @@ export function serializeSigningPackage(pkg: SigAllSigningPackage): string {
 	return JSON.stringify(ordered);
 }
 
-export function deserializeSigningPackage(json: string): SigAllSigningPackage {
-	let parsed: unknown;
+export function deserializeSigningPackage(
+	json: string,
+	options?: { validateDigest?: boolean },
+): SigAllSigningPackage {
+	let data: unknown;
 
 	try {
-		parsed = JSON.parse(json);
+		data = JSON.parse(json);
 	} catch (e) {
 		throw new Error(
 			`Failed to parse signing package JSON: ${e instanceof Error ? e.message : String(e)}`,
 		);
 	}
 
-	if (!parsed || typeof parsed !== 'object') {
-		throw new Error('Signing package must be an object');
+	if (!data || typeof data !== 'object') {
+		throw new Error('Signing package must be a JSON object');
 	}
 
-	const pkg = parsed as SigAllSigningPackage;
+	const pkg = data as SigAllSigningPackage;
 
-	// Validate required fields
-	if (pkg.version !== 'cashu-sigall-v1') {
-		throw new Error('Unsupported signing package version');
+	const version = pkg.version as string;
+	if (version !== 'cashu-sigall-v1') {
+		throw new Error(`Invalid signing package version: ${version}`);
 	}
 
-	if (pkg.type !== 'swap' && pkg.type !== 'melt') {
-		throw new Error('Invalid signing package type');
+	const type = pkg.type as string;
+	if (type !== 'swap' && type !== 'melt') {
+		throw new Error(`Invalid signing package type: ${type}`);
 	}
 
-	if (!Array.isArray(pkg.inputs) || !Array.isArray(pkg.outputs)) {
-		throw new Error('Invalid signing package structure');
+	if (!Array.isArray(pkg.inputs)) {
+		throw new Error('Signing package inputs must be an array');
+	}
+
+	for (let i = 0; i < pkg.inputs.length; i++) {
+		const inp = pkg.inputs[i] as Record<string, unknown>;
+
+		if (!inp || typeof inp !== 'object') throw new Error(`Invalid input at index ${i}`);
+
+		if (typeof inp.id !== 'string') throw new Error(`Input ${i}: id must be string`);
+
+		if (typeof inp.amount !== 'number') throw new Error(`Input ${i}: amount must be number`);
+
+		if (typeof inp.C !== 'string') throw new Error(`Input ${i}: C must be string`);
+	}
+
+	if (!Array.isArray(pkg.outputs)) {
+		throw new Error('Signing package outputs must be an array');
+	}
+
+	for (let i = 0; i < pkg.outputs.length; i++) {
+		const out = pkg.outputs[i] as Record<string, unknown>;
+
+		if (!out || typeof out !== 'object') throw new Error(`Invalid output at index ${i}`);
+
+		if (typeof out.amount !== 'number') throw new Error(`Output ${i}: amount must be number`);
+
+		if (!out.blindedMessage || typeof out.blindedMessage !== 'object')
+			throw new Error(`Output ${i}: blindedMessage invalid`);
+	}
+
+	// --- Optional digest validation ---
+	const digests = pkg.digests as Record<string, string> | undefined;
+
+	if (options?.validateDigest && digests?.current) {
+		const quote = pkg.quote;
+
+		const proofLike = pkg.inputs.map((i) => ({
+			...i,
+			secret: '',
+		})) as Proof[];
+
+		const outputLike = pkg.outputs.map((o) => ({
+			amount: o.amount,
+			blindedMessage: o.blindedMessage,
+			blindingFactor: 0n,
+			secret: new Uint8Array(),
+			toProof: () => {
+				throw new Error('Not a real OutputDataLike');
+			},
+		})) as OutputDataLike[];
+
+		const recomputed = computeSigAllDigests(proofLike, outputLike, quote);
+
+		if (recomputed.current !== digests.current) {
+			throw new Error('Digest validation failed');
+		}
 	}
 
 	return pkg;
