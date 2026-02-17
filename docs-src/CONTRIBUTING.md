@@ -89,22 +89,22 @@ These tests expect a local mint at `http://localhost:3338`. Use the Make targets
 
 ```bash
 # CDK Mint
-DEV=1 make cdk-up
+DEV=1 make cdk-stable-up
 # tear down
-DEV=1 make cdk-down
+DEV=1 make cdk-stable-down
 
 # Nutshell
-DEV=1 make nutshell-up
+DEV=1 make nutshell-stable-up
 # tear down
-DEV=1 make nutshell-down
+DEV=1 make nutshell-stable-down
 ```
 
 To prevent accidental use, these targets require `DEV=1` to be set, either by prefixing the command as shown above, or by exporting it in your shell:
 
 ```bash
 export DEV=1
-make cdk-up
-make nutshell-up
+make cdk-stable-up
+make nutshell-stable-up
 ```
 
 On Apple Silicon the Makefile detects arm64 and runs the container with an amd64 image automatically, if you need to override, pass `PLATFORM=linux/amd64` or `PLATFORM=linux/arm64`.
