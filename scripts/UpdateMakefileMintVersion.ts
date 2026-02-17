@@ -51,11 +51,7 @@ function writePrOutputs(updates: Update[]): void {
 			: 'chore(docker): update mint images';
 	setGithubOutput('title', title);
 
-	const branch =
-		updates.length === 1
-			? `update-${updates[0].name.toLowerCase()}-${updates[0].version.replace(/[:\/]/g, '-')}`
-			: `update-mint-images`;
-	setGithubOutput('branch', branch);
+	setGithubOutput('branch', 'automation/update-mint-images');
 }
 
 type DockerTag = {
