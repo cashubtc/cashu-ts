@@ -37,7 +37,6 @@ import {
 	buildP2PKSigAllMessage,
 	assertSigAllInputs,
 	buildLegacyP2PKSigAllMessage,
-	buildInterimP2PKSigAllMessage,
 } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
@@ -1339,7 +1338,6 @@ class Wallet {
 		let signedFirst = first;
 		const messages = [
 			buildLegacyP2PKSigAllMessage(proofs, outputData, quoteId),
-			buildInterimP2PKSigAllMessage(proofs, outputData, quoteId),
 			buildP2PKSigAllMessage(proofs, outputData, quoteId),
 		];
 		for (const msg of messages) {

@@ -614,40 +614,11 @@ export function isP2PKSigAll(inputs: Proof[]): boolean {
 // ------------------------------
 
 /**
- * Message aggregation for SIG_ALL (interim format).
- *
- * @remarks
- * Melt transactions MUST include the quoteId.
- * @deprecated - For compatibility with NutShell < v18.2.
- * @internal
- */
-export function buildInterimP2PKSigAllMessage(
-	inputs: Proof[],
-	outputs: OutputDataLike[],
-	quoteId?: string,
-): string {
-	const parts: string[] = [];
-	// Concat inputs: secret_0 || C_0 ...
-	for (const p of inputs) {
-		parts.push(p.secret, p.C);
-	}
-	// Concat outputs: amount_0 || id_0 || B_0 ...
-	for (const o of outputs) {
-		parts.push(String(o.blindedMessage.amount), o.blindedMessage.id, o.blindedMessage.B_);
-	}
-	// Add quoteId for melts
-	if (quoteId) {
-		parts.push(quoteId);
-	}
-	return parts.join('');
-}
-
-/**
  * Message aggregation for SIG_ALL (legacy format).
  *
  * @remarks
  * Melt transactions MUST include the quoteId.
- * @deprecated - For compatibility with NutShell < v18.0, CDK < v0.14.1.
+ * @deprecated - For compatibility with NutShell (all releases), CDK < v0.14.0.
  * @internal
  */
 export function buildLegacyP2PKSigAllMessage(
