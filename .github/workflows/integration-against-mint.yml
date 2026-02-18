@@ -5,40 +5,156 @@ on: [push, pull_request]
 jobs:
   cdk-integration-tests:
     runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Start CDK container via Makefile
-        id: start_container
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract CDK versions
+        id: versions
         run: |
           set -euo pipefail
-          CONTAINER_NAME=cdk-integration
-          # use the container name and set that output for later steps
-          DEV=1 CDK_NAME="$CONTAINER_NAME" make cdk-up
-          echo "name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Run shared integration steps (wait, build, test)
+          while IFS='=' read -r key value; do
+            export "${key}=${value}"
+          done < <(DEV=1 make -s print-mint-images)
+
+          stable=$(echo "${CDK_IMAGE}" | sed 's/.*://')
+          rc=$(echo "${CDK_IMAGE_RC}" | sed 's/.*://')
+          rc_base=$(echo "$rc" | sed 's/-.*//')
+
+          newest=$(printf "%s\n%s\n" "$stable" "$rc_base" | sort -V | tail -n1)
+
+          if [[ "$newest" == "$rc_base" && "$rc_base" != "$stable" ]]; then
+            run_rc="true"
+          else
+            run_rc="false"
+          fi
+
+          echo "run_rc=$run_rc" >> "$GITHUB_OUTPUT"
+
+      # --------------------
+      # Stable
+      # --------------------
+      - name: Start CDK stable
+        id: start_stable
+        run: |
+          set -euo pipefail
+          NAME=cashu-dev-cdk
+          DEV=1 CDK_NAME="$NAME" make cdk-stable-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test CDK stable
         uses: ./.github/actions/integration-against-mint
         with:
-          container_name: ${{ steps.start_container.outputs.name }}
+          container_name: ${{ steps.start_stable.outputs.name }}
+
+      - name: Stop CDK stable
+        run: |
+          set -euo pipefail
+          DEV=1 make cdk-stable-down
+
+      # --------------------
+      # RC (conditional)
+      # --------------------
+      - name: Start CDK RC
+        if: steps.versions.outputs.run_rc == 'true'
+        id: start_rc
+        run: |
+          set -euo pipefail
+          NAME=cashu-dev-cdk-rc
+          PLATFORM=""
+          if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+            PLATFORM="linux/arm64"
+          fi
+          DEV=1 PLATFORM="$PLATFORM" CDK_NAME="$NAME" make cdk-rc-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test CDK RC
+        if: steps.versions.outputs.run_rc == 'true'
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ steps.start_rc.outputs.name }}
+
+      - name: Stop CDK RC
+        if: steps.versions.outputs.run_rc == 'true'
+        run: |
+          set -euo pipefail
+          DEV=1 make cdk-rc-down
 
   nutshell-integration-tests:
     runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
 
-      - name: Start Nutshell container via Makefile
-        id: start_container
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract Nutshell versions
+        id: versions
         run: |
           set -euo pipefail
-          CONTAINER_NAME=nutshell-integration
-          # use the container name and set that output for later steps
-          DEV=1 NUT_NAME="$CONTAINER_NAME" make nutshell-up
-          echo "name=$CONTAINER_NAME" >> "$GITHUB_OUTPUT"
 
-      - name: Run shared integration steps (wait, build, test)
+          while IFS='=' read -r key value; do
+            export "${key}=${value}"
+          done < <(DEV=1 make -s print-mint-images)
+
+          stable=$(echo "${NUT_IMAGE}" | sed 's/.*://')
+          rc=$(echo "${NUT_IMAGE_RC}" | sed 's/.*://')
+          rc_base=$(echo "$rc" | sed 's/-.*//')
+
+          newest=$(printf "%s\n%s\n" "$stable" "$rc_base" | sort -V | tail -n1)
+
+          if [[ "$newest" == "$rc_base" && "$rc_base" != "$stable" ]]; then
+            run_rc="true"
+          else
+            run_rc="false"
+          fi
+
+          echo "run_rc=$run_rc" >> "$GITHUB_OUTPUT"
+
+      # --------------------
+      # Stable
+      # --------------------
+      - name: Start Nutshell stable
+        id: start_stable
+        run: |
+          set -euo pipefail
+          NAME=cashu-dev-nutshell
+          DEV=1 NUT_NAME="$NAME" make nutshell-stable-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test Nutshell stable
         uses: ./.github/actions/integration-against-mint
         with:
-          container_name: ${{ steps.start_container.outputs.name }}
+          container_name: ${{ steps.start_stable.outputs.name }}
+
+      - name: Stop Nutshell stable
+        run: |
+          set -euo pipefail
+          DEV=1 make nutshell-stable-down
+
+      # --------------------
+      # RC (conditional)
+      # --------------------
+      - name: Start Nutshell RC
+        if: steps.versions.outputs.run_rc == 'true'
+        id: start_rc
+        run: |
+          set -euo pipefail
+          NAME=cashu-dev-nutshell-rc
+          PLATFORM=""
+          if [ "$(uname -m)" = "arm64" ] || [ "$(uname -m)" = "aarch64" ]; then
+            PLATFORM="linux/arm64"
+          fi
+          DEV=1 PLATFORM="$PLATFORM" NUT_NAME="$NAME" make nutshell-rc-up
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test Nutshell RC
+        if: steps.versions.outputs.run_rc == 'true'
+        uses: ./.github/actions/integration-against-mint
+        with:
+          container_name: ${{ steps.start_rc.outputs.name }}
+
+      - name: Stop Nutshell RC
+        if: steps.versions.outputs.run_rc == 'true'
+        run: |
+          set -euo pipefail
+          DEV=1 make nutshell-rc-down

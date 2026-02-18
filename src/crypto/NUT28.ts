@@ -7,8 +7,6 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 /**
  * BIP340-style domain separation tag (DST) for P2BK.
- *
- * @experimental
  */
 export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
 
@@ -24,7 +22,6 @@ export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
  * @param eBytes Optional. Fixed ephemeral secret key to use (eg for SIG_ALL / testing)
  * @returns Blinded pubkeys in the same order, and Ehex as SEC1 compressed hex, 33 bytes.
  * @throws If a blinded key is at infinity.
- * @experimental
  */
 export function deriveP2BKBlindedPubkeys(
 	pubkeys: string[],
@@ -61,7 +58,6 @@ export function deriveP2BKBlindedPubkeys(
  * @param privateKey Secret key or array of secret keys, hex.
  * @param blindPubKey Blinded public key or array of blinded public keys, hex.
  * @returns Array of derived secret keys as 64 char hex.
- * @experimental
  */
 export function deriveP2BKSecretKeys(
 	Ehex: string,
@@ -101,7 +97,6 @@ export function deriveP2BKSecretKeys(
  * @param naturalPub Optional. Pubkey calculated from private key (P = p·G), 33 byte hex.
  * @returns Derived blinded secret key as 64 char hex.
  * @throws If inputs are out of range, or the derived key would be zero.
- * @experimental
  */
 export function deriveP2BKSecretKey(
 	privkey: string | bigint,
@@ -168,7 +163,6 @@ export function deriveP2BKSecretKey(
  * @param slotIndex Zero based slot index, only lowest 8 bits (0–255) are used.
  * @returns Tweak (r) in [1, n − 1]
  * @throws If r reduces to zero after the retry.
- * @experimental
  */
 function deriveP2BKBlindingTweakFromECDH(
 	point: WeierstrassPoint<bigint>, // E or P

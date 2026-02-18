@@ -6,20 +6,40 @@ on:
   workflow_dispatch: {} # allows manual testing
 
 jobs:
-  renovate:
-    runs-on: ubuntu-latest
+  update-docker:
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # Needed to push branches and commits
+      pull-requests: write # Needed to create PRs
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Run Renovate
-        uses: renovatebot/github-action@v44.0.2
+      - name: Setup Node
+        uses: actions/setup-node@v3
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          configurationFile: .github/renovate.json
-        env:
-          renovate-version: 42.2.0
-          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          node-version: '22.x'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Test dependencies
+        run: npm run test:prepare
+
+      - name: Update Makefile Docker versions
+        id: update
+        run: npm run update-docker-versions
+
+      - name: Create Pull Request
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          branch: ${{ steps.update.outputs.branch }}
+          commit-message: ${{ steps.update.outputs.title }}
+          title: ${{ steps.update.outputs.title }}
+          body: |
+            ## Docker Images Updated
+
+            ${{ steps.update.outputs.summary }}
+          author: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'
+          committer: 'github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>'

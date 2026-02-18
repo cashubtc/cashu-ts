@@ -127,8 +127,8 @@ Many maintainers prefer to run the full PR checks locally before pushing. A comm
 
 ```bash
 # from the repo root
-DEV=1 make cdk-up
-# or DEV=1 make nutshell-up
+DEV=1 make cdk-stable-up
+# or DEV=1 make nutshell-stable-up
 ```
 
 1. Run the full PR tasks (lint, format, api:update, tests):
@@ -165,8 +165,8 @@ Run the individual script if you want to isolate failures or speed up debugging.
 1. When finished, stop the local mint:
 
 ```bash
-DEV=1 make cdk-down
-# or DEV=1 make nutshell-down
+DEV=1 make cdk-stable-down
+# or DEV=1 make nutshell-stable-down
 ```
 
 This pattern (run `npm run prtasks` and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.
@@ -179,15 +179,15 @@ Spin up / tear down locally
 
 ```bash
 # start the mint (uses Makefile defaults unless you override)
-DEV=1 make cdk-up
+DEV=1 make cdk-stable-up
 
 # stop the mint
-DEV=1 make cdk-down
+DEV=1 make cdk-stable-down
 
 # start nutshell
-DEV=1 make nutshell-up
+DEV=1 make nutshell-stable-up
 # stop nutshell
-DEV=1 make nutshell-down
+DEV=1 make nutshell-stable-down
 ```
 
 #### Override behavior
@@ -196,12 +196,14 @@ DEV=1 make nutshell-down
 
 ```bash
 # run a specific mint image with a custom container name
+# NOTE: cdk-up is the base target, cdk-stable-up/cdk-rc-up use the stable/rc values
 CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
 ```
 
 ### CI integration notes
 
-- CI workflows call the same Makefile targets (for example `make cdk-up` / `make nutshell-up`) so the runtime behavior in CI matches local usage.
+- CI workflows call the same Makefile targets (for example `make cdk-stable-up` / `make nutshell-stable-up`) so the runtime behavior in CI matches local usage.
+- CI will also run the latest release candidate if one exist of cdk and nutshell. Once the release has been cut, the RC branch will pause until new RC's have been published.
 - Renovate is configured to update pinned image tags in the Makefile (the canonical source of truth). The Renovate regex intentionally matches semver-like tags (no `latest`) so PRs will update numeric tags.
 - Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs `npm run test-integration`.
 
@@ -209,9 +211,9 @@ CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
 
 1. Ensure dependencies are installed: `npm ci`
 2. Prepare browser artifacts if needed: `npm run test:prepare`
-3. Start the mint(s): `DEV=1 make cdk-up` (and/or `DEV=1 make nutshell-up`)
+3. Start the mint(s): `DEV=1 make cdk-stable-up` (and/or `DEV=1 make nutshell-stable-up`, `DEV=1 make cdk-rc-up`, `DEV=1 make nutshell-rc-up`)
 4. Run the integration tests: `npm run test-integration`
-5. When finished, tear down: `DEV=1 make cdk-down` / `DEV=1 make nutshell-down`
+5. When finished, tear down: `DEV=1 make cdk-stable-down` / `DEV=1 make nutshell-stable-down`
 
 ## API Extractor workflow
 

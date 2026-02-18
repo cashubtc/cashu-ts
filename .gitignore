@@ -1,6 +1,7 @@
 coverage
 lib
 docs
+dist-scripts/
 node_modules
 temp
 test/__screenshots__
