@@ -25,7 +25,6 @@ import {
 	buildP2PKSigAllMessage,
 	assertSigAllInputs,
 	buildLegacyP2PKSigAllMessage,
-	buildInterimP2PKSigAllMessage,
 	createSecret,
 	getP2PKNSigsRefund,
 	isHTLCSpendAuthorised,
@@ -962,8 +961,8 @@ describe('branch coverage helpers', () => {
 	});
 });
 
-describe('SIG_ALL, all three message formats are actually signed', () => {
-	test('first proof witness contains signatures for legacy, interim and final SIG_ALL messages', () => {
+describe('SIG_ALL, both message formats are actually signed', () => {
+	test('first proof witness contains signatures for legacy and final SIG_ALL messages', () => {
 		// 1. Set up a keypair and a SIG_ALL P2PK secret
 		const privBytes = schnorr.utils.randomSecretKey();
 		const privHex = bytesToHex(privBytes);
@@ -1002,10 +1001,9 @@ describe('SIG_ALL, all three message formats are actually signed', () => {
 
 		// 4. Build the three distinct SIG_ALL messages the wallet is supposed to sign
 		const legacyMsg = buildLegacyP2PKSigAllMessage(proofs, outputs, quoteId);
-		const interimMsg = buildInterimP2PKSigAllMessage(proofs, outputs, quoteId);
 		const finalMsg = buildP2PKSigAllMessage(proofs, outputs, quoteId);
 
-		const messages = [legacyMsg, interimMsg, finalMsg];
+		const messages = [legacyMsg, finalMsg];
 
 		// 5. Mimic the wallet SIG_ALL path:
 		//    start from the first proof, then sign it three times with the three messages,
@@ -1018,8 +1016,8 @@ describe('SIG_ALL, all three message formats are actually signed', () => {
 
 		const sigs = getP2PKWitnessSignatures(signedFirst.witness);
 
-		// Sanity: we really appended three signatures
-		expect(sigs.length).toBe(3);
+		// Sanity: we really appended two signatures
+		expect(sigs.length).toBe(2);
 
 		// 6. For each message variant, there must be at least one signature that verifies
 		//    against that specific message and this pubkey.
