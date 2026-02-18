@@ -1,7 +1,4 @@
-import {
-	SigAll,
-	SigAllSigningPackage,
-} from '../../src/model/SigAll';
+import { SigAll, SigAllSigningPackage } from '../../src/model/SigAll';
 import type { Proof, P2PKWitness, SerializedBlindedMessage } from '../../src/model/types';
 import type { OutputDataLike } from '../../src/model/OutputData';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -68,7 +65,6 @@ describe('SIGALL helpers', () => {
 	test('computeSigAllDigests produces all formats', () => {
 		const digests = SigAll.computeDigests([dummyProof], [dummyOutput], 'dummyquote');
 		expect(typeof digests.legacy).toBe('string');
-		expect(typeof digests.interim).toBe('string');
 		expect(typeof digests.current).toBe('string');
 		expect(digests.legacy.length).toBe(64);
 		expect(digests.current.length).toBe(64);

@@ -293,8 +293,8 @@ function extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(
  * Unified extractor for swap and melt signing packages.
  *
  * @remarks
- * Sanitizes inputs, computes legacy and current SIG_ALL formats, and returns a signing package ready
- * for distribution to signers.
+ * Sanitizes inputs, computes legacy and current SIG_ALL formats, and returns a signing package
+ * ready for distribution to signers.
  * @param type Transaction type ('swap' or 'melt')
  * @param inputs Proof array from the preview.
  * @param outputs OutputDataLike array.
