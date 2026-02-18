@@ -74,13 +74,19 @@ describe('SIGALL helpers', () => {
 		const pkg: SigAllSigningPackage = {
 			version: 'cashu-sigall-v1',
 			type: 'swap',
-			inputs: [{ id: 'testid', amount: 42, C: 'dummyC' }],
+			inputs: [{ id: 'testid', amount: 42, C: '02' + '1'.repeat(64) }],
 			outputs: [{ amount: 42, blindedMessage: dummyBlindedMessage }],
 			digests: SigAll.computeDigests([dummyProof], [dummyOutput]),
 			witness: { signatures: ['sig1'] },
 		};
-		const json = SigAll.serializePackage(pkg);
-		const parsed = SigAll.deserializePackage(json);
+
+		const encoded = SigAll.serializePackage(pkg);
+		// console.log('[serialize output]', encoded);
+
+		const parsed = SigAll.deserializePackage(encoded);
+		// console.log('[deserialize output]', JSON.stringify(parsed, null, 2));
+
+		expect(encoded.startsWith('sigallA')).toBe(true);
 		expect(parsed.version).toBe(pkg.version);
 		expect(parsed.type).toBe(pkg.type);
 		expect(parsed.inputs.length).toBe(1);
@@ -89,8 +95,11 @@ describe('SIGALL helpers', () => {
 	});
 
 	test('deserialize fails on invalid version', () => {
-		const pkg = { version: 'bad-version', type: 'swap', inputs: [], outputs: [] };
-		expect(() => SigAll.deserializePackage(JSON.stringify(pkg))).toThrow();
+		const badPkg = { version: 'bad-version', type: 'swap', inputs: [], outputs: [] };
+		const encoded =
+			'sigallA' +
+			btoa(JSON.stringify(badPkg)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+		expect(() => SigAll.deserializePackage(encoded)).toThrow();
 	});
 
 	test('digest validation throws on mismatch', () => {
@@ -98,9 +107,8 @@ describe('SIGALL helpers', () => {
 		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
 		const badDigests = { ...pkg.digests, current: pkg.digests!.current.slice(0, 63) + '0' };
 		const badPkg = { ...pkg, digests: badDigests };
-		expect(() =>
-			SigAll.deserializePackage(SigAll.serializePackage(badPkg), { validateDigest: true }),
-		).toThrow();
+		const encoded = SigAll.serializePackage(badPkg);
+		expect(() => SigAll.deserializePackage(encoded, { validateDigest: true })).toThrow();
 	});
 	test('serialize is deterministic', () => {
 		const pkg = SigAll.extractSwapPackage(makeSwapPreview());

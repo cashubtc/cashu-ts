@@ -9,6 +9,9 @@ import {
 import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { Bytes, encodeUint8toBase64Url } from '../utils';
+
+const SIGALL_PREFIX = 'sigallA';
 
 export type SigAllDigests = {
 	legacy: string;
@@ -66,10 +69,9 @@ function computeSigAllDigests(
 }
 
 /**
- * - Serializes a SigAllSigningPackage to a deterministic JSON string. *
- *
  * @remarks
- * Produces a deterministic JSON representation suitable for transport or storage.
+ * Produces a deterministic JSON representation, base64url-encodes it and prefixes with sigallA for
+ * transport.
  *
  * - Field order is fixed and version field is always included for compatibility.
  * - This enables consistent hashing and verification of package integrity.
@@ -87,18 +89,38 @@ function serializeSigningPackage(pkg: SigAllSigningPackage): string {
 	ordered.outputs = pkg.outputs;
 
 	if (pkg.messageDigest) ordered.messageDigest = pkg.messageDigest;
-
 	if (pkg.digests) ordered.digests = pkg.digests;
-
 	if (pkg.witness) ordered.witness = pkg.witness;
 
-	return JSON.stringify(ordered);
+	const json = JSON.stringify(ordered);
+	const base64url = encodeUint8toBase64Url(Bytes.fromString(json));
+
+	return `${SIGALL_PREFIX}${base64url}`;
 }
 
+/**
+ * @remarks
+ * Accepts a sigallA-prefixed base64url string and rehydrates it into a SigAllSigningPackage.
+ */
 function deserializeSigningPackage(
-	json: string,
+	input: string,
 	options?: { validateDigest?: boolean },
 ): SigAllSigningPackage {
+	if (!input.startsWith(SIGALL_PREFIX)) {
+		throw new Error(`Invalid signing package: must start with "${SIGALL_PREFIX}"`);
+	}
+
+	const base64url = input.slice(SIGALL_PREFIX.length);
+	let json: string;
+
+	try {
+		json = Bytes.toString(Bytes.fromBase64(base64url));
+	} catch (e) {
+		throw new Error(
+			`Failed to parse signing package: ${e instanceof Error ? e.message : String(e)}`,
+		);
+	}
+
 	let data: unknown;
 
 	try {
