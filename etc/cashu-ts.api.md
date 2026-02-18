@@ -7,6 +7,57 @@
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
+export class Amount {
+    // (undocumented)
+    add(other: AmountLike): Amount;
+    // (undocumented)
+    div(divisor: number | bigint): Amount;
+    // (undocumented)
+    eq(other: AmountLike): boolean;
+    static from(input: AmountLike): Amount;
+    // (undocumented)
+    gt(other: AmountLike): boolean;
+    // (undocumented)
+    gte(other: AmountLike): boolean;
+    // (undocumented)
+    isZero(): boolean;
+    // (undocumented)
+    lt(other: AmountLike): boolean;
+    // (undocumented)
+    lte(other: AmountLike): boolean;
+    // (undocumented)
+    static max(a: AmountLike, b: AmountLike): Amount;
+    // (undocumented)
+    static min(a: AmountLike, b: AmountLike): Amount;
+    // (undocumented)
+    mod(divisor: number | bigint): Amount;
+    // (undocumented)
+    mul(factor: number | bigint): Amount;
+    // (undocumented)
+    static one(): Amount;
+    // (undocumented)
+    sub(other: AmountLike): Amount;
+    // (undocumented)
+    static sum(values: Iterable<AmountLike>): Amount;
+    toBigInt(): bigint;
+    // (undocumented)
+    toJSON(): string;
+    toNumber(): number;
+    toNumberUnsafe(): number;
+    toString(): string;
+    // (undocumented)
+    static zero(): Amount;
+}
+
+// @public (undocumented)
+export class AmountError extends Error {
+    constructor(message: string);
+}
+
+// @public (undocumented)
+export type AmountLike = number | bigint | string | Amount;
+
+// @public
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
 // @public

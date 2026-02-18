@@ -89,6 +89,7 @@ export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export { MintOperationError, NetworkError, HttpResponseError } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
+export { Amount, AmountError, type AmountLike } from './model/Amount';
 export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
 export { MintInfo } from './model/MintInfo';
