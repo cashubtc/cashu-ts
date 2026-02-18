@@ -27,6 +27,8 @@ npm run setup-hooks
 - Tests: `npm test`
 - If public API changed: run `npm run api:update` and commit `/etc/cashu-ts.api.md`
 
+Before submitting a PR, please read [COMMUNITY.md](./COMMUNITY.md) to understand our contribution philosophy and review expectations.
+
 ## Local hooks (short)
 
 We provide an optional hook installer. Run `npm run setup-hooks` to copy tracked hook sources from `scripts/hooks/` into an ignored `.githooks/` folder and activate them locally. Hooks are opt-in; CI still runs the full checks.
