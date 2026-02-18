@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.5.0](https://github.com/cashubtc/cashu-ts/compare/v3.4.1...v3.5.0) (2026-02-18)
+
+
+### Features
+
+* **melt:** replace Prefer header with prefer_async POST request ([#500](https://github.com/cashubtc/cashu-ts/issues/500)) ([efe2550](https://github.com/cashubtc/cashu-ts/commit/efe2550c63136f5d1b51a9d5458ea5cdcd851f5a))
+* **p2bk:** update to latest spec - removes Keysetid and NUT-18 flag ([fa26bc5](https://github.com/cashubtc/cashu-ts/commit/fa26bc573bd7348831df64e590ff470d0cfede2c))
+
+
+### Bug Fixes
+
+* remove unbounded per request cache ([#484](https://github.com/cashubtc/cashu-ts/issues/484)) ([b1d32ab](https://github.com/cashubtc/cashu-ts/commit/b1d32ab8de5b4a0468057a8126ad00ec139c3c48))
+
 ## [3.4.1](https://github.com/cashubtc/cashu-ts/compare/v3.4.0...v3.4.1) (2026-02-05)
 
 
