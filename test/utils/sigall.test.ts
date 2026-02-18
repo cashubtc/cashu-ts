@@ -1,15 +1,7 @@
 import {
-	computeSigAllDigests,
-	serializeSigningPackage,
-	deserializeSigningPackage,
-	signSigningPackage,
-	signHexDigest,
-	extractSwapSigningPackage,
-	extractMeltSigningPackage,
-	mergeSignaturesToSwapPreview,
-	mergeSignaturesToMeltPreview,
+	SigAll,
 	SigAllSigningPackage,
-} from '../../src/utils/sigall';
+} from '../../src/model/SigAll';
 import type { Proof, P2PKWitness, SerializedBlindedMessage } from '../../src/model/types';
 import type { OutputDataLike } from '../../src/model/OutputData';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -74,7 +66,7 @@ function makeMeltPreview() {
 
 describe('SIGALL helpers', () => {
 	test('computeSigAllDigests produces all formats', () => {
-		const digests = computeSigAllDigests([dummyProof], [dummyOutput], 'dummyquote');
+		const digests = SigAll.computeDigests([dummyProof], [dummyOutput], 'dummyquote');
 		expect(typeof digests.legacy).toBe('string');
 		expect(typeof digests.interim).toBe('string');
 		expect(typeof digests.current).toBe('string');
@@ -88,11 +80,11 @@ describe('SIGALL helpers', () => {
 			type: 'swap',
 			inputs: [{ id: 'testid', amount: 42, C: 'dummyC' }],
 			outputs: [{ amount: 42, blindedMessage: dummyBlindedMessage }],
-			digests: computeSigAllDigests([dummyProof], [dummyOutput]),
+			digests: SigAll.computeDigests([dummyProof], [dummyOutput]),
 			witness: { signatures: ['sig1'] },
 		};
-		const json = serializeSigningPackage(pkg);
-		const parsed = deserializeSigningPackage(json);
+		const json = SigAll.serializePackage(pkg);
+		const parsed = SigAll.deserializePackage(json);
 		expect(parsed.version).toBe(pkg.version);
 		expect(parsed.type).toBe(pkg.type);
 		expect(parsed.inputs.length).toBe(1);
@@ -102,51 +94,51 @@ describe('SIGALL helpers', () => {
 
 	test('deserialize fails on invalid version', () => {
 		const pkg = { version: 'bad-version', type: 'swap', inputs: [], outputs: [] };
-		expect(() => deserializeSigningPackage(JSON.stringify(pkg))).toThrow();
+		expect(() => SigAll.deserializePackage(JSON.stringify(pkg))).toThrow();
 	});
 
 	test('digest validation throws on mismatch', () => {
 		// Compute real digests, then mutate one char for controlled failure
-		const pkg = extractSwapSigningPackage(makeSwapPreview());
+		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
 		const badDigests = { ...pkg.digests, current: pkg.digests!.current.slice(0, 63) + '0' };
 		const badPkg = { ...pkg, digests: badDigests };
 		expect(() =>
-			deserializeSigningPackage(serializeSigningPackage(badPkg), { validateDigest: true }),
+			SigAll.deserializePackage(SigAll.serializePackage(badPkg), { validateDigest: true }),
 		).toThrow();
 	});
 	test('serialize is deterministic', () => {
-		const pkg = extractSwapSigningPackage(makeSwapPreview());
-		const a = serializeSigningPackage(pkg);
-		const b = serializeSigningPackage(pkg);
+		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+		const a = SigAll.serializePackage(pkg);
+		const b = SigAll.serializePackage(pkg);
 		expect(a).toBe(b);
 	});
 
 	test('merge works with no existing witness', () => {
 		const preview = makeSwapPreview();
-		const pkg = extractSwapSigningPackage(preview);
+		const pkg = SigAll.extractSwapPackage(preview);
 		pkg.witness = { signatures: ['aa'] };
-		const merged = mergeSignaturesToSwapPreview(pkg, preview);
+		const merged = SigAll.mergeSwapPackage(pkg, preview);
 		expect((merged.inputs[0].witness as P2PKWitness).signatures).toContain('aa');
 	});
 
 	test('signSigningPackage appends signatures (multi-party)', () => {
-		const pkg = extractSwapSigningPackage(makeSwapPreview());
-		const s1 = signSigningPackage(pkg, dummyPrivkey);
-		const s2 = signSigningPackage(s1, dummyPrivkey);
+		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+		const s1 = SigAll.signPackage(pkg, dummyPrivkey);
+		const s2 = SigAll.signPackage(s1, dummyPrivkey);
 		expect(s2.witness?.signatures.length).toBeGreaterThan(1);
 	});
 
 	test('transport roundtrip works', () => {
-		const pkg = extractSwapSigningPackage(makeSwapPreview());
-		const json = serializeSigningPackage(pkg);
-		const parsed = deserializeSigningPackage(json);
-		const signed = signSigningPackage(parsed, dummyPrivkey);
+		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
+		const json = SigAll.serializePackage(pkg);
+		const parsed = SigAll.deserializePackage(json);
+		const signed = SigAll.signPackage(parsed, dummyPrivkey);
 		expect(signed.witness?.signatures.length).toBeGreaterThan(0);
 	});
 
 	test('extractSwapSigningPackage produces valid package', () => {
 		const preview = makeSwapPreview();
-		const pkg = extractSwapSigningPackage(preview);
+		const pkg = SigAll.extractSwapPackage(preview);
 		expect(pkg.version).toBe('cashu-sigall-v1');
 		expect(pkg.type).toBe('swap');
 		expect(pkg.inputs.length).toBe(1);
@@ -156,7 +148,7 @@ describe('SIGALL helpers', () => {
 
 	test('extractMeltSigningPackage produces valid package', () => {
 		const preview = makeMeltPreview();
-		const pkg = extractMeltSigningPackage(preview);
+		const pkg = SigAll.extractMeltPackage(preview);
 		expect(pkg.version).toBe('cashu-sigall-v1');
 		expect(pkg.type).toBe('melt');
 		expect(pkg.inputs.length).toBe(1);
@@ -166,32 +158,32 @@ describe('SIGALL helpers', () => {
 
 	test('signSigningPackage appends signatures', () => {
 		const preview = makeSwapPreview();
-		const pkg = extractSwapSigningPackage(preview);
-		const signed = signSigningPackage(pkg, dummyPrivkey);
+		const pkg = SigAll.extractSwapPackage(preview);
+		const signed = SigAll.signPackage(pkg, dummyPrivkey);
 		expect(signed.witness?.signatures.length).toBeGreaterThan(0);
 	});
 
 	test('mergeSignaturesToSwapPreview appends signatures', () => {
 		const preview = makeSwapPreview();
-		const pkg = extractSwapSigningPackage(preview);
-		const signed = signSigningPackage(pkg, dummyPrivkey);
-		const merged = mergeSignaturesToSwapPreview(signed, preview);
+		const pkg = SigAll.extractSwapPackage(preview);
+		const signed = SigAll.signPackage(pkg, dummyPrivkey);
+		const merged = SigAll.mergeSwapPackage(signed, preview);
 		expect(merged.inputs[0].witness).toBeDefined();
 		expect((merged.inputs[0].witness as P2PKWitness).signatures?.length).toBeGreaterThan(0);
 	});
 
 	test('mergeSignaturesToMeltPreview appends signatures', () => {
 		const preview = makeMeltPreview();
-		const pkg = extractMeltSigningPackage(preview);
-		const signed = signSigningPackage(pkg, dummyPrivkey);
-		const merged = mergeSignaturesToMeltPreview(signed, preview);
+		const pkg = SigAll.extractMeltPackage(preview);
+		const signed = SigAll.signPackage(pkg, dummyPrivkey);
+		const merged = SigAll.mergeMeltPackage(signed, preview);
 		expect(merged.inputs[0].witness).toBeDefined();
 		expect((merged.inputs[0].witness as P2PKWitness).signatures?.length).toBeGreaterThan(0);
 	});
 
 	test('signHexDigest produces a hex signature', () => {
 		const digest = bytesToHex(sha256(new TextEncoder().encode('test')));
-		const sig = signHexDigest(digest, dummyPrivkey);
+		const sig = SigAll.signDigest(digest, dummyPrivkey);
 		expect(typeof sig).toBe('string');
 		expect(sig.length).toBeGreaterThan(0);
 	});

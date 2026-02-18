@@ -1,10 +1,5 @@
-import type { OutputDataLike } from '../model/OutputData';
-import type {
-	P2PKWitness,
-	Proof,
-	MeltQuoteBaseResponse,
-	SerializedBlindedMessage,
-} from '../model/types';
+import type { OutputDataLike } from './OutputData';
+import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 import {
 	buildLegacyP2PKSigAllMessage,
@@ -57,7 +52,7 @@ export type SigAllSigningPackage = {
  * @param quoteId Optional quote ID for melt transactions.
  * @returns Object with legacy, interim, and current digests (all hex strings)
  */
-export function computeSigAllDigests(
+function computeSigAllDigests(
 	inputs: Proof[],
 	outputs: OutputDataLike[],
 	quoteId?: string,
@@ -87,7 +82,7 @@ export function computeSigAllDigests(
  * @param pkg The signing package to serialize.
  * @returns JSON string with sorted keys.
  */
-export function serializeSigningPackage(pkg: SigAllSigningPackage): string {
+function serializeSigningPackage(pkg: SigAllSigningPackage): string {
 	// Build object with fixed key order for determinism
 	const ordered: Record<string, unknown> = { version: pkg.version, type: pkg.type };
 
@@ -105,7 +100,7 @@ export function serializeSigningPackage(pkg: SigAllSigningPackage): string {
 	return JSON.stringify(ordered);
 }
 
-export function deserializeSigningPackage(
+function deserializeSigningPackage(
 	json: string,
 	options?: { validateDigest?: boolean },
 ): SigAllSigningPackage {
@@ -209,10 +204,7 @@ export function deserializeSigningPackage(
  * @param privkey Private key to sign with.
  * @returns Package with signatures appended to witness field.
  */
-export function signSigningPackage(
-	pkg: SigAllSigningPackage,
-	privkey: string,
-): SigAllSigningPackage {
+function signSigningPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
 	const newSigs: string[] = [];
 
 	if (pkg.digests) {
@@ -270,7 +262,7 @@ function _signLegacyPackage(pkg: SigAllSigningPackage, privkey: string, newSigs:
 	newSigs.push(schnorrSignMessage(currentMsg, privkey));
 }
 
-export function signHexDigest(hexDigest: string, privkey: string): string {
+function signHexDigest(hexDigest: string, privkey: string): string {
 	const digestBytes = hexToBytes(hexDigest);
 	const keyBytes = hexToBytes(privkey);
 	const signature = schnorr.sign(digestBytes, keyBytes);
@@ -287,7 +279,7 @@ export function signHexDigest(hexDigest: string, privkey: string): string {
  * @param preview SwapPreview from prepareSwapToSend or prepareSwapToReceive.
  * @returns SigAllSigningPackage for distribution to signers.
  */
-export function extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPackage {
+function extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPackage {
 	// Merge keep + send outputs in order (both needed for complete transaction message)
 	const allOutputs = [...(preview.keepOutputs || []), ...(preview.sendOutputs || [])];
 	return _extractSigningPackage('swap', preview.inputs, allOutputs);
@@ -299,7 +291,7 @@ export function extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPa
  * @param preview MeltPreview from prepareMelt.
  * @returns SigAllSigningPackage for distribution to signers.
  */
-export function extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(
+function extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(
 	preview: MeltPreview<TQuote>,
 ): SigAllSigningPackage {
 	return _extractSigningPackage('melt', preview.inputs, preview.outputData, preview.quote.quote);
@@ -363,7 +355,7 @@ function _extractSigningPackage(
  * @param preview Original SwapPreview.
  * @returns SwapPreview ready for completeSwap.
  */
-export function mergeSignaturesToSwapPreview(
+function mergeSignaturesToSwapPreview(
 	pkg: SigAllSigningPackage,
 	preview: SwapPreview,
 ): SwapPreview {
@@ -378,7 +370,7 @@ export function mergeSignaturesToSwapPreview(
  * @param preview Original MeltPreview.
  * @returns MeltPreview ready for completeMelt.
  */
-export function mergeSignaturesToMeltPreview<TQuote extends MeltQuoteBaseResponse>(
+function mergeSignaturesToMeltPreview<TQuote extends MeltQuoteBaseResponse>(
 	pkg: SigAllSigningPackage,
 	preview: MeltPreview<TQuote>,
 ): MeltPreview<TQuote> {
@@ -426,3 +418,19 @@ function _mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
 		};
 	});
 }
+
+export const SigAll = {
+	computeDigests: computeSigAllDigests,
+
+	extractSwapPackage: extractSwapSigningPackage,
+	extractMeltPackage: extractMeltSigningPackage,
+
+	serializePackage: serializeSigningPackage,
+	deserializePackage: deserializeSigningPackage,
+
+	signPackage: signSigningPackage,
+	signDigest: signHexDigest,
+
+	mergeSwapPackage: mergeSignaturesToSwapPreview,
+	mergeMeltPackage: mergeSignaturesToMeltPreview,
+} as const;
