@@ -1652,17 +1652,22 @@ export interface SharedOutputTypeProps {
     denominations?: number[];
 }
 
+// @public (undocumented)
+export const SigAll: SigAllApi;
+
 // @public
-export const SigAll: {
-    readonly computeDigests: typeof computeSigAllDigests;
-    readonly extractSwapPackage: typeof extractSwapSigningPackage;
-    readonly extractMeltPackage: typeof extractMeltSigningPackage;
-    readonly serializePackage: typeof serializeSigningPackage;
-    readonly deserializePackage: typeof deserializeSigningPackage;
-    readonly signPackage: typeof signSigningPackage;
-    readonly signDigest: typeof signHexDigest;
-    readonly mergeSwapPackage: typeof mergeSignaturesToSwapPreview;
-    readonly mergeMeltPackage: typeof mergeSignaturesToMeltPreview;
+export type SigAllApi = {
+    computeDigests: (inputs: Proof[], outputs: OutputDataLike[], quoteId?: string) => SigAllDigests;
+    extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
+    extractMeltPackage: <TQuote extends MeltQuoteBaseResponse>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
+    serializePackage: (pkg: SigAllSigningPackage) => string;
+    deserializePackage: (input: string, options?: {
+        validateDigest?: boolean;
+    }) => SigAllSigningPackage;
+    signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
+    signDigest: (hexDigest: string, privkey: string) => string;
+    mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
+    mergeMeltPackage: <TQuote extends MeltQuoteBaseResponse>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
 };
 
 // @public (undocumented)
@@ -2045,18 +2050,6 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
-
-// Warnings were encountered during analysis:
-//
-// lib/types/index.d.ts:3469:10 - (ae-forgotten-export) The symbol "computeSigAllDigests" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3470:10 - (ae-forgotten-export) The symbol "extractSwapSigningPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3471:10 - (ae-forgotten-export) The symbol "extractMeltSigningPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3472:10 - (ae-forgotten-export) The symbol "serializeSigningPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3473:10 - (ae-forgotten-export) The symbol "deserializeSigningPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3474:10 - (ae-forgotten-export) The symbol "signSigningPackage" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3475:10 - (ae-forgotten-export) The symbol "signHexDigest" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3476:10 - (ae-forgotten-export) The symbol "mergeSignaturesToSwapPreview" needs to be exported by the entry point index.d.ts
-// lib/types/index.d.ts:3477:10 - (ae-forgotten-export) The symbol "mergeSignaturesToMeltPreview" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

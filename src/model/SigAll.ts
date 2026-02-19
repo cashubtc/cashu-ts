@@ -30,34 +30,54 @@ export type SigAllDigests = {
  * @experimental
  */
 export type SigAllSigningPackage = {
+	/**
+	 * Signing package version.
+	 */
 	version: 'cashu-sigall-v1';
+	/**
+	 * Typr of signing package.
+	 */
 	type: 'swap' | 'melt';
-	quote?: string; // melt only
+	/**
+	 * For melt packages only.
+	 */
+	quote?: string;
+	/**
+	 * Minimal inputs required for signing transport to prevent leaking sensitive data.
+	 */
 	inputs: Array<{
 		id: string;
 		amount: number;
 		C: string;
-	}>; //minimal inputs required for signing transport to prevent leaking sensitive data.
+	}>;
+	/**
+	 * Minimal outputs required for signing transport to prevent leaking sensitive data.
+	 */
 	outputs: Array<{ amount: number; blindedMessage: SerializedBlindedMessage }>;
-	messageDigest?: string; //hex SHA256 digest of the message-to-sign.
+	/**
+	 * Hex SHA256 digest of the message-to-sign.
+	 */
+	messageDigest?: string;
+	/**
+	 * Per-format digests to support multiple SIG_ALL formats.
+	 */
 	digests?: {
+		/**
+		 * For Nutshell (all releases), CDK < 0.14.0.
+		 */
 		legacy?: string;
+		/**
+		 * From CDK >= 0.14.0.
+		 */
 		current: string;
-	}; //per-format digests to support signing multiple SIG_ALL formats (legacy / current)
-	witness?: { signatures: string[] }; //collected signatures to be injected into the first proof witness.
+	};
+	/**
+	 * Signatures collected (to be injected into the first proof witness).
+	 */
+	witness?: { signatures: string[] };
 };
 
-/**
- * Computes legacy and current SIG_ALL formats.
- *
- * @remarks
- * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
- * @param inputs Proof array.
- * @param outputs OutputDataLike array.
- * @param quoteId Optional quote ID for melt transactions.
- * @returns Object with legacy, and current digests (all hex strings)
- */
-function computeSigAllDigests(
+function computeDigests(
 	inputs: Proof[],
 	outputs: OutputDataLike[],
 	quoteId?: string,
@@ -73,18 +93,7 @@ function computeSigAllDigests(
 	};
 }
 
-/**
- * @remarks
- * Produces a deterministic JSON representation, base64url-encodes it and prefixes with sigallA for
- * transport.
- *
- * - Field order is fixed and version field is always included for compatibility.
- * - This enables consistent hashing and verification of package integrity.
- *
- * @param pkg The signing package to serialize.
- * @returns JSON string with sorted keys.
- */
-function serializeSigningPackage(pkg: SigAllSigningPackage): string {
+function serializePackage(pkg: SigAllSigningPackage): string {
 	// Build object with fixed key order for determinism
 	const ordered: Record<string, unknown> = { version: pkg.version, type: pkg.type };
 
@@ -103,11 +112,7 @@ function serializeSigningPackage(pkg: SigAllSigningPackage): string {
 	return `${SIGALL_PREFIX}${base64url}`;
 }
 
-/**
- * @remarks
- * Accepts a sigallA-prefixed base64url string and rehydrates it into a SigAllSigningPackage.
- */
-function deserializeSigningPackage(
+function deserializePackage(
 	input: string,
 	options?: { validateDigest?: boolean },
 ): SigAllSigningPackage {
@@ -183,16 +188,11 @@ function deserializeSigningPackage(
 			throw new Error(`Output ${i}: blindedMessage invalid`);
 	}
 
-	// --- Optional digest validation ---
+	// Optional digest validation
 	const digests = pkg.digests as Record<string, string> | undefined;
 
 	if (options?.validateDigest && digests?.current) {
-		const quote = pkg.quote;
-
-		const proofLike = pkg.inputs.map((i) => ({
-			...i,
-			secret: '',
-		})) as Proof[];
+		const proofLike = pkg.inputs.map((i) => ({ ...i, secret: '' })) as Proof[];
 
 		const outputLike = pkg.outputs.map((o) => ({
 			amount: o.amount,
@@ -204,7 +204,7 @@ function deserializeSigningPackage(
 			},
 		})) as OutputDataLike[];
 
-		const recomputed = computeSigAllDigests(proofLike, outputLike, quote);
+		const recomputed = computeDigests(proofLike, outputLike, pkg.quote);
 
 		if (recomputed.current !== digests.current) {
 			throw new Error('Digest validation failed');
@@ -214,28 +214,16 @@ function deserializeSigningPackage(
 	return pkg;
 }
 
-/**
- * Signs a SigAllSigningPackage and returns it with signatures attached.
- *
- * @remarks
- * Collects signatures by signing legacy and current SIG_ALL formats for backward compatibility.
- * Prefers digest-based signing (safer, avoids secrets) but falls back to message reconstruction for
- * legacy packages without digests. Multiple parties can call this sequentially to aggregate
- * signatures for multi-party signing.
- * @param pkg The signing package (from extract*SigningPackage or another signer)
- * @param privkey Private key to sign with.
- * @returns Package with signatures appended to witness field.
- */
-function signSigningPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
+function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
 	const newSigs: string[] = [];
 
 	if (pkg.digests) {
 		// Preferred path: sign precomputed digests (secure, no secrets exposed)
-		if (pkg.digests.legacy) newSigs.push(signHexDigest(pkg.digests.legacy, privkey));
-		if (pkg.digests.current) newSigs.push(signHexDigest(pkg.digests.current, privkey));
+		if (pkg.digests.legacy) newSigs.push(signDigest(pkg.digests.legacy, privkey));
+		if (pkg.digests.current) newSigs.push(signDigest(pkg.digests.current, privkey));
 	} else {
 		// Legacy fallback: reconstruct messages from package.
-		_signLegacyPackage(pkg, privkey, newSigs);
+		signByReconstruction(pkg, privkey, newSigs);
 	}
 
 	// validate that signing actually produced signatures
@@ -249,17 +237,7 @@ function signSigningPackage(pkg: SigAllSigningPackage, privkey: string): SigAllS
 	};
 }
 
-/**
- * Signs package without digests by reconstructing legacy and current SIG_ALL formats.
- *
- * @remarks
- * Used only when digests are unavailable (legacy packages). Reconstructs messages from package
- * inputs/outputs and signs each format. Appends signatures to the provided array.
- * @param pkg Signing package without digests.
- * @param privkey Private key to sign with.
- * @param newSigs Array to accumulate signatures (mutated in place)
- */
-function _signLegacyPackage(pkg: SigAllSigningPackage, privkey: string, newSigs: string[]): void {
+function signByReconstruction(pkg: SigAllSigningPackage, privkey: string, newSigs: string[]): void {
 	// Construct minimal output objects compatible with build functions.
 	// The build functions expect { blindedMessage: ... } shape for outputs.
 	const minimalOutputs: Array<{ blindedMessage: SerializedBlindedMessage }> = pkg.outputs.map(
@@ -281,66 +259,38 @@ function _signLegacyPackage(pkg: SigAllSigningPackage, privkey: string, newSigs:
 	newSigs.push(schnorrSignMessage(currentMsg, privkey));
 }
 
-function signHexDigest(hexDigest: string, privkey: string): string {
+function signDigest(hexDigest: string, privkey: string): string {
 	const digestBytes = hexToBytes(hexDigest);
 	const keyBytes = hexToBytes(privkey);
 	const signature = schnorr.sign(digestBytes, keyBytes);
 	return bytesToHex(signature);
 }
 
-/**
- * Extracts a signing package from a SwapPreview for multi-party SIG_ALL coordination.
- *
- * @remarks
- * This creates a minimal, serializable package that can be passed to other signers. Secrets and
- * blinding factors are NOT included - only what's needed to reconstruct the exact SIG_ALL message
- * and produce signatures.
- * @param preview SwapPreview from prepareSwapToSend or prepareSwapToReceive.
- * @returns SigAllSigningPackage for distribution to signers.
- */
-function extractSwapSigningPackage(preview: SwapPreview): SigAllSigningPackage {
+function extractSwapPackage(preview: SwapPreview): SigAllSigningPackage {
 	// Merge keep + send outputs in order (both needed for complete transaction message)
 	const allOutputs = [...(preview.keepOutputs || []), ...(preview.sendOutputs || [])];
-	return _extractSigningPackage('swap', preview.inputs, allOutputs);
+	return buildSigningPackage('swap', preview.inputs, allOutputs);
 }
 
-/**
- * Extracts a signing package from a MeltPreview for multi-party SIG_ALL coordination.
- *
- * @param preview MeltPreview from prepareMelt.
- * @returns SigAllSigningPackage for distribution to signers.
- */
-function extractMeltSigningPackage<TQuote extends MeltQuoteBaseResponse>(
+function extractMeltPackage<TQuote extends MeltQuoteBaseResponse>(
 	preview: MeltPreview<TQuote>,
 ): SigAllSigningPackage {
-	return _extractSigningPackage('melt', preview.inputs, preview.outputData, preview.quote.quote);
+	return buildSigningPackage('melt', preview.inputs, preview.outputData, preview.quote.quote);
 }
 
-/**
- * Unified extractor for swap and melt signing packages.
- *
- * @remarks
- * Sanitizes inputs, computes legacy and current SIG_ALL formats, and returns a signing package
- * ready for distribution to signers.
- * @param type Transaction type ('swap' or 'melt')
- * @param inputs Proof array from the preview.
- * @param outputs OutputDataLike array.
- * @param quoteId Optional quote ID for melt transactions.
- * @returns SigAllSigningPackage.
- */
-function _extractSigningPackage(
+function buildSigningPackage(
 	type: 'swap' | 'melt',
 	inputs: Proof[],
 	outputs: OutputDataLike[],
 	quoteId?: string,
 ): SigAllSigningPackage {
-	//sanitize inputs - do NOT include secrets or other private fields.
+	// sanitize inputs - do NOT include secrets or other private fields.
 	const sanitizedInputs = inputs.map((p) => ({ id: p.id, amount: p.amount, C: p.C }));
 
-	//compute legacy and current SIG_ALL digests for backward compatibility
-	const digests = computeSigAllDigests(inputs, outputs, quoteId);
+	// compute legacy and current SIG_ALL digests for backward compatibility
+	const digests = computeDigests(inputs, outputs, quoteId);
 
-	//verify current digest was computed correctly (catches bugs).
+	// verify current digest was computed correctly (catches bugs).
 	const msg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
 	const expected = bytesToHex(sha256(new TextEncoder().encode(msg)));
 
@@ -364,51 +314,20 @@ function _extractSigningPackage(
 	};
 }
 
-/**
- * Merges signatures from a signing package back into a SwapPreview.
- *
- * @remarks
- * Injects collected signatures into the first proof's witness for mint submission. Call this after
- * all parties have signed.
- * @param pkg Signing package with collected signatures.
- * @param preview Original SwapPreview.
- * @returns SwapPreview ready for completeSwap.
- */
-function mergeSignaturesToSwapPreview(
-	pkg: SigAllSigningPackage,
-	preview: SwapPreview,
-): SwapPreview {
-	const updatedInputs = _mergeSignatures(preview.inputs, pkg);
+function mergeSwapPackage(pkg: SigAllSigningPackage, preview: SwapPreview): SwapPreview {
+	const updatedInputs = mergeSignatures(preview.inputs, pkg);
 	return { ...preview, inputs: updatedInputs };
 }
 
-/**
- * Merges signatures from a signing package back into a MeltPreview.
- *
- * @param pkg Signing package with collected signatures.
- * @param preview Original MeltPreview.
- * @returns MeltPreview ready for completeMelt.
- */
-function mergeSignaturesToMeltPreview<TQuote extends MeltQuoteBaseResponse>(
+function mergeMeltPackage<TQuote extends MeltQuoteBaseResponse>(
 	pkg: SigAllSigningPackage,
 	preview: MeltPreview<TQuote>,
 ): MeltPreview<TQuote> {
-	const updatedInputs = _mergeSignatures(preview.inputs, pkg);
+	const updatedInputs = mergeSignatures(preview.inputs, pkg);
 	return { ...preview, inputs: updatedInputs };
 }
 
-/**
- * Merges collected signatures into the first proof's witness (NUT-11 convention).
- *
- * @remarks
- * Both Swap and Melt transactions use the same signature injection pattern: all signatures go into
- * the first proof only. This centralizes that logic.
- * @param proofs Proof array from the preview.
- * @param pkg Signing package with collected signatures.
- * @returns Updated proofs with signatures injected into first proof's witness.
- * @throws If no signatures are present in the package.
- */
-function _mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
+function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
 	if (!pkg.witness?.signatures.length) {
 		throw new Error('No signatures to merge');
 	}
@@ -443,18 +362,115 @@ function _mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
  *
  * @experimental
  */
-export const SigAll = {
-	computeDigests: computeSigAllDigests,
+export type SigAllApi = {
+	/**
+	 * Computes legacy and current SIG_ALL formats.
+	 *
+	 * @remarks
+	 * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
+	 * @param inputs Proof array.
+	 * @param outputs OutputDataLike array.
+	 * @param quoteId Optional quote ID for melt transactions.
+	 * @returns Object with legacy, and current digests (all hex strings)
+	 */
+	computeDigests: (inputs: Proof[], outputs: OutputDataLike[], quoteId?: string) => SigAllDigests;
 
-	extractSwapPackage: extractSwapSigningPackage,
-	extractMeltPackage: extractMeltSigningPackage,
+	/**
+	 * Extracts a signing package from a SwapPreview for multi-party SIG_ALL coordination.
+	 *
+	 * @remarks
+	 * This creates a minimal, serializable package that can be passed to other signers. Secrets and
+	 * blinding factors are NOT included - only what's needed to reconstruct the exact SIG_ALL message
+	 * and produce signatures.
+	 * @param preview SwapPreview from prepareSwapToSend or prepareSwapToReceive.
+	 * @returns SigAllSigningPackage for distribution to signers.
+	 */
+	extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
 
-	serializePackage: serializeSigningPackage,
-	deserializePackage: deserializeSigningPackage,
+	/**
+	 * Extracts a signing package from a MeltPreview for multi-party SIG_ALL coordination.
+	 *
+	 * @param preview MeltPreview from prepareMelt.
+	 * @returns SigAllSigningPackage for distribution to signers.
+	 */
+	extractMeltPackage: <TQuote extends MeltQuoteBaseResponse>(
+		preview: MeltPreview<TQuote>,
+	) => SigAllSigningPackage;
 
-	signPackage: signSigningPackage,
-	signDigest: signHexDigest,
+	/**
+	 * @remarks
+	 * Produces a deterministic JSON representation, base64url-encodes it and prefixes with sigallA
+	 * for transport.
+	 *
+	 * - Field order is fixed and version field is always included for compatibility.
+	 * - This enables consistent hashing and verification of package integrity.
+	 *
+	 * @param pkg The signing package to serialize.
+	 * @returns JSON string with sorted keys.
+	 */
+	serializePackage: (pkg: SigAllSigningPackage) => string;
 
-	mergeSwapPackage: mergeSignaturesToSwapPreview,
-	mergeMeltPackage: mergeSignaturesToMeltPreview,
-} as const;
+	/**
+	 * @remarks
+	 * Accepts a sigallA-prefixed base64url string and rehydrates it into a SigAllSigningPackage.
+	 */
+	deserializePackage: (
+		input: string,
+		options?: { validateDigest?: boolean },
+	) => SigAllSigningPackage;
+
+	/**
+	 * Signs a SigAllSigningPackage and returns it with signatures attached.
+	 *
+	 * @remarks
+	 * Collects signatures by signing legacy and current SIG_ALL formats for backward compatibility.
+	 * Prefers digest-based signing (safer, avoids secrets) but falls back to message reconstruction
+	 * for legacy packages without digests. Multiple parties can call this sequentially to aggregate
+	 * signatures for multi-party signing.
+	 * @param pkg The signing package (from extract*SigningPackage or another signer)
+	 * @param privkey Private key to sign with.
+	 * @returns Package with signatures appended to witness field.
+	 */
+	signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
+
+	/**
+	 * Signs a hex-encoded digest with a Schnorr key.
+	 */
+	signDigest: (hexDigest: string, privkey: string) => string;
+
+	/**
+	 * Merges signatures from a signing package back into a SwapPreview.
+	 *
+	 * @remarks
+	 * Injects collected signatures into the first proof's witness for mint submission. Call this
+	 * after all parties have signed.
+	 * @param pkg Signing package with collected signatures.
+	 * @param preview Original SwapPreview.
+	 * @returns SwapPreview ready for completeSwap.
+	 */
+	mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
+
+	/**
+	 * Merges signatures from a signing package back into a MeltPreview.
+	 *
+	 * @param pkg Signing package with collected signatures.
+	 * @param preview Original MeltPreview.
+	 * @returns MeltPreview ready for completeMelt.
+	 */
+	mergeMeltPackage: <TQuote extends MeltQuoteBaseResponse>(
+		pkg: SigAllSigningPackage,
+		preview: MeltPreview<TQuote>,
+	) => MeltPreview<TQuote>;
+};
+
+export const SigAll: SigAllApi = {
+	computeDigests,
+	extractSwapPackage,
+	extractMeltPackage,
+	serializePackage,
+	deserializePackage,
+	signPackage,
+	signDigest,
+	mergeSwapPackage,
+	mergeMeltPackage,
+};
