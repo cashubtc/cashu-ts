@@ -8,6 +8,7 @@ import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
  * Private key type - can be hex string or Uint8Array.
  */
 export type PrivKey = Uint8Array | string;
+export type DigestInput = Uint8Array | string; // hex string or bytes
 import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
 
@@ -198,6 +199,38 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
 // ------------------------------
 
 /**
+ * Computes the SHA-256 hash of a UTF-8 message string.
+ *
+ * @param message To hash (UTF-8 encoded before hashing).
+ * @param asHex Optional: True returns a hex-encoded hash string; otherwise returns raw bytes.
+ * @returns SHA-256 hash as raw bytes or hex string, depending on `asHex`.
+ */
+export function computeMessageDigest(message: string): Uint8Array;
+export function computeMessageDigest(message: string, asHex: false): Uint8Array;
+export function computeMessageDigest(message: string, asHex: true): string;
+export function computeMessageDigest(message: string, asHex = false): string | Uint8Array {
+	const hashBytes = sha256(new TextEncoder().encode(message));
+	return asHex ? bytesToHex(hashBytes) : hashBytes;
+}
+
+/**
+ * Signs a message digest using Schnorr.
+ *
+ * @remarks
+ * Signatures are non-deterministic because schnorr.sign() generates a new random auxiliary value
+ * (auxRand) each time it is called.
+ * @param msghash The SHA-256 digest to sign (hex string or Uint8Array).
+ * @param privateKey The private key to sign with (hex string or Uint8Array).
+ * @returns The signature in hex format.
+ */
+export const schnorrSignDigest = (digest: DigestInput, privateKey: PrivKey): string => {
+	const digestBytes = typeof digest === 'string' ? hexToBytes(digest) : digest;
+	const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
+	const sig = schnorr.sign(digestBytes, privKeyBytes);
+	return bytesToHex(sig);
+};
+
+/**
  * Signs a message string using Schnorr.
  *
  * @remarks
@@ -208,10 +241,8 @@ export const deserializeProof = (proof: SerializedProof): RawProof => {
  * @returns The signature in hex format.
  */
 export const schnorrSignMessage = (message: string, privateKey: PrivKey): string => {
-	const msghash = sha256(new TextEncoder().encode(message));
-	const privKeyBytes = typeof privateKey === 'string' ? hexToBytes(privateKey) : privateKey;
-	const sig = schnorr.sign(msghash, privKeyBytes); // auxRand is random by default
-	return bytesToHex(sig);
+	const msghash = computeMessageDigest(message);
+	return schnorrSignDigest(msghash, privateKey);
 };
 
 /**
@@ -234,7 +265,7 @@ export const schnorrVerifyMessage = (
 	throws: boolean = false,
 ): boolean => {
 	try {
-		const msghash = sha256(new TextEncoder().encode(message));
+		const msghash = computeMessageDigest(message);
 		// Use X-only pubkey: strip 02/03 prefix if pubkey is 66 hex chars (33 bytes)
 		const pubkeyX = pubkey.length === 66 ? pubkey.slice(2) : pubkey;
 		return schnorr.verify(hexToBytes(signature), msghash, hexToBytes(pubkeyX));

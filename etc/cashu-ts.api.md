@@ -120,6 +120,15 @@ export type CheckStateResponse = {
 };
 
 // @public
+export function computeMessageDigest(message: string): Uint8Array;
+
+// @public (undocumented)
+export function computeMessageDigest(message: string, asHex: false): Uint8Array;
+
+// @public (undocumented)
+export function computeMessageDigest(message: string, asHex: true): string;
+
+// @public
 export class ConsoleLogger implements Logger {
     constructor(minLevel?: LogLevel);
     // (undocumented)
@@ -259,6 +268,9 @@ export type DeviceStartResponse = {
     interval?: number;
     expires_in?: number;
 };
+
+// @public (undocumented)
+export type DigestInput = Uint8Array | string;
 
 // @public (undocumented)
 export type DLEQ = {
@@ -1520,6 +1532,9 @@ export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_sta
 
 // @public (undocumented)
 export function sanitizeUrl(url: string): string;
+
+// @public
+export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => string;
 
 // @public
 export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
