@@ -13,6 +13,9 @@ import { Bytes, encodeUint8toBase64Url } from '../utils';
 
 const SIGALL_PREFIX = 'sigallA';
 
+/**
+ * @experimental
+ */
 export type SigAllDigests = {
 	legacy: string;
 	current: string;
@@ -23,6 +26,8 @@ export type SigAllDigests = {
  *
  * This is a wallet-led transport format, it contains only the minimum data required to reconstruct
  * the SIG_ALL message.
+ *
+ * @experimental
  */
 export type SigAllSigningPackage = {
 	version: 'cashu-sigall-v1';
@@ -433,6 +438,11 @@ function _mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
 	});
 }
 
+/**
+ * Helpers for SigAll multi-party signing coordination.
+ *
+ * @experimental
+ */
 export const SigAll = {
 	computeDigests: computeSigAllDigests,
 

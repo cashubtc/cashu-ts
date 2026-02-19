@@ -94,3 +94,4 @@ export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
 export type { RequestFn, RequestArgs, RequestOptions } from './transport';
+export { SigAll, type SigAllDigests, type SigAllSigningPackage } from './model/SigAll';
