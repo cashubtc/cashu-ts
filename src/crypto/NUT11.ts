@@ -617,8 +617,8 @@ export function isP2PKSigAll(inputs: Proof[]): boolean {
  * Message aggregation for SIG_ALL (legacy format).
  *
  * @remarks
- * Melt transactions MUST include the quoteId.
- * @deprecated - For compatibility with NutShell (all releases), CDK < v0.14.0.
+ * Melt transactions MUST include the quoteId. For compatibility with NutShell (all releases), CDK <
+ * v0.14.0.
  * @internal
  */
 export function buildLegacyP2PKSigAllMessage(
