@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.0](https://github.com/cashubtc/cashu-ts/compare/v3.5.0...v3.6.0) (2026-02-20)
+
+
+### Features
+
+* **core:** add utility functions schnorrSignDigest, computeMessageDigest ([#515](https://github.com/cashubtc/cashu-ts/issues/515)) ([1b201c8](https://github.com/cashubtc/cashu-ts/commit/1b201c8a996215af3259a9567ef3eb098e50fc7c))
+
 ## [3.5.0](https://github.com/cashubtc/cashu-ts/compare/v3.4.1...v3.5.0) (2026-02-18)
 
 
