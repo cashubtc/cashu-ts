@@ -2,13 +2,11 @@ import type { OutputDataLike } from './OutputData';
 import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 import {
+	computeMessageDigest,
 	buildLegacyP2PKSigAllMessage,
 	buildP2PKSigAllMessage,
-	schnorrSignMessage,
+	schnorrSignDigest,
 } from '../crypto';
-import { schnorr } from '@noble/curves/secp256k1.js';
-import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
-import { sha256 } from '@noble/hashes/sha2.js';
 import { Bytes, encodeUint8toBase64Url } from '../utils';
 
 const SIGALL_PREFIX = 'sigallA';
@@ -55,10 +53,6 @@ export type SigAllSigningPackage = {
 	 */
 	outputs: Array<{ amount: number; blindedMessage: SerializedBlindedMessage }>;
 	/**
-	 * Hex SHA256 digest of the message-to-sign.
-	 */
-	messageDigest?: string;
-	/**
 	 * Per-format digests to support multiple SIG_ALL formats.
 	 */
 	digests?: {
@@ -85,11 +79,9 @@ function computeDigests(
 	const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, outputs, quoteId);
 	const currentMsg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
 
-	const encoder = new TextEncoder();
-
 	return {
-		legacy: bytesToHex(sha256(encoder.encode(legacyMsg))),
-		current: bytesToHex(sha256(encoder.encode(currentMsg))),
+		legacy: computeMessageDigest(legacyMsg, true),
+		current: computeMessageDigest(currentMsg, true),
 	};
 }
 
@@ -102,7 +94,6 @@ function serializePackage(pkg: SigAllSigningPackage): string {
 	ordered.inputs = pkg.inputs;
 	ordered.outputs = pkg.outputs;
 
-	if (pkg.messageDigest) ordered.messageDigest = pkg.messageDigest;
 	if (pkg.digests) ordered.digests = pkg.digests;
 	if (pkg.witness) ordered.witness = pkg.witness;
 
@@ -188,10 +179,13 @@ function deserializePackage(
 			throw new Error(`Output ${i}: blindedMessage invalid`);
 	}
 
-	// Optional digest validation
 	const digests = pkg.digests as Record<string, string> | undefined;
+	if (!digests || typeof digests.current !== 'string' || digests.current.length === 0) {
+		throw new Error('Signing package digests.current is required');
+	}
 
-	if (options?.validateDigest && digests?.current) {
+	// Optional digest validation
+	if (options?.validateDigest) {
 		const proofLike = pkg.inputs.map((i) => ({ ...i, secret: '' })) as Proof[];
 
 		const outputLike = pkg.outputs.map((o) => ({
@@ -217,13 +211,14 @@ function deserializePackage(
 function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningPackage {
 	const newSigs: string[] = [];
 
-	if (pkg.digests) {
-		// Preferred path: sign precomputed digests (secure, no secrets exposed)
-		if (pkg.digests.legacy) newSigs.push(signDigest(pkg.digests.legacy, privkey));
-		if (pkg.digests.current) newSigs.push(signDigest(pkg.digests.current, privkey));
-	} else {
-		// Legacy fallback: reconstruct messages from package.
-		signByReconstruction(pkg, privkey, newSigs);
+	if (!pkg.digests?.current) {
+		throw new Error('digests.current is required to sign package');
+	}
+
+	// Sign precomputed digests
+	newSigs.push(schnorrSignDigest(pkg.digests.current, privkey));
+	if (pkg.digests.legacy) {
+		newSigs.push(schnorrSignDigest(pkg.digests.legacy, privkey));
 	}
 
 	// validate that signing actually produced signatures
@@ -235,35 +230,6 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
 		...pkg,
 		witness: { signatures: [...(pkg.witness?.signatures || []), ...newSigs] },
 	};
-}
-
-function signByReconstruction(pkg: SigAllSigningPackage, privkey: string, newSigs: string[]): void {
-	// Construct minimal output objects compatible with build functions.
-	// The build functions expect { blindedMessage: ... } shape for outputs.
-	const minimalOutputs: Array<{ blindedMessage: SerializedBlindedMessage }> = pkg.outputs.map(
-		(o) => ({
-			blindedMessage: o.blindedMessage,
-		}),
-	);
-
-	// Reconstruct legacy and current SIG_ALL formats. Note: pkg.inputs here is sanitized
-	// (no secrets), so we pass through as-is to the build functions which only
-	// use the public fields (id, amount, C).
-	const proofLike = pkg.inputs as unknown as Proof[];
-	const outputLike = minimalOutputs as unknown as OutputDataLike[];
-
-	const legacyMsg = buildLegacyP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
-	const currentMsg = buildP2PKSigAllMessage(proofLike, outputLike, pkg.quote);
-
-	newSigs.push(schnorrSignMessage(legacyMsg, privkey));
-	newSigs.push(schnorrSignMessage(currentMsg, privkey));
-}
-
-function signDigest(hexDigest: string, privkey: string): string {
-	const digestBytes = hexToBytes(hexDigest);
-	const keyBytes = hexToBytes(privkey);
-	const signature = schnorr.sign(digestBytes, keyBytes);
-	return bytesToHex(signature);
 }
 
 function extractSwapPackage(preview: SwapPreview): SigAllSigningPackage {
@@ -292,7 +258,7 @@ function buildSigningPackage(
 
 	// verify current digest was computed correctly (catches bugs).
 	const msg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
-	const expected = bytesToHex(sha256(new TextEncoder().encode(msg)));
+	const expected = computeMessageDigest(msg, true);
 
 	if (digests.current !== expected) {
 		throw new Error(
@@ -309,7 +275,6 @@ function buildSigningPackage(
 			amount: o.blindedMessage.amount,
 			blindedMessage: o.blindedMessage,
 		})),
-		messageDigest: digests.current,
 		digests,
 	};
 }
@@ -424,9 +389,7 @@ export type SigAllApi = {
 	 *
 	 * @remarks
 	 * Collects signatures by signing legacy and current SIG_ALL formats for backward compatibility.
-	 * Prefers digest-based signing (safer, avoids secrets) but falls back to message reconstruction
-	 * for legacy packages without digests. Multiple parties can call this sequentially to aggregate
-	 * signatures for multi-party signing.
+	 * Multiple parties can call this sequentially to aggregate signatures for multi-party signing.
 	 * @param pkg The signing package (from extract*SigningPackage or another signer)
 	 * @param privkey Private key to sign with.
 	 * @returns Package with signatures appended to witness field.
@@ -470,7 +433,7 @@ export const SigAll: SigAllApi = {
 	serializePackage,
 	deserializePackage,
 	signPackage,
-	signDigest,
+	signDigest: schnorrSignDigest,
 	mergeSwapPackage,
 	mergeMeltPackage,
 };
