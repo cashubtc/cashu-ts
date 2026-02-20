@@ -14,11 +14,11 @@ RATE_LIMIT_PM ?= 200
 # Pin versions
 # ------------------------
 CDK_IMAGE_RC ?= cashubtc/mintd:0.14.3
-CDK_IMAGE ?= cashubtc/mintd:0.15.0
+CDK_IMAGE ?= cashubtc/mintd:0.15.1
 CDK_NAME ?= cashu-dev-cdk
 
 NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
-NUT_IMAGE ?= cashubtc/nutshell:0.19.0
+NUT_IMAGE ?= cashubtc/nutshell:0.19.2
 NUT_NAME ?= cashu-dev-nutshell
 
 # ------------------------

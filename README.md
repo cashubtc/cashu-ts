@@ -71,12 +71,22 @@ package.
 
 ## Contribute
 
-Contributions are very welcome.
+We welcome contributions from anyone — newcomers, experienced developers, and AI-assisted workflows alike.
 
-If you want to contribute, please open an [Issue](https://github.com/cashubtc/cashu-ts/issues) or a [PR](https://github.com/cashubtc/cashu-ts/pulls).
-We are also tracking the status with [projects](https://github.com/cashubtc/cashu-ts/projects?query=is%3Aopen).
-Please refer to [the contributing guide](./docs-src/CONTRIBUTING.md) for more info.
+If you want to contribute:
 
-## Contact & Maintainers
+- Start by reading [COMMUNITY.md](./docs-src/COMMUNITY.md) to understand our contribution philosophy, review expectations, and how to get involved.
+- Open an [Issue](https://github.com/cashubtc/cashu-ts/issues) or a [PR](https://github.com/cashubtc/cashu-ts/pulls).
+- Track progress using our [projects](https://github.com/cashubtc/cashu-ts/projects?query=is%3Aopen).
+- For process details, see [the contributing guide](./docs-src/CONTRIBUTING.md).
 
-Feel free to join the [matrix server](https://matrix.to/#/#dev:matrix.cashu.space) or [telegram channel](https://t.me/CashuBTC)
+---
+
+## Contact & Community
+
+We are building in the open and encourage active participation:
+
+- Join our weekly call — listen, introduce yourself, or ask questions.
+- Participate in our [matrix server](https://matrix.to/#/#dev:matrix.cashu.space) or [telegram channel](https://t.me/CashuBTC) for ongoing discussion and collaboration.
+
+Being part of the conversation is the best way to have impact and become a long-term contributor.
