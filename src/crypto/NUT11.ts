@@ -257,7 +257,7 @@ export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
  * @returns WitnessData object or undefined.
  * @internal
  */
-function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
+export function parseWitnessData(witness: Proof['witness']): WitnessData | undefined {
 	if (!witness) return undefined;
 	let parsed: Partial<HTLCWitness & P2PKWitness>;
 	try {

@@ -7,6 +7,7 @@ import {
 	buildP2PKSigAllMessage,
 	schnorrSignDigest,
 } from '../crypto';
+import { parseWitnessData } from '../crypto/NUT11';
 import { Bytes, encodeUint8toBase64Url } from '../utils';
 
 const SIGALL_PREFIX = 'sigallA';
@@ -276,29 +277,20 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
 		throw new Error('No signatures to merge');
 	}
 
-	return proofs.map((p, idx) => {
-		if (idx !== 0) return p;
+	if (proofs.length === 0) return proofs;
 
-		let witnessObj: Partial<P2PKWitness> = {};
-		if (typeof p.witness === 'string') {
-			try {
-				witnessObj = (JSON.parse(p.witness) as Partial<P2PKWitness>) || {};
-			} catch {
-				witnessObj = {};
-			}
-		} else if (p.witness) {
-			witnessObj = p.witness;
-		}
+	const [first, ...rest] = proofs;
+	const witnessData = parseWitnessData(first.witness);
+	const existingSignatures = witnessData?.signatures ?? [];
+	const updatedFirst: Proof = {
+		...first,
+		witness: {
+			...(witnessData ?? {}),
+			signatures: [...existingSignatures, ...pkg.witness.signatures],
+		} as P2PKWitness,
+	};
 
-		const existingSignatures = Array.isArray(witnessObj.signatures) ? witnessObj.signatures : [];
-		return {
-			...p,
-			witness: {
-				...witnessObj,
-				signatures: [...existingSignatures, ...pkg.witness!.signatures],
-			} as P2PKWitness,
-		};
-	});
+	return [updatedFirst, ...rest];
 }
 
 /**
