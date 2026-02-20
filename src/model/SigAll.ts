@@ -41,11 +41,11 @@ export type SigAllSigningPackage = {
 	 */
 	quote?: string;
 	/**
-	 * Minimal inputs required for signing transport to prevent leaking sensitive data.
+	 * Minimal input data required for signing verification.
 	 */
 	inputs: Array<Pick<Proof, 'secret' | 'C'>>;
 	/**
-	 * Minimal outputs required for signing transport to prevent leaking sensitive data.
+	 * Minimal output data required for signing verification.
 	 */
 	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>;
 	/**
