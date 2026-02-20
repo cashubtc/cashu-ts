@@ -565,14 +565,14 @@ export function assertSigAllInputs(inputs: Proof[]): void {
  *
  * @remarks
  * Melt transactions MUST include the quoteId.
- * @param inputs Array of Proofs.
+ * @param inputs Array of Proofs (only `secret` and `C` fields required).
  * @param outputs Array of OutputDataLike objects (OutputData, Factory etc).
  * @param quoteId Optional. Quote id for Melt transactions.
  * @internal
  */
 export function buildP2PKSigAllMessage(
-	inputs: Proof[],
-	outputs: OutputDataLike[],
+	inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
 	quoteId?: string,
 ): string {
 	const parts: string[] = [];
@@ -617,13 +617,14 @@ export function isP2PKSigAll(inputs: Proof[]): boolean {
  * Message aggregation for SIG_ALL (legacy format).
  *
  * @remarks
- * Melt transactions MUST include the quoteId. For compatibility with NutShell (all releases), CDK <
- * v0.14.0.
+ * Melt transactions MUST include the quoteId.
+ *
+ * For compatibility with NutShell (all releases), CDK <v0.14.0.
  * @internal
  */
 export function buildLegacyP2PKSigAllMessage(
-	inputs: Proof[],
-	outputs: OutputDataLike[],
+	inputs: Array<Pick<Proof, 'secret'>>,
+	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
 	quoteId?: string,
 ): string {
 	const parts: string[] = [];
