@@ -33,7 +33,7 @@ export type SigAllSigningPackage = {
 	 */
 	version: 'cashu-sigall-v1';
 	/**
-	 * Typr of signing package.
+	 * Type of signing package.
 	 */
 	type: 'swap' | 'melt';
 	/**
