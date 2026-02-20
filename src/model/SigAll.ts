@@ -55,7 +55,7 @@ export type SigAllSigningPackage = {
 	/**
 	 * Per-format digests to support multiple SIG_ALL formats.
 	 */
-	digests?: {
+	digests: {
 		/**
 		 * For Nutshell (all releases), CDK < 0.14.0.
 		 */

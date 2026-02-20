@@ -1705,8 +1705,7 @@ export type SigAllSigningPackage = {
         amount: number;
         blindedMessage: SerializedBlindedMessage;
     }>;
-    messageDigest?: string;
-    digests?: {
+    digests: {
         legacy?: string;
         current: string;
     };
