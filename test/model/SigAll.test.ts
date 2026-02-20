@@ -1,18 +1,16 @@
-import { SigAll, SigAllSigningPackage } from '../../src/model/SigAll';
-import type { Proof, P2PKWitness, SerializedBlindedMessage } from '../../src/model/types';
-import type { OutputDataLike } from '../../src/model/OutputData';
 import { test, describe, expect } from 'vitest';
-import { MeltQuoteState } from '../../src/model/types/NUT05';
+import { SigAll, SigAllSigningPackage, MeltQuoteState } from '../../src';
+import type { OutputDataLike, Proof, P2PKWitness, SerializedBlindedMessage } from '../../src';
 
 const dummyProof: Proof = {
 	id: 'testid',
-	amount: 42,
+	amount: 32,
 	secret: 'dummysecret',
 	C: '02' + '1'.repeat(64),
 };
 
 const dummyBlindedMessage: SerializedBlindedMessage = {
-	amount: 42,
+	amount: 32,
 	id: 'bm1',
 	B_: 'dummyB',
 };
@@ -31,7 +29,7 @@ function makeSwapPreview() {
 		inputs: [dummyProof],
 		keepOutputs: [dummyOutput],
 		sendOutputs: [dummyOutput],
-		amount: 42,
+		amount: 32,
 		fees: 0,
 		keysetIdts: [],
 		method: 'swap',
@@ -45,12 +43,12 @@ function makeMeltPreview() {
 		outputData: [dummyOutput],
 		quote: {
 			quote: 'dummyquote',
-			amount: 42,
+			amount: 32,
 			unit: 'sat',
 			state: MeltQuoteState.PENDING,
 			expiry: Date.now() + 10000,
 		},
-		amount: 42,
+		amount: 32,
 		fees: 0,
 		keysetIdts: [],
 		method: 'melt',
@@ -99,11 +97,6 @@ describe('SigAll — extractSwapPackage', () => {
 		expect(pkg.digests.legacy!.length).toBe(64);
 	});
 
-	test('sanitizes inputs — no secret field', () => {
-		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-		expect((pkg.inputs[0] as Record<string, unknown>).secret).toBeUndefined();
-	});
-
 	test('merges keepOutputs and sendOutputs in order', () => {
 		const preview = makeSwapPreview();
 		const pkg = SigAll.extractSwapPackage(preview);
@@ -139,11 +132,6 @@ describe('SigAll — extractMeltPackage', () => {
 		const pkg = SigAll.extractMeltPackage(makeMeltPreview());
 		expect(pkg.quote).toBe('dummyquote');
 	});
-
-	test('sanitizes inputs — no secret field', () => {
-		const pkg = SigAll.extractMeltPackage(makeMeltPreview());
-		expect((pkg.inputs[0] as Record<string, unknown>).secret).toBeUndefined();
-	});
 });
 
 describe('SigAll — serializePackage / deserializePackage', () => {
@@ -151,8 +139,8 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		const pkg: SigAllSigningPackage = {
 			version: 'cashu-sigall-v1',
 			type: 'swap',
-			inputs: [{ id: 'testid', amount: 42, C: '02' + '1'.repeat(64) }],
-			outputs: [{ amount: 42, blindedMessage: dummyBlindedMessage }],
+			inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+			outputs: [{ blindedMessage: dummyBlindedMessage }],
 			digests: SigAll.computeDigests([dummyProof], [dummyOutput]),
 			witness: { signatures: ['sig1'] },
 		};
@@ -241,32 +229,18 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		).toThrow('inputs must be an array');
 	});
 
-	test('throws on invalid input shape — missing id', () => {
+	test('throws on invalid input shape — missing secret', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
 					version: 'cashu-sigall-v1',
 					type: 'swap',
-					inputs: [{ amount: 1, C: 'abc' }],
+					inputs: [{ C: 'abc' }],
 					outputs: [],
 					digests: { current: 'a'.repeat(64) },
 				}),
 			),
-		).toThrow('id must be string');
-	});
-
-	test('throws on invalid input shape — missing amount', () => {
-		expect(() =>
-			SigAll.deserializePackage(
-				encodeRaw({
-					version: 'cashu-sigall-v1',
-					type: 'swap',
-					inputs: [{ id: 'x', C: 'abc' }],
-					outputs: [],
-					digests: { current: 'a'.repeat(64) },
-				}),
-			),
-		).toThrow('amount must be number');
+		).toThrow('secret must be string');
 	});
 
 	test('throws on invalid input shape — missing C', () => {
@@ -275,7 +249,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 				encodeRaw({
 					version: 'cashu-sigall-v1',
 					type: 'swap',
-					inputs: [{ id: 'x', amount: 1 }],
+					inputs: [{ secret: 'x' }],
 					outputs: [],
 					digests: { current: 'a'.repeat(64) },
 				}),
@@ -295,6 +269,20 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 				}),
 			),
 		).toThrow('outputs must be an array');
+	});
+
+	test('throws on invalid output entry', () => {
+		expect(() =>
+			SigAll.deserializePackage(
+				encodeRaw({
+					version: 'cashu-sigall-v1',
+					type: 'swap',
+					inputs: [],
+					outputs: [null],
+					digests: { current: 'a'.repeat(64) },
+				}),
+			),
+		).toThrow('Invalid output at index 0');
 	});
 
 	test('throws on invalid output shape — missing amount', () => {
@@ -318,7 +306,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 					version: 'cashu-sigall-v1',
 					type: 'swap',
 					inputs: [],
-					outputs: [{ amount: 1 }],
+					outputs: [{ blindedMessage: { amount: 1 } }],
 					digests: { current: 'a'.repeat(64) },
 				}),
 			),
@@ -353,14 +341,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 	});
 
 	test('digest validation passes on correct digest', () => {
-		// Use a proof with no secret — the build functions only use id/amount/C,
-		// and deserializePackage reconstructs with secret: '', so they must match.
-		const bareProof: Proof = { id: 'testid', amount: 42, secret: '', C: '02' + '1'.repeat(64) };
-		const preview = {
-			...makeSwapPreview(),
-			inputs: [bareProof],
-		};
-		const pkg = SigAll.extractSwapPackage(preview);
+		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
 		const encoded = SigAll.serializePackage(pkg);
 		expect(() => SigAll.deserializePackage(encoded, { validateDigest: true })).not.toThrow();
 	});

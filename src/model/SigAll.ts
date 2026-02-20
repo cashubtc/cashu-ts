@@ -1,5 +1,5 @@
 import type { OutputDataLike } from './OutputData';
-import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
+import type { P2PKWitness, Proof, MeltQuoteBaseResponse } from './types';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 import {
 	computeMessageDigest,
@@ -43,15 +43,11 @@ export type SigAllSigningPackage = {
 	/**
 	 * Minimal inputs required for signing transport to prevent leaking sensitive data.
 	 */
-	inputs: Array<{
-		id: string;
-		amount: number;
-		C: string;
-	}>;
+	inputs: Array<Pick<Proof, 'secret' | 'C'>>;
 	/**
 	 * Minimal outputs required for signing transport to prevent leaking sensitive data.
 	 */
-	outputs: Array<{ amount: number; blindedMessage: SerializedBlindedMessage }>;
+	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>;
 	/**
 	 * Per-format digests to support multiple SIG_ALL formats.
 	 */
@@ -72,8 +68,8 @@ export type SigAllSigningPackage = {
 };
 
 function computeDigests(
-	inputs: Proof[],
-	outputs: OutputDataLike[],
+	inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
 	quoteId?: string,
 ): SigAllDigests {
 	const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, outputs, quoteId);
@@ -157,9 +153,7 @@ function deserializePackage(
 
 		if (!inp || typeof inp !== 'object') throw new Error(`Invalid input at index ${i}`);
 
-		if (typeof inp.id !== 'string') throw new Error(`Input ${i}: id must be string`);
-
-		if (typeof inp.amount !== 'number') throw new Error(`Input ${i}: amount must be number`);
+		if (typeof inp.secret !== 'string') throw new Error(`Input ${i}: secret must be string`);
 
 		if (typeof inp.C !== 'string') throw new Error(`Input ${i}: C must be string`);
 	}
@@ -169,13 +163,17 @@ function deserializePackage(
 	}
 
 	for (let i = 0; i < pkg.outputs.length; i++) {
-		const out = pkg.outputs[i] as Record<string, unknown>;
+		const output = pkg.outputs[i] as Record<string, unknown>;
 
-		if (!out || typeof out !== 'object') throw new Error(`Invalid output at index ${i}`);
+		if (!output || typeof output !== 'object') throw new Error(`Invalid output at index ${i}`);
+
+		const out = output.blindedMessage as Record<string, unknown>;
+
+		if (!out || typeof out !== 'object') throw new Error(`Output ${i}: blindedMessage invalid`);
 
 		if (typeof out.amount !== 'number') throw new Error(`Output ${i}: amount must be number`);
 
-		if (!out.blindedMessage || typeof out.blindedMessage !== 'object')
+		if (!out.B_ || typeof out.B_ !== 'string')
 			throw new Error(`Output ${i}: blindedMessage invalid`);
 	}
 
@@ -186,20 +184,7 @@ function deserializePackage(
 
 	// Optional digest validation
 	if (options?.validateDigest) {
-		const proofLike = pkg.inputs.map((i) => ({ ...i, secret: '' })) as Proof[];
-
-		const outputLike = pkg.outputs.map((o) => ({
-			amount: o.amount,
-			blindedMessage: o.blindedMessage,
-			blindingFactor: 0n,
-			secret: new Uint8Array(),
-			toProof: () => {
-				throw new Error('Not a real OutputDataLike');
-			},
-		})) as OutputDataLike[];
-
-		const recomputed = computeDigests(proofLike, outputLike, pkg.quote);
-
+		const recomputed = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
 		if (recomputed.current !== digests.current) {
 			throw new Error('Digest validation failed');
 		}
@@ -250,9 +235,6 @@ function buildSigningPackage(
 	outputs: OutputDataLike[],
 	quoteId?: string,
 ): SigAllSigningPackage {
-	// sanitize inputs - do NOT include secrets or other private fields.
-	const sanitizedInputs = inputs.map((p) => ({ id: p.id, amount: p.amount, C: p.C }));
-
 	// compute legacy and current SIG_ALL digests for backward compatibility
 	const digests = computeDigests(inputs, outputs, quoteId);
 
@@ -270,11 +252,8 @@ function buildSigningPackage(
 		version: 'cashu-sigall-v1',
 		type,
 		...(quoteId ? { quote: quoteId } : {}),
-		inputs: sanitizedInputs,
-		outputs: outputs.map((o) => ({
-			amount: o.blindedMessage.amount,
-			blindedMessage: o.blindedMessage,
-		})),
+		inputs: inputs.map((p) => ({ secret: p.secret, C: p.C })),
+		outputs: outputs.map((o) => ({ blindedMessage: o.blindedMessage })),
 		digests,
 	};
 }
@@ -338,7 +317,11 @@ export type SigAllApi = {
 	 * @param quoteId Optional quote ID for melt transactions.
 	 * @returns Object with legacy, and current digests (all hex strings)
 	 */
-	computeDigests: (inputs: Proof[], outputs: OutputDataLike[], quoteId?: string) => SigAllDigests;
+	computeDigests: (
+		inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+		outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+		quoteId?: string,
+	) => SigAllDigests;
 
 	/**
 	 * Extracts a signing package from a SwapPreview for multi-party SIG_ALL coordination.
