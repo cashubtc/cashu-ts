@@ -10,6 +10,9 @@ import {
 import { parseWitnessData } from '../crypto/NUT11';
 import { Bytes, encodeUint8toBase64Url } from '../utils';
 
+/**
+ * @experimental
+ */
 const SIGALL_PREFIX = 'sigallA';
 
 /**
@@ -308,6 +311,7 @@ export type SigAllApi = {
 	 * @param outputs OutputDataLike array.
 	 * @param quoteId Optional quote ID for melt transactions.
 	 * @returns Object with legacy, and current digests (all hex strings)
+	 * @experimental
 	 */
 	computeDigests: (
 		inputs: Array<Pick<Proof, 'secret' | 'C'>>,
@@ -324,6 +328,7 @@ export type SigAllApi = {
 	 * and produce signatures.
 	 * @param preview SwapPreview from prepareSwapToSend or prepareSwapToReceive.
 	 * @returns SigAllSigningPackage for distribution to signers.
+	 * @experimental
 	 */
 	extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
 
@@ -332,6 +337,7 @@ export type SigAllApi = {
 	 *
 	 * @param preview MeltPreview from prepareMelt.
 	 * @returns SigAllSigningPackage for distribution to signers.
+	 * @experimental
 	 */
 	extractMeltPackage: <TQuote extends MeltQuoteBaseResponse>(
 		preview: MeltPreview<TQuote>,
@@ -347,12 +353,14 @@ export type SigAllApi = {
 	 *
 	 * @param pkg The signing package to serialize.
 	 * @returns JSON string with sorted keys.
+	 * @experimental
 	 */
 	serializePackage: (pkg: SigAllSigningPackage) => string;
 
 	/**
 	 * @remarks
 	 * Accepts a sigallA-prefixed base64url string and rehydrates it into a SigAllSigningPackage.
+	 * @experimental
 	 */
 	deserializePackage: (
 		input: string,
@@ -368,6 +376,7 @@ export type SigAllApi = {
 	 * @param pkg The signing package (from extract*SigningPackage or another signer)
 	 * @param privkey Private key to sign with.
 	 * @returns Package with signatures appended to witness field.
+	 * @experimental
 	 */
 	signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
 
@@ -385,6 +394,7 @@ export type SigAllApi = {
 	 * @param pkg Signing package with collected signatures.
 	 * @param preview Original SwapPreview.
 	 * @returns SwapPreview ready for completeSwap.
+	 * @experimental
 	 */
 	mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
 
@@ -394,6 +404,7 @@ export type SigAllApi = {
 	 * @param pkg Signing package with collected signatures.
 	 * @param preview Original MeltPreview.
 	 * @returns MeltPreview ready for completeMelt.
+	 * @experimental
 	 */
 	mergeMeltPackage: <TQuote extends MeltQuoteBaseResponse>(
 		pkg: SigAllSigningPackage,
@@ -401,6 +412,9 @@ export type SigAllApi = {
 	) => MeltPreview<TQuote>;
 };
 
+/**
+ * @experimental
+ */
 export const SigAll: SigAllApi = {
 	computeDigests,
 	extractSwapPackage,
