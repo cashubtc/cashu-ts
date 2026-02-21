@@ -7,6 +7,7 @@ export * from './NUT04';
 export * from './NUT05';
 export type * from './NUT06';
 export * from './NUT07';
+export type * from './NUT19';
 export type * from './NUT23';
 export type * from './NUT25';
 export type * from './proof';

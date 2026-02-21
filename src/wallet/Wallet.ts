@@ -369,7 +369,13 @@ class Wallet {
 		}
 
 		// Go Mintinfo?
-		this.getMintInfo();
+		const mintInfo = this.getMintInfo();
+
+		// Set up NUT-19 cache retry if supported
+		const nut19 = mintInfo.isSupported(19);
+		if (nut19.supported && nut19.params) {
+			this.mint.setNut19Params(nut19.params);
+		}
 	}
 
 	// -----------------------------------------------------------------
