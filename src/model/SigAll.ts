@@ -34,7 +34,7 @@ export type SigAllSigningPackage = {
 	/**
 	 * Signing package version.
 	 */
-	version: 'cashu-sigall-v1';
+	version: 'sigallA';
 	/**
 	 * Type of signing package.
 	 */
@@ -139,7 +139,7 @@ function deserializePackage(
 	const pkg = data as SigAllSigningPackage;
 
 	const version = pkg.version as string;
-	if (version !== 'cashu-sigall-v1') {
+	if (version !== SIGALL_PREFIX) {
 		throw new Error(`Invalid signing package version: ${version}`);
 	}
 
@@ -260,7 +260,7 @@ function buildSigningPackage(
 	}
 
 	return {
-		version: 'cashu-sigall-v1',
+		version: SIGALL_PREFIX,
 		type,
 		...(quoteId ? { quote: quoteId } : {}),
 		inputs: inputs.map((p) => ({ secret: p.secret, C: p.C })),

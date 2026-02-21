@@ -1693,7 +1693,7 @@ export type SigAllDigests = {
 
 // @public
 export type SigAllSigningPackage = {
-    version: 'cashu-sigall-v1';
+    version: 'sigallA';
     type: 'swap' | 'melt';
     quote?: string;
     inputs: Array<Pick<Proof, 'secret' | 'C'>>;

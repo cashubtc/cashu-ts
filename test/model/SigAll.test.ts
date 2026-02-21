@@ -88,7 +88,7 @@ describe('SigAll — computeDigests', () => {
 describe('SigAll — extractSwapPackage', () => {
 	test('produces valid package shape', () => {
 		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
-		expect(pkg.version).toBe('cashu-sigall-v1');
+		expect(pkg.version).toBe('sigallA');
 		expect(pkg.type).toBe('swap');
 		expect(pkg.quote).toBeUndefined();
 		expect(pkg.inputs.length).toBe(1);
@@ -120,7 +120,7 @@ describe('SigAll — extractSwapPackage', () => {
 describe('SigAll — extractMeltPackage', () => {
 	test('produces valid package shape', () => {
 		const pkg = SigAll.extractMeltPackage(makeMeltPreview());
-		expect(pkg.version).toBe('cashu-sigall-v1');
+		expect(pkg.version).toBe('sigallA');
 		expect(pkg.type).toBe('melt');
 		expect(pkg.quote).toBe('dummyquote');
 		expect(pkg.inputs.length).toBe(1);
@@ -137,7 +137,7 @@ describe('SigAll — extractMeltPackage', () => {
 describe('SigAll — serializePackage / deserializePackage', () => {
 	test('round-trip preserves all fields', () => {
 		const pkg: SigAllSigningPackage = {
-			version: 'cashu-sigall-v1',
+			version: 'sigallA',
 			type: 'swap',
 			inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
 			outputs: [dummyBlindedMessage],
@@ -205,7 +205,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'unknown',
 					inputs: [],
 					outputs: [],
@@ -219,7 +219,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: 'notanarray',
 					outputs: [],
@@ -233,7 +233,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [{ C: 'abc' }],
 					outputs: [],
@@ -247,7 +247,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [{ secret: 'x' }],
 					outputs: [],
@@ -261,7 +261,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: 'notanarray',
@@ -275,7 +275,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: [null],
@@ -289,7 +289,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: [{ B_: 'x', id: 'id1' }],
@@ -303,7 +303,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: [{ amount: 1, id: 'id1' }],
@@ -317,7 +317,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: [{ amount: 1, B_: 'x' }],
@@ -331,7 +331,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: [],
@@ -344,7 +344,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
-					version: 'cashu-sigall-v1',
+					version: 'sigallA',
 					type: 'swap',
 					inputs: [],
 					outputs: [],
