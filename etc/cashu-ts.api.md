@@ -1668,6 +1668,46 @@ export interface SharedOutputTypeProps {
 }
 
 // @public (undocumented)
+export const SigAll: SigAllApi;
+
+// @public
+export type SigAllApi = {
+    computeDigests: (inputs: Array<Pick<Proof, 'secret' | 'C'>>, outputs: SerializedBlindedMessage[], quoteId?: string) => SigAllDigests;
+    extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
+    extractMeltPackage: <TQuote extends MeltQuoteBaseResponse>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
+    serializePackage: (pkg: SigAllSigningPackage) => string;
+    deserializePackage: (input: string, options?: {
+        validateDigest?: boolean;
+    }) => SigAllSigningPackage;
+    signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
+    signDigest: (hexDigest: string, privkey: string) => string;
+    mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
+    mergeMeltPackage: <TQuote extends MeltQuoteBaseResponse>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
+};
+
+// @public (undocumented)
+export type SigAllDigests = {
+    legacy: string;
+    current: string;
+};
+
+// @public
+export type SigAllSigningPackage = {
+    version: 'sigallA';
+    type: 'swap' | 'melt';
+    quote?: string;
+    inputs: Array<Pick<Proof, 'secret' | 'C'>>;
+    outputs: SerializedBlindedMessage[];
+    digests: {
+        legacy?: string;
+        current: string;
+    };
+    witness?: {
+        signatures: string[];
+    };
+};
+
+// @public (undocumented)
 export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
 
 // @public (undocumented)
