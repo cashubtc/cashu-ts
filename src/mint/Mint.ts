@@ -51,6 +51,7 @@ import {
 	type MintQuoteBolt12Request,
 	type SwapRequest,
 } from '../model/types';
+import { type BatchMintRequest } from '../model/types/NUTXX';
 
 /**
  * Class represents Cashu Mint API.
@@ -269,6 +270,33 @@ class Mint {
 	}
 
 	/**
+	 * Mints new tokens by requesting blind signatures on the provided outputs. Mints multiple quotes
+	 * at once.
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @param customRequest Optional override for the request function.
+	 * @returns Serialized blinded signatures.
+	 */
+	async mintBolt11Batch(
+		mintPayload: BatchMintRequest,
+		customRequest?: RequestFn,
+	): Promise<MintResponse> {
+		const data = await this.requestWithAuth<MintResponse>(
+			'POST',
+			'/v1/mint/bolt11/batch',
+			{ requestBody: mintPayload },
+			customRequest,
+		);
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
+			throw new Error('Invalid response from mint');
+		}
+
+		return data;
+	}
+
+	/**
 	 * Mints new tokens using a BOLT12 quote by requesting blind signatures on the provided outputs.
 	 *
 	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
@@ -285,6 +313,33 @@ class Mint {
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
 			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt12' });
+			throw new Error('Invalid response from mint');
+		}
+
+		return data;
+	}
+
+	/**
+	 * Mints new tokens using multiple BOLT12 quotes by requesting blind signatures on the provided
+	 * outputs.
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @param customRequest Optional override for the request function.
+	 * @returns Serialized blinded signatures.
+	 */
+	async mintBolt12Batch(
+		mintPayload: BatchMintRequest,
+		customRequest?: RequestFn,
+	): Promise<MintResponse> {
+		const data = await this.requestWithAuth<MintResponse>(
+			'POST',
+			'/v1/mint/bolt12/batch',
+			{ requestBody: mintPayload },
+			customRequest,
+		);
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
 			throw new Error('Invalid response from mint');
 		}
 
