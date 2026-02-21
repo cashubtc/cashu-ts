@@ -66,7 +66,7 @@ function encodeRaw(obj: unknown): string {
 
 describe('SigAll — computeDigests', () => {
 	test('produces hex strings of correct length', () => {
-		const digests = SigAll.computeDigests([dummyProof], [dummyOutput], 'dummyquote');
+		const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'dummyquote');
 		expect(typeof digests.legacy).toBe('string');
 		expect(typeof digests.current).toBe('string');
 		expect(digests.legacy.length).toBe(64);
@@ -74,13 +74,13 @@ describe('SigAll — computeDigests', () => {
 	});
 
 	test('legacy and current digests differ', () => {
-		const digests = SigAll.computeDigests([dummyProof], [dummyOutput]);
+		const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
 		expect(digests.legacy).not.toBe(digests.current);
 	});
 
 	test('quoteId changes the digests', () => {
-		const without = SigAll.computeDigests([dummyProof], [dummyOutput]);
-		const with_ = SigAll.computeDigests([dummyProof], [dummyOutput], 'somequote');
+		const without = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
+		const with_ = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'somequote');
 		expect(without.current).not.toBe(with_.current);
 	});
 });
@@ -140,8 +140,8 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 			version: 'cashu-sigall-v1',
 			type: 'swap',
 			inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
-			outputs: [{ blindedMessage: dummyBlindedMessage }],
-			digests: SigAll.computeDigests([dummyProof], [dummyOutput]),
+			outputs: [dummyBlindedMessage],
+			digests: SigAll.computeDigests([dummyProof], [dummyBlindedMessage]),
 			witness: { signatures: ['sig1'] },
 		};
 		const encoded = SigAll.serializePackage(pkg);
@@ -292,25 +292,39 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 					version: 'cashu-sigall-v1',
 					type: 'swap',
 					inputs: [],
-					outputs: [{ blindedMessage: {} }],
+					outputs: [{ B_: 'x', id: 'id1' }],
 					digests: { current: 'a'.repeat(64) },
 				}),
 			),
 		).toThrow('amount must be number');
 	});
 
-	test('throws on invalid output shape — missing blindedMessage', () => {
+	test('throws on invalid output shape — missing B_', () => {
 		expect(() =>
 			SigAll.deserializePackage(
 				encodeRaw({
 					version: 'cashu-sigall-v1',
 					type: 'swap',
 					inputs: [],
-					outputs: [{ blindedMessage: { amount: 1 } }],
+					outputs: [{ amount: 1, id: 'id1' }],
 					digests: { current: 'a'.repeat(64) },
 				}),
 			),
-		).toThrow('blindedMessage invalid');
+		).toThrow('B_ invalid');
+	});
+
+	test('throws on invalid output shape — missing id', () => {
+		expect(() =>
+			SigAll.deserializePackage(
+				encodeRaw({
+					version: 'cashu-sigall-v1',
+					type: 'swap',
+					inputs: [],
+					outputs: [{ amount: 1, B_: 'x' }],
+					digests: { current: 'a'.repeat(64) },
+				}),
+			),
+		).toThrow('id invalid');
 	});
 
 	test('throws if digests.current is missing', () => {
@@ -406,7 +420,7 @@ describe('SigAll — signPackage', () => {
 
 describe('SigAll — signDigest', () => {
 	test('produces a hex string signature', () => {
-		const digests = SigAll.computeDigests([dummyProof], [dummyOutput]);
+		const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage]);
 		const sig = SigAll.signDigest(digests.current, dummyPrivkey);
 		expect(typeof sig).toBe('string');
 		expect(sig.length).toBeGreaterThan(0);

@@ -1,5 +1,4 @@
-import type { OutputDataLike } from './OutputData';
-import type { P2PKWitness, Proof, MeltQuoteBaseResponse } from './types';
+import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 import {
 	computeMessageDigest,
@@ -49,9 +48,9 @@ export type SigAllSigningPackage = {
 	 */
 	inputs: Array<Pick<Proof, 'secret' | 'C'>>;
 	/**
-	 * Minimal output data required for signing verification.
+	 * NUT-00 `BlindedMessages` for signing verification.
 	 */
-	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>;
+	outputs: SerializedBlindedMessage[];
 	/**
 	 * Per-format digests to support multiple SIG_ALL formats.
 	 */
@@ -73,11 +72,12 @@ export type SigAllSigningPackage = {
 
 function computeDigests(
 	inputs: Array<Pick<Proof, 'secret' | 'C'>>,
-	outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+	outputs: SerializedBlindedMessage[],
 	quoteId?: string,
 ): SigAllDigests {
-	const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, outputs, quoteId);
-	const currentMsg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
+	const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
+	const legacyMsg = buildLegacyP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
+	const currentMsg = buildP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
 
 	return {
 		legacy: computeMessageDigest(legacyMsg, true),
@@ -171,14 +171,11 @@ function deserializePackage(
 
 		if (!output || typeof output !== 'object') throw new Error(`Invalid output at index ${i}`);
 
-		const out = output.blindedMessage as Record<string, unknown>;
+		if (typeof output.amount !== 'number') throw new Error(`Output ${i}: amount must be number`);
 
-		if (!out || typeof out !== 'object') throw new Error(`Output ${i}: blindedMessage invalid`);
+		if (!output.B_ || typeof output.B_ !== 'string') throw new Error(`Output ${i}: B_ invalid`);
 
-		if (typeof out.amount !== 'number') throw new Error(`Output ${i}: amount must be number`);
-
-		if (!out.B_ || typeof out.B_ !== 'string')
-			throw new Error(`Output ${i}: blindedMessage invalid`);
+		if (!output.id || typeof output.id !== 'string') throw new Error(`Output ${i}: id invalid`);
 	}
 
 	const digests = pkg.digests as Record<string, string> | undefined;
@@ -224,26 +221,36 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
 function extractSwapPackage(preview: SwapPreview): SigAllSigningPackage {
 	// Merge keep + send outputs in order (both needed for complete transaction message)
 	const allOutputs = [...(preview.keepOutputs || []), ...(preview.sendOutputs || [])];
-	return buildSigningPackage('swap', preview.inputs, allOutputs);
+	return buildSigningPackage(
+		'swap',
+		preview.inputs,
+		allOutputs.map((output) => output.blindedMessage),
+	);
 }
 
 function extractMeltPackage<TQuote extends MeltQuoteBaseResponse>(
 	preview: MeltPreview<TQuote>,
 ): SigAllSigningPackage {
-	return buildSigningPackage('melt', preview.inputs, preview.outputData, preview.quote.quote);
+	return buildSigningPackage(
+		'melt',
+		preview.inputs,
+		preview.outputData.map((output) => output.blindedMessage),
+		preview.quote.quote,
+	);
 }
 
 function buildSigningPackage(
 	type: 'swap' | 'melt',
-	inputs: Proof[],
-	outputs: OutputDataLike[],
+	inputs: Array<Pick<Proof, 'secret' | 'C'>>,
+	outputs: SerializedBlindedMessage[],
 	quoteId?: string,
 ): SigAllSigningPackage {
 	// compute legacy and current SIG_ALL digests for backward compatibility
 	const digests = computeDigests(inputs, outputs, quoteId);
 
 	// verify current digest was computed correctly (catches bugs).
-	const msg = buildP2PKSigAllMessage(inputs, outputs, quoteId);
+	const sigAllOutputs = outputs.map((blindedMessage) => ({ blindedMessage }));
+	const msg = buildP2PKSigAllMessage(inputs, sigAllOutputs, quoteId);
 	const expected = computeMessageDigest(msg, true);
 
 	if (digests.current !== expected) {
@@ -257,7 +264,7 @@ function buildSigningPackage(
 		type,
 		...(quoteId ? { quote: quoteId } : {}),
 		inputs: inputs.map((p) => ({ secret: p.secret, C: p.C })),
-		outputs: outputs.map((o) => ({ blindedMessage: o.blindedMessage })),
+		outputs,
 		digests,
 	};
 }
@@ -308,14 +315,14 @@ export type SigAllApi = {
 	 * @remarks
 	 * Returns hex-encoded SHA256 digests for each format to support multi-format signing.
 	 * @param inputs Proof array.
-	 * @param outputs OutputDataLike array.
+	 * @param outputs Array of SerializedBlindMessage (NUT-00 `BlindMessages`).
 	 * @param quoteId Optional quote ID for melt transactions.
 	 * @returns Object with legacy, and current digests (all hex strings)
 	 * @experimental
 	 */
 	computeDigests: (
 		inputs: Array<Pick<Proof, 'secret' | 'C'>>,
-		outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>,
+		outputs: SerializedBlindedMessage[],
 		quoteId?: string,
 	) => SigAllDigests;
 

@@ -1672,7 +1672,7 @@ export const SigAll: SigAllApi;
 
 // @public
 export type SigAllApi = {
-    computeDigests: (inputs: Array<Pick<Proof, 'secret' | 'C'>>, outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>, quoteId?: string) => SigAllDigests;
+    computeDigests: (inputs: Array<Pick<Proof, 'secret' | 'C'>>, outputs: SerializedBlindedMessage[], quoteId?: string) => SigAllDigests;
     extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
     extractMeltPackage: <TQuote extends MeltQuoteBaseResponse>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
     serializePackage: (pkg: SigAllSigningPackage) => string;
@@ -1697,7 +1697,7 @@ export type SigAllSigningPackage = {
     type: 'swap' | 'melt';
     quote?: string;
     inputs: Array<Pick<Proof, 'secret' | 'C'>>;
-    outputs: Array<Pick<OutputDataLike, 'blindedMessage'>>;
+    outputs: SerializedBlindedMessage[];
     digests: {
         legacy?: string;
         current: string;
