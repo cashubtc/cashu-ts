@@ -1897,19 +1897,19 @@ export class Wallet {
     completeMelt<TQuote extends MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
-    createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
+    createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
     // @deprecated (undocumented)
-    createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<MeltQuoteBolt12Response>;
+    createMeltQuote(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
     // @deprecated (undocumented)
-    createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response>;
-    createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteBolt11Response>;
+    createMintQuote(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt11(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(pubkey: string, options?: {
-        amount?: number;
+        amount?: AmountLike;
         description?: string;
     }): Promise<MintQuoteBolt12Response>;
-    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteBolt11Response>;
+    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
@@ -1933,27 +1933,27 @@ export class Wallet {
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
     readonly mint: Mint;
     // @deprecated (undocumented)
-    mintProofs(amount: number, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsBolt11(amount: number, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsBolt12(amount: number, quote: MintQuoteBolt12Response, privkey: string, config?: {
+    mintProofs(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     prepareMelt<TQuote extends MeltQuoteBaseResponse>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
-    prepareSwapToSend(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
+    prepareSwapToSend(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
-    selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
-    send(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
-    sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
+    selectProofsToSend(proofs: Proof[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
+    send(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
+    sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: Proof[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
     // @deprecated (undocumented)
-    readonly swap: (amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
+    readonly swap: (amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;

@@ -71,9 +71,9 @@ import type {
 
 // model helpers
 import { OutputData, type OutputDataLike } from '../model/OutputData';
+import { Amount, type AmountLike } from '../model/Amount';
 
 import {
-	validateAmount,
 	getDecodedToken,
 	getKeepAmounts,
 	hasValidDleq,
@@ -279,15 +279,17 @@ class Wallet {
 	}
 
 	/**
-	 * Asserts amount is a positive, safe integer.
+	 * Normalizes AmountLike to a safe JS number.
 	 *
-	 * @param amount To check.
+	 * @param amount To parse.
 	 * @param op Caller method name (or other identifier) for debug.
-	 * @throws If not.
+	 * @throws If not a positive safe integer.
 	 */
-	private assertAmount(amount: unknown, op: string): asserts amount is number {
+	private normalizeAmount(amount: AmountLike, op: string): number {
 		try {
-			validateAmount(amount, false);
+			const parsed = Amount.from(amount);
+			this.failIf(parsed.isZero(), `Amount must be positive: ${parsed.toString()}`, { op, amount });
+			return parsed.toNumber();
 		} catch (e) {
 			this.fail((e as Error).message, { op, amount });
 		}
@@ -914,9 +916,7 @@ class Wallet {
 		// Extract token proofs
 		let proofs: Proof[] = [];
 		({ proofs } = decodedToken);
-		const totalAmount = sumProofs(proofs);
-		this.failIf(totalAmount === 0, 'Token contains no proofs', { proofs });
-		this.assertAmount(totalAmount, 'prepareSwapToReceive');
+		const totalAmount = this.normalizeAmount(sumProofs(proofs), 'prepareSwapToReceive');
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -975,16 +975,16 @@ class Wallet {
 	 * @returns SendResponse with keep/send proofs.
 	 * @throws Throws if the send cannot be completed offline.
 	 */
-	sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
-		this.assertAmount(amount, 'sendOffline');
+	sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
+		const sendAmount = this.normalizeAmount(amount, 'sendOffline');
 		const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
-		this.failIf(sumProofs(proofs) < amount, 'Not enough funds available to send');
+		this.failIf(sumProofs(proofs) < sendAmount, 'Not enough funds available to send');
 
-		const { keep, send } = this.selectProofsToSend(proofs, amount, includeFees, exactMatch);
+		const { keep, send } = this.selectProofsToSend(proofs, sendAmount, includeFees, exactMatch);
 		// Ensure witnesses are serialized, strip DLEQ if not required
 		const sendPrepared = this._prepareInputsForMint(send, requireDleq);
 		return { keep, send: sendPrepared };
@@ -1017,12 +1017,12 @@ class Wallet {
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
 	async send(
-		amount: number,
+		amount: AmountLike,
 		proofs: Proof[],
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
-		this.assertAmount(amount, 'send');
+		const sendAmount = this.normalizeAmount(amount, 'send');
 		const { keysetId, includeFees = false } = config || {};
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
@@ -1059,14 +1059,14 @@ class Wallet {
 			}
 
 			// Proceed with offline exact-match attempt
-			const { keep, send } = this.sendOffline(amount, proofs, {
+			const { keep, send } = this.sendOffline(sendAmount, proofs, {
 				includeFees,
 				exactMatch: true,
 				requireDleq: false, // safety
 			});
 			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
 
-			if (sumProofs(send) === amount + expectedFee) {
+			if (sumProofs(send) === sendAmount + expectedFee) {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
 			}
@@ -1076,7 +1076,7 @@ class Wallet {
 		}
 
 		// Prepare and complete the send
-		const txn = await this.prepareSwapToSend(amount, proofs, config, outputConfig);
+		const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
 		return await this.completeSwap(txn, config?.privkey);
 	}
 
@@ -1104,11 +1104,12 @@ class Wallet {
 	 * @throws Throws if the send cannot be completed offline or if funds are insufficient.
 	 */
 	async prepareSwapToSend(
-		amount: number,
+		amount: AmountLike,
 		proofs: Proof[],
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SwapPreview> {
+		const sendAmountTarget = this.normalizeAmount(amount, 'prepareSwapToSend');
 		const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
 		// Fallback to policy defaults if no outputConfig
@@ -1122,7 +1123,7 @@ class Wallet {
 
 		// Shape SEND output type and denominations
 		let sendOT = this.configureOutputs(
-			amount,
+			sendAmountTarget,
 			keyset,
 			outputConfig.send ?? this.defaultOutputType(),
 			includeFees,
@@ -1180,7 +1181,7 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount,
+			amount: sendAmountTarget,
 			fees: swapFee,
 			keysetId: keyset.id,
 			inputs: selectedProofs,
@@ -1290,14 +1291,14 @@ class Wallet {
 	 */
 	selectProofsToSend(
 		proofs: Proof[],
-		amountToSend: number,
+		amountToSend: AmountLike,
 		includeFees = false,
 		exactMatch = false,
 	): SendResponse {
-		this.assertAmount(amountToSend, 'selectProofsToSend');
+		const normalizedAmountToSend = this.normalizeAmount(amountToSend, 'selectProofsToSend');
 		const { keep, send } = this._selectProofs(
 			proofs,
-			amountToSend,
+			normalizedAmountToSend,
 			this._keyChain,
 			includeFees,
 			exactMatch,
@@ -1530,7 +1531,10 @@ class Wallet {
 	/**
 	 * @deprecated Use createMintQuoteBolt11()
 	 */
-	async createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response> {
+	async createMintQuote(
+		amount: AmountLike,
+		description?: string,
+	): Promise<MintQuoteBolt11Response> {
 		return this.createMintQuoteBolt11(amount, description);
 	}
 
@@ -1545,10 +1549,10 @@ class Wallet {
 	 *   specified amount and unit.
 	 */
 	async createMintQuoteBolt11(
-		amount: number,
+		amount: AmountLike,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
-		this.assertAmount(amount, 'createMintQuoteBolt11');
+		const mintAmount = this.normalizeAmount(amount, 'createMintQuoteBolt11');
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1559,11 +1563,11 @@ class Wallet {
 
 		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
-			amount: amount,
+			amount: mintAmount,
 			description: description,
 		};
 		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
-		return { ...res, amount: res.amount || amount, unit: res.unit || this._unit };
+		return { ...res, amount: res.amount || mintAmount, unit: res.unit || this._unit };
 	}
 
 	/**
@@ -1576,16 +1580,16 @@ class Wallet {
 	 *   specified amount and unit. The quote will be locked to the specified `pubkey`.
 	 */
 	async createLockedMintQuote(
-		amount: number,
+		amount: AmountLike,
 		pubkey: string,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
-		this.assertAmount(amount, 'createLockedMintQuote');
+		const mintAmount = this.normalizeAmount(amount, 'createLockedMintQuote');
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
 		const mintQuotePayload: MintQuoteBolt11Request = {
 			unit: this._unit,
-			amount: amount,
+			amount: mintAmount,
 			description: description,
 			pubkey: pubkey,
 		};
@@ -1595,7 +1599,7 @@ class Wallet {
 		return {
 			...res,
 			pubkey: resPubkey,
-			amount: res.amount || amount,
+			amount: res.amount || mintAmount,
 			unit: res.unit || this._unit,
 		};
 	}
@@ -1614,7 +1618,7 @@ class Wallet {
 	async createMintQuoteBolt12(
 		pubkey: string,
 		options?: {
-			amount?: number;
+			amount?: AmountLike;
 			description?: string;
 		},
 	): Promise<MintQuoteBolt12Response> {
@@ -1624,10 +1628,15 @@ class Wallet {
 			this.fail('Mint does not support description for bolt12');
 		}
 
+		const amount =
+			options?.amount !== undefined
+				? this.normalizeAmount(options.amount, 'createMintQuoteBolt12')
+				: undefined;
+
 		const mintQuotePayload: MintQuoteBolt12Request = {
 			pubkey: pubkey,
 			unit: this._unit,
-			amount: options?.amount,
+			amount,
 			description: options?.description,
 		};
 
@@ -1680,7 +1689,7 @@ class Wallet {
 	 * @deprecated Use mintProofsBolt11()
 	 */
 	async mintProofs(
-		amount: number,
+		amount: AmountLike,
 		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
@@ -1698,7 +1707,7 @@ class Wallet {
 	 * @returns Minted proofs.
 	 */
 	async mintProofsBolt11(
-		amount: number,
+		amount: AmountLike,
 		quote: string | MintQuoteBolt11Response,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
@@ -1717,7 +1726,7 @@ class Wallet {
 	 * @returns Minted proofs.
 	 */
 	async mintProofsBolt12(
-		amount: number,
+		amount: AmountLike,
 		quote: MintQuoteBolt12Response,
 		privkey: string,
 		config?: { keysetId?: string },
@@ -1742,12 +1751,12 @@ class Wallet {
 	 */
 	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
 		method: T,
-		amount: number,
+		amount: AmountLike,
 		quote: string | (T extends 'bolt11' ? MintQuoteBolt11Response : MintQuoteBolt12Response),
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
-		this.assertAmount(amount, `_mintProofs: ${method}`);
+		const requestedAmount = this.normalizeAmount(amount, `_mintProofs: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 
@@ -1755,7 +1764,7 @@ class Wallet {
 		// we are receiving, so no includeFees.
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		let mintOT = this.configureOutputs(
-			amount,
+			requestedAmount,
 			keyset,
 			outputType,
 			false, // no fees
@@ -1809,7 +1818,10 @@ class Wallet {
 	/**
 	 * @deprecated Use createMeltQuoteBolt11.
 	 */
-	async createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response> {
+	async createMeltQuote(
+		invoice: string,
+		amountMsat?: AmountLike,
+	): Promise<MeltQuoteBolt11Response> {
 		return this.createMeltQuoteBolt11(invoice, amountMsat);
 	}
 
@@ -1825,15 +1837,18 @@ class Wallet {
 	 */
 	async createMeltQuoteBolt11(
 		invoice: string,
-		amountMsat?: number,
+		amountMsat?: AmountLike,
 	): Promise<MeltQuoteBolt11Response> {
+		const normalizedAmountMsat =
+			amountMsat !== undefined
+				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt11')
+				: undefined;
+
 		if (amountMsat !== undefined) {
 			this.failIf(
 				invoiceHasAmountInHRP(invoice),
 				'amountMsat supplied but invoice already contains an amount. Leave amountMsat undefined for non-zero invoices.',
 			);
-
-			this.assertAmount(amountMsat, 'createMeltQuoteBolt11');
 		}
 
 		const supportsAmountless = this._mintInfo?.supportsAmountless?.('bolt11', this._unit) ?? false;
@@ -1842,11 +1857,11 @@ class Wallet {
 			unit: this._unit,
 			request: invoice,
 
-			...(supportsAmountless && amountMsat !== undefined
+			...(supportsAmountless && normalizedAmountMsat !== undefined
 				? {
 						options: {
 							amountless: {
-								amount_msat: amountMsat,
+								amount_msat: normalizedAmountMsat,
 							},
 						},
 					}
@@ -1872,15 +1887,19 @@ class Wallet {
 	 */
 	async createMeltQuoteBolt12(
 		offer: string,
-		amountMsat?: number,
+		amountMsat?: AmountLike,
 	): Promise<MeltQuoteBolt12Response> {
+		const normalizedAmountMsat =
+			amountMsat !== undefined
+				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt12')
+				: undefined;
 		return this.mint.createMeltQuoteBolt12({
 			unit: this._unit,
 			request: offer,
-			options: amountMsat
+			options: normalizedAmountMsat
 				? {
 						amountless: {
-							amount_msat: amountMsat,
+							amount_msat: normalizedAmountMsat,
 						},
 					}
 				: undefined,
@@ -1900,9 +1919,12 @@ class Wallet {
 	 */
 	async createMultiPathMeltQuote(
 		invoice: string,
-		millisatPartialAmount: number,
+		millisatPartialAmount: AmountLike,
 	): Promise<MeltQuoteBolt11Response> {
-		this.assertAmount(millisatPartialAmount, 'createMultiPathMeltQuote');
+		const normalizedMillisatPartialAmount = this.normalizeAmount(
+			millisatPartialAmount,
+			'createMultiPathMeltQuote',
+		);
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(
@@ -1912,7 +1934,7 @@ class Wallet {
 		const meltQuotePayload: MeltQuoteBolt11Request = {
 			unit: this._unit,
 			request: invoice,
-			options: { mpp: { amount: millisatPartialAmount } },
+			options: { mpp: { amount: normalizedMillisatPartialAmount } },
 		};
 		const meltQuote = await this.mint.createMeltQuoteBolt11(meltQuotePayload);
 		return { ...meltQuote, request: invoice, unit: this._unit };
