@@ -431,7 +431,7 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: number, keys: Keys, targetCount: number): number[];
+export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: AmountLike, keys: Keys, targetCount: number): number[];
 
 // @public
 export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[];
@@ -510,7 +510,7 @@ export function getValidSigners(signatures: string[], message: string, pubkeys: 
 export function handleTokens(token: string): Token;
 
 // @public
-export function hasCorrespondingKey(amount: number, keyset: Keys): boolean;
+export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean;
 
 // @public (undocumented)
 export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array;
@@ -1737,7 +1737,7 @@ export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 export function sortProofsById(proofs: Proof[]): Proof[];
 
 // @public
-export function splitAmount(value: number, keyset: Keys, split?: number[], order?: 'desc' | 'asc'): number[];
+export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): number[];
 
 // @public
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;

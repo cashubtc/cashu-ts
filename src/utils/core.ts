@@ -1,3 +1,5 @@
+// TODO(v4): migrate core amount-bearing APIs to return `Amount` instead of number.
+
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -10,6 +12,7 @@ import {
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from '../model/PaymentRequest';
+import { Amount, type AmountLike } from '../model/Amount';
 import type {
 	TokenMetadata,
 	DeprecatedToken,
@@ -41,39 +44,44 @@ import { Bytes } from './Bytes';
  * @throws Error if split sum is greater than value or mint does not have keys for requested split.
  */
 export function splitAmount(
-	value: number,
+	value: AmountLike,
 	keyset: Keys,
-	split?: number[],
+	split?: AmountLike[],
 	order?: 'desc' | 'asc',
 ): number[] {
-	if (split) {
-		const totalSplitAmount = sumArray(split);
+	let remainingValue = toAmount(value, 'splitAmount.value', true);
+	let normalizedSplit = split?.map((amt) => toAmount(amt, 'splitAmount.split', true));
+
+	if (normalizedSplit) {
+		const totalSplitAmount = Amount.sum(normalizedSplit);
 
 		// Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
-		if (value === 0 && totalSplitAmount === 0) {
-			return split;
+		if (remainingValue.isZero() && totalSplitAmount.isZero()) {
+			return normalizedSplit.map((amt) => amt.toNumber());
 		}
 
 		// Normal positive-value paths: ignore zeros for validation and totals
-		const positive = split.filter((amt) => amt > 0);
-		const totalPositive = sumArray(positive);
-		if (totalPositive > value) {
-			throw new Error(`Split is greater than total amount: ${totalPositive} > ${value}`);
+		const positive = normalizedSplit.filter((amt) => !amt.isZero());
+		const totalPositive = Amount.sum(positive);
+		if (totalPositive.gt(remainingValue)) {
+			throw new Error(
+				`Split is greater than total amount: ${totalPositive.toString()} > ${remainingValue.toString()}`,
+			);
 		}
 		if (positive.some((amt) => !hasCorrespondingKey(amt, keyset))) {
 			throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
 		}
 
 		// if caller supplied an exact custom split, preserve their order
-		if (totalPositive === value) {
-			return positive;
+		if (totalPositive.eq(remainingValue)) {
+			return positive.map((amt) => amt.toNumber());
 		}
 
 		// Work only with validated positive amounts from here on
-		split = positive;
-		value -= totalPositive;
+		normalizedSplit = positive;
+		remainingValue = remainingValue.sub(totalPositive);
 	} else {
-		split = [];
+		normalizedSplit = [];
 	}
 
 	// Denomination fill for the remaining value
@@ -83,24 +91,27 @@ export function splitAmount(
 	}
 	for (const amt of sortedKeyAmounts) {
 		if (amt <= 0) continue;
+		const amtAsAmount = Amount.from(amt.toString());
 		// Calculate how many of amt fit into remaining value
-		const requireCount = Math.floor(value / amt);
+		const requireCount = remainingValue.div(amtAsAmount.toBigInt()).toNumber();
 		// Add them to the split and reduce the target value by added amounts
-		split.push(...Array<number>(requireCount).fill(amt));
-		value -= amt * requireCount;
+		normalizedSplit.push(...Array<Amount>(requireCount).fill(amtAsAmount));
+		remainingValue = remainingValue.sub(amtAsAmount.mul(requireCount));
 		// Break early once target is satisfied
-		if (value === 0) break;
+		if (remainingValue.isZero()) break;
 	}
-	if (value !== 0) {
-		throw new Error(`Unable to split remaining amount: ${value}`);
+	if (!remainingValue.isZero()) {
+		throw new Error(`Unable to split remaining amount: ${remainingValue.toString()}`);
 	}
 
 	// Only sort when we performed a fill and it was requested
 	// Exact custom splits were returned unsorted earlier
 	if (order) {
-		return split.sort((a, b) => (order === 'desc' ? b - a : a - b));
+		normalizedSplit = normalizedSplit.sort((a, b) =>
+			order === 'desc' ? b.toNumber() - a.toNumber() : a.toNumber() - b.toNumber(),
+		);
 	}
-	return split;
+	return normalizedSplit.map((amt) => amt.toNumber());
 }
 
 /**
@@ -114,51 +125,61 @@ export function splitAmount(
  */
 export function getKeepAmounts(
 	proofsWeHave: Proof[],
-	amountToKeep: number,
+	amountToKeep: AmountLike,
 	keys: Keys,
 	targetCount: number,
 ): number[] {
+	const normalizedAmountToKeep = toAmount(amountToKeep, 'getKeepAmounts.amountToKeep', true);
 	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
-	const amountsWeWant: number[] = [];
+	const amountsWeWant: Amount[] = [];
+	let runningTotal = Amount.zero();
 	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
 	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
 	sortedKeyAmounts.forEach((amt) => {
+		const amtAsAmount = Amount.from(amt.toString());
 		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
 		const countWeWant = Math.max(targetCount - countWeHave, 0);
 		for (let i = 0; i < countWeWant; ++i) {
-			if (amountsWeWant.reduce((a, b) => a + b, 0) + amt > amountToKeep) {
+			if (runningTotal.add(amtAsAmount).gt(normalizedAmountToKeep)) {
 				break;
 			}
-			amountsWeWant.push(amt);
+			amountsWeWant.push(amtAsAmount);
+			runningTotal = runningTotal.add(amtAsAmount);
 		}
 	});
 	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
-	const amountDiff = amountToKeep - amountsWeWant.reduce((a, b) => a + b, 0);
-	if (amountDiff) {
+	const amountDiff = normalizedAmountToKeep.sub(runningTotal);
+	if (!amountDiff.isZero()) {
 		const remainingAmounts = splitAmount(amountDiff, keys);
 		remainingAmounts.forEach((amt: number) => {
-			amountsWeWant.push(amt);
+			const amount = Amount.from(amt);
+			amountsWeWant.push(amount);
+			runningTotal = runningTotal.add(amount);
 		});
 	}
-	return amountsWeWant.sort((a, b) => a - b);
+	return amountsWeWant
+		.sort((a, b) => a.toNumber() - b.toNumber())
+		.map((amount) => amount.toNumber());
 }
 /**
  * Returns the amounts in the keyset sorted by the order specified.
  *
+ * @remarks
+ * Currently returns unsafe (rounded) numbers above safe integer limit. Will be resolved in v4 when
+ * we can change signature to return `Amount`
  * @param keyset To search in.
  * @param order Order to sort the amounts in.
  * @returns The amounts in the keyset sorted by the order specified.
  */
 export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): number[] {
-	if (order == 'desc') {
-		return Object.keys(keyset)
-			.map((k: string) => parseInt(k))
-			.sort((a: number, b: number) => b - a);
-	}
-	return Object.keys(keyset)
-		.map((k: string) => parseInt(k))
-		.sort((a: number, b: number) => a - b);
+	const amounts = Object.keys(keyset).map((k: string) => Amount.from(k));
+	amounts.sort((a, b) => {
+		if (a.eq(b)) return 0;
+		if (order === 'desc') return a.gt(b) ? -1 : 1;
+		return a.lt(b) ? -1 : 1;
+	});
+	return amounts.map((amount) => amount.toNumberUnsafe()); // map to unsafe number for now
 }
 
 /**
@@ -168,8 +189,16 @@ export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): 
  * @param keyset To search in.
  * @returns True if the amount is in the keyset, false otherwise.
  */
-export function hasCorrespondingKey(amount: number, keyset: Keys): boolean {
-	return amount in keyset;
+export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
+	return toAmount(amount, 'hasCorrespondingKey.amount', true).toString() in keyset;
+}
+
+function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
+	const parsed = Amount.from(amount);
+	if (!allowZero && parsed.isZero()) {
+		throw new Error(`Amount must be positive: ${parsed.toString()}`);
+	}
+	return parsed;
 }
 
 /**
@@ -355,36 +384,15 @@ function templateFromToken(token: Token): TokenV4Template {
 	return tokenTemplate;
 }
 
-/**
- * Asserts amount is a valid, safe integer.
- *
- * @param amount Value to check.
- * @param allowZero If false, requires amount > 0 (default: false).
- */
-/**
- * @internal
- */
-export function validateAmount(amount: unknown, allowZero = false): asserts amount is number {
-	if (typeof amount !== 'number' || !Number.isFinite(amount) || !Number.isInteger(amount)) {
-		throw new Error(`Invalid amount: ${String(amount)}`);
-	}
-	if (!Number.isSafeInteger(amount)) {
-		throw new Error(`Amount must be a safe integer: ${amount}`);
-	}
-	if (allowZero ? amount < 0 : amount <= 0) {
-		throw new Error(`Amount must be ${allowZero ? 'non-negative' : 'positive'}: ${amount}`);
-	}
-}
-
 function tokenFromTemplate(template: TokenV4Template): Token {
 	const proofs: Proof[] = [];
 	template.t.forEach((t) =>
 		t.p.forEach((p) => {
-			validateAmount(p.a, true);
+			const amount = Amount.from(p.a).toNumber();
 			proofs.push({
 				secret: p.s,
 				C: bytesToHex(p.c),
-				amount: p.a,
+				amount,
 				id: bytesToHex(t.i),
 				...(p.d && {
 					dleq: {
@@ -477,12 +485,13 @@ export function handleTokens(token: string): Token {
 			throw new Error('Multi entry token are not supported');
 		}
 		const entry = parsedV3Token.token[0];
-		for (const p of entry.proofs) {
-			validateAmount(p.amount, true);
-		}
+		const proofs = entry.proofs.map((p) => ({
+			...p,
+			amount: Amount.from(p.amount).toNumber(),
+		}));
 		const tokenObj: Token = {
 			mint: entry.mint,
-			proofs: entry.proofs,
+			proofs,
 			unit: parsedV3Token.unit || 'sat',
 		};
 		if (parsedV3Token.memo) {
@@ -635,7 +644,7 @@ export function sanitizeUrl(url: string): string {
 }
 
 export function sumProofs(proofs: Proof[]) {
-	return proofs.reduce((acc: number, proof: Proof) => acc + proof.amount, 0);
+	return Amount.sum(proofs.map((proof: Proof) => proof.amount)).toNumber();
 }
 
 export function decodePaymentRequest(paymentRequest: string) {
@@ -865,10 +874,6 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	const binaryToken = bytes.slice(5);
 	const decoded = decodeCBOR(binaryToken) as TokenV4Template;
 	return tokenFromTemplate(decoded);
-}
-
-function sumArray(arr: number[]) {
-	return arr.reduce((a, c) => a + c, 0);
 }
 
 /**
