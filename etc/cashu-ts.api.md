@@ -1613,7 +1613,7 @@ export type SecretKind = 'P2PK' | 'HTLC' | (string & {});
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 // @public (undocumented)
-export type SelectProofs = (proofs: Proof[], amountToSend: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+export type SelectProofs = (proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
 
 // @public (undocumented)
 export const selectProofsRGLI: SelectProofs;
