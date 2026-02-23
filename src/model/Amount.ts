@@ -125,10 +125,6 @@ export class Amount {
 		return this.toString(); // safer than number for u64
 	}
 
-	isZero(): boolean {
-		return this.value === 0n;
-	}
-
 	// -----------------------------------------------------------------
 	// Section: Arithmetic
 	// -----------------------------------------------------------------
@@ -173,6 +169,10 @@ export class Amount {
 	// -----------------------------------------------------------------
 	// Section: Comparison
 	// -----------------------------------------------------------------
+
+	isZero(): boolean {
+		return this.value === 0n;
+	}
 
 	eq(other: AmountLike): boolean {
 		return this.value === Amount.from(other).value;
