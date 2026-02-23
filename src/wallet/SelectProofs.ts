@@ -3,10 +3,11 @@ import type { Proof } from '../model/types/proof';
 import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER, measureTime } from '../logger';
 import { type SendResponse } from './types';
 import { type KeyChain } from './KeyChain';
+import { Amount, type AmountLike } from '../model/Amount';
 
 export type SelectProofs = (
 	proofs: Proof[],
-	amountToSend: number,
+	amountToSelect: AmountLike,
 	keyChain: KeyChain,
 	includeFees?: boolean,
 	exactMatch?: boolean,
@@ -15,12 +16,15 @@ export type SelectProofs = (
 
 export const selectProofsRGLI: SelectProofs = (
 	proofs: Proof[],
-	amountToSend: number,
+	amountToSelect: AmountLike,
 	keyChain: KeyChain,
 	includeFees: boolean = false,
 	exactMatch: boolean = false,
 	_logger: Logger = NULL_LOGGER,
 ): SendResponse => {
+	const targetAmount = Amount.from(amountToSelect);
+	const targetAmountNumber = targetAmount.toNumber();
+
 	// Init vars
 	const MAX_TRIALS = 60; // 40-80 is optimal (per RGLI paper)
 	const MAX_OVRPCT = 0; // Acceptable close match overage (percent)
@@ -107,8 +111,8 @@ export const selectProofsRGLI: SelectProofs = (
 	// NB: Solutions under amountToSend are invalid (delta: Infinity)
 	const calculateDelta = (amount: number, feePPK: number): number => {
 		const netSum = sumExFees(amount, feePPK);
-		if (netSum < amountToSend) return Infinity; // no good
-		return amount + feePPK / 1000 - amountToSend;
+		if (netSum < targetAmountNumber) return Infinity; // no good
+		return amount + feePPK / 1000 - targetAmountNumber;
 	};
 
 	/**
@@ -140,10 +144,10 @@ export const selectProofsRGLI: SelectProofs = (
 	if (spendableProofs.length > 0) {
 		let endIndex;
 		if (exactMatch) {
-			const rightIndex = binarySearchIndex(spendableProofs, amountToSend, true);
+			const rightIndex = binarySearchIndex(spendableProofs, targetAmountNumber, true);
 			endIndex = rightIndex !== null ? rightIndex + 1 : 0;
 		} else {
-			const biggerIndex = binarySearchIndex(spendableProofs, amountToSend, false);
+			const biggerIndex = binarySearchIndex(spendableProofs, targetAmountNumber, false);
 			if (biggerIndex !== null) {
 				const nextBiggerExFee = spendableProofs[biggerIndex].exFee;
 				const rightIndex = binarySearchIndex(spendableProofs, nextBiggerExFee, true);
@@ -164,14 +168,14 @@ export const selectProofsRGLI: SelectProofs = (
 
 	// Validate using precomputed totals
 	const totalNetSum = sumExFees(totalAmount, totalFeePPK);
-	if (amountToSend <= 0 || amountToSend > totalNetSum) {
+	if (targetAmount.isZero() || targetAmountNumber > totalNetSum) {
 		return { keep: proofs, send: [] };
 	}
 
 	// Max acceptable amount for non-exact matches
 	const maxOverAmount = Math.min(
-		Math.ceil(amountToSend * (1 + MAX_OVRPCT / 100)),
-		amountToSend + MAX_OVRAMT,
+		Math.ceil(targetAmountNumber * (1 + MAX_OVRPCT / 100)),
+		targetAmountNumber + MAX_OVRAMT,
 		totalNetSum,
 	);
 
@@ -182,7 +186,7 @@ export const selectProofsRGLI: SelectProofs = (
 	 */
 	for (let trial = 0; trial < MAX_TRIALS; trial++) {
 		// PHASE 1: Randomized Greedy Selection
-		// Add proofs up to amountToSend (after adjusting for fees)
+		// Add proofs up to target amount (after adjusting for fees)
 		// for exact match or the first amount over target otherwise
 		const S: ProofWithFee[] = [];
 		let amount = 0;
@@ -191,11 +195,11 @@ export const selectProofsRGLI: SelectProofs = (
 			const newAmount = amount + obj.proof.amount;
 			const newFeePPK = feePPK + obj.ppkfee;
 			const netSum = sumExFees(newAmount, newFeePPK);
-			if (exactMatch && netSum > amountToSend) break;
+			if (exactMatch && netSum > targetAmountNumber) break;
 			S.push(obj);
 			amount = newAmount;
 			feePPK = newFeePPK;
-			if (netSum >= amountToSend) break;
+			if (netSum >= targetAmountNumber) break;
 		}
 
 		// PHASE 2: Local Improvement
@@ -217,8 +221,8 @@ export const selectProofsRGLI: SelectProofs = (
 			// Exact or acceptable close match solution found?
 			const netSum = sumExFees(amount, feePPK);
 			if (
-				netSum === amountToSend ||
-				(!exactMatch && netSum >= amountToSend && netSum <= maxOverAmount)
+				netSum === targetAmountNumber ||
+				(!exactMatch && netSum >= targetAmountNumber && netSum <= maxOverAmount)
 			) {
 				break;
 			}
@@ -229,7 +233,7 @@ export const selectProofsRGLI: SelectProofs = (
 			const tempAmount = amount - objP.proof.amount;
 			const tempFeePPK = feePPK - objP.ppkfee;
 			const tempNetSum = sumExFees(tempAmount, tempFeePPK);
-			const target = amountToSend - tempNetSum;
+			const target = targetAmountNumber - tempNetSum;
 
 			// Find a better replacement proof (objQ) and swap it in
 			// Exact match can only replace larger to close on the target
@@ -285,8 +289,8 @@ export const selectProofsRGLI: SelectProofs = (
 		if (bestSubset && bestDelta < Infinity) {
 			const bestSum = sumExFees(bestAmount, bestFeePPK);
 			if (
-				bestSum === amountToSend ||
-				(!exactMatch && bestSum >= amountToSend && bestSum <= maxOverAmount)
+				bestSum === targetAmountNumber ||
+				(!exactMatch && bestSum >= targetAmountNumber && bestSum <= maxOverAmount)
 			) {
 				break;
 			}

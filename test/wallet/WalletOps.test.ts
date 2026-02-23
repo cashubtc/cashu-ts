@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { WalletOps } from '../../src/wallet/WalletOps';
+import { Amount, type AmountLike } from '../../src/model/Amount';
 
 import type {
 	Proof,
@@ -25,7 +26,7 @@ import type {
 // ---- Function signatures for typed mocks ------------------------------------
 
 type SendFn = (
-	amount: number,
+	amount: AmountLike,
 	proofs: Proof[],
 	config?: SendConfig,
 	outputConfig?: OutputConfig,
@@ -39,7 +40,7 @@ type SignP2PKFn = (
 ) => Proof[];
 
 type PrepareSendFn = (
-	amount: number,
+	amount: AmountLike,
 	proofs: Proof[],
 	config?: SendConfig,
 	outputConfig?: OutputConfig,
@@ -58,21 +59,25 @@ type PrepareReceiveFn = (
 ) => Promise<SwapPreview>;
 
 type MintBolt11Fn = (
-	amount: number,
+	amount: AmountLike,
 	quote: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
 type MintBolt12Fn = (
-	amount: number,
+	amount: AmountLike,
 	quote: MintQuoteBolt12Response,
 	privkey: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
-type SendOfflineFn = (amount: number, proofs: Proof[], config?: SendOfflineConfig) => SendResponse;
+type SendOfflineFn = (
+	amount: AmountLike,
+	proofs: Proof[],
+	config?: SendOfflineConfig,
+) => SendResponse;
 
 type PrepareMeltFn = (
 	method: string,
@@ -195,6 +200,12 @@ describe('WalletOps builders', () => {
 			expect(maybeOutputConfig).toEqual({
 				send: { type: 'random' },
 			});
+		});
+
+		it('accepts AmountLike for send amount', async () => {
+			await ops.send(Amount.from(5), proofs).run();
+			expect(wallet.send).toHaveBeenCalledTimes(1);
+			expect(wallet.send.mock.calls[0][0]).toBe(5);
 		});
 
 		it('calls wallet.prepareSwapToSend with defaults when no OutputType was set', async () => {
@@ -480,6 +491,12 @@ describe('WalletOps builders', () => {
 			expect(q).toBe(quote);
 			expect(config).toEqual({ keysetId: 'kid' });
 			expect(maybeOT).toBeUndefined();
+		});
+
+		it('accepts AmountLike for mint amount', async () => {
+			await ops.mintBolt11('10', quote).run();
+			expect(wallet.mintProofsBolt11).toHaveBeenCalledTimes(1);
+			expect(wallet.mintProofsBolt11.mock.calls[0][0]).toBe(10);
 		});
 
 		it('calls wallet.mintProofs with custom OutputType and config', async () => {

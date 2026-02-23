@@ -911,7 +911,7 @@ export type MintAllKeysets = GetKeysetsResponse;
 
 // @public
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
-    constructor(wallet: Wallet, method: M, amount: number, quote: MintQuoteFor<M>);
+    constructor(wallet: Wallet, method: M, amount: AmountLike, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -1253,17 +1253,17 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData<T extends HasKeysetKeys>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createDeterministicData<T extends HasKeysetKeys>(amount: AmountLike, seed: Uint8Array, counter: number, keyset: T, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createP2PKData<T extends HasKeysetKeys>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createP2PKData<T extends HasKeysetKeys>(p2pk: P2PKOptions, amount: AmountLike, keyset: T, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createRandomData<T extends HasKeysetKeys>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createRandomData<T extends HasKeysetKeys>(amount: AmountLike, keyset: T, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleRandomData(amount: number, keysetId: string): OutputData;
+    static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     secret: Uint8Array;
     static sumOutputAmounts(outputs: OutputDataLike[]): number;
@@ -1613,14 +1613,14 @@ export type SecretKind = 'P2PK' | 'HTLC' | (string & {});
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 // @public (undocumented)
-export type SelectProofs = (proofs: Proof[], amountToSend: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+export type SelectProofs = (proofs: Proof[], amountToSend: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
 
 // @public (undocumented)
 export const selectProofsRGLI: SelectProofs;
 
 // @public
 export class SendBuilder {
-    constructor(wallet: Wallet, amount: number, proofs: Proof[]);
+    constructor(wallet: Wallet, amount: AmountLike, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: number[]): this;
     asFactory(factory: OutputDataFactory, denoms?: number[]): this;
@@ -2018,13 +2018,13 @@ export class WalletOps {
     // (undocumented)
     meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
-    mintBolt11(amount: number, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
+    mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
     // (undocumented)
-    mintBolt12(amount: number, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
+    mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)
-    send(amount: number, proofs: Proof[]): SendBuilder;
+    send(amount: AmountLike, proofs: Proof[]): SendBuilder;
 }
 
 // @public

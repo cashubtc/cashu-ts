@@ -5,6 +5,7 @@ import {
 	type MintQuoteBolt12Response,
 	type MintQuoteBolt11Response,
 } from '../model/types';
+import { Amount, type AmountLike } from '../model/Amount';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
@@ -37,16 +38,16 @@ export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
  */
 export class WalletOps {
 	constructor(private wallet: Wallet) {}
-	send(amount: number, proofs: Proof[]) {
+	send(amount: AmountLike, proofs: Proof[]) {
 		return new SendBuilder(this.wallet, amount, proofs);
 	}
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
-	mintBolt11(amount: number, quote: MintQuoteFor<'bolt11'>) {
+	mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>) {
 		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
-	mintBolt12(amount: number, quote: MintQuoteFor<'bolt12'>) {
+	mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>) {
 		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
 	}
 	meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
@@ -81,9 +82,13 @@ export class SendBuilder {
 
 	constructor(
 		private wallet: Wallet,
-		private amount: number,
+		amount: AmountLike,
 		private proofs: Proof[],
-	) {}
+	) {
+		this.amount = Amount.from(amount);
+	}
+
+	private amount: Amount;
 
 	/**
 	 * Use random blinding for the sent outputs.
@@ -280,7 +285,12 @@ export class SendBuilder {
 			send: this.sendOT ?? this.wallet.defaultOutputType(),
 			...(this.keepOT ? { keep: this.keepOT } : {}),
 		};
-		return this.wallet.prepareSwapToSend(this.amount, this.proofs, this.config, outputConfig);
+		return this.wallet.prepareSwapToSend(
+			this.amount.toNumber(),
+			this.proofs,
+			this.config,
+			outputConfig,
+		);
 	}
 
 	/**
@@ -303,7 +313,7 @@ export class SendBuilder {
 			if (this.config.privkey) {
 				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
 			}
-			return this.wallet.sendOffline(this.amount, this.proofs, {
+			return this.wallet.sendOffline(this.amount.toNumber(), this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: true,
 				requireDleq: this.offlineExact.requireDleq,
@@ -316,7 +326,7 @@ export class SendBuilder {
 			if (this.config.privkey) {
 				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
 			}
-			return this.wallet.sendOffline(this.amount, this.proofs, {
+			return this.wallet.sendOffline(this.amount.toNumber(), this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: false,
 				requireDleq: this.offlineClose.requireDleq,
@@ -328,7 +338,7 @@ export class SendBuilder {
 			send: this.sendOT ?? this.wallet.defaultOutputType(),
 			...(this.keepOT ? { keep: this.keepOT } : {}),
 		};
-		return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
+		return this.wallet.send(this.amount.toNumber(), this.proofs, this.config, outputConfig);
 	}
 }
 
@@ -516,11 +526,14 @@ export class MintBuilder<
 	constructor(
 		private wallet: Wallet,
 		private method: M,
-		private amount: number,
+		amount: AmountLike,
 		private quote: MintQuoteFor<M>,
 	) {
+		this.amount = Amount.from(amount);
 		void this._hasPrivkey; // intentionally unused (phantom field)
 	}
+
+	private amount: Amount;
 
 	/**
 	 * Use random blinding for the minted proofs.
@@ -642,7 +655,12 @@ export class MintBuilder<
 			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			return this.wallet.mintProofsBolt11(this.amount, quote, this.config, this.outputType);
+			return this.wallet.mintProofsBolt11(
+				this.amount.toNumber(),
+				quote,
+				this.config,
+				this.outputType,
+			);
 		}
 
 		// BOLT 12
@@ -651,7 +669,7 @@ export class MintBuilder<
 			throw new Error('privkey is required for BOLT12 mint quotes');
 		}
 		return this.wallet.mintProofsBolt12(
-			this.amount,
+			this.amount.toNumber(),
 			bolt12,
 			this.config.privkey,
 			this.config,

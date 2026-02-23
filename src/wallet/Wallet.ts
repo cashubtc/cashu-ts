@@ -286,10 +286,22 @@ class Wallet {
 	 * @throws If not a positive safe integer.
 	 */
 	private normalizeAmount(amount: AmountLike, op: string): number {
+		return this.parseAmount(amount, op, false).toNumber();
+	}
+
+	/**
+	 * Parses AmountLike to Amount.
+	 */
+	private parseAmount(amount: AmountLike, op: string, allowZero = false): Amount {
 		try {
 			const parsed = Amount.from(amount);
-			this.failIf(parsed.isZero(), `Amount must be positive: ${parsed.toString()}`, { op, amount });
-			return parsed.toNumber();
+			if (!allowZero) {
+				this.failIf(parsed.isZero(), `Amount must be positive: ${parsed.toString()}`, {
+					op,
+					amount,
+				});
+			}
+			return parsed;
 		} catch (e) {
 			this.fail((e as Error).message, { op, amount });
 		}
@@ -641,23 +653,27 @@ class Wallet {
 	 * @returns OutputType with required denominations.
 	 */
 	private configureOutputs(
-		amount: number,
+		amount: AmountLike,
 		keyset: Keyset,
 		outputType: OutputType,
 		includeFees: boolean = false,
 		proofsWeHave: Proof[] = [],
 	): OutputType {
-		let newAmount = amount;
+		let newAmount = this.parseAmount(amount, 'configureOutputs', true);
 
 		// Custom outputs don't have automatic optimizations or fee inclusion)
 		if (outputType.type === 'custom') {
 			this.failIf(includeFees, 'The custom OutputType does not support automatic fee inclusion');
 
 			// Validate sum early, as no denominations to fill
-			const customTotal = OutputData.sumOutputAmounts(outputType.data);
+			const customTotal = this.parseAmount(
+				OutputData.sumOutputAmounts(outputType.data),
+				'configureOutputs.customTotal',
+				true,
+			);
 			this.failIf(
-				customTotal !== amount,
-				`Custom output data total (${customTotal}) does not match amount (${amount})`,
+				!customTotal.eq(newAmount),
+				`Custom output data total (${customTotal.toString()}) does not match amount (${newAmount.toString()})`,
 			);
 			return outputType;
 		}
@@ -695,7 +711,7 @@ class Wallet {
 				receiveFee++;
 				receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
 			}
-			newAmount += receiveFee;
+			newAmount = newAmount.add(receiveFee);
 			denominations = [...denominations, ...receiveFeeAmounts];
 		}
 		return { ...outputType, denominations };
@@ -708,7 +724,7 @@ class Wallet {
 	private preparedTotal(ot: OutputType): number {
 		if (ot.type === 'custom') return OutputData.sumOutputAmounts(ot.data);
 		const denoms = ot.denominations ?? [];
-		return denoms.reduce((a, b) => a + b, 0);
+		return Amount.sum(denoms).toNumber();
 	}
 
 	/**
@@ -720,12 +736,13 @@ class Wallet {
 	 * @returns Prepared output data.
 	 */
 	private createOutputData(
-		amount: number,
+		amount: AmountLike,
 		keyset: Keyset,
 		outputType: OutputType,
 	): OutputDataLike[] {
+		const outputAmount = this.parseAmount(amount, 'createOutputData', true);
 		// we can accept zero (for blanks) or positive values
-		this.failIf(amount < 0, 'Amount was negative', { amount });
+		this.failIf(outputAmount.lt(0), 'Amount was negative', { amount });
 		if (
 			// 'custom' OutputType has no denominations. Every other OutputType does.
 			// so let's sanity check those were filled properly (eg: configureOutputs)
@@ -733,16 +750,16 @@ class Wallet {
 			outputType.denominations &&
 			outputType.denominations.length > 0
 		) {
-			const splitSum = outputType.denominations.reduce((sum, a) => sum + a, 0);
-			this.failIf(splitSum !== amount, 'Denominations do not sum to the expected amount', {
-				splitSum,
-				expected: amount,
+			const splitSum = Amount.sum(outputType.denominations);
+			this.failIf(!splitSum.eq(outputAmount), 'Denominations do not sum to the expected amount', {
+				splitSum: splitSum.toString(),
+				expected: outputAmount.toString(),
 			});
 		}
 		let outputData: OutputDataLike[];
 		switch (outputType.type) {
 			case 'random':
-				outputData = OutputData.createRandomData(amount, keyset, outputType.denominations);
+				outputData = OutputData.createRandomData(outputAmount, keyset, outputType.denominations);
 				break;
 			case 'deterministic':
 				this.failIfNullish(
@@ -750,7 +767,7 @@ class Wallet {
 					'Deterministic outputs require a seed configured in the wallet',
 				);
 				outputData = OutputData.createDeterministicData(
-					amount,
+					outputAmount,
 					this._seed,
 					outputType.counter,
 					keyset,
@@ -760,22 +777,26 @@ class Wallet {
 			case 'p2pk':
 				outputData = OutputData.createP2PKData(
 					outputType.options,
-					amount,
+					outputAmount,
 					keyset,
 					outputType.denominations,
 				);
 				break;
 			case 'factory': {
-				const factorySplit = splitAmount(amount, keyset.keys, outputType.denominations);
+				const factorySplit = splitAmount(outputAmount, keyset.keys, outputType.denominations);
 				outputData = factorySplit.map((a) => outputType.factory(a, keyset));
 				break;
 			}
 			case 'custom': {
 				outputData = outputType.data;
-				const customTotal = OutputData.sumOutputAmounts(outputData);
+				const customTotal = this.parseAmount(
+					OutputData.sumOutputAmounts(outputData),
+					'createOutputData.customTotal',
+					true,
+				);
 				this.failIf(
-					customTotal !== amount,
-					`Custom output data total (${customTotal}) does not match amount (${amount})`,
+					!customTotal.eq(outputAmount),
+					`Custom output data total (${customTotal.toString()}) does not match amount (${outputAmount.toString()})`,
 				);
 
 				break;
@@ -1357,8 +1378,8 @@ class Wallet {
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
 	getFeesForProofs(proofs: Proof[]): number {
-		const sumPPK = proofs.reduce((a, c) => a + this.getProofFeePPK(c), 0);
-		return Math.ceil(sumPPK / 1000);
+		const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
+		return Number((sumPPK + 999n) / 1000n);
 	}
 
 	/**
