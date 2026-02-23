@@ -304,6 +304,14 @@ describe('WalletOps builders', () => {
 			});
 		});
 
+		it('accepts AmountLike denominations in builder output config', async () => {
+			await ops.send(7, proofs).asRandom(['2', 3n, 2]).run();
+			const [, , , outputConfig] = wallet.send.mock.calls[0];
+			expect(outputConfig).toEqual({
+				send: { type: 'random', denominations: ['2', 3n, 2] },
+			});
+		});
+
 		it('supports prepareSwapToSend', async () => {
 			await ops
 				.send(7, proofs)

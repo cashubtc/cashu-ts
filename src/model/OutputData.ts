@@ -50,7 +50,7 @@ export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
  * removing the generic.
  */
 export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
-	amount: number,
+	amount: AmountLike,
 	keys: TKeyset,
 ) => OutputDataLike<TKeyset>;
 

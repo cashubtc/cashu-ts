@@ -721,10 +721,10 @@ export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Res
 export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
     constructor(wallet: Wallet, method: string, quote: TQuote, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     // @deprecated
     onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
@@ -913,10 +913,10 @@ export type MintAllKeysets = GetKeysetsResponse;
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
     constructor(wallet: Wallet, method: M, amount: AmountLike, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
     privkey(k: string): MintBuilder<M, true>;
@@ -1272,7 +1272,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 }
 
 // @public
-export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
+export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: AmountLike, keys: TKeyset) => OutputDataLike<TKeyset>;
 
 // @public
 export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
@@ -1537,10 +1537,10 @@ export type RawTransport = {
 export class ReceiveBuilder {
     constructor(wallet: Wallet, token: Token | string);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
@@ -1622,16 +1622,16 @@ export const selectProofsRGLI: SelectProofs;
 export class SendBuilder {
     constructor(wallet: Wallet, amount: AmountLike, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
-    keepAsDeterministic(counter?: number, denoms?: number[]): this;
-    keepAsFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    keepAsP2PK(options: P2PKOptions, denoms?: number[]): this;
-    keepAsRandom(denoms?: number[]): this;
+    keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    keepAsRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
@@ -1715,7 +1715,7 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
 // @public
 export interface SharedOutputTypeProps {
-    denominations?: number[];
+    denominations?: AmountLike[];
 }
 
 // @public (undocumented)

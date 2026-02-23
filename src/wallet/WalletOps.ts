@@ -95,7 +95,7 @@ export class SendBuilder {
 	 *
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asRandom(denoms?: number[]) {
+	asRandom(denoms?: AmountLike[]) {
 		this.sendOT = { type: 'random', denominations: denoms };
 		return this;
 	}
@@ -106,7 +106,7 @@ export class SendBuilder {
 	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
+	asDeterministic(counter = 0, denoms?: AmountLike[]) {
 		this.sendOT = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
@@ -117,7 +117,7 @@ export class SendBuilder {
 	 * @param options NUT 11 options like pubkey and locktime.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
+	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
 		this.sendOT = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
@@ -128,7 +128,7 @@ export class SendBuilder {
 	 * @param factory OutputDataFactory used to produce blinded messages.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
+	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
 		this.sendOT = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
@@ -149,7 +149,7 @@ export class SendBuilder {
 	 *
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	keepAsRandom(denoms?: number[]) {
+	keepAsRandom(denoms?: AmountLike[]) {
 		this.keepOT = { type: 'random', denominations: denoms };
 		return this;
 	}
@@ -160,7 +160,7 @@ export class SendBuilder {
 	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	keepAsDeterministic(counter = 0, denoms?: number[]) {
+	keepAsDeterministic(counter = 0, denoms?: AmountLike[]) {
 		this.keepOT = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
@@ -171,7 +171,7 @@ export class SendBuilder {
 	 * @param options Locking options applied to the kept proofs.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	keepAsP2PK(options: P2PKOptions, denoms?: number[]) {
+	keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
 		this.keepOT = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
@@ -182,7 +182,7 @@ export class SendBuilder {
 	 * @param factory OutputDataFactory used to produce blinded messages.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	keepAsFactory(factory: OutputDataFactory, denoms?: number[]) {
+	keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
 		this.keepOT = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
@@ -371,7 +371,7 @@ export class ReceiveBuilder {
 	 * If denoms specified, proofsWeHave() will have no effect.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asRandom(denoms?: number[]) {
+	asRandom(denoms?: AmountLike[]) {
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
@@ -384,7 +384,7 @@ export class ReceiveBuilder {
 	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
+	asDeterministic(counter = 0, denoms?: AmountLike[]) {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
@@ -397,7 +397,7 @@ export class ReceiveBuilder {
 	 * @param options NUT 11 options like pubkey and locktime.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
+	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
@@ -410,7 +410,7 @@ export class ReceiveBuilder {
 	 * @param factory OutputDataFactory used to produce blinded messages.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
+	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
@@ -542,7 +542,7 @@ export class MintBuilder<
 	 * If denoms specified, proofsWeHave() will have no effect.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asRandom(denoms?: number[]) {
+	asRandom(denoms?: AmountLike[]) {
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
@@ -555,7 +555,7 @@ export class MintBuilder<
 	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
+	asDeterministic(counter = 0, denoms?: AmountLike[]) {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
@@ -568,7 +568,7 @@ export class MintBuilder<
 	 * @param options NUT 11 options like pubkey and locktime.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
+	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
@@ -581,7 +581,7 @@ export class MintBuilder<
 	 * @param factory OutputDataFactory used to produce blinded messages.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
+	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
@@ -714,7 +714,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	 *
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asRandom(denoms?: number[]) {
+	asRandom(denoms?: AmountLike[]) {
 		this.outputType = { type: 'random', denominations: denoms };
 		return this;
 	}
@@ -725,7 +725,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asDeterministic(counter = 0, denoms?: number[]) {
+	asDeterministic(counter = 0, denoms?: AmountLike[]) {
 		this.outputType = { type: 'deterministic', counter, denominations: denoms };
 		return this;
 	}
@@ -736,7 +736,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	 * @param options NUT-11 locking options (e.g., pubkey, locktime).
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asP2PK(options: P2PKOptions, denoms?: number[]) {
+	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
 		this.outputType = { type: 'p2pk', options, denominations: denoms };
 		return this;
 	}
@@ -747,7 +747,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	 * @param factory Factory used to produce blinded messages.
 	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
 	 */
-	asFactory(factory: OutputDataFactory, denoms?: number[]) {
+	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
 		this.outputType = { type: 'factory', factory, denominations: denoms };
 		return this;
 	}
