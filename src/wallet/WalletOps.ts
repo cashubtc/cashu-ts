@@ -79,6 +79,7 @@ export class SendBuilder {
 	private config: SendConfig = {};
 	private offlineExact?: { requireDleq: boolean };
 	private offlineClose?: { requireDleq: boolean };
+	private amount: Amount;
 
 	constructor(
 		private wallet: Wallet,
@@ -87,8 +88,6 @@ export class SendBuilder {
 	) {
 		this.amount = Amount.from(amount);
 	}
-
-	private amount: Amount;
 
 	/**
 	 * Use random blinding for the sent outputs.
@@ -285,12 +284,7 @@ export class SendBuilder {
 			send: this.sendOT ?? this.wallet.defaultOutputType(),
 			...(this.keepOT ? { keep: this.keepOT } : {}),
 		};
-		return this.wallet.prepareSwapToSend(
-			this.amount.toNumber(),
-			this.proofs,
-			this.config,
-			outputConfig,
-		);
+		return this.wallet.prepareSwapToSend(this.amount, this.proofs, this.config, outputConfig);
 	}
 
 	/**
@@ -313,7 +307,7 @@ export class SendBuilder {
 			if (this.config.privkey) {
 				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
 			}
-			return this.wallet.sendOffline(this.amount.toNumber(), this.proofs, {
+			return this.wallet.sendOffline(this.amount, this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: true,
 				requireDleq: this.offlineExact.requireDleq,
@@ -326,7 +320,7 @@ export class SendBuilder {
 			if (this.config.privkey) {
 				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
 			}
-			return this.wallet.sendOffline(this.amount.toNumber(), this.proofs, {
+			return this.wallet.sendOffline(this.amount, this.proofs, {
 				includeFees: this.config.includeFees,
 				exactMatch: false,
 				requireDleq: this.offlineClose.requireDleq,
@@ -338,7 +332,7 @@ export class SendBuilder {
 			send: this.sendOT ?? this.wallet.defaultOutputType(),
 			...(this.keepOT ? { keep: this.keepOT } : {}),
 		};
-		return this.wallet.send(this.amount.toNumber(), this.proofs, this.config, outputConfig);
+		return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
 	}
 }
 
@@ -519,6 +513,7 @@ export class MintBuilder<
 > {
 	private outputType?: OutputType;
 	private config: MintProofsConfig = {};
+	private amount: Amount;
 
 	// phantom field to satisfy linter (erased at emit)
 	private readonly _hasPrivkey!: HasPrivKey;
@@ -532,8 +527,6 @@ export class MintBuilder<
 		this.amount = Amount.from(amount);
 		void this._hasPrivkey; // intentionally unused (phantom field)
 	}
-
-	private amount: Amount;
 
 	/**
 	 * Use random blinding for the minted proofs.
@@ -655,12 +648,7 @@ export class MintBuilder<
 			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			return this.wallet.mintProofsBolt11(
-				this.amount.toNumber(),
-				quote,
-				this.config,
-				this.outputType,
-			);
+			return this.wallet.mintProofsBolt11(this.amount, quote, this.config, this.outputType);
 		}
 
 		// BOLT 12
@@ -669,7 +657,7 @@ export class MintBuilder<
 			throw new Error('privkey is required for BOLT12 mint quotes');
 		}
 		return this.wallet.mintProofsBolt12(
-			this.amount.toNumber(),
+			this.amount,
 			bolt12,
 			this.config.privkey,
 			this.config,

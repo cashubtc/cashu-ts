@@ -11,6 +11,7 @@ export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
 import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 import { type P2PKWitness } from '../model/types';
+import { Amount, type AmountLike } from '../model/Amount';
 
 export type BlindSignature = {
 	C_: WeierstrassPoint<bigint>;
@@ -101,12 +102,12 @@ export function createRandomSecretKey() {
 export function createBlindSignature(
 	B_: WeierstrassPoint<bigint>,
 	privateKey: Uint8Array,
-	amount: number,
+	amount: AmountLike,
 	id: string,
 ): BlindSignature {
 	const a = secp256k1.Point.Fn.fromBytes(privateKey);
 	const C_: WeierstrassPoint<bigint> = B_.multiply(a);
-	return { C_, amount, id };
+	return { C_, amount: Amount.from(amount).toNumber(), id };
 }
 
 /**

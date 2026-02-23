@@ -228,7 +228,7 @@ export function createAuthWallet(mintUrl: string, options?: {
 }>;
 
 // @public (undocumented)
-export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
+export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: AmountLike, id: string): BlindSignature;
 
 // @public
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
