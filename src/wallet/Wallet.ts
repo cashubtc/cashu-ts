@@ -718,13 +718,14 @@ class Wallet {
 	}
 
 	/**
-	 * Sum total implied by a prepared OutputType. Note: Empty denomination is valid (e.g: zero
-	 * change).
+	 * Sum total implied by a prepared OutputType.
+	 *
+	 * Note: Empty denomination is valid (e.g: zero change).
 	 */
-	private preparedTotal(ot: OutputType): number {
-		if (ot.type === 'custom') return OutputData.sumOutputAmounts(ot.data);
+	private preparedTotal(ot: OutputType): Amount {
+		if (ot.type === 'custom') return Amount.from(OutputData.sumOutputAmounts(ot.data));
 		const denoms = ot.denominations ?? [];
-		return Amount.sum(denoms).toNumber();
+		return Amount.sum(denoms);
 	}
 
 	/**
@@ -740,9 +741,7 @@ class Wallet {
 		keyset: Keyset,
 		outputType: OutputType,
 	): OutputDataLike[] {
-		const outputAmount = this.parseAmount(amount, 'createOutputData', true);
-		// we can accept zero (for blanks) or positive values
-		this.failIf(outputAmount.lt(0), 'Amount was negative', { amount });
+		const outputAmount = this.parseAmount(amount, 'createOutputData', true); // allow zero
 		if (
 			// 'custom' OutputType has no denominations. Every other OutputType does.
 			// so let's sanity check those were filled properly (eg: configureOutputs)
@@ -937,7 +936,8 @@ class Wallet {
 		// Extract token proofs
 		let proofs: Proof[] = [];
 		({ proofs } = decodedToken);
-		const totalAmount = this.normalizeAmount(sumProofs(proofs), 'prepareSwapToReceive');
+		const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
+		this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
 
 		// Check DLEQs if needed
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -952,9 +952,9 @@ class Wallet {
 
 		// Shape receive output type and denominations
 		const swapFee = this.getFeesForProofs(proofs);
-		const amount = totalAmount - swapFee;
+		const receiveAmount = totalAmount.sub(swapFee);
 		let receiveOT = this.configureOutputs(
-			amount,
+			receiveAmount,
 			keyset,
 			outputType,
 			false, // includeFees is not applicable for receive
@@ -975,12 +975,12 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount,
+			amount: receiveAmount.toNumber(), // TODO: v4
 			fees: swapFee,
 			keysetId: keyset.id,
 			inputs: proofs,
 			keepOutputs: outputs,
-		} as SwapPreview;
+		};
 	}
 
 	/**
@@ -1054,8 +1054,6 @@ class Wallet {
 		// First, let's see if we can avoid a swap (and fees)
 		// by trying an exact match offline selection, including fees if
 		// we are giving the receiver the amount + their fee to receive
-		// In Wallet.ts, near send()
-
 		try {
 			// Offline exact-match only allowed for plain-random defaults; deterministic implies swap.
 			const wantsDeterministicByPolicy = this.defaultOutputType().type === 'deterministic';
@@ -1130,7 +1128,7 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SwapPreview> {
-		const sendAmountTarget = this.normalizeAmount(amount, 'prepareSwapToSend');
+		const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
 		const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
 		// Fallback to policy defaults if no outputConfig
@@ -1168,12 +1166,12 @@ class Wallet {
 		// Calculate our expected change from the swap (and sanity check!)
 		const selectedSum = sumProofs(selectedProofs);
 		const swapFee = this.getFeesForProofs(selectedProofs);
-		const changeAmount = selectedSum - swapFee - sendAmount;
-		this.failIf(changeAmount < 0, 'Not enough funds available for swap', {
+		const changeAmount = Amount.from(selectedSum).sub(swapFee).sub(sendAmount);
+		this.failIf(changeAmount.lt(0), 'Not enough funds available for swap', {
 			selectedSum,
 			swapFee,
-			sendAmount,
-			changeAmount,
+			sendAmount: sendAmount.toString(),
+			changeAmount: changeAmount.toString(),
 		});
 
 		// Shape KEEP (change) output type and denominations
@@ -1202,14 +1200,14 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount: sendAmountTarget,
+			amount: sendAmountTarget.toNumber(), // TODO: v4
 			fees: swapFee,
 			keysetId: keyset.id,
 			inputs: selectedProofs,
 			sendOutputs,
 			keepOutputs,
 			unselectedProofs,
-		} as SwapPreview;
+		};
 	}
 
 	/**
