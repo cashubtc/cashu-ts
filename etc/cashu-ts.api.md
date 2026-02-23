@@ -11,7 +11,7 @@ export class Amount {
     // (undocumented)
     add(other: AmountLike): Amount;
     // (undocumented)
-    div(divisor: number | bigint): Amount;
+    div(divisor: AmountLike): Amount;
     // (undocumented)
     eq(other: AmountLike): boolean;
     static from(input: AmountLike): Amount;
@@ -30,9 +30,9 @@ export class Amount {
     // (undocumented)
     static min(a: AmountLike, b: AmountLike): Amount;
     // (undocumented)
-    mod(divisor: number | bigint): Amount;
+    mod(divisor: AmountLike): Amount;
     // (undocumented)
-    mul(factor: number | bigint): Amount;
+    mul(factor: AmountLike): Amount;
     // (undocumented)
     static one(): Amount;
     // (undocumented)

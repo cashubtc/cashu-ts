@@ -57,7 +57,7 @@ export function splitAmount(
 
 		// Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
 		if (remainingValue.isZero() && totalSplitAmount.isZero()) {
-			return normalizedSplit.map((amt) => amt.toNumber());
+			return normalizedSplit.map((amt) => amt.toNumber()); // TODO: v4
 		}
 
 		// Normal positive-value paths: ignore zeros for validation and totals
@@ -74,7 +74,7 @@ export function splitAmount(
 
 		// if caller supplied an exact custom split, preserve their order
 		if (totalPositive.eq(remainingValue)) {
-			return positive.map((amt) => amt.toNumber());
+			return positive.map((amt) => amt.toNumber()); // TODO: v4
 		}
 
 		// Work only with validated positive amounts from here on
@@ -85,15 +85,14 @@ export function splitAmount(
 	}
 
 	// Denomination fill for the remaining value
-	const sortedKeyAmounts = getKeysetAmounts(keyset, 'desc');
-	if (!sortedKeyAmounts || sortedKeyAmounts.length === 0) {
+	const sortedKeyAmounts = getKeysetAmountsAsAmount(keyset, 'desc');
+	if (sortedKeyAmounts.length === 0) {
 		throw new Error('Cannot split amount, keyset is inactive or contains no keys');
 	}
-	for (const amt of sortedKeyAmounts) {
-		if (amt <= 0) continue;
-		const amtAsAmount = Amount.from(amt.toString());
+	for (const amtAsAmount of sortedKeyAmounts) {
+		if (amtAsAmount.isZero()) continue;
 		// Calculate how many of amt fit into remaining value
-		const requireCount = remainingValue.div(amtAsAmount.toBigInt()).toNumber();
+		const requireCount = remainingValue.div(amtAsAmount).toNumber(); // TODO: v4
 		// Add them to the split and reduce the target value by added amounts
 		normalizedSplit.push(...Array<Amount>(requireCount).fill(amtAsAmount));
 		remainingValue = remainingValue.sub(amtAsAmount.mul(requireCount));
@@ -107,11 +106,9 @@ export function splitAmount(
 	// Only sort when we performed a fill and it was requested
 	// Exact custom splits were returned unsorted earlier
 	if (order) {
-		normalizedSplit = normalizedSplit.sort((a, b) =>
-			order === 'desc' ? b.toNumber() - a.toNumber() : a.toNumber() - b.toNumber(),
-		);
+		normalizedSplit = normalizedSplit.sort((a, b) => compareAmounts(a, b, order));
 	}
-	return normalizedSplit.map((amt) => amt.toNumber());
+	return normalizedSplit.map((amt) => amt.toNumber()); // TODO: v4
 }
 
 /**
@@ -135,32 +132,32 @@ export function getKeepAmounts(
 	const amountsWeWant: Amount[] = [];
 	let runningTotal = Amount.zero();
 	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
-	const sortedKeyAmounts = getKeysetAmounts(keys, 'asc');
-	sortedKeyAmounts.forEach((amt) => {
-		const amtAsAmount = Amount.from(amt.toString());
-		const countWeHave = amountsWeHave.filter((a) => a === amt).length;
+	const sortedKeyAmounts = getKeysetAmountsAsAmount(keys, 'asc');
+	for (const amt of sortedKeyAmounts) {
+		const countWeHave = amountsWeHave.filter((a) => amt.eq(a)).length;
 		const countWeWant = Math.max(targetCount - countWeHave, 0);
 		for (let i = 0; i < countWeWant; ++i) {
-			if (runningTotal.add(amtAsAmount).gt(normalizedAmountToKeep)) {
+			const nextTotal = runningTotal.add(amt);
+			if (nextTotal.gt(normalizedAmountToKeep)) {
 				break;
 			}
-			amountsWeWant.push(amtAsAmount);
-			runningTotal = runningTotal.add(amtAsAmount);
+			amountsWeWant.push(amt);
+			runningTotal = nextTotal;
 		}
-	});
+	}
 	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
 	const amountDiff = normalizedAmountToKeep.sub(runningTotal);
 	if (!amountDiff.isZero()) {
 		const remainingAmounts = splitAmount(amountDiff, keys);
-		remainingAmounts.forEach((amt: number) => {
+		for (const amt of remainingAmounts) {
 			const amount = Amount.from(amt);
 			amountsWeWant.push(amount);
 			runningTotal = runningTotal.add(amount);
-		});
+		}
 	}
 	return amountsWeWant
-		.sort((a, b) => a.toNumber() - b.toNumber())
-		.map((amount) => amount.toNumber());
+		.sort((a, b) => (a.eq(b) ? 0 : a.lt(b) ? -1 : 1))
+		.map((amount) => amount.toNumber()); // TODO: v4
 }
 /**
  * Returns the amounts in the keyset sorted by the order specified.
@@ -173,13 +170,20 @@ export function getKeepAmounts(
  * @returns The amounts in the keyset sorted by the order specified.
  */
 export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): number[] {
-	const amounts = Object.keys(keyset).map((k: string) => Amount.from(k));
-	amounts.sort((a, b) => {
-		if (a.eq(b)) return 0;
-		if (order === 'desc') return a.gt(b) ? -1 : 1;
-		return a.lt(b) ? -1 : 1;
-	});
+	const amounts = getKeysetAmountsAsAmount(keyset, order);
 	return amounts.map((amount) => amount.toNumberUnsafe()); // map to unsafe number for now
+}
+
+function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[] {
+	const amounts = Object.keys(keyset).map((k: string) => Amount.from(k));
+	amounts.sort((a, b) => compareAmounts(a, b, order));
+	return amounts; // always array
+}
+
+function compareAmounts(a: Amount, b: Amount, order: 'asc' | 'desc'): number {
+	if (a.eq(b)) return 0;
+	if (order === 'desc') return a.gt(b) ? -1 : 1;
+	return a.lt(b) ? -1 : 1;
 }
 
 /**
@@ -643,6 +647,7 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
+// TODO: v4, return Amount
 export function sumProofs(proofs: Proof[]) {
 	return Amount.sum(proofs.map((proof: Proof) => proof.amount)).toNumber();
 }

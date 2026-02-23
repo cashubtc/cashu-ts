@@ -147,35 +147,13 @@ export class Amount {
 		return new Amount(next);
 	}
 
-	mul(factor: number | bigint): Amount {
-		let f: bigint;
-		if (typeof factor === 'number') {
-			if (!Number.isFinite(factor) || !Number.isInteger(factor)) {
-				throw new AmountError(`Invalid multiplier: ${factor}`);
-			}
-			f = BigInt(factor);
-		} else {
-			f = factor;
-		}
-
-		if (f < 0n) {
-			throw new AmountError(`Multiplier must be >= 0, got ${f}`);
-		}
-
+	mul(factor: AmountLike): Amount {
+		const f = Amount.from(factor).value;
 		return new Amount(this.value * f);
 	}
 
-	div(divisor: number | bigint): Amount {
-		let d: bigint;
-		if (typeof divisor === 'number') {
-			if (!Number.isFinite(divisor) || !Number.isInteger(divisor)) {
-				throw new AmountError(`Invalid divisor: ${divisor}`);
-			}
-			d = BigInt(divisor);
-		} else {
-			d = divisor;
-		}
-
+	div(divisor: AmountLike): Amount {
+		const d = Amount.from(divisor).value;
 		if (d <= 0n) {
 			throw new AmountError(`Divisor must be > 0, got ${d}`);
 		}
@@ -183,17 +161,8 @@ export class Amount {
 		return new Amount(this.value / d); // integer division
 	}
 
-	mod(divisor: number | bigint): Amount {
-		let d: bigint;
-		if (typeof divisor === 'number') {
-			if (!Number.isFinite(divisor) || !Number.isInteger(divisor)) {
-				throw new AmountError(`Invalid divisor: ${divisor}`);
-			}
-			d = BigInt(divisor);
-		} else {
-			d = divisor;
-		}
-
+	mod(divisor: AmountLike): Amount {
+		const d = Amount.from(divisor).value;
 		if (d <= 0n) {
 			throw new AmountError(`Divisor must be > 0, got ${d}`);
 		}
