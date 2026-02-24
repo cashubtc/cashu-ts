@@ -1,6 +1,7 @@
 import { HttpResponseError, NetworkError, MintOperationError } from '../model/Errors';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type Nut19Policy } from '../model/types';
+import { JSONInt } from '../utils/JSONInt';
 
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
@@ -58,6 +59,7 @@ export function setRequestLogger(logger: Logger): void {
 	requestLogger = logger;
 }
 
+<<<<<<< HEAD
 const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
@@ -209,7 +211,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	void ttl;
 	void logger;
 
-	const body = requestBody ? JSON.stringify(requestBody) : undefined;
+	const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
@@ -274,7 +276,9 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	if (!response.ok) {
 		let errorData: ApiError;
 		try {
-			errorData = (await response.json()) as ApiError;
+			const errorText = await response.text();
+			const parsed = errorText ? JSONInt.parse(errorText) : undefined;
+			errorData = isApiError(parsed) ? parsed : { error: 'bad response' };
 		} catch {
 			errorData = { error: 'bad response' };
 		}
@@ -300,11 +304,26 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	}
 
 	try {
-		return await response.json();
+		const responseText = await response.text();
+		if (!responseText) {
+			throw new Error('Empty response body');
+		}
+		return JSONInt.parse(responseText);
 	} catch (err) {
 		requestLogger.error('Failed to parse HTTP response', { err });
 		throw new HttpResponseError('bad response', response.status);
 	}
+}
+
+function isApiError(value: unknown): value is ApiError {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const maybe = value as Record<string, unknown>;
+	const hasError = !('error' in maybe) || typeof maybe.error === 'string';
+	const hasCode = !('code' in maybe) || typeof maybe.code === 'number';
+	const hasDetail = !('detail' in maybe) || typeof maybe.detail === 'string';
+	return hasError && hasCode && hasDetail;
 }
 
 /**
