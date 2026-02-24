@@ -218,7 +218,12 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	});
 
 	it('wallet.checkMintQuoteBolt12 delegates to mint', async () => {
-		const response = { quote: 'q1', state: 'PAID', amount_issued: 21 };
+		const response = {
+			quote: 'q1',
+			state: 'PAID',
+			amount_paid: 21,
+			amount_issued: 21,
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const wallet = new Wallet(mint);
@@ -274,9 +279,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	it('wallet.mintProofsBolt12 requires privkey and delegates to mint.mintBolt12', async () => {
 		const response = {
 			signatures: [
-				{ C_: 'sig1', e: 'e1' },
-				{ C_: 'sig2', e: 'e2' },
-				{ C_: 'sig3', e: 'e3' },
+				{ C_: 'sig1', e: 'e1', amount: 16 },
+				{ C_: 'sig2', e: 'e2', amount: 4 },
+				{ C_: 'sig3', e: 'e3', amount: 1 },
 			],
 		};
 		const { req, calls } = makeRequestSpy(response);
