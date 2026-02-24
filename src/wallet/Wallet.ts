@@ -672,7 +672,7 @@ class Wallet {
 				true,
 			);
 			this.failIf(
-				!customTotal.eq(newAmount),
+				!customTotal.equals(newAmount),
 				`Custom output data total (${customTotal.toString()}) does not match amount (${newAmount.toString()})`,
 			);
 			return outputType;
@@ -750,10 +750,14 @@ class Wallet {
 			outputType.denominations.length > 0
 		) {
 			const splitSum = Amount.sum(outputType.denominations);
-			this.failIf(!splitSum.eq(outputAmount), 'Denominations do not sum to the expected amount', {
-				splitSum: splitSum.toString(),
-				expected: outputAmount.toString(),
-			});
+			this.failIf(
+				!splitSum.equals(outputAmount),
+				'Denominations do not sum to the expected amount',
+				{
+					splitSum: splitSum.toString(),
+					expected: outputAmount.toString(),
+				},
+			);
 		}
 		let outputData: OutputDataLike[];
 		switch (outputType.type) {
@@ -794,7 +798,7 @@ class Wallet {
 					true,
 				);
 				this.failIf(
-					!customTotal.eq(outputAmount),
+					!customTotal.equals(outputAmount),
 					`Custom output data total (${customTotal.toString()}) does not match amount (${outputAmount.toString()})`,
 				);
 
@@ -952,7 +956,7 @@ class Wallet {
 
 		// Shape receive output type and denominations
 		const swapFee = this.getFeesForProofs(proofs);
-		const receiveAmount = totalAmount.sub(swapFee);
+		const receiveAmount = totalAmount.subtract(swapFee);
 		let receiveOT = this.configureOutputs(
 			receiveAmount,
 			keyset,
@@ -1164,15 +1168,16 @@ class Wallet {
 		}
 
 		// Calculate our expected change from the swap (and sanity check!)
-		const selectedSum = sumProofs(selectedProofs);
+		const selectedSum = Amount.from(sumProofs(selectedProofs));
 		const swapFee = this.getFeesForProofs(selectedProofs);
-		const changeAmount = Amount.from(selectedSum).sub(swapFee).sub(sendAmount);
-		this.failIf(changeAmount.lt(0), 'Not enough funds available for swap', {
-			selectedSum,
-			swapFee,
-			sendAmount: sendAmount.toString(),
-			changeAmount: changeAmount.toString(),
-		});
+		const required = sendAmount.add(swapFee);
+		if (selectedSum.lessThan(required)) {
+			this.failIf(true, 'Not enough funds available for swap', {
+				selectedSum: selectedSum.toString(),
+				required: required.toString(),
+			});
+		}
+		const changeAmount = selectedSum.subtract(required);
 
 		// Shape KEEP (change) output type and denominations
 		// No includeFees, as we are the receiver of the change
@@ -1375,6 +1380,7 @@ class Wallet {
 	 * @returns Fee amount.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
+	// TODO: v4 - return Amount
 	getFeesForProofs(proofs: Proof[]): number {
 		const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
 		return Number((sumPPK + 999n) / 1000n);

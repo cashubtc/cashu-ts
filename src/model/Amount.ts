@@ -134,7 +134,7 @@ export class Amount {
 		return new Amount(this.value + o.value);
 	}
 
-	sub(other: AmountLike): Amount {
+	subtract(other: AmountLike): Amount {
 		const o = Amount.from(other);
 		const next = this.value - o.value;
 		if (next < 0n) {
@@ -143,12 +143,12 @@ export class Amount {
 		return new Amount(next);
 	}
 
-	mul(factor: AmountLike): Amount {
+	multiplyBy(factor: AmountLike): Amount {
 		const f = Amount.from(factor).value;
 		return new Amount(this.value * f);
 	}
 
-	div(divisor: AmountLike): Amount {
+	divideBy(divisor: AmountLike): Amount {
 		const d = Amount.from(divisor).value;
 		if (d <= 0n) {
 			throw new AmountError(`Divisor must be > 0, got ${d}`);
@@ -157,7 +157,7 @@ export class Amount {
 		return new Amount(this.value / d); // integer division
 	}
 
-	mod(divisor: AmountLike): Amount {
+	modulo(divisor: AmountLike): Amount {
 		const d = Amount.from(divisor).value;
 		if (d <= 0n) {
 			throw new AmountError(`Divisor must be > 0, got ${d}`);
@@ -174,24 +174,38 @@ export class Amount {
 		return this.value === 0n;
 	}
 
-	eq(other: AmountLike): boolean {
+	equals(other: AmountLike): boolean {
 		return this.value === Amount.from(other).value;
 	}
 
-	lt(other: AmountLike): boolean {
-		return this.value < Amount.from(other).value;
+	/**
+	 * Compares this Amount with another Amount.
+	 *
+	 * Defines the natural ordering of Amount values. Useful for sorting and ordering logic.
+	 *
+	 * @returns -1 if this < other, 0 if equal, 1 if this > other.
+	 */
+	compareTo(other: AmountLike): -1 | 0 | 1 {
+		const o = Amount.from(other).value;
+		if (this.value < o) return -1;
+		if (this.value > o) return 1;
+		return 0;
 	}
 
-	lte(other: AmountLike): boolean {
-		return this.value <= Amount.from(other).value;
+	lessThan(other: AmountLike): boolean {
+		return this.compareTo(other) < 0;
 	}
 
-	gt(other: AmountLike): boolean {
-		return this.value > Amount.from(other).value;
+	lessThanOrEqual(other: AmountLike): boolean {
+		return this.compareTo(other) <= 0;
 	}
 
-	gte(other: AmountLike): boolean {
-		return this.value >= Amount.from(other).value;
+	greaterThan(other: AmountLike): boolean {
+		return this.compareTo(other) > 0;
+	}
+
+	greaterThanOrEqual(other: AmountLike): boolean {
+		return this.compareTo(other) >= 0;
 	}
 
 	// -----------------------------------------------------------------
@@ -201,13 +215,13 @@ export class Amount {
 	static min(a: AmountLike, b: AmountLike): Amount {
 		const aa = Amount.from(a);
 		const bb = Amount.from(b);
-		return aa.lte(bb) ? aa : bb;
+		return aa.compareTo(bb) <= 0 ? aa : bb;
 	}
 
 	static max(a: AmountLike, b: AmountLike): Amount {
 		const aa = Amount.from(a);
 		const bb = Amount.from(b);
-		return aa.gte(bb) ? aa : bb;
+		return aa.compareTo(bb) >= 0 ? aa : bb;
 	}
 
 	static sum(values: Iterable<AmountLike>): Amount {

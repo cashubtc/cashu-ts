@@ -10,33 +10,34 @@ import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 export class Amount {
     // (undocumented)
     add(other: AmountLike): Amount;
+    compareTo(other: AmountLike): -1 | 0 | 1;
     // (undocumented)
-    div(divisor: AmountLike): Amount;
+    divideBy(divisor: AmountLike): Amount;
     // (undocumented)
-    eq(other: AmountLike): boolean;
+    equals(other: AmountLike): boolean;
     static from(input: AmountLike): Amount;
     // (undocumented)
-    gt(other: AmountLike): boolean;
+    greaterThan(other: AmountLike): boolean;
     // (undocumented)
-    gte(other: AmountLike): boolean;
+    greaterThanOrEqual(other: AmountLike): boolean;
     // (undocumented)
     isZero(): boolean;
     // (undocumented)
-    lt(other: AmountLike): boolean;
+    lessThan(other: AmountLike): boolean;
     // (undocumented)
-    lte(other: AmountLike): boolean;
+    lessThanOrEqual(other: AmountLike): boolean;
     // (undocumented)
     static max(a: AmountLike, b: AmountLike): Amount;
     // (undocumented)
     static min(a: AmountLike, b: AmountLike): Amount;
     // (undocumented)
-    mod(divisor: AmountLike): Amount;
+    modulo(divisor: AmountLike): Amount;
     // (undocumented)
-    mul(factor: AmountLike): Amount;
+    multiplyBy(factor: AmountLike): Amount;
     // (undocumented)
     static one(): Amount;
     // (undocumented)
-    sub(other: AmountLike): Amount;
+    subtract(other: AmountLike): Amount;
     // (undocumented)
     static sum(values: Iterable<AmountLike>): Amount;
     toBigInt(): bigint;

@@ -63,7 +63,7 @@ export function splitAmount(
 		// Normal positive-value paths: ignore zeros for validation and totals
 		const positive = normalizedSplit.filter((amt) => !amt.isZero());
 		const totalPositive = Amount.sum(positive);
-		if (totalPositive.gt(remainingValue)) {
+		if (totalPositive.greaterThan(remainingValue)) {
 			throw new Error(
 				`Split is greater than total amount: ${totalPositive.toString()} > ${remainingValue.toString()}`,
 			);
@@ -73,13 +73,13 @@ export function splitAmount(
 		}
 
 		// if caller supplied an exact custom split, preserve their order
-		if (totalPositive.eq(remainingValue)) {
+		if (totalPositive.equals(remainingValue)) {
 			return positive.map((amt) => amt.toNumber()); // TODO: v4
 		}
 
 		// Work only with validated positive amounts from here on
 		normalizedSplit = positive;
-		remainingValue = remainingValue.sub(totalPositive);
+		remainingValue = remainingValue.subtract(totalPositive);
 	} else {
 		normalizedSplit = [];
 	}
@@ -92,10 +92,10 @@ export function splitAmount(
 	for (const amtAsAmount of sortedKeyAmounts) {
 		if (amtAsAmount.isZero()) continue;
 		// Calculate how many of amt fit into remaining value
-		const requireCount = remainingValue.div(amtAsAmount).toNumber(); // TODO: v4
+		const requireCount = remainingValue.divideBy(amtAsAmount).toNumber(); // TODO: v4
 		// Add them to the split and reduce the target value by added amounts
 		normalizedSplit.push(...Array<Amount>(requireCount).fill(amtAsAmount));
-		remainingValue = remainingValue.sub(amtAsAmount.mul(requireCount));
+		remainingValue = remainingValue.subtract(amtAsAmount.multiplyBy(requireCount));
 		// Break early once target is satisfied
 		if (remainingValue.isZero()) break;
 	}
@@ -106,7 +106,9 @@ export function splitAmount(
 	// Only sort when we performed a fill and it was requested
 	// Exact custom splits were returned unsorted earlier
 	if (order) {
-		normalizedSplit = normalizedSplit.sort((a, b) => compareAmounts(a, b, order));
+		normalizedSplit = normalizedSplit.sort((a, b) =>
+			order === 'desc' ? b.compareTo(a) : a.compareTo(b),
+		);
 	}
 	return normalizedSplit.map((amt) => amt.toNumber()); // TODO: v4
 }
@@ -134,11 +136,11 @@ export function getKeepAmounts(
 	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
 	const sortedKeyAmounts = getKeysetAmountsAsAmount(keys, 'asc');
 	for (const amt of sortedKeyAmounts) {
-		const countWeHave = amountsWeHave.filter((a) => amt.eq(a)).length;
+		const countWeHave = amountsWeHave.filter((a) => amt.equals(a)).length;
 		const countWeWant = Math.max(targetCount - countWeHave, 0);
 		for (let i = 0; i < countWeWant; ++i) {
 			const nextTotal = runningTotal.add(amt);
-			if (nextTotal.gt(normalizedAmountToKeep)) {
+			if (nextTotal.greaterThan(normalizedAmountToKeep)) {
 				break;
 			}
 			amountsWeWant.push(amt);
@@ -146,7 +148,7 @@ export function getKeepAmounts(
 		}
 	}
 	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
-	const amountDiff = normalizedAmountToKeep.sub(runningTotal);
+	const amountDiff = normalizedAmountToKeep.subtract(runningTotal);
 	if (!amountDiff.isZero()) {
 		const remainingAmounts = splitAmount(amountDiff, keys);
 		for (const amt of remainingAmounts) {
@@ -155,9 +157,7 @@ export function getKeepAmounts(
 			runningTotal = runningTotal.add(amount);
 		}
 	}
-	return amountsWeWant
-		.sort((a, b) => (a.eq(b) ? 0 : a.lt(b) ? -1 : 1))
-		.map((amount) => amount.toNumber()); // TODO: v4
+	return amountsWeWant.sort((a, b) => a.compareTo(b)).map((amount) => amount.toNumber()); // TODO: v4
 }
 /**
  * Returns the amounts in the keyset sorted by the order specified.
@@ -176,14 +176,8 @@ export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): 
 
 function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[] {
 	const amounts = Object.keys(keyset).map((k: string) => Amount.from(k));
-	amounts.sort((a, b) => compareAmounts(a, b, order));
+	amounts.sort((a, b) => (order === 'desc' ? b.compareTo(a) : a.compareTo(b)));
 	return amounts; // always array
-}
-
-function compareAmounts(a: Amount, b: Amount, order: 'asc' | 'desc'): number {
-	if (a.eq(b)) return 0;
-	if (order === 'desc') return a.gt(b) ? -1 : 1;
-	return a.lt(b) ? -1 : 1;
 }
 
 /**
