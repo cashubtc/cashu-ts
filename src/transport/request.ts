@@ -1,5 +1,6 @@
 import { HttpResponseError, NetworkError, MintOperationError } from '../model/Errors';
 import { type Logger, NULL_LOGGER } from '../logger';
+import { JSONInt } from '../utils/JSONInt';
 
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
@@ -54,7 +55,7 @@ async function _request({
 	headers: requestHeaders,
 	...options
 }: RequestOptions): Promise<unknown> {
-	const body = requestBody ? JSON.stringify(requestBody) : undefined;
+	const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
@@ -73,7 +74,9 @@ async function _request({
 	if (!response.ok) {
 		let errorData: ApiError;
 		try {
-			errorData = (await response.json()) as ApiError;
+			const errorText = await response.text();
+			const parsed = errorText ? JSONInt.parse(errorText) : undefined;
+			errorData = isApiError(parsed) ? parsed : { error: 'bad response' };
 		} catch {
 			errorData = { error: 'bad response' };
 		}
@@ -99,11 +102,26 @@ async function _request({
 	}
 
 	try {
-		return await response.json();
+		const responseText = await response.text();
+		if (!responseText) {
+			throw new Error('Empty response body');
+		}
+		return JSONInt.parse(responseText);
 	} catch (err) {
 		requestLogger.error('Failed to parse HTTP response', { err });
 		throw new HttpResponseError('bad response', response.status);
 	}
+}
+
+function isApiError(value: unknown): value is ApiError {
+	if (typeof value !== 'object' || value === null) {
+		return false;
+	}
+	const maybe = value as Record<string, unknown>;
+	const hasError = !('error' in maybe) || typeof maybe.error === 'string';
+	const hasCode = !('code' in maybe) || typeof maybe.code === 'number';
+	const hasDetail = !('detail' in maybe) || typeof maybe.detail === 'string';
+	return hasError && hasCode && hasDetail;
 }
 
 export default async function request<T>(options: RequestOptions): Promise<T> {
