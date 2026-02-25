@@ -20,6 +20,7 @@ export class Amount {
     greaterThan(other: AmountLike): boolean;
     // (undocumented)
     greaterThanOrEqual(other: AmountLike): boolean;
+    isSafeNumber(): boolean;
     // (undocumented)
     isZero(): boolean;
     // (undocumented)

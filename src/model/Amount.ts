@@ -98,13 +98,20 @@ export class Amount {
 	 * @throws If value exceeds Number.MAX_SAFE_INTEGER.
 	 */
 	toNumber(): number {
-		const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
-		if (this.value > maxSafe) {
+		if (!this.isSafeNumber()) {
 			throw new AmountError(
 				`Amount ${this.value} exceeds Number.MAX_SAFE_INTEGER; use bigint/string.`,
 			);
 		}
 		return Number(this.value);
+	}
+
+	/**
+	 * Whether this Amount can be safely converted to a number.
+	 */
+	isSafeNumber(): boolean {
+		const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+		return this.value <= maxSafe;
 	}
 
 	/**
