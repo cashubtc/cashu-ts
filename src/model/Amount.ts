@@ -34,6 +34,9 @@ export class Amount {
 
 	/**
 	 * Parse/normalize supported inputs into an Amount.
+	 *
+	 * @throws If input is negative, or `number` type input is above safe limit, or input is not a
+	 *   finite integer.
 	 */
 	static from(input: AmountLike): Amount {
 		if (input instanceof Amount) return input;
