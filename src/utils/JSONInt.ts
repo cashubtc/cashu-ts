@@ -30,8 +30,7 @@ type ReviverFn = (this: unknown, key: string, value: unknown) => unknown;
 type ReplacerFn = (this: unknown, key: string, value: unknown) => unknown;
 type ReplacerList = ReadonlyArray<string | number>;
 
-const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
-const MIN_SAFE_BIGINT = -MAX_SAFE_BIGINT;
+let safeBigIntLimits: { max: bigint; min: bigint } | undefined;
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -39,6 +38,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function toBigIntCtor(): ((value: string) => bigint) | undefined {
 	const ctor = globalThis.BigInt;
 	return typeof ctor === 'function' ? ctor : undefined;
+}
+
+function getSafeBigIntLimits(bigIntCtor: (value: string) => bigint): {
+	max: bigint;
+	min: bigint;
+} {
+	if (!safeBigIntLimits) {
+		const max = bigIntCtor(String(Number.MAX_SAFE_INTEGER));
+		safeBigIntLimits = { max, min: -max };
+	}
+	return safeBigIntLimits;
 }
 
 class Parser {
@@ -239,7 +249,8 @@ class Parser {
 		}
 
 		const bi = this.bigIntCtor(token);
-		if (bi > MAX_SAFE_BIGINT || bi < MIN_SAFE_BIGINT) {
+		const { max, min } = getSafeBigIntLimits(this.bigIntCtor);
+		if (bi > max || bi < min) {
 			return bi;
 		}
 		return Number(token);
