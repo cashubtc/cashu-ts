@@ -65,6 +65,7 @@ import {
 	type MintQuoteBolt11Request,
 	type MintQuoteBolt12Request,
 	type SwapRequest,
+	type SerializedBlindedMessage,
 	type SerializedBlindedSignature,
 } from '../model/types';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -479,7 +480,7 @@ class Mint {
 			throw new Error('Invalid response from mint');
 		}
 
-		return data;
+		return this.normalizeMeltBaseResponse(data);
 	}
 
 	/**
@@ -640,6 +641,8 @@ class Mint {
 			throw new Error('Invalid response from mint');
 		}
 
+		data.outputs = this.normalizeMessageAmounts(data.outputs, 'restore.outputs');
+		data.signatures = this.normalizeSignatureAmounts(data.signatures, 'restore.signatures');
 		return data;
 	}
 
@@ -798,6 +801,16 @@ class Mint {
 				amount: this.normalizeAmountOrThrow(signature.amount, `${context}.amount`),
 			};
 		});
+	}
+
+	private normalizeMessageAmounts(
+		messages: SerializedBlindedMessage[],
+		context: string,
+	): SerializedBlindedMessage[] {
+		return messages.map((message) => ({
+			...message,
+			amount: this.normalizeAmountOrThrow(message.amount, `${context}.amount`),
+		}));
 	}
 
 	private normalizeMintQuoteBolt11Response(
