@@ -854,10 +854,8 @@ class Mint {
 	private normalizeMeltQuoteBolt11Response(
 		response: MeltQuoteBolt11Response,
 	): MeltQuoteBolt11Response {
-		return {
-			...this.normalizeMeltBaseResponse(response),
-			...this.normalizeAmountFields(response, ['fee_reserve'], 'meltQuoteBolt11'),
-		};
+		const normalized = this.normalizeMeltBaseResponse(response);
+		return this.normalizeAmountFields(normalized, ['fee_reserve'], 'meltQuoteBolt11');
 	}
 }
 
