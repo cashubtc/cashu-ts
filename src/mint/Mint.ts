@@ -776,6 +776,7 @@ class Mint {
 		return false;
 	}
 
+	// TODO v4 - return just Amount
 	private normalizeAmountOrThrow(value: unknown, context: string): number {
 		try {
 			return Amount.from(value as AmountLike).toNumber();
@@ -784,14 +785,10 @@ class Mint {
 		}
 	}
 
+	// TODO: v4 - remove; normalizers should return Amount.
 	private normalizeAmountOrOriginal(value: unknown, context: string): unknown {
-		// TODO: v4 - remove fallback and return Amount directly.
 		if (value === undefined || value === null) return value;
-		try {
-			return this.normalizeAmountOrThrow(value, context);
-		} catch {
-			return value;
-		}
+		return this.normalizeAmountOrThrow(value, context);
 	}
 
 	private normalizeAmountFields<T extends Record<string, unknown>>(
@@ -827,14 +824,14 @@ class Mint {
 	private normalizeMintQuoteBolt11Response(
 		response: MintQuoteBolt11Response,
 	): MintQuoteBolt11Response {
-		// TODO: v4 - return Amount directly; remove fallback to original wire value.
+		// TODO: v4 - return Amount directly.
 		return this.normalizeAmountFields(response, ['amount'], 'mintQuoteBolt11');
 	}
 
 	private normalizeMintQuoteBolt12Response(
 		response: MintQuoteBolt12Response,
 	): MintQuoteBolt12Response {
-		// TODO: v4 - return Amount directly; remove fallback to original wire value.
+		// TODO: v4 - return Amount directly.
 		return this.normalizeAmountFields(
 			response,
 			['amount', 'amount_paid', 'amount_issued'],
