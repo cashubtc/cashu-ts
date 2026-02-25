@@ -107,14 +107,6 @@ export class Amount {
 	}
 
 	/**
-	 * Whether this Amount can be safely converted to a number.
-	 */
-	isSafeNumber(): boolean {
-		const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
-		return this.value <= maxSafe;
-	}
-
-	/**
 	 * Unsafe conversion to number. Precision can be lost above MAX_SAFE_INTEGER.
 	 */
 	toNumberUnsafe(): number {
@@ -176,6 +168,14 @@ export class Amount {
 	// -----------------------------------------------------------------
 	// Section: Comparison
 	// -----------------------------------------------------------------
+
+	/**
+	 * Whether this Amount can be safely converted to a number.
+	 */
+	isSafeNumber(): boolean {
+		const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+		return this.value <= maxSafe;
+	}
 
 	isZero(): boolean {
 		return this.value === 0n;
