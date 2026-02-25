@@ -187,7 +187,10 @@ function deserializePackage(
 	if (options?.validateDigest) {
 		const recomputed = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
 		if (recomputed.current !== digests.current) {
-			throw new Error('Digest validation failed');
+			throw new Error('Digest validation failed: current digest mismatch');
+		}
+		if (digests.legacy && recomputed.legacy !== digests.legacy) {
+			throw new Error('Digest validation failed: legacy digest mismatch');
 		}
 	}
 
