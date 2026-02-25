@@ -5,23 +5,45 @@ import { type SendResponse } from './types';
 import { type KeyChain } from './KeyChain';
 import { Amount, type AmountLike } from '../model/Amount';
 
+// TODO v4
+// - use amountToSelect: AmountLike
+// - Remove overloads in selectProofsRGLI
 export type SelectProofs = (
 	proofs: Proof[],
-	amountToSelect: AmountLike,
+	amountToSelect: number,
 	keyChain: KeyChain,
 	includeFees?: boolean,
 	exactMatch?: boolean,
 	logger?: Logger,
 ) => SendResponse;
 
-export const selectProofsRGLI: SelectProofs = (
+/**
+ * @deprecated Use an `AmountLike` type for amountToSelect.
+ */
+export function selectProofsRGLI(
+	proofs: Proof[],
+	amountToSelect: number,
+	keyChain: KeyChain,
+	includeFees?: boolean,
+	exactMatch?: boolean,
+	logger?: Logger,
+): SendResponse;
+export function selectProofsRGLI(
+	proofs: Proof[],
+	amountToSelect: AmountLike,
+	keyChain: KeyChain,
+	includeFees?: boolean,
+	exactMatch?: boolean,
+	logger?: Logger,
+): SendResponse;
+export function selectProofsRGLI(
 	proofs: Proof[],
 	amountToSelect: AmountLike,
 	keyChain: KeyChain,
 	includeFees: boolean = false,
 	exactMatch: boolean = false,
 	_logger: Logger = NULL_LOGGER,
-): SendResponse => {
+): SendResponse {
 	const targetAmount = Amount.from(amountToSelect);
 	const targetAmountNumber = targetAmount.toNumber();
 
@@ -315,4 +337,4 @@ export const selectProofsRGLI: SelectProofs = (
 		return { keep, send: bestProofs };
 	}
 	return { keep: proofs, send: [] };
-};
+}

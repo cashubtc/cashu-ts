@@ -46,11 +46,13 @@ export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
  * the call site, use `OutputDataLike<YourType>`.
  *
  * @remarks
- * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
- * removing the generic.
+ * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic. Likewise,
+ * we will change amount to `AmountLike`. v4 shape will be:
+ *
+ * `export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;`
  */
 export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
-	amount: AmountLike,
+	amount: number,
 	keys: TKeyset,
 ) => OutputDataLike<TKeyset>;
 

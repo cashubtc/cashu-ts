@@ -1274,7 +1274,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 }
 
 // @public
-export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: AmountLike, keys: TKeyset) => OutputDataLike<TKeyset>;
+export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
 
 // @public
 export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
@@ -1615,10 +1615,13 @@ export type SecretKind = 'P2PK' | 'HTLC' | (string & {});
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 // @public (undocumented)
-export type SelectProofs = (proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+export type SelectProofs = (proofs: Proof[], amountToSelect: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+
+// @public @deprecated (undocumented)
+export function selectProofsRGLI(proofs: Proof[], amountToSelect: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger): SendResponse;
 
 // @public (undocumented)
-export const selectProofsRGLI: SelectProofs;
+export function selectProofsRGLI(proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger): SendResponse;
 
 // @public
 export class SendBuilder {
