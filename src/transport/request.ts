@@ -27,14 +27,14 @@ export type RequestOptions = RequestArgs &
 /**
  * Cashu api error.
  *
- * - Error: Brief error message.
- * - Code: HTTP error code.
- * - Detail: Detailed error message.
+ * - Code: Mint error code.
+ * - Detail: Error message or mint-specific payload.
+ * - Error: HTTP error message (non NUT-00 response)
  */
 export type ApiError = {
-	error?: string;
 	code?: number;
-	detail?: string;
+	detail?: unknown;
+	error?: string;
 };
 
 let globalRequestOptions: Partial<RequestOptions> = {};
@@ -276,9 +276,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	if (!response.ok) {
 		let errorData: ApiError;
 		try {
-			const errorText = await response.text();
-			const parsed = errorText ? JSONInt.parse(errorText) : undefined;
-			errorData = isApiError(parsed) ? parsed : { error: 'bad response' };
+			errorData = parseErrorBody(await response.text());
 		} catch {
 			errorData = { error: 'bad response' };
 		}
@@ -315,15 +313,25 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	}
 }
 
-function isApiError(value: unknown): value is ApiError {
-	if (typeof value !== 'object' || value === null) {
-		return false;
+/**
+ * Try extract a normalized error message.
+ */
+function parseErrorBody(errorText: string): ApiError {
+	if (!errorText) return { detail: 'bad response' };
+	let parsed: unknown;
+	try {
+		parsed = JSONInt.parse(errorText);
+	} catch {
+		return { detail: errorText };
 	}
-	const maybe = value as Record<string, unknown>;
-	const hasError = !('error' in maybe) || typeof maybe.error === 'string';
-	const hasCode = !('code' in maybe) || typeof maybe.code === 'number';
-	const hasDetail = !('detail' in maybe) || typeof maybe.detail === 'string';
-	return hasError && hasCode && hasDetail;
+	if (
+		typeof parsed === 'object' &&
+		parsed !== null &&
+		('detail' in parsed || 'code' in parsed || 'error' in parsed)
+	) {
+		return parsed as ApiError;
+	}
+	return { detail: parsed };
 }
 
 /**
