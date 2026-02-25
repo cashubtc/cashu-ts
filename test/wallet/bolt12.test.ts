@@ -77,7 +77,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 	});
 
 	it('mintBolt12 posts to /v1/mint/bolt12', async () => {
-		const response = { signatures: [{ C_: '...', e: '...' }] };
+		const response = { signatures: [{ C_: '...', id: 'ks1', amount: 42 }] };
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const mintPayload = { quote: 'q123', outputs: [{ amount: 42, id: 'ks1', B_: '...' }] };
@@ -218,7 +218,12 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	});
 
 	it('wallet.checkMintQuoteBolt12 delegates to mint', async () => {
-		const response = { quote: 'q1', state: 'PAID', amount_issued: 21 };
+		const response = {
+			quote: 'q1',
+			state: 'PAID',
+			amount_paid: 21,
+			amount_issued: 21,
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const wallet = new Wallet(mint);
@@ -274,9 +279,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	it('wallet.mintProofsBolt12 requires privkey and delegates to mint.mintBolt12', async () => {
 		const response = {
 			signatures: [
-				{ C_: 'sig1', e: 'e1' },
-				{ C_: 'sig2', e: 'e2' },
-				{ C_: 'sig3', e: 'e3' },
+				{ C_: 'sig1', id: '009a1f293253e41e', amount: 16 },
+				{ C_: 'sig2', id: '009a1f293253e41e', amount: 4 },
+				{ C_: 'sig3', id: '009a1f293253e41e', amount: 1 },
 			],
 		};
 		const { req, calls } = makeRequestSpy(response);
