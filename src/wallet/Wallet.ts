@@ -83,6 +83,7 @@ import {
 	invoiceHasAmountInHRP,
 } from '../utils';
 import { type AuthProvider } from '../auth/AuthProvider';
+import { type BatchMintRequest } from '../model/types/NUTXX';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 
@@ -1707,6 +1708,29 @@ class Wallet {
 	}
 
 	/**
+	 * Batch mint proofs for a bolt11 quote.
+	 *
+	 * @param quotes Mint quote ID or object (bolt11).
+	 * @param config Optional parameters.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns Minted proofs.
+	 */
+	async batchMintProofsBolt11(
+		quotes: Array<Pick<MintQuoteBolt11Response, 'amount' | 'quote'>>,
+		signatures?: Array<string | null>,
+		config?: Omit<MintProofsConfig, 'privkey'>,
+		outputType?: OutputType,
+	): Promise<Proof[]> {
+		const ids: string[] = [];
+		const amounts: number[] = [];
+		for (const quote of quotes) {
+			ids.push(quote.quote);
+			amounts.push(quote.amount);
+		}
+		return this._batchMintProofs('bolt11', ids, amounts, signatures, config, outputType);
+	}
+
+	/**
 	 * Mints proofs for a bolt12 quote.
 	 *
 	 * @param amount Amount to mint.
@@ -1792,6 +1816,78 @@ class Wallet {
 			({ signatures } = await this.mint.mintBolt12(mintPayload));
 		} else {
 			({ signatures } = await this.mint.mintBolt11(mintPayload));
+		}
+		this.failIf(
+			signatures.length !== outputs.length,
+			`Mint returned ${signatures.length} signatures, expected ${outputs.length}`,
+		);
+
+		this._logger.debug('MINT COMPLETED', { amounts: outputs.map((o) => o.blindedMessage.amount) });
+		return outputs.map((d, i) => d.toProof(signatures[i], keyset));
+	}
+
+	/**
+	 * Internal helper for minting proofs with bolt11 or bolt12.
+	 *
+	 * @remarks
+	 * Handles blinded messages, signatures, and proof construction. Use public methods like
+	 * mintProofs or helpers for API access.
+	 * @param method 'bolt11' or 'bolt12'.
+	 * @param amount Amount to mint (must be positive).
+	 * @param quote Quote ID or object.
+	 * @param config Optional (privkey, keysetId).
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns Minted proofs.
+	 * @throws If params are invalid or mint returns errors.
+	 */
+	private async _batchMintProofs(
+		method: 'bolt11' | 'bolt12',
+		quoteIds: string[],
+		amounts: number[],
+		nut20Signatures?: Array<string | null>,
+		config?: Omit<MintProofsConfig, 'privkey'>,
+		outputType?: OutputType,
+	): Promise<Proof[]> {
+		// this.assertAmount(amount, `_mintProofs: ${method}`);
+		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
+		const { keysetId, proofsWeHave, onCountersReserved } = config ?? {};
+
+		// Shape output type and denominations for our proofs
+		// we are receiving, so no includeFees.
+		const mintAmount = amounts.reduce((a, c) => a + c, 0);
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+		let mintOT = this.configureOutputs(
+			mintAmount,
+			keyset,
+			outputType,
+			false, // no fees
+			proofsWeHave,
+		);
+
+		// Assign counters atomically if OutputType is deterministic
+		// and the counter is zero (auto-assign)
+		const autoCounters = await this.addCountersToOutputTypes(keyset.id, mintOT);
+		[mintOT] = autoCounters.outputTypes;
+		if (autoCounters.used) {
+			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'mintProofs' });
+		}
+		this._logger.debug('mint counter', { counter: autoCounters.used, mintOT });
+
+		// Create outputs and mint payload
+		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
+		const blindedMessages = outputs.map((d) => d.blindedMessage);
+		const mintPayload: BatchMintRequest = {
+			outputs: blindedMessages,
+			quotes: quoteIds,
+			quote_amounts: amounts,
+			signatures: nut20Signatures,
+		};
+
+		let signatures;
+		if (method === 'bolt12') {
+			({ signatures } = await this.mint.mintBolt12Batch(mintPayload));
+		} else {
+			({ signatures } = await this.mint.mintBolt11Batch(mintPayload));
 		}
 		this.failIf(
 			signatures.length !== outputs.length,
