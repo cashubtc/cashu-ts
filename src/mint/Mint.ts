@@ -832,8 +832,16 @@ class Mint {
 	}
 
 	private normalizeMeltBaseResponse<T extends MeltQuoteBaseResponse>(response: T): T {
+		const hasFeeReserve = Object.prototype.hasOwnProperty.call(response, 'fee_reserve');
+		const feeReserve = hasFeeReserve
+			? this.normalizeAmountOrOriginal(
+					(response as { fee_reserve?: unknown }).fee_reserve,
+					'meltQuote.fee_reserve',
+				)
+			: undefined;
 		return {
 			...this.normalizeAmountFields(response, ['amount'], 'meltQuote'),
+			...(hasFeeReserve ? { fee_reserve: feeReserve } : {}),
 			change: response.change
 				? this.normalizeSignatureAmounts(response.change, 'meltQuote.change')
 				: undefined,
