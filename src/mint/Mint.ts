@@ -292,48 +292,57 @@ class Mint {
 	/**
 	 * Mints new tokens by requesting blind signatures on the provided outputs.
 	 *
+	 * @remarks
+	 * Thin wrapper around mint('bolt11', ...).
 	 * @param mintPayload Payload containing the outputs to get blind signatures on.
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures.
 	 */
 	async mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
-		const data = await this.requestWithAuth<MintResponse>(
-			'POST',
-			'/v1/mint/bolt11',
-			{ requestBody: mintPayload },
-			customRequest,
-		);
-
-		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
-			throw new Error('Invalid response from mint');
-		}
-		data.signatures = this.normalizeSignatureAmounts(data.signatures);
-
-		return data;
+		return this.mint('bolt11', mintPayload, { customRequest });
 	}
 
 	/**
 	 * Mints new tokens using a BOLT12 quote by requesting blind signatures on the provided outputs.
 	 *
+	 * @remarks
+	 * Thin wrapper around mint('bolt12', ...).
 	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
 	 * @param customRequest Optional override for the request function.
 	 * @returns Serialized blinded signatures for the requested outputs.
 	 */
 	async mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
-		const data = await this.requestWithAuth<MintResponse>(
+		return this.mint('bolt12', mintPayload, { customRequest });
+	}
+
+	/**
+	 * Mints new tokens for a given payment method.
+	 *
+	 * @remarks
+	 * Uses `/v1/mint/{method}` and validates method format.
+	 * @param method The minting method (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
+	 * @param options.customRequest Optional override for the request function.
+	 * @returns Serialized blinded signatures for the requested outputs.
+	 */
+	async mint<TRes extends Record<string, unknown> = Record<string, unknown>>(
+		method: string,
+		mintPayload: MintRequest,
+		options?: { customRequest?: RequestFn },
+	): Promise<MintResponse & TRes> {
+		failIf(!this.isValidMethodString(method), `Invalid mint method: ${method}`, this._logger);
+		const data = await this.requestWithAuth<MintResponse & TRes>(
 			'POST',
-			'/v1/mint/bolt12',
+			`/v1/mint/${method}`,
 			{ requestBody: mintPayload },
-			customRequest,
+			options?.customRequest,
 		);
 
 		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt12' });
+			this._logger.error('Invalid response from mint...', { data, op: `mint.${method}` });
 			throw new Error('Invalid response from mint');
 		}
 		data.signatures = this.normalizeSignatureAmounts(data.signatures);
-
 		return data;
 	}
 
