@@ -206,4 +206,10 @@ describe('reviver behavior', () => {
 		const out = parse('[1,2,3]', (key, value) => (key === '1' ? 20 : value));
 		expect(out).toEqual([1, 20, 3]);
 	});
+
+	test('reviver can delete array entries', () => {
+		const out = parse('[1,2,3]', (key, value) => (key === '1' ? undefined : value)) as number[];
+		expect(out.length).toBe(3);
+		expect(1 in out).toBe(false);
+	});
 });
