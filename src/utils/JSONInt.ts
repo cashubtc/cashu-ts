@@ -323,7 +323,7 @@ function walkReviver(
 	if (Array.isArray(current)) {
 		for (let i = 0; i < current.length; i += 1) {
 			const v = walkReviver(current, String(i), reviver);
-			if (v === undefined) current[i] = undefined;
+			if (v === undefined) Reflect.deleteProperty(current, i);
 			else current[i] = v;
 		}
 	} else if (isRecord(current)) {
