@@ -93,7 +93,7 @@ DEV=1 make nutshell-stable-down
 - Be explicit about errors; fail fast with actionable messages.
 - Optimize for readability over micro-performance.
 - Prefer early exits and flatter structures to avoid deep if/else nesting.
-- If it's not "[Zen](https://peps.python.org/pep-0020/)" code, then don't do it.
+- If it's not "Zen" (PEP 20) in spirit, then don't do it.
 
 ## Linting and TypeScript rules
 
