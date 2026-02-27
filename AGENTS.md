@@ -29,6 +29,7 @@ Optional local hooks (opt-in): `npm run setup-hooks`.
   - `crypto/` cryptographic primitives
   - `transport/` HTTP/WebSocket transport, request helpers
   - `auth/` OIDC auth helpers
+  - `utils/` various helpers (cbor, base64, bech32, Bytes etc)
 - `test/` unit + integration tests; `test/integration.test.ts` is a good live usage reference
 - `examples/` runnable examples and usage patterns
 - `docs-src/` contributor docs and usage recipes (rendered on docs site)
