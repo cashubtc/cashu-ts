@@ -107,9 +107,10 @@ DEV=1 make nutshell-stable-down
 
 ## Hooks and commit hygiene
 
-Hooks are opt-in; install with `npm run setup-hooks`.
-Pre-commit runs lint/format by default; set `FULL_PRECOMMIT=1` to run full suite.
-Pre-push runs `npm run prtasks`.
+Hooks are installed by Husky:
+
+- Pre-commit runs lint/format by default; set `FULL_PRECOMMIT=1` to run full suite.
+- Pre-push runs `npm run prtasks`.
 
 ## If you are making changes (author flow)
 
