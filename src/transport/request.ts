@@ -14,7 +14,14 @@ export type RequestArgs = {
 
 export type RequestOptions = RequestArgs &
 	Omit<RequestInit, 'body' | 'headers'> &
-	Partial<Nut19Policy>;
+	Partial<Nut19Policy> & {
+		/**
+		 * Per-request timeout in milliseconds. If a single fetch hangs longer than this, it is aborted
+		 * and treated as a NetworkError (triggering retry on cached endpoints). Without this, a hung
+		 * connection can consume the entire TTL retry window.
+		 */
+		requestTimeout?: number;
+	};
 
 /**
  * Cashu api error.
@@ -56,6 +63,20 @@ const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
 
 /**
+ * Returns true if the error warrants a retry on NUT-19 cached endpoints:
+ *
+ * - NetworkError: network-level failures (DNS, connection refused, AbortError/timeout)
+ * - HttpResponseError with 5xx status: server-side transient errors (503, 502, etc.)
+ *
+ * 4xx errors (including 429 Too Many Requests) are NOT retried — they are bounced back to the
+ * caller immediately.
+ */
+function isRetryableError(e: unknown): boolean {
+	if (e instanceof NetworkError) return true;
+	return e instanceof HttpResponseError && e.status >= 500;
+}
+
+/**
  * Internal function that handles retry logic for NUT-19 cached endpoints. Non-cached endpoints are
  * executed directly without retries.
  */
@@ -69,7 +90,7 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 		cached_endpoints?.some(
 			(cached_endpoint) =>
 				cached_endpoint.path === url.pathname &&
-				cached_endpoint.method === (options.method ?? 'GET'),
+				cached_endpoint.method === (options.method?.toUpperCase() ?? 'GET'),
 		) && !!ttl;
 
 	if (!isCachable) {
@@ -83,7 +104,7 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 		try {
 			return await _request(options);
 		} catch (e) {
-			if (e instanceof NetworkError) {
+			if (isRetryableError(e)) {
 				const totalElapsedTime = Date.now() - startTime;
 				const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
@@ -121,6 +142,12 @@ async function _request({
 	endpoint,
 	requestBody,
 	headers: requestHeaders,
+	requestTimeout,
+	// excluded from fetch options — NUT-19 fields consumed by requestWithRetry
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	cached_endpoints: _cached_endpoints,
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	ttl: _ttl,
 	...options
 }: RequestOptions): Promise<unknown> {
 	const body = requestBody ? JSON.stringify(requestBody) : undefined;
@@ -130,13 +157,25 @@ async function _request({
 		...requestHeaders,
 	};
 
+	const controller = new AbortController();
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+	if (requestTimeout !== undefined) {
+		timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+	}
+	const signal = requestTimeout !== undefined ? controller.signal : options.signal;
+
 	let response: Response;
 	try {
-		response = await fetch(endpoint, { body, headers, ...options });
+		response = await fetch(endpoint, { body, headers, ...options, signal });
 	} catch (err) {
+		if (err instanceof Error && err.name === 'AbortError') {
+			throw new NetworkError(`Request timed out after ${requestTimeout}ms`);
+		}
 		// A fetch() promise only rejects when the request fails,
 		// for example, because of a badly-formed request URL or a network error.
 		throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
+	} finally {
+		clearTimeout(timeoutId);
 	}
 
 	if (!response.ok) {
@@ -176,10 +215,11 @@ async function _request({
 }
 
 /**
- * Performs HTTP request with exponential backoff retry for NUT-19 cached endpoints. Retries only
- * occur for network errors on endpoints specified in cached_endpoints. Nut19Policy for given
- * endpoint should be provided as Nut19Policy object, fetched with MintInfo Regular requests are
- * made for non-cached endpoints without retry logic.
+ * Performs HTTP request with exponential backoff retry for NUT-19 cached endpoints. Retries occur
+ * for network errors and 5xx responses on endpoints specified in cached_endpoints. 4xx errors
+ * (including 429 Too Many Requests) are not retried. Nut19Policy for a given endpoint should be
+ * provided as Nut19Policy object fetched from MintInfo. Regular requests are made for non-cached
+ * endpoints without retry logic.
  */
 export default async function request<T>(options: RequestOptions): Promise<T> {
 	const data = await requestWithRetry({ ...options, ...globalRequestOptions });

@@ -1,11 +1,11 @@
 import { beforeAll, test, describe, expect, afterAll, afterEach, vi } from 'vitest';
 import { Wallet, HttpResponseError, NetworkError, MintOperationError } from '../../src';
-import { HttpResponse, http } from 'msw';
+import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../../src';
 import request from '../../src/transport';
 import { MINTCACHE } from '../consts';
-import { Nut19Policy } from '../../src/model/types';
+import { Nut19Policy } from '../../src';
 
 // Setup mint cache for loadMint()
 const mintUrl = 'https://localhost:3338';
@@ -191,7 +191,7 @@ describe('requests', () => {
 			expect(requestCount).toBe(4);
 		});
 
-		test('does not retry on non-NetworkError (e.g., HttpResponseError)', async () => {
+		test('does not retry on 4xx HttpResponseError (e.g., 404 Not Found)', async () => {
 			const endpoint = mintUrl + '/v1/keys';
 			const retryPolicy: Nut19Policy = {
 				ttl: 60000,
@@ -214,6 +214,70 @@ describe('requests', () => {
 
 			expect(requestCount).toBe(1);
 		});
+
+		test('does not retry on 429 Too Many Requests', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, () => {
+					requestCount++;
+					return new HttpResponse(JSON.stringify({ error: 'Too Many Requests' }), { status: 429 });
+				}),
+			);
+
+			await expect(request({ endpoint, ...retryPolicy })).rejects.toThrow(HttpResponseError);
+			expect(requestCount).toBe(1);
+		});
+
+		test('retries cached endpoints on 5xx HttpResponseError', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, () => {
+					requestCount++;
+					if (requestCount < 3) {
+						return new HttpResponse(JSON.stringify({ error: 'Service Unavailable' }), {
+							status: 503,
+						});
+					}
+					return HttpResponse.json({ keysets: [] });
+				}),
+			);
+
+			const result = await request({ endpoint, ...retryPolicy });
+			expect(requestCount).toBe(3);
+			expect(result).toEqual({ keysets: [] });
+		});
+
+		test('aborts hung request after requestTimeout and retries', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, async () => {
+					requestCount++;
+					if (requestCount === 1) {
+						await delay(5000); // hang longer than requestTimeout
+					}
+					return HttpResponse.json({ keysets: [] });
+				}),
+			);
+
+			const result = await request({ endpoint, ...retryPolicy, requestTimeout: 100 });
+			expect(requestCount).toBe(2); // first hung + aborted, second succeeded
+			expect(result).toEqual({ keysets: [] });
+		}, 5000);
 
 		test('only retries endpoints with matching method', async () => {
 			const endpoint = mintUrl + '/v1/keys';

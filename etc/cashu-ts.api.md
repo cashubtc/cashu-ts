@@ -1602,7 +1602,9 @@ export type RequestArgs = {
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 // @public (undocumented)
-export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy>;
+export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy> & {
+    requestTimeout?: number;
+};
 
 // @public (undocumented)
 export type RestoreConfig = {
