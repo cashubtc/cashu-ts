@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90.04% </span>
+                <span class="strong">90.22% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>199/221</span>
+                <span class='fraction'>203/225</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.28% </span>
+                <span class="strong">89.83% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>50/56</span>
+                <span class='fraction'>53/59</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90.04% </span>
+                <span class="strong">90.22% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>199/221</span>
+                <span class='fraction'>203/225</span>
             </div>
         
             
@@ -408,7 +408,14 @@
 <a name='L343'></a><a href='#L343'>343</a>
 <a name='L344'></a><a href='#L344'>344</a>
 <a name='L345'></a><a href='#L345'>345</a>
-<a name='L346'></a><a href='#L346'>346</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L346'></a><a href='#L346'>346</a>
+<a name='L347'></a><a href='#L347'>347</a>
+<a name='L348'></a><a href='#L348'>348</a>
+<a name='L349'></a><a href='#L349'>349</a>
+<a name='L350'></a><a href='#L350'>350</a>
+<a name='L351'></a><a href='#L351'>351</a>
+<a name='L352'></a><a href='#L352'>352</a>
+<a name='L353'></a><a href='#L353'>353</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -429,6 +436,9 @@
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -578,6 +588,7 @@
 <span class="cline-any cline-yes">14x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">193x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">193x</span>
 <span class="cline-any cline-yes">193x</span>
@@ -696,6 +707,7 @@
 <span class="cline-any cline-yes">36x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">60x</span>
 <span class="cline-any cline-yes">60x</span>
 <span class="cline-any cline-yes">60x</span>
 <span class="cline-any cline-yes">60x</span>
@@ -732,6 +744,7 @@
 <span class="cline-any cline-yes">53x</span>
 <span class="cline-any cline-yes">53x</span>
 <span class="cline-any cline-yes">53x</span>
+<span class="cline-any cline-yes">53x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">53x</span>
@@ -742,6 +755,7 @@
 <span class="cline-any cline-yes">53x</span>
 <span class="cline-any cline-yes">53x</span>
 <span class="cline-any cline-yes">53x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -774,6 +788,7 @@ import {
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
+import { Amount, type AmountLike } from './Amount';
 &nbsp;
 // TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
 // For now the generic preserves the relationship between factory input type and `toProof` keyset type,
@@ -800,8 +815,10 @@ export interface OutputDataLike&lt;TKeyset extends HasKeysetKeys = HasKeysetKeys
  * the call site, use `OutputDataLike&lt;YourType&gt;`.
  *
  * @remarks
- * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
- * removing the generic.
+ * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic. Likewise,
+ * we will change amount to `AmountLike`. v4 shape will be:
+ *
+ * `export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) =&gt; OutputDataLike;`
  */
 export type OutputDataFactory&lt;TKeyset extends HasKeysetKeys = HasKeysetKeys&gt; = (
 	amount: number,
@@ -914,15 +931,16 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 &nbsp;
 	static createP2PKData&lt;T extends HasKeysetKeys&gt;(
 		p2pk: P2PKOptions,
-		amount: number,
+		amount: AmountLike,
 		keyset: T,
-		customSplit?: number[],
+		customSplit?: AmountLike[],
 	) {
-		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) =&gt; Amount.from(a));
 		return amounts.map((a) =&gt; this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 &nbsp;
-	static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string) {
+	static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string) {
+		const amountValue = Amount.from(amount);
 		// normalise keys and clamp required signature counts to available keys
 		const lockKeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
 		const refundKeys: string[] = p2pk.refundKeys ?? [];
@@ -1020,7 +1038,7 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 &nbsp;
 		// create OutputData
 		const od = new OutputData(
-			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes,
 		);
@@ -1032,33 +1050,34 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 	}
 &nbsp;
 	static createRandomData&lt;T extends HasKeysetKeys&gt;(
-		amount: number,
+		amount: AmountLike,
 		keyset: T,
-		customSplit?: number[],
+		customSplit?: AmountLike[],
 	) {
-		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) =&gt; Amount.from(a));
 		return amounts.map((a) =&gt; this.createSingleRandomData(a, keyset.id));
 	}
 &nbsp;
-	static createSingleRandomData(amount: number, keysetId: string) {
+	static createSingleRandomData(amount: AmountLike, keysetId: string) {
+		const amountValue = Amount.from(amount);
 		const randomHex = bytesToHex(randomBytes(32));
 		const secretBytes = new TextEncoder().encode(randomHex);
 		const { r, B_ } = blindMessage(secretBytes);
 		return new OutputData(
-			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes,
 		);
 	}
 &nbsp;
 	static createDeterministicData&lt;T extends HasKeysetKeys&gt;(
-		amount: number,
+		amount: AmountLike,
 		seed: Uint8Array,
 		counter: number,
 		keyset: T,
-		customSplit?: number[],
+		customSplit?: AmountLike[],
 	): OutputData[] {
-		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) =&gt; Amount.from(a));
 		return amounts.map((a, i) =&gt;
 			this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
 		);
@@ -1069,11 +1088,12 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 	 *   and retry per BIP32-style derivation.
 	 */
 	static createSingleDeterministicData(
-		amount: number,
+		amount: AmountLike,
 		seed: Uint8Array,
 		counter: number,
 		keysetId: string,
 	) {
+		const amountValue = Amount.from(amount);
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
@@ -1082,7 +1102,7 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 		const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
-			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			utf8SecretBytes,
 		);
@@ -1094,8 +1114,9 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 	 * @param outputs Array of OutputDataLike objects.
 	 * @returns The total sum of amounts.
 	 */
+	// TODO(v4): Move Number return types to Amount (breaking change)
 	static sumOutputAmounts(outputs: OutputDataLike[]): number {
-		return outputs.reduce((sum, output) =&gt; sum + output.blindedMessage.amount, 0);
+		return Amount.sum(outputs.map((output) =&gt; output.blindedMessage.amount)).toNumber();
 	}
 }
 &nbsp;</pre></td></tr></table></pre>
@@ -1105,7 +1126,7 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-02-25T11:45:17.611Z
+                at 2026-03-04T11:07:34.710Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
