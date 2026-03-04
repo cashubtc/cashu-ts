@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { WalletOps } from '../../src/wallet/WalletOps';
+import { Amount, type AmountLike } from '../../src/model/Amount';
 
 import type {
 	Proof,
@@ -25,7 +26,7 @@ import type {
 // ---- Function signatures for typed mocks ------------------------------------
 
 type SendFn = (
-	amount: number,
+	amount: AmountLike,
 	proofs: Proof[],
 	config?: SendConfig,
 	outputConfig?: OutputConfig,
@@ -39,7 +40,7 @@ type SignP2PKFn = (
 ) => Proof[];
 
 type PrepareSendFn = (
-	amount: number,
+	amount: AmountLike,
 	proofs: Proof[],
 	config?: SendConfig,
 	outputConfig?: OutputConfig,
@@ -58,21 +59,25 @@ type PrepareReceiveFn = (
 ) => Promise<SwapPreview>;
 
 type MintBolt11Fn = (
-	amount: number,
+	amount: AmountLike,
 	quote: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
 type MintBolt12Fn = (
-	amount: number,
+	amount: AmountLike,
 	quote: MintQuoteBolt12Response,
 	privkey: string,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
-type SendOfflineFn = (amount: number, proofs: Proof[], config?: SendOfflineConfig) => SendResponse;
+type SendOfflineFn = (
+	amount: AmountLike,
+	proofs: Proof[],
+	config?: SendOfflineConfig,
+) => SendResponse;
 
 type PrepareMeltFn = (
 	method: string,
@@ -189,12 +194,18 @@ describe('WalletOps builders', () => {
 			expect(wallet.send).toHaveBeenCalledTimes(1);
 			const [amount, sentProofs, config, maybeOutputConfig] = wallet.send.mock.calls[0];
 
-			expect(amount).toBe(5);
+			expect(Amount.from(amount).toNumber()).toBe(5);
 			expect(sentProofs).toBe(proofs);
 			expect(config).toEqual({ includeFees: true, keysetId: 'kid' });
 			expect(maybeOutputConfig).toEqual({
 				send: { type: 'random' },
 			});
+		});
+
+		it('accepts AmountLike for send amount', async () => {
+			await ops.send(Amount.from(5), proofs).run();
+			expect(wallet.send).toHaveBeenCalledTimes(1);
+			expect(Amount.from(wallet.send.mock.calls[0][0]).toNumber()).toBe(5);
 		});
 
 		it('calls wallet.prepareSwapToSend with defaults when no OutputType was set', async () => {
@@ -204,7 +215,7 @@ describe('WalletOps builders', () => {
 			const [amount, sentProofs, config, maybeOutputConfig] =
 				wallet.prepareSwapToSend.mock.calls[0];
 
-			expect(amount).toBe(5);
+			expect(Amount.from(amount).toNumber()).toBe(5);
 			expect(sentProofs).toBe(proofs);
 			expect(config).toEqual({ includeFees: true, keysetId: 'kid' });
 			expect(maybeOutputConfig).toEqual({
@@ -252,7 +263,7 @@ describe('WalletOps builders', () => {
 			expect(wallet.sendOffline).toHaveBeenCalledTimes(1);
 			const [amount, sentProofs, config] = wallet.sendOffline.mock.calls[0];
 
-			expect(amount).toBe(5);
+			expect(Amount.from(amount).toNumber()).toBe(5);
 			expect(sentProofs).toBe(proofs);
 			expect(config).toEqual({ includeFees: true, exactMatch: true, requireDleq: false });
 			expect(wallet.send).not.toHaveBeenCalled();
@@ -290,6 +301,14 @@ describe('WalletOps builders', () => {
 					options: { pubkey: ['a', 'b'], requiredSignatures: 2 },
 					denominations: [],
 				},
+			});
+		});
+
+		it('accepts AmountLike denominations in builder output config', async () => {
+			await ops.send(7, proofs).asRandom(['2', 3n, 2]).run();
+			const [, , , outputConfig] = wallet.send.mock.calls[0];
+			expect(outputConfig).toEqual({
+				send: { type: 'random', denominations: ['2', 3n, 2] },
 			});
 		});
 
@@ -476,10 +495,16 @@ describe('WalletOps builders', () => {
 			expect(wallet.mintProofsBolt11).toHaveBeenCalledTimes(1);
 			const [amount, q, config, maybeOT] = wallet.mintProofsBolt11.mock.calls[0];
 
-			expect(amount).toBe(10);
+			expect(Amount.from(amount).toNumber()).toBe(10);
 			expect(q).toBe(quote);
 			expect(config).toEqual({ keysetId: 'kid' });
 			expect(maybeOT).toBeUndefined();
+		});
+
+		it('accepts AmountLike for mint amount', async () => {
+			await ops.mintBolt11('10', quote).run();
+			expect(wallet.mintProofsBolt11).toHaveBeenCalledTimes(1);
+			expect(Amount.from(wallet.mintProofsBolt11.mock.calls[0][0]).toNumber()).toBe(10);
 		});
 
 		it('calls wallet.mintProofs with custom OutputType and config', async () => {
@@ -493,7 +518,7 @@ describe('WalletOps builders', () => {
 			expect(wallet.mintProofsBolt11).toHaveBeenCalledTimes(1);
 			const [amount, q, config, outputType] = wallet.mintProofsBolt11.mock.calls[0];
 
-			expect(amount).toBe(10);
+			expect(Amount.from(amount).toNumber()).toBe(10);
 			expect(q).toBe(quote);
 			expect(outputType).toEqual({ type: 'p2pk', options: { pubkey: 'P' }, denominations: [10] });
 
@@ -562,7 +587,7 @@ describe('WalletOps builders', () => {
 			expect(wallet.mintProofsBolt12).toHaveBeenCalledTimes(1);
 			const [amount, q, pk, cfg, ot] = wallet.mintProofsBolt12.mock.calls[0];
 
-			expect(amount).toBe(7);
+			expect(Amount.from(amount).toNumber()).toBe(7);
 			expect(q).toBe(mint12);
 			expect(pk).toBe('sk'); // positional
 			expect(cfg).toMatchObject({ keysetId: 'kid' });

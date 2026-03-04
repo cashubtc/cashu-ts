@@ -8,7 +8,7 @@ import {
 	getPubKeyFromPrivKey,
 } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
-import { MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
+import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
 import * as utils from '../../src/utils';
 import { PUBKEYS } from '../consts';
 import {
@@ -42,6 +42,11 @@ describe('test split amounts ', () => {
 	test('testing amount 0', async () => {
 		const chunks = utils.splitAmount(0, keys);
 		expect(chunks).toStrictEqual([]);
+	});
+
+	test('accepts AmountLike value and split entries', async () => {
+		const chunks = utils.splitAmount(Amount.from(10), keys, ['1', 1n, Amount.from(2), 2, 2, 2n]);
+		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
 });
 
@@ -591,6 +596,14 @@ describe('test output selection', () => {
 		// keeping 22 with a target of 2, we expect one 1, one 2, no 4s, one 8, and another 1, 2, 8 to reach 22
 		amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 2);
 		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
+
+		amountsToKeep = utils.getKeepAmounts(proofsWeHave, '22', keys, 2);
+		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
+	});
+
+	test('hasCorrespondingKey accepts AmountLike', () => {
+		expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
+		expect(utils.hasCorrespondingKey(Amount.from(3), keys)).toBe(false);
 	});
 });
 describe('test zero-knowledge utilities', () => {

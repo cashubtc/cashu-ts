@@ -1,4 +1,5 @@
 import type { Proof } from '../../model/types/proof';
+import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import { type OperationCounters } from '../CounterSource';
 import { type SigFlag } from '../../crypto';
@@ -20,7 +21,7 @@ export interface SharedOutputTypeProps {
 	 *
 	 * @default Uses basic splitAmount if omitted.
 	 */
-	denominations?: number[];
+	denominations?: AmountLike[];
 }
 
 /**

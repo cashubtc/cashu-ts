@@ -7,6 +7,59 @@
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
+export class Amount {
+    // (undocumented)
+    add(other: AmountLike): Amount;
+    compareTo(other: AmountLike): -1 | 0 | 1;
+    // (undocumented)
+    divideBy(divisor: AmountLike): Amount;
+    // (undocumented)
+    equals(other: AmountLike): boolean;
+    static from(input: AmountLike): Amount;
+    // (undocumented)
+    greaterThan(other: AmountLike): boolean;
+    // (undocumented)
+    greaterThanOrEqual(other: AmountLike): boolean;
+    isSafeNumber(): boolean;
+    // (undocumented)
+    isZero(): boolean;
+    // (undocumented)
+    lessThan(other: AmountLike): boolean;
+    // (undocumented)
+    lessThanOrEqual(other: AmountLike): boolean;
+    // (undocumented)
+    static max(a: AmountLike, b: AmountLike): Amount;
+    // (undocumented)
+    static min(a: AmountLike, b: AmountLike): Amount;
+    // (undocumented)
+    modulo(divisor: AmountLike): Amount;
+    // (undocumented)
+    multiplyBy(factor: AmountLike): Amount;
+    // (undocumented)
+    static one(): Amount;
+    // (undocumented)
+    subtract(other: AmountLike): Amount;
+    // (undocumented)
+    static sum(values: Iterable<AmountLike>): Amount;
+    toBigInt(): bigint;
+    // (undocumented)
+    toJSON(): string;
+    toNumber(): number;
+    toNumberUnsafe(): number;
+    toString(): string;
+    // (undocumented)
+    static zero(): Amount;
+}
+
+// @public (undocumented)
+export class AmountError extends Error {
+    constructor(message: string);
+}
+
+// @public (undocumented)
+export type AmountLike = number | bigint | string | Amount;
+
+// @public
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
 // @public
@@ -177,7 +230,7 @@ export function createAuthWallet(mintUrl: string, options?: {
 }>;
 
 // @public (undocumented)
-export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: number, id: string): BlindSignature;
+export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: AmountLike, id: string): BlindSignature;
 
 // @public
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
@@ -380,7 +433,7 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: number, keys: Keys, targetCount: number): number[];
+export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: AmountLike, keys: Keys, targetCount: number): number[];
 
 // @public
 export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[];
@@ -459,7 +512,7 @@ export function getValidSigners(signatures: string[], message: string, pubkeys: 
 export function handleTokens(token: string): Token;
 
 // @public
-export function hasCorrespondingKey(amount: number, keyset: Keys): boolean;
+export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean;
 
 // @public (undocumented)
 export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array;
@@ -670,10 +723,10 @@ export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Res
 export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
     constructor(wallet: Wallet, method: string, quote: TQuote, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     // @deprecated
     onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
@@ -860,12 +913,12 @@ export type MintAllKeysets = GetKeysetsResponse;
 
 // @public
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
-    constructor(wallet: Wallet, method: M, amount: number, quote: MintQuoteFor<M>);
+    constructor(wallet: Wallet, method: M, amount: AmountLike, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
     privkey(k: string): MintBuilder<M, true>;
@@ -1202,17 +1255,17 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData<T extends HasKeysetKeys>(amount: number, seed: Uint8Array, counter: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createDeterministicData<T extends HasKeysetKeys>(amount: AmountLike, seed: Uint8Array, counter: number, keyset: T, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createP2PKData<T extends HasKeysetKeys>(p2pk: P2PKOptions, amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createP2PKData<T extends HasKeysetKeys>(p2pk: P2PKOptions, amount: AmountLike, keyset: T, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createRandomData<T extends HasKeysetKeys>(amount: number, keyset: T, customSplit?: number[]): OutputData[];
+    static createRandomData<T extends HasKeysetKeys>(amount: AmountLike, keyset: T, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createSingleDeterministicData(amount: number, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string): OutputData;
+    static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
-    static createSingleRandomData(amount: number, keysetId: string): OutputData;
+    static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     secret: Uint8Array;
     static sumOutputAmounts(outputs: OutputDataLike[]): number;
@@ -1486,10 +1539,10 @@ export type RawTransport = {
 export class ReceiveBuilder {
     constructor(wallet: Wallet, token: Token | string);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
@@ -1562,25 +1615,28 @@ export type SecretKind = 'P2PK' | 'HTLC' | (string & {});
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 // @public (undocumented)
-export type SelectProofs = (proofs: Proof[], amountToSend: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+export type SelectProofs = (proofs: Proof[], amountToSelect: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
+
+// @public @deprecated (undocumented)
+export function selectProofsRGLI(proofs: Proof[], amountToSelect: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger): SendResponse;
 
 // @public (undocumented)
-export const selectProofsRGLI: SelectProofs;
+export function selectProofsRGLI(proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger): SendResponse;
 
 // @public
 export class SendBuilder {
-    constructor(wallet: Wallet, amount: number, proofs: Proof[]);
+    constructor(wallet: Wallet, amount: AmountLike, proofs: Proof[]);
     asCustom(data: OutputDataLike[]): this;
-    asDeterministic(counter?: number, denoms?: number[]): this;
-    asFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    asP2PK(options: P2PKOptions, denoms?: number[]): this;
-    asRandom(denoms?: number[]): this;
+    asDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    asRandom(denoms?: AmountLike[]): this;
     includeFees(on?: boolean): this;
     keepAsCustom(data: OutputDataLike[]): this;
-    keepAsDeterministic(counter?: number, denoms?: number[]): this;
-    keepAsFactory(factory: OutputDataFactory, denoms?: number[]): this;
-    keepAsP2PK(options: P2PKOptions, denoms?: number[]): this;
-    keepAsRandom(denoms?: number[]): this;
+    keepAsDeterministic(counter?: number, denoms?: AmountLike[]): this;
+    keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
+    keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
+    keepAsRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     offlineCloseMatch(requireDleq?: boolean): this;
     offlineExactOnly(requireDleq?: boolean): this;
@@ -1664,7 +1720,7 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
 
 // @public
 export interface SharedOutputTypeProps {
-    denominations?: number[];
+    denominations?: AmountLike[];
 }
 
 // @public (undocumented)
@@ -1686,7 +1742,7 @@ export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 export function sortProofsById(proofs: Proof[]): Proof[];
 
 // @public
-export function splitAmount(value: number, keyset: Keys, split?: number[], order?: 'desc' | 'asc'): number[];
+export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): number[];
 
 // @public
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
@@ -1846,19 +1902,19 @@ export class Wallet {
     completeMelt<TQuote extends MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
-    createLockedMintQuote(amount: number, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
+    createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
     // @deprecated (undocumented)
-    createMeltQuote(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt11(invoice: string, amountMsat?: number): Promise<MeltQuoteBolt11Response>;
-    createMeltQuoteBolt12(offer: string, amountMsat?: number): Promise<MeltQuoteBolt12Response>;
+    createMeltQuote(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
+    createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
     // @deprecated (undocumented)
-    createMintQuote(amount: number, description?: string): Promise<MintQuoteBolt11Response>;
-    createMintQuoteBolt11(amount: number, description?: string): Promise<MintQuoteBolt11Response>;
+    createMintQuote(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
+    createMintQuoteBolt11(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(pubkey: string, options?: {
-        amount?: number;
+        amount?: AmountLike;
         description?: string;
     }): Promise<MintQuoteBolt12Response>;
-    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: number): Promise<MeltQuoteBolt11Response>;
+    createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
@@ -1882,27 +1938,27 @@ export class Wallet {
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
     readonly mint: Mint;
     // @deprecated (undocumented)
-    mintProofs(amount: number, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsBolt11(amount: number, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
-    mintProofsBolt12(amount: number, quote: MintQuoteBolt12Response, privkey: string, config?: {
+    mintProofs(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     prepareMelt<TQuote extends MeltQuoteBaseResponse>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
-    prepareSwapToSend(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
+    prepareSwapToSend(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
-    selectProofsToSend(proofs: Proof[], amountToSend: number, includeFees?: boolean, exactMatch?: boolean): SendResponse;
-    send(amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
-    sendOffline(amount: number, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
+    selectProofsToSend(proofs: Proof[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
+    send(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
+    sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: Proof[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
     // @deprecated (undocumented)
-    readonly swap: (amount: number, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
+    readonly swap: (amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
@@ -1967,13 +2023,13 @@ export class WalletOps {
     // (undocumented)
     meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
-    mintBolt11(amount: number, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
+    mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
     // (undocumented)
-    mintBolt12(amount: number, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
+    mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
     // (undocumented)
     receive(token: Token | string): ReceiveBuilder;
     // (undocumented)
-    send(amount: number, proofs: Proof[]): SendBuilder;
+    send(amount: AmountLike, proofs: Proof[]): SendBuilder;
 }
 
 // @public

@@ -25,6 +25,7 @@ import {
 	MeltBlanks,
 	HasKeysetKeys,
 	OutputType,
+	Amount,
 } from '../../src';
 
 import { Bytes } from '../../src/utils';
@@ -1276,6 +1277,19 @@ describe('send', () => {
 		expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 		expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+	});
+
+	test('test send accepts AmountLike values', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const amountInputs = [Amount.from(1), 1n, '1'] as const;
+		for (const amount of amountInputs) {
+			const result = await wallet.send(amount, proofs);
+			expect(result.keep).toHaveLength(0);
+			expect(result.send).toHaveLength(1);
+			expect(result.send[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+		}
 	});
 
 	test('test send over paying. Should return change', async () => {

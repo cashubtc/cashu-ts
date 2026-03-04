@@ -19,6 +19,7 @@ import {
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
+import { Amount, type AmountLike } from './Amount';
 
 // TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
 // For now the generic preserves the relationship between factory input type and `toProof` keyset type,
@@ -45,8 +46,10 @@ export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
  * the call site, use `OutputDataLike<YourType>`.
  *
  * @remarks
- * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
- * removing the generic.
+ * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic. Likewise,
+ * we will change amount to `AmountLike`. v4 shape will be:
+ *
+ * `export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;`
  */
 export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
 	amount: number,
@@ -159,15 +162,16 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 
 	static createP2PKData<T extends HasKeysetKeys>(
 		p2pk: P2PKOptions,
-		amount: number,
+		amount: AmountLike,
 		keyset: T,
-		customSplit?: number[],
+		customSplit?: AmountLike[],
 	) {
-		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) => Amount.from(a));
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 
-	static createSingleP2PKData(p2pk: P2PKOptions, amount: number, keysetId: string) {
+	static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string) {
+		const amountValue = Amount.from(amount);
 		// normalise keys and clamp required signature counts to available keys
 		const lockKeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
 		const refundKeys: string[] = p2pk.refundKeys ?? [];
@@ -265,7 +269,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 
 		// create OutputData
 		const od = new OutputData(
-			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes,
 		);
@@ -277,33 +281,34 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 	}
 
 	static createRandomData<T extends HasKeysetKeys>(
-		amount: number,
+		amount: AmountLike,
 		keyset: T,
-		customSplit?: number[],
+		customSplit?: AmountLike[],
 	) {
-		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) => Amount.from(a));
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
 
-	static createSingleRandomData(amount: number, keysetId: string) {
+	static createSingleRandomData(amount: AmountLike, keysetId: string) {
+		const amountValue = Amount.from(amount);
 		const randomHex = bytesToHex(randomBytes(32));
 		const secretBytes = new TextEncoder().encode(randomHex);
 		const { r, B_ } = blindMessage(secretBytes);
 		return new OutputData(
-			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			secretBytes,
 		);
 	}
 
 	static createDeterministicData<T extends HasKeysetKeys>(
-		amount: number,
+		amount: AmountLike,
 		seed: Uint8Array,
 		counter: number,
 		keyset: T,
-		customSplit?: number[],
+		customSplit?: AmountLike[],
 	): OutputData[] {
-		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) => Amount.from(a));
 		return amounts.map((a, i) =>
 			this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
 		);
@@ -314,11 +319,12 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 	 *   and retry per BIP32-style derivation.
 	 */
 	static createSingleDeterministicData(
-		amount: number,
+		amount: AmountLike,
 		seed: Uint8Array,
 		counter: number,
 		keysetId: string,
 	) {
+		const amountValue = Amount.from(amount);
 		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
@@ -327,7 +333,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
-			new BlindedMessage(amount, B_, keysetId).getSerializedBlindedMessage(),
+			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
 			r,
 			utf8SecretBytes,
 		);
@@ -339,7 +345,8 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 	 * @param outputs Array of OutputDataLike objects.
 	 * @returns The total sum of amounts.
 	 */
+	// TODO(v4): Move Number return types to Amount (breaking change)
 	static sumOutputAmounts(outputs: OutputDataLike[]): number {
-		return outputs.reduce((sum, output) => sum + output.blindedMessage.amount, 0);
+		return Amount.sum(outputs.map((output) => output.blindedMessage.amount)).toNumber();
 	}
 }

@@ -1,6 +1,7 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
 import { Proof } from '../../src/model/types';
+import { Amount } from '../../src/model/Amount';
 
 // -----------------------------------------------------------------
 // Most paths are exercised via wallet tests.
@@ -66,6 +67,16 @@ describe('selectProofsRGLI, focused unit tests', () => {
 		const kc = keychainStub({ A: 0 });
 		const res = selectProofsRGLI(proofs as any, 6, kc, false, false);
 		expect(res.send.length + res.keep.length).toBe(2);
+		expect(res.send.length).toBeGreaterThan(0);
+	});
+
+	test('accepts AmountLike target amount', () => {
+		const proofs: Proof[] = [
+			{ id: 'A', amount: 3, secret: 's1', C: 'C1' },
+			{ id: 'A', amount: 4, secret: 's2', C: 'C2' },
+		];
+		const kc = keychainStub({ A: 0 });
+		const res = selectProofsRGLI(proofs as any, Amount.from('6'), kc, false, false);
 		expect(res.send.length).toBeGreaterThan(0);
 	});
 
