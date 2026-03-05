@@ -324,6 +324,7 @@ class Wallet {
 			promises.push(
 				this.mint.getInfo().then((info) => {
 					this._mintInfo = new MintInfo(info);
+					this.mint.setMintInfo(this._mintInfo);
 					return null;
 				}),
 			);
@@ -347,6 +348,7 @@ class Wallet {
 	 */
 	loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void {
 		this._mintInfo = new MintInfo(mintInfo);
+		this.mint.setMintInfo(this._mintInfo);
 		this._keyChain.loadFromCache(cache);
 		this.finishInit();
 	}

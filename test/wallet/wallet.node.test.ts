@@ -26,6 +26,7 @@ import {
 	HasKeysetKeys,
 	OutputType,
 	Amount,
+	setGlobalRequestOptions,
 } from '../../src';
 
 import { Bytes } from '../../src/utils';
@@ -192,6 +193,109 @@ describe('test wallet init', () => {
 		// Verify specific keyset retrieval
 		const specificKeys = wallet.keyChain.getKeyset('00bd033559de27d0').keys;
 		expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
+	});
+
+	test('should resolve NUT-19 support lazily from mint info when unsupported', async () => {
+		const wallet = new Wallet(new Mint(mintUrl), { unit });
+		await wallet.loadMint();
+
+		const mintInfo = await wallet.mint.getLazyMintInfo();
+		expect(mintInfo.isSupported(19)).toEqual({ supported: false });
+	});
+
+	test('should keep cached NUT-19 support when loading from cache', async () => {
+		const staleCachedInfo = JSON.parse(JSON.stringify(mintInfoResp));
+		staleCachedInfo.nuts[19] = {
+			ttl: 30,
+			cached_endpoints: [{ method: 'GET', path: '/v1/info' }],
+		};
+
+		const wallet = new Wallet(new Mint(mintUrl), { unit, mintInfo: staleCachedInfo });
+		wallet.loadMintFromCache(staleCachedInfo, MINTCACHE.keychainCache);
+
+		const mintInfo = await wallet.mint.getLazyMintInfo();
+		expect(mintInfo.isSupported(19)).toEqual({
+			supported: true,
+			params: {
+				ttl: 30000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/info' }],
+			},
+		});
+	});
+
+	test('should wire NUT-19 policy from mint info during init', async () => {
+		const mintInfoWithNut19 = JSON.parse(JSON.stringify(mintInfoResp));
+		mintInfoWithNut19.nuts[19] = {
+			ttl: 30,
+			cached_endpoints: [{ method: 'POST', path: '/v1/checkstate' }],
+		};
+
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfoWithNut19);
+			}),
+		);
+
+		const wallet = new Wallet(new Mint(mintUrl), { unit });
+		await wallet.loadMint();
+
+		const mintInfo = await wallet.mint.getLazyMintInfo();
+		expect(mintInfo.isSupported(19)).toEqual({
+			supported: true,
+			params: {
+				ttl: 30000,
+				cached_endpoints: [{ method: 'POST', path: '/v1/checkstate' }],
+			},
+		});
+	});
+
+	test('should retry timed out NUT-19 cached endpoint through wallet API', async () => {
+		const mintInfoWithNut19 = JSON.parse(JSON.stringify(mintInfoResp));
+		mintInfoWithNut19.nuts[19] = {
+			ttl: 60,
+			cached_endpoints: [{ method: 'POST', path: '/v1/checkstate' }],
+		};
+
+		server.use(
+			http.get(mintUrl + '/v1/info', () => {
+				return HttpResponse.json(mintInfoWithNut19);
+			}),
+		);
+
+		let requestCount = 0;
+		server.use(
+			http.post(mintUrl + '/v1/checkstate', async () => {
+				requestCount++;
+				if (requestCount === 1) {
+					await new Promise((resolve) => setTimeout(resolve, 100));
+				}
+				return HttpResponse.json({
+					states: [
+						{
+							Y: '02d5dd71f59d917da3f73defe997928e9459e9d67d8bdb771e4989c2b5f50b2fff',
+							state: 'UNSPENT',
+						},
+					],
+				});
+			}),
+		);
+
+		setGlobalRequestOptions({ requestTimeout: 10 });
+		try {
+			const wallet = new Wallet(new Mint(mintUrl), { unit });
+			await wallet.loadMint();
+			const states = await wallet.checkProofsStates([
+				{
+					secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+				},
+			]);
+
+			expect(requestCount).toBe(2);
+			expect(states).toHaveLength(1);
+			expect(states[0].state).toBe(CheckStateEnum.UNSPENT);
+		} finally {
+			setGlobalRequestOptions({});
+		}
 	});
 
 	test('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
