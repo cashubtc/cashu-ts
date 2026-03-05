@@ -35,14 +35,11 @@ function makeKeysetFromCache(k: MintKeys, active = true) {
 }
 
 describe('Mint (BOLT12) – instance methods via customRequest', () => {
-	it('uses per-call customRequest for lazy /v1/info before operation request', async () => {
+	it('does not force /v1/info lookup before operation request', async () => {
 		const offlineMint = new Mint('https://offline.invalid');
 		const calls: string[] = [];
 		const customRequest = async (options: ReqArgs) => {
 			calls.push(options.endpoint);
-			if (options.endpoint.endsWith('/v1/info')) {
-				return MINTCACHE.mintInfo as any;
-			}
 			return {
 				quote: 'q1',
 				request: 'lno1offer...',
@@ -60,8 +57,26 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		);
 
 		expect(result.quote).toBe('q1');
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatch(/\/v1\/mint\/quote\/bolt12$/);
+	});
+
+	it('uses per-call customRequest on getLazyMintInfo cache miss', async () => {
+		const offlineMint = new Mint('https://offline.invalid');
+		const calls: string[] = [];
+		const customRequest = async (options: ReqArgs) => {
+			calls.push(options.endpoint);
+			if (options.endpoint.endsWith('/v1/info')) {
+				return MINTCACHE.mintInfo as any;
+			}
+			throw new Error('unexpected endpoint');
+		};
+
+		const info = await offlineMint.getLazyMintInfo(customRequest);
+
+		expect(info.name).toBe(MINTCACHE.mintInfo.name);
+		expect(calls).toHaveLength(1);
 		expect(calls[0]).toMatch(/\/v1\/info$/);
-		expect(calls[1]).toMatch(/\/v1\/mint\/quote\/bolt12$/);
 	});
 
 	it('createMintQuoteBolt12 posts to /v1/mint/quote/bolt12 with payload incl. pubkey', async () => {

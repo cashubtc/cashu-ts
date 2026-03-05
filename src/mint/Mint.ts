@@ -145,6 +145,13 @@ class Mint {
 	}
 
 	/**
+	 * Seeds the mint-info cache from already-fetched data.
+	 */
+	setMintInfo(mintInfo: MintInfo | GetInfoResponse): void {
+		this._mintInfo = mintInfo instanceof MintInfo ? mintInfo : new MintInfo(mintInfo);
+	}
+
+	/**
 	 * Performs a swap operation with ecash inputs and outputs.
 	 *
 	 * @param swapPayload Payload containing inputs and outputs.
@@ -711,7 +718,10 @@ class Mint {
 		customRequest?: RequestFn,
 	): Promise<T> {
 		const requestInstance = customRequest ?? this._request;
-		const mintInfo = await this.getLazyMintInfo(customRequest);
+		let mintInfo = this._mintInfo;
+		if (this._authProvider) {
+			mintInfo = await this.getLazyMintInfo(customRequest);
+		}
 		// Get BAT/CAT token if this endpoint is protected
 		const bat = await this.handleBlindAuth(method, path, mintInfo);
 		const cat = await this.handleClearAuth(method, path, mintInfo);
@@ -720,7 +730,7 @@ class Mint {
 			...(bat ? { 'Blind-auth': bat } : {}),
 			...(cat ? { 'Clear-auth': cat } : {}),
 		};
-		const nut19 = mintInfo.isSupported(19);
+		const nut19 = mintInfo?.isSupported(19);
 		return requestInstance<T>({
 			...init,
 			endpoint: joinUrls(this._mintUrl, path),

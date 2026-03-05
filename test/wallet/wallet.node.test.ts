@@ -203,7 +203,7 @@ describe('test wallet init', () => {
 		expect(mintInfo.isSupported(19)).toEqual({ supported: false });
 	});
 
-	test('should resolve NUT-19 support lazily from network when loading stale cache', async () => {
+	test('should keep cached NUT-19 support when loading from cache', async () => {
 		const staleCachedInfo = JSON.parse(JSON.stringify(mintInfoResp));
 		staleCachedInfo.nuts[19] = {
 			ttl: 30,
@@ -214,7 +214,13 @@ describe('test wallet init', () => {
 		wallet.loadMintFromCache(staleCachedInfo, MINTCACHE.keychainCache);
 
 		const mintInfo = await wallet.mint.getLazyMintInfo();
-		expect(mintInfo.isSupported(19)).toEqual({ supported: false });
+		expect(mintInfo.isSupported(19)).toEqual({
+			supported: true,
+			params: {
+				ttl: 30000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/info' }],
+			},
+		});
 	});
 
 	test('should wire NUT-19 policy from mint info during init', async () => {
