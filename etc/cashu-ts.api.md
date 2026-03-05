@@ -907,7 +907,6 @@ export class Mint {
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
-    setNut19Params(params: Nut19Policy): void;
     swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
@@ -1195,7 +1194,7 @@ export type Nut19Policy = {
         method: 'GET' | 'POST';
         path: string;
     }>;
-} | null;
+};
 
 // @public (undocumented)
 export class OIDCAuth {

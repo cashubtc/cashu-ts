@@ -1,11 +1,12 @@
-import { beforeAll, test, describe, expect, afterAll, afterEach, vi } from 'vitest';
+import { beforeAll, beforeEach, test, describe, expect, afterAll, afterEach, vi } from 'vitest';
 import { Wallet, HttpResponseError, NetworkError, MintOperationError } from '../../src';
 import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../../src';
-import request from '../../src/transport';
+import request, { setRequestLogger } from '../../src/transport';
 import { MINTCACHE } from '../consts';
 import { Nut19Policy } from '../../src';
+import { NULL_LOGGER, type Logger } from '../../src/logger';
 
 // Setup mint cache for loadMint()
 const mintUrl = 'https://localhost:3338';
@@ -21,6 +22,14 @@ afterEach(() => {
 
 afterAll(() => {
 	server.close();
+});
+
+beforeEach(() => {
+	server.use(
+		http.get(mintUrl + '/v1/info', () => {
+			return HttpResponse.json(MINTCACHE.mintInfo);
+		}),
+	);
 });
 
 describe('requests', () => {
@@ -143,6 +152,66 @@ describe('requests', () => {
 			expect(requestCount).toBe(1);
 		});
 
+		test('handles relative endpoints with normal request behavior', async () => {
+			const endpoint = '/v1/keys';
+			const responseBody = { keysets: [] };
+			const fetchMock = vi
+				.spyOn(globalThis, 'fetch')
+				.mockResolvedValue(new Response(JSON.stringify(responseBody), { status: 200 }));
+
+			const result = await request<typeof responseBody>({
+				endpoint,
+				ttl: 1000,
+				cached_endpoints: [{ method: 'GET', path: '/not-matching' }],
+			});
+
+			expect(result).toEqual(responseBody);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock).toHaveBeenCalledWith(
+				endpoint,
+				expect.objectContaining({
+					headers: expect.objectContaining({ Accept: 'application/json, text/plain, */*' }),
+				}),
+			);
+		});
+
+		test('matches relative endpoint with query and retries when path is cached', async () => {
+			const endpoint = '/v1/keys?token=abc';
+			const retryPolicy: Nut19Policy = {
+				ttl: 1000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+
+			let requestCount = 0;
+			const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+				requestCount++;
+				if (requestCount === 1) {
+					throw new TypeError('Network request failed');
+				}
+				return new Response(JSON.stringify({ keysets: [] }), { status: 200 });
+			});
+
+			const result = await request({ endpoint, ...retryPolicy });
+
+			expect(result).toEqual({ keysets: [] });
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		});
+
+		test('skips retry matching when endpoint path cannot be derived', async () => {
+			const endpoint = 'v1/keys';
+			const retryPolicy: Nut19Policy = {
+				ttl: 1000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			vi.spyOn(Math, 'random').mockReturnValue(0);
+			const fetchMock = vi
+				.spyOn(globalThis, 'fetch')
+				.mockRejectedValue(new TypeError('Failed to parse URL from v1/keys'));
+
+			await expect(request({ endpoint, ...retryPolicy })).rejects.toThrow(NetworkError);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		});
+
 		test('retries cached endpoints on NetworkError', async () => {
 			const endpoint = mintUrl + '/v1/keys';
 			const retryPolicy: Nut19Policy = {
@@ -165,6 +234,45 @@ describe('requests', () => {
 			).rejects.toThrow(NetworkError);
 			expect(requestCount).toBeGreaterThan(1); // should retry multiple times (exponential backoff)
 		}, 10000);
+
+		test('includes concrete delay value in retry log message', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const retryPolicy: Nut19Policy = {
+				ttl: 20,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			const logger: Logger = {
+				error: vi.fn(),
+				warn: vi.fn(),
+				info: vi.fn(),
+				debug: vi.fn(),
+				trace: vi.fn(),
+				log: vi.fn(),
+			};
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, () => {
+					requestCount++;
+					return Response.error();
+				}),
+			);
+
+			setRequestLogger(logger);
+			const mockedRandom = 0.12345;
+			const expectedDelay = mockedRandom * 100;
+			vi.spyOn(Math, 'random').mockReturnValue(mockedRandom);
+
+			try {
+				await expect(request({ endpoint, ...retryPolicy })).rejects.toThrow(NetworkError);
+				expect(requestCount).toBe(2);
+				expect(logger.info).toHaveBeenCalledWith(
+					`Network Error: attempting retry 1 in ${expectedDelay}ms`,
+					expect.objectContaining({ retries: 1, delay: expectedDelay }),
+				);
+			} finally {
+				setRequestLogger(NULL_LOGGER);
+			}
+		});
 
 		test('respects TTL limit during retries', async () => {
 			const endpoint = mintUrl + '/v1/keys';
@@ -278,6 +386,221 @@ describe('requests', () => {
 			expect(requestCount).toBe(2); // first hung + aborted, second succeeded
 			expect(result).toEqual({ keysets: [] });
 		}, 5000);
+
+		test('composes requestTimeout with already-aborted external signal', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			ac.abort();
+
+			const startedAt = Date.now();
+			let thrown: unknown;
+			try {
+				await request({ endpoint, signal: ac.signal, requestTimeout: 5000 });
+			} catch (err) {
+				thrown = err;
+			}
+
+			expect(thrown).toBeInstanceOf(NetworkError);
+			expect((thrown as Error).message).not.toContain('Request timed out');
+			expect(Date.now() - startedAt).toBeLessThan(250);
+		});
+
+		test('composes already-aborted external signal with cached retry policy', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			ac.abort();
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, () => {
+					requestCount++;
+					return HttpResponse.json({ keysets: [] });
+				}),
+			);
+
+			const startedAt = Date.now();
+			let thrown: unknown;
+			try {
+				await request({ endpoint, signal: ac.signal, requestTimeout: 5000, ...retryPolicy });
+			} catch (err) {
+				thrown = err;
+			}
+
+			expect(thrown).toBeInstanceOf(NetworkError);
+			expect((thrown as Error).name).toBe('CallerAbortError');
+			expect((thrown as Error).message).not.toContain('Request timed out');
+			expect(Date.now() - startedAt).toBeLessThan(250);
+			expect(requestCount).toBe(0);
+		});
+
+		test('composes requestTimeout with external signal aborted in-flight', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+
+			server.use(
+				http.get(endpoint, async () => {
+					await delay(5000);
+					return HttpResponse.json({ keysets: [] });
+				}),
+			);
+
+			setTimeout(() => ac.abort(), 25);
+
+			let thrown: unknown;
+			try {
+				await request({ endpoint, signal: ac.signal, requestTimeout: 1000 });
+			} catch (err) {
+				thrown = err;
+			}
+
+			expect(thrown).toBeInstanceOf(NetworkError);
+			expect((thrown as Error).message).not.toContain('Request timed out');
+		});
+
+		test('does not retry cached endpoint when caller aborts in-flight', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+
+			let requestCount = 0;
+			server.use(
+				http.get(endpoint, async () => {
+					requestCount++;
+					await delay(5000);
+					return HttpResponse.json({ keysets: [] });
+				}),
+			);
+
+			setTimeout(() => ac.abort(), 25);
+
+			await expect(
+				request({ endpoint, signal: ac.signal, requestTimeout: 1000, ...retryPolicy }),
+			).rejects.toThrow(NetworkError);
+
+			expect(requestCount).toBe(1);
+		}, 5000);
+
+		test('aborts retry backoff delay when caller aborts', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+
+			let requestCount = 0;
+			vi.spyOn(Math, 'random').mockReturnValue(1); // first delay: 100ms
+			vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+				requestCount++;
+				throw new TypeError('Network request failed');
+			});
+
+			const startedAt = Date.now();
+			const req = request({ endpoint, signal: ac.signal, ...retryPolicy });
+			setTimeout(() => ac.abort(), 10);
+
+			let thrown: unknown;
+			try {
+				await req;
+			} catch (err) {
+				thrown = err;
+			}
+
+			expect(thrown).toBeInstanceOf(NetworkError);
+			expect((thrown as Error).name).toBe('CallerAbortError');
+			expect(Date.now() - startedAt).toBeLessThan(90);
+			expect(requestCount).toBe(1);
+		});
+
+		test('caller abort during retry backoff rejects promptly and does not schedule another attempt', async () => {
+			vi.useFakeTimers();
+			try {
+				const endpoint = mintUrl + '/v1/keys';
+				const ac = new AbortController();
+				const retryPolicy: Nut19Policy = {
+					ttl: 60000,
+					cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+				};
+
+				let requestCount = 0;
+				vi.spyOn(Math, 'random').mockReturnValue(1); // first delay: 100ms
+				vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+					requestCount++;
+					throw new TypeError('Network request failed');
+				});
+
+				const req = request({ endpoint, signal: ac.signal, ...retryPolicy });
+				const rejection = req.catch((err) => err);
+				setTimeout(() => ac.abort(), 10);
+
+				await vi.advanceTimersByTimeAsync(10);
+				const thrown = await rejection;
+				expect(thrown).toMatchObject({ name: 'CallerAbortError' });
+
+				expect(requestCount).toBe(1);
+				expect(vi.getTimerCount()).toBe(0);
+
+				await vi.advanceTimersByTimeAsync(500);
+				expect(requestCount).toBe(1);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+
+		test('preserves caller-abort classification before fetch when signal is pre-aborted', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			ac.abort();
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+
+			const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+			let thrown: unknown;
+			try {
+				await request({ endpoint, signal: ac.signal, ...retryPolicy });
+			} catch (err) {
+				thrown = err;
+			}
+
+			expect(thrown).toBeInstanceOf(NetworkError);
+			expect((thrown as Error).name).toBe('CallerAbortError');
+			expect(fetchMock).not.toHaveBeenCalled();
+		});
+
+		test('keeps timeout abort mapped to NetworkError when both signals abort', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+				await delay(30);
+				const abortError = new Error('The operation was aborted');
+				abortError.name = 'AbortError';
+				throw abortError;
+			});
+
+			setTimeout(() => ac.abort(), 20);
+
+			let thrown: unknown;
+			try {
+				await request({ endpoint, signal: ac.signal, requestTimeout: 10 });
+			} catch (err) {
+				thrown = err;
+			} finally {
+				fetchMock.mockRestore();
+			}
+
+			expect(thrown).toBeInstanceOf(NetworkError);
+			expect((thrown as Error).message).toContain('Request timed out after 10ms');
+		});
 
 		test('only retries endpoints with matching method', async () => {
 			const endpoint = mintUrl + '/v1/keys';

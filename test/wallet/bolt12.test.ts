@@ -12,6 +12,9 @@ type ReqArgs = {
 const makeRequestSpy = <T>(payload: T) => {
 	const calls: ReqArgs[] = [];
 	const req = async (options: ReqArgs) => {
+		if (options.endpoint.endsWith('/v1/info')) {
+			return MINTCACHE.mintInfo as any;
+		}
 		calls.push({
 			endpoint: options.endpoint,
 			method: options.method,

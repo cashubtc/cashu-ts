@@ -50,7 +50,6 @@ import {
 	type MintQuoteBolt11Request,
 	type MintQuoteBolt12Request,
 	type SwapRequest,
-	type Nut19Policy,
 } from '../model/types';
 
 /**
@@ -66,7 +65,6 @@ class Mint {
 	private _logger: Logger;
 	private _mintInfo?: MintInfo;
 	private _authProvider?: AuthProvider;
-	private _nut19Policy?: Nut19Policy;
 
 	/**
 	 * @param mintUrl Requires mint URL to create this object.
@@ -144,13 +142,6 @@ class Mint {
 		const data = await this.getInfo();
 		this._mintInfo = new MintInfo(data);
 		return this._mintInfo;
-	}
-
-	/**
-	 * Set NUT-19 cache parameters for this mint instance.
-	 */
-	setNut19Params(params: Nut19Policy): void {
-		this._nut19Policy = params;
 	}
 
 	/**
@@ -720,12 +711,13 @@ class Mint {
 			...(bat ? { 'Blind-auth': bat } : {}),
 			...(cat ? { 'Clear-auth': cat } : {}),
 		};
+		const nut19 = (await this.getLazyMintInfo()).isSupported(19);
 		return requestInstance<T>({
 			...init,
 			endpoint: joinUrls(this._mintUrl, path),
 			method,
 			headers,
-			...(this._nut19Policy ? this._nut19Policy : {}),
+			...(nut19?.supported && nut19.params ? nut19.params : {}),
 		});
 	}
 

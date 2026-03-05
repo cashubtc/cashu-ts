@@ -62,6 +62,14 @@ const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
 
+class CallerAbortError extends NetworkError {
+	constructor(message: string) {
+		super(message);
+		this.name = 'CallerAbortError';
+		Object.setPrototypeOf(this, CallerAbortError.prototype);
+	}
+}
+
 /**
  * Returns true if the error warrants a retry on NUT-19 cached endpoints:
  *
@@ -72,8 +80,46 @@ const BASE_DELAY = 100; // 100 ms
  * caller immediately.
  */
 function isRetryableError(e: unknown): boolean {
+	if (e instanceof CallerAbortError) return false;
 	if (e instanceof NetworkError) return true;
 	return e instanceof HttpResponseError && e.status >= 500;
+}
+
+function waitWithAbort(delayMs: number, signal?: AbortSignal | null): Promise<void> {
+	if (!signal) {
+		return new Promise((resolve) => setTimeout(resolve, delayMs));
+	}
+
+	return new Promise((resolve, reject) => {
+		if (signal.aborted) {
+			reject(new CallerAbortError('Request aborted by caller'));
+			return;
+		}
+
+		const onAbort = () => {
+			clearTimeout(timeoutId);
+			signal.removeEventListener('abort', onAbort);
+			reject(new CallerAbortError('Request aborted by caller'));
+		};
+
+		signal.addEventListener('abort', onAbort, { once: true });
+
+		const timeoutId = setTimeout(() => {
+			signal.removeEventListener('abort', onAbort);
+			resolve();
+		}, delayMs);
+	});
+}
+
+function getEndpointPathnameSafe(endpoint: string): string | undefined {
+	try {
+		return new URL(endpoint).pathname;
+	} catch {
+		if (endpoint.startsWith('/')) {
+			return endpoint.split(/[?#]/, 1)[0];
+		}
+		return undefined;
+	}
 }
 
 /**
@@ -82,16 +128,17 @@ function isRetryableError(e: unknown): boolean {
  */
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	const { ttl, cached_endpoints, endpoint } = options;
-
-	const url = new URL(endpoint);
+	const endpointPathname = getEndpointPathnameSafe(endpoint);
 
 	// there should be at least one cached_endpoint, also ttl is already mapped null->Infinity
 	const isCachable =
+		endpointPathname !== undefined &&
 		cached_endpoints?.some(
 			(cached_endpoint) =>
-				cached_endpoint.path === url.pathname &&
+				cached_endpoint.path === endpointPathname &&
 				cached_endpoint.method === (options.method?.toUpperCase() ?? 'GET'),
-		) && !!ttl;
+		) &&
+		!!ttl;
 
 	if (!isCachable) {
 		return await _request(options);
@@ -121,13 +168,13 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 						throw e;
 					}
 					retries++;
-					requestLogger.info(`Network Error: attempting retry ${retries} in {delay}ms`, {
+					requestLogger.info(`Network Error: attempting retry ${retries} in ${delay}ms`, {
 						e,
 						retries,
 						delay,
 					});
 
-					await new Promise((resolve) => setTimeout(resolve, delay));
+					await waitWithAbort(delay, options.signal);
 					return retry();
 				}
 			}
@@ -138,18 +185,24 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	return retry();
 }
 
-async function _request({
-	endpoint,
-	requestBody,
-	headers: requestHeaders,
-	requestTimeout,
-	// excluded from fetch options — NUT-19 fields consumed by requestWithRetry
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	cached_endpoints: _cached_endpoints,
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	ttl: _ttl,
-	...options
-}: RequestOptions): Promise<unknown> {
+async function _request(options: RequestOptions): Promise<unknown> {
+	const {
+		endpoint,
+		requestBody,
+		headers: requestHeaders,
+		requestTimeout,
+		// consumed by requestWithRetry, excluded from raw fetch options
+		cached_endpoints,
+		ttl,
+		logger,
+		...fetchOptions
+	} = options;
+
+	// Intentionally unused vars (extracted from fetchOptions)
+	void cached_endpoints;
+	void ttl;
+	void logger;
+
 	const body = requestBody ? JSON.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
@@ -157,25 +210,60 @@ async function _request({
 		...requestHeaders,
 	};
 
-	const controller = new AbortController();
+	// Construct an AbortController based on timeout, user signal, or both!
+	const timeoutController = requestTimeout !== undefined ? new AbortController() : undefined;
+	const callerSignal = options.signal ?? undefined;
+	let signal: AbortSignal | undefined = callerSignal;
 	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	if (requestTimeout !== undefined) {
-		timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+	let cleanupAbortListeners: (() => void) | undefined;
+
+	if (timeoutController) {
+		timeoutId = setTimeout(() => timeoutController.abort(), requestTimeout);
+
+		if (!callerSignal) {
+			signal = timeoutController.signal;
+		} else {
+			const combinedController = new AbortController();
+			const forwardAbort = () => combinedController.abort();
+			if (callerSignal.aborted || timeoutController.signal.aborted) {
+				forwardAbort();
+			} else {
+				callerSignal.addEventListener('abort', forwardAbort, { once: true });
+				timeoutController.signal.addEventListener('abort', forwardAbort, { once: true });
+				cleanupAbortListeners = () => {
+					callerSignal.removeEventListener('abort', forwardAbort);
+					timeoutController.signal.removeEventListener('abort', forwardAbort);
+				};
+			}
+			signal = combinedController.signal;
+		}
 	}
-	const signal = requestTimeout !== undefined ? controller.signal : options.signal;
+
+	if (callerSignal?.aborted && !timeoutController?.signal.aborted) {
+		throw new CallerAbortError('Request aborted by caller');
+	}
 
 	let response: Response;
 	try {
-		response = await fetch(endpoint, { body, headers, ...options, signal });
+		response = await fetch(endpoint, { body, headers, ...fetchOptions, signal });
 	} catch (err) {
-		if (err instanceof Error && err.name === 'AbortError') {
+		const timedOut = !!timeoutController?.signal.aborted;
+		const callerAborted = !!callerSignal?.aborted;
+		if (timedOut) {
 			throw new NetworkError(`Request timed out after ${requestTimeout}ms`);
+		}
+		if (callerAborted) {
+			throw new CallerAbortError(err instanceof Error ? err.message : 'Request aborted by caller');
+		}
+		if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
+			throw new NetworkError(err.message);
 		}
 		// A fetch() promise only rejects when the request fails,
 		// for example, because of a badly-formed request URL or a network error.
 		throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
 	} finally {
 		clearTimeout(timeoutId);
+		cleanupAbortListeners?.();
 	}
 
 	if (!response.ok) {
