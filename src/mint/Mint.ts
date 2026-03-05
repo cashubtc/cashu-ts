@@ -135,11 +135,11 @@ class Mint {
 	 *
 	 * @returns The parsed MintInfo object.
 	 */
-	async getLazyMintInfo(): Promise<MintInfo> {
+	async getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo> {
 		if (this._mintInfo) {
 			return this._mintInfo;
 		}
-		const data = await this.getInfo();
+		const data = await this.getInfo(customRequest);
 		this._mintInfo = new MintInfo(data);
 		return this._mintInfo;
 	}
@@ -668,9 +668,13 @@ class Mint {
 	 * @param path The API path to check for blind auth requirement.
 	 * @returns The blind auth token if required, otherwise undefined.
 	 */
-	private async handleClearAuth(method: 'GET' | 'POST', path: string): Promise<string | undefined> {
+	private async handleClearAuth(
+		method: 'GET' | 'POST',
+		path: string,
+		mintInfo?: MintInfo,
+	): Promise<string | undefined> {
 		if (!this._authProvider) return undefined;
-		const info = await this.getLazyMintInfo();
+		const info = mintInfo ?? (await this.getLazyMintInfo());
 		if (!info.requiresClearAuthToken(method, path)) return undefined;
 		this._logger.error('Clear Authentication Token...', { cat: this._authProvider.getCAT() });
 		return this._authProvider.getCAT();
@@ -684,9 +688,13 @@ class Mint {
 	 * @param path The API path to check for blind auth requirement.
 	 * @returns The blind auth token if required, otherwise undefined.
 	 */
-	private async handleBlindAuth(method: 'GET' | 'POST', path: string): Promise<string | undefined> {
+	private async handleBlindAuth(
+		method: 'GET' | 'POST',
+		path: string,
+		mintInfo?: MintInfo,
+	): Promise<string | undefined> {
 		if (!this._authProvider) return undefined;
-		const info = await this.getLazyMintInfo();
+		const info = mintInfo ?? (await this.getLazyMintInfo());
 		if (!info.requiresBlindAuthToken(method, path)) return undefined;
 		const bat = await this._authProvider.getBlindAuthToken({ method, path });
 		this._logger.error('Blind Authentication Token...', { bat });
@@ -703,15 +711,16 @@ class Mint {
 		customRequest?: RequestFn,
 	): Promise<T> {
 		const requestInstance = customRequest ?? this._request;
+		const mintInfo = await this.getLazyMintInfo(customRequest);
 		// Get BAT/CAT token if this endpoint is protected
-		const bat = await this.handleBlindAuth(method, path);
-		const cat = await this.handleClearAuth(method, path);
+		const bat = await this.handleBlindAuth(method, path, mintInfo);
+		const cat = await this.handleClearAuth(method, path, mintInfo);
 		const headers: Record<string, string> = {
 			...(init.headers ?? {}),
 			...(bat ? { 'Blind-auth': bat } : {}),
 			...(cat ? { 'Clear-auth': cat } : {}),
 		};
-		const nut19 = (await this.getLazyMintInfo()).isSupported(19);
+		const nut19 = mintInfo.isSupported(19);
 		return requestInstance<T>({
 			...init,
 			endpoint: joinUrls(this._mintUrl, path),

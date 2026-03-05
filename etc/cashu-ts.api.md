@@ -888,7 +888,7 @@ export class Mint {
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
     getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse>;
-    getLazyMintInfo(): Promise<MintInfo>;
+    getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo>;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
         preferAsync?: boolean;

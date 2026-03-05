@@ -35,6 +35,35 @@ function makeKeysetFromCache(k: MintKeys, active = true) {
 }
 
 describe('Mint (BOLT12) – instance methods via customRequest', () => {
+	it('uses per-call customRequest for lazy /v1/info before operation request', async () => {
+		const offlineMint = new Mint('https://offline.invalid');
+		const calls: string[] = [];
+		const customRequest = async (options: ReqArgs) => {
+			calls.push(options.endpoint);
+			if (options.endpoint.endsWith('/v1/info')) {
+				return MINTCACHE.mintInfo as any;
+			}
+			return {
+				quote: 'q1',
+				request: 'lno1offer...',
+				amount: 21,
+				unit: 'sat',
+				pubkey: '02abcd',
+				amount_paid: 0,
+				amount_issued: 0,
+			} as any;
+		};
+
+		const result = await offlineMint.createMintQuoteBolt12(
+			{ amount: 21, unit: 'sat', pubkey: '02abcd' },
+			customRequest,
+		);
+
+		expect(result.quote).toBe('q1');
+		expect(calls[0]).toMatch(/\/v1\/info$/);
+		expect(calls[1]).toMatch(/\/v1\/mint\/quote\/bolt12$/);
+	});
+
 	it('createMintQuoteBolt12 posts to /v1/mint/quote/bolt12 with payload incl. pubkey', async () => {
 		const response = {
 			quote: 'q123',
