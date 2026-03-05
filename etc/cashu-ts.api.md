@@ -907,6 +907,7 @@ export class Mint {
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
     restore(restorePayload: PostRestorePayload, customRequest?: RequestFn): Promise<PostRestoreResponse>;
+    setMintInfo(mintInfo: MintInfo | GetInfoResponse): void;
     swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
