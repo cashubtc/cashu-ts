@@ -209,10 +209,13 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
 		...requestHeaders,
 	};
+	const callerSignal = options.signal ?? undefined;
+	if (callerSignal?.aborted) {
+		throw new CallerAbortError('Request aborted by caller');
+	}
 
 	// Construct an AbortController based on timeout, user signal, or both!
 	const timeoutController = requestTimeout !== undefined ? new AbortController() : undefined;
-	const callerSignal = options.signal ?? undefined;
 	let signal: AbortSignal | undefined = callerSignal;
 	let timeoutId: ReturnType<typeof setTimeout> | undefined;
 	let cleanupAbortListeners: (() => void) | undefined;
@@ -237,10 +240,6 @@ async function _request(options: RequestOptions): Promise<unknown> {
 			}
 			signal = combinedController.signal;
 		}
-	}
-
-	if (callerSignal?.aborted && !timeoutController?.signal.aborted) {
-		throw new CallerAbortError('Request aborted by caller');
 	}
 
 	let response: Response;
