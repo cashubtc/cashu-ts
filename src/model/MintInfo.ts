@@ -123,7 +123,7 @@ export class MintInfo {
 
 	private checkNut19() {
 		const rawPolicy = this._mintInfo.nuts?.[19];
-		if (rawPolicy && rawPolicy.cached_endpoints.length > 0) {
+		if (rawPolicy && (rawPolicy?.cached_endpoints?.length || 0) > 0) {
 			return {
 				supported: true,
 				params: {
