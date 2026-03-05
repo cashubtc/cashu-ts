@@ -197,6 +197,28 @@ describe('requests', () => {
 			expect(fetchMock).toHaveBeenCalledTimes(2);
 		});
 
+		test('matches cached API path when endpoint includes mint URL subpath', async () => {
+			const endpoint = 'https://mint.example/cashu/v1/keys';
+			const retryPolicy: Nut19Policy = {
+				ttl: 1000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+
+			let requestCount = 0;
+			const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+				requestCount++;
+				if (requestCount === 1) {
+					throw new TypeError('Network request failed');
+				}
+				return new Response(JSON.stringify({ keysets: [] }), { status: 200 });
+			});
+
+			const result = await request({ endpoint, ...retryPolicy });
+
+			expect(result).toEqual({ keysets: [] });
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		});
+
 		test('skips retry matching when endpoint path cannot be derived', async () => {
 			const endpoint = 'v1/keys';
 			const retryPolicy: Nut19Policy = {

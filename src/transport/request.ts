@@ -122,6 +122,11 @@ function getEndpointPathnameSafe(endpoint: string): string | undefined {
 	}
 }
 
+function endpointPathMatchesCachedPath(endpointPath: string, cachedPath: string): boolean {
+	if (endpointPath === cachedPath) return true;
+	return endpointPath.endsWith(cachedPath);
+}
+
 /**
  * Internal function that handles retry logic for NUT-19 cached endpoints. Non-cached endpoints are
  * executed directly without retries.
@@ -129,14 +134,15 @@ function getEndpointPathnameSafe(endpoint: string): string | undefined {
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	const { ttl, cached_endpoints, endpoint } = options;
 	const endpointPathname = getEndpointPathnameSafe(endpoint);
+	const requestMethod = options.method?.toUpperCase() ?? 'GET';
 
 	// there should be at least one cached_endpoint, also ttl is already mapped null->Infinity
 	const isCachable =
 		endpointPathname !== undefined &&
 		cached_endpoints?.some(
 			(cached_endpoint) =>
-				cached_endpoint.path === endpointPathname &&
-				cached_endpoint.method === (options.method?.toUpperCase() ?? 'GET'),
+				endpointPathMatchesCachedPath(endpointPathname, cached_endpoint.path) &&
+				cached_endpoint.method === requestMethod,
 		) &&
 		!!ttl;
 
