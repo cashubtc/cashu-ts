@@ -1,4 +1,19 @@
 /**
+ * TODO: v4 action plan:
+ *
+ * - Public types change from number to AmountLike (inputs) and Amount (outputs):
+ * - MintQuoteBolt11Response.amount: Amount.
+ * - MintQuoteBolt12Response.amount/amount_paid/amount_issued: Amount.
+ * - MeltQuoteBaseResponse.amount: Amount.
+ * - MeltQuoteBolt11Response.fee_reserve: Amount.
+ * - SerializedBlindedSignature.amount: Amount (or AmountLike at wire boundary)
+ * - Mint normalizers become strict and return Amount:
+ * - Remove normalizeAmountOrOriginal.
+ * - Keep only strict normalizeAmountOrThrow returning Amount.
+ * - NormalizeAmountFields returns Amount fields, no fallback.
+ */
+
+/**
  * Cashu Mint Class.
  *
  * @remarks
@@ -50,7 +65,10 @@ import {
 	type MintQuoteBolt11Request,
 	type MintQuoteBolt12Request,
 	type SwapRequest,
+	type SerializedBlindedMessage,
+	type SerializedBlindedSignature,
 } from '../model/types';
+import { Amount, type AmountLike } from '../model/Amount';
 
 /**
  * Class represents Cashu Mint API.
@@ -163,6 +181,7 @@ class Mint {
 			this._logger.error('Invalid response from mint...', { data, op: 'swap' });
 			throw new Error('Invalid response from mint');
 		}
+		data.signatures = this.normalizeSignatureAmounts(data.signatures, 'swap.signatures');
 
 		return data;
 	}
@@ -181,7 +200,9 @@ class Mint {
 		const response = await this.requestWithAuth<
 			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('POST', '/v1/mint/quote/bolt11', { requestBody: mintQuotePayload }, customRequest);
-		const data = handleMintQuoteResponseDeprecated(response, this._logger);
+		const data = this.normalizeMintQuoteBolt11Response(
+			handleMintQuoteResponseDeprecated(response, this._logger),
+		);
 		return data;
 	}
 
@@ -203,7 +224,7 @@ class Mint {
 			{ requestBody: mintQuotePayload },
 			customRequest,
 		);
-		return response;
+		return this.normalizeMintQuoteBolt12Response(response);
 	}
 
 	/**
@@ -222,7 +243,7 @@ class Mint {
 		>('GET', `/v1/mint/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
-		return data;
+		return this.normalizeMintQuoteBolt11Response(data);
 	}
 
 	/**
@@ -242,7 +263,7 @@ class Mint {
 			{},
 			customRequest,
 		);
-		return response;
+		return this.normalizeMintQuoteBolt12Response(response);
 	}
 
 	/**
@@ -264,6 +285,7 @@ class Mint {
 			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
 			throw new Error('Invalid response from mint');
 		}
+		data.signatures = this.normalizeSignatureAmounts(data.signatures, 'mintBolt11.signatures');
 
 		return data;
 	}
@@ -287,6 +309,7 @@ class Mint {
 			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt12' });
 			throw new Error('Invalid response from mint');
 		}
+		data.signatures = this.normalizeSignatureAmounts(data.signatures, 'mintBolt12.signatures');
 
 		return data;
 	}
@@ -306,7 +329,9 @@ class Mint {
 			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('POST', '/v1/melt/quote/bolt11', { requestBody: meltQuotePayload }, customRequest);
 
-		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
+		const data = this.normalizeMeltQuoteBolt11Response(
+			handleMeltQuoteResponseDeprecated(response, this._logger),
+		);
 
 		if (
 			!isObj(data) ||
@@ -338,7 +363,7 @@ class Mint {
 			{ requestBody: meltQuotePayload },
 			customRequest,
 		);
-		return response;
+		return this.normalizeMeltQuoteBolt11Response(response);
 	}
 
 	/**
@@ -356,7 +381,9 @@ class Mint {
 			MeltQuoteBolt11Response & MeltQuoteResponsePaidDeprecated
 		>('GET', `/v1/melt/quote/bolt11/${quote}`, {}, customRequest);
 
-		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
+		const data = this.normalizeMeltQuoteBolt11Response(
+			handleMeltQuoteResponseDeprecated(response, this._logger),
+		);
 
 		if (
 			!isObj(data) ||
@@ -391,7 +418,7 @@ class Mint {
 			{},
 			customRequest,
 		);
-		return response;
+		return this.normalizeMeltQuoteBolt11Response(response);
 	}
 
 	/**
@@ -453,7 +480,7 @@ class Mint {
 			throw new Error('Invalid response from mint');
 		}
 
-		return data;
+		return this.normalizeMeltBaseResponse(data);
 	}
 
 	/**
@@ -478,7 +505,9 @@ class Mint {
 	): Promise<MeltQuoteBolt11Response> {
 		const response = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 
-		const data = handleMeltQuoteResponseDeprecated(response, this._logger);
+		const data = this.normalizeMeltQuoteBolt11Response(
+			handleMeltQuoteResponseDeprecated(response, this._logger),
+		);
 
 		if (
 			!isObj(data) ||
@@ -612,6 +641,8 @@ class Mint {
 			throw new Error('Invalid response from mint');
 		}
 
+		data.outputs = this.normalizeMessageAmounts(data.outputs, 'restore.outputs');
+		data.signatures = this.normalizeSignatureAmounts(data.signatures, 'restore.signatures');
 		return data;
 	}
 
@@ -725,6 +756,103 @@ class Mint {
 			return true;
 		}
 		return false;
+	}
+
+	// TODO v4 - return just Amount
+	private normalizeAmountOrThrow(value: unknown, context: string): number {
+		try {
+			return Amount.from(value as AmountLike).toNumber();
+		} catch (e) {
+			throw new Error(`Invalid amount in ${context}: ${(e as Error).message}`);
+		}
+	}
+
+	// TODO: v4 - remove; normalizers should return Amount.
+	private normalizeAmountOrOriginal(value: unknown, context: string): unknown {
+		if (value === undefined || value === null) return value;
+		return this.normalizeAmountOrThrow(value, context);
+	}
+
+	private normalizeAmountFields<T extends Record<string, unknown>>(
+		response: T,
+		fields: Array<keyof T>,
+		contextPrefix: string,
+	): T {
+		const normalized: T = { ...response };
+		for (const field of fields) {
+			normalized[field] = this.normalizeAmountOrOriginal(
+				response[field],
+				`${contextPrefix}.${String(field)}`,
+			) as T[typeof field];
+		}
+		return normalized;
+	}
+
+	private normalizeSignatureAmounts(
+		signatures: SerializedBlindedSignature[],
+		context: string,
+	): SerializedBlindedSignature[] {
+		return signatures.map((signature) => {
+			if (signature.amount === undefined) {
+				return signature;
+			}
+			return {
+				...signature,
+				amount: this.normalizeAmountOrThrow(signature.amount, `${context}.amount`),
+			};
+		});
+	}
+
+	private normalizeMessageAmounts(
+		messages: SerializedBlindedMessage[],
+		context: string,
+	): SerializedBlindedMessage[] {
+		return messages.map((message) => ({
+			...message,
+			amount: this.normalizeAmountOrThrow(message.amount, `${context}.amount`),
+		}));
+	}
+
+	private normalizeMintQuoteBolt11Response(
+		response: MintQuoteBolt11Response,
+	): MintQuoteBolt11Response {
+		// TODO: v4 - return Amount directly.
+		return this.normalizeAmountFields(response, ['amount'], 'mintQuoteBolt11');
+	}
+
+	private normalizeMintQuoteBolt12Response(
+		response: MintQuoteBolt12Response,
+	): MintQuoteBolt12Response {
+		// TODO: v4 - return Amount directly.
+		return this.normalizeAmountFields(
+			response,
+			['amount', 'amount_paid', 'amount_issued'],
+			'mintQuoteBolt12',
+		);
+	}
+
+	private normalizeMeltBaseResponse<T extends MeltQuoteBaseResponse>(response: T): T {
+		const hasFeeReserve = Object.prototype.hasOwnProperty.call(response, 'fee_reserve');
+		const feeReserve = hasFeeReserve
+			? this.normalizeAmountOrOriginal(
+					(response as { fee_reserve?: unknown }).fee_reserve,
+					'meltQuote.fee_reserve',
+				)
+			: undefined;
+		return {
+			...this.normalizeAmountFields(response, ['amount'], 'meltQuote'),
+			...(hasFeeReserve ? { fee_reserve: feeReserve } : {}),
+			change: response.change
+				? this.normalizeSignatureAmounts(response.change, 'meltQuote.change')
+				: undefined,
+		};
+	}
+
+	private normalizeMeltQuoteBolt11Response(
+		response: MeltQuoteBolt11Response,
+	): MeltQuoteBolt11Response {
+		const normalized = this.normalizeMeltBaseResponse(response);
+		return this.normalizeAmountFields(normalized, ['fee_reserve'], 'meltQuoteBolt11');
 	}
 }
 
