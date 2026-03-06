@@ -81,6 +81,14 @@ describe('native BigInt support: stringify', () => {
 		const output = stringify({ a: 1, b: 2 }, (key, value) => (key === 'b' ? undefined : value));
 		expect(output).toBe('{"a":1}');
 	});
+
+	test('throws TypeError on circular references', () => {
+		const obj: { self?: unknown } = {};
+		obj.self = obj;
+
+		expect(() => stringify(obj)).toThrow(TypeError);
+		expect(() => stringify(obj)).toThrow('Converting circular structure to JSON');
+	});
 });
 
 describe('parse option: strict', () => {

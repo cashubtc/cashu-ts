@@ -374,6 +374,7 @@ export function stringify(
 ): string {
 	let gap = '';
 	let indent = '';
+	const inProgress = new WeakSet<object>();
 
 	if (typeof space === 'number') {
 		indent = ' '.repeat(Math.min(10, Math.max(0, Math.floor(space))));
@@ -411,44 +412,52 @@ export function stringify(
 				return undefined;
 			case 'object': {
 				if (val === null) return 'null';
+				if (inProgress.has(val)) {
+					throw new TypeError('Converting circular structure to JSON');
+				}
+				inProgress.add(val);
 				const mind = gap;
 				gap += indent;
 
-				if (Array.isArray(val)) {
-					const parts: string[] = [];
-					const arrayHolder = val as unknown as Record<string, unknown>;
-					for (let i = 0; i < val.length; i += 1) {
-						const item = serialize(arrayHolder, String(i));
-						parts.push(item ?? 'null');
+				try {
+					if (Array.isArray(val)) {
+						const parts: string[] = [];
+						const arrayHolder = val as unknown as Record<string, unknown>;
+						for (let i = 0; i < val.length; i += 1) {
+							const item = serialize(arrayHolder, String(i));
+							parts.push(item ?? 'null');
+						}
+						const out =
+							parts.length === 0
+								? '[]'
+								: gap
+									? `[\n${gap}${parts.join(`,\n${gap}`)}\n${mind}]`
+									: `[${parts.join(',')}]`;
+						gap = mind;
+						return out;
 					}
+
+					const obj = val as Record<string, unknown>;
+					const keys = propertyList ?? Object.keys(obj);
+					const pairs: string[] = [];
+					for (const k of keys) {
+						const item = serialize(obj, k);
+						if (item !== undefined) {
+							pairs.push(`${quoteString(k)}${gap ? ': ' : ':'}${item}`);
+						}
+					}
+
 					const out =
-						parts.length === 0
-							? '[]'
+						pairs.length === 0
+							? '{}'
 							: gap
-								? `[\n${gap}${parts.join(`,\n${gap}`)}\n${mind}]`
-								: `[${parts.join(',')}]`;
+								? `{\n${gap}${pairs.join(`,\n${gap}`)}\n${mind}}`
+								: `{${pairs.join(',')}}`;
 					gap = mind;
 					return out;
+				} finally {
+					inProgress.delete(val);
 				}
-
-				const obj = val as Record<string, unknown>;
-				const keys = propertyList ?? Object.keys(obj);
-				const pairs: string[] = [];
-				for (const k of keys) {
-					const item = serialize(obj, k);
-					if (item !== undefined) {
-						pairs.push(`${quoteString(k)}${gap ? ': ' : ':'}${item}`);
-					}
-				}
-
-				const out =
-					pairs.length === 0
-						? '{}'
-						: gap
-							? `{\n${gap}${pairs.join(`,\n${gap}`)}\n${mind}}`
-							: `{${pairs.join(',')}}`;
-				gap = mind;
-				return out;
 			}
 			default:
 				return undefined;
