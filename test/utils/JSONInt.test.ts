@@ -67,6 +67,10 @@ describe('native BigInt support: stringify', () => {
 		expect(output).toBe('{"a":1,"c":3}');
 	});
 
+	test('returns undefined for root undefined', () => {
+		expect(stringify(undefined)).toBeUndefined();
+	});
+
 	test('respects toJSON output', () => {
 		const output = stringify({ value: { toJSON: () => 'ok' } });
 		expect(output).toBe('{"value":"ok"}');

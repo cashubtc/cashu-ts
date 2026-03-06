@@ -59,7 +59,6 @@ export function setRequestLogger(logger: Logger): void {
 	requestLogger = logger;
 }
 
-<<<<<<< HEAD
 const MAX_CACHED_RETRIES = 9; // 10 requests total
 const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms

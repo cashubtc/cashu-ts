@@ -371,7 +371,7 @@ export function stringify(
 	value: unknown,
 	replacer?: ReplacerFn | ReplacerList,
 	space?: string | number,
-): string {
+): string | undefined {
 	let gap = '';
 	let indent = '';
 	const inProgress = new WeakSet<object>();
@@ -466,9 +466,6 @@ export function stringify(
 
 	const root = { '': value };
 	const out = serialize(root, '');
-	if (out === undefined) {
-		return 'null';
-	}
 	return out;
 }
 
