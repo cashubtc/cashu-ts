@@ -102,6 +102,31 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		expect(c.requestBody).toEqual(payload);
 	});
 
+	it('normalizes bigint mint quote amounts back to legacy numbers', async () => {
+		const response = {
+			quote: 'q123',
+			request: 'lno1offer...',
+			amount: 9007199254740993n,
+			unit: 'sat',
+			expiry: 123456,
+			pubkey: '02abcd',
+			amount_paid: 9007199254740995n,
+			amount_issued: 9007199254740997n,
+		};
+		const { req } = makeRequestSpy(response);
+		const mint = new Mint(mintUrl, { customRequest: req });
+
+		const res = await mint.createMintQuoteBolt12({
+			amount: 42,
+			unit: 'sat',
+			pubkey: '02abcd',
+		});
+
+		expect(res.amount).toBe(Number(response.amount));
+		expect(res.amount_paid).toBe(Number(response.amount_paid));
+		expect(res.amount_issued).toBe(Number(response.amount_issued));
+	});
+
 	it('checkMintQuoteBolt12 requests /v1/mint/quote/bolt12/{quote}', async () => {
 		const response = {
 			quote: 'q123',
@@ -136,6 +161,21 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		expect(c.requestBody).toEqual(mintPayload);
 	});
 
+	it('normalizes bigint signature amounts back to legacy numbers', async () => {
+		const response = {
+			signatures: [{ C_: '...', id: 'ks1', amount: 9007199254740993n }],
+		};
+		const { req } = makeRequestSpy(response);
+		const mint = new Mint(mintUrl, { customRequest: req });
+
+		const res = await mint.mintBolt12({
+			quote: 'q123',
+			outputs: [{ amount: 42, id: 'ks1', B_: '...' }],
+		} as any);
+
+		expect(res.signatures[0].amount).toBe(Number(response.signatures[0].amount));
+	});
+
 	it('createMeltQuoteBolt12 posts to /v1/melt/quote/bolt12', async () => {
 		const response = { quote: 'm123', amount: 100, fee_reserve: 3, request: 'lno1offer...' };
 		const { req, calls } = makeRequestSpy(response);
@@ -147,6 +187,26 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12$/);
 		expect(c.method?.toUpperCase()).toBe('POST');
 		expect(c.requestBody).toEqual(meltQuotePayload);
+	});
+
+	it('normalizes bigint melt quote amounts back to legacy numbers', async () => {
+		const response = {
+			quote: 'm123',
+			amount: 9007199254740993n,
+			fee_reserve: 9007199254740995n,
+			request: 'lno1offer...',
+		};
+		const { req } = makeRequestSpy(response);
+		const mint = new Mint(mintUrl, { customRequest: req });
+
+		const res = await mint.createMeltQuoteBolt12({
+			request: 'lno1offer...',
+			unit: 'sat',
+			amount: 100,
+		} as any);
+
+		expect(res.amount).toBe(Number(response.amount));
+		expect(res.fee_reserve).toBe(Number(response.fee_reserve));
 	});
 
 	it('checkMeltQuoteBolt12 requests /v1/melt/quote/bolt12/{quote}', async () => {
