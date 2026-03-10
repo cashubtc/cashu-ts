@@ -932,6 +932,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    prepare(this: MintBuilder<M, true>): Promise<MintPreview>;
     privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Proof[]): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;

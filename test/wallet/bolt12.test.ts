@@ -483,4 +483,56 @@ describe('Wallet (BOLT12) – wrappers', () => {
 			signature: expect.any(String),
 		});
 	});
+
+	it('wallet.prepareMint and completeMint support locked bolt12 quotes', async () => {
+		const response = {
+			signatures: [
+				{ C_: 'sig1', id: '009a1f293253e41e', amount: 16 },
+				{ C_: 'sig2', id: '009a1f293253e41e', amount: 4 },
+				{ C_: 'sig3', id: '009a1f293253e41e', amount: 1 },
+			],
+		};
+		const { req, calls } = makeRequestSpy(response);
+		const mint = new Mint(mintUrl, { customRequest: req });
+		const wallet = new Wallet(mint);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+		const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
+		vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
+		vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
+			{
+				blindedMessage: { amount: 16, B_: 'B1' },
+				toProof: () => ({ amount: 16, secret: 'secret1', C: 'C1' }),
+			},
+			{
+				blindedMessage: { amount: 4, B_: 'B2' },
+				toProof: () => ({ amount: 4, secret: 'secret2', C: 'C2' }),
+			},
+			{
+				blindedMessage: { amount: 1, B_: 'B3' },
+				toProof: () => ({ amount: 1, secret: 'secret3', C: 'C3' }),
+			},
+		]);
+
+		const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+		const preview = await wallet.prepareMint(
+			'bolt12',
+			21,
+			{ quote: 'q1', request: 'lno1offer...', pubkey: '1234' } as any,
+			{ privkey },
+		);
+
+		expect(calls).toHaveLength(0);
+		expect(preview.payload).toMatchObject({
+			quote: 'q1',
+			outputs: expect.any(Array),
+			signature: expect.any(String),
+		});
+
+		const proofs = await wallet.completeMint(preview);
+
+		expect(proofs).toHaveLength(3);
+		expect(calls).toHaveLength(1);
+		expect(calls[0].endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
+		expect(calls[0].requestBody).toEqual(preview.payload);
+	});
 });

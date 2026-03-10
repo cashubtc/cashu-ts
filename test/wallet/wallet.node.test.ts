@@ -1315,6 +1315,39 @@ describe('requestTokens', () => {
 		expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
 		expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
 	});
+
+	test('prepareMint defers request until completeMint', async () => {
+		let mintCalls = 0;
+		server.use(
+			http.post(mintUrl + '/v1/mint/bolt11', () => {
+				mintCalls += 1;
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const preview = await wallet.prepareMint('bolt11', 1, '');
+		expect(mintCalls).toBe(0);
+		expect(preview.method).toBe('bolt11');
+		expect(preview.payload.quote).toBe('');
+		expect(preview.outputData).toHaveLength(1);
+
+		const proofs = await wallet.completeMint(preview);
+
+		expect(mintCalls).toBe(1);
+		expect(proofs).toHaveLength(1);
+		expect(proofs[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
+	});
+
 	test('test requestTokens bad response', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/mint/bolt11', () => {
@@ -1325,6 +1358,33 @@ describe('requestTokens', () => {
 		await wallet.loadMint();
 
 		await expect(wallet.mintProofsBolt11(1, '')).rejects.toThrow('Invalid response from mint');
+	});
+
+	test('prepareMint deterministic counters reserve once and avoid duplicate outputs', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () => {
+				return HttpResponse.json({
+					keysets: [{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 }],
+				});
+			}),
+		);
+
+		const keysetId = '00bd033559de27d0';
+		const seed = hexToBytes(
+			'dd44ee516b0647e80b488e8dcc56d736a148f15276bef588b37057476d4b2b25780d3688a32b37353d6995997842c0fd8b412475c891c16310471fbc86dcbda8',
+		);
+		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
+		await wallet.loadMint();
+
+		const preview = await wallet.prepareMint('bolt11', 3, '', undefined, {
+			type: 'deterministic',
+			counter: 0,
+		});
+
+		expect(preview.outputData.length).toBeGreaterThan(0);
+		const secrets = preview.outputData.map((p) => Bytes.toHex(p.secret));
+		expect(new Set(secrets).size).toBe(secrets.length);
+		expect(await wallet.counters.peekNext(keysetId)).toBe(preview.outputData.length);
 	});
 });
 
