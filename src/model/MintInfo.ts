@@ -5,6 +5,10 @@ import {
 	type WebSocketSupport,
 	type Nut19Policy,
 } from './types';
+import {
+	normalizeAmountToLegacyNumber,
+	normalizeSafeIntegerMetadata,
+} from '../utils/normalizeNumbers';
 
 type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
@@ -23,13 +27,53 @@ export class MintInfo {
 	private readonly _protected21?: ProtectedIndex;
 
 	constructor(info: GetInfoResponse) {
-		this._mintInfo = info;
+		this._mintInfo = MintInfo.normalizeInfo(info); // TODO v4
 
-		const pe22 = this.toEndpoints(info?.nuts?.[22]?.protected_endpoints);
+		const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints);
 		this._protected22 = this.buildIndex(pe22);
 
-		const pe21 = this.toEndpoints(info?.nuts?.[21]?.protected_endpoints);
+		const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints);
 		this._protected21 = this.buildIndex(pe21);
+	}
+
+	// TODO v4 - remove this normalization (GetInfoResponse will change)
+	// and we can just normalize min/max_amount to Amount in checkMintMelt()
+	private static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
+		return {
+			...info,
+			nuts: {
+				...info.nuts,
+				...(info.nuts['4']
+					? { '4': MintInfo.normalizeMethodLimits(info.nuts['4'], 'nuts.4.methods') }
+					: {}),
+				...(info.nuts['5']
+					? { '5': MintInfo.normalizeMethodLimits(info.nuts['5'], 'nuts.5.methods') }
+					: {}),
+			},
+		};
+	}
+
+	private static normalizeMethodLimits<
+		TNut extends {
+			methods: Array<{ min_amount?: number; max_amount?: number }>;
+		},
+	>(nut: TNut, context: string): TNut {
+		return {
+			...nut,
+			methods: nut.methods.map((method) => ({
+				...method,
+				min_amount: normalizeAmountToLegacyNumber(
+					method.min_amount,
+					`${context}.min_amount`,
+					undefined,
+				),
+				max_amount: normalizeAmountToLegacyNumber(
+					method.max_amount,
+					`${context}.max_amount`,
+					undefined,
+				),
+			})),
+		};
 	}
 
 	isSupported(num: 4 | 5): { disabled: boolean; params: SwapMethod[] };
@@ -124,15 +168,13 @@ export class MintInfo {
 	private checkNut19() {
 		const rawPolicy = this._mintInfo.nuts?.[19];
 		if (rawPolicy && (rawPolicy?.cached_endpoints?.length || 0) > 0) {
+			const ttlSeconds = normalizeSafeIntegerMetadata(rawPolicy.ttl, 'nuts.19.ttl', null);
 			return {
 				supported: true,
 				params: {
 					// map null to infinity, if not null map seconds to milliseconds.
 					// this way ttl is always a number
-					ttl:
-						typeof rawPolicy.ttl === 'number' && !isNaN(rawPolicy.ttl)
-							? Math.max(rawPolicy.ttl, 0) * 1000
-							: Infinity,
+					ttl: ttlSeconds === null ? Infinity : Math.max(ttlSeconds, 0) * 1000,
 					cached_endpoints: rawPolicy.cached_endpoints,
 				} as Nut19Policy,
 			};

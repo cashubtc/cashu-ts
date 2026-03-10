@@ -4,3 +4,4 @@ export * from './Bytes';
 export * from './cbor';
 export * from './core';
 export * from './JSONInt';
+export * from './normalizeNumbers';

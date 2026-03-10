@@ -1,6 +1,14 @@
 import type { AuthProvider } from './AuthProvider';
 import request, { type RequestFn } from '../transport';
-import { joinUrls, hasValidDleq, encodeJsonToBase64, Bytes } from '../utils';
+import {
+	joinUrls,
+	hasValidDleq,
+	encodeJsonToBase64,
+	Bytes,
+	normalizeMintKeys,
+	normalizeMintKeyset,
+	normalizeSafeIntegerMetadata,
+} from '../utils';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
 import type {
@@ -336,9 +344,11 @@ export class AuthManager implements AuthProvider {
 					method: 'GET',
 				}),
 			]);
+			const normalizedKeysets = allKeysets.keysets.map((keyset) => normalizeMintKeyset(keyset));
+			const normalizedKeys = allKeys.keysets.map((keyset) => normalizeMintKeys(keyset));
 			// build a KeyChain preloaded with caches, unit 'auth'
 			// Then smoke test to surface errors early - no need to init() with cached keys
-			this.keychain = new KeyChain(this.mintUrl, 'auth', allKeysets.keysets, allKeys.keysets);
+			this.keychain = new KeyChain(this.mintUrl, 'auth', normalizedKeysets, normalizedKeys);
 			this.keychain.getCheapestKeyset();
 		}
 	}
@@ -349,7 +359,11 @@ export class AuthManager implements AuthProvider {
 	private getBatMaxMint(): number {
 		if (!this.info) throw new Error('AuthManager: mint info not loaded');
 		const n22 = this.info.nuts['22'];
-		const mintMax = n22?.bat_max_mint ?? this.maxPerMint;
+		const mintMax = normalizeSafeIntegerMetadata(
+			n22?.bat_max_mint,
+			'nuts.22.bat_max_mint',
+			this.maxPerMint,
+		);
 		return Math.max(1, Math.min(this.maxPerMint, mintMax));
 	}
 

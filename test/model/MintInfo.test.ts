@@ -101,4 +101,54 @@ describe('MintInfo protected endpoint matching', () => {
 			},
 		});
 	});
+
+	it('normalizes bigint info numeric fields at construction', () => {
+		const info = new MintInfo({
+			...MINTINFORESP,
+			nuts: {
+				4: {
+					disabled: false,
+					methods: [{ method: 'bolt11', unit: 'sat', min_amount: 1n, max_amount: 2n }],
+				},
+				5: {
+					disabled: false,
+					methods: [{ method: 'bolt11', unit: 'sat', min_amount: 3n, max_amount: 4n }],
+				},
+				19: {
+					ttl: 30n,
+					cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+				},
+				22: {
+					bat_max_mint: 5n,
+					protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+				},
+			},
+		} as any);
+
+		expect(info.nuts['4'].methods[0].min_amount).toBe(1);
+		expect(info.nuts['4'].methods[0].max_amount).toBe(2);
+		expect(info.nuts['5'].methods[0].min_amount).toBe(3);
+		expect(info.nuts['5'].methods[0].max_amount).toBe(4);
+		expect(info.nuts['22']?.bat_max_mint).toBe(5n);
+		expect(info.isSupported(19)).toEqual({
+			supported: true,
+			params: {
+				ttl: 30_000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			},
+		});
+	});
+
+	it('rejects out-of-range bigint info metadata at construction', () => {
+		const info = new MintInfo({
+			...MINTINFORESP,
+			nuts: {
+				19: {
+					ttl: 9007199254740993n,
+					cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+				},
+			},
+		} as any);
+		expect(() => info.isSupported(19)).toThrow('nuts.19.ttl');
+	});
 });

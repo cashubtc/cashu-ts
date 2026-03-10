@@ -108,7 +108,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 			request: 'lno1offer...',
 			amount: 9007199254740993n,
 			unit: 'sat',
-			expiry: 123456,
+			expiry: 123456n,
 			pubkey: '02abcd',
 			amount_paid: 9007199254740995n,
 			amount_issued: 9007199254740997n,
@@ -123,8 +123,32 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		});
 
 		expect(res.amount).toBe(Number(response.amount));
+		expect(res.expiry).toBe(123456);
 		expect(res.amount_paid).toBe(Number(response.amount_paid));
 		expect(res.amount_issued).toBe(Number(response.amount_issued));
+	});
+
+	it('rejects out-of-range bigint mint quote expiry', async () => {
+		const response = {
+			quote: 'q123',
+			request: 'lno1offer...',
+			amount: 42,
+			unit: 'sat',
+			expiry: 9007199254740999n,
+			pubkey: '02abcd',
+			amount_paid: 0,
+			amount_issued: 0,
+		};
+		const { req } = makeRequestSpy(response);
+		const mint = new Mint(mintUrl, { customRequest: req });
+
+		await expect(
+			mint.createMintQuoteBolt12({
+				amount: 42,
+				unit: 'sat',
+				pubkey: '02abcd',
+			}),
+		).rejects.toThrow('mintQuoteBolt12.expiry');
 	});
 
 	it('checkMintQuoteBolt12 requests /v1/mint/quote/bolt12/{quote}', async () => {
@@ -194,6 +218,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 			quote: 'm123',
 			amount: 9007199254740993n,
 			fee_reserve: 9007199254740995n,
+			expiry: 123456n,
 			request: 'lno1offer...',
 		};
 		const { req } = makeRequestSpy(response);
@@ -206,7 +231,28 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		} as any);
 
 		expect(res.amount).toBe(Number(response.amount));
+		expect(res.expiry).toBe(123456);
 		expect(res.fee_reserve).toBe(Number(response.fee_reserve));
+	});
+
+	it('rejects out-of-range bigint melt quote expiry', async () => {
+		const response = {
+			quote: 'm123',
+			amount: 100,
+			fee_reserve: 2,
+			expiry: 9007199254740997n,
+			request: 'lno1offer...',
+		};
+		const { req } = makeRequestSpy(response);
+		const mint = new Mint(mintUrl, { customRequest: req });
+
+		await expect(
+			mint.createMeltQuoteBolt12({
+				request: 'lno1offer...',
+				unit: 'sat',
+				amount: 100,
+			} as any),
+		).rejects.toThrow('meltQuote.expiry');
 	});
 
 	it('checkMeltQuoteBolt12 requests /v1/melt/quote/bolt12/{quote}', async () => {
@@ -240,6 +286,7 @@ describe('Mint (BOLT12) – instance methods', () => {
 			request: 'lno1offer...',
 			amount: 21,
 			unit: 'sat',
+			expiry: null,
 			pubkey: '02abcd',
 			amount_paid: 0,
 			amount_issued: 0,
@@ -305,6 +352,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 			request: 'lno1offer...',
 			amount: 21,
 			unit: 'sat',
+			expiry: null,
 			pubkey: '02abcd',
 			amount_paid: 0,
 			amount_issued: 0,
@@ -328,6 +376,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const response = {
 			quote: 'q1',
 			state: 'PAID',
+			expiry: null,
 			amount_paid: 21,
 			amount_issued: 21,
 		};

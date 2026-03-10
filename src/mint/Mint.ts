@@ -1,6 +1,7 @@
 /**
  * TODO: v4 bigint switch plan:
  *
+ * - `Amount` is the normalization primitive for incoming integer values.
  * - Change public mint response amount fields from `number` to `Amount`.
  * - MintQuoteBolt11Response.amount -> Amount.
  * - MintQuoteBolt12Response.amount/amount_paid/amount_issued -> Amount.
@@ -11,6 +12,7 @@
  * - Replace the temporary legacy bigint shim with strict Amount normalization.
  * - Remove `normalizeLegacyAmount()`.
  * - Return `Amount.from(...)` for normalized response fields instead of `Number(...)`.
+ * - Keep metadata fields such as expiry/ttl/input_fee_ppk/final_expiry as safe `number`s.
  * - Update runtime validation to accept `Amount` on normalized objects where it currently expects
  *   `number`.
  * - Propagate the output-type change through Wallet/docs/examples/api report in the v4 breaking
@@ -38,7 +40,15 @@ import request, {
 	type RequestFn,
 	type RequestOptions,
 } from '../transport';
-import { isObj, joinUrls, sanitizeUrl } from '../utils';
+import {
+	isObj,
+	joinUrls,
+	normalizeAmountToLegacyNumber,
+	normalizeMintKeys,
+	normalizeMintKeyset,
+	normalizeSafeIntegerMetadata,
+	sanitizeUrl,
+} from '../utils';
 import {
 	type MeltQuoteResponsePaidDeprecated,
 	handleMeltQuoteResponseDeprecated,
@@ -147,8 +157,10 @@ class Mint {
 		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(this._mintUrl, '/v1/info'),
 		});
+		// TODO v4 - remove deprecated tweak from 2024
 		const data = handleMintInfoContactFieldDeprecated(response, this._logger);
-		return data;
+		// TODO v4 - just return data when GetInfoResponse is updated to AmountLike
+		return new MintInfo(data).cache;
 	}
 
 	/**
@@ -211,6 +223,7 @@ class Mint {
 			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('POST', '/v1/mint/quote/bolt11', { requestBody: mintQuotePayload }, customRequest);
 		const data = this.normalizeMintQuoteBolt11Response(
+			// TODO v4 - remove deprecated tweak from 2024
 			handleMintQuoteResponseDeprecated(response, this._logger),
 		);
 		return data;
@@ -251,7 +264,7 @@ class Mint {
 		const response = await this.requestWithAuth<
 			MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated
 		>('GET', `/v1/mint/quote/bolt11/${quote}`, {}, customRequest);
-
+		// TODO v4 - remove deprecated tweak from 2024
 		const data = handleMintQuoteResponseDeprecated(response, this._logger);
 		return this.normalizeMintQuoteBolt11Response(data);
 	}
@@ -340,6 +353,7 @@ class Mint {
 		>('POST', '/v1/melt/quote/bolt11', { requestBody: meltQuotePayload }, customRequest);
 
 		const data = this.normalizeMeltQuoteBolt11Response(
+			// TODO v4 - remove deprecated tweak from 2024
 			handleMeltQuoteResponseDeprecated(response, this._logger),
 		);
 
@@ -392,6 +406,7 @@ class Mint {
 		>('GET', `/v1/melt/quote/bolt11/${quote}`, {}, customRequest);
 
 		const data = this.normalizeMeltQuoteBolt11Response(
+			// TODO v4 - remove deprecated tweak from 2024
 			handleMeltQuoteResponseDeprecated(response, this._logger),
 		);
 
@@ -516,6 +531,7 @@ class Mint {
 		const response = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 
 		const data = this.normalizeMeltQuoteBolt11Response(
+			// TODO v4 - remove deprecated tweak from 2024
 			handleMeltQuoteResponseDeprecated(response, this._logger),
 		);
 
@@ -612,7 +628,10 @@ class Mint {
 			throw new Error('Invalid response from mint');
 		}
 
-		return data;
+		return {
+			...data,
+			keysets: data.keysets.map((keyset) => normalizeMintKeys(keyset)),
+		};
 	}
 
 	/**
@@ -623,9 +642,17 @@ class Mint {
 	 */
 	async getKeySets(customRequest?: RequestFn): Promise<GetKeysetsResponse> {
 		const requestInstance = customRequest ?? this._request;
-		return requestInstance<GetKeysetsResponse>({
+		const data = await requestInstance<GetKeysetsResponse>({
 			endpoint: joinUrls(this._mintUrl, '/v1/keysets'),
 		});
+		if (!isObj(data) || !Array.isArray(data.keysets)) {
+			this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
+			throw new Error('Invalid response from mint');
+		}
+		return {
+			...data,
+			keysets: data.keysets.map((keyset) => normalizeMintKeyset(keyset)),
+		};
 	}
 
 	/**
@@ -783,11 +810,8 @@ class Mint {
 	}
 
 	private normalizeLegacyAmount<T>(value: T): T | number {
-		if (typeof value === 'bigint') {
-			// Preserve v3 behavior for oversized wire amounts until the v4 switch to Amount outputs.
-			return Number(value);
-		}
-		return value;
+		// Preserve v3 behavior for oversized wire amounts until the v4 switch to Amount outputs.
+		return normalizeAmountToLegacyNumber(value as number | bigint | string, 'amount');
 	}
 
 	private normalizeSignatureAmounts(
@@ -816,6 +840,7 @@ class Mint {
 		return {
 			...response,
 			amount: this.normalizeLegacyAmount(response.amount),
+			expiry: normalizeSafeIntegerMetadata(response.expiry, 'mintQuoteBolt11.expiry', null),
 		};
 	}
 
@@ -826,6 +851,7 @@ class Mint {
 			...response,
 			amount:
 				response.amount === undefined ? undefined : this.normalizeLegacyAmount(response.amount),
+			expiry: normalizeSafeIntegerMetadata(response.expiry, 'mintQuoteBolt12.expiry', null),
 			amount_paid: this.normalizeLegacyAmount(response.amount_paid),
 			amount_issued: this.normalizeLegacyAmount(response.amount_issued),
 		};
@@ -835,6 +861,7 @@ class Mint {
 		return {
 			...response,
 			amount: this.normalizeLegacyAmount(response.amount),
+			expiry: normalizeSafeIntegerMetadata(response.expiry, 'meltQuote.expiry', undefined),
 			change: response.change ? this.normalizeSignatureAmounts(response.change) : undefined,
 		};
 	}
