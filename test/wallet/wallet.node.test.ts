@@ -504,7 +504,14 @@ describe('test info', () => {
 
 		server.use(
 			http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
-				HttpResponse.json({ quote: 'sat-quote', request: 'lnbc...' }),
+				HttpResponse.json({
+					quote: 'sat-quote',
+					request: 'lnbc...',
+					unit: 'sat',
+					amount: 1000,
+					state: MintQuoteState.UNPAID,
+					expiry: null,
+				}),
 			),
 		);
 		await expect(wallet.createMintQuoteBolt11(1000, 'sat description')).resolves.toHaveProperty(
@@ -2741,7 +2748,12 @@ describe('melt proofs', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
+					fee_reserve: 3,
 					state: MeltQuoteState.PAID,
+					expiry: 1234567890,
 					payment_preimage: 'preimage',
 					change: [
 						{
@@ -2800,7 +2812,12 @@ describe('melt proofs', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 12,
+					unit: 'sat',
+					fee_reserve: 0,
 					state: MeltQuoteState.PAID,
+					expiry: 1234567890,
 					payment_preimage: 'preimage',
 					change: [],
 				});
@@ -2844,7 +2861,12 @@ describe('melt proofs', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
-					paid: false,
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
+					fee_reserve: 3,
+					state: MeltQuoteState.UNPAID,
+					expiry: 1234567890,
 					payment_preimage: null,
 					change: null,
 				});
@@ -2891,7 +2913,12 @@ describe('melt proofs', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
+					fee_reserve: 3,
 					state: MeltQuoteState.PAID,
+					expiry: 1234567890,
 					payment_preimage: 'preimage',
 					change: [
 						{
@@ -2962,13 +2989,23 @@ describe('melt proofs', () => {
 				callCount++;
 				if (callCount === 1) {
 					return HttpResponse.json({
+						quote: 'test_melt_quote',
+						amount: 10,
+						unit: 'sat',
+						fee_reserve: 3,
 						state: MeltQuoteState.UNPAID,
+						expiry: 1234567890,
 						payment_preimage: null,
 						change: null,
 					});
 				}
 				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
+					fee_reserve: 3,
 					state: MeltQuoteState.PAID,
+					expiry: 1234567890,
 					payment_preimage: 'preimage',
 					change: [
 						{
@@ -3145,11 +3182,13 @@ describe('melt proofs', () => {
 					const body = await request.json();
 					seenBody = body;
 					return HttpResponse.json({
-						quote: meltQuote.quote, // id string
+						quote: meltQuote.quote,
 						amount: meltQuote.amount,
+						unit: meltQuote.unit,
 						fee_reserve: meltQuote.fee_reserve,
 						state: MeltQuoteState.PAID,
-						payment_preimage: 'deadbeef', // optional but harmless
+						expiry: meltQuote.expiry,
+						payment_preimage: 'deadbeef',
 						change: [
 							{
 								id: '00bd033559de27d0',
@@ -3209,7 +3248,11 @@ describe('melt proofs', () => {
 					const body = await request.json();
 					seenBody = body;
 					return HttpResponse.json({
+						quote: meltQuote.quote,
+						amount: meltQuote.amount,
+						unit: meltQuote.unit,
 						state: MeltQuoteState.PAID,
+						expiry: meltQuote.expiry,
 						payment_preimage: 'preimage',
 						change: [
 							{
@@ -3244,7 +3287,11 @@ describe('melt proofs', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt12', () => {
 				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
 					state: MeltQuoteState.PAID,
+					expiry: 1234567890,
 					payment_preimage: 'preimage',
 					change: [
 						{
@@ -3299,7 +3346,13 @@ describe('melt proofs', () => {
 	test('test melt proofs bad response', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
-				return HttpResponse.json({});
+				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
+					fee_reserve: 3,
+					expiry: 1234567890,
+				});
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
@@ -3338,7 +3391,12 @@ describe('melt proofs', () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
+					quote: 'test_melt_quote',
+					amount: 10,
+					unit: 'sat',
+					fee_reserve: 2,
 					state: MeltQuoteState.PAID,
+					expiry: 1234567890,
 					payment_preimage: 'preimage',
 					change: [
 						{
@@ -3496,7 +3554,12 @@ describe('async melt preference body', () => {
 				return HttpResponse.json({
 					quote: meltQuote.quote,
 					amount: meltQuote.amount,
+					unit: meltQuote.unit,
+					request: meltQuote.request,
 					state: 'UNPAID',
+					expiry: 1234567890,
+					fee_reserve: meltQuote.fee_reserve,
+					payment_preimage: null,
 					change: [],
 				});
 			}),
@@ -3540,7 +3603,12 @@ describe('async melt preference body', () => {
 				return HttpResponse.json({
 					quote: meltQuote.quote,
 					amount: meltQuote.amount,
+					unit: meltQuote.unit,
+					request: meltQuote.request,
 					state: 'UNPAID',
+					expiry: 1234567890,
+					fee_reserve: meltQuote.fee_reserve,
+					payment_preimage: null,
 					change: [],
 				});
 			}),
@@ -3646,7 +3714,17 @@ describe('async melt preference body', () => {
 				expect(prefer).toBeNull();
 				expect(blind).toBe('test-token');
 				expect(body.prefer_async).toBe(true);
-				return HttpResponse.json({ quote: 'q-auth-1', amount: 1, state: 'UNPAID', change: [] });
+				return HttpResponse.json({
+					quote: 'q-auth-1',
+					amount: 1,
+					unit: 'sat',
+					request: invoice,
+					state: 'UNPAID',
+					expiry: 1234567890,
+					fee_reserve: 0,
+					payment_preimage: null,
+					change: [],
+				});
 			}),
 		);
 
