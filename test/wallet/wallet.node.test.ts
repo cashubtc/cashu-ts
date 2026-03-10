@@ -3701,6 +3701,7 @@ describe('async melt preference body', () => {
 			time: 0,
 			nuts: {
 				22: {
+					bat_max_mint: 1,
 					protected_endpoints: [{ method: 'POST', path: '/v1/melt/bolt11' }],
 				},
 			},
@@ -3768,6 +3769,7 @@ describe('async melt preference body', () => {
 			time: 0,
 			nuts: {
 				22: {
+					bat_max_mint: 1,
 					protected_endpoints: [{ method: 'POST', path: '/v1/melt/bolt12' }],
 				},
 			},

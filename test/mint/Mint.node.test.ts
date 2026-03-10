@@ -60,11 +60,11 @@ describe('Mint legacy numeric normalization', () => {
 		expect(info.nuts['4'].methods[0].max_amount).toBe(456);
 		expect(info.nuts['5'].methods[0].min_amount).toBe(789);
 		expect(info.nuts['5'].methods[0].max_amount).toBe(999);
-		expect(info.nuts['19']?.ttl).toBe(120n);
-		expect(info.nuts['22']?.bat_max_mint).toBe(5n);
+		expect(info.nuts['19']?.ttl).toBe(120);
+		expect(info.nuts['22']?.bat_max_mint).toBe(5);
 	});
 
-	it('leaves getInfo metadata validation to downstream edges', async () => {
+	it('rejects out-of-range bigint info metadata in getInfo()', async () => {
 		const mint = new Mint(mintUrl, {
 			customRequest: makeRequest({
 				name: 'mint',
@@ -79,8 +79,7 @@ describe('Mint legacy numeric normalization', () => {
 			} as any),
 		});
 
-		const info = await mint.getInfo();
-		expect(info.nuts['19']?.ttl).toBe(9007199254740993n);
+		await expect(mint.getInfo()).rejects.toThrow('nuts.19.ttl');
 	});
 
 	it('normalizes bigint fields in getKeySets()', async () => {

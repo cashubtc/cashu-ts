@@ -49,6 +49,8 @@ export class MintInfo {
 				...(info.nuts['5']
 					? { '5': MintInfo.normalizeMethodLimits(info.nuts['5'], 'nuts.5.methods') }
 					: {}),
+				...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
+				...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22']) } : {}),
 			},
 		};
 	}
@@ -73,6 +75,28 @@ export class MintInfo {
 					undefined,
 				),
 			})),
+		};
+	}
+
+	private static normalizeNut19(
+		nut19: GetInfoResponse['nuts']['19'],
+	): GetInfoResponse['nuts']['19'] {
+		if (!nut19) return nut19;
+
+		return {
+			...nut19,
+			ttl: normalizeSafeIntegerMetadata(nut19.ttl, 'nuts.19.ttl', null),
+		};
+	}
+
+	private static normalizeNut22(
+		nut22: GetInfoResponse['nuts']['22'],
+	): GetInfoResponse['nuts']['22'] {
+		if (!nut22) return nut22;
+
+		return {
+			...nut22,
+			bat_max_mint: normalizeSafeIntegerMetadata(nut22.bat_max_mint, 'nuts.22.bat_max_mint'),
 		};
 	}
 
