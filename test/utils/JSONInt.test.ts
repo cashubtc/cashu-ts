@@ -86,6 +86,21 @@ describe('native BigInt support: stringify', () => {
 		expect(output).toBe('{"a":1}');
 	});
 
+	test('unboxes boxed primitives like native JSON.stringify', () => {
+		expect(stringify(new Number(2))).toBe('2');
+		expect(stringify(new String('x'))).toBe('"x"');
+		expect(stringify(new Boolean(false))).toBe('false');
+	});
+
+	test('unboxes boxed primitives nested in objects and arrays', () => {
+		const output = stringify({
+			amount: new Number(2),
+			label: new String('x'),
+			flags: [new Boolean(false), new Number(3)],
+		});
+		expect(output).toBe('{"amount":2,"label":"x","flags":[false,3]}');
+	});
+
 	test('throws TypeError on circular references', () => {
 		const obj: { self?: unknown } = {};
 		obj.self = obj;

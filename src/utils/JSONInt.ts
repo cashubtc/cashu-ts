@@ -367,6 +367,13 @@ function isToJSONCapable(value: unknown): value is { toJSON: (key: string) => un
 	);
 }
 
+function unboxBoxedPrimitive(value: unknown): unknown {
+	if (value instanceof Number || value instanceof String || value instanceof Boolean) {
+		return value.valueOf();
+	}
+	return value;
+}
+
 export function stringify(
 	value: unknown,
 	replacer?: ReplacerFn | ReplacerList,
@@ -397,6 +404,7 @@ export function stringify(
 		if (typeof replacer === 'function') {
 			val = replacer.call(holder, key, val);
 		}
+		val = unboxBoxedPrimitive(val);
 
 		switch (typeof val) {
 			case 'string':
