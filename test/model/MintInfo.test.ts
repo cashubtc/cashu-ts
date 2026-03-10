@@ -1,19 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { MintInfo } from '../../src/model/MintInfo';
-
-const baseMintInfo = {
-	name: 'Test Mint',
-	pubkey: '0000',
-	version: 'test/0.1',
-	nuts: {},
-};
+import { MINTINFORESP } from '../consts';
 
 describe('MintInfo protected endpoint matching', () => {
 	it('matches exact literal path', () => {
 		const info = new MintInfo({
-			...baseMintInfo,
+			...MINTINFORESP,
 			nuts: {
 				22: {
+					bat_max_mint: 100,
 					protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
 				},
 			},
@@ -26,9 +21,10 @@ describe('MintInfo protected endpoint matching', () => {
 
 	it('matches exact anchored path ^...$', () => {
 		const info = new MintInfo({
-			...baseMintInfo,
+			...MINTINFORESP,
 			nuts: {
 				22: {
+					bat_max_mint: 100,
 					protected_endpoints: [{ method: 'POST', path: '^/v1/mint/bolt11$' }],
 				},
 			},
@@ -40,9 +36,10 @@ describe('MintInfo protected endpoint matching', () => {
 
 	it('matches prefix pattern ^/path/.*', () => {
 		const info = new MintInfo({
-			...baseMintInfo,
+			...MINTINFORESP,
 			nuts: {
 				22: {
+					bat_max_mint: 100,
 					protected_endpoints: [{ method: 'GET', path: '^/v1/mint/quote/bolt11/.*' }],
 				},
 			},
@@ -55,9 +52,10 @@ describe('MintInfo protected endpoint matching', () => {
 
 	it('matches prefix pattern ^/path/.*$', () => {
 		const info = new MintInfo({
-			...baseMintInfo,
+			...MINTINFORESP,
 			nuts: {
 				22: {
+					bat_max_mint: 100,
 					protected_endpoints: [{ method: 'POST', path: '^/v1/melt/.*$' }],
 				},
 			},
@@ -69,9 +67,10 @@ describe('MintInfo protected endpoint matching', () => {
 
 	it('matches prefix pattern /path/*', () => {
 		const info = new MintInfo({
-			...baseMintInfo,
+			...MINTINFORESP,
 			nuts: {
 				22: {
+					bat_max_mint: 100,
 					protected_endpoints: [{ method: 'GET', path: '/v1/mint/quote/bolt*' }],
 				},
 			},
@@ -82,5 +81,24 @@ describe('MintInfo protected endpoint matching', () => {
 		expect(info.requiresBlindAuthToken('GET', '/v1/melt/quote')).toBe(false);
 		expect(info.requiresBlindAuthToken('POST', '/v1/mint/quote/bolt11/abc')).toBe(false);
 		expect(info.requiresBlindAuthToken('GET', '/v1/melt/quote/bolt12')).toBe(false);
+	});
+
+	it('maps NUT-19 ttl null to Infinity', () => {
+		const info = new MintInfo({
+			...MINTINFORESP,
+			nuts: {
+				19: {
+					ttl: null,
+					cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+				},
+			},
+		} as any);
+		expect(info.isSupported(19)).toEqual({
+			supported: true,
+			params: {
+				ttl: Infinity,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			},
+		});
 	});
 });
