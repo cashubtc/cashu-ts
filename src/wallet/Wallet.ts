@@ -1723,12 +1723,16 @@ class Wallet {
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt11', amount, quote, config, outputType);
+		return this.mintProofsBolt11(amount, quote, config, outputType);
 	}
 
 	/**
 	 * Mint proofs for a bolt11 quote.
 	 *
+	 * @remarks
+	 * Convenience helper for the common BOLT11 flow. Internally this uses `prepareMint('bolt11',…)`
+	 * followed by `completeMint()`. Use `prepareMint()` directly when you need the generic method
+	 * based API or want to persist a replay-safe preview before completion.
 	 * @param amount Amount to mint.
 	 * @param quote Mint quote ID or object (bolt11).
 	 * @param config Optional parameters (e.g. privkey for locked quotes).
@@ -1741,12 +1745,17 @@ class Wallet {
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt11', amount, quote, config, outputType);
+		const preview = await this.prepareMint('bolt11', amount, quote, config, outputType);
+		return this.completeMint(preview);
 	}
 
 	/**
 	 * Mints proofs for a bolt12 quote.
 	 *
+	 * @remarks
+	 * Convenience helper for the common BOLT12 flow. Internally this uses `prepareMint('bolt12',…)`
+	 * followed by `completeMint()`. Use `prepareMint()` directly when you need the generic method
+	 * based API or want to persist a replay-safe preview before completion.
 	 * @param amount Amount to mint.
 	 * @param quote Bolt12 mint quote.
 	 * @param privkey Private key to unlock the quote.
@@ -1761,73 +1770,29 @@ class Wallet {
 		config?: { keysetId?: string },
 		outputType?: OutputType,
 	): Promise<Proof[]> {
-		return this._mintProofs('bolt12', amount, quote, { ...config, privkey }, outputType);
+		const preview = await this.prepareMint(
+			'bolt12',
+			amount,
+			quote,
+			{ ...config, privkey },
+			outputType,
+		);
+		return this.completeMint(preview);
 	}
 
 	/**
 	 * Prepare a mint transaction for replay and later completion.
 	 *
 	 * @remarks
-	 * Returns a MintPreview that contains the exact mint payload and output data needed to construct
-	 * proofs. Persist this preview to support NUT-19 replay safety.
+	 * Generic method-oriented mint API. This supports current methods such as `bolt11` and `bolt12`
+	 * as well as future custom methods exposed by the mint. For first-class typed ergonomics with the
+	 * built-in methods, prefer `mintProofsBolt11()`, `mintProofsBolt12()`, or
+	 * `wallet.ops.mintBolt11()/mintBolt12()`.
+	 *
+	 * Returns a `MintPreview` that contains the exact mint payload and output data needed to
+	 * construct proofs. Persist this preview to support NUT-19 replay safety.
 	 */
 	async prepareMint<TQuote extends MintQuoteBaseResponse | string>(
-		method: string,
-		amount: AmountLike,
-		quote: TQuote,
-		config?: MintProofsConfig,
-		outputType?: OutputType,
-	): Promise<MintPreview> {
-		return this.buildMintPreview(method, amount, quote, config, outputType);
-	}
-
-	/**
-	 * Complete a prepared mint transaction.
-	 *
-	 * @param mintPreview Preview returned by prepareMint.
-	 * @returns Minted proofs.
-	 */
-	async completeMint(mintPreview: MintPreview): Promise<Proof[]> {
-		const { payload, outputData, keysetId, method } = mintPreview;
-		const { signatures } = await this.mint.mint(method, payload);
-		this.failIf(
-			signatures.length !== outputData.length,
-			`Mint returned ${signatures.length} signatures, expected ${outputData.length}`,
-		);
-
-		const keyset = this.getKeyset(keysetId);
-		this._logger.debug('MINT COMPLETED', {
-			amounts: outputData.map((o) => o.blindedMessage.amount),
-		});
-		return outputData.map((d, i) => d.toProof(signatures[i], keyset));
-	}
-
-	/**
-	 * Internal helper for minting proofs with bolt11 or bolt12.
-	 *
-	 * @remarks
-	 * Handles blinded messages, signatures, and proof construction. Use public methods like
-	 * mintProofs or helpers for API access.
-	 * @param method 'bolt11' or 'bolt12'.
-	 * @param amount Amount to mint (must be positive).
-	 * @param quote Quote ID or object.
-	 * @param config Optional (privkey, keysetId).
-	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns Minted proofs.
-	 * @throws If params are invalid or mint returns errors.
-	 */
-	private async _mintProofs<T extends 'bolt11' | 'bolt12'>(
-		method: T,
-		amount: AmountLike,
-		quote: string | (T extends 'bolt11' ? MintQuoteBolt11Response : MintQuoteBolt12Response),
-		config?: MintProofsConfig,
-		outputType?: OutputType,
-	): Promise<Proof[]> {
-		const preview = await this.buildMintPreview(method, amount, quote as never, config, outputType);
-		return this.completeMint(preview);
-	}
-
-	private async buildMintPreview<TQuote extends MintQuoteBaseResponse | string>(
 		method: string,
 		amount: AmountLike,
 		quote: TQuote,
@@ -1884,6 +1849,30 @@ class Wallet {
 			keysetId: keyset.id,
 			quote: quoteId,
 		};
+	}
+
+	/**
+	 * Complete a prepared mint transaction.
+	 *
+	 * @remarks
+	 * Use with a `MintPreview` returned by `prepareMint()`. This is the second step of the generic
+	 * mint flow and is also what the named convenience helpers use internally.
+	 * @param mintPreview Preview returned by prepareMint.
+	 * @returns Minted proofs.
+	 */
+	async completeMint(mintPreview: MintPreview): Promise<Proof[]> {
+		const { payload, outputData, keysetId, method } = mintPreview;
+		const { signatures } = await this.mint.mint(method, payload);
+		this.failIf(
+			signatures.length !== outputData.length,
+			`Mint returned ${signatures.length} signatures, expected ${outputData.length}`,
+		);
+
+		const keyset = this.getKeyset(keysetId);
+		this._logger.debug('MINT COMPLETED', {
+			amounts: outputData.map((o) => o.blindedMessage.amount),
+		});
+		return outputData.map((d, i) => d.toProof(signatures[i], keyset));
 	}
 
 	// -----------------------------------------------------------------

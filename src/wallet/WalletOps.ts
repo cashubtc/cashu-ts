@@ -498,6 +498,9 @@ export class ReceiveBuilder {
  * @remarks
  * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
  * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
+ *
+ * Use this builder for the typed, first-class mint methods. For arbitrary or future mint methods,
+ * use the generic `wallet.prepareMint(method, …)` / `wallet.completeMint()` flow.
  * @example
  *
  *     const proofs = await wallet.ops
@@ -638,7 +641,7 @@ export class MintBuilder<
 	 *
 	 * @remarks
 	 * Call `wallet.completeMint(MintPreview)` to complete the mint. This method can only be called
-	 * for bolt12 quotes when .privkey() is set.
+	 * for bolt12 quotes when `.privkey()` is set.
 	 * @returns A MintPreview containing the payload and output data needed to complete the mint.
 	 */
 	async prepare(this: MintBuilder<M, true>) {
@@ -664,7 +667,8 @@ export class MintBuilder<
 	 * Execute minting against the quote.
 	 *
 	 * @remarks
-	 * This method can only be called for bolt12 quotes when .privkey() is set.
+	 * This is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
+	 * This method can only be called for bolt12 quotes when `.privkey()` is set.
 	 * @returns The newly minted proofs.
 	 */
 	async run(this: MintBuilder<M, true>) {
