@@ -27,7 +27,7 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 	/**
 	 * Timestamp of when the quote expires.
 	 */
-	expiry: number;
+	expiry: number | null;
 	/**
 	 * Public key the quote is locked to.
 	 *

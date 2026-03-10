@@ -34,7 +34,7 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
 	/**
 	 * Timestamp of when the quote expires.
 	 */
-	expiry: number;
+	expiry: number | null;
 };
 
 /**
