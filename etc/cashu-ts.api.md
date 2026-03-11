@@ -1118,7 +1118,7 @@ export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
 export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
     amount: number;
     state: MintQuoteState;
-    expiry: number | null;
+    expiry: number;
 };
 
 // @public
@@ -1130,7 +1130,7 @@ export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
 // @public
 export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
     amount?: number;
-    expiry: number | null;
+    expiry: number;
     pubkey: string;
     amount_paid: number;
     amount_issued: number;

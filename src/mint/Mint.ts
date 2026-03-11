@@ -840,7 +840,12 @@ class Mint {
 		return {
 			...response,
 			amount: this.normalizeLegacyAmount(response.amount),
-			expiry: normalizeSafeIntegerMetadata(response.expiry, 'mintQuoteBolt11.expiry', null),
+			// TODO v4: make MintQuoteBolt11Response.expiry nullable in the public API.
+			expiry: normalizeSafeIntegerMetadata(
+				response.expiry,
+				'mintQuoteBolt11.expiry',
+				null,
+			) as MintQuoteBolt11Response['expiry'],
 		};
 	}
 
@@ -851,7 +856,12 @@ class Mint {
 			...response,
 			amount:
 				response.amount === undefined ? undefined : this.normalizeLegacyAmount(response.amount),
-			expiry: normalizeSafeIntegerMetadata(response.expiry, 'mintQuoteBolt12.expiry', null),
+			// TODO v4: make MintQuoteBolt12Response.expiry nullable in the public API.
+			expiry: normalizeSafeIntegerMetadata(
+				response.expiry,
+				'mintQuoteBolt12.expiry',
+				null,
+			) as MintQuoteBolt12Response['expiry'],
 			amount_paid: this.normalizeLegacyAmount(response.amount_paid),
 			amount_issued: this.normalizeLegacyAmount(response.amount_issued),
 		};

@@ -26,8 +26,11 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 	amount?: number;
 	/**
 	 * Timestamp of when the quote expires.
+	 *
+	 * @remarks
+	 * TODO v4: widen to `number | null` to match the spec and runtime normalization.
 	 */
-	expiry: number | null;
+	expiry: number;
 	/**
 	 * Public key the quote is locked to.
 	 *
