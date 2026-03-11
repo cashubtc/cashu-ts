@@ -19,11 +19,11 @@ natively, removing the primary CJS use case.
 
 ## Migration path for consumers
 
-| Current setup                     | Migration                                          |
-| --------------------------------- | -------------------------------------------------- |
-| `require('@cashu/cashu-ts')`      | Convert to ESM `import` or use dynamic `import()`  |
-| Node.js < 20.19                   | Upgrade Node.js to 20.19+ or 22.x                  |
-| Bundler configured for CJS output | Update bundler config to output ESM                 |
+| Current setup                     | Migration                                         |
+| --------------------------------- | ------------------------------------------------- |
+| `require('@cashu/cashu-ts')`      | Convert to ESM `import` or use dynamic `import()` |
+| Node.js < 20.19                   | Upgrade Node.js to 20.19+ or 22.x                 |
+| Bundler configured for CJS output | Update bundler config to output ESM               |
 
 ### Example
 
