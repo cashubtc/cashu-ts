@@ -1,5 +1,5 @@
 /**
- * @module MyLibrary
+ * @module Cashu-TS
  * * ### Useful Resources
  * - [Development Guide](https://github.com/cashubtc/cashu-ts/blob/main/docs-src/DEVELOPER.md)
  * - [Contributing](https://github.com/cashubtc/cashu-ts/blob/main/docs-src/CONTRIBUTING.md)

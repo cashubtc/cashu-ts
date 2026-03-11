@@ -77,8 +77,8 @@ If you want to contribute:
 
 - Start by reading [COMMUNITY.md](./docs-src/COMMUNITY.md) to understand our contribution philosophy, review expectations, and how to get involved.
 - Open an [Issue](https://github.com/cashubtc/cashu-ts/issues) or a [PR](https://github.com/cashubtc/cashu-ts/pulls).
-- Track progress using our [projects](https://github.com/cashubtc/cashu-ts/projects?query=is%3Aopen).
-- For process details, see [the contributing guide](./docs-src/CONTRIBUTING.md).
+- Track progress using our [projects](https://github.com/orgs/cashubtc/projects/19).
+- For process details, see [the contributing guide](./CONTRIBUTING.md).
 
 ---
 

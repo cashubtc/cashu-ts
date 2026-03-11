@@ -18,7 +18,7 @@ npm run test:prepare
 ```
 
 Node requirement: see `package.json` (currently `>=22.4.0`).
-Optional local hooks (opt-in): `npm run setup-hooks`.
+Local installs configure Husky hooks automatically.
 
 ## Repo map
 
@@ -53,7 +53,8 @@ Optional local hooks (opt-in): `npm run setup-hooks`.
 
 ## Common tasks
 
-One-shot PR suite: `npm run prtasks` (lint, format, api:update, tests).
+CI check: `npm run prtasks` (lint, format, api:update, tests).
+Repo-wide lint checks: `npm run check-lint` and `npm run check-format`.
 Integration tests: `npm run test-integration` (requires local mint, see `Makefile`).
 Consumer smoke tests: `npm run test:consumer`.
 Other scripts: see `package.json`.
@@ -109,8 +110,9 @@ DEV=1 make nutshell-stable-down
 
 Hooks are installed by Husky:
 
-- Pre-commit runs lint/format by default; set `FULL_PRECOMMIT=1` to run full suite.
-- Pre-push runs `npm run prtasks`.
+- `commit-msg` enforces Conventional Commits.
+- `pre-commit` runs `lint-staged` on staged files.
+- `pre-push` runs `npm run check-lint` and `npm run check-format`.
 
 ## If you are making changes (author flow)
 

@@ -18,4 +18,4 @@ This project uses **Semantic Versioning** and a simplified branching model.
 - Breaking API changes must be clearly marked to trigger a major version bump.
 - Version numbers are determined automatically by release-please; contributors should not attempt to control versions directly.
 
-For a fuller developer-focused guide (setup, hooks, release steps and troubleshooting) see [the developer guide](./doc-src/DEVELOPER.md).
+For a fuller developer-focused guide (setup, hooks, release steps and troubleshooting) see [the developer guide](./DEVELOPER.md).
