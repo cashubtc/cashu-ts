@@ -10,7 +10,14 @@ import {
 import { test, describe, expect } from 'vitest';
 import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
 import * as utils from '../../src/utils';
-import { PUBKEYS } from '../consts';
+import {
+	NUT02_V1_VECTOR1_KEYS,
+	NUT02_V1_VECTOR2_KEYS,
+	NUT02_V2_VECTOR1_KEYS,
+	NUT02_V2_VECTOR2_KEYS,
+	NUT02_V2_VECTOR3_KEYS,
+	PUBKEYS,
+} from '../consts';
 import {
 	hasValidDleq,
 	hexToNumber,
@@ -442,19 +449,41 @@ describe('test keyset derivation', () => {
 		const keysetId = utils.deriveKeysetId(keys);
 		expect(keysetId).toBe('009a1f293253e41e');
 	});
-	test('derive v1', () => {
-		const keys = {
-			'1': '03a40f20667ed53513075dc51e715ff2046cad64eb68960632269ba7f0210e38bc',
-			'2': '03fd4ce5a16b65576145949e6f99f445f8249fee17c606b688b504a849cdc452de',
-			'4': '02648eccfa4c026960966276fa5a4cae46ce0fd432211a4f449bf84f13aa5f8303',
-			'8': '02fdfd6796bfeac490cbee12f778f867f0a2c68f6508d17c649759ea0dc3547528',
-		};
-		const keysetId = utils.deriveKeysetId(keys, {
+	test('derives NUT-02 version 1 vector 1', () => {
+		const keysetId = utils.deriveKeysetId(NUT02_V1_VECTOR1_KEYS.keys, { versionByte: 0 });
+		expect(keysetId).toBe(NUT02_V1_VECTOR1_KEYS.id);
+	});
+	test('derives NUT-02 version 1 vector 2', () => {
+		const keysetId = utils.deriveKeysetId(NUT02_V1_VECTOR2_KEYS.keys, { versionByte: 0 });
+		expect(keysetId).toBe(NUT02_V1_VECTOR2_KEYS.id);
+	});
+	test('derives NUT-02 version 2 vector 1', () => {
+		const keysetId = utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
 			expiry: 2059210353,
 			input_fee_ppk: 100,
 			unit: 'sat',
 		});
-		expect(keysetId).toBe('015ba18a8adcd02e715a58358eb618da4a4b3791151a4bee5e968bb88406ccf76a');
+		expect(keysetId).toBe(NUT02_V2_VECTOR1_KEYS.id);
+	});
+	test('derives NUT-02 version 2 vector 2', () => {
+		const keysetId = utils.deriveKeysetId(NUT02_V2_VECTOR2_KEYS.keys, {
+			expiry: NUT02_V2_VECTOR2_KEYS.final_expiry,
+			input_fee_ppk: NUT02_V2_VECTOR2_KEYS.input_fee_ppk,
+			unit: NUT02_V2_VECTOR2_KEYS.unit,
+		});
+		expect(keysetId).toBe(NUT02_V2_VECTOR2_KEYS.id);
+	});
+	test('derives NUT-02 version 2 vector 3', () => {
+		const keysetId = utils.deriveKeysetId(NUT02_V2_VECTOR3_KEYS.keys, {
+			input_fee_ppk: NUT02_V2_VECTOR3_KEYS.input_fee_ppk,
+			unit: NUT02_V2_VECTOR3_KEYS.unit,
+		});
+		expect(keysetId).toBe(NUT02_V2_VECTOR3_KEYS.id);
+	});
+	test('verifies NUT-02 version 2 vector DTOs', () => {
+		expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR1_KEYS)).toBe(true);
+		expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR2_KEYS)).toBe(true);
+		expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR3_KEYS)).toBe(true);
 	});
 });
 
