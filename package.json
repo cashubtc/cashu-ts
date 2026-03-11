@@ -41,7 +41,7 @@
 		"api:update": "npm run compile && api-extractor run --local",
 		"setup-hooks": "chmod +x scripts/install-git-hooks.sh && ./scripts/install-git-hooks.sh",
 		"uninstall-hooks": "git config --local --unset core.hooksPath && [ \"${REMOVE_GITHOOKS:-0}\" = \"1\" ] && rm -rf .githooks || echo 'To remove the installed hooks set REMOVE_GITHOOKS=1'",
-		"prtasks": "npm run lint && npm run format && npm run api:update && npm run test && git status",
+		"prtasks": "npm run check-lint && npm run check-format && npm run api:update && npm run test && git status",
 		"prepare": "husky && [ \"$CI\" != \"true\" ] && npm run setup-git || true",
 		"setup-git": "git config commit.template .gitmessage",
 		"migrate-hooks": "REMOVE_GITHOOKS=1 npm run uninstall-hooks && npm install",
@@ -54,6 +54,15 @@
 			"import": "./lib/cashu-ts.es.js",
 			"default": "./lib/cashu-ts.es.js"
 		}
+	},
+	"lint-staged": {
+		"*.{js,ts}": [
+			"eslint --fix",
+			"prettier --write"
+		],
+		"*.{json,md,yml,yaml}": [
+			"prettier --write"
+		]
 	},
 	"keywords": [
 		"cashu"
@@ -80,6 +89,7 @@
 		"eslint-plugin-promise": "^7.2.1",
 		"globals": "^16.3.0",
 		"husky": "^9.1.7",
+		"lint-staged": "^16.3.3",
 		"mock-socket": "^9.3.1",
 		"msw": "^2.12.4",
 		"node-fetch": "^3.3.2",

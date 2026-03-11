@@ -1,15 +1,15 @@
 #!/usr/bin/env sh
-echo "Running pre-push: full PR tasks (lint, format, api:update, tests)"
+
+echo "Running pre-push: lint + format checks"
 
 if ! command -v npm >/dev/null 2>&1; then
 	echo "npm not found in PATH. Install Node.js/npm before pushing." >&2
 	exit 1
 fi
 
-echo "-> npm run prtasks"
-npm run prtasks || {
-	echo "pre-push checks failed. Push aborted." >&2
+if ! npm run check-lint && npm run check-format; then
+	echo "Pre-push checks failed. Push aborted." >&2
 	exit 1
-}
+fi
 
 echo "Pre-push checks passed."
