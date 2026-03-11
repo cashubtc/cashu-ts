@@ -1,4 +1,4 @@
-[Documents](../index.html) › **Contribution Guide**
+[Documents](../index.html) > **Contribution Guide**
 
 # Contribution Guide
 
@@ -137,4 +137,4 @@ npm run test-integration
 
 ---
 
-Thanks for contributing — please open [Issues](https://github.com/cashubtc/cashu-ts/issues) or [Pull Requests](https://github.com/cashubtc/cashu-ts/pulls) if anything is unclear.
+Thanks for contributing - please open [Issues](https://github.com/cashubtc/cashu-ts/issues) or [Pull Requests](https://github.com/cashubtc/cashu-ts/pulls) if anything is unclear.

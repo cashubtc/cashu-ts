@@ -2,7 +2,7 @@
  * @module MyLibrary
  * * ### Useful Resources
  * - [Development Guide](https://github.com/cashubtc/cashu-ts/blob/main/docs-src/DEVELOPER.md)
- * - [Contributing](https://github.com/cashubtc/cashu-ts/blob/main/docs-src/CONTRIBUTING.md)
+ * - [Contributing](https://github.com/cashubtc/cashu-ts/blob/main/CONTRIBUTING.md)
  * - [Examples](https://github.com/cashubtc/cashu-ts/tree/main/examples)
  */
 

@@ -10,7 +10,7 @@ This document outlines the current and planned features for the project, tracked
 
 This roadmap will be updated as new features are proposed or completed. Contributions and feedback are welcome!
 
-We are also tracking the project [here](https://github.com/cashubtc/cashu-ts/projects?query=is%3Aopen)
+We are also tracking the project [here](https://github.com/orgs/cashubtc/projects/19)
 
 ## [NUTs](https://github.com/cashubtc/nuts/):
 

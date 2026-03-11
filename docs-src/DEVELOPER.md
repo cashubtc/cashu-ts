@@ -78,15 +78,14 @@ This project follows the [Conventional Commits](https://www.conventionalcommits.
 
 If your message doesn't fit the format, the commit-msg hook will prevent the commit.
 
-#### Pro-Tip: Recovering a Failed Commit
+#### Pro tip: recover a failed commit
 
-If your commit fails the `commitlint` check, don't worry—you don't have to retype it!
+If your commit fails the `commitlint` check, you don't need to retype it.
 
-**The Quick Fix:**
-Git saves your last failed commit message in `.git/COMMIT_EDITMSG`. You can quickly recover it with:
+Git keeps the attempted message in `.git/COMMIT_EDITMSG`. To reopen, fix, and retry it:
 
 ```bash
-git commit -t .git/COMMIT_EDITMSG
+git commit --edit --file=.git/COMMIT_EDITMSG
 ```
 
 ### Migrate Hooks
