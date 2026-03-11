@@ -2,7 +2,7 @@
 
 # Contribution Guide
 
-This file is contributor-facing: quick setup, how to opt in to local hooks, and a short PR checklist. For detailed developer instructions (environment, hooks internals, release process, CI parity, and troubleshooting) see [the developer guide](./DEVELOPER.md).
+This file is contributor-facing: quick setup, current hook behavior, and a short PR checklist. For detailed developer instructions (environment, release process, CI parity, and troubleshooting) see [the developer guide](./DEVELOPER.md).
 
 ## Quickstart
 
@@ -15,8 +15,6 @@ npm ci
 # optional: prepare Playwright browsers for integration tests
 npm run test:prepare
 
-# optional: opt in to local git hooks
-npm run setup-hooks
 ```
 
 ## PR checklist (author)
@@ -31,21 +29,38 @@ Before submitting a PR, please read [COMMUNITY.md](./COMMUNITY.md) to understand
 
 ## Local hooks (short)
 
-We provide an optional hook installer. Run `npm run setup-hooks` to copy tracked hook sources from `scripts/hooks/` into an ignored `.githooks/` folder and activate them locally. Hooks are opt-in; CI still runs the full checks.
+Husky hooks install automatically during local `npm ci` / `npm install` via the `prepare` script.
 
-If you want the installer behavior or hook internals, see the `Hooks` section in `DEVELOPER.md`.
+- `commit-msg` enforces Conventional Commits.
+- `pre-commit` runs `lint-staged` on staged files. For `*.{js,ts}` it runs ESLint with `--fix` and Prettier; for `*.{json,md,yml,yaml}` it runs Prettier.
+- `pre-push` runs repository-wide `npm run check-lint` and `npm run check-format`.
 
-## Full PR checks
+If you want more detail on the hook behavior, see the `Hooks` section in `DEVELOPER.md`.
 
-There is a convenience script `npm run prtasks` that runs the full PR/CI suite (lint, format, api:update, tests). The installed `pre-push` hook runs `npm run prtasks` to ensure the full checks before pushing. You may run it manually before opening a PR.
+## Recommended local checks
 
-If you need the pre-commit hook to run the full suite for one commit, set `FULL_PRECOMMIT=1` when committing:
+The hooks only cover commit message validation plus lint and formatting checks. Before opening a PR, run the checks that match your change:
 
 ```bash
-FULL_PRECOMMIT=1 git commit -m "..."
+# required for most code changes
+npm run compile
+npm test
+
+# if public API changed
+npm run api:update
+
+# if your change depends on a local mint
+npm run test-integration
 ```
 
-Tip: a common local workflow before pushing is to run `npm run prtasks` and, for integration tests, start a local mint using the example `docker-compose` (see `examples/auth_mint/docker-compose.yml`) and then run `npm run test-integration`. This reproduces CI conditions locally and reduces surprises.
+We also have an "all-in-one" script that runs all CI tasks sequentially:
+
+```bash
+# runs lint, format, compile, api-update and tests
+npm run prtasks
+```
+
+Tip: if you want to mirror the pre-push checks manually, run `npm run check-lint` and `npm run check-format`.
 
 ## API Extractor
 

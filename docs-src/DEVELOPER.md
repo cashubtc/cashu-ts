@@ -3,7 +3,7 @@
 # Developer Guide
 
 This document is a quick reference for maintainers and frequent contributors. It complements [the contributor guide](./CONTRIBUTING.md) (which is contributor-facing) and contains deeper, actionable instructions for setting up, testing, and developing the project.
-We use Husky to manage our git hooks. When you install dependencies, the environment is automatically configured. See the Hooks section below for more info.
+We use Husky to manage our git hooks. When you install dependencies locally, the environment is configured automatically. See the Hooks section below for more info.
 
 ## Quickstart (one-time)
 
@@ -59,10 +59,10 @@ This callout is important — please don't skip it when moving between major bra
 - Recommended tools: `npm` (node package manager), `git`, optional `nvm`/`volta` for Node version management.
 - Optional: Playwright browsers for integration tests (`npm run test:prepare`).
 
-## Hooks internals (how the installer works)
+## Hooks internals
 
-During the install process [husky](https://typicode.github.io/husky/) was installed and setup for pre-commit, pre-push, and commit-msg hooks.
-We also automatically configured your local `git config commit.template` to use our project's `.gitmessage`.
+During local install, [husky](https://typicode.github.io/husky/) wires up the `pre-commit`, `pre-push`, and `commit-msg` hooks through the `prepare` script.
+We also configure your local `git config commit.template` to use the project's `.gitmessage`.
 
 ### Commit Message Convention
 
@@ -88,25 +88,19 @@ Git keeps the attempted message in `.git/COMMIT_EDITMSG`. To reopen, fix, and re
 git commit --edit --file=.git/COMMIT_EDITMSG
 ```
 
-### Migrate Hooks
-
-We previously offered hooks as opt-in. If you had that configured we offer a migrate-hooks command.
-
-```bash
-npm run migrate-hooks
-```
-
-This runs `npm run uninstall-hooks` and `npm install`.
-
 ### Pre-commit vs pre-push strategy
 
-- `pre-commit`: quick feedback (lint + format) — fast to avoid blocking developers.
-  - Opt-in full run: set `FULL_PRECOMMIT=1` for a single commit when you want the full suite locally.
-- `pre-push`: runs full PR checks (`npm run prtasks`) to ensure the full suite runs before pushing.
+- `commit-msg`: validates the commit message with Commitlint and points you at `.git/COMMIT_EDITMSG` if the message needs fixing.
+- `pre-commit`: runs `lint-staged` on staged files only.
+  - `*.{js,ts}`: `eslint --fix`, then `prettier --write`
+  - `*.{json,md,yml,yaml}`: `prettier --write`
+- `pre-push`: runs repository-wide `npm run check-lint` and `npm run check-format`.
 
-This keeps commits fast while ensuring pushes execute the heavier checks.
+This keeps commits fast while still blocking pushes with lint or formatting drift.
 
-## Running the full PR checks locally
+## Running local validation checks
+
+The hooks do not run compile, unit tests, integration tests, or API Extractor for you. Run the checks that fit your change before opening a PR.
 
 The repo includes a convenience script:
 
@@ -114,13 +108,13 @@ The repo includes a convenience script:
 npm run prtasks
 ```
 
-This runs (in order): lint, format, api:update (compile + api-extractor), tests, and `git status`.
+This runs (in order): lint, format, api:update (compile + api-extractor), tests, and `git status`
 
 Caution: `api:update` can modify generated files (e.g. API reports). Inspect and commit any intended changes.
 
-### Local pre-push workflow (recommended)
+### Local validation workflow (recommended)
 
-Many maintainers prefer to run the full PR checks locally before pushing. A common, reliable workflow:
+Many maintainers prefer to run the relevant checks locally before pushing. A common, reliable workflow:
 
 1. Start a local mint (for integration tests). We have make targets for both CDK's mintd, and Nutshell:
 
@@ -149,7 +143,7 @@ npm run test-integration
 npm run test:consumer
 ```
 
-**Note**: the consumer smoke tests are run in CI but are intentionally not part of `prtasks` to avoid adding noise to every local run; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
+**Note**: the consumer smoke tests are run in CI but are not part of the git hooks; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
 
 The `test:consumer` aggregator runs the following scripts (you can run them individually):
 
@@ -168,7 +162,7 @@ DEV=1 make cdk-stable-down
 # or DEV=1 make nutshell-stable-down
 ```
 
-This pattern (run `npm run prtasks` and integration tests against a local mint) gives fast, reproducible results and avoids surprises in CI.
+This pattern gives fast, reproducible results and avoids surprises in CI.
 
 ## Integration mints (Makefile & CI)
 
@@ -338,7 +332,7 @@ We use [release-please](https://github.com/googleapis/release-please) to automat
 
 - If you see strange compile or api-extractor errors after switching branches: run `npm ci` to ensure `node_modules` matches the checked-in lockfile. If problems persist, try removing `node_modules` and running `npm ci` again.
 
-- To reproduce CI locally (fast): run `npm run prtasks`. This runs the same suite used for PRs and helps surface issues that CI would catch.
+- To reproduce CI locally, run the same checks your change requires: `npm run check-lint`, `npm run check-format`, `npm run compile`, `npm test`, `npm run api:update` for public API changes, and `npm run test-integration` when mint behavior is involved.
 
 ## Contact & maintainers
 
