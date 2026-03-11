@@ -132,7 +132,6 @@ npm run test-integration
 
 - **TS sources** use extensionless imports.
 - **Runtime ESM** (`lib/**/*.js`) must have `.js` on relative imports.
-- **Runtime CJS** (`lib/**/*.cjs`) may omit extensions, Node does not require them.
 - **Type declarations** (`lib/types/**/*.d.ts`) are a rolled up file (no relative imports/re-exports).
 
 ---

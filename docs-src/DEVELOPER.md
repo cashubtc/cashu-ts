@@ -146,7 +146,7 @@ npm run test-integration
 3a. (Optional but recommended) Run the consumer smoke tests used by CI:
 
 ```bash
-# runs all consumer smoke tests (bundler, commonjs, iife, nodenext, reactnative)
+# runs all consumer smoke tests (bundler, iife, nodenext, reactnative)
 npm run test:consumer
 ```
 
@@ -155,7 +155,6 @@ npm run test:consumer
 The `test:consumer` aggregator runs the following scripts (you can run them individually):
 
 - `npm run test:bundler` — smoke test using the bundler consumer
-- `npm run test:commonjs` — smoke test for CommonJS consumers
 - `npm run test:iife` — smoke test for IIFE (standalone) build
 - `npm run test:nodenext` — smoke test for Node ESM consumers
 - `npm run test:reactnative` — smoke test for React Native consumer
