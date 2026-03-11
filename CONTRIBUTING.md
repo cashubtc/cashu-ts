@@ -1,17 +1,10 @@
 # Contributing to Cashu-TS
 
-We welcome contributions from anyone — newcomers, experienced developers, and AI-assisted workflows alike.
+Thanks for your interest in contributing to Cashu-TS.
 
-To get started:
+This top-level `CONTRIBUTING.md` exists so GitHub can find it easily.
 
-- Read [COMMUNITY.md](./docs-src/COMMUNITY.md) to understand our contribution philosophy, review expectations, and how to get involved.
-- Read [the contributing guide](./CONTRIBUTING.md) for setup, PR checks, hooks, and testing expectations.
-- Open an [Issue](https://github.com/cashubtc/cashu-ts/issues) or a [PR](https://github.com/cashubtc/cashu-ts/pulls).
-- Track progress using our [projects](https://github.com/orgs/cashubtc/projects/19).
-
-We also have a Developer guide: [`docs-src/DEVELOPER.md`](./docs-src/DEVELOPER.md)
-
-If you want to contribute:
+The full contributor docs live in the files below.
 
 - Contributor guide: [`docs-src/CONTRIBUTING.md`](./docs-src/CONTRIBUTING.md)
 - Developer guide: [`docs-src/DEVELOPER.md`](./docs-src/DEVELOPER.md)
