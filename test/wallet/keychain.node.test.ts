@@ -4,7 +4,7 @@ import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi 
 
 import { Mint, KeyChain, Keyset, type MintKeyset, type MintKeys } from '../../src';
 import { isValidHex } from '../../src/utils';
-import { PUBKEYS } from '../consts';
+import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 
 const mintUrl = 'http://localhost:3338';
 const mint = new Mint(mintUrl);
@@ -12,17 +12,7 @@ const unit = 'sat';
 
 const dummyKeysResp: { keysets: MintKeys[] } = {
 	keysets: [
-		{
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			active: true,
-			input_fee_ppk: 0,
-			final_expiry: 1754296607,
-			keys: {
-				1: '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
-				2: '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
-			},
-		},
+		DUMMY_TEST_KEYS,
 		{
 			id: '009a1f293253e41e',
 			unit: 'sat',
@@ -56,13 +46,7 @@ const dummyKeysResp: { keysets: MintKeys[] } = {
 
 const dummyKeysetResp: { keysets: MintKeyset[] } = {
 	keysets: [
-		{
-			id: '00bd033559de27d0',
-			unit: 'sat',
-			active: true,
-			input_fee_ppk: 0,
-			final_expiry: 1754296607,
-		},
+		DUMMY_TEST_KEYSET,
 		{
 			id: '009a1f293253e41e',
 			unit: 'sat',

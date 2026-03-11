@@ -321,3 +321,19 @@ export const NUT02_V2_VECTOR3_KEYSET: MintKeyset = {
 	input_fee_ppk: NUT02_V2_VECTOR3_KEYS.input_fee_ppk,
 	final_expiry: NUT02_V2_VECTOR3_KEYS.final_expiry,
 };
+
+export const DUMMY_TEST_KEYSET: MintKeyset = {
+	id: '00bd033559de27d0',
+	unit: 'sat',
+	active: true,
+	input_fee_ppk: 0,
+	final_expiry: 1754296607,
+};
+
+export const DUMMY_TEST_KEYS: MintKeys = {
+	...DUMMY_TEST_KEYSET,
+	keys: {
+		'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
+		'2': '03361cd8bd1329fea797a6add1cf1990ffcf2270ceb9fc81eeee0e8e9c1bd0cdf5',
+	},
+};
