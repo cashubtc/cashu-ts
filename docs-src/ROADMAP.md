@@ -33,7 +33,7 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [ ] [NUT-16](https://github.com/cashubtc/nuts/blob/main/16.md) | Animated QR codes |
 - [x] [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) | WebSockets |
 - [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) | Payment Requests |
-- [ ] [NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md) | Cached Responses |
+- [x] [NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md) | Cached Responses |
 - [x] [NUT-20](https://github.com/cashubtc/nuts/blob/main/20.md) | Signature on Mint Quote |
 - [x] [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) | Clear Authentication |
 - [x] [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) | Blind Authentication |

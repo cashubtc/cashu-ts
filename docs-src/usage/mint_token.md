@@ -22,7 +22,8 @@ if (mintQuoteChecked.state === MintQuoteState.PAID) {
 
 ## 2) Two-step BOLT11 mint with `prepareMint()` / `completeMint()`
 
-The two-step process gives you a chance to save outputdata, allowing preview and NUT-19 retry.
+The two-step process gives you a chance to persist the preview before calling the mint. This works
+well with NUT-19 transport retries and lets you recover safely if your app restarts between steps.
 
 ```ts
 import { Wallet, MintQuoteState } from '@cashu/cashu-ts';
