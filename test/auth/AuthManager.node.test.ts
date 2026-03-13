@@ -206,6 +206,82 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 		expect(am.poolSize).toBe(2);
 	});
 
+	test('ensure() normalizes bigint info and auth keyset fields during init', async () => {
+		const am = new AuthManager(mintUrl, { request: reqSpy, desiredPoolSize: 5, maxPerMint: 99 });
+		const outputsSpy = stubOutputs(2);
+		reqSpy
+			.mockResolvedValueOnce({
+				name: 'mint',
+				pubkey: '02abcd',
+				version: 'test',
+				contact: [],
+				nuts: {
+					'4': { disabled: false, methods: [] },
+					'5': { disabled: false, methods: [] },
+					'22': { bat_max_mint: 2n },
+				},
+			})
+			.mockResolvedValueOnce({
+				keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250n }],
+			})
+			.mockResolvedValueOnce({
+				keysets: [
+					{
+						id: '00k',
+						unit: 'auth',
+						input_fee_ppk: 250n,
+						final_expiry: 1_754_296_607n,
+						keys: { 1: '02aa' },
+					},
+				],
+			})
+			.mockResolvedValueOnce({ signatures: ['sig0', 'sig1'] });
+
+		await am.ensure(5);
+
+		const KeyChainMock = (wallet as any).KeyChain as Mock;
+		expect(KeyChainMock).toHaveBeenCalledWith(
+			mintUrl,
+			'auth',
+			[{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250 }],
+			[
+				{
+					id: '00k',
+					unit: 'auth',
+					input_fee_ppk: 250,
+					final_expiry: 1_754_296_607,
+					keys: { 1: '02aa' },
+				},
+			],
+		);
+		expect(outputsSpy).toHaveBeenCalledWith(2, expect.any(Object));
+		expect(am.poolSize).toBe(2);
+	});
+
+	test('ensure() rejects out-of-range auth keyset metadata during init', async () => {
+		const am = new AuthManager(mintUrl, { request: reqSpy, desiredPoolSize: 5, maxPerMint: 99 });
+		reqSpy
+			.mockResolvedValueOnce({
+				name: 'mint',
+				pubkey: '02abcd',
+				version: 'test',
+				contact: [],
+				nuts: {
+					'4': { disabled: false, methods: [] },
+					'5': { disabled: false, methods: [] },
+					'22': { bat_max_mint: 2n },
+				},
+			})
+			.mockResolvedValueOnce({
+				keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 9007199254740993n }],
+			})
+			.mockResolvedValueOnce({
+				keysets: [{ id: '00k', unit: 'auth', input_fee_ppk: 250n, keys: { 1: '02aa' } }],
+			});
+
+		await expect(am.ensure(5)).rejects.toThrow('keyset.input_fee_ppk');
+	});
+
 	test('topUp/end-to-end: creates proofs, validates DLEQ, pushes to pool', async () => {
 		const am = new AuthManager(mintUrl, { request: reqSpy });
 		am['info'] = fakeInfo({ batMax: 3 });

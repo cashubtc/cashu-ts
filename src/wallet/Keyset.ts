@@ -1,6 +1,7 @@
 import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
 import { type MintKeyset, type MintKeys } from '../model/types';
 import { hexToBytes } from '@noble/curves/utils.js';
+import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
 
 export class Keyset {
 	private _id: string;
@@ -160,25 +161,33 @@ export class Keyset {
 	 * @returns Keyset instance.
 	 */
 	static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset {
-		const ks = new Keyset(meta.id, meta.unit, meta.active, meta.input_fee_ppk, meta.final_expiry);
+		const nMeta = normalizeMintKeyset(meta);
+		const nKeys = keys ? normalizeMintKeys(keys) : undefined;
+		const ks = new Keyset(
+			nMeta.id,
+			nMeta.unit,
+			nMeta.active,
+			nMeta.input_fee_ppk,
+			nMeta.final_expiry,
+		);
 
 		// Sanity checks
-		if (keys) {
-			if (keys.id !== meta.id) {
-				throw new Error(`Mismatched keyset ids: meta=${meta.id}, keys=${keys.id}`);
+		if (nKeys) {
+			if (nKeys.id !== nMeta.id) {
+				throw new Error(`Mismatched keyset ids: meta=${nMeta.id}, keys=${nKeys.id}`);
 			}
-			if (keys.unit !== meta.unit) {
-				throw new Error(`Mismatched keyset units: meta=${meta.unit}, keys=${keys.unit}`);
+			if (nKeys.unit !== nMeta.unit) {
+				throw new Error(`Mismatched keyset units: meta=${nMeta.unit}, keys=${nKeys.unit}`);
 			}
 			if (
-				keys.final_expiry !== undefined &&
-				meta.final_expiry !== undefined &&
-				keys.final_expiry !== meta.final_expiry
+				nKeys.final_expiry !== undefined &&
+				nMeta.final_expiry !== undefined &&
+				nKeys.final_expiry !== nMeta.final_expiry
 			) {
-				throw new Error(`Mismatched keyset expiry for id=${meta.id}`);
+				throw new Error(`Mismatched keyset expiry for id=${nMeta.id}`);
 			}
 			// All good
-			ks.keys = keys.keys;
+			ks.keys = nKeys.keys;
 		}
 		return ks;
 	}

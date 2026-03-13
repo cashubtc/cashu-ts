@@ -1,6 +1,7 @@
 import { HttpResponseError, NetworkError, MintOperationError } from '../model/Errors';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type Nut19Policy } from '../model/types';
+import { JSONInt } from '../utils/JSONInt';
 
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
@@ -26,14 +27,14 @@ export type RequestOptions = RequestArgs &
 /**
  * Cashu api error.
  *
- * - Error: Brief error message.
- * - Code: HTTP error code.
- * - Detail: Detailed error message.
+ * - Code: Mint error code.
+ * - Detail: Error message or mint-specific payload.
+ * - Error: HTTP error message (non NUT-00 response)
  */
 export type ApiError = {
-	error?: string;
 	code?: number;
-	detail?: string;
+	detail?: unknown;
+	error?: string;
 };
 
 let globalRequestOptions: Partial<RequestOptions> = {};
@@ -209,7 +210,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	void ttl;
 	void logger;
 
-	const body = requestBody ? JSON.stringify(requestBody) : undefined;
+	const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
 	const headers = {
 		...{ Accept: 'application/json, text/plain, */*' },
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
@@ -274,7 +275,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	if (!response.ok) {
 		let errorData: ApiError;
 		try {
-			errorData = (await response.json()) as ApiError;
+			errorData = parseErrorBody(await response.text());
 		} catch {
 			errorData = { error: 'bad response' };
 		}
@@ -300,11 +301,36 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	}
 
 	try {
-		return await response.json();
+		const responseText = await response.text();
+		if (!responseText) {
+			throw new Error('Empty response body');
+		}
+		return JSONInt.parse(responseText);
 	} catch (err) {
 		requestLogger.error('Failed to parse HTTP response', { err });
 		throw new HttpResponseError('bad response', response.status);
 	}
+}
+
+/**
+ * Try extract a normalized error message.
+ */
+function parseErrorBody(errorText: string): ApiError {
+	if (!errorText) return { detail: 'bad response' };
+	let parsed: unknown;
+	try {
+		parsed = JSONInt.parse(errorText);
+	} catch {
+		return { detail: errorText };
+	}
+	if (
+		typeof parsed === 'object' &&
+		parsed !== null &&
+		('detail' in parsed || 'code' in parsed || 'error' in parsed)
+	) {
+		return parsed as ApiError;
+	}
+	return { detail: parsed };
 }
 
 /**
