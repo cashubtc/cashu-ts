@@ -6,8 +6,6 @@ These fixtures verify that `@cashu/cashu-ts` can be consumed across common envir
 
 Bundler: TypeScript compiles with `moduleResolution` set to `bundler`. One line node runtime eval confirms the ESM entry is loadable and that `createP2PKsecret` is exported.
 
-CommonJS: TypeScript compiles with `module` set to `commonjs`, then `node index.js` runs. This catches classic CJS interop mistakes at runtime.
-
 IIFE: We build the standalone browser bundle, rewrite a local `index.html` to point at it, then load it in headless Chromium and watch for console errors.
 
 NodeNext: TypeScript compiles with `module` and `moduleResolution` set to `nodenext`. One line node runtime eval confirms the ESM entry loads and a `Wallet` can be constructed.
@@ -20,9 +18,8 @@ From the repo root:
 
 ```bash
 npm run test:consumer            # run all targets, sequential
-npm run test:consumer:bundler
-npm run test:consumer:commonjs
-npm run test:consumer:iife
-npm run test:consumer:nodenext
-npm run test:consumer:reactnative
+npm run test:bundler
+npm run test:iife
+npm run test:nodenext
+npm run test:reactnative
 ```

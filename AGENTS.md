@@ -6,7 +6,7 @@ how to run it, and the key conventions.
 ## Project snapshot
 
 - Cashu TS is a TypeScript library for Cashu wallets and mint interactions.
-- Public API surface is defined in `src/index.ts` and built for ESM + CJS.
+- Public API surface is defined in `src/index.ts` and built for ESM.
 - Docs and examples live in `docs-src/` and `examples/`.
 
 ## Quickstart (local dev)
@@ -42,7 +42,6 @@ Local installs configure Husky hooks automatically.
   published.
 - The build emits:
   - ESM runtime: `lib/**/*.js` (relative imports must include `.js`)
-  - CJS runtime: `lib/**/*.cjs`
   - Types: `lib/types/index.d.ts` (rolled up)
 
 ## Generated artifacts (do not hand-edit)
@@ -62,7 +61,7 @@ Other scripts: see `package.json`.
 ## Day-to-day commands
 
 - `npm run dev` for TypeScript watch mode.
-- `npm run compile` to build ESM + CJS outputs.
+- `npm run compile` to build ESM output.
 - `npm test` for unit/browser test projects.
 - `npm run lint` / `npm run format` for local fixes.
 
@@ -128,7 +127,7 @@ Hooks are installed by Husky:
 2. Public API changes: check `src/index.ts` and the diff in `/etc/cashu-ts.api.md`.
 3. Tests: ensure new behavior is covered; check for `.node.`/`.browser.` naming if relevant.
 4. Docs: verify usage recipes/examples if API shape or behavior changed.
-5. Build/runtime: ensure ESM/CJS expectations are met (relative `.js` in ESM builds).
+5. Build/runtime: ensure ESM expectations are met (relative `.js` in ESM builds).
 
 ## Docs and usage recipes
 

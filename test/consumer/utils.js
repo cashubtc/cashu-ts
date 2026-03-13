@@ -73,7 +73,6 @@ async function createTempDir(testName) {
 }
 
 async function copySharedIndex({ testName, tempDir }) {
-	if (testName === 'CommonJS') return;
 	const sharedIndexPath = path.join(sharedFixtureDir, 'index.ts');
 	const exists = await fs
 		.access(sharedIndexPath)
@@ -140,7 +139,7 @@ export async function runSmokeTest({
 		// init npm and install deps
 		initAndInstall({ tempDir, installDepsCommand, tgzPath });
 
-		// pre validation steps, for example npm pkg set type=commonjs
+		// pre validation steps
 		for (const step of preValidationSteps) npmExec(step, tempDir);
 
 		// helpful debug
