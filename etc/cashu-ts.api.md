@@ -901,6 +901,9 @@ export class Mint {
         customRequest?: RequestFn;
         preferAsync?: boolean;
     }): Promise<MeltQuoteBolt12Response>;
+    mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: {
+        customRequest?: RequestFn;
+    }): Promise<MintResponse & TRes>;
     mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
@@ -929,6 +932,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
+    prepare(this: MintBuilder<M, true>): Promise<MintPreview>;
     privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Proof[]): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
@@ -1084,6 +1088,16 @@ export class MintOperationError extends HttpResponseError {
     constructor(code: number, detail: string);
     // (undocumented)
     code: number;
+}
+
+// @public
+export interface MintPreview {
+    keysetId: string;
+    // (undocumented)
+    method: string;
+    outputData: OutputDataLike[];
+    payload: MintRequest;
+    quote: string;
 }
 
 // @public
@@ -1971,6 +1985,7 @@ export class Wallet {
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<TQuote extends MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
+    completeMint(mintPreview: MintPreview): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
@@ -2017,6 +2032,7 @@ export class Wallet {
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     prepareMelt<TQuote extends MeltQuoteBaseResponse>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
+    prepareMint<TQuote extends MintQuoteBaseResponse | string>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview>;
     prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

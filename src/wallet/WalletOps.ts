@@ -498,6 +498,9 @@ export class ReceiveBuilder {
  * @remarks
  * Bolt12 requires privkey by default, bolt11 only for locked quotes. The compiler will throw an
  * error if bolt12 and privkey() is omitted: MintBuilder<"bolt12", false>' is not assignable...
+ *
+ * Use this builder for the typed, first-class mint methods. For arbitrary or future mint methods,
+ * use the generic `wallet.prepareMint(method, …)` / `wallet.completeMint()` flow.
  * @example
  *
  *     const proofs = await wallet.ops
@@ -634,13 +637,14 @@ export class MintBuilder<
 	}
 
 	/**
-	 * Execute minting against the quote.
+	 * Prepare the mint.
 	 *
 	 * @remarks
-	 * This method can only be called for bolt12 quotes when .privkey() is set.
-	 * @returns The newly minted proofs.
+	 * Call `wallet.completeMint(MintPreview)` to complete the mint. This method can only be called
+	 * for bolt12 quotes when `.privkey()` is set.
+	 * @returns A MintPreview containing the payload and output data needed to complete the mint.
 	 */
-	async run(this: MintBuilder<M, true>) {
+	async prepare(this: MintBuilder<M, true>) {
 		// BOLT 11
 		if (this.method === 'bolt11') {
 			const quote = this.quote as string | MintQuoteBolt11Response;
@@ -648,7 +652,7 @@ export class MintBuilder<
 			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			return this.wallet.mintProofsBolt11(this.amount, quote, this.config, this.outputType);
+			return this.wallet.prepareMint(this.method, this.amount, quote, this.config, this.outputType);
 		}
 
 		// BOLT 12
@@ -656,13 +660,20 @@ export class MintBuilder<
 		if (!this.config.privkey) {
 			throw new Error('privkey is required for BOLT12 mint quotes');
 		}
-		return this.wallet.mintProofsBolt12(
-			this.amount,
-			bolt12,
-			this.config.privkey,
-			this.config,
-			this.outputType,
-		);
+		return this.wallet.prepareMint(this.method, this.amount, bolt12, this.config, this.outputType);
+	}
+
+	/**
+	 * Execute minting against the quote.
+	 *
+	 * @remarks
+	 * This is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
+	 * This method can only be called for bolt12 quotes when `.privkey()` is set.
+	 * @returns The newly minted proofs.
+	 */
+	async run(this: MintBuilder<M, true>) {
+		const preview = await this.prepare();
+		return this.wallet.completeMint(preview);
 	}
 }
 

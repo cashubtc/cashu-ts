@@ -4,6 +4,7 @@ import {
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBaseResponse,
 	type SwapRequest,
+	type MintRequest,
 	type MeltRequest,
 } from '../../model/types';
 import { type Keyset } from '../Keyset';
@@ -17,6 +18,29 @@ export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Res
 	outputData: OutputDataLike[];
 	keyset: Keyset;
 	quote: T;
+}
+
+/**
+ * Preview of a mint transaction created by prepareMint.
+ */
+export interface MintPreview {
+	method: string;
+	/**
+	 * Mint payload to be sent to the mint.
+	 */
+	payload: MintRequest;
+	/**
+	 * Blinding data required to construct proofs.
+	 */
+	outputData: OutputDataLike[];
+	/**
+	 * Keyset ID used to prepare the outputs.
+	 */
+	keysetId: string;
+	/**
+	 * Mint Quote ID.
+	 */
+	quote: string;
 }
 
 /**

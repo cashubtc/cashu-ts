@@ -474,13 +474,14 @@ describe('mint api', () => {
 		const pubKeyBob = secp256k1.getPublicKey(privKeyBob);
 		const mintRequest = await wallet.createMintQuoteBolt11(50);
 		await untilMintQuotePaid(wallet, mintRequest);
-		const proofs = await wallet.ops
+		const preview = await wallet.ops
 			.mintBolt11(50, mintRequest.quote)
 			.asP2PK({
 				pubkey: bytesToHex(pubKeyBob),
 				sigFlag: 'SIG_ALL',
 			})
-			.run();
+			.prepare();
+		const proofs = await wallet.completeMint(preview);
 		// console.log('input proofs', proofs);
 		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
 		const fee = meltRequest.fee_reserve;
