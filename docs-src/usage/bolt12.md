@@ -23,10 +23,9 @@ const { change } = await wallet.meltProofsBolt12(meltQuote, send);
 const updatedQuote = await wallet.checkMintQuoteBolt12(bolt12Quote.quote);
 const availableAmount = updatedQuote.amount_paid - updatedQuote.amount_issued;
 if (availableAmount > 0) {
-	const newProofs = await wallet.mintProofsBolt12(
-		availableAmount,
-		updatedQuote,
-		bytesToHex(privateKey),
-	);
+	const preview = await wallet.prepareMint('bolt12', availableAmount, updatedQuote, {
+		privkey: bytesToHex(privateKey),
+	});
+	const newProofs = await wallet.completeMint(preview);
 }
 ```

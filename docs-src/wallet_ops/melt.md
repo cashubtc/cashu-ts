@@ -28,3 +28,16 @@ const { quote, change } = await wallet.ops
 - Callback hooks let you persist state for retry later.
 - If you prefer global subscriptions, use:
   - onCountersReserved -> wallet.on.countersReserved()
+
+## 3) Two-step melt with `prepare()`
+
+```ts
+const preview = await wallet.ops.meltBolt11(meltQuote, myProofs).asDeterministic().prepare();
+
+// Persist `preview` if you want to retry safely later.
+const { quote, change } = await wallet.completeMelt(preview);
+```
+
+- `prepare()` creates the `MeltPreview` and any NUT-08 blanks without paying yet.
+- `run()` is equivalent to `const preview = await prepare(); await wallet.completeMelt(preview)`.
+- This pairs well with NUT-19 cached-response retries on mints that advertise the melt endpoint.

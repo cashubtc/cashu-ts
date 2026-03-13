@@ -4,13 +4,14 @@ Please see the following examples for detailed usage. You can also look at the [
 
 # Examples
 
-| Recipe                              |
-| :---------------------------------- |
-| [Bolt12](./bolt12.md)               |
-| [Create P2PK](./create_p2pk.md)     |
-| [Create Token](./create_token.md)   |
-| [Create Wallet](./create_wallet.md) |
-| [Get Token](./get_token.md)         |
-| [Melt Token](./melt_token.md)       |
-| [Mint Token](./mint_token.md)       |
-| [Logging](./logging.md)             |
+| Recipe                                |
+| :------------------------------------ |
+| [Bolt12](./bolt12.md)                 |
+| [Create P2PK](./create_p2pk.md)       |
+| [Create Token](./create_token.md)     |
+| [Create Wallet](./create_wallet.md)   |
+| [Get Token](./get_token.md)           |
+| [Melt Token](./melt_token.md)         |
+| [Mint Token](./mint_token.md)         |
+| [NUT-19 Cached Responses](./nut19.md) |
+| [Logging](./logging.md)               |

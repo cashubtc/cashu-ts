@@ -2,8 +2,11 @@
 
 # Melt tokens
 
-```typescript
+## 1) One-step BOLT11 melt
+
+```ts
 import { Wallet } from '@cashu/cashu-ts';
+
 const mintUrl = 'http://localhost:3338';
 const wallet = new Wallet(mintUrl);
 await wallet.loadMint(); // wallet is now ready to use
@@ -21,4 +24,29 @@ const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSen
 });
 const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 // store proofsToKeep and meltResponse.change in your app ..
+```
+
+## 2) Two-step melt with `prepareMelt()` / `completeMelt()`
+
+The two-step flow lets you persist the preview before paying. This is the recommended pattern when
+you want replay-safe recovery alongside NUT-19 transport retries.
+
+```ts
+import { Wallet } from '@cashu/cashu-ts';
+
+const wallet = new Wallet('http://localhost:3338');
+await wallet.loadMint();
+
+const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
+const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
+const { send: proofsToSend } = await wallet.send(amountToSend, proofs, {
+	includeFees: true,
+});
+
+const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
+	includeFees: true,
+});
+
+await saveMeltPreview(meltPreview);
+const meltResponse = await wallet.completeMelt(meltPreview);
 ```
