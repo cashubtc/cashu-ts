@@ -2776,6 +2776,50 @@ describe('Blind Authentication', () => {
 	});
 });
 
+describe('Clear Authentication', () => {
+	test('handleClearAuth calls ensureCAT (not getCAT) and sends Clear-auth header', async () => {
+		const mintInfo = {
+			name: 'Testnut mint',
+			pubkey: '02abc',
+			version: 'Nutshell/x',
+			contact: [],
+			time: 0,
+			nuts: {
+				21: {
+					openid_discovery: 'https://auth.example.com/.well-known/openid-configuration',
+					client_id: 'cashu-client',
+					protected_endpoints: [{ method: 'POST', path: '/v1/swap' }],
+				},
+			},
+		};
+		server.use(http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfo)));
+
+		let receivedClearAuth: string | null = null;
+		server.use(
+			http.post(mintUrl + '/v1/swap', async ({ request }) => {
+				receivedClearAuth = request.headers.get('clear-auth');
+				return HttpResponse.json({ signatures: [] });
+			}),
+		);
+		const freshToken = 'refreshed-cat-token';
+		const mockAuthProvider: AuthProvider = {
+			getBlindAuthToken: vi.fn().mockResolvedValue(''),
+			getCAT: vi.fn().mockReturnValue('expired-cat-token'),
+			setCAT: vi.fn(),
+			ensureCAT: vi.fn().mockResolvedValue(freshToken),
+		};
+		const mintClient = new Mint(mintUrl, { authProvider: mockAuthProvider });
+		await mintClient.swap({ inputs: [], outputs: [] });
+
+		// ensureCAT must be called — not getCAT — so refresh logic can run
+		expect(mockAuthProvider.ensureCAT).toHaveBeenCalled();
+		expect(mockAuthProvider.getCAT).not.toHaveBeenCalled();
+
+		// The refreshed token must appear in the Clear-auth header
+		expect(receivedClearAuth).toBe(freshToken);
+	});
+});
+
 describe('melt proofs', () => {
 	test('test melt proofs base case', async () => {
 		server.use(
