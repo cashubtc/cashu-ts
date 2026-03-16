@@ -11,6 +11,20 @@ function encodeUint8toBase64Url(bytes: Uint8Array): string {
 		.replace(/=+$/, ''); // Remove padding characters
 }
 
+/**
+ * Encode bytes as URL-safe base64 **with** padding (RFC 4648 §5, padded variant).
+ *
+ * Use this when the receiver requires padded URL-safe base64, e.g. CDK mint's
+ * `general_purpose::URL_SAFE` decoder for the `Blind-auth` header (NUT-22). Use
+ * `encodeUint8toBase64Url` instead when the spec explicitly forbids padding (e.g. PKCE code
+ * verifier / challenge per RFC 7636).
+ */
+function encodeUint8toBase64UrlPadded(bytes: Uint8Array): string {
+	return Bytes.toBase64(bytes)
+		.replace(/\+/g, '-') // Replace + with -
+		.replace(/\//g, '_'); // Replace / with _  (padding retained)
+}
+
 function encodeBase64toUint8(base64String: string): Uint8Array {
 	return Bytes.fromBase64(base64String);
 }
@@ -76,6 +90,7 @@ function isBase64String(s: string): boolean {
 export {
 	encodeUint8toBase64,
 	encodeUint8toBase64Url,
+	encodeUint8toBase64UrlPadded,
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeBase64ToJson,

@@ -3,8 +3,8 @@ import request, { type RequestFn } from '../transport';
 import {
 	joinUrls,
 	hasValidDleq,
-	encodeJsonToBase64,
 	Bytes,
+	encodeUint8toBase64UrlPadded,
 	normalizeMintKeys,
 	normalizeMintKeyset,
 	normalizeSafeIntegerMetadata,
@@ -427,11 +427,14 @@ export class AuthManager implements AuthProvider {
 // ------------------------------
 
 /**
- * Serialize an Auth Proof as a BAT header value: "authA" + base64(JSON_without_dleq)
+ * Serialize an Auth Proof as a BAT header value: "authA" + base64url(JSON_without_dleq)
+ *
+ * Uses URL-safe base64 _with_ padding (`=`) as required by CDK (`general_purpose::URL_SAFE`).
+ * Stripping the padding causes a decode error on the mint side with keysets v2.
  */
 function serializeBAT(proof: Proof): string {
 	// strip dleq per NUT-22
-	const token = { id: proof.id, secret: proof.secret, C: proof.C };
-	const base64Data = encodeJsonToBase64(token);
-	return `authA${base64Data}`;
+	const tokenStr = JSON.stringify({ id: proof.id, secret: proof.secret, C: proof.C });
+	const base64url = encodeUint8toBase64UrlPadded(Bytes.fromString(tokenStr));
+	return `authA${base64url}`;
 }
