@@ -25,6 +25,7 @@ import * as wallet from '../../src/wallet';
 import { AuthManager } from '../../src/auth/AuthManager';
 import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
+import { encodeBase64toUint8, Bytes } from '../../src/utils';
 import { OutputData } from '../../src/model/OutputData';
 
 const mintUrl = 'http://mint.local';
@@ -34,9 +35,8 @@ const mintUrl = 'http://mint.local';
  * -------------------------- */
 
 function decodeBAT(batHeader: string): { id: string; secret: string; C: string } {
-	const base64 = batHeader.slice('authA'.length);
-	const json = Buffer.from(base64, 'base64').toString('utf8');
-	return JSON.parse(json);
+	const base64url = batHeader.slice('authA'.length);
+	return JSON.parse(Bytes.toString(encodeBase64toUint8(base64url)));
 }
 
 function stubOutputs(n: number, keysetId = '00authkeyset0001') {
@@ -425,6 +425,11 @@ describe('getBlindAuthToken coverage', () => {
 		const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap' });
 		const parsed = decodeBAT(bat);
 		expect(parsed).toEqual({ id: '00authkeyset0001', secret: 'SECRET_0', C: 'C_0' });
+
+		// CDK's URL_SAFE engine (general_purpose::URL_SAFE) requires padding.
+		// Verify the base64url portion retains '=' padding so the mint can decode it.
+		const b64part = bat.slice('authA'.length);
+		expect(b64part.length % 4).toBe(0);
 	});
 
 	test('warn path: endpoint not protected by NUT-22', async () => {
