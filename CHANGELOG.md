@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.6.1](https://github.com/cashubtc/cashu-ts/compare/v3.6.0...v3.6.1) (2026-03-17)
+
+
+### Bug Fixes
+
+* **auth:** use ensureCAT if available so token is refreshed ([#529](https://github.com/cashubtc/cashu-ts/issues/529)) ([7ba4bbc](https://github.com/cashubtc/cashu-ts/commit/7ba4bbc61a133e61c907408619b17f4903aa04a8))
+
 ## [3.6.0](https://github.com/cashubtc/cashu-ts/compare/v3.5.0...v3.6.0) (2026-03-13)
 
 
