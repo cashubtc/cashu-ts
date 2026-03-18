@@ -18,7 +18,7 @@ Cashu TS is a JavaScript library for [Cashu](https://github.com/cashubtc) wallet
 npm i @cashu/cashu-ts
 ```
 
-> **ESM-only since v4.** This package ships only ES modules. CommonJS `require()` is no longer supported. If upgrading from v3, see [migration-4.0.0.md](./migration-4.0.0.md). 
+> **ESM-only since v4.** This package ships only ES modules. CommonJS `require()` is no longer supported. If upgrading from v3, see [migration-4.0.0.md](./migration-4.0.0.md).
 
 ### Quick Start (Create a wallet)
 

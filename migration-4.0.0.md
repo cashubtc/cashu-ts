@@ -39,7 +39,7 @@ If you must keep a CJS entry point, use a dynamic import wrapper:
 ```js
 // CJS compatibility using an IIFE
 (async () => {
-    const { Wallet } = await import('@cashu/cashu-ts');
-    // ...
+	const { Wallet } = await import('@cashu/cashu-ts');
+	// ...
 })();
 ```
