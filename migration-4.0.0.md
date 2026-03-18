@@ -44,3 +44,75 @@ If you must keep a CJS entry point, use a dynamic import wrapper:
 	// ...
 })();
 ```
+
+---
+
+## Amount fields on mint responses now return `Amount` objects
+
+Previously typed as `number`, the following fields now return an `Amount` value object (imported from `@cashu/cashu-ts`):
+
+| Type                         | Field(s)                                 |
+| ---------------------------- | ---------------------------------------- |
+| `MintQuoteBolt11Response`    | `amount`                                 |
+| `MintQuoteBolt12Response`    | `amount`, `amount_paid`, `amount_issued` |
+| `MeltQuoteBaseResponse`      | `amount`                                 |
+| `MeltQuoteBolt11Response`    | `fee_reserve`                            |
+| `MeltQuoteBolt12Response`    | `fee_reserve`                            |
+| `SerializedBlindedMessage`   | `amount`                                 |
+| `SerializedBlindedSignature` | `amount`                                 |
+
+`SwapMethod.min_amount` / `max_amount` (from `GetInfoResponse`) are now typed as `AmountLike` (`number | string | bigint | Amount`).
+
+`expiry` fields on `MintQuoteBolt11Response` and `MintQuoteBolt12Response` now allow `null` (spec-compliant) in addition to `number`.
+
+### Migration
+
+```ts
+// Before
+const sats = meltQuote.fee_reserve + meltQuote.amount;
+const n = meltQuote.amount;
+
+// After
+const sats = meltQuote.fee_reserve.add(meltQuote.amount).toNumber();
+const n = meltQuote.amount.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
+
+// Safe JSON serialisation: Amount.toJSON() emits a number for safe values,
+// a decimal string for values above MAX_SAFE_INTEGER
+JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":1000}'
+```
+
+### Removed
+
+- 2024 backwards-compat shims: deprecated `paid` boolean on melt responses, deprecated array-of-arrays `contact` field normalisation, deprecated NUT-04/05/06 response shapes
+
+---
+
+## `sumProofs()` and `TokenMetadata.amount` now return `Amount`
+
+`sumProofs()` (utility function) and the `amount` field on `TokenMetadata` (returned by `getTokenMetadata()`) previously returned `number`; both now return an `Amount` value object.
+
+```ts
+// Before
+const n: number = sumProofs(proofs);
+const m: number = getTokenMetadata(token).amount;
+
+// After
+const total: Amount = sumProofs(proofs);
+const n: number = total.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
+const m: Amount = getTokenMetadata(token).amount;
+```
+
+---
+
+## `OutputData.sumOutputAmounts()` now returns `Amount`
+
+Previously returned `number`; now returns an `Amount` value object to be consistent with the rest of the v4 API.
+
+```ts
+// Before
+const total: number = OutputData.sumOutputAmounts(outputs);
+
+// After
+const total: Amount = OutputData.sumOutputAmounts(outputs);
+const n: number = total.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
+```

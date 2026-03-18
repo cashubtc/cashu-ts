@@ -24,12 +24,13 @@ describe('Amount conversions', () => {
 	it('constructs one and serializes safely', () => {
 		const one = Amount.one();
 		expect(one.toBigInt()).toBe(1n);
-		expect(one.toJSON()).toBe('1');
+		expect(one.toJSON()).toBe(1); // safe integer → number
 	});
 
 	it('converts to unsafe numbers when needed', () => {
 		const large = Amount.from(BigInt(Number.MAX_SAFE_INTEGER) + 10n);
 		expect(large.toNumberUnsafe()).toBe(Number(large.toBigInt()));
+		expect(large.toJSON()).toBe(String(large.toBigInt())); // unsafe integer → string
 	});
 });
 

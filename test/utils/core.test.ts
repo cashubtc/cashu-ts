@@ -324,7 +324,7 @@ describe('test getTokenMetadata', () => {
 		expect(metadata).toStrictEqual({
 			unit: 'sat',
 			mint: 'https://testnut.cashu.space',
-			amount: 10,
+			amount: Amount.from(10),
 			incompleteProofs: [
 				{
 					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
@@ -386,7 +386,7 @@ describe('test getTokenMetadata', () => {
 		expect(metadata).toStrictEqual({
 			unit: 'sat',
 			mint: 'https://testnut.cashu.space',
-			amount: 10,
+			amount: Amount.from(10),
 			incompleteProofs: [
 				{
 					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',

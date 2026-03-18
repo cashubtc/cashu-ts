@@ -45,6 +45,7 @@ import {
 	sumProofs,
 	HasKeysetKeys,
 	NetworkError,
+	Amount,
 } from '../src';
 import ws from 'ws';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
@@ -150,7 +151,7 @@ describe('mint api', () => {
 		const proofs = await wallet.mintProofsBolt11(1337, request.quote);
 		expect(proofs).toBeDefined();
 		// expect that the sum of all tokens.proofs.amount is equal to the requested amount
-		expect(sumProofs(proofs)).toBe(1337);
+		expect(sumProofs(proofs).toNumber()).toBe(1337);
 	});
 	test('invoice with description', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
@@ -168,7 +169,7 @@ describe('mint api', () => {
 		const fee = (await wallet.createMeltQuoteBolt11(invoice)).fee_reserve;
 		expect(fee).toBeDefined();
 		// because external invoice, fee should be > 0
-		expect(fee).toBeGreaterThan(0);
+		expect(fee.toNumber()).toBeGreaterThan(0);
 	});
 	test('pay external invoice', async () => {
 		const invoice =
@@ -180,15 +181,15 @@ describe('mint api', () => {
 		const proofs = await wallet.mintProofsBolt11(3000, request.quote);
 		const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
 		const fee = meltQuote.fee_reserve;
-		expect(fee).toBeGreaterThan(0);
+		expect(fee.toNumber()).toBeGreaterThan(0);
 		// get the quote from the mint
 		const quote_ = await wallet.checkMeltQuoteBolt11(meltQuote.quote);
 		expect(quote_).toBeDefined();
-		const sendResponse = await wallet.send(2000 + fee, proofs, { includeFees: true });
+		const sendResponse = await wallet.send(2000 + fee.toNumber(), proofs, { includeFees: true });
 		const response = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have not received the fee back, since it was external
-		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBeLessThan(fee);
+		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBeLessThan(fee.toNumber());
 		// check states of spent and kept proofs after payment
 		const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
 		expect(sentProofsStates).toBeDefined();
@@ -217,7 +218,7 @@ describe('mint api', () => {
 		expect(sendResponse.keep).toBeDefined();
 		expect(sendResponse.send.length).toBe(1);
 		expect(sendResponse.keep.length).toBe(0);
-		expect(sumProofs(sendResponse.send)).toBe(64);
+		expect(sumProofs(sendResponse.send).toNumber()).toBe(64);
 	});
 	test('test send tokens with change', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
@@ -233,8 +234,8 @@ describe('mint api', () => {
 		// The 32 would have been selected (fee: 1 sat), leaving 4,64 unspent
 		// We expect: 16, 4, 1 change + 4,64 unspent = 5 proofs (total 89)
 		expect(sendResponse.keep.length).toBe(5);
-		expect(sumProofs(sendResponse.send)).toBe(10);
-		expect(sumProofs(sendResponse.keep)).toBe(89);
+		expect(sumProofs(sendResponse.send).toNumber()).toBe(10);
+		expect(sumProofs(sendResponse.keep).toNumber()).toBe(89);
 	});
 	test('receive tokens with previous split', async () => {
 		const wallet = new Wallet(mintUrl, { unit });
@@ -459,7 +460,7 @@ describe('mint api', () => {
 			.run();
 		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
 		const fee = meltRequest.fee_reserve;
-		expect(fee).toBeGreaterThan(0);
+		expect(fee.toNumber()).toBeGreaterThan(0);
 		const signedProofs = wallet.signP2PKProofs(proofs, bytesToHex(privKeyBob));
 		const response = await wallet.meltProofsBolt11(meltRequest, signedProofs);
 		expect(response).toBeDefined();
@@ -485,7 +486,7 @@ describe('mint api', () => {
 		// console.log('input proofs', proofs);
 		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
 		const fee = meltRequest.fee_reserve;
-		expect(fee).toBeGreaterThan(0);
+		expect(fee.toNumber()).toBeGreaterThan(0);
 		const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
 		const response = await wallet.completeMelt(melt, bytesToHex(privKeyBob));
 		expect(response).toBeDefined();
@@ -504,7 +505,7 @@ describe('mint api', () => {
 		// prepare to melt
 		const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
 		const fee = meltRequest.fee_reserve;
-		expect(fee).toBeGreaterThan(0);
+		expect(fee.toNumber()).toBeGreaterThan(0);
 		const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
 		// complete melt async
 		const response = await wallet.completeMelt(melt, undefined, true);
@@ -677,7 +678,7 @@ describe('dleq', () => {
 		const encodedToken = getEncodedTokenV4(token);
 		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 		expect(newProofs).toBeDefined();
-		expect(sumProofs(newProofs)).toEqual(7); // after 1 sat fee
+		expect(sumProofs(newProofs).toNumber()).toEqual(7); // after 1 sat fee
 	});
 	test('send strip dleq', async () => {
 		const wallet = new Wallet(mintUrl);
@@ -763,7 +764,7 @@ describe('Custom Outputs', () => {
 		expectNUT10SecretDataToEqual(proofs, hexPk);
 		// Lets melt some of these proofs to pay an invoice
 		const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
-		const meltAmount = meltQuote.amount + meltQuote.fee_reserve;
+		const meltAmount = meltQuote.amount.toNumber() + meltQuote.fee_reserve.toNumber();
 		// Use our keepFactory for the change (keep) outputs
 		const customConfig: OutputConfig = {
 			keep: keepFactory,
@@ -788,7 +789,7 @@ describe('Custom Outputs', () => {
 			expectNUT10SecretDataToEqual(meltRes.change, hexPk);
 		}
 		// Finally we want to check whether received token are locked as well
-		const restAmount = sumProofs(meltKeep) - wallet.getFeesForProofs(meltKeep);
+		const restAmount = sumProofs(meltKeep).subtract(wallet.getFeesForProofs(meltKeep));
 		// First we unlock all the proofs that we have left
 		const signedMeltKeep = wallet.signP2PKProofs(meltKeep, hexSk);
 		const unlockedProofs = await wallet.send(restAmount, signedMeltKeep);
@@ -832,7 +833,7 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuoteBolt11(21);
 		await untilMintQuotePaid(wallet, quote);
 		const proofs = await wallet.mintProofsBolt11(21, quote.quote);
-		const amount = sumProofs(proofs) - wallet.getFeesForProofs(proofs);
+		const amount = sumProofs(proofs).subtract(wallet.getFeesForProofs(proofs));
 		const { send, keep } = await wallet.send(
 			amount,
 			proofs,
@@ -951,7 +952,7 @@ describe('Wallet Restore', () => {
 		const proofs = await wallet.ops.mintBolt11(70, mintQuote.quote).asDeterministic(5).run();
 		const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
 		expect(restoredProofs).toEqual(proofs);
-		expect(sumProofs(restoredProofs)).toBe(70);
+		expect(sumProofs(restoredProofs).toNumber()).toBe(70);
 		expect(lastCounterWithSignature).toBe(7);
 	});
 });
@@ -1002,7 +1003,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
 			// mint with NUT-19 cache retry - should handle network failure
 			const proofs = await wallet.mintProofsBolt11(100, request.quote);
 			expect(proofs).toBeDefined();
-			expect(sumProofs(proofs)).toBe(100);
+			expect(sumProofs(proofs).toNumber()).toBe(100);
 			expect(fetchCallCount).toBe(3); // 1 + 2 retries
 		} finally {
 			// restore original fetch

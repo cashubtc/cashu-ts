@@ -17,8 +17,8 @@ const makeRequest = <T>(payload: T) => {
 	};
 };
 
-describe('Mint legacy numeric normalization', () => {
-	it('normalizes amount-like bigint fields in getInfo()', async () => {
+describe('Mint normalization', () => {
+	it('passes through AmountLike min/max amounts from getInfo()', async () => {
 		const mint = new Mint(mintUrl, {
 			customRequest: makeRequest({
 				name: 'mint',
@@ -56,15 +56,18 @@ describe('Mint legacy numeric normalization', () => {
 
 		const info = await mint.getInfo();
 
-		expect(info.nuts['4'].methods[0].min_amount).toBe(123);
-		expect(info.nuts['4'].methods[0].max_amount).toBe(456);
-		expect(info.nuts['5'].methods[0].min_amount).toBe(789);
-		expect(info.nuts['5'].methods[0].max_amount).toBe(999);
-		expect(info.nuts['19']?.ttl).toBe(120);
-		expect(info.nuts['22']?.bat_max_mint).toBe(5);
+		// min/max are AmountLike — wire bigint values pass through unchanged
+		expect(info.nuts['4'].methods[0].min_amount).toBe(123n);
+		expect(info.nuts['4'].methods[0].max_amount).toBe(456n);
+		expect(info.nuts['5'].methods[0].min_amount).toBe(789n);
+		expect(info.nuts['5'].methods[0].max_amount).toBe(999n);
+		// metadata integers normalized by MintInfo construction
+		const mintInfo = await mint.getLazyMintInfo();
+		expect(mintInfo.cache.nuts['19']?.ttl).toBe(120);
+		expect(mintInfo.cache.nuts['22']?.bat_max_mint).toBe(5);
 	});
 
-	it('rejects out-of-range bigint info metadata in getInfo()', async () => {
+	it('rejects out-of-range bigint info metadata in getLazyMintInfo()', async () => {
 		const mint = new Mint(mintUrl, {
 			customRequest: makeRequest({
 				name: 'mint',
@@ -79,7 +82,7 @@ describe('Mint legacy numeric normalization', () => {
 			} as any),
 		});
 
-		await expect(mint.getInfo()).rejects.toThrow('nuts.19.ttl');
+		await expect(mint.getLazyMintInfo()).rejects.toThrow('nuts.19.ttl');
 	});
 
 	it('normalizes bigint fields in getKeySets()', async () => {

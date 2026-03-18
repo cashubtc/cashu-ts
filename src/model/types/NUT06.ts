@@ -1,3 +1,5 @@
+import type { AmountLike } from '../Amount';
+
 /**
  * Response from mint at /info endpoint.
  */
@@ -90,8 +92,8 @@ export type MintContactInfo = {
 export type SwapMethod = {
 	method: string;
 	unit: string;
-	min_amount: number;
-	max_amount: number;
+	min_amount: AmountLike;
+	max_amount: AmountLike;
 	description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783
 	options?: {
 		description?: boolean;

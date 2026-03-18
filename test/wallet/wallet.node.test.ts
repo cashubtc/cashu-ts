@@ -442,8 +442,9 @@ describe('test info', () => {
 			info.isSupported(1 as any);
 		}).toThrow(/nut is not supported/);
 	});
-	test('test info with deprecated contact field', async () => {
-		// mintInfoRespDeprecated is the same as mintInfoResp but with the contact field in the old format
+	test('test info with deprecated contact field (passed through as-is in v4)', async () => {
+		// mintInfoRespDeprecated uses the old array-of-arrays contact format
+		// v4 no longer normalizes this — it is passed through from the wire
 		const mintInfoRespDeprecated = JSON.parse(
 			'{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. All your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[["email","contact@me.com"],["twitter","@me"],["nostr","npub1337"]],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"17":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}',
 		);
@@ -455,10 +456,11 @@ describe('test info', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 		const info = wallet.getMintInfo();
+		// Wire format array-of-arrays is passed through unchanged in v4
 		expect(info.contact).toEqual([
-			{ method: 'email', info: 'contact@me.com' },
-			{ method: 'twitter', info: '@me' },
-			{ method: 'nostr', info: 'npub1337' },
+			['email', 'contact@me.com'],
+			['twitter', '@me'],
+			['nostr', 'npub1337'],
 		]);
 	});
 	test('supportsNut04Description respects per-unit description support', async () => {
@@ -594,7 +596,7 @@ describe('test fees', () => {
 		const fee = await wallet.checkMeltQuoteBolt11('test');
 		const amount = 2000;
 
-		expect(fee.fee_reserve + amount).toEqual(2020);
+		expect(fee.fee_reserve.add(amount).toNumber()).toEqual(2020);
 	});
 });
 
@@ -2418,7 +2420,7 @@ describe('multi mint', async () => {
 		await wallet.loadMint();
 
 		const meltQuote = await wallet.createMultiPathMeltQuote(invoice, 1000);
-		expect(meltQuote.amount).toBe(1);
+		expect(meltQuote.amount).toEqual(Amount.from(1));
 		expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
 		await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow();
 	});
@@ -2852,8 +2854,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -2905,8 +2907,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 12,
-			fee_reserve: 0,
+			amount: Amount.from(12),
+			fee_reserve: Amount.from(0),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -2954,8 +2956,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3017,8 +3019,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3104,8 +3106,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3187,8 +3189,8 @@ describe('melt proofs', () => {
 		};
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3231,8 +3233,8 @@ describe('melt proofs', () => {
 			await wallet.loadMint();
 			const meltQuote: MeltQuoteBolt11Response = {
 				quote: 'test_melt_quote',
-				amount: 10,
-				fee_reserve: 3, // ceil(log2(3)) = 2 blanks expected
+				amount: Amount.from(10),
+				fee_reserve: Amount.from(3), // ceil(log2(3)) = 2 blanks expected
 				request: 'bolt11...',
 				state: MeltQuoteState.UNPAID,
 				expiry: 1234567890,
@@ -3297,8 +3299,8 @@ describe('melt proofs', () => {
 			await wallet.loadMint();
 			const meltQuote: MeltQuoteBolt12Response = {
 				quote: 'test_melt_quote',
-				amount: 10,
-				fee_reserve: 3,
+				amount: Amount.from(10),
+				fee_reserve: Amount.from(3),
 				request: 'bolt12request',
 				state: MeltQuoteState.UNPAID,
 				expiry: 1234567890,
@@ -3390,8 +3392,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt12Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt12request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3437,8 +3439,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 3,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(3),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3500,8 +3502,8 @@ describe('melt proofs', () => {
 
 		const meltQuote: MeltQuoteBolt11Response = {
 			quote: 'test_melt_quote',
-			amount: 10,
-			fee_reserve: 2,
+			amount: Amount.from(10),
+			fee_reserve: Amount.from(2),
 			request: 'bolt11request',
 			state: MeltQuoteState.UNPAID,
 			expiry: 1234567890,
@@ -3607,12 +3609,12 @@ describe('async melt preference body', () => {
 		// Arrange: quote and proofs with exact match (no change outputs needed)
 		const meltQuote = {
 			quote: 'q-async-1',
-			amount: 1,
+			amount: Amount.from(1),
 			unit: 'sat',
 			request: invoice,
 			state: 'UNPAID',
-			fee_reserve: 0,
-		} as MeltQuoteBolt11Response;
+			fee_reserve: Amount.from(0),
+		} as unknown as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3656,12 +3658,12 @@ describe('async melt preference body', () => {
 	test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
 		const meltQuote = {
 			quote: 'q-async-1b',
-			amount: 1,
+			amount: Amount.from(1),
 			unit: 'sat',
 			request: invoice,
 			state: 'UNPAID',
-			fee_reserve: 0,
-		} as MeltQuoteBolt11Response;
+			fee_reserve: Amount.from(0),
+		} as unknown as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3702,7 +3704,7 @@ describe('async melt preference body', () => {
 	test('bolt12: sends prefer_async when preferAsync is true', async () => {
 		const meltQuote = {
 			quote: 'q-async-12',
-			amount: 1,
+			amount: Amount.from(1),
 			unit: 'sat',
 			request: 'lno1offer...',
 		} as any; // minimal shape for wallet.meltProofsBolt12
@@ -3738,7 +3740,7 @@ describe('async melt preference body', () => {
 	test('bolt12: does not send prefer_async when preferAsync is not set', async () => {
 		const meltQuote = {
 			quote: 'q-async-12b',
-			amount: 1,
+			amount: Amount.from(1),
 			unit: 'sat',
 			request: 'lno1offer...',
 		} as any;
@@ -3816,12 +3818,12 @@ describe('async melt preference body', () => {
 
 		const meltQuote = {
 			quote: 'q-auth-1',
-			amount: 1,
+			amount: Amount.from(1),
 			unit: 'sat',
 			request: invoice,
 			state: 'UNPAID',
-			fee_reserve: 0,
-		} as MeltQuoteBolt11Response;
+			fee_reserve: Amount.from(0),
+		} as unknown as MeltQuoteBolt11Response;
 		const proofs = [
 			{
 				id: '00bd033559de27d0',
@@ -3874,7 +3876,7 @@ describe('async melt preference body', () => {
 
 		const meltQuote = {
 			quote: 'q-auth-12',
-			amount: 1,
+			amount: Amount.from(1),
 			unit: 'sat',
 			request: 'lno1offer...',
 		} as any;

@@ -166,8 +166,8 @@ const quote = 'q123';
 
 const melt11: MeltQuoteBolt11Response = {
 	quote: 'mq11',
-	amount: 5,
-	fee_reserve: 1,
+	amount: Amount.from(5),
+	fee_reserve: Amount.from(1),
 	state: 'UNPAID' as any,
 	expiry: 0,
 	payment_preimage: null,
@@ -177,8 +177,8 @@ const melt11: MeltQuoteBolt11Response = {
 
 const melt12: MeltQuoteBolt12Response = {
 	quote: 'mq12',
-	amount: 7,
-	fee_reserve: 2,
+	amount: Amount.from(7),
+	fee_reserve: Amount.from(2),
 	state: 'UNPAID' as any,
 	expiry: 0,
 	payment_preimage: null,
@@ -189,12 +189,12 @@ const melt12: MeltQuoteBolt12Response = {
 const mint12: MintQuoteBolt12Response = {
 	quote: 'mq12',
 	request: 'lno1...',
-	amount: 7,
+	amount: Amount.from(7),
 	unit: 'sat',
 	expiry: 0,
 	pubkey: '0200000',
-	amount_paid: 0,
-	amount_issued: 0,
+	amount_paid: Amount.from(0),
+	amount_issued: Amount.from(0),
 };
 
 describe('WalletOps builders', () => {

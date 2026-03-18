@@ -102,7 +102,7 @@ describe('MintInfo protected endpoint matching', () => {
 		});
 	});
 
-	it('normalizes bigint info numeric fields at construction', () => {
+	it('preserves AmountLike min/max amounts; normalizes metadata integers at construction', () => {
 		const info = new MintInfo({
 			...MINTINFORESP,
 			nuts: {
@@ -125,10 +125,12 @@ describe('MintInfo protected endpoint matching', () => {
 			},
 		} as any);
 
-		expect(info.nuts['4'].methods[0].min_amount).toBe(1);
-		expect(info.nuts['4'].methods[0].max_amount).toBe(2);
-		expect(info.nuts['5'].methods[0].min_amount).toBe(3);
-		expect(info.nuts['5'].methods[0].max_amount).toBe(4);
+		// min/max amounts are AmountLike — wire bigint values pass through as-is
+		expect(info.nuts['4'].methods[0].min_amount).toBe(1n);
+		expect(info.nuts['4'].methods[0].max_amount).toBe(2n);
+		expect(info.nuts['5'].methods[0].min_amount).toBe(3n);
+		expect(info.nuts['5'].methods[0].max_amount).toBe(4n);
+		// metadata integers (ttl, bat_max_mint) are still normalized to safe numbers
 		expect(info.nuts['19']?.ttl).toBe(30);
 		expect(info.nuts['22']?.bat_max_mint).toBe(5);
 		expect(info.isSupported(19)).toEqual({

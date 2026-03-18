@@ -1,6 +1,7 @@
 import { type MintQuoteBaseRequest, type MintQuoteBaseResponse } from './NUT04';
 import { type MeltQuoteBaseRequest } from './NUT05';
 import { type MeltQuoteBolt11Response } from './NUT23';
+import type { Amount } from '../Amount';
 
 /**
  * Payload that needs to be sent to the mint when requesting a mint.
@@ -21,16 +22,13 @@ export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
  */
 export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 	/**
-	 * Amount requested for mint quote.
+	 * Amount requested for mint quote. `undefined` for amountless offers.
 	 */
-	amount?: number;
+	amount?: Amount;
 	/**
-	 * Timestamp of when the quote expires.
-	 *
-	 * @remarks
-	 * TODO v4: widen to `number | null` to match the spec and runtime normalization.
+	 * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
 	 */
-	expiry: number;
+	expiry: number | null;
 	/**
 	 * Public key the quote is locked to.
 	 *
@@ -42,11 +40,11 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 	 * The amount that has been paid to the mint via the bolt12 offer. The difference between this and
 	 * `amount_issued` can be minted.
 	 */
-	amount_paid: number;
+	amount_paid: Amount;
 	/**
 	 * The amount of ecash that has been issued for the given mint quote.
 	 */
-	amount_issued: number;
+	amount_issued: Amount;
 };
 
 /**

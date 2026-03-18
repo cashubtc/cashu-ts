@@ -43,7 +43,7 @@ export class Amount {
     static sum(values: Iterable<AmountLike>): Amount;
     toBigInt(): bigint;
     // (undocumented)
-    toJSON(): string;
+    toJSON(): number | string;
     toNumber(): number;
     toNumberUnsafe(): number;
     toString(): string;
@@ -633,7 +633,7 @@ export type KeyChainCache = {
 
 // @public
 export type Keys = {
-    [amount: number]: string;
+    [amount: string]: string;
 };
 
 // @public (undocumented)
@@ -776,7 +776,7 @@ export type MeltQuoteBaseRequest = {
 // @public
 export type MeltQuoteBaseResponse = {
     quote: string;
-    amount: number;
+    amount: Amount;
     unit: string;
     state: MeltQuoteState;
     expiry: number;
@@ -798,7 +798,7 @@ export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
 // @public
 export type MeltQuoteBolt11Response = MeltQuoteBaseResponse & {
     request: string;
-    fee_reserve: number;
+    fee_reserve: Amount;
     payment_preimage: string | null;
 };
 
@@ -1130,9 +1130,9 @@ export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
 
 // @public
 export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
-    amount: number;
+    amount: Amount;
     state: MintQuoteState;
-    expiry: number;
+    expiry: number | null;
 };
 
 // @public
@@ -1143,11 +1143,11 @@ export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
 
 // @public
 export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
-    amount?: number;
-    expiry: number;
+    amount?: Amount;
+    expiry: number | null;
     pubkey: string;
-    amount_paid: number;
-    amount_issued: number;
+    amount_paid: Amount;
+    amount_issued: Amount;
 };
 
 // @public (undocumented)
@@ -1311,7 +1311,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     secret: Uint8Array;
-    static sumOutputAmounts(outputs: OutputDataLike[]): number;
+    static sumOutputAmounts(outputs: OutputDataLike[]): Amount;
     // (undocumented)
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
 }
@@ -1720,7 +1720,7 @@ export type SendResponse = {
 
 // @public
 export type SerializedBlindedMessage = {
-    amount: number;
+    amount: Amount;
     B_: string;
     id: string;
 };
@@ -1728,7 +1728,7 @@ export type SerializedBlindedMessage = {
 // @public
 export type SerializedBlindedSignature = {
     id: string;
-    amount: number;
+    amount: Amount;
     C_: string;
     dleq?: SerializedDLEQ;
 };
@@ -1841,14 +1841,14 @@ export type SubscribeOpts = {
 export type SubscriptionCanceller = () => void;
 
 // @public (undocumented)
-export function sumProofs(proofs: Proof[]): number;
+export function sumProofs(proofs: Proof[]): Amount;
 
 // @public
 export type SwapMethod = {
     method: string;
     unit: string;
-    min_amount: number;
-    max_amount: number;
+    min_amount: AmountLike;
+    max_amount: AmountLike;
     description?: boolean;
     options?: {
         description?: boolean;
@@ -1902,7 +1902,7 @@ export type TokenMetadata = {
     unit: string;
     memo?: string;
     mint: string;
-    amount: number;
+    amount: Amount;
     incompleteProofs: Array<Omit<Proof, 'id'>>;
 };
 

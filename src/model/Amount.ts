@@ -123,8 +123,8 @@ export class Amount {
 		return this.value.toString(10);
 	}
 
-	toJSON(): string {
-		return this.toString(); // safer than number for u64
+	toJSON(): number | string {
+		return this.isSafeNumber() ? Number(this.value) : this.toString();
 	}
 
 	// -----------------------------------------------------------------

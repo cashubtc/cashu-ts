@@ -562,7 +562,7 @@ export function deriveKeysetId(
 
 	if (isDeprecatedBase64) {
 		const pubkeysConcat = Object.entries(keys)
-			.sort(([amountA], [amountB]) => Number(amountA) - Number(amountB))
+			.sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
 			.map(([, pubKey]) => pubKey)
 			.reduce((prev: string, curr: string) => prev + curr, '');
 		const hash = sha256(Bytes.fromString(pubkeysConcat));
@@ -573,7 +573,7 @@ export function deriveKeysetId(
 	switch (versionByte) {
 		case 0: {
 			const pubkeysConcat = Object.entries(keys)
-				.sort(([amountA], [amountB]) => Number(amountA) - Number(amountB))
+				.sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
 				.map(([, pubKey]) => hexToBytes(pubKey))
 				.reduce(
 					(prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr),
@@ -587,8 +587,8 @@ export function deriveKeysetId(
 			if (!unit) {
 				throw new Error('Cannot compute keyset ID version 01: unit is required.');
 			}
-			const sortedEntries = Object.entries(keys).sort(
-				([amountA], [amountB]) => Number(amountA) - Number(amountB),
+			const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
+				Amount.from(amountA).compareTo(amountB),
 			);
 			let preimage = sortedEntries.map(([amount, pubkey]) => `${amount}:${pubkey}`).join(',');
 			preimage += `|unit:${unit}`;
@@ -641,9 +641,8 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
-// TODO: v4, return Amount
-export function sumProofs(proofs: Proof[]) {
-	return Amount.sum(proofs.map((proof: Proof) => proof.amount)).toNumber();
+export function sumProofs(proofs: Proof[]): Amount {
+	return Amount.sum(proofs.map((proof: Proof) => proof.amount));
 }
 
 export function decodePaymentRequest(paymentRequest: string) {

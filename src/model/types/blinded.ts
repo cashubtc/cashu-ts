@@ -1,3 +1,5 @@
+import type { Amount } from '../Amount';
+
 /**
  * Blinded message for sending to the mint.
  */
@@ -5,7 +7,7 @@ export type SerializedBlindedMessage = {
 	/**
 	 * Amount.
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * Blinded message.
 	 */
@@ -25,9 +27,9 @@ export type SerializedBlindedSignature = {
 	 */
 	id: string;
 	/**
-	 * Amount denominated in Satoshi.
+	 * Amount denominated in keyset unit.
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * Blinded signature.
 	 */

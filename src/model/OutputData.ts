@@ -134,13 +134,14 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 				r: this.blindingFactor,
 			};
 		}
+		const sigAmountKey = sig.amount.toString();
 		const blindSignature = {
 			id: sig.id,
-			amount: sig.amount,
+			amount: sig.amount.toNumber(), // TODO: proof numbers are unsafe
 			C_: pointFromHex(sig.C_),
 			dleq: dleq,
 		};
-		const A = pointFromHex(keyset.keys[sig.amount]);
+		const A = pointFromHex(keyset.keys[sigAmountKey]);
 		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
 		const serializedProof = {
 			...serializeProof(proof),
@@ -345,8 +346,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 	 * @param outputs Array of OutputDataLike objects.
 	 * @returns The total sum of amounts.
 	 */
-	// TODO(v4): Move Number return types to Amount (breaking change)
-	static sumOutputAmounts(outputs: OutputDataLike[]): number {
-		return Amount.sum(outputs.map((output) => output.blindedMessage.amount)).toNumber();
+	static sumOutputAmounts(outputs: OutputDataLike[]): Amount {
+		return Amount.sum(outputs.map((output) => output.blindedMessage.amount));
 	}
 }
