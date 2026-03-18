@@ -26,6 +26,7 @@ import {
 	OutputType,
 	Amount,
 	setGlobalRequestOptions,
+	AmountLike,
 } from '../../src';
 
 import { Bytes } from '../../src/utils';
@@ -583,8 +584,8 @@ describe('test fees', () => {
 			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
 				return HttpResponse.json({
 					quote: 'test_melt_quote_id',
-					amount: 2000,
-					fee_reserve: 20,
+					amount: Amount.from(2000),
+					fee_reserve: Amount.from(20),
 					payment_preimage: null,
 					state: 'UNPAID',
 				} as MeltQuoteBolt11Response);
@@ -957,7 +958,7 @@ describe('receive', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const customFactory = (amount: number, keyset: HasKeysetKeys): OutputData => {
+		const customFactory = (amount: AmountLike, keyset: HasKeysetKeys): OutputData => {
 			return OutputData.createRandomData(amount, keyset)[0];
 		};
 		const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });
@@ -3155,7 +3156,7 @@ describe('melt proofs', () => {
 		const data: OutputData[] = [
 			new OutputData(
 				{
-					amount: 0,
+					amount: Amount.zero(),
 					B_: '0280999e99569db86fff252e9fe235d5ab0583c5e48e9a6d30b7159ddb2354a664',
 					id: '00bd033559de27d0',
 				},
@@ -3169,7 +3170,7 @@ describe('melt proofs', () => {
 			),
 			new OutputData(
 				{
-					amount: 0,
+					amount: Amount.zero(),
 					B_: '0366a12d8f642a9209b2a2b62dd46133d67c61395758760b037526d8ea6ebb0b58',
 					id: '00bd033559de27d0',
 				},

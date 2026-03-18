@@ -45,7 +45,7 @@ import {
 	sumProofs,
 	HasKeysetKeys,
 	NetworkError,
-	Amount,
+	AmountLike,
 } from '../src';
 import ws from 'ws';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
@@ -749,7 +749,7 @@ describe('Custom Outputs', () => {
 		'lnbc10n1pn449a7pp5eh3jn9p8hlcq0c0ppcfem2hg9ehptqr9hjk5gst6c0c9qfmrrvgsdq4gdshx6r4ypqkgerjv4ehxcqzpuxqr8pqsp539s9559pdth06j37kexk9zq2pusl4yvy97ruf36jqgyskawlls3s9p4gqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpqysgqy00qa3xgn03jtwrtpu93rqrp806czmpftj8g97cm0r3d2x4rsvlhp5vzgjyzzazl9xf4gpgd35gmys998tlfu8j5zrk7sf3n2nh3t3gpyul75t';
 	test('Default keepFactory', async () => {
 		// First we create a keep factory, this is a function that will be used to construct all outputs that we "keep"
-		function p2pkFactory(a: number, k: HasKeysetKeys) {
+		function p2pkFactory(a: AmountLike, k: HasKeysetKeys) {
 			return OutputData.createSingleP2PKData({ pubkey: hexPk }, a, k.id);
 		}
 		const keepFactory: OutputType = { type: 'factory', factory: p2pkFactory };
@@ -808,7 +808,7 @@ describe('Custom Outputs', () => {
 	});
 	test('Manual Factory Mint', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
-			function inner(a: number, k: HasKeysetKeys) {
+			function inner(a: AmountLike, k: HasKeysetKeys) {
 				return OutputData.createSingleP2PKData({ pubkey: pubkey }, a, k.id);
 			}
 			return inner;
@@ -823,7 +823,7 @@ describe('Custom Outputs', () => {
 	});
 	test('Manual Factory Send', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
-			function inner(a: number, k: HasKeysetKeys) {
+			function inner(a: AmountLike, k: HasKeysetKeys) {
 				return OutputData.createSingleP2PKData({ pubkey }, a, k.id);
 			}
 			return inner;

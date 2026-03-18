@@ -112,8 +112,8 @@ class MockWallet {
 	signP2PKProofs: Mock<SignP2PKFn> = vi.fn<SignP2PKFn>((ps) => ps); // passthrough
 	send: Mock<SendFn> = vi.fn<SendFn>(async () => ({ keep: [], send: [] }));
 	prepareSwapToSend: Mock<PrepareSendFn> = vi.fn<PrepareSendFn>(async () => ({
-		amount: 16,
-		fees: 1,
+		amount: Amount.from(16),
+		fees: Amount.one(),
 		keysetId: '123',
 		inputs: [],
 		keepOutputs: [],
@@ -122,8 +122,8 @@ class MockWallet {
 	}));
 	receive: Mock<ReceiveFn> = vi.fn<ReceiveFn>(async () => ({ proofs: [] }));
 	prepareSwapToReceive: Mock<PrepareReceiveFn> = vi.fn<PrepareReceiveFn>(async () => ({
-		amount: 16,
-		fees: 1,
+		amount: Amount.from(16),
+		fees: Amount.one(),
 		keysetId: '123',
 		inputs: [],
 		keepOutputs: [],
@@ -364,8 +364,8 @@ describe('WalletOps builders', () => {
 		});
 
 		it('supports sendCustom and keepCustom OutputTypes', async () => {
-			const mockData = [{ blindedMessage: { amount: 4 } }] as OutputData[];
-			const mockKeep = [{ blindedMessage: { amount: 1 } }] as OutputData[];
+			const mockData = [{ blindedMessage: { amount: Amount.from(4) } }] as OutputData[];
+			const mockKeep = [{ blindedMessage: { amount: Amount.one() } }] as OutputData[];
 
 			await ops.send(4, proofs).asCustom(mockData).keepAsCustom(mockKeep).run();
 
@@ -460,7 +460,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('supports custom() OutputType for receive', async () => {
-			const data = [{ blindedMessage: { amount: 5 } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.from(5) } }] as OutputData[];
 			await ops.receive(token).asCustom(data).run();
 
 			const [, , outputType] = wallet.receive.mock.calls[0];
@@ -561,7 +561,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('supports custom() OutputType for mint', async () => {
-			const data = [{ blindedMessage: { amount: 8 } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.from(8) } }] as OutputData[];
 			await ops.mintBolt11(8, quote).asCustom(data).prepare();
 
 			const [, , , , ot] = wallet.prepareMint.mock.calls[0];
@@ -668,7 +668,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt12 supports custom OutputType', async () => {
-			const data = [{ blindedMessage: { amount: 7 } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.from(7) } }] as OutputData[];
 			await ops.mintBolt12(7, mint12).asCustom(data).privkey('sk').prepare();
 
 			const [, , , , ot] = wallet.prepareMint.mock.calls[0];
@@ -769,7 +769,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt11: supports custom OutputType', async () => {
-			const data = [{ blindedMessage: { amount: 0 } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.zero() } }] as OutputData[];
 			await ops.meltBolt11(melt11, proofs).asCustom(data).run();
 
 			expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
