@@ -6,8 +6,6 @@
 	"engines": {
 		"node": ">=22.4.0"
 	},
-	"main": "lib/cashu-ts.cjs",
-	"module": "lib/cashu-ts.es.js",
 	"types": "lib/types/index.d.ts",
 	"repository": {
 		"type": "git",
@@ -19,15 +17,13 @@
 	"scripts": {
 		"build:scripts": "tsc -p scripts/tsconfig.json",
 		"compile:es": "BUILD_FORMAT=es vite build",
-		"compile:cjs": "BUILD_FORMAT=cjs vite build",
 		"compile:standalone": "BUILD_FORMAT=iife vite build",
-		"compile": "npm run compile:es && npm run compile:cjs",
+		"compile": "npm run compile:es",
 		"test:bundler": "node test/consumer/bundler/run-test.js",
-		"test:commonjs": "node test/consumer/commonjs/run-test.js",
 		"test:iife": "node test/consumer/iife/run-test.js",
 		"test:nodenext": "node test/consumer/nodenext/run-test.js",
 		"test:reactnative": "node test/consumer/reactnative/run-test.js",
-		"test:consumer": "npm run test:bundler && npm run test:commonjs && npm run test:iife && npm run test:nodenext && npm run test:reactnative",
+		"test:consumer": "npm run test:bundler && npm run test:iife && npm run test:nodenext && npm run test:reactnative",
 		"test:prepare": "npx playwright install chromium --with-deps",
 		"test": "vitest run --coverage --project node --project browser",
 		"test-integration": "vitest run --coverage --project integration",
@@ -50,7 +46,6 @@
 	"exports": {
 		".": {
 			"types": "./lib/types/index.d.ts",
-			"require": "./lib/cashu-ts.cjs",
 			"import": "./lib/cashu-ts.es.js",
 			"default": "./lib/cashu-ts.es.js"
 		}
