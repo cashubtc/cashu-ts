@@ -46,13 +46,10 @@ export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
  * the call site, use `OutputDataLike<YourType>`.
  *
  * @remarks
- * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic. Likewise,
- * we will change amount to `AmountLike`. v4 shape will be:
- *
- * `export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;`
+ * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic.
  */
 export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
-	amount: number,
+	amount: AmountLike,
 	keys: TKeyset,
 ) => OutputDataLike<TKeyset>;
 
@@ -167,7 +164,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		keyset: T,
 		customSplit?: AmountLike[],
 	) {
-		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) => Amount.from(a));
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
 	}
 
@@ -286,7 +283,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		keyset: T,
 		customSplit?: AmountLike[],
 	) {
-		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) => Amount.from(a));
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
 
@@ -309,7 +306,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		keyset: T,
 		customSplit?: AmountLike[],
 	): OutputData[] {
-		const amounts = splitAmount(amount, keyset.keys, customSplit).map((a) => Amount.from(a));
+		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a, i) =>
 			this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
 		);

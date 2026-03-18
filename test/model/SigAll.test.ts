@@ -1,5 +1,5 @@
 import { test, describe, expect } from 'vitest';
-import { SigAll, SigAllSigningPackage, MeltQuoteState } from '../../src';
+import { SigAll, SigAllSigningPackage, MeltQuoteState, Amount } from '../../src';
 import type { OutputDataLike, Proof, P2PKWitness, SerializedBlindedMessage } from '../../src';
 
 const dummyProof: Proof = {
@@ -29,8 +29,8 @@ function makeSwapPreview() {
 		inputs: [dummyProof],
 		keepOutputs: [dummyOutput],
 		sendOutputs: [dummyOutput],
-		amount: 32,
-		fees: 0,
+		amount: Amount.from(32),
+		fees: Amount.from(0),
 		keysetIdts: [],
 		method: 'swap',
 		keysetId: 'dummy-keyset-id',

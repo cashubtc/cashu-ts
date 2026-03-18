@@ -984,8 +984,8 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount: receiveAmount.toNumber(), // TODO: v4
-			fees: swapFee,
+			amount: receiveAmount,
+			fees: Amount.from(swapFee),
 			keysetId: keyset.id,
 			inputs: proofs,
 			keepOutputs: outputs,
@@ -1210,8 +1210,8 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount: sendAmountTarget.toNumber(), // TODO: v4
-			fees: swapFee,
+			amount: sendAmountTarget,
+			fees: Amount.from(swapFee),
 			keysetId: keyset.id,
 			inputs: selectedProofs,
 			sendOutputs,
@@ -1582,7 +1582,7 @@ class Wallet {
 		amount: AmountLike,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
-		const mintAmount = this.normalizeAmount(amount, 'createMintQuoteBolt11');
+		const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11').toBigInt();
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1614,7 +1614,7 @@ class Wallet {
 		pubkey: string,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
-		const mintAmount = this.normalizeAmount(amount, 'createLockedMintQuote');
+		const mintAmount = this.parseAmount(amount, 'createLockedMintQuote').toBigInt();
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
 		const mintQuotePayload: MintQuoteBolt11Request = {
@@ -1655,7 +1655,7 @@ class Wallet {
 
 		const amount =
 			options?.amount !== undefined
-				? this.normalizeAmount(options.amount, 'createMintQuoteBolt12')
+				? this.parseAmount(options.amount, 'createMintQuoteBolt12').toBigInt()
 				: undefined;
 
 		const mintQuotePayload: MintQuoteBolt12Request = {
@@ -1901,7 +1901,7 @@ class Wallet {
 	): Promise<MeltQuoteBolt11Response> {
 		const normalizedAmountMsat =
 			amountMsat !== undefined
-				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt11')
+				? this.parseAmount(amountMsat, 'createMeltQuoteBolt11').toBigInt()
 				: undefined;
 
 		if (amountMsat !== undefined) {
@@ -1951,7 +1951,7 @@ class Wallet {
 	): Promise<MeltQuoteBolt12Response> {
 		const normalizedAmountMsat =
 			amountMsat !== undefined
-				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt12')
+				? this.parseAmount(amountMsat, 'createMeltQuoteBolt12').toBigInt()
 				: undefined;
 		return this.mint.createMeltQuoteBolt12({
 			unit: this._unit,
@@ -1981,10 +1981,10 @@ class Wallet {
 		invoice: string,
 		millisatPartialAmount: AmountLike,
 	): Promise<MeltQuoteBolt11Response> {
-		const normalizedMillisatPartialAmount = this.normalizeAmount(
+		const normalizedMillisatPartialAmount = this.parseAmount(
 			millisatPartialAmount,
 			'createMultiPathMeltQuote',
-		);
+		).toBigInt();
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(

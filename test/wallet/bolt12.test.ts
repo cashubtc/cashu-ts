@@ -382,7 +382,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		expect(calls[0].requestBody).toEqual({
 			pubkey: '02abcd',
 			unit: 'sat',
-			amount: 21,
+			amount: 21n,
 			description: 'desc',
 		});
 	});
@@ -423,7 +423,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 			request: 'lno1offer...',
 			options: {
 				amountless: {
-					amount_msat: 100_000,
+					amount_msat: 100_000n,
 				},
 			},
 		});

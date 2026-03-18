@@ -48,7 +48,7 @@ describe('NUT-26 Test Vectors', () => {
 		test('PaymentRequest.fromEncodedRequest', () => {
 			const pr = PaymentRequest.fromEncodedRequest(encoded);
 			expect(pr.id).toBe(expected.i);
-			expect(pr.amount).toBe(expected.a);
+			expect(pr.amount?.toNumber()).toBe(expected.a);
 			expect(pr.unit).toBe(expected.u);
 			expect(pr.mints).toEqual(expected.m);
 			expect(pr.transport![0].type).toBe(expected.t[0].t);

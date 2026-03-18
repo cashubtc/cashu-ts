@@ -1,5 +1,6 @@
 import { type OutputDataLike } from '../../model/OutputData';
 import { type Proof } from '../../model/types/proof';
+import { type Amount } from '../../model/Amount';
 import {
 	type MeltQuoteBolt11Response,
 	type MeltQuoteBaseResponse,
@@ -95,11 +96,11 @@ export type SwapPreview = {
 	/**
 	 * Amount being sent or received (excluding fees).
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * Total fees for the swap (inc receiver's fees if applicable)
 	 */
-	fees: number;
+	fees: Amount;
 	/**
 	 * Keyset ID used to prepare the outputs.
 	 */

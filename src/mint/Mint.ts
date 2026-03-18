@@ -781,6 +781,14 @@ class Mint {
 		return false;
 	}
 
+	/**
+	 * Wraps raw `amount` values from JSON into `Amount` objects.
+	 *
+	 * `SerializedBlindedSignature.amount` is typed as `Amount`, but JSONInt.parse produces `number |
+	 * bigint` at the wire boundary. Any code path that receives signatures directly from HTTP (i.e.
+	 * without going through this class) must apply the same normalization — see AuthManager.topUp for
+	 * an example.
+	 */
 	private normalizeSignatureAmounts(
 		signatures: SerializedBlindedSignature[],
 	): SerializedBlindedSignature[] {

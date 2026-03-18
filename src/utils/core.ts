@@ -1,5 +1,3 @@
-// TODO(v4): migrate core amount-bearing APIs to return `Amount` instead of number.
-
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -48,7 +46,7 @@ export function splitAmount(
 	keyset: Keys,
 	split?: AmountLike[],
 	order?: 'desc' | 'asc',
-): number[] {
+): Amount[] {
 	let remainingValue = toAmount(value, 'splitAmount.value', true);
 	let normalizedSplit = split?.map((amt) => toAmount(amt, 'splitAmount.split', true));
 
@@ -57,7 +55,7 @@ export function splitAmount(
 
 		// Special case: explicit "zero-total" outputs (restore or NUT-08 blanks)
 		if (remainingValue.isZero() && totalSplitAmount.isZero()) {
-			return normalizedSplit.map((amt) => amt.toNumber()); // TODO: v4
+			return normalizedSplit;
 		}
 
 		// Normal positive-value paths: ignore zeros for validation and totals
@@ -74,7 +72,7 @@ export function splitAmount(
 
 		// if caller supplied an exact custom split, preserve their order
 		if (totalPositive.equals(remainingValue)) {
-			return positive.map((amt) => amt.toNumber()); // TODO: v4
+			return positive;
 		}
 
 		// Work only with validated positive amounts from here on
@@ -91,8 +89,8 @@ export function splitAmount(
 	}
 	for (const amtAsAmount of sortedKeyAmounts) {
 		if (amtAsAmount.isZero()) continue;
-		// Calculate how many of amt fit into remaining value
-		const requireCount = remainingValue.divideBy(amtAsAmount).toNumber(); // TODO: v4
+		// Calculate how many of this denomination fit into the remaining value
+		const requireCount = remainingValue.divideBy(amtAsAmount).toNumber();
 		// Add them to the split and reduce the target value by added amounts
 		normalizedSplit.push(...Array<Amount>(requireCount).fill(amtAsAmount));
 		remainingValue = remainingValue.subtract(amtAsAmount.multiplyBy(requireCount));
@@ -110,7 +108,7 @@ export function splitAmount(
 			order === 'desc' ? b.compareTo(a) : a.compareTo(b),
 		);
 	}
-	return normalizedSplit.map((amt) => amt.toNumber()); // TODO: v4
+	return normalizedSplit;
 }
 
 /**
@@ -127,7 +125,7 @@ export function getKeepAmounts(
 	amountToKeep: AmountLike,
 	keys: Keys,
 	targetCount: number,
-): number[] {
+): Amount[] {
 	const normalizedAmountToKeep = toAmount(amountToKeep, 'getKeepAmounts.amountToKeep', true);
 	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
@@ -150,28 +148,22 @@ export function getKeepAmounts(
 	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
 	const amountDiff = normalizedAmountToKeep.subtract(runningTotal);
 	if (!amountDiff.isZero()) {
-		const remainingAmounts = splitAmount(amountDiff, keys);
-		for (const amt of remainingAmounts) {
-			const amount = Amount.from(amt);
-			amountsWeWant.push(amount);
-			runningTotal = runningTotal.add(amount);
+		for (const amt of splitAmount(amountDiff, keys)) {
+			amountsWeWant.push(amt);
+			runningTotal = runningTotal.add(amt);
 		}
 	}
-	return amountsWeWant.sort((a, b) => a.compareTo(b)).map((amount) => amount.toNumber()); // TODO: v4
+	return amountsWeWant.sort((a, b) => a.compareTo(b));
 }
 /**
  * Returns the amounts in the keyset sorted by the order specified.
  *
- * @remarks
- * Currently returns unsafe (rounded) numbers above safe integer limit. Will be resolved in v4 when
- * we can change signature to return `Amount`
  * @param keyset To search in.
  * @param order Order to sort the amounts in.
  * @returns The amounts in the keyset sorted by the order specified.
  */
-export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): number[] {
-	const amounts = getKeysetAmountsAsAmount(keyset, order);
-	return amounts.map((amount) => amount.toNumberUnsafe()); // map to unsafe number for now
+export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): Amount[] {
+	return getKeysetAmountsAsAmount(keyset, order);
 }
 
 function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[] {

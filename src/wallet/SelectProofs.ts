@@ -5,37 +5,15 @@ import { type SendResponse } from './types';
 import { type KeyChain } from './KeyChain';
 import { Amount, type AmountLike } from '../model/Amount';
 
-// TODO v4
-// - use amountToSelect: AmountLike
-// - Remove overloads in selectProofsRGLI
 export type SelectProofs = (
-	proofs: Proof[],
-	amountToSelect: number,
-	keyChain: KeyChain,
-	includeFees?: boolean,
-	exactMatch?: boolean,
-	logger?: Logger,
-) => SendResponse;
-
-/**
- * @deprecated Use an `AmountLike` type for amountToSelect.
- */
-export function selectProofsRGLI(
-	proofs: Proof[],
-	amountToSelect: number,
-	keyChain: KeyChain,
-	includeFees?: boolean,
-	exactMatch?: boolean,
-	logger?: Logger,
-): SendResponse;
-export function selectProofsRGLI(
 	proofs: Proof[],
 	amountToSelect: AmountLike,
 	keyChain: KeyChain,
 	includeFees?: boolean,
 	exactMatch?: boolean,
 	logger?: Logger,
-): SendResponse;
+) => SendResponse;
+
 export function selectProofsRGLI(
 	proofs: Proof[],
 	amountToSelect: AmountLike,

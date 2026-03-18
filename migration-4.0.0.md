@@ -116,3 +116,86 @@ const total: number = OutputData.sumOutputAmounts(outputs);
 const total: Amount = OutputData.sumOutputAmounts(outputs);
 const n: number = total.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
 ```
+
+---
+
+## `SwapPreview.amount` and `SwapPreview.fees` now return `Amount`
+
+Both fields on the `SwapPreview` type (returned by `Wallet.getSwapPreview()`) previously returned `number`; both now return `Amount`.
+
+```ts
+// Before
+const net: number = preview.amount - preview.fees;
+
+// After
+const net: Amount = preview.amount.subtract(preview.fees);
+const n: number = net.toNumber();
+```
+
+---
+
+## `PaymentRequest.amount` now returns `Amount`
+
+The `amount` field on `PaymentRequest` (and the result of `decodePaymentRequest()`) previously returned `number | undefined`; it now returns `Amount | undefined`.
+
+```ts
+// Before
+const sats: number | undefined = request.amount;
+
+// After
+const sats: number | undefined = request.amount?.toNumber();
+```
+
+---
+
+## Utility functions `splitAmount`, `getKeepAmounts`, and `getKeysetAmounts` now return `Amount[]`
+
+These functions in `@cashu/cashu-ts` previously returned `number[]`; they now return `Amount[]`.
+
+```ts
+// Before
+const chunks: number[] = splitAmount(1000, keys);
+const keep: number[] = getKeepAmounts(proofs, 500, keys, 3);
+const denominations: number[] = getKeysetAmounts(keyset);
+
+// After
+const chunks: Amount[] = splitAmount(1000, keys);
+const keep: Amount[] = getKeepAmounts(proofs, 500, keys, 3);
+const denominations: Amount[] = getKeysetAmounts(keyset);
+
+// Convert to numbers where needed
+chunks.map((a) => a.toNumber());
+```
+
+---
+
+## `OutputDataFactory` callback: `amount` parameter is now `AmountLike`
+
+If you implement a custom `OutputDataFactory`, the `amount` argument previously typed as `number` is now `AmountLike`. Update your callback signature and use `Amount.from(amount)` if you need an `Amount` object.
+
+```ts
+// Before
+const factory: OutputDataFactory = (amount: number, keys) => { ... };
+
+// After
+import { Amount, type AmountLike } from '@cashu/cashu-ts';
+const factory: OutputDataFactory = (amount: AmountLike, keys) => {
+    const a = Amount.from(amount);
+    // ...
+};
+```
+
+---
+
+## `SelectProofs` type: `amountToSelect` parameter is now `AmountLike`
+
+If you implement a custom `SelectProofs` function or hold a reference typed as `SelectProofs`, update the `amountToSelect` parameter from `number` to `AmountLike`.
+
+```ts
+// Before
+const mySelector: SelectProofs = (proofs, amountToSelect: number, ...) => { ... };
+
+// After
+import { type AmountLike } from '@cashu/cashu-ts';
+const mySelector: SelectProofs = (proofs, amountToSelect: AmountLike, ...) => { ... };
+```

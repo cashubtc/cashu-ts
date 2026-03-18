@@ -9,18 +9,23 @@ import type {
 	PaymentRequestTransport,
 	PaymentRequestTransportType,
 } from '../wallet/types';
+import { Amount, type AmountLike } from './Amount';
 
 export class PaymentRequest {
+	public amount?: Amount;
+
 	constructor(
 		public transport?: PaymentRequestTransport[],
 		public id?: string,
-		public amount?: number,
+		amount?: AmountLike,
 		public unit?: string,
 		public mints?: string[],
 		public description?: string,
 		public singleUse: boolean = false,
 		public nut10?: NUT10Option,
-	) {}
+	) {
+		this.amount = amount !== undefined ? Amount.from(amount) : undefined;
+	}
 
 	toRawRequest() {
 		const rawRequest: RawPaymentRequest = {};
@@ -35,7 +40,9 @@ export class PaymentRequest {
 			rawRequest.i = this.id;
 		}
 		if (this.amount) {
-			rawRequest.a = this.amount;
+			// TODO: use toBigInt() once encodeCBOR supports bigint (8-byte uint64). NUT-18 specifies
+			// "a" as uint64 but the CBOR encoder currently caps at 32-bit integers.
+			rawRequest.a = this.amount.toNumber();
 		}
 		if (this.unit) {
 			rawRequest.u = this.unit;
@@ -84,7 +91,7 @@ export class PaymentRequest {
 	toEncodedCreqB(): string {
 		const tlvRequest: DecodedTLVPaymentRequest = {
 			id: this.id,
-			amount: this.amount !== undefined ? BigInt(this.amount) : undefined,
+			amount: this.amount !== undefined ? this.amount.toBigInt() : undefined,
 			unit: this.unit,
 			singleUse: this.singleUse,
 			mints: this.mints,
@@ -153,7 +160,7 @@ export class PaymentRequest {
 			return new PaymentRequest(
 				decoded.transports,
 				decoded.id,
-				decoded.amount !== undefined ? Number(decoded.amount) : undefined,
+				decoded.amount,
 				decoded.unit,
 				decoded.mints,
 				decoded.description,

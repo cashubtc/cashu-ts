@@ -9,6 +9,7 @@ import {
 	normalizeMintKeyset,
 	normalizeSafeIntegerMetadata,
 } from '../utils';
+import { Amount } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
 import type {
@@ -406,8 +407,13 @@ export class AuthManager implements AuthProvider {
 		if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
 			throw new Error('AuthManager: bad BAT mint response');
 		}
+		// Normalize signature amounts (raw JSON has numbers, not Amount objects)
+		const signatures = res.signatures.map((sig) => ({
+			...sig,
+			amount: Amount.from(sig.amount),
+		}));
 		// Create BAT proofs and check DLEQ
-		const proofs = outputs.map((d, i) => d.toProof(res.signatures[i], keys));
+		const proofs = outputs.map((d, i) => d.toProof(signatures[i], keys));
 		for (const p of proofs) {
 			if (!hasValidDleq(p, keys)) {
 				throw new Error('AuthManager: mint returned BAT with invalid DLEQ');

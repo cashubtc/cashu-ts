@@ -440,10 +440,10 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: AmountLike, keys: Keys, targetCount: number): number[];
+export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: AmountLike, keys: Keys, targetCount: number): Amount[];
 
 // @public
-export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): number[];
+export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): Amount[];
 
 // @public (undocumented)
 export const getKeysetIdInt: (keysetId: string) => bigint;
@@ -787,10 +787,10 @@ export type MeltQuoteBaseResponse = {
 export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
     options?: {
         amountless?: {
-            amount_msat: number;
+            amount_msat: AmountLike;
         };
         mpp?: {
-            amount: number;
+            amount: AmountLike;
         };
     };
 };
@@ -806,7 +806,7 @@ export type MeltQuoteBolt11Response = MeltQuoteBaseResponse & {
 export type MeltQuoteBolt12Request = MeltQuoteBaseRequest & {
     options?: {
         amountless?: {
-            amount_msat: number;
+            amount_msat: AmountLike;
         };
     };
 };
@@ -1124,7 +1124,7 @@ export type MintQuoteBaseResponse = {
 
 // @public
 export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
-    amount: number;
+    amount: AmountLike;
     description?: string;
 };
 
@@ -1137,7 +1137,7 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
 
 // @public
 export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
-    amount?: number;
+    amount?: AmountLike;
     description?: string;
 };
 
@@ -1317,7 +1317,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 }
 
 // @public
-export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: number, keys: TKeyset) => OutputDataLike<TKeyset>;
+export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: AmountLike, keys: TKeyset) => OutputDataLike<TKeyset>;
 
 // @public
 export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
@@ -1438,9 +1438,9 @@ export type PartialMintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: number | undefined, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined);
     // (undocumented)
-    amount?: number | undefined;
+    amount?: Amount;
     // (undocumented)
     description?: string | undefined;
     // (undocumented)
@@ -1660,13 +1660,10 @@ export type SecretKind = 'P2PK' | 'HTLC' | (string & {});
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 // @public (undocumented)
-export type SelectProofs = (proofs: Proof[], amountToSelect: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
-
-// @public @deprecated (undocumented)
-export function selectProofsRGLI(proofs: Proof[], amountToSelect: number, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger): SendResponse;
+export type SelectProofs = (proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger) => SendResponse;
 
 // @public (undocumented)
-export function selectProofsRGLI(proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, logger?: Logger): SendResponse;
+export function selectProofsRGLI(proofs: Proof[], amountToSelect: AmountLike, keyChain: KeyChain, includeFees?: boolean, exactMatch?: boolean, _logger?: Logger): SendResponse;
 
 // @public
 export class SendBuilder {
@@ -1827,7 +1824,7 @@ export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
 export function sortProofsById(proofs: Proof[]): Proof[];
 
 // @public
-export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): number[];
+export function splitAmount(value: AmountLike, keyset: Keys, split?: AmountLike[], order?: 'desc' | 'asc'): Amount[];
 
 // @public
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>>;
@@ -1861,8 +1858,8 @@ export type SwapPayload = SwapRequest;
 
 // @public
 export type SwapPreview = {
-    amount: number;
-    fees: number;
+    amount: Amount;
+    fees: Amount;
     keysetId: string;
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];

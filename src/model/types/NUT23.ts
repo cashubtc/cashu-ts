@@ -4,7 +4,7 @@ import {
 	type MintQuoteState,
 } from './NUT04';
 import { type MeltQuoteBaseRequest, type MeltQuoteBaseResponse } from './NUT05';
-import type { Amount } from '../Amount';
+import type { Amount, AmountLike } from '../Amount';
 
 /**
  * Payload that needs to be sent to the mint when requesting a mint.
@@ -13,7 +13,7 @@ export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
 	/**
 	 * Amount to be minted.
 	 */
-	amount: number;
+	amount: AmountLike;
 	/**
 	 * Description for the invoice.
 	 */
@@ -49,10 +49,10 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
 export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
 	options?: {
 		amountless?: {
-			amount_msat: number;
+			amount_msat: AmountLike;
 		};
 		mpp?: {
-			amount: number;
+			amount: AmountLike;
 		};
 	};
 };
