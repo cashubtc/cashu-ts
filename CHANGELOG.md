@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.0.0](https://github.com/cashubtc/cashu-ts/compare/v3.6.1...v4.0.0) (2026-03-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove support for CJS build ([#524](https://github.com/cashubtc/cashu-ts/issues/524))
+
+### Miscellaneous Chores
+
+* remove support for CJS build ([#524](https://github.com/cashubtc/cashu-ts/issues/524)) ([b0e417e](https://github.com/cashubtc/cashu-ts/commit/b0e417edbd9cf0e8d358ed2c67525b37d78cdc7c))
+
 ## [3.6.1](https://github.com/cashubtc/cashu-ts/compare/v3.6.0...v3.6.1) (2026-03-17)
 
 
