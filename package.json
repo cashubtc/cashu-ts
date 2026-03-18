@@ -6,7 +6,6 @@
 	"engines": {
 		"node": ">=22.4.0"
 	},
-	"module": "lib/cashu-ts.es.js",
 	"types": "lib/types/index.d.ts",
 	"repository": {
 		"type": "git",

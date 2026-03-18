@@ -38,6 +38,9 @@ import { Wallet } from '@cashu/cashu-ts';
 If you must keep a CJS entry point, use a dynamic import wrapper:
 
 ```js
-// CJS compatibility shim (Node.js >= 20.19)
-const { Wallet } = await import('@cashu/cashu-ts');
+// CJS compatibility using an IIFE
+(async () => {
+    const { Wallet } = await import('@cashu/cashu-ts');
+    // ...
+})();
 ```
