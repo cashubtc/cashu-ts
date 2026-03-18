@@ -8,8 +8,7 @@ cashu-ts v4 ships **only ES modules**. The CommonJS build (`lib/cashu-ts.cjs`) h
 
 Our core dependencies (`@noble/curves`, `@noble/hashes`, `@scure/bip32`) are ESM-only.
 Maintaining a dual CJS build required bundling those deps into the CJS output, increasing
-complexity and risk of module-duplication bugs. Our `engines.node` minimum supports `require(esm)`
-natively, removing the primary CJS use case.
+complexity and risk of module-duplication bugs.
 
 ### What changed
 
