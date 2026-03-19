@@ -127,7 +127,7 @@ class Mint {
 		const response = await requestInstance<GetInfoResponse>({
 			endpoint: joinUrls(this._mintUrl, '/v1/info'),
 		});
-		return response;
+		return MintInfo.normalizeInfo(response);
 	}
 
 	/**
@@ -189,7 +189,12 @@ class Mint {
 		const response = await this.requestWithAuth<MintQuoteBolt11Response>(
 			'POST',
 			'/v1/mint/quote/bolt11',
-			{ requestBody: mintQuotePayload },
+			{
+				requestBody: {
+					...mintQuotePayload,
+					amount: Amount.from(mintQuotePayload.amount).toBigInt(),
+				},
+			},
 			customRequest,
 		);
 		return this.normalizeMintQuoteBolt11Response(response);
@@ -207,10 +212,14 @@ class Mint {
 		mintQuotePayload: MintQuoteBolt12Request,
 		customRequest?: RequestFn,
 	): Promise<MintQuoteBolt12Response> {
+		const body: Record<string, unknown> = { ...mintQuotePayload };
+		if (mintQuotePayload.amount !== undefined) {
+			body.amount = Amount.from(mintQuotePayload.amount).toBigInt();
+		}
 		const response = await this.requestWithAuth<MintQuoteBolt12Response>(
 			'POST',
 			'/v1/mint/quote/bolt12',
-			{ requestBody: mintQuotePayload },
+			{ requestBody: body },
 			customRequest,
 		);
 		return this.normalizeMintQuoteBolt12Response(response);
@@ -327,7 +336,7 @@ class Mint {
 		const response = await this.requestWithAuth<MeltQuoteBolt11Response>(
 			'POST',
 			'/v1/melt/quote/bolt11',
-			{ requestBody: meltQuotePayload },
+			{ requestBody: this.normalizeMeltQuoteRequestOptions(meltQuotePayload) },
 			customRequest,
 		);
 		const data = this.normalizeMeltQuoteBolt11Response(response);
@@ -359,7 +368,7 @@ class Mint {
 		const response = await this.requestWithAuth<MeltQuoteBolt12Response>(
 			'POST',
 			'/v1/melt/quote/bolt12',
-			{ requestBody: meltQuotePayload },
+			{ requestBody: this.normalizeMeltQuoteRequestOptions(meltQuotePayload) },
 			customRequest,
 		);
 		return this.normalizeMeltQuoteBolt11Response(response);
@@ -771,6 +780,26 @@ class Mint {
 			headers,
 			...(nut19?.supported && nut19.params ? nut19.params : {}),
 		});
+	}
+
+	/**
+	 * Normalizes AmountLike fields inside melt quote request options so they are serialized as JSON
+	 * number tokens (not strings) when forwarded to the mint.
+	 */
+	private normalizeMeltQuoteRequestOptions(
+		payload: MeltQuoteBolt11Request | MeltQuoteBolt12Request,
+	): Record<string, unknown> {
+		if (!payload.options) return payload as Record<string, unknown>;
+		const opts: Record<string, unknown> = { ...payload.options };
+		if (payload.options.amountless) {
+			opts.amountless = {
+				amount_msat: Amount.from(payload.options.amountless.amount_msat).toBigInt(),
+			};
+		}
+		if ('mpp' in payload.options && payload.options.mpp) {
+			opts.mpp = { amount: Amount.from(payload.options.mpp.amount).toBigInt() };
+		}
+		return { ...payload, options: opts };
 	}
 
 	private isValidMethodString(method: unknown): boolean {

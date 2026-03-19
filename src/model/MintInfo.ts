@@ -33,7 +33,7 @@ export class MintInfo {
 		this._protected21 = this.buildIndex(pe21);
 	}
 
-	private static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
+	static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
 		return {
 			...info,
 			nuts: {
