@@ -1,30 +1,17 @@
 import { type OutputDataLike } from '../../model/OutputData';
 import { type Proof } from '../../model/types/proof';
-import { type Amount } from '../../model/Amount';
+import { type AmountLike } from '../../model/Amount';
 import {
-	type MeltQuoteBolt11Response,
 	type MeltQuoteBaseResponse,
+	type MintQuoteBaseResponse,
 	type SwapRequest,
 	type MintRequest,
-	type MeltRequest,
 } from '../../model/types';
-import { type Keyset } from '../Keyset';
-
-/**
- * @deprecated Use wallet.prepareMelt() and store the MeltPreview instead.
- */
-export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
-	method: 'bolt11' | 'bolt12';
-	payload: MeltRequest;
-	outputData: OutputDataLike[];
-	keyset: Keyset;
-	quote: T;
-}
 
 /**
  * Preview of a mint transaction created by prepareMint.
  */
-export interface MintPreview {
+export interface MintPreview<TQuote extends MintQuoteBaseResponse = MintQuoteBaseResponse> {
 	method: string;
 	/**
 	 * Mint payload to be sent to the mint.
@@ -39,15 +26,15 @@ export interface MintPreview {
 	 */
 	keysetId: string;
 	/**
-	 * Mint Quote ID.
+	 * Mint Quote object.
 	 */
-	quote: string;
+	quote: TQuote;
 }
 
 /**
  * Preview of a Melt transaction created by prepareMelt.
  */
-export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
+export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> {
 	method: string;
 	/**
 	 * Inputs (Proofs) to be melted.
@@ -96,11 +83,11 @@ export type SwapPreview = {
 	/**
 	 * Amount being sent or received (excluding fees).
 	 */
-	amount: Amount;
+	amount: AmountLike;
 	/**
 	 * Total fees for the swap (inc receiver's fees if applicable)
 	 */
-	fees: Amount;
+	fees: AmountLike;
 	/**
 	 * Keyset ID used to prepare the outputs.
 	 */
