@@ -27,7 +27,7 @@ import {
 	normalizeSafeIntegerMetadata,
 	sanitizeUrl,
 } from '../utils';
-import { Amount } from '../model/Amount';
+import { Amount, type AmountLike } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
@@ -864,6 +864,9 @@ class Mint {
 			amount: Amount.from(response.amount),
 			expiry: normalizeSafeIntegerMetadata(response.expiry, 'meltQuote.expiry', undefined),
 			change: response.change ? this.normalizeSignatureAmounts(response.change) : undefined,
+			...('fee_reserve' in response && response.fee_reserve != null
+				? { fee_reserve: Amount.from(response.fee_reserve as AmountLike) }
+				: {}),
 		};
 	}
 
