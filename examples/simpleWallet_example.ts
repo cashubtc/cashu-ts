@@ -156,7 +156,7 @@ const runWalletExample = async () => {
 			const quote = await wallet.createMeltQuoteBolt11(externalInvoice);
 
 			// After creating the melt quote, we can initiate the melting process.
-			const amountToMelt = quote.amount + quote.fee_reserve;
+			const amountToMelt = quote.amount.add(quote.fee_reserve);
 
 			console.log(`quote amount: ${quote.amount}`);
 			console.log(`fee reserve proofs: ${quote.fee_reserve}`);

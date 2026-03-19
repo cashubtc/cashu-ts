@@ -79,7 +79,7 @@ async function main() {
 	const request = await wallet.createMintQuoteBolt11(100);
 	await new Promise((res) => setTimeout(res, 3000));
 	console.log('\nMint the proofs...');
-	const proofs = await wallet.mintProofs(100, request.quote);
+	const proofs = await wallet.mintProofsBolt11(100, request);
 	console.log(
 		'\nMinted 100 sats.',
 		proofs.map((p) => p.amount),

@@ -1,5 +1,5 @@
 import dns from 'node:dns';
-import { Wallet, MintQuoteState, MintQuoteBolt12Response, Proof, sumProofs } from '../src';
+import { Wallet, MintQuoteState, MintQuoteBolt12Response, Proof, sumProofs, Amount } from '../src';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
@@ -30,7 +30,7 @@ const runBolt12WalletExample = async () => {
 
 		// Mint initial proofs via BOLT11
 		let proofs = await mintInitialProofs(wallet);
-		let totalSent = 0;
+		let totalSent = Amount.zero();
 
 		// Pay BOLT12 offer multiple times
 		// NOTE: CDK currently only lets us pay each offer once because there is a unique constraint on the offer.
@@ -49,7 +49,7 @@ const runBolt12WalletExample = async () => {
 				);
 
 				proofs = remainingProofs;
-				totalSent += sentAmount;
+				totalSent.add(sentAmount);
 
 				// Mint new proofs from accumulated payments
 				const newProofs = await mintFromBolt12Quote(wallet, bolt12MintQuote);
@@ -111,10 +111,10 @@ const payBolt12Offer = async (
 	offer: string,
 	amount: number,
 	proofs: Proof[],
-): Promise<{ remainingProofs: Proof[]; sentAmount: number }> => {
+): Promise<{ remainingProofs: Proof[]; sentAmount: Amount }> => {
 	// Create melt quote
 	const meltQuote = await wallet.createMeltQuoteBolt12(offer, amount * 1000);
-	const totalNeeded = meltQuote.amount + meltQuote.fee_reserve;
+	const totalNeeded = meltQuote.amount.add(meltQuote.fee_reserve);
 
 	if (sumProofs(proofs) < totalNeeded) {
 		throw new Error(`Insufficient balance: need ${totalNeeded}, have ${sumProofs(proofs)}`);
@@ -137,9 +137,9 @@ const mintFromBolt12Quote = async (
 	quote: MintQuoteBolt12Response,
 ): Promise<Proof[]> => {
 	const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);
-	const availableToMint = updatedQuote.amount_paid - updatedQuote.amount_issued;
+	const availableToMint = updatedQuote.amount_paid.add(updatedQuote.amount_issued);
 
-	if (availableToMint <= 0) {
+	if (availableToMint.lessThanOrEqual(0)) {
 		return [];
 	}
 
