@@ -17,11 +17,9 @@ import {
 	OutputData,
 	ConsoleLogger,
 	OutputConfig,
-	MeltProofsConfig,
 	MeltQuoteBolt12Response,
 	AuthProvider,
 	MintQuoteBolt11Response,
-	MeltBlanks,
 	HasKeysetKeys,
 	OutputType,
 	Amount,
@@ -1311,7 +1309,15 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const proofs = await wallet.mintProofsBolt11(1, '');
+		const mintQuote: MintQuoteBolt11Response = {
+			quote: 'test-quote-id',
+			request: 'lnbc...',
+			amount: Amount.from(1),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+		const proofs = await wallet.mintProofsBolt11(1, mintQuote);
 
 		expect(proofs).toHaveLength(1);
 		expect(proofs[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
@@ -1338,10 +1344,18 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const preview = await wallet.prepareMint('bolt11', 1, '');
+		const mintQuote: MintQuoteBolt11Response = {
+			quote: 'deferred-quote-id',
+			request: 'lnbc...',
+			amount: Amount.from(1),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+		const preview = await wallet.prepareMint('bolt11', 1, mintQuote);
 		expect(mintCalls).toBe(0);
 		expect(preview.method).toBe('bolt11');
-		expect(preview.payload.quote).toBe('');
+		expect(preview.payload.quote).toBe('deferred-quote-id');
 		expect(preview.outputData).toHaveLength(1);
 
 		const proofs = await wallet.completeMint(preview);
@@ -1360,7 +1374,17 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		await expect(wallet.mintProofsBolt11(1, '')).rejects.toThrow('Invalid response from mint');
+		const mintQuote: MintQuoteBolt11Response = {
+			quote: 'bad-response-quote',
+			request: 'lnbc...',
+			amount: Amount.from(1),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+		await expect(wallet.mintProofsBolt11(1, mintQuote)).rejects.toThrow(
+			'Invalid response from mint',
+		);
 	});
 
 	test('prepareMint deterministic counters reserve once and avoid duplicate outputs', async () => {
@@ -1379,7 +1403,16 @@ describe('requestTokens', () => {
 		const wallet = new Wallet(mint, { unit, bip39seed: seed, logger });
 		await wallet.loadMint();
 
-		const preview = await wallet.prepareMint('bolt11', 3, '', undefined, {
+		const mintQuote: MintQuoteBolt11Response = {
+			quote: 'quote123',
+			request: 'lnbc...',
+			amount: Amount.from(1),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+
+		const preview = await wallet.prepareMint('bolt11', 3, mintQuote, undefined, {
 			type: 'deterministic',
 			counter: 0,
 		});
@@ -2986,170 +3019,6 @@ describe('melt proofs', () => {
 		expect(response.change).toHaveLength(0);
 	});
 
-	/**
-	 * @deprecated
-	 */
-	test('test melt proofs with callback for blanks', async () => {
-		server.use(
-			http.post(mintUrl + '/v1/melt/bolt11', () => {
-				return HttpResponse.json({
-					quote: 'test_melt_quote',
-					amount: 10,
-					unit: 'sat',
-					fee_reserve: 3,
-					state: MeltQuoteState.PAID,
-					expiry: 1234567890,
-					payment_preimage: 'preimage',
-					change: [
-						{
-							id: '00bd033559de27d0',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-					],
-				});
-			}),
-		);
-		const wallet = new Wallet(mint, { unit });
-		await wallet.loadMint();
-
-		const meltQuote: MeltQuoteBolt11Response = {
-			quote: 'test_melt_quote',
-			amount: Amount.from(10),
-			fee_reserve: Amount.from(3),
-			request: 'bolt11request',
-			state: MeltQuoteState.UNPAID,
-			expiry: 1234567890,
-			payment_preimage: null,
-			unit: 'sat',
-		};
-		const proofsToSend: Proof[] = [
-			{
-				id: '00bd033559de27d0',
-				amount: 8,
-				secret: 'secret1',
-				C: 'C1',
-			},
-			{
-				id: '00bd033559de27d0',
-				amount: 5,
-				secret: 'secret2',
-				C: 'C2',
-			},
-		];
-		let capturedBlanks: MeltBlanks | undefined;
-		const config: MeltProofsConfig = {
-			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks as MeltBlanks;
-			},
-		};
-		const response = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
-
-		expect(capturedBlanks).toBeDefined();
-		expect(capturedBlanks!.method).toBe('bolt11');
-		expect(capturedBlanks!.quote).toMatchObject(meltQuote);
-		expect(capturedBlanks!.keyset.id).toBe('00bd033559de27d0');
-		expect(capturedBlanks!.outputData).toHaveLength(2); // log2(3)~1.58, ceil=2
-		expect(capturedBlanks!.quote.quote).toBe('test_melt_quote');
-		expect(capturedBlanks!.payload.inputs).toHaveLength(2);
-
-		// Response still completes sync
-		expect(response.change).toHaveLength(2);
-	});
-
-	test('test melt proofs pending with callback and completeMelt', async () => {
-		let callCount = 0;
-		server.use(
-			http.post(mintUrl + '/v1/melt/bolt11', () => {
-				callCount++;
-				if (callCount === 1) {
-					return HttpResponse.json({
-						quote: 'test_melt_quote',
-						amount: 10,
-						unit: 'sat',
-						fee_reserve: 3,
-						state: MeltQuoteState.UNPAID,
-						expiry: 1234567890,
-						payment_preimage: null,
-						change: null,
-					});
-				}
-				return HttpResponse.json({
-					quote: 'test_melt_quote',
-					amount: 10,
-					unit: 'sat',
-					fee_reserve: 3,
-					state: MeltQuoteState.PAID,
-					expiry: 1234567890,
-					payment_preimage: 'preimage',
-					change: [
-						{
-							id: '00bd033559de27d0',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-					],
-				});
-			}),
-		);
-		const wallet = new Wallet(mint, { unit });
-		await wallet.loadMint();
-
-		const meltQuote: MeltQuoteBolt11Response = {
-			quote: 'test_melt_quote',
-			amount: Amount.from(10),
-			fee_reserve: Amount.from(3),
-			request: 'bolt11request',
-			state: MeltQuoteState.UNPAID,
-			expiry: 1234567890,
-			payment_preimage: null,
-			unit: 'sat',
-		};
-		const proofsToSend: Proof[] = [
-			{
-				id: '00bd033559de27d0',
-				amount: 8,
-				secret: 'secret1',
-				C: 'C1',
-			},
-			{
-				id: '00bd033559de27d0',
-				amount: 5,
-				secret: 'secret2',
-				C: 'C2',
-			},
-		];
-		let capturedBlanks: MeltBlanks | undefined;
-		const config: MeltProofsConfig = {
-			onChangeOutputsCreated: (blanks) => {
-				capturedBlanks = blanks as MeltBlanks;
-			},
-		};
-		const initialResponse = await wallet.meltProofsBolt11(meltQuote, proofsToSend, config);
-
-		expect(initialResponse.quote.state).toBe(MeltQuoteState.UNPAID);
-		expect(initialResponse.change).toHaveLength(0);
-		expect(capturedBlanks).toBeDefined();
-
-		// Simulate completion later
-		const completedResponse = await wallet.completeMelt(capturedBlanks!);
-
-		expect(completedResponse.quote.state).toBe(MeltQuoteState.PAID);
-		expect(completedResponse.quote.payment_preimage).toBe('preimage');
-		expect(completedResponse.change).toHaveLength(2);
-		expect(completedResponse.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
-	});
-
 	test('custom OutputType is used as-is in prepareMelt', async () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
@@ -3330,6 +3199,7 @@ describe('melt proofs', () => {
 					return HttpResponse.json({
 						quote: meltQuote.quote,
 						amount: meltQuote.amount,
+						fee_reserve: meltQuote.fee_reserve,
 						unit: meltQuote.unit,
 						state: MeltQuoteState.PAID,
 						expiry: meltQuote.expiry,
@@ -3369,6 +3239,7 @@ describe('melt proofs', () => {
 				return HttpResponse.json({
 					quote: 'test_melt_quote',
 					amount: 10,
+					fee_reserve: 3,
 					unit: 'sat',
 					state: MeltQuoteState.PAID,
 					expiry: 1234567890,
@@ -3423,7 +3294,7 @@ describe('melt proofs', () => {
 		expect(response.change[0]).toMatchObject({ amount: 1, id: '00bd033559de27d0' });
 	});
 
-	test('test melt proofs bad response', async () => {
+	test('mint.meltBolt11 rejects response missing state', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/melt/bolt11', () => {
 				return HttpResponse.json({
@@ -3432,39 +3303,16 @@ describe('melt proofs', () => {
 					unit: 'sat',
 					fee_reserve: 3,
 					expiry: 1234567890,
+					// no state field
 				});
 			}),
 		);
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
 
-		const meltQuote: MeltQuoteBolt11Response = {
-			quote: 'test_melt_quote',
-			amount: Amount.from(10),
-			fee_reserve: Amount.from(3),
-			request: 'bolt11request',
-			state: MeltQuoteState.UNPAID,
-			expiry: 1234567890,
-			payment_preimage: null,
-			unit: 'sat',
-		};
-		const proofsToSend: Proof[] = [
-			{
-				id: '00bd033559de27d0',
-				amount: 8,
-				secret: 'secret1',
-				C: 'C1',
-			},
-			{
-				id: '00bd033559de27d0',
-				amount: 5,
-				secret: 'secret2',
-				C: 'C2',
-			},
-		];
-		await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
-			'Invalid response from mint',
-		);
+		await expect(
+			wallet.mint.meltBolt11({ quote: 'test_melt_quote', inputs: [], outputs: [] }),
+		).rejects.toThrow('Invalid response from mint');
 	});
 
 	test('test melt proofs mismatch signatures', async () => {
@@ -3606,56 +3454,6 @@ describe('bindKeyset & withKeyset', () => {
 });
 
 describe('async melt preference body', () => {
-	test('bolt11: sends prefer_async when preferAsync is true', async () => {
-		// Arrange: quote and proofs with exact match (no change outputs needed)
-		const meltQuote = {
-			quote: 'q-async-1',
-			amount: Amount.from(1),
-			unit: 'sat',
-			request: invoice,
-			state: 'UNPAID',
-			fee_reserve: Amount.from(0),
-		} as unknown as MeltQuoteBolt11Response;
-		const proofs = [
-			{
-				id: '00bd033559de27d0',
-				amount: 1,
-				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-			},
-		];
-
-		server.use(
-			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
-				const prefer = request.headers.get('prefer');
-				const body = (await request.json()) as { prefer_async?: boolean };
-				expect(prefer).toBeNull();
-				expect(body.prefer_async).toBe(true);
-				return HttpResponse.json({
-					quote: meltQuote.quote,
-					amount: meltQuote.amount,
-					unit: meltQuote.unit,
-					request: meltQuote.request,
-					state: 'UNPAID',
-					expiry: 1234567890,
-					fee_reserve: meltQuote.fee_reserve,
-					payment_preimage: null,
-					change: [],
-				});
-			}),
-		);
-
-		const wallet = new Wallet(mint, { unit });
-		await wallet.loadMint();
-		const res = await wallet.meltProofsBolt11(meltQuote, proofs, {
-			onChangeOutputsCreated: (_foo) => {},
-		});
-
-		// Assert: got a response and no change outputs
-		expect(res.quote.quote).toBe(meltQuote.quote);
-		expect(res.change).toHaveLength(0);
-	});
-
 	test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
 		const meltQuote = {
 			quote: 'q-async-1b',
@@ -3702,46 +3500,11 @@ describe('async melt preference body', () => {
 		expect(res.change).toHaveLength(0);
 	});
 
-	test('bolt12: sends prefer_async when preferAsync is true', async () => {
-		const meltQuote = {
-			quote: 'q-async-12',
-			amount: Amount.from(1),
-			unit: 'sat',
-			request: 'lno1offer...',
-		} as any; // minimal shape for wallet.meltProofsBolt12
-		const proofs = [
-			{
-				id: '00bd033559de27d0',
-				amount: 1,
-				secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
-				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
-			},
-		];
-
-		server.use(
-			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
-				const prefer = request.headers.get('prefer');
-				const body = (await request.json()) as { prefer_async?: boolean };
-				expect(prefer).toBeNull();
-				expect(body.prefer_async).toBe(true);
-				return HttpResponse.json({ quote: meltQuote.quote, amount: meltQuote.amount, change: [] });
-			}),
-		);
-
-		const wallet = new Wallet(mint, { unit });
-		await wallet.loadMint();
-
-		const res = await wallet.meltProofsBolt12(meltQuote, proofs, {
-			onChangeOutputsCreated: (_foo) => {},
-		});
-		expect(res.quote.quote).toBe(meltQuote.quote);
-		expect(res.change).toHaveLength(0);
-	});
-
 	test('bolt12: does not send prefer_async when preferAsync is not set', async () => {
 		const meltQuote = {
 			quote: 'q-async-12b',
 			amount: Amount.from(1),
+			fee_reserve: Amount.from(0),
 			unit: 'sat',
 			request: 'lno1offer...',
 		} as any;
@@ -3760,7 +3523,12 @@ describe('async melt preference body', () => {
 				const body = (await request.json()) as { prefer_async?: boolean };
 				expect(prefer).toBeNull();
 				expect(body.prefer_async).toBeUndefined();
-				return HttpResponse.json({ quote: meltQuote.quote, amount: meltQuote.amount, change: [] });
+				return HttpResponse.json({
+					quote: meltQuote.quote,
+					amount: meltQuote.amount,
+					fee_reserve: meltQuote.fee_reserve,
+					change: [],
+				});
 			}),
 		);
 
@@ -3772,7 +3540,7 @@ describe('async melt preference body', () => {
 		expect(res.change).toHaveLength(0);
 	});
 
-	test('bolt11: preferAsync with blind auth sends prefer_async and Blind-auth header', async () => {
+	test('bolt11: blind auth sends Blind-auth header', async () => {
 		const mintInfo = {
 			name: 'Testnut mint',
 			pubkey: '02abc',
@@ -3791,10 +3559,8 @@ describe('async melt preference body', () => {
 			http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
 				const blind = request.headers.get('blind-auth');
-				const body = (await request.json()) as { prefer_async?: boolean };
 				expect(prefer).toBeNull();
 				expect(blind).toBe('test-token');
-				expect(body.prefer_async).toBe(true);
 				return HttpResponse.json({
 					quote: 'q-auth-1',
 					amount: 1,
@@ -3834,13 +3600,11 @@ describe('async melt preference body', () => {
 			},
 		];
 
-		const res = await wallet.meltProofsBolt11(meltQuote, proofs, {
-			onChangeOutputsCreated: (_foo) => {},
-		});
+		const res = await wallet.meltProofsBolt11(meltQuote, proofs);
 		expect(res.quote.quote).toBe('q-auth-1');
 	});
 
-	test('bolt12: preferAsync with blind auth sends prefer_async and Blind-auth header', async () => {
+	test('bolt12: blind auth sends Blind-auth header', async () => {
 		const mintInfo = {
 			name: 'Testnut mint',
 			pubkey: '02abc',
@@ -3859,11 +3623,9 @@ describe('async melt preference body', () => {
 			http.post(mintUrl + '/v1/melt/bolt12', async ({ request }) => {
 				const prefer = request.headers.get('prefer');
 				const blind = request.headers.get('blind-auth');
-				const body = (await request.json()) as { prefer_async?: boolean };
 				expect(prefer).toBeNull();
 				expect(blind).toBe('test-token');
-				expect(body.prefer_async).toBe(true);
-				return HttpResponse.json({ quote: 'q-auth-12', amount: 1, change: [] });
+				return HttpResponse.json({ quote: 'q-auth-12', amount: 1, fee_reserve: 0, change: [] });
 			}),
 		);
 
@@ -3890,9 +3652,7 @@ describe('async melt preference body', () => {
 			},
 		];
 
-		const res = await wallet.meltProofsBolt12(meltQuote, proofs, {
-			onChangeOutputsCreated: (_foo) => {},
-		});
+		const res = await wallet.meltProofsBolt12(meltQuote, proofs);
 		expect(res.quote.quote).toBe('q-auth-12');
 	});
 });

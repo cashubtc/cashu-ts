@@ -42,7 +42,6 @@ export class Amount {
     // (undocumented)
     static sum(values: Iterable<AmountLike>): Amount;
     toBigInt(): bigint;
-    // (undocumented)
     toJSON(): number | string;
     toNumber(): number;
     toNumberUnsafe(): number;
@@ -712,20 +711,6 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
 // @public
 export const meetsSignerThreshold: (signatures: string[], message: string, pubkeys: string[], threshold?: number) => boolean;
 
-// @public @deprecated (undocumented)
-export interface MeltBlanks<T extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
-    // (undocumented)
-    keyset: Keyset;
-    // (undocumented)
-    method: 'bolt11' | 'bolt12';
-    // (undocumented)
-    outputData: OutputDataLike[];
-    // (undocumented)
-    payload: MeltRequest;
-    // (undocumented)
-    quote: T;
-}
-
 // @public
 export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
     constructor(wallet: Wallet, method: string, quote: TQuote, proofs: Proof[]);
@@ -735,8 +720,6 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
     asP2PK(options: P2PKOptions, denoms?: AmountLike[]): this;
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
-    // @deprecated
-    onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>): this;
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<MeltPreview<TQuote>>;
     privkey(k: string | string[]): this;
@@ -744,7 +727,7 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 }
 
 // @public
-export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
+export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> {
     inputs: Proof[];
     keysetId: string;
     // (undocumented)
@@ -757,7 +740,6 @@ export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBol
 export type MeltProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
-    onChangeOutputsCreated?: (blanks: MeltBlanks<MeltQuoteBaseResponse>) => void;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -891,15 +873,12 @@ export class Mint {
     getLazyMintInfo(customRequest?: RequestFn): Promise<MintInfo>;
     melt<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
-        preferAsync?: boolean;
     }): Promise<MeltQuoteBaseResponse & TRes>;
     meltBolt11(meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
-        preferAsync?: boolean;
     }): Promise<MeltQuoteBolt11Response>;
     meltBolt12(meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
-        preferAsync?: boolean;
     }): Promise<MeltQuoteBolt12Response>;
     mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: {
         customRequest?: RequestFn;
@@ -932,7 +911,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(this: MintBuilder<M, true>): Promise<MintPreview>;
+    prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>>;
     privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Proof[]): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
@@ -1093,13 +1072,13 @@ export class MintOperationError extends HttpResponseError {
 }
 
 // @public
-export interface MintPreview {
+export interface MintPreview<TQuote extends MintQuoteBaseResponse = MintQuoteBaseResponse> {
     keysetId: string;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
     payload: MintRequest;
-    quote: string;
+    quote: TQuote;
 }
 
 // @public
@@ -1860,8 +1839,8 @@ export type SwapPayload = SwapRequest;
 
 // @public
 export type SwapPreview = {
-    amount: Amount;
-    fees: Amount;
+    amount: AmountLike;
+    fees: AmountLike;
     keysetId: string;
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
@@ -1983,7 +1962,7 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
-    completeMelt<TQuote extends MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
+    completeMelt<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
@@ -2031,7 +2010,7 @@ export class Wallet {
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     prepareMelt<TQuote extends MeltQuoteBaseResponse>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
-    prepareMint<TQuote extends MintQuoteBaseResponse | string>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview>;
+    prepareMint<TQuote extends MintQuoteBaseResponse>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
@@ -2068,8 +2047,6 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
-    // @deprecated
-    meltBlanksCreated(cb: (payload: MeltBlanks<MeltQuoteBaseResponse>) => void, opts?: SubscribeOpts): SubscriptionCanceller;
     meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
     mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;

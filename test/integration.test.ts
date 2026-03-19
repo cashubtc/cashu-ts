@@ -1038,7 +1038,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
 
 		try {
 			// should eventually give up due to TTL
-			await expect(wallet.mintProofsBolt11(100, req.quote)).rejects.toThrow(NetworkError);
+			await expect(wallet.mintProofsBolt11(100, req)).rejects.toThrow(NetworkError);
 			expect(fetchCallCount).toBeGreaterThan(1);
 			expect(fetchCallCount).toBeLessThan(15);
 		} finally {

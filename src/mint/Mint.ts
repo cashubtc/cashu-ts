@@ -339,7 +339,7 @@ class Mint {
 			{ requestBody: this.normalizeMeltQuoteRequestOptions(meltQuotePayload) },
 			customRequest,
 		);
-		const data = this.normalizeMeltQuoteBolt11Response(response);
+		const data = this.normalizeMeltResponse(response);
 
 		if (
 			!isObj(data) ||
@@ -371,7 +371,7 @@ class Mint {
 			{ requestBody: this.normalizeMeltQuoteRequestOptions(meltQuotePayload) },
 			customRequest,
 		);
-		return this.normalizeMeltQuoteBolt11Response(response);
+		return this.normalizeMeltResponse(response);
 	}
 
 	/**
@@ -391,7 +391,7 @@ class Mint {
 			{},
 			customRequest,
 		);
-		const data = this.normalizeMeltQuoteBolt11Response(response);
+		const data = this.normalizeMeltResponse(response);
 
 		if (
 			!isObj(data) ||
@@ -426,7 +426,7 @@ class Mint {
 			{},
 			customRequest,
 		);
-		return this.normalizeMeltQuoteBolt11Response(response);
+		return this.normalizeMeltResponse(response);
 	}
 
 	/**
@@ -435,7 +435,8 @@ class Mint {
 	 * @remarks
 	 * This method enables support for custom payment methods without modifying the Mint class. It
 	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
-	 * the common fields: quote, amount, fee_reserve, state, expiry.
+	 * the common fields: quote, amount, state, expiry. Method-specific fields (e.g. `fee_reserve` for
+	 * bolt11/bolt12) are normalised when present.
 	 * @example
 	 *
 	 * ```ts
@@ -446,7 +447,6 @@ class Mint {
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', or custom method name).
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns A response object with at least the required melt quote fields.
 	 */
 	async melt<TRes extends Record<string, unknown> = Record<string, unknown>>(
@@ -454,23 +454,14 @@ class Mint {
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
-			/**
-			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
-			 */
-			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBaseResponse & TRes> {
-		// TODO: remove with deprecated preferAsync option
-		const requestBody: MeltRequest = {
-			...meltPayload,
-			...(options?.preferAsync ? { prefer_async: true } : {}),
-		};
 		// Validate method string and make request
 		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
 		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
-			{ requestBody },
+			{ requestBody: meltPayload },
 			options?.customRequest,
 		);
 
@@ -488,7 +479,7 @@ class Mint {
 			throw new Error('Invalid response from mint');
 		}
 
-		return this.normalizeMeltBaseResponse(data);
+		return this.normalizeMeltResponse(data);
 	}
 
 	/**
@@ -498,22 +489,15 @@ class Mint {
 	 *
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns The melt response.
 	 */
 	async meltBolt11(
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
-			/**
-			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
-			 */
-			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt11Response> {
-		const response = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
-
-		const data = this.normalizeMeltQuoteBolt11Response(response);
+		const data = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 
 		if (
 			!isObj(data) ||
@@ -534,17 +518,12 @@ class Mint {
 	 *
 	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
 	 * @param options.customRequest Optional override for the request function.
-	 * @param options.preferAsync DEPRECATED Set `prefer_async: true` in the meltPayload.
 	 * @returns Payment result with state and optional change signatures.
 	 */
 	async meltBolt12(
 		meltPayload: MeltRequest,
 		options?: {
 			customRequest?: RequestFn;
-			/**
-			 * @deprecated Set `prefer_async: true` directly in the meltPayload.
-			 */
-			preferAsync?: boolean;
 		},
 	): Promise<MeltQuoteBolt12Response> {
 		return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
@@ -858,7 +837,7 @@ class Mint {
 		};
 	}
 
-	private normalizeMeltBaseResponse<T extends MeltQuoteBaseResponse>(response: T): T {
+	private normalizeMeltResponse<T extends MeltQuoteBaseResponse>(response: T): T {
 		return {
 			...response,
 			amount: Amount.from(response.amount),
@@ -867,16 +846,7 @@ class Mint {
 			...('fee_reserve' in response && response.fee_reserve != null
 				? { fee_reserve: Amount.from(response.fee_reserve as AmountLike) }
 				: {}),
-		};
-	}
-
-	private normalizeMeltQuoteBolt11Response(
-		response: MeltQuoteBolt11Response,
-	): MeltQuoteBolt11Response {
-		return {
-			...this.normalizeMeltBaseResponse(response),
-			fee_reserve: Amount.from(response.fee_reserve),
-		};
+		} as T;
 	}
 }
 
