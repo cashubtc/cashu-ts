@@ -3,16 +3,17 @@ import { type SerializedBlindedSignature } from './types/index';
 import { type DLEQ } from '../crypto';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { numberToHexPadded64 } from '../utils';
+import { Amount, type AmountLike } from './Amount';
 
 class BlindedSignature {
 	id: string;
-	amount: number;
+	amount: Amount;
 	C_: WeierstrassPoint<bigint>;
 	dleq?: DLEQ;
 
-	constructor(id: string, amount: number, C_: WeierstrassPoint<bigint>, dleq?: DLEQ) {
+	constructor(id: string, amount: AmountLike, C_: WeierstrassPoint<bigint>, dleq?: DLEQ) {
 		this.id = id;
-		this.amount = amount;
+		this.amount = Amount.from(amount);
 		this.C_ = C_;
 		this.dleq = dleq;
 	}

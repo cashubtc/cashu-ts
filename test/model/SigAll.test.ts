@@ -1,5 +1,5 @@
 import { test, describe, expect } from 'vitest';
-import { SigAll, SigAllSigningPackage, MeltQuoteState } from '../../src';
+import { SigAll, SigAllSigningPackage, MeltQuoteState, Amount } from '../../src';
 import type { OutputDataLike, Proof, P2PKWitness, SerializedBlindedMessage } from '../../src';
 
 const dummyProof: Proof = {
@@ -10,7 +10,7 @@ const dummyProof: Proof = {
 };
 
 const dummyBlindedMessage: SerializedBlindedMessage = {
-	amount: 32,
+	amount: 32n,
 	id: 'bm1',
 	B_: 'dummyB',
 };
@@ -29,8 +29,8 @@ function makeSwapPreview() {
 		inputs: [dummyProof],
 		keepOutputs: [dummyOutput],
 		sendOutputs: [dummyOutput],
-		amount: 32,
-		fees: 0,
+		amount: Amount.from(32),
+		fees: Amount.from(0),
 		keysetIdts: [],
 		method: 'swap',
 		keysetId: 'dummy-keyset-id',
@@ -165,6 +165,20 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 		expect(parsed.type).toBe('melt');
 	});
 
+	test('round-trip preserves large (unsafe integer) output amounts', () => {
+		const largeAmount = 9007199254740993n; // > MAX_SAFE_INTEGER
+		const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
+		const pkg: SigAllSigningPackage = {
+			version: 'sigallA',
+			type: 'swap',
+			inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+			outputs: [largeBm],
+			digests: SigAll.computeDigests([dummyProof], [largeBm]),
+		};
+		const parsed = SigAll.deserializePackage(SigAll.serializePackage(pkg));
+		expect(parsed.outputs[0].amount).toBe(largeAmount);
+	});
+
 	test('serialization is deterministic', () => {
 		const pkg = SigAll.extractSwapPackage(makeSwapPreview());
 		expect(SigAll.serializePackage(pkg)).toBe(SigAll.serializePackage(pkg));
@@ -296,7 +310,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
 					digests: { current: 'a'.repeat(64) },
 				}),
 			),
-		).toThrow('amount must be number');
+		).toThrow('amount must be a number');
 	});
 
 	test('throws on invalid output shape — missing B_', () => {

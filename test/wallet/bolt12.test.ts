@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Mint, Wallet, type MintKeys, type MintKeyset, Keyset, Proof } from '../../src';
+import { Amount, Mint, Wallet, type MintKeys, type MintKeyset, Keyset, Proof } from '../../src';
 import { MINTCACHE } from '../consts';
 
 type ReqArgs = {
@@ -94,15 +94,19 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const payload = { amount: 42, unit: 'sat', description: 'test', pubkey: '02abcd' };
 		const res = await mint.createMintQuoteBolt12(payload);
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
+		expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
+		expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
+		expect(res.expiry).toBe(response.expiry);
 		expect(calls).toHaveLength(1);
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12$/);
 		expect(c.method?.toUpperCase()).toBe('POST');
-		expect(c.requestBody).toEqual(payload);
+		expect(c.requestBody).toEqual({ ...payload, amount: 42n });
 	});
 
-	it('normalizes bigint mint quote amounts back to legacy numbers', async () => {
+	it('normalizes wire amounts (including bigint) to Amount objects', async () => {
 		const response = {
 			quote: 'q123',
 			request: 'lno1offer...',
@@ -122,10 +126,10 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 			pubkey: '02abcd',
 		});
 
-		expect(res.amount).toBe(Number(response.amount));
+		expect(res.amount).toEqual(Amount.from(response.amount));
 		expect(res.expiry).toBe(123456);
-		expect(res.amount_paid).toBe(Number(response.amount_paid));
-		expect(res.amount_issued).toBe(Number(response.amount_issued));
+		expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
+		expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
 	});
 
 	it('rejects out-of-range bigint mint quote expiry', async () => {
@@ -166,7 +170,10 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const res = await mint.checkMintQuoteBolt12('q123');
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
+		expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
+		expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
 		expect(calls).toHaveLength(1);
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12\/q123$/);
@@ -178,14 +185,14 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const mintPayload = { quote: 'q123', outputs: [{ amount: 42, id: 'ks1', B_: '...' }] };
 		const res = await mint.mintBolt12(mintPayload as any);
-		expect(res).toEqual(response);
+		expect(res.signatures[0].amount).toEqual(Amount.from(response.signatures[0].amount));
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/bolt12$/);
 		expect(c.method?.toUpperCase()).toBe('POST');
 		expect(c.requestBody).toEqual(mintPayload);
 	});
 
-	it('normalizes bigint signature amounts back to legacy numbers', async () => {
+	it('normalizes wire signature amounts (including bigint) to Amount objects', async () => {
 		const response = {
 			signatures: [{ C_: '...', id: 'ks1', amount: 9007199254740993n }],
 		};
@@ -197,7 +204,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 			outputs: [{ amount: 42, id: 'ks1', B_: '...' }],
 		} as any);
 
-		expect(res.signatures[0].amount).toBe(Number(response.signatures[0].amount));
+		expect(res.signatures[0].amount).toEqual(Amount.from(response.signatures[0].amount));
 	});
 
 	it('createMeltQuoteBolt12 posts to /v1/melt/quote/bolt12', async () => {
@@ -206,14 +213,16 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const meltQuotePayload = { request: 'lno1offer...', unit: 'sat', amount: 100 };
 		const res = await mint.createMeltQuoteBolt12(meltQuotePayload as any);
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
+		expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12$/);
 		expect(c.method?.toUpperCase()).toBe('POST');
 		expect(c.requestBody).toEqual(meltQuotePayload);
 	});
 
-	it('normalizes bigint melt quote amounts back to legacy numbers', async () => {
+	it('normalizes wire melt quote amounts (including bigint) to Amount objects', async () => {
 		const response = {
 			quote: 'm123',
 			amount: 9007199254740993n,
@@ -230,9 +239,9 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 			amount: 100,
 		} as any);
 
-		expect(res.amount).toBe(Number(response.amount));
+		expect(res.amount).toEqual(Amount.from(response.amount));
 		expect(res.expiry).toBe(123456);
-		expect(res.fee_reserve).toBe(Number(response.fee_reserve));
+		expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
 	});
 
 	it('rejects out-of-range bigint melt quote expiry', async () => {
@@ -260,7 +269,9 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const res = await mint.checkMeltQuoteBolt12('m123');
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
+		expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/quote\/bolt12\/m123$/);
 	});
@@ -271,7 +282,8 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const meltPayload = { quote: 'm123', inputs: [], outputs: [] };
 		const res = await mint.meltBolt12(meltPayload as any);
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/melt\/bolt12$/);
 		expect(c.method?.toUpperCase()).toBe('POST');
@@ -362,12 +374,15 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const wallet = new Wallet(mint);
 		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		const res = await wallet.createMintQuoteBolt12('02abcd', { amount: 21, description: 'desc' });
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
+		expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
+		expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
 		expect(calls).toHaveLength(1);
 		expect(calls[0].requestBody).toEqual({
 			pubkey: '02abcd',
 			unit: 'sat',
-			amount: 21,
+			amount: 21n,
 			description: 'desc',
 		});
 	});
@@ -385,7 +400,9 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const wallet = new Wallet(mint);
 		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		const res = await wallet.checkMintQuoteBolt12('q1');
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount_paid).toEqual(Amount.from(response.amount_paid));
+		expect(res.amount_issued).toEqual(Amount.from(response.amount_issued));
 		expect(calls).toHaveLength(1);
 		expect(calls[0].endpoint).toMatch(/\/v1\/mint\/quote\/bolt12\/q1$/);
 	});
@@ -397,14 +414,16 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const wallet = new Wallet(mint);
 		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
 		const res = await wallet.createMeltQuoteBolt12('lno1offer...', 100_000); // 100k msat
-		expect(res).toEqual(response);
+		expect(res.quote).toBe(response.quote);
+		expect(res.amount).toEqual(Amount.from(response.amount));
+		expect(res.fee_reserve).toEqual(Amount.from(response.fee_reserve));
 		expect(calls).toHaveLength(1);
 		expect(calls[0].requestBody).toEqual({
 			unit: 'sat',
 			request: 'lno1offer...',
 			options: {
 				amountless: {
-					amount_msat: 100_000,
+					amount_msat: 100_000n,
 				},
 			},
 		});
@@ -419,7 +438,12 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const ks = makeKeysetFromCache(MINTCACHE.keys[0]);
 		vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
 		vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([]);
-		const meltQuote = { quote: 'm1', amount: 100, unit: 'sat', request: 'lno1offer...' };
+		const meltQuote = {
+			quote: 'm1',
+			amount: Amount.from(100),
+			unit: 'sat',
+			request: 'lno1offer...',
+		};
 		const proof: Proof = { amount: 128, secret: 'secret1', C: 'C1', id: 'foo' };
 		const res = await wallet.meltProofsBolt12(meltQuote as any, [proof]);
 		expect(res.quote.quote).toEqual('m1');

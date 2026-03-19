@@ -39,6 +39,11 @@ function decodeBAT(batHeader: string): { id: string; secret: string; C: string }
 	return JSON.parse(Bytes.toString(encodeBase64toUint8(base64url)));
 }
 
+/**
+ * Minimal signature stub — toProof is mocked so only `amount` needs to be a valid AmountLike.
+ */
+const fakeSig = { amount: 1, id: 'k', C_: 'C_' };
+
 function stubOutputs(n: number, keysetId = '00authkeyset0001') {
 	return vi.spyOn(OutputData, 'createRandomData').mockImplementation((): any[] => {
 		return Array.from({ length: n }, (_, i) => ({
@@ -199,7 +204,7 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 		seedKeychain(am);
 
 		const outputsSpy = stubOutputs(2);
-		reqSpy.mockResolvedValueOnce({ signatures: ['sig0', 'sig1'] });
+		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
 		await am.ensure(5);
 
 		expect(outputsSpy).toHaveBeenCalled();
@@ -235,7 +240,7 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 					},
 				],
 			})
-			.mockResolvedValueOnce({ signatures: ['sig0', 'sig1'] });
+			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
 
 		await am.ensure(5);
 
@@ -288,7 +293,7 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 		seedKeychain(am);
 
 		const outputsSpy = stubOutputs(3);
-		reqSpy.mockResolvedValueOnce({ signatures: ['a', 'b', 'c'] });
+		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig, fakeSig] });
 		await am.ensure(3);
 
 		expect(am.poolSize).toBe(3);
@@ -420,7 +425,7 @@ describe('getBlindAuthToken coverage', () => {
 		} as any;
 
 		stubOutputs(1);
-		reqSpy.mockResolvedValueOnce({ signatures: ['sig'] });
+		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
 		const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap' });
 		const parsed = decodeBAT(bat);
@@ -522,7 +527,7 @@ describe('topUp error branches', () => {
 
 		stubOutputs(1);
 		hasValidDleqSpy.mockReturnValue(false);
-		reqSpy.mockResolvedValueOnce({ signatures: ['sig'] });
+		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
 		await expect(am.ensure(1)).rejects.toThrow('invalid DLEQ');
 	});
@@ -603,7 +608,7 @@ test('topUp sets Clear-auth header when mint endpoint requires CAT', async () =>
 		},
 	]);
 	vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
-	reqSpy.mockResolvedValueOnce({ signatures: ['sig'] });
+	reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
 	await am.ensure(1);
 

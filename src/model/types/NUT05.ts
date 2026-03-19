@@ -1,5 +1,6 @@
 import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
 import { type Proof } from './proof';
+import type { Amount } from '../Amount';
 
 export const MeltQuoteState = {
 	UNPAID: 'UNPAID',
@@ -33,7 +34,7 @@ export type MeltQuoteBaseResponse = {
 	/**
 	 * Amount to be melted.
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * Unit of the melt quote.
 	 */

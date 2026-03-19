@@ -4,6 +4,7 @@ import {
 	type MintQuoteState,
 } from './NUT04';
 import { type MeltQuoteBaseRequest, type MeltQuoteBaseResponse } from './NUT05';
+import type { Amount, AmountLike } from '../Amount';
 
 /**
  * Payload that needs to be sent to the mint when requesting a mint.
@@ -12,7 +13,7 @@ export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
 	/**
 	 * Amount to be minted.
 	 */
-	amount: number;
+	amount: AmountLike;
 	/**
 	 * Description for the invoice.
 	 */
@@ -26,18 +27,15 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
 	/**
 	 * Amount requested for mint quote.
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * State of the mint quote.
 	 */
 	state: MintQuoteState;
 	/**
-	 * Timestamp of when the quote expires.
-	 *
-	 * @remarks
-	 * TODO v4: widen to `number | null` to match the spec and runtime normalization.
+	 * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
 	 */
-	expiry: number;
+	expiry: number | null;
 };
 
 /**
@@ -51,10 +49,10 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
 export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
 	options?: {
 		amountless?: {
-			amount_msat: number;
+			amount_msat: AmountLike;
 		};
 		mpp?: {
-			amount: number;
+			amount: AmountLike;
 		};
 	};
 };
@@ -71,7 +69,7 @@ export type MeltQuoteBolt11Response = MeltQuoteBaseResponse & {
 	/**
 	 * Fee reserve to be added to the amount.
 	 */
-	fee_reserve: number;
+	fee_reserve: Amount;
 	/**
 	 * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
 	 * depending on which LN-backend the mint uses.
