@@ -984,6 +984,8 @@ export class MintInfo {
     // (undocumented)
     get name(): string;
     // (undocumented)
+    static normalizeInfo(info: GetInfoResponse): GetInfoResponse;
+    // (undocumented)
     get nuts(): {
         '4': {
             methods: SwapMethod[];
@@ -1717,7 +1719,7 @@ export type SendResponse = {
 
 // @public
 export type SerializedBlindedMessage = {
-    amount: Amount;
+    amount: bigint;
     B_: string;
     id: string;
 };

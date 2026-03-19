@@ -103,7 +103,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 		const c = calls[0];
 		expect(c.endpoint).toMatch(/^https:\/\/localhost:3338\/v1\/mint\/quote\/bolt12$/);
 		expect(c.method?.toUpperCase()).toBe('POST');
-		expect(c.requestBody).toEqual(payload);
+		expect(c.requestBody).toEqual({ ...payload, amount: 42n });
 	});
 
 	it('normalizes wire amounts (including bigint) to Amount objects', async () => {

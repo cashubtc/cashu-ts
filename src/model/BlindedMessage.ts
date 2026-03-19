@@ -17,7 +17,7 @@ class BlindedMessage {
 	}
 
 	getSerializedBlindedMessage(): SerializedBlindedMessage {
-		return { amount: this.amountValue, B_: this.B_.toHex(true), id: this.id };
+		return { amount: this.amountValue.toBigInt(), B_: this.B_.toHex(true), id: this.id };
 	}
 }
 export { BlindedMessage };

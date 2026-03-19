@@ -5,9 +5,10 @@ import type { Amount } from '../Amount';
  */
 export type SerializedBlindedMessage = {
 	/**
-	 * Amount.
+	 * Amount as a bigint so that JSONInt.stringify emits a raw numeric JSON token (never a quoted
+	 * string) for values that exceed Number.MAX_SAFE_INTEGER (e.g. msat denominations).
 	 */
-	amount: Amount;
+	amount: bigint;
 	/**
 	 * Blinded message.
 	 */

@@ -58,7 +58,6 @@ Previously typed as `number`, the following fields now return an `Amount` value 
 | `MeltQuoteBaseResponse`      | `amount`                                 |
 | `MeltQuoteBolt11Response`    | `fee_reserve`                            |
 | `MeltQuoteBolt12Response`    | `fee_reserve`                            |
-| `SerializedBlindedMessage`   | `amount`                                 |
 | `SerializedBlindedSignature` | `amount`                                 |
 
 `SwapMethod.min_amount` / `max_amount` (from `GetInfoResponse`) are now typed as `AmountLike` (`number | string | bigint | Amount`).
@@ -79,6 +78,22 @@ const n = meltQuote.amount.toNumber(); // throws if value > Number.MAX_SAFE_INTE
 // Safe JSON serialisation: Amount.toJSON() emits a number for safe values,
 // a decimal string for values above MAX_SAFE_INTEGER
 JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":1000}'
+```
+
+---
+
+## `SerializedBlindedMessage.amount` is now `bigint`
+
+`SerializedBlindedMessage` is the outbound wire type sent to the mint. Its `amount` field is now typed as `bigint` (previously `number`) so that `JSONInt.stringify` always emits a raw numeric token — even for msat values above `Number.MAX_SAFE_INTEGER`.
+
+This type is not typically constructed directly by application code; it is produced internally by `BlindedMessage.getSerializedBlindedMessage()`. If you build `SerializedBlindedMessage` objects manually, update the `amount` field:
+
+```ts
+// Before
+const output: SerializedBlindedMessage = { amount: 1000, id: keysetId, B_: hex };
+
+// After
+const output: SerializedBlindedMessage = { amount: 1000n, id: keysetId, B_: hex };
 ```
 
 ### Removed
