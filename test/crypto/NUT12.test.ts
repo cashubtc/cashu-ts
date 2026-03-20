@@ -9,7 +9,7 @@ import {
 	createDLEQProof,
 	verifyDLEQProof,
 	verifyDLEQProof_reblind,
-	constructProofFromPromise,
+	constructUnblindedSignature,
 	createRandomRawBlindedMessage,
 } from '../../src/crypto';
 
@@ -36,7 +36,7 @@ describe('test DLEQ scheme', () => {
 		const blindMessage = createRandomRawBlindedMessage();
 
 		// Mint
-		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, 1, '');
+		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, '');
 		const dleqProof = createDLEQProof(blindMessage.B_, mintPrivKey);
 
 		// Wallet(Alice)
@@ -51,11 +51,11 @@ describe('test DLEQ scheme', () => {
 		const blindMessage = createRandomRawBlindedMessage();
 
 		// Mint
-		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, 1, '');
+		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, '');
 		let dleqProof = createDLEQProof(blindMessage.B_, mintPrivKey);
 
 		// Wallet(Alice)
-		const proof = constructProofFromPromise(
+		const proof = constructUnblindedSignature(
 			blindSignature,
 			blindMessage.r,
 			blindMessage.secret,

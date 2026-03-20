@@ -8,13 +8,13 @@ import {
 import { type P2PKOptions } from '../wallet';
 import {
 	blindMessage,
-	constructProofFromPromise,
+	constructUnblindedSignature,
 	deriveP2BKBlindedPubkeys,
 	deriveBlindingFactor,
 	deriveSecret,
 	pointFromHex,
-	serializeProof,
 	type DLEQ,
+	type BlindSignature,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
@@ -132,16 +132,14 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 			};
 		}
 		const sigAmountKey = sig.amount.toString();
-		const blindSignature = {
-			id: sig.id,
-			amount: sig.amount.toNumber(), // TODO: proof numbers are unsafe
-			C_: pointFromHex(sig.C_),
-			dleq: dleq,
-		};
 		const A = pointFromHex(keyset.keys[sigAmountKey]);
-		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
-		const serializedProof = {
-			...serializeProof(proof),
+		const blindSig: BlindSignature = { id: sig.id, C_: pointFromHex(sig.C_) };
+		const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
+		const proof: Proof = {
+			id: sig.id,
+			amount: sig.amount.toNumber(), // TODO: Proof.amount → Amount
+			C: unblinded.C.toHex(true),
+			secret: new TextDecoder().decode(unblinded.secret),
 			...(dleq && {
 				dleq: {
 					s: bytesToHex(dleq.s),
@@ -149,13 +147,13 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 					r: numberToHexPadded64(dleq.r ?? BigInt(0)),
 				} as SerializedDLEQ,
 			}),
-		} as Proof;
+		};
 
 		// Add P2BK (Pay to Blinded Key) blinding factors if needed
 		const Ehex = takeEphemeralE(this);
-		if (Ehex) serializedProof.p2pk_e = Ehex;
+		if (Ehex) proof.p2pk_e = Ehex;
 
-		return serializedProof;
+		return proof;
 	}
 
 	static createP2PKData<T extends HasKeysetKeys>(

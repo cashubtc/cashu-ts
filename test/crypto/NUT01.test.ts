@@ -18,7 +18,7 @@ describe('test blind sig', () => {
 			new TextEncoder().encode('test_message'),
 			hexToNumber('0000000000000000000000000000000000000000000000000000000000000001'),
 		);
-		const { C_ } = createBlindSignature(B_, privKey, 0, '0000000');
+		const { C_ } = createBlindSignature(B_, privKey, '0000000');
 		expect(C_.toHex(true)).toBe(
 			'025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b',
 		);

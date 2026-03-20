@@ -114,16 +114,12 @@ export interface AuthProvider {
 // @public (undocumented)
 export function bigIntStringify<T>(_key: unknown, value: T): string | T;
 
-// @public @deprecated (undocumented)
-export type BlindedMessage = RawBlindedMessage;
-
 // @public
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public (undocumented)
 export type BlindSignature = {
     C_: WeierstrassPoint<bigint>;
-    amount: number;
     id: string;
 };
 
@@ -198,7 +194,7 @@ export class ConsoleLogger implements Logger {
 }
 
 // @public (undocumented)
-export function constructProofFromPromise(promise: BlindSignature, r: bigint, secret: Uint8Array, key: WeierstrassPoint<bigint>): RawProof;
+export function constructUnblindedSignature(blindSig: BlindSignature, r: bigint, secret: Uint8Array, key: WeierstrassPoint<bigint>): UnblindedSignature;
 
 // @public
 export interface CounterRange {
@@ -229,7 +225,7 @@ export function createAuthWallet(mintUrl: string, options?: {
 }>;
 
 // @public (undocumented)
-export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, amount: AmountLike, id: string): BlindSignature;
+export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, id: string): BlindSignature;
 
 // @public
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
@@ -253,9 +249,6 @@ export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array
 
 // @public
 export function createP2PKsecret(pubkey: string, tags?: string[][]): string;
-
-// @public @deprecated (undocumented)
-export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage;
 
 // @public
 export function createRandomRawBlindedMessage(): RawBlindedMessage;
@@ -307,9 +300,6 @@ export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number)
 
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
-
-// @public (undocumented)
-export const deserializeProof: (proof: SerializedProof) => RawProof;
 
 // @public (undocumented)
 export type DeviceStartResponse = {
@@ -1544,15 +1534,6 @@ export type RawPaymentRequest = {
 };
 
 // @public (undocumented)
-export type RawProof = {
-    C: WeierstrassPoint<bigint>;
-    secret: Uint8Array;
-    amount: number;
-    id: string;
-    witness?: P2PKWitness;
-};
-
-// @public (undocumented)
 export type RawTransport = {
     t: PaymentRequestTransportType;
     a: string;
@@ -1724,19 +1705,7 @@ export type SerializedMintKeys = {
 };
 
 // @public (undocumented)
-export type SerializedProof = {
-    C: string;
-    secret: string;
-    amount: number;
-    id: string;
-    witness?: string;
-};
-
-// @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
-
-// @public (undocumented)
-export const serializeProof: (proof: RawProof) => SerializedProof;
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
@@ -1897,6 +1866,13 @@ export type TokenResponse = {
 };
 
 // @public (undocumented)
+export type UnblindedSignature = {
+    C: WeierstrassPoint<bigint>;
+    secret: Uint8Array;
+    id: string;
+};
+
+// @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
 // @public (undocumented)
@@ -1929,7 +1905,7 @@ export function verifyP2PKSig(proof: Proof): boolean;
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
 // @public (undocumented)
-export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean;
+export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;
 
 // @public
 export class Wallet {
