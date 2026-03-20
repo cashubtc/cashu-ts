@@ -1164,6 +1164,11 @@ export class NetworkError extends Error {
 }
 
 // @public
+export function normalizeProofs(raw: Array<Omit<Proof, 'amount'> & {
+    amount: number | bigint | string;
+}>): Proof[];
+
+// @public
 export function numberToHexPadded64(number: bigint): string;
 
 // @public
@@ -1487,7 +1492,7 @@ export type PrivKey = Uint8Array | string;
 // @public
 export type Proof = {
     id: string;
-    amount: number;
+    amount: bigint;
     secret: string;
     C: string;
     dleq?: SerializedDLEQ;

@@ -5,13 +5,13 @@ import { type SerializedDLEQ } from './blinded';
  */
 export type Proof = {
 	/**
-	 * Keyset id, used to link proofs to a mint an its MintKeys.
+	 * Keyset id, used to link proofs to a mint and its MintKeys.
 	 */
 	id: string;
 	/**
-	 * Amount denominated in Satoshis. Has to match the amount of the mints signing key.
+	 * Amount denominated in unit of the mints keyset id.
 	 */
-	amount: number;
+	amount: bigint;
 	/**
 	 * The initial secret that was (randomly) chosen for the creation of this proof.
 	 */

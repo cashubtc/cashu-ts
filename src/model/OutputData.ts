@@ -137,7 +137,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
 		const proof: Proof = {
 			id: sig.id,
-			amount: sig.amount.toNumber(), // TODO: Proof.amount → Amount
+			amount: sig.amount.toBigInt(),
 			C: unblinded.C.toHex(true),
 			secret: new TextDecoder().decode(unblinded.secret),
 			...(dleq && {
