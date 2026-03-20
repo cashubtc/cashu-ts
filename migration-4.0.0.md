@@ -304,6 +304,79 @@ await wallet.completeMelt(preview);
 
 ---
 
+## `Proof.amount` is now `bigint`
+
+The `amount` field on the `Proof` type has changed from `number` to `bigint`. This affects any code that constructs, stores, or compares proof amounts.
+
+```ts
+// Before
+const proof: Proof = { id, amount: 1000, C, secret };
+const total = proofs.reduce((sum, p) => sum + p.amount, 0);
+
+// After
+const proof: Proof = { id, amount: 1000n, C, secret };
+const total = proofs.reduce((sum, p) => sum + p.amount, 0n);
+
+// Convert to number when needed (e.g. display)
+const display: number = Number(proof.amount); // safe for typical sat amounts
+```
+
+If you persist proofs to a database or serialize them to JSON, the `amount` field will now serialise as a JSON integer (unchanged over the wire), but your stored TypeScript types need updating to `bigint`.
+
+A `normalizeProofAmounts()` helper is exported for migrating stored proofs that were saved with `number` amounts:
+
+```ts
+import { normalizeProofAmounts } from '@cashu/cashu-ts';
+
+const legacyProofs = db.load(); // amount fields are numbers
+const proofs = normalizeProofAmounts(legacyProofs); // amount fields are bigints
+```
+
+---
+
+## `Wallet.getFeesForProofs()` now returns `Amount`
+
+Previously returned `number`; now returns an `Amount` value object, consistent with other fee fields in the v4 API.
+
+```ts
+// Before
+const fee: number = wallet.getFeesForProofs(proofs);
+const total = sendAmount + fee;
+
+// After
+const fee: Amount = wallet.getFeesForProofs(proofs);
+const total = Amount.from(sendAmount).add(fee);
+const n: number = fee.toNumber();
+```
+
+---
+
+## Crypto primitive renames
+
+The following low-level exports from `@cashu/cashu-ts` (re-exported from the crypto layer) have been renamed for clarity. The old names no longer exist.
+
+| Old name                     | New name                        |
+| ---------------------------- | ------------------------------- |
+| `RawProof`                   | `UnblindedSignature`            |
+| `constructProofFromPromise`  | `constructUnblindedSignature`   |
+| `createRandomBlindedMessage` | `createRandomRawBlindedMessage` |
+
+These are low-level primitives not typically used by application code. If you use them directly, update your imports:
+
+```ts
+// Before
+import { RawProof, constructProofFromPromise, createRandomBlindedMessage } from '@cashu/cashu-ts';
+
+// After
+import {
+	UnblindedSignature,
+	constructUnblindedSignature,
+	createRandomRawBlindedMessage,
+} from '@cashu/cashu-ts';
+```
+
+---
+
 ## `preferAsync` option removed from `melt()` / `meltBolt11()` / `meltBolt12()` options
 
 The deprecated `preferAsync` option on `Mint.melt()` and the wallet's `meltBolt11()`/`meltBolt12()` option objects has been removed. It was already marked deprecated (the guidance was to set `prefer_async: true` directly in the `MeltRequest` payload). It is no longer accepted.
