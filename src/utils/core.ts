@@ -258,7 +258,13 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	if (removeDleq) {
 		token.proofs = stripDleq(token.proofs);
 	}
-	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs: token.proofs }] };
+	// v3 wire format is JSON: amounts must be serialized as numbers (bigint throws in JSON.stringify).
+	// TODO(step-5): revisit when uint64 CBOR support lands.
+	const v3TokenObj = {
+		token: [
+			{ mint: token.mint, proofs: token.proofs.map((p) => ({ ...p, amount: Number(p.amount) })) },
+		],
+	} as unknown as DeprecatedToken;
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
 	}
@@ -347,7 +353,7 @@ function templateFromToken(token: Token): TokenV4Template {
 				i: hexToBytes(id),
 				p: idMap[id].map(
 					(p: Proof): V4ProofTemplate => ({
-						a: p.amount,
+						a: Number(p.amount), // TODO(step-5): use bigint when CBOR encoder supports uint64
 						s: p.secret,
 						c: hexToBytes(p.C),
 						...(p.dleq && {
@@ -378,11 +384,10 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 	const proofs: Proof[] = [];
 	template.t.forEach((t) =>
 		t.p.forEach((p) => {
-			const amount = Amount.from(p.a).toNumber();
 			proofs.push({
 				secret: p.s,
 				C: bytesToHex(p.c),
-				amount,
+				amount: BigInt(p.a),
 				id: bytesToHex(t.i),
 				...(p.d && {
 					dleq: {
@@ -477,7 +482,8 @@ export function handleTokens(token: string): Token {
 		const entry = parsedV3Token.token[0];
 		const proofs = entry.proofs.map((p) => ({
 			...p,
-			amount: Amount.from(p.amount).toNumber(),
+			// JSON.parse yields number; cast to bigint at the decode boundary
+			amount: BigInt(p.amount as unknown as number),
 		}));
 		const tokenObj: Token = {
 			mint: entry.mint,
@@ -635,6 +641,19 @@ export function sanitizeUrl(url: string): string {
 
 export function sumProofs(proofs: Proof[]): Amount {
 	return Amount.sum(proofs.map((proof: Proof) => proof.amount));
+}
+
+/**
+ * Normalizes raw proof objects (e.g. from a database or JSON.parse) into typed `Proof` objects by
+ * converting `amount` to `bigint`.
+ *
+ * @example Const stored = JSON.parse(db.get('proofs')) as RawProof[]; const proofs =
+ * normalizeProofs(stored);
+ */
+export function normalizeProofs(
+	raw: Array<Omit<Proof, 'amount'> & { amount: number | bigint | string }>,
+): Proof[] {
+	return raw.map((p) => ({ ...p, amount: BigInt(p.amount) }));
 }
 
 export function decodePaymentRequest(paymentRequest: string) {
@@ -825,7 +844,7 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
 	if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
 		throw new Error(`Undefined key for amount ${proof.amount} in keyset ${keyset.id}`);
 	}
-	const key = keyset.keys[proof.amount];
+	const key = keyset.keys[proof.amount.toString()];
 	return verifyDLEQProof_reblind(
 		new TextEncoder().encode(proof.secret),
 		dleq,

@@ -189,7 +189,7 @@ describe('mint api', () => {
 		const response = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
 		expect(response).toBeDefined();
 		// expect that we have not received the fee back, since it was external
-		expect(response.change.reduce((a, b) => a + b.amount, 0)).toBeLessThan(fee.toNumber());
+		expect(response.change.reduce((a, b) => a + Number(b.amount), 0)).toBeLessThan(fee.toNumber());
 		// check states of spent and kept proofs after payment
 		const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
 		expect(sentProofsStates).toBeDefined();
@@ -288,7 +288,7 @@ describe('mint api', () => {
 		const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
 		expect(
 			proofs.reduce((curr, acc) => {
-				return curr + acc.amount;
+				return curr + Number(acc.amount);
 			}, 0),
 		).toBe(63);
 	});
@@ -322,7 +322,7 @@ describe('mint api', () => {
 		const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
 		expect(
 			keep.reduce((curr, acc) => {
-				return curr + acc.amount;
+				return curr + Number(acc.amount);
 			}, 0),
 		).toBe(64);
 	});
@@ -365,7 +365,7 @@ describe('mint api', () => {
 
 		expect(
 			proofs.reduce((curr, acc) => {
-				return curr + acc.amount;
+				return curr + Number(acc.amount);
 			}, 0),
 		).toBe(63);
 	});
@@ -402,7 +402,7 @@ describe('mint api', () => {
 		// console.log('P2BK RECEIVE', proofs);
 		expect(
 			proofs.reduce((curr, acc) => {
-				return curr + acc.amount;
+				return curr + Number(acc.amount);
 			}, 0),
 		).toBe(63);
 	});
@@ -439,7 +439,7 @@ describe('mint api', () => {
 
 		expect(
 			proofs.reduce((curr, acc) => {
-				return curr + acc.amount;
+				return curr + Number(acc.amount);
 			}, 0),
 		).toBe(63);
 	});
@@ -880,7 +880,7 @@ describe('Keep Vector and Reordering', () => {
 			{}, // config
 			{ type: 'random', denominations: testOutputAmounts }, // outputType
 		);
-		receiveProofs.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
+		receiveProofs.forEach((p, i) => expect(Number(p.amount)).toBe(testOutputAmounts[i]));
 	});
 	test('Send', async () => {
 		const wallet = new Wallet(mintUrl);
@@ -895,7 +895,7 @@ describe('Keep Vector and Reordering', () => {
 			send: { type: 'random', denominations: testOutputAmounts },
 		};
 		const { send } = await wallet.send(32, testProofs, {}, customConfig);
-		send.forEach((p, i) => expect(p.amount).toBe(testOutputAmounts[i]));
+		send.forEach((p, i) => expect(Number(p.amount)).toBe(testOutputAmounts[i]));
 	});
 	test('Send with partial keep denominations (wants 16,8 but the rest can be anything)', async () => {
 		const wallet = new Wallet(mintUrl);
@@ -913,8 +913,8 @@ describe('Keep Vector and Reordering', () => {
 		const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
 		// console.log(send.map((p) => p.amount));
 		// console.log(keep.map((p) => p.amount));
-		send.forEach((p, i) => expect(p.amount).toBe(testSendAmounts[i]));
-		keep.forEach((p, i) => expect(p.amount).toBe(expectedKeep[i]));
+		send.forEach((p, i) => expect(Number(p.amount)).toBe(testSendAmounts[i]));
+		keep.forEach((p, i) => expect(Number(p.amount)).toBe(expectedKeep[i]));
 	});
 	test('Send with partial send denominations (wants 16,8 but the rest can be anything)', async () => {
 		const wallet = new Wallet(mintUrl);
@@ -938,8 +938,8 @@ describe('Keep Vector and Reordering', () => {
 		// 	'keep',
 		// 	keep.map((p) => p.amount),
 		// );
-		send.forEach((p, i) => expect(p.amount).toBe(expectedSend[i]));
-		keep.forEach((p, i) => expect(p.amount).toBe(testKeepAmounts[i]));
+		send.forEach((p, i) => expect(Number(p.amount)).toBe(expectedSend[i]));
+		keep.forEach((p, i) => expect(Number(p.amount)).toBe(testKeepAmounts[i]));
 	});
 });
 describe('Wallet Restore', () => {
