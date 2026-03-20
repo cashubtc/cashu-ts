@@ -647,13 +647,16 @@ export function sumProofs(proofs: Proof[]): Amount {
  * Normalizes raw proof objects (e.g. from a database or JSON.parse) into typed `Proof` objects by
  * converting `amount` to `bigint`.
  *
- * @example Const stored = JSON.parse(db.get('proofs')) as RawProof[]; const proofs =
- * normalizeProofs(stored);
+ * @example
+ *
+ *     // Proofs loaded from a database where amount was stored as a number:
+ *     const stored = JSON.parse(db.get('proofs')); // amount: number
+ *     const proofs = normalizeProofAmounts(stored); // amount: bigint
  */
-export function normalizeProofs(
-	raw: Array<Omit<Proof, 'amount'> & { amount: number | bigint | string }>,
+export function normalizeProofAmounts(
+	raw: Array<Omit<Proof, 'amount'> & { amount: AmountLike }>,
 ): Proof[] {
-	return raw.map((p) => ({ ...p, amount: BigInt(p.amount) }));
+	return raw.map((p) => ({ ...p, amount: Amount.from(p.amount).toBigInt() }));
 }
 
 export function decodePaymentRequest(paymentRequest: string) {

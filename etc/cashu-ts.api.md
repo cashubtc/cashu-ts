@@ -1164,8 +1164,8 @@ export class NetworkError extends Error {
 }
 
 // @public
-export function normalizeProofs(raw: Array<Omit<Proof, 'amount'> & {
-    amount: number | bigint | string;
+export function normalizeProofAmounts(raw: Array<Omit<Proof, 'amount'> & {
+    amount: AmountLike;
 }>): Proof[];
 
 // @public
