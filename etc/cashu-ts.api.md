@@ -1267,18 +1267,18 @@ export interface OutputConfig {
 }
 
 // @public (undocumented)
-export class OutputData implements OutputDataLike<HasKeysetKeys> {
+export class OutputData implements OutputDataLike {
     constructor(blindedMessage: SerializedBlindedMessage, blindingFactor: bigint, secret: Uint8Array);
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
     blindingFactor: bigint;
     // (undocumented)
-    static createDeterministicData<T extends HasKeysetKeys>(amount: AmountLike, seed: Uint8Array, counter: number, keyset: T, customSplit?: AmountLike[]): OutputData[];
+    static createDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createP2PKData<T extends HasKeysetKeys>(p2pk: P2PKOptions, amount: AmountLike, keyset: T, customSplit?: AmountLike[]): OutputData[];
+    static createP2PKData(p2pk: P2PKOptions, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createRandomData<T extends HasKeysetKeys>(amount: AmountLike, keyset: T, customSplit?: AmountLike[]): OutputData[];
+    static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
     static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
@@ -1292,11 +1292,11 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
 }
 
-// @public
-export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (amount: AmountLike, keys: TKeyset) => OutputDataLike<TKeyset>;
+// @public (undocumented)
+export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
-// @public
-export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
+// @public (undocumented)
+export interface OutputDataLike {
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;
     // (undocumented)
@@ -1304,7 +1304,7 @@ export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
     // (undocumented)
     secret: Uint8Array;
     // (undocumented)
-    toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
+    toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
 
 // @public

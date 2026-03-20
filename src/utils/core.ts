@@ -186,7 +186,7 @@ export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
 function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
 	const parsed = Amount.from(amount);
 	if (!allowZero && parsed.isZero()) {
-		throw new Error(`Amount must be positive: ${parsed.toString()}`);
+		throw new Error(`Amount must be positive: ${parsed.toString()}, op: ${op}`);
 	}
 	return parsed;
 }
