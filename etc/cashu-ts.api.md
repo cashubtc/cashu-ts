@@ -1963,7 +1963,7 @@ export class Wallet {
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): number;
-    getFeesForProofs(proofs: Proof[]): number;
+    getFeesForProofs(proofs: Proof[]): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
     groupProofsByState(proofs: Proof[]): Promise<{
