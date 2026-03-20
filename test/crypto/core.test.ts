@@ -5,10 +5,8 @@ import {
 	blindMessage,
 	unblindSignature,
 	createBlindSignature,
-	constructProofFromPromise,
+	constructUnblindedSignature,
 	createRandomRawBlindedMessage,
-	serializeProof,
-	deserializeProof,
 	getKeysetIdInt,
 	hash_e,
 	pointFromBytes,
@@ -17,7 +15,7 @@ import { Bytes } from '../../src/utils';
 import { hexToBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { verifyProof } from '../../src/crypto/NUT01';
+import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 
 const SECRET_MESSAGE = 'test_message';
 
@@ -30,10 +28,10 @@ describe('test crypto scheme', () => {
 		const blindMessage = createRandomRawBlindedMessage();
 
 		//Mint
-		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, 1, '');
+		const blindSignature = createBlindSignature(blindMessage.B_, mintPrivKey, '');
 
 		//Wallet
-		const proof = constructProofFromPromise(
+		const proof = constructUnblindedSignature(
 			blindSignature,
 			blindMessage.r,
 			blindMessage.secret,
@@ -41,7 +39,7 @@ describe('test crypto scheme', () => {
 		);
 
 		//Mint
-		const isValid = verifyProof(proof, mintPrivKey);
+		const isValid = verifyUnblindedSignature(proof, mintPrivKey);
 		expect(isValid).toBeTruthy();
 	});
 });
@@ -129,43 +127,5 @@ describe('getKeysetIdInt', () => {
 		const b64Id = 'AQID';
 		const expected = BigInt(0x010203) % MOD;
 		expect(getKeysetIdInt(b64Id)).toBe(expected);
-	});
-});
-
-describe('serialize/deserialize proof', () => {
-	test('round-trips without witness', () => {
-		// Build a raw proof using the normal flow to get a valid C point.
-		const mintSk = secp256k1.utils.randomSecretKey();
-		const mintPk = bytesToHex(secp256k1.getPublicKey(mintSk, true));
-		const secret = new TextEncoder().encode('roundtrip');
-		const { r, B_ } = blindMessage(secret);
-		const blindSig = createBlindSignature(B_, mintSk, 2, 'abc123');
-		const raw = constructProofFromPromise(blindSig, r, secret, pointFromHex(mintPk));
-
-		const ser = serializeProof(raw);
-		const de = deserializeProof(ser);
-
-		expect(de.amount).toBe(raw.amount);
-		expect(de.id).toBe(raw.id);
-		expect(de.C.toHex(true)).toBe(raw.C.toHex(true));
-		expect(new TextDecoder().decode(de.secret)).toBe(new TextDecoder().decode(raw.secret));
-		expect(de.witness).toBeUndefined();
-	});
-
-	test('round-trips with witness present', () => {
-		const mintSk = secp256k1.utils.randomSecretKey();
-		const mintPk = bytesToHex(secp256k1.getPublicKey(mintSk, true));
-		const secret = new TextEncoder().encode('roundtrip-witness');
-		const { r, B_ } = blindMessage(secret);
-		const blindSig = createBlindSignature(B_, mintSk, 1, 'xyz');
-		const raw = constructProofFromPromise(blindSig, r, secret, pointFromHex(mintPk));
-
-		// attach a witness (matches SerializedProof.witness stringification)
-		raw.witness = { signatures: ['aa'.repeat(32)] };
-
-		const ser = serializeProof(raw);
-		const de = deserializeProof(ser);
-
-		expect(de.witness).toEqual(raw.witness);
 	});
 });

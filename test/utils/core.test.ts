@@ -1,7 +1,6 @@
 import {
 	blindMessage,
-	constructProofFromPromise,
-	serializeProof,
+	constructUnblindedSignature,
 	createDLEQProof,
 	pointFromBytes,
 	createBlindSignature,
@@ -649,18 +648,21 @@ describe('test zero-knowledge utilities', () => {
 	// construct DLEQ
 	const fakeDleq = createDLEQProof(fakeBlindedMessage.B_, privkey);
 	// blind signature
-	const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00');
+	const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, '00');
 	// unblind
-	const proof = constructProofFromPromise(fakeBlindSignature, r, fakeSecret, pubkey);
-	// serialize
-	const serializedProof = {
-		...serializeProof(proof),
+	const unblinded = constructUnblindedSignature(fakeBlindSignature, r, fakeSecret, pubkey);
+	// construct Proof directly (amount = 1, matching keyset key in tests below)
+	const serializedProof: Proof = {
+		id: unblinded.id,
+		amount: 1,
+		C: unblinded.C.toHex(true),
+		secret: new TextDecoder().decode(unblinded.secret),
 		dleq: {
 			r: numberToHexPadded64(r),
 			e: bytesToHex(fakeDleq.e),
 			s: bytesToHex(fakeDleq.s),
 		},
-	} as Proof;
+	};
 
 	test('has valid dleq', () => {
 		const keyset = {
