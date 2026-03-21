@@ -40,8 +40,10 @@ export function selectProofsRGLI(
 	/**
 	 * Helper Functions.
 	 */
+	// Caches proof amount (number) and fee
 	interface ProofWithFee {
 		proof: Proof;
+		amountNum: number; // Number(proof.amount)
 		exFee: number;
 		ppkfee: number;
 	}
@@ -121,10 +123,19 @@ export function selectProofsRGLI(
 	let totalAmount = 0;
 	let totalFeePPK = 0;
 	const proofWithFees = proofs.map((p) => {
+		// Guard: this algorithm uses number arithmetic throughout. Amounts above MAX_SAFE_INTEGER
+		// (e.g. high-value proofs in msat-denomination mints) require a custom SelectProofs impl.
+		if (p.amount > BigInt(Number.MAX_SAFE_INTEGER)) {
+			fail(
+				'selectProofsRGLI does not support proof amounts > Number.MAX_SAFE_INTEGER. ' +
+					'Provide a custom SelectProofs implementation for msat-scale wallets.',
+				_logger,
+			);
+		}
 		const ppkfee = feeForProof(p);
-		const amountNum = Number(p.amount);
+		const amountNum = Number(p.amount); // safe: guarded above
 		const exFee = includeFees ? amountNum - ppkfee / 1000 : amountNum;
-		const obj = { proof: p, exFee, ppkfee };
+		const obj = { proof: p, amountNum, exFee, ppkfee };
 		// Sum all economical proofs (filtered below)
 		if (!includeFees || exFee > 0) {
 			totalAmount += amountNum;
@@ -161,7 +172,7 @@ export function selectProofsRGLI(
 		}
 		// Adjust totals for removed proofs
 		for (let i = endIndex; i < spendableProofs.length; i++) {
-			totalAmount -= Number(spendableProofs[i].proof.amount);
+			totalAmount -= spendableProofs[i].amountNum;
 			totalFeePPK -= spendableProofs[i].ppkfee;
 		}
 		spendableProofs = spendableProofs.slice(0, endIndex);
@@ -193,7 +204,7 @@ export function selectProofsRGLI(
 		let amount = 0;
 		let feePPK = 0;
 		for (const obj of shuffleArray(spendableProofs)) {
-			const newAmount = amount + Number(obj.proof.amount);
+			const newAmount = amount + obj.amountNum;
 			const newFeePPK = feePPK + obj.ppkfee;
 			const netSum = sumExFees(newAmount, newFeePPK);
 			if (exactMatch && netSum > targetAmountNumber) break;
@@ -231,7 +242,7 @@ export function selectProofsRGLI(
 			// Get details for proof being replaced (objP), and temporarily
 			// calculate the subset amount/fee with that proof removed.
 			const objP = S[i];
-			const tempAmount = amount - Number(objP.proof.amount);
+			const tempAmount = amount - objP.amountNum;
 			const tempFeePPK = feePPK - objP.ppkfee;
 			const tempNetSum = sumExFees(tempAmount, tempFeePPK);
 			const target = targetAmountNumber - tempNetSum;
@@ -246,7 +257,7 @@ export function selectProofsRGLI(
 				if (!exactMatch || objQ.exFee > objP.exFee) {
 					if (target >= 0 || objQ.exFee <= objP.exFee) {
 						S[i] = objQ;
-						amount = tempAmount + Number(objQ.proof.amount);
+						amount = tempAmount + objQ.amountNum;
 						feePPK = tempFeePPK + objQ.ppkfee;
 						others.splice(qIndex, 1);
 						insertSorted(others, objP);
@@ -272,7 +283,7 @@ export function selectProofsRGLI(
 			const tempS = [...bestSubset]; // copy
 			while (tempS.length > 1 && bestDelta > 0) {
 				const objP = tempS.pop() as ProofWithFee;
-				const tempAmount = amount - Number(objP.proof.amount);
+				const tempAmount = amount - objP.amountNum;
 				const tempFeePPK = feePPK - objP.ppkfee;
 				const tempDelta = calculateDelta(tempAmount, tempFeePPK);
 				if (tempDelta == Infinity) break;

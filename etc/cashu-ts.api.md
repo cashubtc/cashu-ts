@@ -1292,10 +1292,10 @@ export class OutputData implements OutputDataLike {
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
 }
 
-// @public (undocumented)
+// @public
 export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
-// @public (undocumented)
+// @public
 export interface OutputDataLike {
     // (undocumented)
     blindedMessage: SerializedBlindedMessage;

@@ -141,7 +141,7 @@ export function constructUnblindedSignature(
 }
 
 // ------------------------------
-// Schnorr Signing / Verififcaton
+// Schnorr Signing / Verification
 // ------------------------------
 
 /**

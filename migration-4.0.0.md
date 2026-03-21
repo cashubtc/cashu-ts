@@ -186,20 +186,25 @@ chunks.map((a) => a.toNumber());
 
 ---
 
-## `OutputDataFactory` callback: `amount` parameter is now `AmountLike`
+## `OutputDataFactory` and `OutputDataLike`: generic removed, `amount` parameter widened
 
-If you implement a custom `OutputDataFactory`, the `amount` argument previously typed as `number` is now `AmountLike`. Update your callback signature and use `Amount.from(amount)` if you need an `Amount` object.
+Both types previously carried a `TKeyset extends HasKeysetKeys` generic parameter and the `amount` argument on `OutputDataFactory` was typed as `number`. Both changes are now applied:
+
+- The `<TKeyset>` generic has been removed; the keyset parameter is fixed to `HasKeysetKeys`.
+- The `amount` argument on `OutputDataFactory` is now `AmountLike` (was `number`).
 
 ```ts
 // Before
-const factory: OutputDataFactory = (amount: number, keys) => { ... };
+const factory: OutputDataFactory<MyKeyset> = (amount: number, keys: MyKeyset) => { ... };
+class MyOutput implements OutputDataLike<MyKeyset> { ... }
 
 // After
-import { Amount, type AmountLike } from '@cashu/cashu-ts';
-const factory: OutputDataFactory = (amount: AmountLike, keys) => {
+import { Amount, type AmountLike, type HasKeysetKeys } from '@cashu/cashu-ts';
+const factory: OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => {
     const a = Amount.from(amount);
     // ...
 };
+class MyOutput implements OutputDataLike { ... }
 ```
 
 ---
@@ -360,19 +365,57 @@ The following low-level exports from `@cashu/cashu-ts` (re-exported from the cry
 | `RawProof`                   | `UnblindedSignature`            |
 | `constructProofFromPromise`  | `constructUnblindedSignature`   |
 | `createRandomBlindedMessage` | `createRandomRawBlindedMessage` |
+| `verifyProof`                | `verifyUnblindedSignature`      |
 
 These are low-level primitives not typically used by application code. If you use them directly, update your imports:
 
 ```ts
 // Before
-import { RawProof, constructProofFromPromise, createRandomBlindedMessage } from '@cashu/cashu-ts';
+import {
+	RawProof,
+	constructProofFromPromise,
+	createRandomBlindedMessage,
+	verifyProof,
+} from '@cashu/cashu-ts';
 
 // After
 import {
 	UnblindedSignature,
 	constructUnblindedSignature,
 	createRandomRawBlindedMessage,
+	verifyUnblindedSignature,
 } from '@cashu/cashu-ts';
+```
+
+### Removed crypto primitives
+
+The following exports have been removed with no replacement — they were dead code not used outside the library:
+
+| Removed              | Notes                                                           |
+| -------------------- | --------------------------------------------------------------- |
+| `SerializedProof`    | Hex-serialised proof type; use `Proof` directly                 |
+| `serializeProof()`   | Use `Proof` values directly — no serialisation step is needed   |
+| `deserializeProof()` | Use `Proof` values directly — no deserialisation step is needed |
+| `BlindedMessage`     | Was a deprecated alias for `RawBlindedMessage`; use the latter  |
+
+### `BlindSignature.amount` field removed
+
+`BlindSignature` (the post-blinding crypto primitive) had an `amount` field that was never used in any cryptographic computation. It has been removed. The type is now:
+
+```ts
+type BlindSignature = { C_: WeierstrassPoint<bigint>; id: string };
+```
+
+### `createBlindSignature` — `amount` parameter removed
+
+The `amount` parameter has been dropped from `createBlindSignature`. Amount is determined at the `OutputData` layer, not the crypto layer.
+
+```ts
+// Before
+createBlindSignature(B_, privateKey, amount, id);
+
+// After
+createBlindSignature(B_, privateKey, id);
 ```
 
 ---

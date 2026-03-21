@@ -21,6 +21,10 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 import { Amount, type AmountLike } from './Amount';
 
+/**
+ * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
+ * `keys`. Custom implementations must satisfy this interface to be used with wallet operations.
+ */
 export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
@@ -29,6 +33,10 @@ export interface OutputDataLike {
 	toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
 
+/**
+ * Factory function that produces an {@link OutputDataLike} for a given amount and keyset. Implement
+ * this to customise blinded-message construction (e.g. deterministic secrets, P2PK).
+ */
 export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
 /**
