@@ -78,6 +78,27 @@ describe('payment requests', () => {
 			'nprofile1qy28wumn8ghj7un9d3shjtnyv9kh2uewd9hsz9mhwden5te0wfjkccte9curxven9eehqctrv5hszrthwden5te0dehhxtnvdakqqgymdex3gvfsfujp3xyn7e7qrs8yyq9d8zsu2zqujxuxcapfqvzc8grqdkts',
 		);
 	});
+	test('encode and decode payment request with bigint amount (uint64)', async () => {
+		const largeAmount = 2n ** 53n + 1n; // exceeds Number.MAX_SAFE_INTEGER
+		const request = new PaymentRequest(
+			[
+				{
+					type: PaymentRequestTransportType.POST,
+					target: 'https://example.com/pay',
+				} as PaymentRequestTransport,
+			],
+			'bigint_test',
+			largeAmount,
+			'sat',
+			['https://mint.com'],
+		);
+		const pr = request.toEncodedRequest();
+		expect(pr).toBeDefined();
+		const decoded = decodePaymentRequest(pr);
+		expect(decoded.amount?.toBigInt()).toBe(largeAmount);
+		expect(decoded.id).toBe('bigint_test');
+	});
+
 	test('test unsupported prefix/version', async () => {
 		const prWithInvalidPrefix =
 			'croqApGF0gaNhdGVub3N0cmFheKlucHJvZmlsZTFxeTI4d3VtbjhnaGo3dW45ZDNzaGp0bnl2OWtoMnVld2Q5aHN6OW1od2RlbjV0ZTB3ZmprY2N0ZTljdXJ4dmVuOWVlaHFjdHJ2NWhzenJ0aHdkZW41dGUwZGVoaHh0bnZkYWtxcWd5bWRleDNndmZzZnVqcDN4eW43ZTdxcnM4eXlxOWQ4enN1MnpxdWp4dXhjYXBmcXZ6YzhncnFka3RzYWeBgmFuYjE3YWloNDg0MGY1MWVhdWNzYXRhbYFwaHR0cHM6Ly9taW50LmNvbQ==';
