@@ -237,7 +237,7 @@ function extractSwapPackage(preview: SwapPreview): SigAllSigningPackage {
 	);
 }
 
-function extractMeltPackage<TQuote extends MeltQuoteBaseResponse>(
+function extractMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
 	preview: MeltPreview<TQuote>,
 ): SigAllSigningPackage {
 	return buildSigningPackage(
@@ -283,7 +283,7 @@ function mergeSwapPackage(pkg: SigAllSigningPackage, preview: SwapPreview): Swap
 	return { ...preview, inputs: updatedInputs };
 }
 
-function mergeMeltPackage<TQuote extends MeltQuoteBaseResponse>(
+function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
 	pkg: SigAllSigningPackage,
 	preview: MeltPreview<TQuote>,
 ): MeltPreview<TQuote> {
@@ -355,7 +355,7 @@ export type SigAllApi = {
 	 * @returns SigAllSigningPackage for distribution to signers.
 	 * @experimental
 	 */
-	extractMeltPackage: <TQuote extends MeltQuoteBaseResponse>(
+	extractMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
 		preview: MeltPreview<TQuote>,
 	) => SigAllSigningPackage;
 
@@ -422,7 +422,7 @@ export type SigAllApi = {
 	 * @returns MeltPreview ready for completeMelt.
 	 * @experimental
 	 */
-	mergeMeltPackage: <TQuote extends MeltQuoteBaseResponse>(
+	mergeMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
 		pkg: SigAllSigningPackage,
 		preview: MeltPreview<TQuote>,
 	) => MeltPreview<TQuote>;

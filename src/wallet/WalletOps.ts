@@ -725,7 +725,9 @@ export class MintBuilder<
  * 	.run();
  * ```
  */
-export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
+export class MeltBuilder<
+	TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBolt11Response,
+> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 

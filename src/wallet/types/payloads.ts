@@ -34,7 +34,9 @@ export interface MintPreview<TQuote extends MintQuoteBaseResponse = MintQuoteBas
 /**
  * Preview of a Melt transaction created by prepareMelt.
  */
-export interface MeltPreview<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> {
+export interface MeltPreview<
+	TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse,
+> {
 	method: string;
 	/**
 	 * Inputs (Proofs) to be melted.
