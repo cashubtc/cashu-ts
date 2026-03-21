@@ -1818,6 +1818,10 @@ class Wallet {
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<MintPreview<TQuote>> {
+		this.failIf(
+			typeof quote === 'string',
+			`prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
+		);
 		const requestedAmount = this.normalizeAmount(amount, `prepareMint: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
@@ -2261,7 +2265,9 @@ class Wallet {
 			this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
 		}
 
-		return { quote: meltResponse as TQuote, change };
+		// Merge preview quote with response to protect against incomplete response.
+		const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
+		return { quote: mergedQuote, change };
 	}
 
 	// -----------------------------------------------------------------
