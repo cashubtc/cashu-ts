@@ -1,4 +1,5 @@
 import { Bytes } from './Bytes';
+import { JSONInt } from './JSONInt';
 
 function encodeUint8toBase64(uint8array: Uint8Array): string {
 	return Bytes.toBase64(uint8array);
@@ -29,15 +30,28 @@ function encodeBase64toUint8(base64String: string): Uint8Array {
 	return Bytes.fromBase64(base64String);
 }
 
+/**
+ * Serializes an object to base64url-encoded JSON using {@link JSONInt.stringify}.
+ *
+ * `bigint` values are emitted as raw JSON number tokens (no quotes, no `n` suffix), which is
+ * required for the v3 cashu token wire format. Callers must use {@link encodeBase64ToJson} to
+ * decode, as standard `JSON.parse` will lose precision on integers above `MAX_SAFE_INTEGER`.
+ */
 function encodeJsonToBase64(jsonObj: unknown): string {
-	const jsonString = JSON.stringify(jsonObj);
+	const jsonString = JSONInt.stringify(jsonObj) ?? '';
 	return base64urlFromBase64(Bytes.toBase64(Bytes.fromString(jsonString)));
 }
 
+/**
+ * Deserializes a base64url-encoded JSON string using {@link JSONInt.parse}.
+ *
+ * Integers within `±MAX_SAFE_INTEGER` are returned as `number`; integers outside that range are
+ * returned as `bigint`. This preserves precision for large amounts encoded by
+ * {@link encodeJsonToBase64}.
+ */
 function encodeBase64ToJson<T extends object>(base64String: string): T {
 	const jsonString = Bytes.toString(Bytes.fromBase64(base64urlToBase64(base64String)));
-	const jsonObj = JSON.parse(jsonString) as T;
-	return jsonObj;
+	return JSONInt.parse(jsonString) as T;
 }
 
 function base64urlToBase64(str: string) {

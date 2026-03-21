@@ -20,7 +20,7 @@ export type V4ProofTemplate = {
 	/**
 	 * Amount.
 	 */
-	a: number;
+	a: number | bigint;
 	/**
 	 * Secret.
 	 */

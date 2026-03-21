@@ -215,6 +215,24 @@ describe('test token v3 encoding', () => {
 			'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJhbW91bnQiOjIsImlkIjoiMDA5YTFmMjkzMjUzZTQxZSIsInNlY3JldCI6IjQwNzkxNWJjMjEyYmU2MWE3N2UzZTZkMmFlYjRjNzI3OTgwYmRhNTFjZDA2YTZhZmMyOWUyODYxNzY4YTc4MzciLCJDIjoiMDJiYzkwOTc5OTdkODFhZmIyY2M3MzQ2YjVlNDM0NWE5MzQ2YmQyYTUwNmViNzk1ODU5OGE3MmYwY2Y4NTE2M2VhIn0seyJhbW91bnQiOjgsImlkIjoiMDA5YTFmMjkzMjUzZTQxZSIsInNlY3JldCI6ImZlMTUxMDkzMTRlNjFkNzc1NmIwZjhlZTBmMjNhNjI0YWNhYTNmNGUwNDJmNjE0MzNjNzI4YzcwNTdiOTMxYmUiLCJDIjoiMDI5ZThlNTA1MGI4OTBhN2Q2YzA5NjhkYjE2YmMxZDVkNWZhMDQwZWExZGUyODRmNmVjNjlkNjEyOTlmNjcxMDU5In1dfV0sInVuaXQiOiJzYXQiLCJtZW1vIjoiVGhhbmsgeW91LiJ9',
 		);
 	});
+
+	test('bigint amount > MAX_SAFE_INTEGER roundtrips through v3 encoding', () => {
+		const largeAmount = 2n ** 53n + 1n; // 9007199254740993n — first integer above MAX_SAFE_INTEGER
+		const token = {
+			mint: 'https://8333.space:3338',
+			proofs: [
+				{
+					amount: largeAmount,
+					id: '009a1f293253e41e',
+					secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+					C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
+				},
+			],
+		};
+		const encoded = utils.getEncodedTokenV3(token);
+		const decoded = utils.getDecodedToken(encoded);
+		expect(decoded.proofs[0].amount).toBe(largeAmount);
+	});
 });
 
 describe('test decode token', () => {
@@ -543,6 +561,25 @@ describe('test v4 encoding', () => {
 		expect(decodedEncodedToken).toEqual(v3Token);
 		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
 	});
+	test('bigint amount > MAX_SAFE_INTEGER roundtrips through v4 encoding', () => {
+		const largeAmount = 2n ** 53n + 1n; // 9007199254740993n — first integer above MAX_SAFE_INTEGER
+		const token = {
+			mint: 'http://localhost:3338',
+			proofs: [
+				{
+					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+					C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+					id: '00ad268c4d1f5826',
+					amount: largeAmount,
+				},
+			],
+			unit: 'sat',
+		};
+		const encoded = utils.getEncodedTokenV4(token);
+		const decoded = utils.getDecodedToken(encoded);
+		expect(decoded.proofs[0].amount).toBe(largeAmount);
+	});
+
 	test('removing DLEQ', async () => {
 		const proofs = [
 			{

@@ -258,12 +258,8 @@ export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
 	if (removeDleq) {
 		token.proofs = stripDleq(token.proofs);
 	}
-	// v3 wire format is JSON: amounts must be serialized as numbers (bigint throws in JSON.stringify).
-	// TODO(step-5): revisit when uint64 CBOR support lands.
 	const v3TokenObj = {
-		token: [
-			{ mint: token.mint, proofs: token.proofs.map((p) => ({ ...p, amount: Number(p.amount) })) },
-		],
+		token: [{ mint: token.mint, proofs: token.proofs }],
 	} as unknown as DeprecatedToken;
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
@@ -353,7 +349,7 @@ function templateFromToken(token: Token): TokenV4Template {
 				i: hexToBytes(id),
 				p: idMap[id].map(
 					(p: Proof): V4ProofTemplate => ({
-						a: Number(p.amount), // TODO(step-5): use bigint when CBOR encoder supports uint64
+						a: p.amount,
 						s: p.secret,
 						c: hexToBytes(p.C),
 						...(p.dleq && {
@@ -387,7 +383,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 			proofs.push({
 				secret: p.s,
 				C: bytesToHex(p.c),
-				amount: BigInt(p.a),
+				amount: Amount.from(p.a).toBigInt(),
 				id: bytesToHex(t.i),
 				...(p.d && {
 					dleq: {
@@ -482,8 +478,7 @@ export function handleTokens(token: string): Token {
 		const entry = parsedV3Token.token[0];
 		const proofs = entry.proofs.map((p) => ({
 			...p,
-			// JSON.parse yields number; cast to bigint at the decode boundary
-			amount: BigInt(p.amount as unknown as number),
+			amount: Amount.from(p.amount as AmountLike).toBigInt(),
 		}));
 		const tokenObj: Token = {
 			mint: entry.mint,
