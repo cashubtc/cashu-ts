@@ -277,7 +277,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 	});
 
 	it('meltBolt12 posts to /v1/melt/bolt12', async () => {
-		const response = { quote: 'm123', amount: 100, fee_reserve: 3, change: [] };
+		const response = { quote: 'm123', amount: 100, fee_reserve: 3, state: 'PAID', change: [] };
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const meltPayload = { quote: 'm123', inputs: [], outputs: [] };
@@ -430,7 +430,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	});
 
 	it('wallet.meltProofsBolt12 delegates and returns {quote, change}', async () => {
-		const response = { quote: 'm1', amount: 100, fee_reserve: 2, change: [] };
+		const response = { quote: 'm1', amount: 100, fee_reserve: 2, state: 'PAID', change: [] };
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const wallet = new Wallet(mint);

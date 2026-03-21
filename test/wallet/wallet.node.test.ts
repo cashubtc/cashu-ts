@@ -3527,6 +3527,7 @@ describe('async melt preference body', () => {
 					quote: meltQuote.quote,
 					amount: meltQuote.amount,
 					fee_reserve: meltQuote.fee_reserve,
+					state: 'PAID',
 					change: [],
 				});
 			}),
@@ -3625,7 +3626,13 @@ describe('async melt preference body', () => {
 				const blind = request.headers.get('blind-auth');
 				expect(prefer).toBeNull();
 				expect(blind).toBe('test-token');
-				return HttpResponse.json({ quote: 'q-auth-12', amount: 1, fee_reserve: 0, change: [] });
+				return HttpResponse.json({
+					quote: 'q-auth-12',
+					amount: 1,
+					fee_reserve: 0,
+					state: 'PAID',
+					change: [],
+				});
 			}),
 		);
 

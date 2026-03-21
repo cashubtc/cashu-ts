@@ -466,14 +466,11 @@ class Mint {
 		);
 
 		// Runtime shape check for basic MeltQuoteBaseResponse
-		// TODO: - Tests need updating before we can do full shape check!
 		if (
-			!isObj(data) //||
-			// typeof data.quote !== 'string' ||
-			// typeof data.amount !== 'number' ||
-			// typeof data.unit !== 'string' ||
-			// typeof data.expiry !== 'number' ||
-			// !Object.values(MeltQuoteState).includes(data.state)
+			!isObj(data) ||
+			typeof data.quote !== 'string' ||
+			typeof data.state !== 'string' ||
+			!Object.values(MeltQuoteState).includes(data.state)
 		) {
 			this._logger.error('Invalid response from mint...', { data, op: 'melt' });
 			throw new Error('Invalid response from mint');
