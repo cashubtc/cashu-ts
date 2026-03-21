@@ -95,7 +95,7 @@ describe('payment requests', () => {
 		const pr = request.toEncodedRequest();
 		expect(pr).toBeDefined();
 		const decoded = decodePaymentRequest(pr);
-		expect(decoded.amount).toBe(largeAmount);
+		expect(decoded.amount?.toBigInt()).toBe(largeAmount);
 		expect(decoded.id).toBe('bigint_test');
 	});
 

@@ -40,9 +40,7 @@ export class PaymentRequest {
 			rawRequest.i = this.id;
 		}
 		if (this.amount) {
-			// TODO: use toBigInt() once encodeCBOR supports bigint (8-byte uint64). NUT-18 specifies
-			// "a" as uint64 but the CBOR encoder currently caps at 32-bit integers.
-			rawRequest.a = this.amount.toNumber();
+			rawRequest.a = this.amount.toBigInt();
 		}
 		if (this.unit) {
 			rawRequest.u = this.unit;
