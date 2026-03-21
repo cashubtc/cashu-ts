@@ -1,7 +1,7 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { type RawProof, createRandomSecretKey, hashToCurve } from './core';
+import { type UnblindedSignature, createRandomSecretKey, hashToCurve } from './core';
 import { HDKey } from '@scure/bip32';
 import { deriveKeysetId } from '../utils';
 
@@ -100,7 +100,7 @@ export function createNewMintKeys(
 	return { pubKeys, privKeys, keysetId };
 }
 
-export function verifyProof(proof: RawProof, privKey: Uint8Array): boolean {
+export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
 	const Y: WeierstrassPoint<bigint> = hashToCurve(proof.secret);
 	const a = secp256k1.Point.Fn.fromBytes(privKey);
 	const aY: WeierstrassPoint<bigint> = Y.multiply(a);

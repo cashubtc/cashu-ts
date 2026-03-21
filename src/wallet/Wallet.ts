@@ -280,17 +280,6 @@ class Wallet {
 	}
 
 	/**
-	 * Normalizes AmountLike to a safe JS number.
-	 *
-	 * @param amount To parse.
-	 * @param op Caller method name (or other identifier) for debug.
-	 * @throws If not a positive safe integer.
-	 */
-	private normalizeAmount(amount: AmountLike, op: string): number {
-		return this.parseAmount(amount, op, false).toNumber();
-	}
-
-	/**
 	 * Parses AmountLike to Amount.
 	 */
 	private parseAmount(amount: AmountLike, op: string, allowZero = false): Amount {
@@ -1004,7 +993,7 @@ class Wallet {
 	 * @throws Throws if the send cannot be completed offline.
 	 */
 	sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
-		const sendAmount = this.normalizeAmount(amount, 'sendOffline');
+		const sendAmount = this.parseAmount(amount, 'sendOffline');
 		const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
 		if (requireDleq) {
 			// Only use proofs that have a DLEQ
@@ -1050,7 +1039,7 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise<SendResponse> {
-		const sendAmount = this.normalizeAmount(amount, 'send');
+		const sendAmount = this.parseAmount(amount, 'send');
 		const { keysetId, includeFees = false } = config || {};
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
@@ -1090,9 +1079,9 @@ class Wallet {
 				exactMatch: true,
 				requireDleq: false, // safety
 			});
-			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
+			const expectedFee = includeFees ? this.getFeesForProofs(send) : Amount.zero();
 
-			if (sumProofs(send).equals(sendAmount + expectedFee)) {
+			if (sumProofs(send).equals(sendAmount.add(expectedFee))) {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
 			}
@@ -1322,10 +1311,10 @@ class Wallet {
 		includeFees = false,
 		exactMatch = false,
 	): SendResponse {
-		const normalizedAmountToSend = this.normalizeAmount(amountToSend, 'selectProofsToSend');
+		const parsedAmountToSend = this.parseAmount(amountToSend, 'selectProofsToSend');
 		const { keep, send } = this._selectProofs(
 			proofs,
-			normalizedAmountToSend,
+			parsedAmountToSend,
 			this._keyChain,
 			includeFees,
 			exactMatch,
@@ -1383,10 +1372,9 @@ class Wallet {
 	 * @returns Fee amount.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
-	// TODO: v4 - return Amount
-	getFeesForProofs(proofs: Proof[]): number {
+	getFeesForProofs(proofs: Proof[]): Amount {
 		const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
-		return Number((sumPPK + 999n) / 1000n);
+		return Amount.from((sumPPK + 999n) / 1000n);
 	}
 
 	/**
@@ -1825,7 +1813,7 @@ class Wallet {
 			typeof quote === 'string',
 			`prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
 		);
-		const requestedAmount = this.normalizeAmount(amount, `prepareMint: ${method}`);
+		const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 
