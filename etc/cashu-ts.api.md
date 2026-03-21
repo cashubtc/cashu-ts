@@ -1555,7 +1555,7 @@ export type RawNUT10Option = {
 // @public (undocumented)
 export type RawPaymentRequest = {
     i?: string;
-    a?: number;
+    a?: number | bigint;
     u?: string;
     s?: boolean;
     m?: string[];

@@ -25,7 +25,6 @@ function base64urlDecode(str: string): Uint8Array {
 const encoderThrows = [
 	{ name: 'Symbol', decoded: Symbol('x'), throws: /Unsupported type/ },
 	{ name: 'function', decoded: (() => {}) as any, throws: /Unsupported type/ },
-	{ name: 'BigInt', decoded: BigInt(1) as any, throws: /Unsupported type/ },
 	{ name: 'unsigned integer too large', decoded: 4294967296, throws: /Unsupported integer size/ },
 	{ name: 'negative integer too large', decoded: -4294967297, throws: /Unsupported integer size/ },
 	{ name: 'array too long', decoded: new Array(70000).fill(0), throws: /Unsupported array length/ },
@@ -375,6 +374,67 @@ describe('cbor encoder', () => {
 
 		const encNeg1 = encodeCBOR(-1 as any);
 		expect(encNeg1[0]).toBe(0x20);
+	});
+
+	test('encodes bigint values using 8-byte uint64 form and roundtrips', () => {
+		// Small bigint that fits in short form
+		const small = 10n;
+		const encSmall = encodeCBOR(small as any);
+		expect(encSmall[0]).toBe(0x0a);
+		expect(decodeCBOR(encSmall)).toBe(10);
+
+		// bigint in 1-byte form
+		const b200 = 200n;
+		const enc200 = encodeCBOR(b200 as any);
+		expect(enc200[0]).toBe(0x18);
+		expect(decodeCBOR(enc200)).toBe(200);
+
+		// bigint in 2-byte form
+		const b1000 = 1000n;
+		const enc1000 = encodeCBOR(b1000 as any);
+		expect(enc1000[0]).toBe(0x19);
+		expect(decodeCBOR(enc1000)).toBe(1000);
+
+		// bigint in 4-byte form
+		const b100000 = 100000n;
+		const enc100000 = encodeCBOR(b100000 as any);
+		expect(enc100000[0]).toBe(0x1a);
+		expect(decodeCBOR(enc100000)).toBe(100000);
+
+		// bigint that exceeds 32-bit -> 8-byte uint64 form
+		const big = 2n ** 33n; // 8589934592
+		const encBig = encodeCBOR(big as any);
+		expect(encBig[0]).toBe(0x1b); // additional-info 27
+		expect(decodeCBOR(encBig)).toBe(Number(big)); // fits in safe integer
+
+		// bigint that exceeds MAX_SAFE_INTEGER -> decoded as bigint
+		const huge = 2n ** 53n + 1n; // 9007199254740993
+		const encHuge = encodeCBOR(huge as any);
+		expect(encHuge[0]).toBe(0x1b);
+		expect(decodeCBOR(encHuge)).toBe(huge);
+
+		// max uint64
+		const maxUint64 = 2n ** 64n - 1n;
+		const encMax = encodeCBOR(maxUint64 as any);
+		expect(encMax[0]).toBe(0x1b);
+		expect(decodeCBOR(encMax)).toBe(maxUint64);
+	});
+
+	test('encodes negative bigint values and roundtrips', () => {
+		const neg = -1n;
+		const encNeg = encodeCBOR(neg as any);
+		expect(encNeg[0]).toBe(0x20);
+		expect(decodeCBOR(encNeg)).toBe(-1);
+
+		const negBig = -(2n ** 33n);
+		const encNegBig = encodeCBOR(negBig as any);
+		expect(encNegBig[0]).toBe(0x3b); // major type 1, additional-info 27
+		expect(decodeCBOR(encNegBig)).toBe(Number(negBig));
+	});
+
+	test('throws for bigint exceeding uint64 range', () => {
+		const tooBig = 2n ** 64n;
+		expect(() => encodeCBOR(tooBig as any)).toThrow(/BigInt value out of uint64 range/);
 	});
 
 	test('encodes non-integer numbers as float64 (1.5, NaN, Infinity) and roundtrips', () => {
