@@ -14,7 +14,7 @@ export type RawNUT10Option = {
 
 export type RawPaymentRequest = {
 	i?: string; // id
-	a?: number; // amount
+	a?: number | bigint; // amount
 	u?: string; // unit
 	s?: boolean; // single use
 	m?: string[]; // mints
