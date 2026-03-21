@@ -11,7 +11,9 @@ import {
 /**
  * Preview of a mint transaction created by prepareMint.
  */
-export interface MintPreview<TQuote extends MintQuoteBaseResponse = MintQuoteBaseResponse> {
+export interface MintPreview<
+	TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
+> {
 	method: string;
 	/**
 	 * Mint payload to be sent to the mint.

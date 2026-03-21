@@ -1759,7 +1759,7 @@ class Wallet {
 			// Skip checkMintQuoteBolt11 to avoid an extra round-trip. This method returns Proof[]
 			// so the quote object is never exposed to the caller — a stub is sufficient and
 			// an invalid quote will be exposed in the minting step.
-			const quoteObj: MintQuoteBaseResponse = { quote, request: '', unit: this.unit };
+			const quoteObj = { quote };
 			const preview = await this.prepareMint('bolt11', amount, quoteObj, config, outputType);
 			return this.completeMint(preview);
 		}
@@ -1810,8 +1810,11 @@ class Wallet {
 	 *
 	 * Returns a `MintPreview` that contains the exact mint payload and output data needed to
 	 * construct proofs. Persist this preview to support NUT-19 replay safety.
+	 * @param quote The mint quote. Only `quote` (ID) is required — a full `MintQuoteBolt11Response`
+	 *   works, but `{ quote: string }` is sufficient. Pass `config.privkey` to produce a NUT-20
+	 *   signature regardless of whether the quote carries a `pubkey` field.
 	 */
-	async prepareMint<TQuote extends MintQuoteBaseResponse>(
+	async prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
 		method: string,
 		amount: AmountLike,
 		quote: TQuote,
@@ -1855,11 +1858,14 @@ class Wallet {
 			quote: quote.quote,
 		};
 
-		// Sign payload if the quote carries a public key
-		if (quote.pubkey) {
+		// Require a privkey when the quote is known to be locked
+		if ('pubkey' in quote && quote.pubkey) {
 			this.failIf(!privkey, 'Can not sign locked quote without private key');
-			const mintQuoteSignature = signMintQuote(privkey!, quote.quote, blindedMessages);
-			mintPayload.signature = mintQuoteSignature;
+		}
+		// Sign whenever a privkey is provided — quote.pubkey may be absent if only the
+		// quote ID was stored, but the caller still needs to produce a NUT-20 signature
+		if (privkey) {
+			mintPayload.signature = signMintQuote(privkey, quote.quote, blindedMessages);
 		}
 
 		return {
@@ -1880,7 +1886,9 @@ class Wallet {
 	 * @param mintPreview Preview returned by prepareMint.
 	 * @returns Minted proofs.
 	 */
-	async completeMint(mintPreview: MintPreview): Promise<Proof[]> {
+	async completeMint(
+		mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
+	): Promise<Proof[]> {
 		const { payload, outputData, keysetId, method } = mintPreview;
 		const { signatures } = await this.mint.mint(method, payload);
 		this.failIf(

@@ -1072,7 +1072,7 @@ export class MintOperationError extends HttpResponseError {
 }
 
 // @public
-export interface MintPreview<TQuote extends MintQuoteBaseResponse = MintQuoteBaseResponse> {
+export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
     keysetId: string;
     // (undocumented)
     method: string;
@@ -1963,7 +1963,7 @@ export class Wallet {
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
-    completeMint(mintPreview: MintPreview): Promise<Proof[]>;
+    completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
@@ -2010,7 +2010,7 @@ export class Wallet {
     readonly on: WalletEvents;
     readonly ops: WalletOps;
     prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
-    prepareMint<TQuote extends MintQuoteBaseResponse>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
+    prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
     receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;

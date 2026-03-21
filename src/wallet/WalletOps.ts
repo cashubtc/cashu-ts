@@ -45,6 +45,11 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
+	/**
+	 * @param quote Full `MintQuoteBolt11Response` or a bare quote ID string. Passing a string fetches
+	 *   the latest quote state from the mint (unit/expiry validation included). Pass the full object
+	 *   if you already have it to avoid the extra round-trip.
+	 */
 	mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>) {
 		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
@@ -505,7 +510,7 @@ export class ReceiveBuilder {
  * @example
  *
  *     const proofs = await wallet.ops
- *     	.mint(100, quote)
+ *     	.mintBolt11(100, quote)
  *     	.asDeterministic() // counter 0 auto reserves
  *     	.onCountersReserved((info) => console.log(info))
  *     	.privkey('sk')
