@@ -406,7 +406,11 @@ function decodeSigned(
 	if (typeof value === 'bigint') {
 		return { value: -1n - value, offset: newOffset };
 	}
-	return { value: -1 - value, offset: newOffset };
+	const signed = -1 - value;
+	if (!Number.isSafeInteger(signed)) {
+		return { value: -1n - BigInt(value), offset: newOffset };
+	}
+	return { value: signed, offset: newOffset };
 }
 
 function decodeByteString(

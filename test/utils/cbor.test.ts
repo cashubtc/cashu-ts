@@ -162,6 +162,27 @@ describe('cbor decoder', () => {
 		const res = decodeCBOR(data) as Uint8Array;
 		expect(Array.from(res)).toEqual([1, 2, 3, 4, 5]);
 	});
+
+	test('decode signed 8-byte value at MAX_SAFE_INTEGER boundary returns bigint', () => {
+		// major type 1 (negative), additionalInfo 27 -> 0x3b, payload = MAX_SAFE_INTEGER
+		// CBOR negative = -1 - payload = -9007199254740992 which is outside safe range
+		const hi = Math.floor(Number.MAX_SAFE_INTEGER / 2 ** 32);
+		const lo = Number.MAX_SAFE_INTEGER & 0xffffffff;
+		const data = Uint8Array.from([
+			0x3b,
+			(hi >>> 24) & 0xff,
+			(hi >>> 16) & 0xff,
+			(hi >>> 8) & 0xff,
+			hi & 0xff,
+			(lo >>> 24) & 0xff,
+			(lo >>> 16) & 0xff,
+			(lo >>> 8) & 0xff,
+			lo & 0xff,
+		]);
+		const result = decodeCBOR(data);
+		expect(typeof result).toBe('bigint');
+		expect(result).toBe(-1n - BigInt(Number.MAX_SAFE_INTEGER));
+	});
 });
 
 describe('cbor encoder', () => {
