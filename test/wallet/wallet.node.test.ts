@@ -2442,6 +2442,8 @@ describe('multi mint', async () => {
 						quote: 'K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D',
 						amount: 1,
 						fee_reserve: 2,
+						unit: 'sat',
+						request: invoice,
 						paid: false,
 						state: 'UNPAID',
 						expiry: 1673972705,
@@ -2870,6 +2872,7 @@ describe('melt proofs', () => {
 					state: MeltQuoteState.PAID,
 					expiry: 1234567890,
 					payment_preimage: 'preimage',
+					request: 'bolt11request',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -2934,6 +2937,7 @@ describe('melt proofs', () => {
 					state: MeltQuoteState.PAID,
 					expiry: 1234567890,
 					payment_preimage: 'preimage',
+					request: 'bolt11request',
 					change: [],
 				});
 			}),
@@ -2983,6 +2987,7 @@ describe('melt proofs', () => {
 					state: MeltQuoteState.UNPAID,
 					expiry: 1234567890,
 					payment_preimage: null,
+					request: 'bolt11request',
 					change: null,
 				});
 			}),
@@ -3140,6 +3145,7 @@ describe('melt proofs', () => {
 						state: MeltQuoteState.PAID,
 						expiry: meltQuote.expiry,
 						payment_preimage: 'deadbeef',
+						request: meltQuote.request,
 						change: [
 							{
 								id: '00bd033559de27d0',
@@ -3206,6 +3212,7 @@ describe('melt proofs', () => {
 						state: MeltQuoteState.PAID,
 						expiry: meltQuote.expiry,
 						payment_preimage: 'preimage',
+						request: meltQuote.request,
 						change: [
 							{
 								id: '00bd033559de27d0',
@@ -3246,6 +3253,7 @@ describe('melt proofs', () => {
 					state: MeltQuoteState.PAID,
 					expiry: 1234567890,
 					payment_preimage: 'preimage',
+					request: 'bolt12request',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -3328,6 +3336,7 @@ describe('melt proofs', () => {
 					state: MeltQuoteState.PAID,
 					expiry: 1234567890,
 					payment_preimage: 'preimage',
+					request: 'bolt11request',
 					change: [
 						{
 							id: '00bd033559de27d0',
@@ -3529,7 +3538,10 @@ describe('async melt preference body', () => {
 					quote: meltQuote.quote,
 					amount: meltQuote.amount,
 					fee_reserve: meltQuote.fee_reserve,
+					unit: meltQuote.unit,
+					expiry: 9999999999,
 					state: 'PAID',
+					request: meltQuote.request,
 					change: [],
 				});
 			}),
@@ -3632,7 +3644,10 @@ describe('async melt preference body', () => {
 					quote: 'q-auth-12',
 					amount: 1,
 					fee_reserve: 0,
+					unit: 'sat',
+					expiry: 9999999999,
 					state: 'PAID',
+					request: 'lno1offer...',
 					change: [],
 				});
 			}),

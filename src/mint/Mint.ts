@@ -27,7 +27,7 @@ import {
 	normalizeSafeIntegerMetadata,
 	sanitizeUrl,
 } from '../utils';
-import { Amount, type AmountLike } from '../model/Amount';
+import { Amount } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import type { AuthProvider } from '../auth/AuthProvider';
@@ -151,6 +151,10 @@ class Mint {
 		this._mintInfo = mintInfo instanceof MintInfo ? mintInfo : new MintInfo(mintInfo);
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Swap
+	// -----------------------------------------------------------------
+
 	/**
 	 * Performs a swap operation with ecash inputs and outputs.
 	 *
@@ -174,6 +178,10 @@ class Mint {
 
 		return data;
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Create Mint Quote
+	// -----------------------------------------------------------------
 
 	/**
 	 * Requests a new mint quote from the mint.
@@ -225,6 +233,10 @@ class Mint {
 		return this.normalizeMintQuoteBolt12Response(response);
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Check Mint Quote
+	// -----------------------------------------------------------------
+
 	/**
 	 * Gets an existing mint quote from the mint.
 	 *
@@ -264,6 +276,10 @@ class Mint {
 		);
 		return this.normalizeMintQuoteBolt12Response(response);
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Mint Proofs
+	// -----------------------------------------------------------------
 
 	/**
 	 * Mints new tokens by requesting blind signatures on the provided outputs.
@@ -322,6 +338,10 @@ class Mint {
 		return data;
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Create Melt Quote
+	// -----------------------------------------------------------------
+
 	/**
 	 * Requests a new melt quote from the mint.
 	 *
@@ -339,18 +359,8 @@ class Mint {
 			{ requestBody: this.normalizeMeltQuoteRequestOptions(meltQuotePayload) },
 			customRequest,
 		);
-		const data = this.normalizeMeltResponse(response);
-
-		if (
-			!isObj(data) ||
-			!(data?.amount instanceof Amount) ||
-			!(data?.fee_reserve instanceof Amount) ||
-			typeof data?.quote !== 'string'
-		) {
-			this._logger.error('Invalid response from mint...', { data, op: 'createMeltQuoteBolt11' });
-			throw new Error('Invalid response from mint');
-		}
-		return data;
+		const data = this.normalizeMeltBaseResponse(response, 'createMeltQuoteBolt11');
+		return this.normalizeMeltBoltResponse(data, 'createMeltQuoteBolt11');
 	}
 
 	/**
@@ -371,8 +381,13 @@ class Mint {
 			{ requestBody: this.normalizeMeltQuoteRequestOptions(meltQuotePayload) },
 			customRequest,
 		);
-		return this.normalizeMeltResponse(response);
+		const data = this.normalizeMeltBaseResponse(response, 'createMeltQuoteBolt12');
+		return this.normalizeMeltBoltResponse(data, 'createMeltQuoteBolt12');
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Check Melt Quote
+	// -----------------------------------------------------------------
 
 	/**
 	 * Gets an existing melt quote.
@@ -391,21 +406,8 @@ class Mint {
 			{},
 			customRequest,
 		);
-		const data = this.normalizeMeltResponse(response);
-
-		if (
-			!isObj(data) ||
-			!(data?.amount instanceof Amount) ||
-			!(data?.fee_reserve instanceof Amount) ||
-			typeof data?.quote !== 'string' ||
-			typeof data?.state !== 'string' ||
-			!Object.values(MeltQuoteState).includes(data.state)
-		) {
-			this._logger.error('Invalid response from mint...', { data, op: 'checkMeltQuoteBolt11' });
-			throw new Error('Invalid response from mint');
-		}
-
-		return data;
+		const data = this.normalizeMeltBaseResponse(response, 'checkMeltQuoteBolt11');
+		return this.normalizeMeltBoltResponse(data, 'checkMeltQuoteBolt11');
 	}
 
 	/**
@@ -426,8 +428,13 @@ class Mint {
 			{},
 			customRequest,
 		);
-		return this.normalizeMeltResponse(response);
+		const data = this.normalizeMeltBaseResponse(response, 'checkMeltQuoteBolt12');
+		return this.normalizeMeltBoltResponse(data, 'checkMeltQuoteBolt12');
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Melt Proofs
+	// -----------------------------------------------------------------
 
 	/**
 	 * Generic method to melt tokens using any payment method endpoint.
@@ -456,27 +463,22 @@ class Mint {
 			customRequest?: RequestFn;
 		},
 	): Promise<MeltQuoteBaseResponse & TRes> {
-		// Validate method string and make request
 		failIf(!this.isValidMethodString(method), `Invalid melt method: ${method}`, this._logger);
-		const data = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
+		const response = await this.requestWithAuth<MeltQuoteBaseResponse & TRes>(
 			'POST',
 			`/v1/melt/${method}`,
 			{ requestBody: meltPayload },
 			options?.customRequest,
 		);
-
-		// Runtime shape check for basic MeltQuoteBaseResponse
-		if (
-			!isObj(data) ||
-			typeof data.quote !== 'string' ||
-			typeof data.state !== 'string' ||
-			!Object.values(MeltQuoteState).includes(data.state)
-		) {
-			this._logger.error('Invalid response from mint...', { data, op: 'melt' });
-			throw new Error('Invalid response from mint');
+		const data = this.normalizeMeltBaseResponse(response, `melt: ${method}`);
+		if (method === 'bolt11' || method === 'bolt12') {
+			// First class methods (note: their response types are identical)
+			return this.normalizeMeltBoltResponse(
+				data as MeltQuoteBolt11Response & TRes,
+				`melt: ${method}`,
+			);
 		}
-
-		return this.normalizeMeltResponse(data);
+		return data;
 	}
 
 	/**
@@ -484,6 +486,8 @@ class Mint {
 	 * The inputs contain the amount and the fee_reserves for a Lightning payment. The payload can
 	 * also contain blank outputs in order to receive back overpaid Lightning fees.
 	 *
+	 * @remarks
+	 * Thin wrapper around melt('bolt11', ...).
 	 * @param meltPayload The melt payload containing inputs and optional outputs.
 	 * @param options.customRequest Optional override for the request function.
 	 * @returns The melt response.
@@ -494,18 +498,7 @@ class Mint {
 			customRequest?: RequestFn;
 		},
 	): Promise<MeltQuoteBolt11Response> {
-		const data = await this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
-
-		if (
-			!isObj(data) ||
-			typeof data?.state !== 'string' ||
-			!Object.values(MeltQuoteState).includes(data.state)
-		) {
-			this._logger.error('Invalid response from mint...', { data, op: 'meltBolt11' });
-			throw new Error('Invalid response from mint');
-		}
-
-		return data;
+		return this.melt<MeltQuoteBolt11Response>('bolt11', meltPayload, options);
 	}
 
 	/**
@@ -513,6 +506,8 @@ class Mint {
 	 * cover the amount plus fee reserves. Optional outputs can be included to receive change for
 	 * overpaid Lightning fees.
 	 *
+	 * @remarks
+	 * Thin wrapper around melt('bolt12', ...).
 	 * @param meltPayload Payload containing quote ID, inputs, and optional outputs for change.
 	 * @param options.customRequest Optional override for the request function.
 	 * @returns Payment result with state and optional change signatures.
@@ -525,6 +520,10 @@ class Mint {
 	): Promise<MeltQuoteBolt12Response> {
 		return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Public Utilities
+	// -----------------------------------------------------------------
 
 	/**
 	 * Checks if specific proofs have already been redeemed.
@@ -639,6 +638,10 @@ class Mint {
 		return data;
 	}
 
+	// -----------------------------------------------------------------
+	// Section: Websockets
+	// -----------------------------------------------------------------
+
 	/**
 	 * Tries to establish a websocket connection with the websocket mint url according to NUT-17.
 	 */
@@ -683,6 +686,10 @@ class Mint {
 	get webSocketConnection() {
 		return this.ws;
 	}
+
+	// -----------------------------------------------------------------
+	// Section: AUTH
+	// -----------------------------------------------------------------
 
 	/**
 	 * Returns the Clear Authentication Token (CAT) to use in the 'Clear-auth' header, or undefined if
@@ -757,6 +764,10 @@ class Mint {
 			...(nut19?.supported && nut19.params ? nut19.params : {}),
 		});
 	}
+
+	// -----------------------------------------------------------------
+	// Section: Normalizers / Helpers
+	// -----------------------------------------------------------------
 
 	/**
 	 * Normalizes AmountLike fields inside melt quote request options so they are serialized as JSON
@@ -834,16 +845,43 @@ class Mint {
 		};
 	}
 
-	private normalizeMeltResponse<T extends MeltQuoteBaseResponse>(response: T): T {
-		return {
+	private normalizeMeltBaseResponse<T extends MeltQuoteBaseResponse>(
+		response: T,
+		op: string = 'melt',
+	): T {
+		const data = {
 			...response,
 			amount: Amount.from(response.amount),
 			expiry: normalizeSafeIntegerMetadata(response.expiry, 'meltQuote.expiry', undefined),
 			change: response.change ? this.normalizeSignatureAmounts(response.change) : undefined,
-			...('fee_reserve' in response && response.fee_reserve != null
-				? { fee_reserve: Amount.from(response.fee_reserve as AmountLike) }
-				: {}),
 		} as T;
+
+		if (
+			!isObj(data) ||
+			typeof data.quote !== 'string' ||
+			!(data.amount instanceof Amount) ||
+			typeof data.unit !== 'string' ||
+			typeof data.state !== 'string' ||
+			typeof data.expiry !== 'number' ||
+			!Object.values(MeltQuoteState).includes(data.state)
+		) {
+			this._logger.error('Invalid response from mint...', { data, op });
+			throw new Error('Invalid response from mint');
+		}
+		return data;
+	}
+
+	private normalizeMeltBoltResponse<T extends MeltQuoteBolt11Response>(
+		response: T,
+		op: string = 'melt',
+	): T {
+		const data = { ...response, fee_reserve: Amount.from(response.fee_reserve) } as T;
+
+		if (typeof data.request !== 'string' || !(data.fee_reserve instanceof Amount)) {
+			this._logger.error('Invalid response from mint...', { data, op });
+			throw new Error('Invalid response from mint');
+		}
+		return data;
 	}
 }
 

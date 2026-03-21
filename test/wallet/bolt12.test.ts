@@ -208,7 +208,15 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 	});
 
 	it('createMeltQuoteBolt12 posts to /v1/melt/quote/bolt12', async () => {
-		const response = { quote: 'm123', amount: 100, fee_reserve: 3, request: 'lno1offer...' };
+		const response = {
+			quote: 'm123',
+			amount: 100,
+			fee_reserve: 3,
+			unit: 'sat',
+			expiry: 9999999999,
+			state: 'UNPAID',
+			request: 'lno1offer...',
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const meltQuotePayload = { request: 'lno1offer...', unit: 'sat', amount: 100 };
@@ -227,7 +235,9 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 			quote: 'm123',
 			amount: 9007199254740993n,
 			fee_reserve: 9007199254740995n,
+			unit: 'sat',
 			expiry: 123456n,
+			state: 'UNPAID',
 			request: 'lno1offer...',
 		};
 		const { req } = makeRequestSpy(response);
@@ -265,7 +275,15 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 	});
 
 	it('checkMeltQuoteBolt12 requests /v1/melt/quote/bolt12/{quote}', async () => {
-		const response = { quote: 'm123', amount: 100, fee_reserve: 3, state: 'UNPAID' };
+		const response = {
+			quote: 'm123',
+			amount: 100,
+			fee_reserve: 3,
+			unit: 'sat',
+			expiry: 9999999999,
+			state: 'UNPAID',
+			request: 'lno1offer...',
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const res = await mint.checkMeltQuoteBolt12('m123');
@@ -277,7 +295,16 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
 	});
 
 	it('meltBolt12 posts to /v1/melt/bolt12', async () => {
-		const response = { quote: 'm123', amount: 100, fee_reserve: 3, state: 'PAID', change: [] };
+		const response = {
+			quote: 'm123',
+			amount: 100,
+			fee_reserve: 3,
+			unit: 'sat',
+			expiry: 9999999999,
+			state: 'PAID',
+			change: [],
+			request: 'lno1offer...',
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const meltPayload = { quote: 'm123', inputs: [], outputs: [] };
@@ -408,7 +435,15 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	});
 
 	it('wallet.createMeltQuoteBolt12(offer, amountMsat?) delegates to mint', async () => {
-		const response = { quote: 'm1', request: 'lno1offer...', amount: 100, fee_reserve: 2 };
+		const response = {
+			quote: 'm1',
+			request: 'lno1offer...',
+			amount: 100,
+			fee_reserve: 2,
+			unit: 'sat',
+			expiry: 9999999999,
+			state: 'UNPAID',
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const wallet = new Wallet(mint);
@@ -430,7 +465,16 @@ describe('Wallet (BOLT12) – wrappers', () => {
 	});
 
 	it('wallet.meltProofsBolt12 delegates and returns {quote, change}', async () => {
-		const response = { quote: 'm1', amount: 100, fee_reserve: 2, state: 'PAID', change: [] };
+		const response = {
+			quote: 'm1',
+			amount: 100,
+			fee_reserve: 2,
+			unit: 'sat',
+			expiry: 9999999999,
+			state: 'PAID',
+			change: [],
+			request: 'lno1offer...',
+		};
 		const { req, calls } = makeRequestSpy(response);
 		const mint = new Mint(mintUrl, { customRequest: req });
 		const wallet = new Wallet(mint);
