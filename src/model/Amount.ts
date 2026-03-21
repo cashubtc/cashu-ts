@@ -103,7 +103,7 @@ export class Amount {
 	toNumber(): number {
 		if (!this.isSafeNumber()) {
 			throw new AmountError(
-				`Amount ${this.value} exceeds Number.MAX_SAFE_INTEGER; use bigint/string.`,
+				`Amount ${this.value} exceeds Number.MAX_SAFE_INTEGER; use toBigInt/toString/toJSON.`,
 			);
 		}
 		return Number(this.value);
@@ -123,6 +123,9 @@ export class Amount {
 		return this.value.toString(10);
 	}
 
+	/**
+	 * Returns number if a safe integer, string if not.
+	 */
 	toJSON(): number | string {
 		return this.isSafeNumber() ? Number(this.value) : this.toString();
 	}

@@ -3,8 +3,6 @@ import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import { type OperationCounters } from '../CounterSource';
 import { type SigFlag } from '../../crypto';
-import { type MeltBlanks } from './payloads';
-import { type MeltQuoteBaseResponse } from '../../model/types';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
@@ -166,17 +164,9 @@ export type MintProofsConfig = {
 
 /**
  * Configuration for melting operations.
- *
- * @remarks
- * OnChangeOutputsCreated is deprecated - use wallet.prepareMelt() and store the MeltPreview
- * instead.
  */
 export type MeltProofsConfig = {
 	keysetId?: string;
 	privkey?: string | string[];
-	/**
-	 * @deprecated Use wallet.prepareMelt() and store the MeltPreview instead.
-	 */
-	onChangeOutputsCreated?: (blanks: MeltBlanks<MeltQuoteBaseResponse>) => void;
 	onCountersReserved?: OnCountersReserved;
 };

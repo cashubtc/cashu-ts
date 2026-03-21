@@ -134,16 +134,18 @@ const n: number = total.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
 
 ---
 
-## `SwapPreview.amount` and `SwapPreview.fees` now return `Amount`
+## `SwapPreview.amount` and `SwapPreview.fees` are now `AmountLike`
 
-Both fields on the `SwapPreview` type (returned by `Wallet.getSwapPreview()`) previously returned `number`; both now return `Amount`.
+Both fields on the `SwapPreview` type (returned by `prepareSend()` / `prepareReceive()`) are now typed as `AmountLike` rather than `Amount`. The wallet still returns `Amount` objects at runtime; the looser type allows deserialized previews (where amounts are plain numbers) to satisfy the type without wrapping in `Amount.from()`.
+
+If you call `Amount` methods on these fields, wrap them first:
 
 ```ts
-// Before
-const net: number = preview.amount - preview.fees;
+// Before — worked because the type was Amount
+const net = preview.amount.subtract(preview.fees);
 
-// After
-const net: Amount = preview.amount.subtract(preview.fees);
+// After — use Amount.from() to restore arithmetic
+const net = Amount.from(preview.amount).subtract(Amount.from(preview.fees));
 const n: number = net.toNumber();
 ```
 
@@ -214,3 +216,110 @@ const mySelector: SelectProofs = (proofs, amountToSelect: number, ...) => { ... 
 import { type AmountLike } from '@cashu/cashu-ts';
 const mySelector: SelectProofs = (proofs, amountToSelect: AmountLike, ...) => { ... };
 ```
+
+---
+
+## `MintPreview.quote` is now the full quote object
+
+`prepareMint()` previously stored only the quote ID string in `MintPreview.quote`. It now stores the full quote object returned by the mint, giving consumers access to informational fields (`expiry`, `request`, `amount`, `unit`) needed for NUT-19 retry flows.
+
+```ts
+// Before — quote was a plain string
+const preview = await wallet.prepareMint('bolt11', 1000, quoteResponse);
+preview.quote; // string (quote ID only)
+
+// After — quote is the full TQuote object when a quote object is passed
+const preview = await wallet.prepareMint('bolt11', 1000, quoteResponse);
+preview.quote.expiry; // number | null — accessible now
+preview.quote.request; // string — Lightning invoice
+
+// If you passed a string quote ID, the field is { quote: string }
+const preview2 = await wallet.prepareMint('bolt11', 1000, 'q123');
+preview2.quote; // { quote: 'q123' }
+```
+
+The type is `MintPreview<TQuote>` where `TQuote extends { quote: string }` (defaults to `MintQuoteBaseResponse`).
+
+If you construct a `MintPreview` manually (e.g., after deserialization), update the `quote` field from a bare string to an object:
+
+```ts
+// Before
+const preview: MintPreview = { ..., quote: 'q123' };
+
+// After — pass the full quote object returned by createMintQuoteBolt11/12
+const preview: MintPreview = { ..., quote: mintQuoteResponse };
+```
+
+---
+
+## `MeltBlanks`, `meltBlanksCreated`, and `onChangeOutputsCreated` removed
+
+The legacy NUT-08 blanks callback API has been removed entirely. Use `prepareMelt()` + `completeMelt()` to achieve the same NUT-19 retry safety.
+
+### Removed APIs
+
+| API                                              | Replacement                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------- |
+| `MeltBlanks` type                                | `MeltPreview`                                                 |
+| `wallet.on.meltBlanksCreated(cb)`                | `await wallet.prepareMelt(...)` and persist the `MeltPreview` |
+| `MeltProofsConfig.onChangeOutputsCreated`        | `prepareMelt()`                                               |
+| `ops.meltBolt11(...).onChangeOutputsCreated(cb)` | `.prepare()` to get a `MeltPreview`                           |
+
+### Migration
+
+```ts
+// Before — legacy callback pattern
+let savedBlanks: MeltBlanks | undefined;
+await wallet.meltProofsBolt11(quote, proofs, {
+	onChangeOutputsCreated: (blanks) => {
+		savedBlanks = blanks;
+		persist(blanks); // save for retry
+	},
+});
+// ... later, retry:
+if (savedBlanks) await wallet.completeMelt(savedBlanks);
+
+// After — prepare/complete pattern
+const preview = await wallet.prepareMelt('bolt11', quote, proofs);
+persist(preview); // save for retry
+await wallet.completeMelt(preview);
+// ... later, retry:
+const preview = restore(); // load persisted MeltPreview
+await wallet.completeMelt(preview);
+```
+
+`prepareMelt()` / `MeltBuilder` only require `{ quote: string, amount: Amount }` on the quote argument — you do not need a full `MeltQuoteBolt11Response`. A persisted quote ID and amount are sufficient:
+
+```ts
+// Minimal quote — no need to re-fetch the full quote object
+const preview = await wallet.prepareMelt(
+	'bolt11',
+	{ quote: storedQuoteId, amount: storedAmount },
+	proofs,
+);
+await wallet.completeMelt(preview);
+```
+
+`completeMelt()` only requires `{ quote: { quote: string } }` on the input — a deserialized `MeltPreview` satisfies this without needing to reconstruct `Amount` fields on the quote object.
+
+---
+
+## `preferAsync` option removed from `melt()` / `meltBolt11()` / `meltBolt12()` options
+
+The deprecated `preferAsync` option on `Mint.melt()` and the wallet's `meltBolt11()`/`meltBolt12()` option objects has been removed. It was already marked deprecated (the guidance was to set `prefer_async: true` directly in the `MeltRequest` payload). It is no longer accepted.
+
+If you need NUT-06 async melt, pass `prefer_async: true` in the melt payload, or use `completeMelt(preview, privkey, true)`:
+
+```ts
+// Before
+await wallet.meltProofsBolt11(quote, proofs, { preferAsync: true });
+
+// After — set in payload directly, or via completeMelt's third argument
+const preview = await wallet.prepareMelt('bolt11', quote, proofs);
+await wallet.completeMelt(preview, undefined, true);
+// or equivalently:
+// await wallet.completeMelt(preview, undefined, /* preferAsync */ false);
+// and put prefer_async: true in the MeltRequest payload yourself
+```
+
+---
