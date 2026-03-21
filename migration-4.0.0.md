@@ -288,7 +288,19 @@ const preview = restore(); // load persisted MeltPreview
 await wallet.completeMelt(preview);
 ```
 
-`completeMelt()` now only requires `{ quote: { quote: string } }` on the input — a deserialized `MeltPreview` satisfies this without needing to reconstruct `Amount` fields on the quote object.
+`prepareMelt()` / `MeltBuilder` only require `{ quote: string, amount: Amount }` on the quote argument — you do not need a full `MeltQuoteBolt11Response`. A persisted quote ID and amount are sufficient:
+
+```ts
+// Minimal quote — no need to re-fetch the full quote object
+const preview = await wallet.prepareMelt(
+	'bolt11',
+	{ quote: storedQuoteId, amount: storedAmount },
+	proofs,
+);
+await wallet.completeMelt(preview);
+```
+
+`completeMelt()` only requires `{ quote: { quote: string } }` on the input — a deserialized `MeltPreview` satisfies this without needing to reconstruct `Amount` fields on the quote object.
 
 ---
 

@@ -2130,7 +2130,8 @@ class Wallet {
 	 * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for
 	 * Lightning fee return and returns a MeltPreview, which you can melt using completeMelt.
 	 * @param method Payment method of the quote.
-	 * @param meltQuote The melt quote.
+	 * @param meltQuote The melt quote. Only `quote` (ID) and `amount` are required — a full
+	 *   `MeltQuoteBolt11Response` works, but `{ quote: string, amount: Amount }` is sufficient.
 	 * @param proofsToSend Proofs to melt.
 	 * @param config Optional configuration (keysetId, privkey, etc.).
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
@@ -2138,7 +2139,7 @@ class Wallet {
 	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	async prepareMelt<TQuote extends MeltQuoteBaseResponse>(
+	async prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
 		method: string,
 		meltQuote: TQuote,
 		proofsToSend: Proof[],
@@ -2217,7 +2218,9 @@ class Wallet {
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+	async completeMelt<
+		TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse,
+	>(
 		meltPreview: MeltPreview<TQuote>,
 		privkey?: string | string[],
 		preferAsync?: boolean,

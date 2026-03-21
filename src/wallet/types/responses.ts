@@ -3,7 +3,9 @@ import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 /**
  * Response after paying a Lightning invoice.
  */
-export type MeltProofsResponse<TQuote extends MeltQuoteBaseResponse = MeltQuoteBaseResponse> = {
+export type MeltProofsResponse<
+	TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse,
+> = {
 	/**
 	 * If false, the proofs have not been invalidated and the payment can be tried later again with
 	 * the same proofs.
