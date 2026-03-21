@@ -216,6 +216,23 @@ describe('test token v3 encoding', () => {
 			'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJhbW91bnQiOjIsImlkIjoiMDA5YTFmMjkzMjUzZTQxZSIsInNlY3JldCI6IjQwNzkxNWJjMjEyYmU2MWE3N2UzZTZkMmFlYjRjNzI3OTgwYmRhNTFjZDA2YTZhZmMyOWUyODYxNzY4YTc4MzciLCJDIjoiMDJiYzkwOTc5OTdkODFhZmIyY2M3MzQ2YjVlNDM0NWE5MzQ2YmQyYTUwNmViNzk1ODU5OGE3MmYwY2Y4NTE2M2VhIn0seyJhbW91bnQiOjgsImlkIjoiMDA5YTFmMjkzMjUzZTQxZSIsInNlY3JldCI6ImZlMTUxMDkzMTRlNjFkNzc1NmIwZjhlZTBmMjNhNjI0YWNhYTNmNGUwNDJmNjE0MzNjNzI4YzcwNTdiOTMxYmUiLCJDIjoiMDI5ZThlNTA1MGI4OTBhN2Q2YzA5NjhkYjE2YmMxZDVkNWZhMDQwZWExZGUyODRmNmVjNjlkNjEyOTlmNjcxMDU5In1dfV0sInVuaXQiOiJzYXQiLCJtZW1vIjoiVGhhbmsgeW91LiJ9',
 		);
 	});
+	test('getEncodedTokenV3 does not mutate input token proof IDs', () => {
+		const token = {
+			mint: 'https://testnut.cashu.space',
+			proofs: [
+				{
+					id: '01884a74bb2fc5ee6e5f958f89f9e4e6cf79241fbc9fd1012d6811b054a78beffe',
+					amount: 1,
+					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+					C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
+				},
+			],
+			unit: 'sat',
+		};
+		const originalId = token.proofs[0].id;
+		utils.getEncodedTokenV3(token);
+		expect(token.proofs[0].id).toBe(originalId);
+	});
 });
 
 describe('test decode token', () => {
@@ -543,6 +560,23 @@ describe('test v4 encoding', () => {
 		const decodedExpectedToken = utils.getDecodedToken(encodedV4);
 		expect(decodedEncodedToken).toEqual(v3Token);
 		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
+	});
+	test('getEncodedToken does not mutate input token proof IDs', () => {
+		const token = {
+			mint: 'https://testnut.cashu.space',
+			proofs: [
+				{
+					id: '01884a74bb2fc5ee6e5f958f89f9e4e6cf79241fbc9fd1012d6811b054a78beffe',
+					amount: 1,
+					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+					C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
+				},
+			],
+			unit: 'sat',
+		};
+		const originalId = token.proofs[0].id;
+		utils.getEncodedToken(token);
+		expect(token.proofs[0].id).toBe(originalId);
 	});
 	test('removing DLEQ', async () => {
 		const proofs = [
