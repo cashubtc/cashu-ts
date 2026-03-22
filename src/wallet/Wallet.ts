@@ -2226,9 +2226,7 @@ class Wallet {
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<
-		TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse,
-	>(
+	async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
 		meltPreview: MeltPreview<TQuote>,
 		privkey?: string | string[],
 		preferAsync?: boolean,

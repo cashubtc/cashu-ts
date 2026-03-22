@@ -37,7 +37,7 @@ export interface MintPreview<
  * Preview of a Melt transaction created by prepareMelt.
  */
 export interface MeltPreview<
-	TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse,
+	TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
 > {
 	method: string;
 	/**

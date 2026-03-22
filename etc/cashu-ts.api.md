@@ -727,7 +727,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
 }
 
 // @public
-export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse> {
+export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> {
     inputs: Proof[];
     keysetId: string;
     // (undocumented)
@@ -744,7 +744,7 @@ export type MeltProofsConfig = {
 };
 
 // @public
-export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse> = {
+export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> = {
     quote: TQuote;
     change: Proof[];
 };
@@ -1753,7 +1753,7 @@ export const SigAll: SigAllApi;
 export type SigAllApi = {
     computeDigests: (inputs: Array<Pick<Proof, 'secret' | 'C'>>, outputs: SerializedBlindedMessage[], quoteId?: string) => SigAllDigests;
     extractSwapPackage: (preview: SwapPreview) => SigAllSigningPackage;
-    extractMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
+    extractMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(preview: MeltPreview<TQuote>) => SigAllSigningPackage;
     serializePackage: (pkg: SigAllSigningPackage) => string;
     deserializePackage: (input: string, options?: {
         validateDigest?: boolean;
@@ -1761,7 +1761,7 @@ export type SigAllApi = {
     signPackage: (pkg: SigAllSigningPackage, privkey: string) => SigAllSigningPackage;
     signDigest: (hexDigest: string, privkey: string) => string;
     mergeSwapPackage: (pkg: SigAllSigningPackage, preview: SwapPreview) => SwapPreview;
-    mergeMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
+    mergeMeltPackage: <TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(pkg: SigAllSigningPackage, preview: MeltPreview<TQuote>) => MeltPreview<TQuote>;
 };
 
 // @public (undocumented)
@@ -1962,7 +1962,7 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
-    completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
+    completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
