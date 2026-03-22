@@ -53,7 +53,7 @@ import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import type { SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
-import type { KeyChainCache, MintKeys, MintKeyset } from '../model/types/keyset';
+import type { KeyChainCache } from '../model/types/keyset';
 import type {
 	GetInfoResponse,
 	MeltRequest,
@@ -192,18 +192,6 @@ class Wallet {
 			secretsPolicy?: SecretsPolicy; // optional, auto
 			counterSource?: CounterSource; // optional, otherwise ephemeral
 			counterInit?: Record<string, number>; // optional, starting "next" per keyset
-			/**
-			 * @deprecated Use `wallet.loadMintFromCache` after init.
-			 */
-			keys?: MintKeys[] | MintKeys;
-			/**
-			 * @deprecated Use `wallet.loadMintFromCache` after init.
-			 */
-			keysets?: MintKeyset[];
-			/**
-			 * @deprecated Use `wallet.loadMintFromCache` after init.
-			 */
-			mintInfo?: GetInfoResponse;
 			denominationTarget?: number;
 			selectProofs?: SelectProofs; // optional override
 			logger?: Logger;
@@ -238,19 +226,6 @@ class Wallet {
 		this.counters = new WalletCounters(this._counterSource);
 		this._keyChain = new KeyChain(this.mint, this._unit);
 		this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
-
-		// TODO: Deprecated cache init - to be removed with deprecated constructor options
-		if (options?.keysets && options?.keys && options?.mintInfo) {
-			const allKeys = Array.isArray(options.keys) ? options.keys : [options.keys];
-			// Convert Mint DTOs to KeyChainCache
-			const cache: KeyChainCache = KeyChain.mintToCacheDTO(
-				this._unit,
-				this.mint.mintUrl,
-				options.keysets,
-				allKeys,
-			);
-			this.loadMintFromCache(options.mintInfo, cache);
-		}
 	}
 
 	// Convenience wrappers for "log and throw"

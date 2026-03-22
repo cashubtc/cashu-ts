@@ -424,6 +424,106 @@ createBlindSignature(B_, privateKey, id);
 
 ---
 
+## KeyChain and KeyChainCache: multi-unit support and API cleanup
+
+### `KeyChainCache` — `unit` field removed, `savedAt` field added
+
+The `unit` field has been removed from `KeyChainCache`. The cache now contains keysets for **all** units at the mint. Use an explicit `unit` argument when restoring from cache.
+
+The new `savedAt?: number` field (unix ms) is set automatically when the cache is created. Use it to implement TTL / staleness checks in your app.
+
+```ts
+// Before
+type KeyChainCache = { keysets: KeysetCache[]; unit: string; mintUrl: string };
+
+// After
+type KeyChainCache = { keysets: KeysetCache[]; mintUrl: string; savedAt?: number };
+```
+
+### `KeyChain.fromCache` — explicit `unit` parameter
+
+```ts
+// Before
+const chain = KeyChain.fromCache(mint, cache);
+
+// After — unit is now the second argument
+const chain = KeyChain.fromCache(mint, 'sat', cache);
+```
+
+### `KeyChain.mintToCacheDTO` — `unit` parameter removed
+
+The first argument (`unit`) has been dropped. The cache is now mint-wide (all units).
+
+```ts
+// Before
+const cache = KeyChain.mintToCacheDTO(unit, mintUrl, keysets, keys);
+
+// After
+const cache = KeyChain.mintToCacheDTO(mintUrl, keysets, keys);
+```
+
+### `KeyChain` constructor — `cachedKeysets` and `cachedKeys` removed
+
+The optional `cachedKeysets` and `cachedKeys` constructor parameters have been removed. Use `mintToCacheDTO` + `fromCache` instead:
+
+```ts
+// Before
+const chain = new KeyChain(mint, unit, keysets, keys);
+
+// After
+const cache = KeyChain.mintToCacheDTO(mintUrl, keysets, keys);
+const chain = KeyChain.fromCache(mint, unit, cache);
+```
+
+### `KeyChain.getCache()` — removed
+
+The deprecated `getCache()` method has been removed. Use the `cache` getter:
+
+```ts
+// Before
+const { keysets, keys, unit, mintUrl } = chain.getCache();
+
+// After
+const cache = chain.cache; // KeyChainCache
+const { keysets, keys } = KeyChain.cacheToMintDTO(cache); // if you need wire DTOs
+```
+
+### `KeyChainCache` now contains all units
+
+Previously, `cache.keysets` only contained keysets for the wallet's unit. It now contains keysets for every unit the mint exposes. If you read `cache.keysets` directly and assumed single-unit contents, filter by `unit` yourself.
+
+---
+
+## Wallet constructor — deprecated preload options removed
+
+The `keys`, `keysets`, and `mintInfo` constructor options have been removed. Use `loadMintFromCache` after construction instead:
+
+```ts
+// Before
+const wallet = new Wallet(mintUrl, { unit, keys, keysets, mintInfo });
+
+// After
+const wallet = new Wallet(mintUrl, { unit });
+const cache = KeyChain.mintToCacheDTO(mintUrl, keysets, keys);
+wallet.loadMintFromCache(mintInfo, cache);
+```
+
+---
+
+## Keyset — deprecated property aliases removed
+
+The following getter aliases on the `Keyset` class have been removed:
+
+| Removed getter  | Use instead |
+| --------------- | ----------- |
+| `active`        | `isActive`  |
+| `input_fee_ppk` | `fee`       |
+| `final_expiry`  | `expiry`    |
+
+Note: `input_fee_ppk` and `final_expiry` remain on the wire types `MintKeyset` and `MintKeys` — only the class getters are removed.
+
+---
+
 ## `preferAsync` option removed from `melt()` / `meltBolt11()` / `meltBolt12()` options
 
 The deprecated `preferAsync` option on `Mint.melt()` and the wallet's `meltBolt11()`/`meltBolt12()` option objects has been removed. It was already marked deprecated (the guidance was to set `prefer_async: true` directly in the `MeltRequest` payload). It is no longer accepted.

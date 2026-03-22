@@ -349,7 +349,8 @@ export class AuthManager implements AuthProvider {
 			const normalizedKeys = allKeys.keysets.map((keyset) => normalizeMintKeys(keyset));
 			// build a KeyChain preloaded with caches, unit 'auth'
 			// Then smoke test to surface errors early - no need to init() with cached keys
-			this.keychain = new KeyChain(this.mintUrl, 'auth', normalizedKeysets, normalizedKeys);
+			const cache = KeyChain.mintToCacheDTO(this.mintUrl, normalizedKeysets, normalizedKeys);
+			this.keychain = KeyChain.fromCache(this.mintUrl, 'auth', cache);
 			this.keychain.getCheapestKeyset();
 		}
 	}

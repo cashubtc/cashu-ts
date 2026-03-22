@@ -19,7 +19,7 @@ export const MINTCACHE = (() => {
 			final_expiry: undefined,
 		},
 		{
-			id: '00bd033559de27d0',
+			id: '01c98b29ff5192f43ed5dc13833be2577dc9f1c264ce4e8194dbd7c205d30068c9',
 			unit: 'usd',
 			active: true,
 			input_fee_ppk: 0,
@@ -36,7 +36,7 @@ export const MINTCACHE = (() => {
 			},
 		},
 		{
-			id: '00bd033559de27d0',
+			id: '01c98b29ff5192f43ed5dc13833be2577dc9f1c264ce4e8194dbd7c205d30068c9',
 			unit: 'usd',
 			keys: {
 				'1': '02f970b6ee058705c0dddc4313721cffb7efd3d142d96ea8e01d31c2b2ff09f181',
@@ -47,7 +47,7 @@ export const MINTCACHE = (() => {
 	const unit = 'sat';
 	const mintUrl = 'http://localhost:3338';
 	const mintInfo = MINTINFORESP;
-	const keychainCache: KeyChainCache = KeyChain.mintToCacheDTO(unit, mintUrl, keysets, keys);
+	const keychainCache: KeyChainCache = KeyChain.mintToCacheDTO(mintUrl, keysets, keys);
 
 	return {
 		mintUrl,

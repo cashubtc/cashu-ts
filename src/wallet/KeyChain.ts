@@ -10,10 +10,12 @@ import type {
 } from '../model/types/keyset';
 
 /**
- * Manages the unit-specific keysets for a Mint.
+ * Manages all keysets for a Mint. Queries filter by the wallet's unit.
  *
  * @remarks
- * Will ONLY load keysets in the KeyChain unit.
+ * Stores keysets for every unit the mint exposes. Methods like `getKeysets()` and
+ * `getCheapestKeyset()` filter by `this.unit`; `getKeyset(id)` is a direct lookup and is
+ * intentionally cross-unit.
  */
 export class KeyChain {
 	private mint: Mint;
@@ -21,20 +23,9 @@ export class KeyChain {
 	private keysets: { [id: string]: Keyset } = {};
 	private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
 
-	constructor(
-		mint: string | Mint,
-		unit: string,
-		cachedKeysets?: MintKeyset[],
-		cachedKeys?: MintKeys[] | MintKeys,
-	) {
+	constructor(mint: string | Mint, unit: string) {
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this.unit = unit;
-
-		// Legacy preload path using Mint API DTOs
-		if (cachedKeysets && cachedKeys) {
-			const arrayOfKeys = Array.isArray(cachedKeys) ? cachedKeys : [cachedKeys];
-			this.buildKeychain(cachedKeysets, arrayOfKeys);
-		}
 	}
 
 	// ---------------------------------------------------------------------
@@ -46,9 +37,12 @@ export class KeyChain {
 	 *
 	 * @remarks
 	 * Does not hit the network. The cache should have been produced by `keyChain.cache`.
+	 * @param mint Mint URL or Mint instance.
+	 * @param unit The unit this KeyChain should filter queries by (e.g. 'sat').
+	 * @param cache Cache produced by `keyChain.cache` or `KeyChain.mintToCacheDTO`.
 	 */
-	static fromCache(mint: string | Mint, cache: KeyChainCache): KeyChain {
-		const chain = new KeyChain(mint, cache.unit);
+	static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache): KeyChain {
+		const chain = new KeyChain(mint, unit);
 		chain.loadFromCache(cache);
 		return chain;
 	}
@@ -59,9 +53,11 @@ export class KeyChain {
 	 * @remarks
 	 * This is symmetrical to {@link KeyChain.cacheToMintDTO}. It is used by the `cache` getter and any
 	 * code that wants to move from raw Mint DTOs to the new cache shape.
+	 * @param mintUrl Mint URL.
+	 * @param allKeysets All keysets from mint.getKeySets() — any unit.
+	 * @param allKeys All keys from mint.getKeys() — any unit.
 	 */
 	static mintToCacheDTO(
-		unit: string,
 		mintUrl: string,
 		allKeysets: MintKeyset[],
 		allKeys: MintKeys[],
@@ -77,8 +73,8 @@ export class KeyChain {
 		});
 		return {
 			keysets: cacheKeysets,
-			unit,
 			mintUrl,
+			savedAt: Date.now(),
 		};
 	}
 
@@ -86,8 +82,7 @@ export class KeyChain {
 	 * Convert a KeyChainCache back into Mint API DTOs.
 	 *
 	 * @remarks
-	 * This is the inverse of {@link KeyChain.mintToCacheDTO} and is used by `loadFromCache` and the
-	 * deprecated `getCache()` wrapper.
+	 * This is the inverse of {@link KeyChain.mintToCacheDTO}.
 	 */
 	static cacheToMintDTO(cache: KeyChainCache): {
 		keysets: MintKeyset[];
@@ -145,21 +140,16 @@ export class KeyChain {
 	 *
 	 * @remarks
 	 * Does not hit the network. Intended for callers that already have a KeyChainCache and want a
-	 * synchronous path.
+	 * synchronous path. Loads all keysets from the cache regardless of unit; query methods filter by
+	 * `this.unit`.
 	 */
 	loadFromCache(cache: KeyChainCache): void {
-		if (cache.unit !== this.unit) {
-			throw new Error(
-				`KeyChain unit mismatch in cache, expected '${this.unit}', got '${cache.unit}' from ${cache.mintUrl}`,
-			);
-		}
-
 		const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
 		this.buildKeychain(keysets, keys);
 	}
 
 	/**
-	 * Builds keychain from Mint Keyset and Keys data.
+	 * Builds keychain from Mint Keyset and Keys data. Stores all units.
 	 *
 	 * @param allKeysets Keyset data from mint.getKeySets() API.
 	 * @param allKeys Keys data from mint.getKeys() API.
@@ -168,27 +158,17 @@ export class KeyChain {
 		// Clear existing keysets to avoid stale data
 		this.keysets = {};
 
-		// Filter Keysets / Keys by unit
-		const unitKeysets = allKeysets.filter((k) => k.unit === this.unit);
-		if (!unitKeysets.length) {
-			throw new Error(`No Keysets found for unit: ${this.unit}`);
-		}
-		const keysMap = new Map<string, MintKeys>(
-			allKeys.filter((k) => k.unit === this.unit).map((k) => [k.id, k]),
-		);
+		const keysMap = new Map<string, MintKeys>(allKeys.map((k) => [k.id, k]));
 
-		// Build keysets
-		for (const meta of unitKeysets) {
-			// Add keys if we have them
+		for (const meta of allKeysets) {
 			const mk = keysMap.get(meta.id);
 			const keyset = mk ? Keyset.fromMintApi(meta, mk) : Keyset.fromMintApi(meta);
 
-			// Discard unverifed keys
+			// Discard unverified keys
 			if (!keyset.verify()) {
 				keyset.keys = {};
 			}
 
-			// Add to keychain
 			this.keysets[keyset.id] = keyset;
 		}
 	}
@@ -225,10 +205,10 @@ export class KeyChain {
 			throw new Error('KeyChain not initialized');
 		}
 		const activeKeysets = Object.values(this.keysets).filter(
-			(k) => k.isActive && k.hasHexId && k.hasKeys,
+			(k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
 		);
 		if (activeKeysets.length === 0) {
-			throw new Error('No active keyset found');
+			throw new Error(`No active keyset found for unit: ${this.unit}`);
 		}
 		return activeKeysets.sort((a, b) => a.fee - b.fee)[0];
 	}
@@ -288,16 +268,20 @@ export class KeyChain {
 	}
 
 	/**
-	 * Get list of all keysets for the unit.
+	 * Get list of all keysets for the wallet's unit.
 	 *
-	 * @returns Array of Keysets.
-	 * @throws If uninitialized.
+	 * @returns Array of Keysets for `this.unit`.
+	 * @throws If uninitialized or no keysets exist for the unit.
 	 */
 	getKeysets(): Keyset[] {
 		if (Object.keys(this.keysets).length === 0) {
 			throw new Error('KeyChain not initialized');
 		}
-		return Object.values(this.keysets);
+		const unitKeysets = Object.values(this.keysets).filter((k) => k.unit === this.unit);
+		if (unitKeysets.length === 0) {
+			throw new Error(`No keysets found for unit: ${this.unit}`);
+		}
+		return unitKeysets;
 	}
 
 	/**
@@ -336,34 +320,12 @@ export class KeyChain {
 	 * API going forward.
 	 */
 	get cache(): KeyChainCache {
-		const allKeysets: Keyset[] = this.getKeysets();
+		// Use Object.values directly — all units, not just this.unit
+		const allKeysets = Object.values(this.keysets);
 		const metaList: MintKeyset[] = allKeysets.map((k) => k.toMintKeyset());
 		const keysList: MintKeys[] = allKeysets
 			.map((k) => k.toMintKeys())
 			.filter((mk): mk is MintKeys => mk !== null);
-		return KeyChain.mintToCacheDTO(this.unit, this.mint.mintUrl, metaList, keysList);
-	}
-
-	/**
-	 * Legacy Mint API cache format.
-	 *
-	 * @remarks
-	 * Useful for instantiating new wallets / keychains without repeatedly calling the mint API.
-	 * @deprecated Use the `cache` getter which returns a consolidated KeyChainCache.
-	 */
-	getCache(): {
-		keysets: MintKeyset[];
-		keys: MintKeys[];
-		unit: string;
-		mintUrl: string;
-	} {
-		const cache = this.cache;
-		const { keysets, keys } = KeyChain.cacheToMintDTO(cache);
-		return {
-			keysets,
-			keys,
-			unit: cache.unit,
-			mintUrl: cache.mintUrl,
-		};
+		return KeyChain.mintToCacheDTO(this.mint.mintUrl, metaList, keysList);
 	}
 }
