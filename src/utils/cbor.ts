@@ -30,12 +30,6 @@
  * - Encoder does not emit float16/float32. It uses float64 for
  *   non-integers to keep the implementation small.
  *
- * NUT-18 specifies PaymentRequest.amount ("a") as uint64, so amounts between 2^32 and
- * 2^64-1 are currently unrepresentable in creqA. Required changes:
- *   - encodeItem: add a `bigint` branch emitting the 8-byte uint64 form (additional-info 27)
- *   - decodeUnsigned / decodeLength: return bigint when additionalInfo === 27 and value > MAX_SAFE_INTEGER
- *   - PaymentRequest.toRawRequest: switch from amount.toNumber() to amount.toBigInt()
- *
  * Guidance for contributors
  * - To add streaming support, implement indefinite-length decoders that
  *   concatenate chunks until the break byte (0xff) and update decodeItem
