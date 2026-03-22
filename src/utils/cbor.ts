@@ -7,8 +7,8 @@
  * - Additional-info lengths: short (0..23), 1-, 2- and 4-byte length forms are
  *   encoded by the encoder. The decoder understands 8-byte length fields
  *   (additional-info 27) and will decode them into a JavaScript Number
- *   (hi * 2**32 + lo) but the encoder intentionally does not emit 8-byte
- *   integer forms (see 'Not implemented' below).
+ *   (hi * 2**32 + lo). The encoder emits 8-byte integer forms for bigint
+ *   values and for number values >= 2^32 (delegated to the bigint path).
  * - Floating point: decoder supports float16/float32/float64. Encoder emits
  *   float64 for non-integers.
  * - Guardrails: explicit throws for unsupported types and sizes (e.g. huge
@@ -115,7 +115,8 @@ function encodeUnsigned(value: number, buffer: number[]) {
 			value & 0xff,
 		);
 	} else {
-		throw new Error('Unsupported integer size');
+		// Safe integers >= 2^32: delegate to bigint path for 8-byte encoding
+		encodeBigInt(BigInt(value), buffer);
 	}
 }
 
@@ -176,7 +177,8 @@ function encodeSigned(value: number, buffer: number[]) {
 			unsigned & 0xff,
 		);
 	} else {
-		throw new Error('Unsupported integer size');
+		// Safe integers >= 2^32: delegate to bigint path for 8-byte encoding
+		encodeBigInt(BigInt(value), buffer);
 	}
 }
 

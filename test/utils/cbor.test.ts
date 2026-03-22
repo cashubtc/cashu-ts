@@ -25,8 +25,6 @@ function base64urlDecode(str: string): Uint8Array {
 const encoderThrows = [
 	{ name: 'Symbol', decoded: Symbol('x'), throws: /Unsupported type/ },
 	{ name: 'function', decoded: (() => {}) as any, throws: /Unsupported type/ },
-	{ name: 'unsigned integer too large', decoded: 4294967296, throws: /Unsupported integer size/ },
-	{ name: 'negative integer too large', decoded: -4294967297, throws: /Unsupported integer size/ },
 	{ name: 'array too long', decoded: new Array(70000).fill(0), throws: /Unsupported array length/ },
 ];
 
@@ -328,6 +326,24 @@ describe('cbor encoder', () => {
 		const n = 0x00010000; // 65536
 		const enc = encodeCBOR(n as any);
 		expect(Array.from(enc)).toEqual([0x1a, 0x00, 0x01, 0x00, 0x00]);
+		expect(decodeCBOR(enc)).toBe(n);
+	});
+
+	test('encodes number >= 2^32 via bigint delegation and roundtrips', () => {
+		const n = 4294967296; // 2^32, first value beyond 4-byte unsigned
+		const enc = encodeCBOR(n as any);
+		// Should use 8-byte form (additional-info 27)
+		expect(enc[0]).toBe(0x1b);
+		expect(enc.length).toBe(9);
+		expect(decodeCBOR(enc)).toBe(n);
+	});
+
+	test('encodes negative number beyond -2^32 via bigint delegation and roundtrips', () => {
+		const n = -4294967297; // first value beyond 4-byte negative
+		const enc = encodeCBOR(n as any);
+		// Should use 8-byte form under major type 1 (0x3b)
+		expect(enc[0]).toBe(0x3b);
+		expect(enc.length).toBe(9);
 		expect(decodeCBOR(enc)).toBe(n);
 	});
 
@@ -650,8 +666,9 @@ describe('CBOR Test Vectors', () => {
 			// Decide whether to skip the encode round-trip for this vector. Some
 			// vectors use float16/float32 (0xf9/0xfa) or float64 (0xfb) encodings or
 			// use 8-byte integer forms (additional-info 27 / 0x1b). Our encoder
-			// intentionally emits float64 for non-integers and only encodes integers
-			// up to 32-bit, so those vectors cannot be round-tripped exactly.
+			// intentionally emits float64 for non-integers and uses the shortest
+			// encoding for integers, so 8-byte test vectors for small values
+			// cannot be round-tripped to identical bytes.
 			const additionalInfo = firstByte & 0x1f;
 
 			// Unknown simple values (major type 7, additionalInfo < 24 but not one of
@@ -675,8 +692,9 @@ describe('CBOR Test Vectors', () => {
 				}
 			}
 
-			// For 8-byte integer forms (additionalInfo 27) the encoder only supports
-			// up to 32-bit integers. Mark those to skip encode assertions.
+			// For 8-byte integer forms (additionalInfo 27) the encoder uses the
+			// shortest form, so test vectors that use 8-byte encoding for small
+			// values won't produce byte-identical output. Skip encode assertions.
 			if ((majorType === 0 || majorType === 1) && additionalInfo === 27) {
 				skipEncode = true;
 			}
