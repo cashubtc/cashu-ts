@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90.26% </span>
+                <span class="strong">89.95% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>204/226</span>
+                <span class='fraction'>197/219</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">90.26% </span>
+                <span class="strong">89.95% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>204/226</span>
+                <span class='fraction'>197/219</span>
             </div>
         
             
@@ -392,27 +392,7 @@
 <a name='L327'></a><a href='#L327'>327</a>
 <a name='L328'></a><a href='#L328'>328</a>
 <a name='L329'></a><a href='#L329'>329</a>
-<a name='L330'></a><a href='#L330'>330</a>
-<a name='L331'></a><a href='#L331'>331</a>
-<a name='L332'></a><a href='#L332'>332</a>
-<a name='L333'></a><a href='#L333'>333</a>
-<a name='L334'></a><a href='#L334'>334</a>
-<a name='L335'></a><a href='#L335'>335</a>
-<a name='L336'></a><a href='#L336'>336</a>
-<a name='L337'></a><a href='#L337'>337</a>
-<a name='L338'></a><a href='#L338'>338</a>
-<a name='L339'></a><a href='#L339'>339</a>
-<a name='L340'></a><a href='#L340'>340</a>
-<a name='L341'></a><a href='#L341'>341</a>
-<a name='L342'></a><a href='#L342'>342</a>
-<a name='L343'></a><a href='#L343'>343</a>
-<a name='L344'></a><a href='#L344'>344</a>
-<a name='L345'></a><a href='#L345'>345</a>
-<a name='L346'></a><a href='#L346'>346</a>
-<a name='L347'></a><a href='#L347'>347</a>
-<a name='L348'></a><a href='#L348'>348</a>
-<a name='L349'></a><a href='#L349'>349</a>
-<a name='L350'></a><a href='#L350'>350</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L330'></a><a href='#L330'>330</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -427,27 +407,13 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -545,8 +511,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-yes">69x</span>
-<span class="cline-any cline-yes">69x</span>
 <span class="cline-any cline-yes">69x</span>
 <span class="cline-any cline-yes">69x</span>
 <span class="cline-any cline-yes">69x</span>
@@ -693,10 +657,6 @@
 <span class="cline-any cline-yes">193x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">34x</span>
-<span class="cline-any cline-yes">34x</span>
-<span class="cline-any cline-yes">34x</span>
-<span class="cline-any cline-yes">34x</span>
 <span class="cline-any cline-yes">34x</span>
 <span class="cline-any cline-yes">34x</span>
 <span class="cline-any cline-yes">34x</span>
@@ -771,50 +731,36 @@
 import { type P2PKOptions } from '../wallet';
 import {
 	blindMessage,
-	constructProofFromPromise,
+	constructUnblindedSignature,
 	deriveP2BKBlindedPubkeys,
 	deriveBlindingFactor,
 	deriveSecret,
 	pointFromHex,
-	serializeProof,
 	type DLEQ,
+	type BlindSignature,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 import { Amount, type AmountLike } from './Amount';
 &nbsp;
-// TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
-// For now the generic preserves the relationship between factory input type and `toProof` keyset type,
-// and keeps narrower implementations assignable under `strictFunctionTypes`.
-&nbsp;
 /**
- * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
- * the call site, use `OutputDataLike&lt;YourType&gt;`.
- *
- * @remarks
- * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
- * removing the generic.
+ * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
+ * `keys`. Custom implementations must satisfy this interface to be used with wallet operations.
  */
-export interface OutputDataLike&lt;TKeyset extends HasKeysetKeys = HasKeysetKeys&gt; {
+export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 &nbsp;
-	toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) =&gt; Proof;
+	toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) =&gt; Proof;
 }
 &nbsp;
 /**
- * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
- * the call site, use `OutputDataLike&lt;YourType&gt;`.
- *
- * @remarks
- * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic.
+ * Factory function that produces an {@link OutputDataLike} for a given amount and keyset. Implement
+ * this to customise blinded-message construction (e.g. deterministic secrets, P2PK).
  */
-export type OutputDataFactory&lt;TKeyset extends HasKeysetKeys = HasKeysetKeys&gt; = (
-	amount: AmountLike,
-	keys: TKeyset,
-) =&gt; OutputDataLike&lt;TKeyset&gt;;
+export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) =&gt; OutputDataLike;
 &nbsp;
 /**
  * Core P2PK tags that must not be settable in additional tags.
@@ -870,7 +816,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 <span class="cstat-no" title="statement not covered" >	return e;</span>
 <span class="cstat-no" title="statement not covered" >}</span>
 &nbsp;
-export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
+export class OutputData implements OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -895,16 +841,14 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 <span class="cstat-no" title="statement not covered" >			};</span>
 <span class="cstat-no" title="statement not covered" >		}</span>
 		const sigAmountKey = sig.amount.toString();
-		const blindSignature = {
-			id: sig.id,
-			amount: sig.amount.toNumber(), // TODO: proof numbers are unsafe
-			C_: pointFromHex(sig.C_),
-			dleq: dleq,
-		};
 		const A = pointFromHex(keyset.keys[sigAmountKey]);
-		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
-		const serializedProof = {
-			...serializeProof(proof),
+		const blindSig: BlindSignature = { id: sig.id, C_: pointFromHex(sig.C_) };
+		const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
+		const proof: Proof = {
+			id: sig.id,
+			amount: sig.amount.toBigInt(),
+			C: unblinded.C.toHex(true),
+			secret: new TextDecoder().decode(unblinded.secret),
 			...(<span class="branch-0 cbranch-no" title="branch not covered" >dleq &amp;&amp; {</span>
 <span class="cstat-no" title="statement not covered" >				dleq: {</span>
 <span class="cstat-no" title="statement not covered" >					s: bytesToHex(dleq.s),</span>
@@ -912,19 +856,19 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 <span class="cstat-no" title="statement not covered" >					r: numberToHexPadded64(dleq.r ?? BigInt(0)),</span>
 <span class="cstat-no" title="statement not covered" >				} as SerializedDLEQ,</span>
 <span class="cstat-no" title="statement not covered" >			}),</span>
-		} as Proof;
+		};
 &nbsp;
 		// Add P2BK (Pay to Blinded Key) blinding factors if needed
 		const Ehex = takeEphemeralE(this);
-		if (Ehex) <span class="branch-0 cbranch-no" title="branch not covered" >serializedProof.p2pk_e = Ehex;</span>
+		if (Ehex) <span class="branch-0 cbranch-no" title="branch not covered" >proof.p2pk_e = Ehex;</span>
 &nbsp;
-		return serializedProof;
+		return proof;
 	}
 &nbsp;
-	static createP2PKData&lt;T extends HasKeysetKeys&gt;(
+	static createP2PKData(
 		p2pk: P2PKOptions,
 		amount: AmountLike,
-		keyset: T,
+		keyset: HasKeysetKeys,
 		customSplit?: AmountLike[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -1041,11 +985,7 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 		return od;
 	}
 &nbsp;
-	static createRandomData&lt;T extends HasKeysetKeys&gt;(
-		amount: AmountLike,
-		keyset: T,
-		customSplit?: AmountLike[],
-	) {
+	static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) =&gt; this.createSingleRandomData(a, keyset.id));
 	}
@@ -1062,11 +1002,11 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
 		);
 	}
 &nbsp;
-	static createDeterministicData&lt;T extends HasKeysetKeys&gt;(
+	static createDeterministicData(
 		amount: AmountLike,
 		seed: Uint8Array,
 		counter: number,
-		keyset: T,
+		keyset: HasKeysetKeys,
 		customSplit?: AmountLike[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -1117,7 +1057,7 @@ export class OutputData implements OutputDataLike&lt;HasKeysetKeys&gt; {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-03-23T18:03:14.516Z
+                at 2026-03-23T18:11:57.344Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

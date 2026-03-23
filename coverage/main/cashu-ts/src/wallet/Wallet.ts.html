@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.64% </span>
+                <span class="strong">89.62% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>1143/1275</span>
+                <span class='fraction'>1140/1272</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">81.84% </span>
+                <span class="strong">81.78% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>239/292</span>
+                <span class='fraction'>238/291</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">86.95% </span>
+                <span class="strong">86.76% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>60/69</span>
+                <span class='fraction'>59/68</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.64% </span>
+                <span class="strong">89.62% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>1143/1275</span>
+                <span class='fraction'>1140/1272</span>
             </div>
         
             
@@ -2402,19 +2402,7 @@
 <a name='L2337'></a><a href='#L2337'>2337</a>
 <a name='L2338'></a><a href='#L2338'>2338</a>
 <a name='L2339'></a><a href='#L2339'>2339</a>
-<a name='L2340'></a><a href='#L2340'>2340</a>
-<a name='L2341'></a><a href='#L2341'>2341</a>
-<a name='L2342'></a><a href='#L2342'>2342</a>
-<a name='L2343'></a><a href='#L2343'>2343</a>
-<a name='L2344'></a><a href='#L2344'>2344</a>
-<a name='L2345'></a><a href='#L2345'>2345</a>
-<a name='L2346'></a><a href='#L2346'>2346</a>
-<a name='L2347'></a><a href='#L2347'>2347</a>
-<a name='L2348'></a><a href='#L2348'>2348</a>
-<a name='L2349'></a><a href='#L2349'>2349</a>
-<a name='L2350'></a><a href='#L2350'>2350</a>
-<a name='L2351'></a><a href='#L2351'>2351</a>
-<a name='L2352'></a><a href='#L2352'>2352</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L2340'></a><a href='#L2340'>2340</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2694,17 +2682,6 @@
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">99x</span>
-<span class="cline-any cline-yes">99x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -3791,7 +3768,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -5047,17 +5023,6 @@ class Wallet {
 	}
 &nbsp;
 	/**
-	 * Normalizes AmountLike to a safe JS number.
-	 *
-	 * @param amount To parse.
-	 * @param op Caller method name (or other identifier) for debug.
-	 * @throws If not a positive safe integer.
-	 */
-	private normalizeAmount(amount: AmountLike, op: string): number {
-		return this.parseAmount(amount, op, false).toNumber();
-	}
-&nbsp;
-	/**
 	 * Parses AmountLike to Amount.
 	 */
 	private parseAmount(amount: AmountLike, op: string, allowZero = false): Amount {
@@ -5771,7 +5736,7 @@ class Wallet {
 	 * @throws Throws if the send cannot be completed offline.
 	 */
 	sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
-		const sendAmount = this.normalizeAmount(amount, 'sendOffline');
+		const sendAmount = this.parseAmount(amount, 'sendOffline');
 		const { requireDleq = false, includeFees = false, exactMatch = true } = <span class="branch-0 cbranch-no" title="branch not covered" >config || {};</span>
 		if (requireDleq) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
 			// Only use proofs that have a DLEQ
@@ -5817,7 +5782,7 @@ class Wallet {
 		config?: SendConfig,
 		outputConfig?: OutputConfig,
 	): Promise&lt;SendResponse&gt; {
-		const sendAmount = this.normalizeAmount(amount, 'send');
+		const sendAmount = this.parseAmount(amount, 'send');
 		const { keysetId, includeFees = false } = config || {};
 		// Fallback to policy defaults if no outputConfig
 		outputConfig = outputConfig ?? {
@@ -5857,9 +5822,9 @@ class Wallet {
 				exactMatch: true,
 				requireDleq: false, // safety
 			});
-			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
+			const expectedFee = includeFees ? this.getFeesForProofs(send) : Amount.zero();
 &nbsp;
-			if (sumProofs(send).equals(sendAmount + expectedFee)) {
+			if (sumProofs(send).equals(sendAmount.add(expectedFee))) {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
 			}
@@ -6089,10 +6054,10 @@ class Wallet {
 		includeFees = false,
 		exactMatch = false,
 	): SendResponse {
-		const normalizedAmountToSend = this.normalizeAmount(amountToSend, 'selectProofsToSend');
+		const parsedAmountToSend = this.parseAmount(amountToSend, 'selectProofsToSend');
 		const { keep, send } = this._selectProofs(
 			proofs,
-			normalizedAmountToSend,
+			parsedAmountToSend,
 			this._keyChain,
 			includeFees,
 			exactMatch,
@@ -6150,10 +6115,9 @@ class Wallet {
 	 * @returns Fee amount.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
-	// TODO: v4 - return Amount
-	getFeesForProofs(proofs: Proof[]): number {
+	getFeesForProofs(proofs: Proof[]): Amount {
 		const sumPPK = Amount.sum(proofs.map((proof) =&gt; this.getProofFeePPK(proof))).toBigInt();
-		return Number((sumPPK + 999n) / 1000n);
+		return Amount.from((sumPPK + 999n) / 1000n);
 	}
 &nbsp;
 	/**
@@ -6592,7 +6556,7 @@ class Wallet {
 			typeof quote === 'string',
 			`prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
 		);
-		const requestedAmount = this.normalizeAmount(amount, `prepareMint: ${method}`);
+		const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 &nbsp;
@@ -7123,7 +7087,7 @@ export { Wallet };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-03-23T18:03:14.516Z
+                at 2026-03-23T18:11:57.344Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
