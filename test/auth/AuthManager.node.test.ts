@@ -1,5 +1,3 @@
-// tests/auth/AuthManager.node.test.ts
-
 // 1) Mock FIRST, and define everything INSIDE the factory (no outer refs)
 import { vi, describe, test, expect, beforeEach, afterEach, Mock, MockInstance } from 'vitest';
 
@@ -11,7 +9,10 @@ vi.mock('../../src/wallet', () => {
 			unit: 'auth',
 			keys: { 1: '02deadbeef', 2: '03cafebabe' },
 		});
-	});
+	}) as Mock & {
+		mintToCacheDTO: Mock;
+		fromCache: Mock;
+	};
 
 	// Static methods used by AuthManager.init
 	KeyChainMock.mintToCacheDTO = vi.fn((_mintUrl: string, _keysets: any, _keys: any) => ({
@@ -36,6 +37,20 @@ import { encodeBase64toUint8, Bytes } from '../../src/utils';
 import { OutputData } from '../../src/model/OutputData';
 
 const mintUrl = 'http://mint.local';
+
+function getKeyChainMock(): Mock & {
+	mintToCacheDTO: Mock;
+	fromCache: Mock;
+} {
+	return (
+		wallet as unknown as {
+			KeyChain: Mock & {
+				mintToCacheDTO: Mock;
+				fromCache: Mock;
+			};
+		}
+	).KeyChain;
+}
 
 /* --------------------------
  * Helpers
@@ -93,7 +108,7 @@ beforeEach(() => {
 	reqSpy = vi.fn();
 	hasValidDleqSpy = vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
 
-	const KeyChainMock = (wallet as any).KeyChain as Mock;
+	const KeyChainMock = getKeyChainMock();
 	if (vi.isMockFunction(KeyChainMock)) KeyChainMock.mockClear();
 });
 
@@ -251,7 +266,7 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 
 		await am.ensure(5);
 
-		const KeyChainMock = (wallet as any).KeyChain as Mock;
+		const KeyChainMock = getKeyChainMock();
 		expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
 			mintUrl,
 			[{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250 }],
@@ -333,7 +348,7 @@ describe('AuthManager: init fetches info then builds KeyChain via wallet mock', 
 
 		expect(am['info']).toBeTruthy();
 
-		const KeyChainMock = (wallet as any).KeyChain as Mock;
+		const KeyChainMock = getKeyChainMock();
 		expect(vi.isMockFunction(KeyChainMock)).toBe(true);
 		// AuthManager now uses mintToCacheDTO + fromCache instead of the raw constructor
 		expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
@@ -484,8 +499,8 @@ describe('getBlindAuthToken coverage', () => {
 test('importPool dedupes by secret and exportPool deep-copies and preserves missing dleq', () => {
 	const am = new AuthManager(mintUrl, { request: reqSpy });
 
-	const a: Proof = { id: 'k', C: 'C1', secret: 'S', dleq: { e: 'e1', s: 's1' }, amount: 1 };
-	const b: Proof = { id: 'k', C: 'C2', secret: 'S', dleq: { e: 'e2', s: 's2' }, amount: 1 }; // dup secret
+	const a: Proof = { id: 'k', C: 'C1', secret: 'S', dleq: { e: 'e1', s: 's1' }, amount: 1n };
+	const b: Proof = { id: 'k', C: 'C2', secret: 'S', dleq: { e: 'e2', s: 's2' }, amount: 1n }; // dup secret
 	const c: Proof = { id: 'k', C: 'C3', secret: 'T', amount: 1 } as any; // no dleq
 
 	am.importPool([a, b, c], 'replace');

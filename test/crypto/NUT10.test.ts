@@ -3,7 +3,7 @@ import { getTagInt, hasTag, parseHTLCSecret, parseSecret } from '../../src/crypt
 import { Proof } from '../../src';
 
 const proof: Proof = {
-	amount: 2,
+	amount: 2n,
 	id: '00bfa73302d12ffd',
 	secret:
 		'["HTLC",{"nonce":"c9b0fabb8007c0db4bef64d5d128cdcf3c79e8bb780c3294adf4c88e96c32647","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","039e6ec7e922abb4162235b3a42965eb11510b07b7461f6b1a17478b1c9c64d100"],["locktime","1"],["refund","02ce1bbd2c9a4be8029c9a6435ad601c45677f5cde81f8a7f0ed535e0039d0eb6c","03c43c00ff57f63cfa9e732f0520c342123e21331d0121139f1b636921eeec095f"],["n_sigs_refund","2"],["sigflag","SIG_ALL"]]}]',

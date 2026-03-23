@@ -169,8 +169,8 @@ class MockWallet {
 // ---- Fixtures ---------------------------------------------------------------
 
 const proofs: Proof[] = [
-	{ amount: 2, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-	{ amount: 3, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+	{ amount: 2n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+	{ amount: 3n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
 ];
 
 const token =
@@ -378,8 +378,8 @@ describe('WalletOps builders', () => {
 		});
 
 		it('supports sendCustom and keepCustom OutputTypes', async () => {
-			const mockData = [{ blindedMessage: { amount: Amount.from(4) } }] as OutputData[];
-			const mockKeep = [{ blindedMessage: { amount: Amount.one() } }] as OutputData[];
+			const mockData = [{ blindedMessage: { amount: Amount.from(4) } }] as unknown as OutputData[];
+			const mockKeep = [{ blindedMessage: { amount: Amount.one() } }] as unknown as OutputData[];
 
 			await ops.send(4, proofs).asCustom(mockData).keepAsCustom(mockKeep).run();
 
@@ -474,7 +474,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('supports custom() OutputType for receive', async () => {
-			const data = [{ blindedMessage: { amount: Amount.from(5) } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.from(5) } }] as unknown as OutputData[];
 			await ops.receive(token).asCustom(data).run();
 
 			const [, , outputType] = wallet.receive.mock.calls[0];
@@ -507,7 +507,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('proofsWeHave() is forwarded in receive config', async () => {
-			const some = [{ amount: 1 } as Proof, { amount: 2 } as Proof];
+			const some = [{ amount: 1 } as unknown as Proof, { amount: 2 } as unknown as Proof];
 			await ops.receive(token).asDeterministic(0).proofsWeHave(some).run();
 
 			const [, config] = wallet.receive.mock.calls[0];
@@ -577,7 +577,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('supports custom() OutputType for mint', async () => {
-			const data = [{ blindedMessage: { amount: Amount.from(8) } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.from(8) } }] as unknown as OutputData[];
 			await ops.mintBolt11(8, quote).asCustom(data).prepare();
 
 			const [, , , , ot] = wallet.prepareMint.mock.calls[0];
@@ -592,7 +592,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('proofsWeHave() is forwarded in mint config', async () => {
-			const some = [{ amount: 3 } as Proof];
+			const some = [{ amount: 3 } as unknown as Proof];
 			await ops.mintBolt11(3, quote).asDeterministic(0).proofsWeHave(some).prepare();
 
 			const [, , , cfg] = wallet.prepareMint.mock.calls[0];
@@ -684,7 +684,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt12 supports custom OutputType', async () => {
-			const data = [{ blindedMessage: { amount: Amount.from(7) } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.from(7) } }] as unknown as OutputData[];
 			await ops.mintBolt12(7, mint12).asCustom(data).privkey('sk').prepare();
 
 			const [, , , , ot] = wallet.prepareMint.mock.calls[0];
@@ -699,7 +699,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt12 forwards proofsWeHave in config', async () => {
-			const some = [{ amount: 3 } as Proof];
+			const some = [{ amount: 3 } as unknown as Proof];
 			await ops.mintBolt12(7, mint12).asDeterministic(0).proofsWeHave(some).privkey('sk').prepare();
 
 			const [, , , cfg] = wallet.prepareMint.mock.calls[0];
@@ -785,7 +785,7 @@ describe('WalletOps builders', () => {
 		});
 
 		it('bolt11: supports custom OutputType', async () => {
-			const data = [{ blindedMessage: { amount: Amount.zero() } }] as OutputData[];
+			const data = [{ blindedMessage: { amount: Amount.zero() } }] as unknown as OutputData[];
 			await ops.meltBolt11(melt11, proofs).asCustom(data).run();
 
 			expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
