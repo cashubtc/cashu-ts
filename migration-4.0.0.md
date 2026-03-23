@@ -339,19 +339,23 @@ const proofs = normalizeProofAmounts(legacyProofs); // amount fields are bigints
 
 ---
 
-## `Wallet.getFeesForProofs()` now returns `Amount`
+## `Wallet.getFeesForProofs()` and `Wallet.getFeesForKeyset()` now return `Amount`
 
-Previously returned `number`; now returns an `Amount` value object, consistent with other fee fields in the v4 API.
+Both methods previously returned `number`; they now return `Amount` value objects, consistent with other fee and amount fields in the v4 API.
 
 ```ts
 // Before
 const fee: number = wallet.getFeesForProofs(proofs);
 const total = sendAmount + fee;
 
+const ksFee: number = wallet.getFeesForKeyset(3, keysetId);
+
 // After
 const fee: Amount = wallet.getFeesForProofs(proofs);
 const total = Amount.from(sendAmount).add(fee);
 const n: number = fee.toNumber();
+
+const ksFee: Amount = wallet.getFeesForKeyset(3, keysetId);
 ```
 
 ---

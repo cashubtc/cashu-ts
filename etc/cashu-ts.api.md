@@ -1962,7 +1962,7 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
-    getFeesForKeyset(nInputs: number, keysetId: string): number;
+    getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Proof[]): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;

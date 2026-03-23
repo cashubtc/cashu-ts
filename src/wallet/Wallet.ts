@@ -697,10 +697,12 @@ class Wallet {
 			let receiveFee = this.getFeesForKeyset(denominations.length, keyset.id);
 			let receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
 			while (
-				this.getFeesForKeyset(denominations.length + receiveFeeAmounts.length, keyset.id) >
-				receiveFee
+				this.getFeesForKeyset(
+					denominations.length + receiveFeeAmounts.length,
+					keyset.id,
+				).greaterThan(receiveFee)
 			) {
-				receiveFee++;
+				receiveFee = receiveFee.add(1);
 				receiveFeeAmounts = splitAmount(receiveFee, keyset.keys);
 			}
 			newAmount = newAmount.add(receiveFee);
@@ -1404,11 +1406,11 @@ class Wallet {
 	 * @param keysetId KeysetId used to lookup `input_fee_ppk`
 	 * @returns Fee amount.
 	 */
-	getFeesForKeyset(nInputs: number, keysetId: string): number {
+	getFeesForKeyset(nInputs: number, keysetId: string): Amount {
 		try {
 			// We must NOT fallback to wallet's keyset
 			const feePPK = this._keyChain.getKeyset(keysetId).fee;
-			return Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0));
+			return Amount.from(Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0)));
 		} catch (e) {
 			this.fail(`No keyset found with ID ${keysetId}`, { e });
 		}

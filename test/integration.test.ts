@@ -889,7 +889,7 @@ describe('Keep Vector and Reordering', () => {
 		await untilMintQuotePaid(wallet, mintQuote);
 		const testOutputAmounts = [8, 4, 8, 2, 8, 2];
 		const testProofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
-		const fees = wallet.getFeesForProofs(testProofs);
+		const fees = wallet.getFeesForProofs(testProofs).toNumber();
 		const customConfig: OutputConfig = {
 			keep: { type: 'random', denominations: [16, 8, ...Array(8 - fees).fill(1)] },
 			send: { type: 'random', denominations: testOutputAmounts },
