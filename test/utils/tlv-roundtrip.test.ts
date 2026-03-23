@@ -9,6 +9,7 @@ import { describe, test, expect } from 'vitest';
 import { decodeBech32mToBytes, encodeBech32m } from '../../src/utils/bech32m';
 import { decodeTLV, encodeTLV } from '../../src/utils/tlv';
 import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
+import { PaymentRequestTransportType } from '../../src/wallet';
 
 /**
  * Helper function to perform roundtrip test:
@@ -19,7 +20,7 @@ import type { DecodedTLVPaymentRequest } from '../../src/utils/tlv';
  * 4. Decode the re-encoded TLV bytes.
  * 5. Compare original and final decoded objects.
  */
-function testRoundtrip(encoded: string, description: string) {
+function testRoundtrip(encoded: string, _description: string) {
 	// Step 1: Decode original
 	const originalBytes = decodeBech32mToBytes(encoded.toLowerCase());
 	const originalDecoded = decodeTLV(originalBytes);
@@ -334,7 +335,7 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
 				description: 'Test payment',
 				transports: [
 					{
-						type: 'nostr' as const,
+						type: PaymentRequestTransportType.NOSTR,
 						target: 'nprofile1qqsrhuxx8l9ex335q7he0f09aej04zpazpl0ne2cgukyawd24mayt8g2lcy6q',
 						tags: [['n', '17']],
 					},

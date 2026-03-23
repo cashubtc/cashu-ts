@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Amount, Mint, Wallet, type MintKeys, type MintKeyset, Keyset, Proof } from '../../src';
+import { Amount, Mint, Wallet, type MintKeys, Keyset, Proof } from '../../src';
 import { MINTCACHE } from '../consts';
 
 type ReqArgs = {
@@ -488,7 +488,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
 			unit: 'sat',
 			request: 'lno1offer...',
 		};
-		const proof: Proof = { amount: 128, secret: 'secret1', C: 'C1', id: 'foo' };
+		const proof: Proof = { amount: 128n, secret: 'secret1', C: 'C1', id: 'foo' };
 		const res = await wallet.meltProofsBolt12(meltQuote as any, [proof]);
 		expect(res.quote.quote).toEqual('m1');
 		expect(res.change).toEqual([]);

@@ -175,26 +175,6 @@ describe('test wallet init', () => {
 		expect(mintInfo.isSupported(19)).toEqual({ supported: false });
 	});
 
-	test('should keep cached NUT-19 support when loading from cache', async () => {
-		const staleCachedInfo = JSON.parse(JSON.stringify(mintInfoResp));
-		staleCachedInfo.nuts[19] = {
-			ttl: 30,
-			cached_endpoints: [{ method: 'GET', path: '/v1/info' }],
-		};
-
-		const wallet = new Wallet(new Mint(mintUrl), { unit, mintInfo: staleCachedInfo });
-		wallet.loadMintFromCache(staleCachedInfo, MINTCACHE.keychainCache);
-
-		const mintInfo = await wallet.mint.getLazyMintInfo();
-		expect(mintInfo.isSupported(19)).toEqual({
-			supported: true,
-			params: {
-				ttl: 30000,
-				cached_endpoints: [{ method: 'GET', path: '/v1/info' }],
-			},
-		});
-	});
-
 	test('should wire NUT-19 policy from mint info during init', async () => {
 		const mintInfoWithNut19 = JSON.parse(JSON.stringify(mintInfoResp));
 		mintInfoWithNut19.nuts[19] = {
@@ -349,12 +329,7 @@ describe('test wallet init', () => {
 	});
 
 	test('should force refresh mint info, keys, and keysets when forceRefresh is true', async () => {
-		const wallet = new Wallet(mintUrl, {
-			unit,
-			mintInfo: mintInfoResp,
-			keys: dummyKeysResp.keysets,
-			keysets: dummyKeysetResp.keysets,
-		});
+		const wallet = new Wallet(mintUrl, { unit });
 		const spyMintInfo = vi.spyOn((wallet as any).mint, 'getInfo');
 		const spyKeySets = vi.spyOn((wallet as any).mint, 'getKeySets');
 		const spyKeys = vi.spyOn((wallet as any).mint, 'getKeys');

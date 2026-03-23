@@ -124,18 +124,6 @@ export type BlindSignature = {
 };
 
 // @public @deprecated
-export type Bolt12MeltQuotePayload = MeltQuoteBolt12Request;
-
-// @public @deprecated (undocumented)
-export type Bolt12MeltQuoteResponse = MeltQuoteBolt12Response;
-
-// @public @deprecated
-export type Bolt12MintQuotePayload = MintQuoteBolt12Request;
-
-// @public @deprecated
-export type Bolt12MintQuoteResponse = MintQuoteBolt12Response;
-
-// @public @deprecated
 export function bytesToNumber(bytes: Uint8Array): bigint;
 
 // @public (undocumented)
@@ -657,9 +645,6 @@ export type KeysetPair = {
     privKeys: RawMintKeys;
 };
 
-// @public @deprecated (undocumented)
-export type LockedMintQuoteResponse = MintQuoteBolt11Response;
-
 // @public (undocumented)
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -773,9 +758,6 @@ export type MeltQuoteBolt12Request = MeltQuoteBaseRequest & {
 // @public
 export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
 
-// @public @deprecated (undocumented)
-export type MeltQuoteResponse = MeltQuoteBolt11Response;
-
 // @public (undocumented)
 export const MeltQuoteState: {
     readonly UNPAID: "UNPAID";
@@ -871,12 +853,6 @@ export class Mint {
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
 }
-
-// @public @deprecated (undocumented)
-export type MintActiveKeys = GetKeysResponse;
-
-// @public @deprecated (undocumented)
-export type MintAllKeysets = GetKeysetsResponse;
 
 // @public
 export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
@@ -1110,12 +1086,6 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 
 // @public (undocumented)
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : MintQuoteBolt12Response;
-
-// @public @deprecated
-export type MintQuotePayload = MintQuoteBolt11Request;
-
-// @public @deprecated (undocumented)
-export type MintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 export const MintQuoteState: {
@@ -1392,12 +1362,6 @@ export function parseP2PKSecret(secret: Uint8Array): Secret;
 
 // @public
 export function parseSecret(secret: string | Secret): Secret;
-
-// @public @deprecated
-export type PartialMeltQuoteResponse = MeltQuoteBolt11Response;
-
-// @public @deprecated
-export type PartialMintQuoteResponse = MintQuoteBolt11Response;
 
 // @public (undocumented)
 class PaymentRequest_2 {
@@ -1794,9 +1758,6 @@ export type SwapMethod = {
         amountless?: boolean;
     };
 };
-
-// @public @deprecated
-export type SwapPayload = SwapRequest;
 
 // @public
 export type SwapPreview = {

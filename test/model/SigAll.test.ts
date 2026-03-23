@@ -4,7 +4,7 @@ import type { OutputDataLike, Proof, P2PKWitness, SerializedBlindedMessage } fro
 
 const dummyProof: Proof = {
 	id: 'testid',
-	amount: 32,
+	amount: 32n,
 	secret: 'dummysecret',
 	C: '02' + '1'.repeat(64),
 };

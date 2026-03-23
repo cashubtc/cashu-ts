@@ -50,7 +50,7 @@ describe('test create p2pk secret', () => {
 	test('sign and verify proof', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -63,14 +63,14 @@ describe('test create p2pk secret', () => {
 	test('sign and verify proofs', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
 		const proof1: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
 		};
 
 		const proof2: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -92,14 +92,14 @@ describe('test create p2pk secret', () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
 		const secretStr2 = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY2}"}]`;
 		const proof1: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
 		};
 
 		const proof2: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr2,
@@ -121,14 +121,14 @@ describe('test create p2pk secret', () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["pubkeys","${PUBKEY2}"]]}]`;
 		const secretStr2 = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","1"],["pubkeys","${PUBKEY2}"]]}]`;
 		const proof1: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
 		};
 
 		const proof2: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr2,
@@ -150,14 +150,14 @@ describe('test create p2pk secret', () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["pubkeys","${PUBKEY2}"]]}]`;
 		const secretStr2 = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY2}","tags":[["n_sigs","1"]]}]`;
 		const proof1: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
 		};
 
 		const proof2: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr2,
@@ -180,7 +180,7 @@ describe('test create p2pk secret', () => {
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -193,7 +193,7 @@ describe('test create p2pk secret', () => {
 	test('verify unlocked proofs and bad witness', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["locktime","123"]]}]`;
 		const proof1: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -433,7 +433,7 @@ describe('test signP2PKProof', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -443,7 +443,7 @@ describe('test signP2PKProof', () => {
 	test('can only sign and verify once', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -466,7 +466,7 @@ describe('test signP2PKProof', () => {
 
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -484,7 +484,7 @@ describe('test signP2PKProof', () => {
 		expect(PUBKEY3).toMatch(/^03/); // Verify it really is an odd Y-parity key
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY2}"}]`;
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			id: '00000000000',
 			secret: secretStr,
@@ -541,7 +541,7 @@ describe('test getP2PKWitnessSignatures', () => {
 describe('test p2pk verify', () => {
 	test('test no witness', () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			id: '00000000',
 			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
 			secret: `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${bytesToHex(
@@ -585,7 +585,7 @@ describe('P2BK fixed-vector ECDH tweak', () => {
 
 		// Now exercise signing end-to-end
 		const proof = {
-			amount: 64,
+			amount: 64n,
 			id: idHex,
 			C: '03657c5d884350d232dd219cfd68b1f19bc844c324d08d66e1f1db64106410de39', // any point is fine here
 			secret: secretStr,
@@ -616,7 +616,7 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 		const secret = createP2PKsecret(P0_, []);
 
 		// Proof-like object handed to signer
-		const proof = { amount: 1, id: kidHex, C: '03'.padEnd(66, '0'), secret, p2pk_e: E } as any;
+		const proof = { amount: 1n, id: kidHex, C: '03'.padEnd(66, '0'), secret, p2pk_e: E } as any;
 
 		// Bob signs using derived k; verify succeeds and witness is present
 		const [signed] = signP2PKProofs([proof], pBob);
@@ -637,7 +637,7 @@ describe('P2BK roundtrips (deriveP2BKBlindedPubkeys in secret -> signP2PKProofs)
 			['n_sigs', '2'],
 		]);
 		// Proof-like object handed to signer
-		const base = { amount: 1, id: kidHex, C: '03'.padEnd(66, '0'), secret, p2pk_e: E } as any;
+		const base = { amount: 1n, id: kidHex, C: '03'.padEnd(66, '0'), secret, p2pk_e: E } as any;
 
 		// Only Alice signs -> insufficient (witness added, but verify = false)
 		const [oneSigned] = signP2PKProofs([structuredClone(base)], pAlice);
@@ -706,7 +706,7 @@ describe('schnorrVerifyMessage & hasP2PKSignedProof', () => {
 		const sig = schnorrSignMessage(secret, priv);
 
 		const proofWithMatch: Proof = {
-			amount: 1,
+			amount: 1n,
 			id: 'a',
 			C: '03'.padEnd(66, '0'),
 			secret,
@@ -718,12 +718,12 @@ describe('schnorrVerifyMessage & hasP2PKSignedProof', () => {
 		const otherPub = bytesToHex(getPubKeyFromPrivKey(otherPriv));
 		expect(hasP2PKSignedProof(otherPub, proofWithMatch)).toBe(false);
 
-		const noWitness: Proof = { amount: 1, id: 'b', C: '03'.padEnd(66, '0'), secret };
+		const noWitness: Proof = { amount: 1n, id: 'b', C: '03'.padEnd(66, '0'), secret };
 		expect(hasP2PKSignedProof(pub, noWitness)).toBe(false);
 	});
 	test('returns false with non json witness string', () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			id: 'mw',
 			C: '03'.padEnd(66, '0'),
 			secret: `["P2PK",{"nonce":"aa","data":"${PUBKEY}"}]`,
@@ -733,7 +733,7 @@ describe('schnorrVerifyMessage & hasP2PKSignedProof', () => {
 	});
 	test('throws on SIG_ALL secret', () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			id: 'mw',
 			C: '03'.padEnd(66, '0'),
 			secret: `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["sigflag","SIG_ALL"]]}]`,
@@ -973,13 +973,13 @@ describe('SIG_ALL, both message formats are actually signed', () => {
 		// 2. Build a minimal SIG_ALL input set that passes assertSigAllInputs
 		const proofs: Proof[] = [
 			{
-				amount: 1,
+				amount: 1n,
 				id: '00a1',
 				C: '03'.padEnd(66, '1'),
 				secret,
 			} as Proof,
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00a2',
 				C: '03'.padEnd(66, '2'),
 				secret,
@@ -1041,7 +1041,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('Valid Locktime Multisig', async () => {
 		const proof: Proof = {
-			amount: 64,
+			amount: 64n,
 			C: '02d7cd858d866fca404b5cb1ffd813946e6d19efa1af00d654080fd20266bdc0b1',
 			id: '001b6c716bf42c7e',
 			secret:
@@ -1054,7 +1054,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('Valid Refund Multisig', async () => {
 		const proof: Proof = {
-			amount: 64,
+			amount: 64n,
 			C: '02d7cd858d866fca404b5cb1ffd813946e6d19efa1af00d654080fd20266bdc0b1',
 			id: '001b6c716bf42c7e',
 			secret:
@@ -1067,7 +1067,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_INPUTS - valid signature', async () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			secret:
 				'["P2PK",{"nonce":"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f","data":"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7","tags":[["sigflag","SIG_INPUTS"]]}]',
 			C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
@@ -1080,7 +1080,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_INPUTS - invalid signature', async () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			secret:
 				'["P2PK",{"nonce":"859d4935c4907062a6297cf4e663e2835d90d97ecdd510745d32f6816323a41f","data":"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7","tags":[["sigflag","SIG_INPUTS"]]}]',
 			C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
@@ -1093,7 +1093,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_INPUTS - 2 signatures required to meet multi-signature', async () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			secret:
 				'["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7","tags":[["pubkeys","0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798","02142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9"],["n_sigs","2"],["sigflag","SIG_INPUTS"]]}]',
 			C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
@@ -1106,7 +1106,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_INPUTS - one signature failing multi-signature', async () => {
 		const proof: Proof = {
-			amount: 1,
+			amount: 1n,
 			secret:
 				'["P2PK",{"nonce":"0ed3fcb22c649dd7bbbdcca36e0c52d4f0187dd3b6a19efcc2bfbebb5f85b2a1","data":"0249098aa8b9d2fbec49ff8598feb17b592b986e62319a4fa488a3dc36387157a7","tags":[["pubkeys","0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798","02142715675faf8da1ecc4d51e0b9e539fa0d52fdd96ed60dbe99adb15d6b05ad9"],["n_sigs","2"],["sigflag","SIG_INPUTS"]]}]',
 			C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
@@ -1119,7 +1119,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_INPUTS - signature from refund key, spendable because locktime is in the past', async () => {
 		const proof: Proof = {
-			amount: 64,
+			amount: 64n,
 			C: '0257353051c02e2d650dede3159915c8be123ba4f47cf33183c7fedd20bd91a79b',
 			id: '001b6c716bf42c7e',
 			secret:
@@ -1132,7 +1132,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_INPUTS - signature from refund key, NOT spendable because locktime is in the future', async () => {
 		const proof: Proof = {
-			amount: 64,
+			amount: 64n,
 			C: '0215865e3b30bdf6f5cdc1ee2c33379d5629bdf2eff2595603d939ff8c65d80586',
 			id: '001b6c716bf42c7e',
 			secret:
@@ -1146,7 +1146,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest valid msg_to_sign', async () => {
 		const proof: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303","data":"030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1","tags":[["sigflag","SIG_ALL"]]}]',
@@ -1166,7 +1166,7 @@ describe('NUT-11 test vectors', () => {
 
 	test('SIG_ALL - SwapRequest with a valid sig_all signature', async () => {
 		const proof: Proof = {
-			amount: 2,
+			amount: 2n,
 			id: '00bfa73302d12ffd',
 			secret:
 				'["P2PK",{"nonce":"c7f280eb55c1e8564e03db06973e94bc9b666d9e1ca42ad278408fe625950303","data":"030d8acedfe072c9fa449a1efe0817157403fbec460d8e79f957966056e5dd76c1","tags":[["sigflag","SIG_ALL"]]}]',
@@ -1186,7 +1186,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest invalid as the spending conditions are not identical across inputs', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 1,
+				amount: 1n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"fa6dd3fac9086c153878dec90b9e37163d38ff2ecf8b37db6470e9d185abbbae","data":"033b42b04e659fed13b669f8b16cdaffc3ee5738608810cf97a7631d09bd01399d","tags":[["sigflag","SIG_ALL"]]}]',
@@ -1195,7 +1195,7 @@ describe('NUT-11 test vectors', () => {
 					'{"signatures":["27b4d260a1186e3b62a26c0d14ffeab3b9f7c3889e78707b8fd3836b473a00601afbd53a2288ad20a624a8bbe3344453215ea075fc0ce479dd8666fd3d9162cc"]}',
 			},
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"4007b21fc5f5b1d4920bc0a08b158d98fd0fb2b0b0262b57ff53c6c5d6c2ae8c","data":"033b42b04e659fed13b669f8b16cdaffc3ee5738608810cf97a7631d09bd01399d","tags":[["locktime","122222222222222"],["sigflag","SIG_ALL"]]}]',
@@ -1216,7 +1216,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest where multiple valid signatures are required and provided', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"04bfd885fc982d553711092d037fdceb7320fd8f96b0d4fd6d31a65b83b94272","data":"0275e78025b558dbe6cb8fdd032a2e7613ca14fda5c1f4c4e3427f5077a7bd90e4","tags":[["pubkeys","035163650bbd5ed4be7693f40f340346ba548b941074e9138b67ef6c42755f3449","02817d22a8edc44c4141e192995a7976647c335092199f9e076a170c7336e2f5cc"],["n_sigs","2"],["sigflag","SIG_ALL"]]}]',
@@ -1237,7 +1237,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest - locktime has passed and the refund key signatures are valid', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"9ea35553beb18d553d0a53120d0175a0991ca6109370338406eed007b26eacd1","data":"02af21e09300af92e7b48c48afdb12e22933738cfb9bba67b27c00c679aae3ec25","tags":[["locktime","1"],["refund","02637c19143c58b2c58bd378400a7b82bdc91d6dedaeb803b28640ef7d28a887ac","0345c7fdf7ec7c8e746cca264bf27509eb4edb9ac421f8fbfab1dec64945a4d797"],["n_sigs_refund","2"],["sigflag","SIG_ALL"]]}]',
@@ -1257,7 +1257,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest - with an HTLC also locked to a public key', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["HTLC",{"nonce":"d730dd70cd7ec6e687829857de8e70aab2b970712f4dbe288343eca20e63c28c","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","0350cda8a1d5257dbd6ba8401a9a27384b9ab699e636e986101172167799469b14"],["sigflag","SIG_ALL"]]}]',
@@ -1277,7 +1277,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest - with an HTLC, invalid, locktime not expired, but proof is signed with the refund key', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["HTLC",{"nonce":"512c4045f12fdfd6f55059669c189e040c37c1ce2f8be104ed6aec296acce4e9","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","03ba83defd31c63f8841d188f0d41b5bb3af1bb3c08d0ba46f8f1d26a4d45e8cad"],["locktime","4854185133"],["refund","032f1008a79c722e93a1b4b853f85f38283f9ef74ee4c5c91293eb1cc3c5e46e34"],["sigflag","SIG_ALL"]]}]',
@@ -1298,7 +1298,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - SwapRequest - valid multisig HTLC also locked to locktime and refund keys', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["HTLC",{"nonce":"c9b0fabb8007c0db4bef64d5d128cdcf3c79e8bb780c3294adf4c88e96c32647","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","039e6ec7e922abb4162235b3a42965eb11510b07b7461f6b1a17478b1c9c64d100"],["locktime","1"],["refund","02ce1bbd2c9a4be8029c9a6435ad601c45677f5cde81f8a7f0ed535e0039d0eb6c","03c43c00ff57f63cfa9e732f0520c342123e21331d0121139f1b636921eeec095f"],["n_sigs_refund","2"],["sigflag","SIG_ALL"]]}]',
@@ -1322,7 +1322,7 @@ describe('NUT-11 test vectors', () => {
 		const pub = '029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835';
 		const inputs = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret: `[\"P2PK\",{\"nonce\":\"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de\",\"data\":\"${pub}\",\"tags\":[[\"sigflag\",\"SIG_ALL\"]]}]`,
 				C: '02a9d461ff36448469dccf828fa143833ae71c689886ac51b62c8d61ddaa10028b',
@@ -1343,7 +1343,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - MeltRequest - valid request', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"bbf9edf441d17097e39f5095a3313ba24d3055ab8a32f758ff41c10d45c4f3de","data":"029116d32e7da635c8feeb9f1f4559eb3d9b42d400f9d22a64834d89cde0eb6835","tags":[["sigflag","SIG_ALL"]]}]',
@@ -1364,7 +1364,7 @@ describe('NUT-11 test vectors', () => {
 	test('SIG_ALL - MeltRequest - valid multisig', async () => {
 		const proofs: Proof[] = [
 			{
-				amount: 2,
+				amount: 2n,
 				id: '00bfa73302d12ffd',
 				secret:
 					'["P2PK",{"nonce":"68d7822538740e4f9c9ebf5183ef6c4501c7a9bca4e509ce2e41e1d62e7b8a99","data":"0394e841bd59aeadce16380df6174cb29c9fea83b0b65b226575e6d73cc5a1bd59","tags":[["pubkeys","033d892d7ad2a7d53708b7a5a2af101cbcef69522bd368eacf55fcb4f1b0494058"],["n_sigs","2"],["sigflag","SIG_ALL"]]}]',

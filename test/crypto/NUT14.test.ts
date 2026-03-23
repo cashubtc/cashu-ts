@@ -59,7 +59,7 @@ describe('NUT14 module core functions', () => {
 describe('verifyHTLCSpendingConditions and isHTLCSpendAuthorised', () => {
 	test('HTLC main spending pathway', async () => {
 		const proof: Proof = {
-			amount: 2,
+			amount: 2n,
 			id: '00bfa73302d12ffd',
 			secret: `["HTLC",{"nonce":"d730dd70cd7ec6e687829857de8e70aab2b970712f4dbe288343eca20e63c28c","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","${PUBKEY}"]]}]`,
 			C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',
@@ -70,7 +70,7 @@ describe('verifyHTLCSpendingConditions and isHTLCSpendAuthorised', () => {
 	});
 	test('HTLC main spending pathway, no preimage (fails)', async () => {
 		const proof: Proof = {
-			amount: 2,
+			amount: 2n,
 			id: '00bfa73302d12ffd',
 			secret: `["HTLC",{"nonce":"d730dd70cd7ec6e687829857de8e70aab2b970712f4dbe288343eca20e63c28c","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","${PUBKEY}"]]}]`,
 			C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',
@@ -82,7 +82,7 @@ describe('verifyHTLCSpendingConditions and isHTLCSpendAuthorised', () => {
 	});
 	test('HTLC main spending pathway, incorrect preimage (fails)', async () => {
 		const proof: Proof = {
-			amount: 2,
+			amount: 2n,
 			id: '00bfa73302d12ffd',
 			secret: `["HTLC",{"nonce":"d730dd70cd7ec6e687829857de8e70aab2b970712f4dbe288343eca20e63c28c","data":"ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5","tags":[["pubkeys","${PUBKEY}"]]}]`,
 			C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',

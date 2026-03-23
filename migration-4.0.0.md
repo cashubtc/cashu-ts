@@ -257,58 +257,6 @@ const preview: MintPreview = { ..., quote: mintQuoteResponse };
 
 ---
 
-## `MeltBlanks`, `meltBlanksCreated`, and `onChangeOutputsCreated` removed
-
-The legacy NUT-08 blanks callback API has been removed entirely. Use `prepareMelt()` + `completeMelt()` to achieve the same NUT-19 retry safety.
-
-### Removed APIs
-
-| API                                              | Replacement                                                   |
-| ------------------------------------------------ | ------------------------------------------------------------- |
-| `MeltBlanks` type                                | `MeltPreview`                                                 |
-| `wallet.on.meltBlanksCreated(cb)`                | `await wallet.prepareMelt(...)` and persist the `MeltPreview` |
-| `MeltProofsConfig.onChangeOutputsCreated`        | `prepareMelt()`                                               |
-| `ops.meltBolt11(...).onChangeOutputsCreated(cb)` | `.prepare()` to get a `MeltPreview`                           |
-
-### Migration
-
-```ts
-// Before — legacy callback pattern
-let savedBlanks: MeltBlanks | undefined;
-await wallet.meltProofsBolt11(quote, proofs, {
-	onChangeOutputsCreated: (blanks) => {
-		savedBlanks = blanks;
-		persist(blanks); // save for retry
-	},
-});
-// ... later, retry:
-if (savedBlanks) await wallet.completeMelt(savedBlanks);
-
-// After — prepare/complete pattern
-const preview = await wallet.prepareMelt('bolt11', quote, proofs);
-persist(preview); // save for retry
-await wallet.completeMelt(preview);
-// ... later, retry:
-const preview = restore(); // load persisted MeltPreview
-await wallet.completeMelt(preview);
-```
-
-`prepareMelt()` / `MeltBuilder` only require `{ quote: string, amount: Amount }` on the quote argument — you do not need a full `MeltQuoteBolt11Response`. A persisted quote ID and amount are sufficient:
-
-```ts
-// Minimal quote — no need to re-fetch the full quote object
-const preview = await wallet.prepareMelt(
-	'bolt11',
-	{ quote: storedQuoteId, amount: storedAmount },
-	proofs,
-);
-await wallet.completeMelt(preview);
-```
-
-`completeMelt()` only requires `{ quote: { quote: string } }` on the input — a deserialized `MeltPreview` satisfies this without needing to reconstruct `Amount` fields on the quote object.
-
----
-
 ## `Proof.amount` is now `bigint`
 
 The `amount` field on the `Proof` type has changed from `number` to `bigint`. This affects any code that constructs, stores, or compares proof amounts.
@@ -477,16 +425,7 @@ const chain = KeyChain.fromCache(mint, unit, cache);
 
 ### `KeyChain.getCache()` — removed
 
-The deprecated `getCache()` method has been removed. Use the `cache` getter:
-
-```ts
-// Before
-const { keysets, keys, unit, mintUrl } = chain.getCache();
-
-// After
-const cache = chain.cache; // KeyChainCache
-const { keysets, keys } = KeyChain.cacheToMintDTO(cache); // if you need wire DTOs
-```
+The v3-deprecated `getCache()` method has been removed. Use the `cache` getter instead.
 
 ### `KeyChainCache` now contains all units
 
@@ -494,52 +433,14 @@ Previously, `cache.keysets` only contained keysets for the wallet's unit. It now
 
 ---
 
-## Wallet constructor — deprecated preload options removed
+## Deprecated v3 APIs now removed
 
-The `keys`, `keysets`, and `mintInfo` constructor options have been removed. Use `loadMintFromCache` after construction instead:
+These APIs were already deprecated in v3. In v4 they have been removed:
 
-```ts
-// Before
-const wallet = new Wallet(mintUrl, { unit, keys, keysets, mintInfo });
-
-// After
-const wallet = new Wallet(mintUrl, { unit });
-const cache = KeyChain.mintToCacheDTO(mintUrl, keysets, keys);
-wallet.loadMintFromCache(mintInfo, cache);
-```
-
----
-
-## Keyset — deprecated property aliases removed
-
-The following getter aliases on the `Keyset` class have been removed:
-
-| Removed getter  | Use instead |
-| --------------- | ----------- |
-| `active`        | `isActive`  |
-| `input_fee_ppk` | `fee`       |
-| `final_expiry`  | `expiry`    |
-
-Note: `input_fee_ppk` and `final_expiry` remain on the wire types `MintKeyset` and `MintKeys` — only the class getters are removed.
-
----
-
-## `preferAsync` option removed from `melt()` / `meltBolt11()` / `meltBolt12()` options
-
-The deprecated `preferAsync` option on `Mint.melt()` and the wallet's `meltBolt11()`/`meltBolt12()` option objects has been removed. It was already marked deprecated (the guidance was to set `prefer_async: true` directly in the `MeltRequest` payload). It is no longer accepted.
-
-If you need NUT-06 async melt, pass `prefer_async: true` in the melt payload, or use `completeMelt(preview, privkey, true)`:
-
-```ts
-// Before
-await wallet.meltProofsBolt11(quote, proofs, { preferAsync: true });
-
-// After — set in payload directly, or via completeMelt's third argument
-const preview = await wallet.prepareMelt('bolt11', quote, proofs);
-await wallet.completeMelt(preview, undefined, true);
-// or equivalently:
-// await wallet.completeMelt(preview, undefined, /* preferAsync */ false);
-// and put prefer_async: true in the MeltRequest payload yourself
-```
+- `Wallet` constructor preload options `keys`, `keysets`, and `mintInfo`; use `loadMintFromCache()` after construction.
+- `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`.
+- `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
+- `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
+- Deprecated crypto/type aliases removed in the v4 cleanup, including `BlindedMessage`; use the non-deprecated names such as `RawBlindedMessage`.
 
 ---
