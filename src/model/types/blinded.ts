@@ -1,11 +1,14 @@
+import type { Amount } from '../Amount';
+
 /**
  * Blinded message for sending to the mint.
  */
 export type SerializedBlindedMessage = {
 	/**
-	 * Amount.
+	 * Amount as a bigint so that JSONInt.stringify emits a raw numeric JSON token (never a quoted
+	 * string) for values that exceed Number.MAX_SAFE_INTEGER (e.g. msat denominations).
 	 */
-	amount: number;
+	amount: bigint;
 	/**
 	 * Blinded message.
 	 */
@@ -25,9 +28,9 @@ export type SerializedBlindedSignature = {
 	 */
 	id: string;
 	/**
-	 * Amount denominated in Satoshi.
+	 * Amount denominated in keyset unit.
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * Blinded signature.
 	 */

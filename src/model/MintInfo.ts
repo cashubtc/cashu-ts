@@ -5,10 +5,7 @@ import {
 	type WebSocketSupport,
 	type Nut19Policy,
 } from './types';
-import {
-	normalizeAmountToLegacyNumber,
-	normalizeSafeIntegerMetadata,
-} from '../utils/normalizeNumbers';
+import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
 type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
@@ -27,7 +24,7 @@ export class MintInfo {
 	private readonly _protected21?: ProtectedIndex;
 
 	constructor(info: GetInfoResponse) {
-		this._mintInfo = MintInfo.normalizeInfo(info); // TODO v4
+		this._mintInfo = MintInfo.normalizeInfo(info);
 
 		const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints);
 		this._protected22 = this.buildIndex(pe22);
@@ -36,45 +33,14 @@ export class MintInfo {
 		this._protected21 = this.buildIndex(pe21);
 	}
 
-	// TODO v4 - remove this normalization (GetInfoResponse will change)
-	// and we can just normalize min/max_amount to Amount in checkMintMelt()
-	private static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
+	static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
 		return {
 			...info,
 			nuts: {
 				...info.nuts,
-				...(info.nuts['4']
-					? { '4': MintInfo.normalizeMethodLimits(info.nuts['4'], 'nuts.4.methods') }
-					: {}),
-				...(info.nuts['5']
-					? { '5': MintInfo.normalizeMethodLimits(info.nuts['5'], 'nuts.5.methods') }
-					: {}),
 				...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
 				...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22']) } : {}),
 			},
-		};
-	}
-
-	private static normalizeMethodLimits<
-		TNut extends {
-			methods: Array<{ min_amount?: number; max_amount?: number }>;
-		},
-	>(nut: TNut, context: string): TNut {
-		return {
-			...nut,
-			methods: nut.methods.map((method) => ({
-				...method,
-				min_amount: normalizeAmountToLegacyNumber(
-					method.min_amount,
-					`${context}.min_amount`,
-					undefined,
-				),
-				max_amount: normalizeAmountToLegacyNumber(
-					method.max_amount,
-					`${context}.max_amount`,
-					undefined,
-				),
-			})),
 		};
 	}
 

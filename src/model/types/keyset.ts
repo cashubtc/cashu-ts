@@ -2,7 +2,7 @@
  * Public keys are a dictionary of number and string. The number represents the amount that the key
  * signs for.
  */
-export type Keys = { [amount: number]: string };
+export type Keys = { [amount: string]: string };
 
 /**
  * Minimal key carrier shape for low level helpers.

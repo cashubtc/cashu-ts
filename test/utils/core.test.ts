@@ -44,16 +44,16 @@ for (let i = 1; i <= 0x10000; i *= 16) {
 describe('test split amounts ', () => {
 	test('testing amount 2561', async () => {
 		const chunks = utils.splitAmount(2561, keys);
-		expect(chunks).toStrictEqual([2048, 512, 1]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([2048, 512, 1]);
 	});
 	test('testing amount 0', async () => {
 		const chunks = utils.splitAmount(0, keys);
-		expect(chunks).toStrictEqual([]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([]);
 	});
 
 	test('accepts AmountLike value and split entries', async () => {
 		const chunks = utils.splitAmount(Amount.from(10), keys, ['1', 1n, Amount.from(2), 2, 2, 2n]);
-		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
 });
 
@@ -61,21 +61,21 @@ describe('test split custom amounts ', () => {
 	const fiveToOne = [1, 1, 1, 1, 1];
 	test('testing amount 5', async () => {
 		const chunks = utils.splitAmount(5, keys, fiveToOne);
-		expect(chunks).toStrictEqual([1, 1, 1, 1, 1]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([1, 1, 1, 1, 1]);
 	});
 	const tenToOneAndTwo = [1, 1, 2, 2, 2, 2];
 	test('testing amount 10', async () => {
 		const chunks = utils.splitAmount(10, keys, tenToOneAndTwo);
-		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([1, 1, 2, 2, 2, 2]);
 	});
 	test('testing amount 12', async () => {
 		const chunks = utils.splitAmount(12, keys, tenToOneAndTwo);
-		expect(chunks).toStrictEqual([1, 1, 2, 2, 2, 2, 2]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([1, 1, 2, 2, 2, 2, 2]);
 	});
 	const fiveTwelve = [512];
 	test('testing amount 518', async () => {
 		const chunks = utils.splitAmount(518, keys, fiveTwelve, 'desc');
-		expect(chunks).toStrictEqual([512, 4, 2]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([512, 4, 2]);
 	});
 	const tooMuch = [512, 512];
 	test('testing amount 512 but split too much', async () => {
@@ -88,26 +88,26 @@ describe('test split custom amounts ', () => {
 	const empty: Array<number> = [];
 	test('testing empty', async () => {
 		const chunks = utils.splitAmount(5, keys, empty, 'desc');
-		expect(chunks).toStrictEqual([4, 1]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([4, 1]);
 	});
 	const undef = undefined;
 	test('testing undefined', async () => {
 		const chunks = utils.splitAmount(5, keys, undef);
-		expect(chunks).toStrictEqual([4, 1]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([4, 1]);
 	});
 });
 
 describe('test split different key amount', () => {
 	test('testing amount 68251', async () => {
 		const chunks = utils.splitAmount(68251, keys_base10, undefined, 'desc');
-		expect(chunks).toStrictEqual([
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([
 			10000, 10000, 10000, 10000, 10000, 10000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 100,
 			100, 10, 10, 10, 10, 10, 1,
 		]);
 	});
 	test('testing amount 1917', async () => {
 		const chunks = utils.splitAmount(1917, keys_base16);
-		expect(chunks).toStrictEqual([
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([
 			256, 256, 256, 256, 256, 256, 256, 16, 16, 16, 16, 16, 16, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 			1, 1, 1,
 		]);
@@ -117,7 +117,7 @@ describe('test split different key amount', () => {
 describe('test splitAmount zero handling', () => {
 	test('value=0 and split of zeros passes through unchanged', () => {
 		const chunks = utils.splitAmount(0, keys, [0, 0, 0]);
-		expect(chunks).toStrictEqual([0, 0, 0]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([0, 0, 0]);
 	});
 
 	test('value=0 with nonzero split throws', () => {
@@ -129,19 +129,19 @@ describe('test splitAmount zero handling', () => {
 	test('positive value ignores zeros in split', () => {
 		const chunks = utils.splitAmount(5, keys, [0, 1, 4, 0]);
 		// zeros are ignored, result is same as [1,4]
-		expect(chunks).toStrictEqual([1, 4]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([1, 4]);
 	});
 
 	test('all zeros with positive value falls back to normal fill', () => {
 		const chunks = utils.splitAmount(5, keys, [0, 0]);
 		// should behave same as no custom split: [4,1]
-		expect(chunks).toStrictEqual([4, 1]);
+		expect(chunks.map((a) => a.toNumber())).toStrictEqual([4, 1]);
 	});
 });
 
 test('exact custom split preserves order', () => {
 	const chunks = utils.splitAmount(32, keys, [8, 4, 8, 2, 8, 2]);
-	expect(chunks).toStrictEqual([8, 4, 8, 2, 8, 2]);
+	expect(chunks.map((a) => a.toNumber())).toStrictEqual([8, 4, 8, 2, 8, 2]);
 });
 
 describe('test token v3 encoding', () => {
@@ -324,7 +324,7 @@ describe('test getTokenMetadata', () => {
 		expect(metadata).toStrictEqual({
 			unit: 'sat',
 			mint: 'https://testnut.cashu.space',
-			amount: 10,
+			amount: Amount.from(10),
 			incompleteProofs: [
 				{
 					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
@@ -386,7 +386,7 @@ describe('test getTokenMetadata', () => {
 		expect(metadata).toStrictEqual({
 			unit: 'sat',
 			mint: 'https://testnut.cashu.space',
-			amount: 10,
+			amount: Amount.from(10),
 			incompleteProofs: [
 				{
 					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
@@ -616,18 +616,18 @@ describe('test output selection', () => {
 
 		let amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 3);
 		// keeping 22 with a target count of 3, we expect two 1s, two 2s, no 4s, and two 8s, and no extra to reach 22
-		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
+		expect(amountsToKeep.map((a) => a.toNumber())).toEqual([1, 1, 2, 2, 8, 8]);
 
 		// keeping 22 with a target count of 4, we expect three 1s, three 2s, one 4, and one 8 and another 1 to reach 22
 		amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 4);
-		expect(amountsToKeep).toEqual([1, 1, 1, 1, 2, 2, 2, 4, 8]);
+		expect(amountsToKeep.map((a) => a.toNumber())).toEqual([1, 1, 1, 1, 2, 2, 2, 4, 8]);
 
 		// keeping 22 with a target of 2, we expect one 1, one 2, no 4s, one 8, and another 1, 2, 8 to reach 22
 		amountsToKeep = utils.getKeepAmounts(proofsWeHave, 22, keys, 2);
-		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
+		expect(amountsToKeep.map((a) => a.toNumber())).toEqual([1, 1, 2, 2, 8, 8]);
 
 		amountsToKeep = utils.getKeepAmounts(proofsWeHave, '22', keys, 2);
-		expect(amountsToKeep).toEqual([1, 1, 2, 2, 8, 8]);
+		expect(amountsToKeep.map((a) => a.toNumber())).toEqual([1, 1, 2, 2, 8, 8]);
 	});
 
 	test('hasCorrespondingKey accepts AmountLike', () => {

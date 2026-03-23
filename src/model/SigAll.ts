@@ -7,7 +7,7 @@ import {
 	schnorrSignDigest,
 } from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
-import { Bytes, encodeUint8toBase64Url } from '../utils';
+import { Bytes, encodeUint8toBase64Url, JSONInt } from '../utils';
 
 /**
  * @experimental
@@ -97,7 +97,7 @@ function serializePackage(pkg: SigAllSigningPackage): string {
 	if (pkg.digests) ordered.digests = pkg.digests;
 	if (pkg.witness) ordered.witness = pkg.witness;
 
-	const json = JSON.stringify(ordered);
+	const json = JSONInt.stringify(ordered) ?? '{}';
 	const base64url = encodeUint8toBase64Url(Bytes.fromString(json));
 
 	return `${SIGALL_PREFIX}${base64url}`;
@@ -125,7 +125,7 @@ function deserializePackage(
 	let data: unknown;
 
 	try {
-		data = JSON.parse(json);
+		data = JSONInt.parse(json);
 	} catch (e) {
 		throw new Error(
 			`Failed to parse signing package JSON: ${e instanceof Error ? e.message : String(e)}`,
@@ -171,11 +171,17 @@ function deserializePackage(
 
 		if (!output || typeof output !== 'object') throw new Error(`Invalid output at index ${i}`);
 
-		if (typeof output.amount !== 'number') throw new Error(`Output ${i}: amount must be number`);
+		const amountType = typeof output.amount;
+		if (amountType !== 'number' && amountType !== 'bigint') {
+			throw new Error(`Output ${i}: amount must be a number`);
+		}
 
 		if (!output.B_ || typeof output.B_ !== 'string') throw new Error(`Output ${i}: B_ invalid`);
 
 		if (!output.id || typeof output.id !== 'string') throw new Error(`Output ${i}: id invalid`);
+
+		// Rehydrate raw JSON token (number | bigint) to bigint to satisfy SerializedBlindedMessage contract.
+		output.amount = BigInt(output.amount as number | bigint);
 	}
 
 	const digests = pkg.digests as Record<string, string> | undefined;

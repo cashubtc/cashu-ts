@@ -727,7 +727,7 @@ class Wallet {
 	 * Note: Empty denomination is valid (e.g: zero change).
 	 */
 	private preparedTotal(ot: OutputType): Amount {
-		if (ot.type === 'custom') return Amount.from(OutputData.sumOutputAmounts(ot.data));
+		if (ot.type === 'custom') return OutputData.sumOutputAmounts(ot.data);
 		const denoms = ot.denominations ?? [];
 		return Amount.sum(denoms);
 	}
@@ -837,10 +837,10 @@ class Wallet {
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
 		const indices = mergedBlindingData.map((_, i) => i);
 		if (!isP2PKSigAll(inputs)) {
-			indices.sort(
-				(a, b) =>
-					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
-			);
+			indices.sort((a, b) => {
+				const aa = Amount.from(mergedBlindingData[a].blindedMessage.amount);
+				return aa.compareTo(mergedBlindingData[b].blindedMessage.amount);
+			});
 		}
 		const keepVector: boolean[] = [
 			...Array.from({ length: keepOutputs.length }, () => true),
@@ -983,8 +983,8 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount: receiveAmount.toNumber(), // TODO: v4
-			fees: swapFee,
+			amount: receiveAmount,
+			fees: Amount.from(swapFee),
 			keysetId: keyset.id,
 			inputs: proofs,
 			keepOutputs: outputs,
@@ -1011,7 +1011,7 @@ class Wallet {
 			// Only use proofs that have a DLEQ
 			proofs = proofs.filter((p: Proof) => p.dleq != undefined);
 		}
-		this.failIf(sumProofs(proofs) < sendAmount, 'Not enough funds available to send');
+		this.failIf(sumProofs(proofs).lessThan(sendAmount), 'Not enough funds available to send');
 
 		const { keep, send } = this.selectProofsToSend(proofs, sendAmount, includeFees, exactMatch);
 		// Ensure witnesses are serialized, strip DLEQ if not required
@@ -1093,7 +1093,7 @@ class Wallet {
 			});
 			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
 
-			if (sumProofs(send) === sendAmount + expectedFee) {
+			if (sumProofs(send).equals(sendAmount + expectedFee)) {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
 			}
@@ -1172,7 +1172,7 @@ class Wallet {
 		}
 
 		// Calculate our expected change from the swap (and sanity check!)
-		const selectedSum = Amount.from(sumProofs(selectedProofs));
+		const selectedSum = sumProofs(selectedProofs);
 		const swapFee = this.getFeesForProofs(selectedProofs);
 		const required = sendAmount.add(swapFee);
 		if (selectedSum.lessThan(required)) {
@@ -1209,8 +1209,8 @@ class Wallet {
 
 		// Return SwapPreview
 		return {
-			amount: sendAmountTarget.toNumber(), // TODO: v4
-			fees: swapFee,
+			amount: sendAmountTarget,
+			fees: Amount.from(swapFee),
 			keysetId: keyset.id,
 			inputs: selectedProofs,
 			sendOutputs,
@@ -1542,7 +1542,7 @@ class Wallet {
 			const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
 			if (matchingSig) {
 				lastCounterWithSignature = start + i;
-				outputData[i].blindedMessage.amount = matchingSig.amount;
+				outputData[i].blindedMessage.amount = matchingSig.amount.toBigInt();
 				restoredProofs.push(outputData[i].toProof(matchingSig, keyset));
 			}
 		}
@@ -1581,7 +1581,7 @@ class Wallet {
 		amount: AmountLike,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
-		const mintAmount = this.normalizeAmount(amount, 'createMintQuoteBolt11');
+		const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11').toBigInt();
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -1596,7 +1596,7 @@ class Wallet {
 			description: description,
 		};
 		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
-		return { ...res, amount: res.amount || mintAmount, unit: res.unit || this._unit };
+		return { ...res, unit: res.unit || this._unit };
 	}
 
 	/**
@@ -1613,7 +1613,7 @@ class Wallet {
 		pubkey: string,
 		description?: string,
 	): Promise<MintQuoteBolt11Response> {
-		const mintAmount = this.normalizeAmount(amount, 'createLockedMintQuote');
+		const mintAmount = this.parseAmount(amount, 'createLockedMintQuote').toBigInt();
 		const { supported } = this.getMintInfo().isSupported(20);
 		this.failIf(!supported, 'Mint does not support NUT-20');
 		const mintQuotePayload: MintQuoteBolt11Request = {
@@ -1625,12 +1625,7 @@ class Wallet {
 		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
 		this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');
 		const resPubkey = res.pubkey!;
-		return {
-			...res,
-			pubkey: resPubkey,
-			amount: res.amount || mintAmount,
-			unit: res.unit || this._unit,
-		};
+		return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };
 	}
 
 	/**
@@ -1659,7 +1654,7 @@ class Wallet {
 
 		const amount =
 			options?.amount !== undefined
-				? this.normalizeAmount(options.amount, 'createMintQuoteBolt12')
+				? this.parseAmount(options.amount, 'createMintQuoteBolt12').toBigInt()
 				: undefined;
 
 		const mintQuotePayload: MintQuoteBolt12Request = {
@@ -1697,7 +1692,7 @@ class Wallet {
 		if (typeof quote === 'string') {
 			return baseRes;
 		}
-		return { ...baseRes, amount: baseRes.amount || quote.amount, unit: baseRes.unit || quote.unit };
+		return { ...baseRes, unit: baseRes.unit || quote.unit };
 	}
 
 	/**
@@ -1905,7 +1900,7 @@ class Wallet {
 	): Promise<MeltQuoteBolt11Response> {
 		const normalizedAmountMsat =
 			amountMsat !== undefined
-				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt11')
+				? this.parseAmount(amountMsat, 'createMeltQuoteBolt11').toBigInt()
 				: undefined;
 
 		if (amountMsat !== undefined) {
@@ -1955,7 +1950,7 @@ class Wallet {
 	): Promise<MeltQuoteBolt12Response> {
 		const normalizedAmountMsat =
 			amountMsat !== undefined
-				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt12')
+				? this.parseAmount(amountMsat, 'createMeltQuoteBolt12').toBigInt()
 				: undefined;
 		return this.mint.createMeltQuoteBolt12({
 			unit: this._unit,
@@ -1985,10 +1980,10 @@ class Wallet {
 		invoice: string,
 		millisatPartialAmount: AmountLike,
 	): Promise<MeltQuoteBolt11Response> {
-		const normalizedMillisatPartialAmount = this.normalizeAmount(
+		const normalizedMillisatPartialAmount = this.parseAmount(
 			millisatPartialAmount,
 			'createMultiPathMeltQuote',
-		);
+		).toBigInt();
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(
@@ -2136,23 +2131,24 @@ class Wallet {
 		// In the common case where selected proofs = amount + fee_reserve,
 		// this equals the quote’s fee_reserve. If you overshoot more,
 		// the extra also becomes NUT-08 lightning fee change.
-		const feeReserve = sendAmount - meltQuote.amount;
+		this.failIf(
+			sendAmount.lessThan(meltQuote.amount),
+			'Not enough proofs to cover amount + fee reserve',
+			{
+				sendAmount: sendAmount.toString(),
+				quoteAmount: meltQuote.amount.toString(),
+			},
+		);
+		const feeReserve = sendAmount.subtract(meltQuote.amount);
 		let outputData: OutputDataLike[] = [];
-
-		// bolt11 does not allow partial payment, and although bolt12 could, mints
-		// like CDK forbid it. So let's fail loudly up front...
-		this.failIf(feeReserve < 0, 'Not enough proofs to cover amount + fee reserve', {
-			sendAmount,
-			quoteAmount: meltQuote.amount,
-		});
 
 		if (outputType.type === 'custom') {
 			outputData = outputType.data;
 		}
 		// Create NUT-08 blanks for return of Lightning fee change
 		// Note: zero amount + zero denomination passes splitAmount validation
-		else if (feeReserve > 0) {
-			let count = Math.ceil(Math.log2(feeReserve)) || 1;
+		else if (feeReserve.greaterThan(0)) {
+			let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
 			if (count < 0) count = 0; // Prevents: -Infinity
 			const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
 			this._logger.debug('Creating NUT-08 blanks for fee reserve', {

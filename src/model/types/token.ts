@@ -1,3 +1,4 @@
+import { type Amount } from '../Amount';
 import { type Proof } from './proof';
 
 /**
@@ -73,7 +74,7 @@ export type TokenMetadata = {
 	/**
 	 * The amount of the token.
 	 */
-	amount: number;
+	amount: Amount;
 	/**
 	 * The incomplete proofs of the token.
 	 */
