@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.86% </span>
+                <span class="strong">90.24% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>1161/1292</span>
+                <span class='fraction'>1165/1291</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">84.31% </span>
+                <span class="strong">84.59% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>258/306</span>
+                <span class='fraction'>258/305</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">89.86% </span>
+                <span class="strong">90.24% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>1161/1292</span>
+                <span class='fraction'>1165/1291</span>
             </div>
         
             
@@ -2432,11 +2432,7 @@
 <a name='L2367'></a><a href='#L2367'>2367</a>
 <a name='L2368'></a><a href='#L2368'>2368</a>
 <a name='L2369'></a><a href='#L2369'>2369</a>
-<a name='L2370'></a><a href='#L2370'>2370</a>
-<a name='L2371'></a><a href='#L2371'>2371</a>
-<a name='L2372'></a><a href='#L2372'>2372</a>
-<a name='L2373'></a><a href='#L2373'>2373</a>
-<a name='L2374'></a><a href='#L2374'>2374</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L2370'></a><a href='#L2370'>2370</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -2726,8 +2722,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">2x</span>
-<span class="cline-any cline-yes">106x</span>
-<span class="cline-any cline-yes">106x</span>
+<span class="cline-any cline-yes">99x</span>
+<span class="cline-any cline-yes">99x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -3276,7 +3272,7 @@
 <span class="cline-any cline-yes">25x</span>
 <span class="cline-any cline-yes">25x</span>
 <span class="cline-any cline-yes">25x</span>
-<span class="cline-any cline-yes">25x</span>
+<span class="cline-any cline-yes">44x</span>
 <span class="cline-any cline-yes">44x</span>
 <span class="cline-any cline-yes">25x</span>
 <span class="cline-any cline-yes">25x</span>
@@ -4065,11 +4061,6 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -4576,9 +4567,10 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">19x</span>
 <span class="cline-any cline-yes">19x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">19x</span>
+<span class="cline-any cline-yes">19x</span>
+<span class="cline-any cline-yes">19x</span>
+<span class="cline-any cline-yes">19x</span>
 <span class="cline-any cline-yes">19x</span>
 <span class="cline-any cline-yes">19x</span>
 <span class="cline-any cline-yes">19x</span>
@@ -5538,7 +5530,7 @@ class Wallet {
 	 * Note: Empty denomination is valid (e.g: zero change).
 	 */
 	private preparedTotal(ot: OutputType): Amount {
-		if (ot.type === 'custom') return Amount.from(OutputData.sumOutputAmounts(ot.data));
+		if (ot.type === 'custom') return OutputData.sumOutputAmounts(ot.data);
 		const denoms = ot.<span class="branch-0 cbranch-no" title="branch not covered" >denominations ?? [];</span>
 		return Amount.sum(denoms);
 	}
@@ -5648,10 +5640,10 @@ class Wallet {
 		const mergedBlindingData = [...keepOutputs, ...sendOutputs];
 		const indices = mergedBlindingData.map((_, i) =&gt; i);
 		if (!isP2PKSigAll(inputs)) {
-			indices.sort(
-				(a, b) =&gt;
-					mergedBlindingData[a].blindedMessage.amount - mergedBlindingData[b].blindedMessage.amount,
-			);
+			indices.sort((a, b) =&gt; {
+				const aa = Amount.from(mergedBlindingData[a].blindedMessage.amount);
+				return aa.compareTo(mergedBlindingData[b].blindedMessage.amount);
+			});
 		}
 		const keepVector: boolean[] = [
 			...Array.from({ length: keepOutputs.length }, () =&gt; true),
@@ -5794,8 +5786,8 @@ class Wallet {
 &nbsp;
 		// Return SwapPreview
 		return {
-			amount: receiveAmount.toNumber(), // TODO: v4
-			fees: swapFee,
+			amount: receiveAmount,
+			fees: Amount.from(swapFee),
 			keysetId: keyset.id,
 			inputs: proofs,
 			keepOutputs: outputs,
@@ -5822,7 +5814,7 @@ class Wallet {
 			// Only use proofs that have a DLEQ
 <span class="cstat-no" title="statement not covered" >			proofs = proofs.filter((p: Proof) =&gt; p.dleq != undefined);</span>
 <span class="cstat-no" title="statement not covered" >		}</span>
-		this.failIf(sumProofs(proofs) &lt; sendAmount, 'Not enough funds available to send');
+		this.failIf(sumProofs(proofs).lessThan(sendAmount), 'Not enough funds available to send');
 &nbsp;
 		const { keep, send } = this.selectProofsToSend(proofs, sendAmount, includeFees, exactMatch);
 		// Ensure witnesses are serialized, strip DLEQ if not required
@@ -5904,7 +5896,7 @@ class Wallet {
 			});
 			const expectedFee = includeFees ? this.getFeesForProofs(send) : 0;
 &nbsp;
-			if (sumProofs(send) === sendAmount + expectedFee) {
+			if (sumProofs(send).equals(sendAmount + expectedFee)) {
 				this._logger.info('Successful exactMatch offline selection!');
 				return { keep, send };
 			}
@@ -5983,7 +5975,7 @@ class Wallet {
 		}
 &nbsp;
 		// Calculate our expected change from the swap (and sanity check!)
-		const selectedSum = Amount.from(sumProofs(selectedProofs));
+		const selectedSum = sumProofs(selectedProofs);
 		const swapFee = this.getFeesForProofs(selectedProofs);
 		const required = sendAmount.add(swapFee);
 		if (selectedSum.lessThan(required)) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
@@ -6020,8 +6012,8 @@ class Wallet {
 &nbsp;
 		// Return SwapPreview
 		return {
-			amount: sendAmountTarget.toNumber(), // TODO: v4
-			fees: swapFee,
+			amount: sendAmountTarget,
+			fees: Amount.from(swapFee),
 			keysetId: keyset.id,
 			inputs: selectedProofs,
 			sendOutputs,
@@ -6353,7 +6345,7 @@ class Wallet {
 			const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
 			if (matchingSig) {
 				lastCounterWithSignature = start + i;
-				outputData[i].blindedMessage.amount = matchingSig.amount;
+				outputData[i].blindedMessage.amount = matchingSig.amount.toBigInt();
 				restoredProofs.push(outputData[i].toProof(matchingSig, keyset));
 			}
 		}
@@ -6392,7 +6384,7 @@ class Wallet {
 		amount: AmountLike,
 		description?: string,
 	): Promise&lt;MintQuoteBolt11Response&gt; {
-		const mintAmount = this.normalizeAmount(amount, 'createMintQuoteBolt11');
+		const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11').toBigInt();
 		// Check if mint supports description for bolt11
 		if (description) {
 			const mintInfo = this.getMintInfo();
@@ -6407,7 +6399,7 @@ class Wallet {
 			description: description,
 		};
 		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);
-		return { ...res, amount: res.<span class="branch-0 cbranch-no" title="branch not covered" >amount || mintAmount, u</span>nit: res.<span class="branch-0 cbranch-no" title="branch not covered" >unit || this._unit }</span>;
+		return { ...res, unit: res.<span class="branch-0 cbranch-no" title="branch not covered" >unit || this._unit }</span>;
 	}
 &nbsp;
 	/**
@@ -6424,7 +6416,7 @@ class Wallet {
 <span class="cstat-no" title="statement not covered" >		pubkey: string,</span>
 <span class="cstat-no" title="statement not covered" >		description?: string,</span>
 <span class="cstat-no" title="statement not covered" >	): Promise&lt;MintQuoteBolt11Response&gt; {</span>
-<span class="cstat-no" title="statement not covered" >		const mintAmount = this.normalizeAmount(amount, 'createLockedMintQuote');</span>
+<span class="cstat-no" title="statement not covered" >		const mintAmount = this.parseAmount(amount, 'createLockedMintQuote').toBigInt();</span>
 <span class="cstat-no" title="statement not covered" >		const { supported } = this.getMintInfo().isSupported(20);</span>
 <span class="cstat-no" title="statement not covered" >		this.failIf(!supported, 'Mint does not support NUT-20');</span>
 <span class="cstat-no" title="statement not covered" >		const mintQuotePayload: MintQuoteBolt11Request = {</span>
@@ -6436,12 +6428,7 @@ class Wallet {
 <span class="cstat-no" title="statement not covered" >		const res = await this.mint.createMintQuoteBolt11(mintQuotePayload);</span>
 <span class="cstat-no" title="statement not covered" >		this.failIf(typeof res.pubkey !== 'string', 'Mint returned unlocked mint quote');</span>
 <span class="cstat-no" title="statement not covered" >		const resPubkey = res.pubkey!;</span>
-<span class="cstat-no" title="statement not covered" >		return {</span>
-<span class="cstat-no" title="statement not covered" >			...res,</span>
-<span class="cstat-no" title="statement not covered" >			pubkey: resPubkey,</span>
-<span class="cstat-no" title="statement not covered" >			amount: res.amount || mintAmount,</span>
-<span class="cstat-no" title="statement not covered" >			unit: res.unit || this._unit,</span>
-<span class="cstat-no" title="statement not covered" >		};</span>
+<span class="cstat-no" title="statement not covered" >		return { ...res, pubkey: resPubkey, unit: res.unit || this._unit };</span>
 <span class="cstat-no" title="statement not covered" >	}</span>
 &nbsp;
 	/**
@@ -6470,7 +6457,7 @@ class Wallet {
 &nbsp;
 		const amount =
 			options?.amount !== undefined
-				? this.normalizeAmount(options.amount, 'createMintQuoteBolt12'<span class="branch-0 cbranch-no" title="branch not covered" >)</span>
+				? this.parseAmount(options.amount, 'createMintQuoteBolt12').toBigInt(<span class="branch-0 cbranch-no" title="branch not covered" >)</span>
 <span class="cstat-no" title="statement not covered" >				: undefined;</span>
 &nbsp;
 		const mintQuotePayload: MintQuoteBolt12Request = {
@@ -6508,7 +6495,7 @@ class Wallet {
 <span class="cstat-no" title="statement not covered" >		if (typeof quote === 'string') {</span>
 <span class="cstat-no" title="statement not covered" >			return baseRes;</span>
 <span class="cstat-no" title="statement not covered" >		}</span>
-<span class="cstat-no" title="statement not covered" >		return { ...baseRes, amount: baseRes.amount || quote.amount, unit: baseRes.unit || quote.unit };</span>
+<span class="cstat-no" title="statement not covered" >		return { ...baseRes, unit: baseRes.unit || quote.unit };</span>
 <span class="cstat-no" title="statement not covered" >	}</span>
 &nbsp;
 	/**
@@ -6716,7 +6703,7 @@ class Wallet {
 	): Promise&lt;MeltQuoteBolt11Response&gt; {
 		const normalizedAmountMsat =
 			amountMsat !== <span class="branch-0 cbranch-no" title="branch not covered" >undefined</span>
-<span class="cstat-no" title="statement not covered" >				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt11')</span>
+<span class="cstat-no" title="statement not covered" >				? this.parseAmount(amountMsat, 'createMeltQuoteBolt11').toBigInt()</span>
 				: undefined;
 &nbsp;
 		if (amountMsat !== undefined) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
@@ -6766,7 +6753,7 @@ class Wallet {
 	): Promise&lt;MeltQuoteBolt12Response&gt; {
 		const normalizedAmountMsat =
 			amountMsat !== undefined
-				? this.normalizeAmount(amountMsat, 'createMeltQuoteBolt12'<span class="branch-0 cbranch-no" title="branch not covered" >)</span>
+				? this.parseAmount(amountMsat, 'createMeltQuoteBolt12').toBigInt(<span class="branch-0 cbranch-no" title="branch not covered" >)</span>
 <span class="cstat-no" title="statement not covered" >				: undefined;</span>
 		return this.mint.createMeltQuoteBolt12({
 			unit: this._unit,
@@ -6796,10 +6783,10 @@ class Wallet {
 		invoice: string,
 		millisatPartialAmount: AmountLike,
 	): Promise&lt;MeltQuoteBolt11Response&gt; {
-		const normalizedMillisatPartialAmount = this.normalizeAmount(
+		const normalizedMillisatPartialAmount = this.parseAmount(
 			millisatPartialAmount,
 			'createMultiPathMeltQuote',
-		);
+		).toBigInt();
 		const { supported, params } = this.getMintInfo().isSupported(15);
 		this.failIf(!supported, 'Mint does not support NUT-15');
 		this.failIf(
@@ -6947,23 +6934,24 @@ class Wallet {
 		// In the common case where selected proofs = amount + fee_reserve,
 		// this equals the quote’s fee_reserve. If you overshoot more,
 		// the extra also becomes NUT-08 lightning fee change.
-		const feeReserve = sendAmount - meltQuote.amount;
+		this.failIf(
+			sendAmount.lessThan(meltQuote.amount),
+			'Not enough proofs to cover amount + fee reserve',
+			{
+				sendAmount: sendAmount.toString(),
+				quoteAmount: meltQuote.amount.toString(),
+			},
+		);
+		const feeReserve = sendAmount.subtract(meltQuote.amount);
 		let outputData: OutputDataLike[] = [];
-&nbsp;
-		// bolt11 does not allow partial payment, and although bolt12 could, mints
-		// like CDK forbid it. So let's fail loudly up front...
-		this.failIf(feeReserve &lt; 0, 'Not enough proofs to cover amount + fee reserve', {
-			sendAmount,
-			quoteAmount: meltQuote.amount,
-		});
 &nbsp;
 		if (outputType.type === 'custom') {
 			outputData = outputType.data;
 		}
 		// Create NUT-08 blanks for return of Lightning fee change
 		// Note: zero amount + zero denomination passes splitAmount validation
-		else if (feeReserve &gt; 0) {
-			let count = Math.ceil(Math.log2(feeReserve)<span class="branch-0 cbranch-no" title="branch not covered" >) || 1;</span>
+		else if (feeReserve.greaterThan(0)) {
+			let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())<span class="branch-0 cbranch-no" title="branch not covered" >) || 1;</span>
 			if (count &lt; 0) <span class="branch-0 cbranch-no" title="branch not covered" >count = 0; // Prevents: -Infinity</span>
 			const denominations: number[] = count ? new Array&lt;number&gt;(count).fill(0<span class="branch-0 cbranch-no" title="branch not covered" >) : [];</span>
 			this._logger.debug('Creating NUT-08 blanks for fee reserve', {
@@ -7189,7 +7177,7 @@ export { Wallet };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-03-23T17:33:24.279Z
+                at 2026-03-23T17:35:20.622Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
