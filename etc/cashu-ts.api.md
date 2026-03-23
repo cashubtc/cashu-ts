@@ -123,9 +123,6 @@ export type BlindSignature = {
     id: string;
 };
 
-// @public @deprecated
-export function bytesToNumber(bytes: Uint8Array): bigint;
-
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -259,9 +256,6 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 // @public
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
 
-// @public @deprecated (undocumented)
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
-
 // @public (undocumented)
 export type DeriveKeysetIdOptions = {
     expiry?: number;
@@ -316,10 +310,7 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 export function getDataField(secret: Secret | string): string;
 
 // @public
-export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
-
-// @public @deprecated (undocumented)
-export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
+export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
@@ -434,9 +425,6 @@ export type GetKeysetsResponse = {
 export type GetKeysResponse = {
     keysets: MintKeys[];
 };
-
-// @public @deprecated (undocumented)
-export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[];
 
 // @public
 export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[];
@@ -988,8 +976,6 @@ export class MintInfo {
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     supportsAmountless(method?: string, unit?: string): boolean;
-    // @deprecated (undocumented)
-    get supportsBolt12Description(): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;
@@ -1357,9 +1343,6 @@ export function parseHTLCSecret(secret: string | Secret): Secret;
 // @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
 
-// @public @deprecated (undocumented)
-export function parseP2PKSecret(secret: Uint8Array): Secret;
-
 // @public
 export function parseSecret(secret: string | Secret): Secret;
 
@@ -1723,9 +1706,6 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
 // @public
 export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[], logger?: Logger, message?: string): Proof[];
 
-// @public @deprecated
-export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
-
 // @public (undocumented)
 export function sortProofsById(proofs: Proof[]): Proof[];
 
@@ -1842,17 +1822,8 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean;
 // @public
 export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
-// @public @deprecated (undocumented)
-export function verifyKeysetId(keys: MintKeys): boolean;
-
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
-
-// @public @deprecated
-export const verifyP2PKSecretSignature: (signature: string, secret: string, pubkey: string) => boolean;
-
-// @public @deprecated (undocumented)
-export function verifyP2PKSig(proof: Proof): boolean;
 
 // @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
@@ -1879,12 +1850,8 @@ export class Wallet {
         lastCounterWithSignature?: number;
     }>;
     bindKeyset(id: string): void;
-    // @deprecated (undocumented)
-    checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response>;
-    // @deprecated (undocumented)
-    checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
@@ -1893,12 +1860,8 @@ export class Wallet {
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
-    // @deprecated (undocumented)
-    createMeltQuote(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
-    // @deprecated (undocumented)
-    createMintQuote(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt11(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: AmountLike;
@@ -1922,13 +1885,9 @@ export class Wallet {
     loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void;
     // (undocumented)
     get logger(): Logger;
-    // @deprecated (undocumented)
-    meltProofs(meltQuote: MeltQuoteBolt11Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt11(meltQuote: MeltQuoteBolt11Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
     readonly mint: Mint;
-    // @deprecated (undocumented)
-    mintProofs(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
         keysetId?: string;
@@ -1948,8 +1907,6 @@ export class Wallet {
     send(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: Proof[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
-    // @deprecated (undocumented)
-    readonly swap: (amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;
@@ -2028,9 +1985,6 @@ export type WebSocketSupport = {
     commands: string[];
 };
 
-// @public @deprecated (undocumented)
-export type WellKnownSecret = 'P2PK';
-
 // @public (undocumented)
 export class WSConnection {
     constructor(url: string, logger?: Logger);
@@ -2041,8 +1995,6 @@ export class WSConnection {
     cancelSubscription<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     // (undocumented)
     close(): void;
-    // @deprecated (undocumented)
-    closeSubscription(subId: string): void;
     // (undocumented)
     connect(timeoutMs?: number): Promise<void>;
     // (undocumented)

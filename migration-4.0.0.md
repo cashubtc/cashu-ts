@@ -438,9 +438,13 @@ Previously, `cache.keysets` only contained keysets for the wallet's unit. It now
 These APIs were already deprecated in v3. In v4 they have been removed:
 
 - `Wallet` constructor preload options `keys`, `keysets`, and `mintInfo`; use `loadMintFromCache()` after construction.
+- Deprecated wallet method aliases: `wallet.swap`, `createMintQuote`, `checkMintQuote`, `mintProofs`, `createMeltQuote`, `checkMeltQuote`, and `meltProofs`; use `send`, `createMintQuoteBolt11`, `checkMintQuoteBolt11`, `mintProofsBolt11`, `createMeltQuoteBolt11`, `checkMeltQuoteBolt11`, and `meltProofsBolt11`.
 - `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`.
 - `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
+- Deprecated utility helpers and overloads in `src/utils/core`: `bytesToNumber`, `verifyKeysetId`, the positional `deriveKeysetId(...)` signature, and the `getDecodedToken(..., HasKeysetId[])` overload; use `Bytes.toBigInt`, `Keyset.verifyKeysetId(...)`, the options-based `deriveKeysetId(...)`, and `string[]` keyset IDs.
+- Deprecated NUT-11 helpers and aliases: the `parseP2PKSecret(Uint8Array)` overload, `WellKnownSecret`, `signP2PKSecret`, `verifyP2PKSecretSignature`, `getP2PKExpectedKWitnessPubkeys`, and `verifyP2PKSig`; use `parseP2PKSecret(string | Secret)`, `SecretKind`, `schnorrSignMessage`, `schnorrVerifyMessage`, `getP2PKExpectedWitnessPubkeys`, and `isP2PKSpendAuthorised()` / `verifyP2PKSpendingConditions()`.
+- Deprecated convenience aliases removed elsewhere in the API: `MintInfo.supportsBolt12Description` and `WSConnection.closeSubscription()`; use `supportsNut04Description('bolt12')` and `cancelSubscription()` instead.
 - Deprecated crypto/type aliases removed in the v4 cleanup, including `BlindedMessage`; use the non-deprecated names such as `RawBlindedMessage`.
 
 ---

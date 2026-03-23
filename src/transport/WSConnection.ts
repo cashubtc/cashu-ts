@@ -180,13 +180,6 @@ export class WSConnection {
 		this.sendRpcMessage(method, params, id);
 	}
 
-	/**
-	 * @deprecated Use cancelSubscription for JSONRPC compliance.
-	 */
-	closeSubscription(subId: string) {
-		this.ws?.send(JSON.stringify(['CLOSE', subId]));
-	}
-
 	addSubListener<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void) {
 		(this.subListeners[subId] = this.subListeners[subId] || []).push(
 			callback as (payload: unknown) => void,

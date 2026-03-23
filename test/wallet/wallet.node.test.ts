@@ -652,7 +652,7 @@ describe('receive', () => {
 	});
 
 	test('test receive raw token', async () => {
-		const decodedInput = getDecodedToken(tokenInput);
+		const decodedInput = getDecodedToken(tokenInput, ['z32vUtKgNCm1']);
 		server.use(
 			http.post(mintUrl + '/v1/swap', () => {
 				return HttpResponse.json({
