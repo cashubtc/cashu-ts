@@ -438,6 +438,7 @@ Previously, `cache.keysets` only contained keysets for the wallet's unit. It now
 These APIs were already deprecated in v3. In v4 they have been removed:
 
 - `Wallet` constructor preload options `keys`, `keysets`, and `mintInfo`; use `loadMintFromCache()` after construction.
+- Deprecated wallet method aliases: `wallet.swap`, `createMintQuote`, `checkMintQuote`, `mintProofs`, `createMeltQuote`, `checkMeltQuote`, and `meltProofs`; use `send`, `createMintQuoteBolt11`, `checkMintQuoteBolt11`, `mintProofsBolt11`, `createMeltQuoteBolt11`, `checkMeltQuoteBolt11`, and `meltProofsBolt11`.
 - `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`.
 - `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.

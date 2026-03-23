@@ -1259,11 +1259,6 @@ class Wallet {
 		};
 	}
 
-	/**
-	 * @deprecated - Use send()
-	 */
-	public readonly swap = this.send.bind(this);
-
 	// -----------------------------------------------------------------
 	// Section: Transaction Helpers
 	// -----------------------------------------------------------------
@@ -1521,15 +1516,15 @@ class Wallet {
 	// Section: Create Mint Quote
 	// -----------------------------------------------------------------
 
-	/**
-	 * @deprecated Use createMintQuoteBolt11()
-	 */
-	async createMintQuote(
-		amount: AmountLike,
-		description?: string,
-	): Promise<MintQuoteBolt11Response> {
-		return this.createMintQuoteBolt11(amount, description);
-	}
+	// /**
+	//  * @deprecated Use createMintQuoteBolt11()
+	//  */
+	// async createMintQuote(
+	// 	amount: AmountLike,
+	// 	description?: string,
+	// ): Promise<MintQuoteBolt11Response> {
+	// 	return this.createMintQuoteBolt11(amount, description);
+	// }
 
 	/**
 	 * Requests a mint quote from the mint. Response returns a Lightning payment request for the
@@ -1635,12 +1630,12 @@ class Wallet {
 	// Section: Check Mint Quote
 	// -----------------------------------------------------------------
 
-	/**
-	 * @deprecated Use checkMintQuoteBolt11()
-	 */
-	async checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response> {
-		return this.checkMintQuoteBolt11(quote);
-	}
+	// /**
+	//  * @deprecated Use checkMintQuoteBolt11()
+	//  */
+	// async checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response> {
+	// 	return this.checkMintQuoteBolt11(quote);
+	// }
 
 	/**
 	 * Gets an existing mint quote from the mint.
@@ -1689,17 +1684,17 @@ class Wallet {
 		);
 	}
 
-	/**
-	 * @deprecated Use mintProofsBolt11()
-	 */
-	async mintProofs(
-		amount: AmountLike,
-		quote: string | MintQuoteBolt11Response,
-		config?: MintProofsConfig,
-		outputType?: OutputType,
-	): Promise<Proof[]> {
-		return this.mintProofsBolt11(amount, quote, config, outputType);
-	}
+	// /**
+	//  * @deprecated Use mintProofsBolt11()
+	//  */
+	// async mintProofs(
+	// 	amount: AmountLike,
+	// 	quote: string | MintQuoteBolt11Response,
+	// 	config?: MintProofsConfig,
+	// 	outputType?: OutputType,
+	// ): Promise<Proof[]> {
+	// 	return this.mintProofsBolt11(amount, quote, config, outputType);
+	// }
 
 	/**
 	 * Mint proofs for a bolt11 quote.
@@ -1872,15 +1867,15 @@ class Wallet {
 	// Section: Create Melt Quote
 	// -----------------------------------------------------------------
 
-	/**
-	 * @deprecated Use createMeltQuoteBolt11.
-	 */
-	async createMeltQuote(
-		invoice: string,
-		amountMsat?: AmountLike,
-	): Promise<MeltQuoteBolt11Response> {
-		return this.createMeltQuoteBolt11(invoice, amountMsat);
-	}
+	// /**
+	//  * @deprecated Use createMeltQuoteBolt11.
+	//  */
+	// async createMeltQuote(
+	// 	invoice: string,
+	// 	amountMsat?: AmountLike,
+	// ): Promise<MeltQuoteBolt11Response> {
+	// 	return this.createMeltQuoteBolt11(invoice, amountMsat);
+	// }
 
 	/**
 	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
@@ -2001,12 +1996,12 @@ class Wallet {
 	// Section: Check Melt Quote
 	// -----------------------------------------------------------------
 
-	/**
-	 * @deprecated Use checkMeltQuoteBolt11()
-	 */
-	async checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response> {
-		return this.checkMeltQuoteBolt11(quote);
-	}
+	// /**
+	//  * @deprecated Use checkMeltQuoteBolt11()
+	//  */
+	// async checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response> {
+	// 	return this.checkMeltQuoteBolt11(quote);
+	// }
 
 	/**
 	 * Returns an existing bolt11 melt quote from the mint.
@@ -2039,17 +2034,17 @@ class Wallet {
 	// Section: Melt Proofs
 	// -----------------------------------------------------------------
 
-	/**
-	 * @deprecated Use meltProofsBolt11()
-	 */
-	async meltProofs(
-		meltQuote: MeltQuoteBolt11Response,
-		proofsToSend: Proof[],
-		config?: MeltProofsConfig,
-		outputType?: OutputType,
-	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
-		return this.meltProofsBolt11(meltQuote, proofsToSend, config, outputType);
-	}
+	// /**
+	//  * @deprecated Use meltProofsBolt11()
+	//  */
+	// async meltProofs(
+	// 	meltQuote: MeltQuoteBolt11Response,
+	// 	proofsToSend: Proof[],
+	// 	config?: MeltProofsConfig,
+	// 	outputType?: OutputType,
+	// ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
+	// 	return this.meltProofsBolt11(meltQuote, proofsToSend, config, outputType);
+	// }
 
 	/**
 	 * Melt proofs for a bolt11 melt quote.

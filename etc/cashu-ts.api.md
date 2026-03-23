@@ -1850,12 +1850,8 @@ export class Wallet {
         lastCounterWithSignature?: number;
     }>;
     bindKeyset(id: string): void;
-    // @deprecated (undocumented)
-    checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response>;
-    // @deprecated (undocumented)
-    checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
@@ -1864,12 +1860,8 @@ export class Wallet {
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
-    // @deprecated (undocumented)
-    createMeltQuote(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
-    // @deprecated (undocumented)
-    createMintQuote(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt11(amount: AmountLike, description?: string): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(pubkey: string, options?: {
         amount?: AmountLike;
@@ -1893,13 +1885,9 @@ export class Wallet {
     loadMintFromCache(mintInfo: GetInfoResponse, cache: KeyChainCache): void;
     // (undocumented)
     get logger(): Logger;
-    // @deprecated (undocumented)
-    meltProofs(meltQuote: MeltQuoteBolt11Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt11(meltQuote: MeltQuoteBolt11Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
     readonly mint: Mint;
-    // @deprecated (undocumented)
-    mintProofs(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
         keysetId?: string;
@@ -1919,8 +1907,6 @@ export class Wallet {
     send(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: Proof[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];
-    // @deprecated (undocumented)
-    readonly swap: (amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig) => Promise<SendResponse>;
     get unit(): string;
     withKeyset(id: string, opts?: {
         counterSource?: CounterSource;

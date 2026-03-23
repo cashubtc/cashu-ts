@@ -229,7 +229,7 @@ describe('test token v3 encoding', () => {
 			],
 		};
 		const encoded = utils.getEncodedTokenV3(token);
-		const decoded = utils.getDecodedToken(encoded);
+		const decoded = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
 		expect(decoded.proofs[0].amount).toBe(largeAmount);
 	});
 	test('getEncodedTokenV3 does not mutate input token proof IDs', () => {
@@ -271,7 +271,7 @@ describe('test decode token', () => {
 				prefix +
 				'cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
 
-			const result = utils.getDecodedToken(token);
+			const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
 			expect(result).toStrictEqual(obj);
 		});
 	});
@@ -291,7 +291,7 @@ describe('test decode token', () => {
 
 		const token =
 			'AeyJ0b2tlbiI6W3sibWludCI6Imh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCIsInByb29mcyI6W3siaWQiOiJJMnlOK2lSWWZrelQiLCJhbW91bnQiOjEsInNlY3JldCI6Ijk3emZtbWFHZjVrOE1nMGdhanBuYm1wZXJ2VHRFZUU4d3dLcmk3cldwVXM9IiwiQyI6IjAyMTk1MDgxZTYyMmY5OGJmYzE5YTA1ZWJlMjM0MWQ5NTVjMGQxMjU4OGM1OTQ4Yzg1OGQwN2FkZWMwMDdiYzFlNCJ9XX1dfQ';
-		const result = utils.getDecodedToken(token);
+		const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
 		expect(result).toStrictEqual(obj);
 	});
 	test('testing v4 Token', () => {
@@ -312,7 +312,7 @@ describe('test decode token', () => {
 		const token =
 			'cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ=';
 
-		const result = utils.getDecodedToken(token);
+		const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
 		expect(result).toStrictEqual(v3Token);
 	});
 	test('testing v4 Token with multi keyset', () => {
@@ -344,7 +344,7 @@ describe('test decode token', () => {
 		const token =
 			'cashuBo2F0gqJhaUgA_9SLj17PgGFwgaNhYQFhc3hAYWNjMTI0MzVlN2I4NDg0YzNjZjE4NTAxNDkyMThhZjkwZjcxNmE1MmJmNGE1ZWQzNDdlNDhlY2MxM2Y3NzM4OGFjWCECRFODGd5IXVW-07KaZCvuWHk3WrnnpiDhHki6SCQh88-iYWlIAK0mjE0fWCZhcIKjYWECYXN4QDEzMjNkM2Q0NzA3YTU4YWQyZTIzYWRhNGU5ZjFmNDlmNWE1YjRhYzdiNzA4ZWIwZDYxZjczOGY0ODMwN2U4ZWVhY1ghAjRWqhENhLSsdHrr2Cw7AFrKUL9Ffr1XN6RBT6w659lNo2FhAWFzeEA1NmJjYmNiYjdjYzY0MDZiM2ZhNWQ1N2QyMTc0ZjRlZmY4YjQ0MDJiMTc2OTI2ZDNhNTdkM2MzZGNiYjU5ZDU3YWNYIQJzEpxXGeWZN5qXSmJjY8MzxWyvwObQGr5G1YCCgHicY2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdA==';
 
-		const result = utils.getDecodedToken(token);
+		const result = utils.getDecodedToken(token, ['009a1f293253e41e']);
 		expect(result).toStrictEqual(v3Token);
 	});
 });
@@ -538,8 +538,8 @@ describe('test v4 encoding', () => {
 			unit: 'sat',
 		};
 		const encoded = utils.getEncodedTokenV4(v3Token);
-		const decodedEncodedToken = utils.getDecodedToken(encoded);
-		const decodedExpectedToken = utils.getDecodedToken(encodedV4);
+		const decodedEncodedToken = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
+		const decodedExpectedToken = utils.getDecodedToken(encodedV4, ['009a1f293253e41e']);
 		expect(decodedEncodedToken).toEqual(v3Token);
 		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
 	});
@@ -572,8 +572,8 @@ describe('test v4 encoding', () => {
 		};
 
 		const encoded = utils.getEncodedTokenV4(v3Token);
-		const decodedEncodedToken = utils.getDecodedToken(encoded);
-		const decodedExpectedToken = utils.getDecodedToken(encodedV4);
+		const decodedEncodedToken = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
+		const decodedExpectedToken = utils.getDecodedToken(encodedV4, ['009a1f293253e41e']);
 		expect(decodedEncodedToken).toEqual(v3Token);
 		expect(decodedExpectedToken).toEqual(decodedEncodedToken);
 	});
@@ -592,7 +592,7 @@ describe('test v4 encoding', () => {
 			unit: 'sat',
 		};
 		const encoded = utils.getEncodedTokenV4(token);
-		const decoded = utils.getDecodedToken(encoded);
+		const decoded = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
 		expect(decoded.proofs[0].amount).toBe(largeAmount);
 	});
 	test('getEncodedToken does not mutate input token proof IDs', () => {
@@ -662,7 +662,7 @@ describe('test v4 encoding', () => {
 		expect(encoded).toBe(
 			'cashuBpGFteCJodHRwczovL25vZmVlcy50ZXN0bnV0LmNhc2h1LnNwYWNlYXVjc2F0YXSBomFpSAC0zSfYhhpEYXCDo2FhAWFzeEAxMDIxNjQ2N2JiMzNmNmYwNzlhZTkyMzQ5YmE1NGZhMzRkZjk5YmEyNDU3MjY0NWI4YjgxMzY4OGM3NGI1ODJkYWNYIQP_LnKUFkN_nqjQIsUB_1swnWB_mMmrU9Uc0kGFtNPkK6NhYQRhc3hAMWIxYmM3YTA5OWE2M2M4MDhjMTdmOGNhNGVkZTAzZjMwZDNjMjQzY2EzNGVjNGQxMGExMzI3YjdjZmIzZWFkN2FjWCECtFf44eFRzXHdMka1bQ9HmsY3hucZFrRtFjactveAJLmjYWEQYXN4QDg0MjUzNTQ1MzM0MzZjYTdjMjliMzRkYWFlM2FlZjg1YWIwODkyNWM4MTBkMWRiNGYwMDUyNTlkNzlkN2Y5ZjZhY1ghA1cM3zO8gypgZgs-fY3bdNDdMVjg_eWw9gdVW7fo6fsPYWRkRGVtbw',
 		);
-		expect(utils.getDecodedToken(encoded).proofs[0].dleq).toBeUndefined();
+		expect(utils.getDecodedToken(encoded, ['009a1f293253e41e']).proofs[0].dleq).toBeUndefined();
 	});
 });
 
