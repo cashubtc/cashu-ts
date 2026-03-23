@@ -10,12 +10,8 @@ import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
 import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
-import { type P2PKWitness } from '../model/types';
-import { Amount, type AmountLike } from '../model/Amount';
-
 export type BlindSignature = {
 	C_: WeierstrassPoint<bigint>;
-	amount: number;
 	id: string;
 };
 
@@ -25,31 +21,16 @@ export type RawBlindedMessage = {
 	secret: Uint8Array;
 };
 
-/**
- * @deprecated - Use {@link RawBlindedMessage}.
- */
-export type BlindedMessage = RawBlindedMessage;
-
 export type DLEQ = {
 	s: Uint8Array; // signature
 	e: Uint8Array; // challenge
 	r?: bigint; // optional: blinding factor
 };
 
-export type RawProof = {
+export type UnblindedSignature = {
 	C: WeierstrassPoint<bigint>;
 	secret: Uint8Array;
-	amount: number;
 	id: string;
-	witness?: P2PKWitness;
-};
-
-export type SerializedProof = {
-	C: string;
-	secret: string;
-	amount: number;
-	id: string;
-	witness?: string;
 };
 
 const DOMAIN_SEPARATOR = utf8ToBytes('Secp256k1_HashToCurve_Cashu_');
@@ -102,20 +83,11 @@ export function createRandomSecretKey() {
 export function createBlindSignature(
 	B_: WeierstrassPoint<bigint>,
 	privateKey: Uint8Array,
-	amount: AmountLike,
 	id: string,
 ): BlindSignature {
 	const a = secp256k1.Point.Fn.fromBytes(privateKey);
 	const C_: WeierstrassPoint<bigint> = B_.multiply(a);
-	return { C_, amount: Amount.from(amount).toNumber(), id };
-}
-
-/**
- * @deprecated - Use {@link createRandomRawBlindedMessage}
- */
-export function createRandomBlindedMessage(_deprecated?: PrivKey): RawBlindedMessage {
-	void _deprecated; // intentionally unused
-	return createRandomRawBlindedMessage();
+	return { C_, id };
 }
 
 /**
@@ -158,45 +130,18 @@ export function unblindSignature(
 	return C;
 }
 
-export function constructProofFromPromise(
-	promise: BlindSignature,
+export function constructUnblindedSignature(
+	blindSig: BlindSignature,
 	r: bigint,
 	secret: Uint8Array,
 	key: WeierstrassPoint<bigint>,
-): RawProof {
-	const A = key;
-	const C = unblindSignature(promise.C_, r, A);
-	const proof = {
-		id: promise.id,
-		amount: promise.amount,
-		secret,
-		C,
-	};
-	return proof;
+): UnblindedSignature {
+	const C = unblindSignature(blindSig.C_, r, key);
+	return { id: blindSig.id, secret, C };
 }
 
-export const serializeProof = (proof: RawProof): SerializedProof => {
-	return {
-		amount: proof.amount,
-		C: proof.C.toHex(true),
-		id: proof.id,
-		secret: new TextDecoder().decode(proof.secret),
-		witness: JSON.stringify(proof.witness),
-	};
-};
-
-export const deserializeProof = (proof: SerializedProof): RawProof => {
-	return {
-		amount: proof.amount,
-		C: pointFromHex(proof.C),
-		id: proof.id,
-		secret: new TextEncoder().encode(proof.secret),
-		witness: proof.witness ? (JSON.parse(proof.witness) as P2PKWitness) : undefined,
-	};
-};
-
 // ------------------------------
-// Schnorr Signing / Verififcaton
+// Schnorr Signing / Verification
 // ------------------------------
 
 /**

@@ -45,6 +45,9 @@ describe('requests', () => {
 					fee_reserve: 20,
 					payment_preimage: null,
 					state: 'UNPAID',
+					unit: 'sat',
+					expiry: 9999999999,
+					request: 'bolt11invoice...',
 				});
 			}),
 		);
@@ -68,6 +71,9 @@ describe('requests', () => {
 					fee_reserve: 20,
 					payment_preimage: null,
 					state: 'UNPAID',
+					unit: 'sat',
+					expiry: 9999999999,
+					request: 'bolt11invoice...',
 				});
 			}),
 		);

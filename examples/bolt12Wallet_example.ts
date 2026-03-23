@@ -116,7 +116,7 @@ const payBolt12Offer = async (
 	const meltQuote = await wallet.createMeltQuoteBolt12(offer, amount * 1000);
 	const totalNeeded = meltQuote.amount.add(meltQuote.fee_reserve);
 
-	if (sumProofs(proofs) < totalNeeded) {
+	if (sumProofs(proofs).lessThan(totalNeeded)) {
 		throw new Error(`Insufficient balance: need ${totalNeeded}, have ${sumProofs(proofs)}`);
 	}
 

@@ -8,50 +8,36 @@ import {
 import { type P2PKOptions } from '../wallet';
 import {
 	blindMessage,
-	constructProofFromPromise,
+	constructUnblindedSignature,
 	deriveP2BKBlindedPubkeys,
 	deriveBlindingFactor,
 	deriveSecret,
 	pointFromHex,
-	serializeProof,
 	type DLEQ,
+	type BlindSignature,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 import { Amount, type AmountLike } from './Amount';
 
-// TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
-// For now the generic preserves the relationship between factory input type and `toProof` keyset type,
-// and keeps narrower implementations assignable under `strictFunctionTypes`.
-
 /**
- * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
- * the call site, use `OutputDataLike<YourType>`.
- *
- * @remarks
- * WARNING: In v4 we may simplify this further by fixing the keyset type to `HasKeysetKeys` and
- * removing the generic.
+ * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
+ * `keys`. Custom implementations must satisfy this interface to be used with wallet operations.
  */
-export interface OutputDataLike<TKeyset extends HasKeysetKeys = HasKeysetKeys> {
+export interface OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
 
-	toProof: (signature: SerializedBlindedSignature, keyset: TKeyset) => Proof;
+	toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
 
 /**
- * Note: OutputData helpers only require keyset `id` and `keys`. If you want richer keyset typing at
- * the call site, use `OutputDataLike<YourType>`.
- *
- * @remarks
- * WARNING: In v4 we will fix the keyset type to `HasKeysetKeys` and remove the generic.
+ * Factory function that produces an {@link OutputDataLike} for a given amount and keyset. Implement
+ * this to customise blinded-message construction (e.g. deterministic secrets, P2PK).
  */
-export type OutputDataFactory<TKeyset extends HasKeysetKeys = HasKeysetKeys> = (
-	amount: AmountLike,
-	keys: TKeyset,
-) => OutputDataLike<TKeyset>;
+export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
 /**
  * Core P2PK tags that must not be settable in additional tags.
@@ -107,7 +93,7 @@ function takeEphemeralE(target: OutputData): string | undefined {
 	return e;
 }
 
-export class OutputData implements OutputDataLike<HasKeysetKeys> {
+export class OutputData implements OutputDataLike {
 	blindedMessage: SerializedBlindedMessage;
 	blindingFactor: bigint;
 	secret: Uint8Array;
@@ -132,16 +118,14 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 			};
 		}
 		const sigAmountKey = sig.amount.toString();
-		const blindSignature = {
-			id: sig.id,
-			amount: sig.amount.toNumber(), // TODO: proof numbers are unsafe
-			C_: pointFromHex(sig.C_),
-			dleq: dleq,
-		};
 		const A = pointFromHex(keyset.keys[sigAmountKey]);
-		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
-		const serializedProof = {
-			...serializeProof(proof),
+		const blindSig: BlindSignature = { id: sig.id, C_: pointFromHex(sig.C_) };
+		const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
+		const proof: Proof = {
+			id: sig.id,
+			amount: sig.amount.toBigInt(),
+			C: unblinded.C.toHex(true),
+			secret: new TextDecoder().decode(unblinded.secret),
 			...(dleq && {
 				dleq: {
 					s: bytesToHex(dleq.s),
@@ -149,19 +133,19 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 					r: numberToHexPadded64(dleq.r ?? BigInt(0)),
 				} as SerializedDLEQ,
 			}),
-		} as Proof;
+		};
 
 		// Add P2BK (Pay to Blinded Key) blinding factors if needed
 		const Ehex = takeEphemeralE(this);
-		if (Ehex) serializedProof.p2pk_e = Ehex;
+		if (Ehex) proof.p2pk_e = Ehex;
 
-		return serializedProof;
+		return proof;
 	}
 
-	static createP2PKData<T extends HasKeysetKeys>(
+	static createP2PKData(
 		p2pk: P2PKOptions,
 		amount: AmountLike,
-		keyset: T,
+		keyset: HasKeysetKeys,
 		customSplit?: AmountLike[],
 	) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
@@ -278,11 +262,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		return od;
 	}
 
-	static createRandomData<T extends HasKeysetKeys>(
-		amount: AmountLike,
-		keyset: T,
-		customSplit?: AmountLike[],
-	) {
+	static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]) {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
 		return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
 	}
@@ -299,11 +279,11 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 		);
 	}
 
-	static createDeterministicData<T extends HasKeysetKeys>(
+	static createDeterministicData(
 		amount: AmountLike,
 		seed: Uint8Array,
 		counter: number,
-		keyset: T,
+		keyset: HasKeysetKeys,
 		customSplit?: AmountLike[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);

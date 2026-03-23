@@ -1,7 +1,6 @@
 import {
 	blindMessage,
-	constructProofFromPromise,
-	serializeProof,
+	constructUnblindedSignature,
 	createDLEQProof,
 	pointFromBytes,
 	createBlindSignature,
@@ -152,13 +151,13 @@ describe('test token v3 encoding', () => {
 					mint: 'https://8333.space:3338',
 					proofs: [
 						{
-							amount: 2,
+							amount: 2n,
 							id: '009a1f293253e41e',
 							secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
 							C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
 						},
 						{
-							amount: 8,
+							amount: 8n,
 							id: '009a1f293253e41e',
 							secret: 'fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be',
 							C: '029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059',
@@ -189,13 +188,13 @@ describe('test token v3 encoding', () => {
 					mint: 'https://8333.space:3338',
 					proofs: [
 						{
-							amount: 2,
+							amount: 2n,
 							id: '009a1f293253e41e',
 							secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
 							C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
 						},
 						{
-							amount: 8,
+							amount: 8n,
 							id: '009a1f293253e41e',
 							secret: 'fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be',
 							C: '029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059',
@@ -224,7 +223,7 @@ describe('test decode token', () => {
 			proofs: [
 				{
 					C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-					amount: 1,
+					amount: 1n,
 					id: 'I2yN+iRYfkzT',
 					secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs=',
 				},
@@ -247,7 +246,7 @@ describe('test decode token', () => {
 			proofs: [
 				{
 					C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-					amount: 1,
+					amount: 1n,
 					id: 'I2yN+iRYfkzT',
 					secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs=',
 				},
@@ -271,7 +270,7 @@ describe('test decode token', () => {
 					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
 					C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
 					id: '00ad268c4d1f5826',
-					amount: 1,
+					amount: 1n,
 				},
 			],
 		};
@@ -291,19 +290,19 @@ describe('test decode token', () => {
 					secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
 					C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
 					id: '00ffd48b8f5ecf80',
-					amount: 1,
+					amount: 1n,
 				},
 				{
 					secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
 					C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
 					id: '00ad268c4d1f5826',
-					amount: 2,
+					amount: 2n,
 				},
 				{
 					secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
 					C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
 					id: '00ad268c4d1f5826',
-					amount: 1,
+					amount: 1n,
 				},
 			],
 		};
@@ -328,7 +327,7 @@ describe('test getTokenMetadata', () => {
 			incompleteProofs: [
 				{
 					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
-					amount: 4,
+					amount: 4n,
 					dleq: {
 						e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
 						r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
@@ -338,7 +337,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
-					amount: 2,
+					amount: 2n,
 					dleq: {
 						e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
 						r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
@@ -348,7 +347,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
-					amount: 2,
+					amount: 2n,
 					dleq: {
 						e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
 						r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
@@ -358,7 +357,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
-					amount: 1,
+					amount: 1n,
 					dleq: {
 						e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
 						r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
@@ -368,7 +367,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
-					amount: 1,
+					amount: 1n,
 					dleq: {
 						e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
 						r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
@@ -390,7 +389,7 @@ describe('test getTokenMetadata', () => {
 			incompleteProofs: [
 				{
 					C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
-					amount: 4,
+					amount: 4n,
 					dleq: {
 						e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
 						r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
@@ -400,7 +399,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
-					amount: 2,
+					amount: 2n,
 					dleq: {
 						e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
 						r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
@@ -410,7 +409,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
-					amount: 2,
+					amount: 2n,
 					dleq: {
 						e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
 						r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
@@ -420,7 +419,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
-					amount: 1,
+					amount: 1n,
 					dleq: {
 						e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
 						r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
@@ -430,7 +429,7 @@ describe('test getTokenMetadata', () => {
 				},
 				{
 					C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
-					amount: 1,
+					amount: 1n,
 					dleq: {
 						e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
 						r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
@@ -499,7 +498,7 @@ describe('test v4 encoding', () => {
 					secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
 					C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
 					id: '00ad268c4d1f5826',
-					amount: 1,
+					amount: 1n,
 				},
 			],
 			unit: 'sat',
@@ -520,19 +519,19 @@ describe('test v4 encoding', () => {
 					secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
 					C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
 					id: '00ffd48b8f5ecf80',
-					amount: 1,
+					amount: 1n,
 				},
 				{
 					secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
 					C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
 					id: '00ad268c4d1f5826',
-					amount: 2,
+					amount: 2n,
 				},
 				{
 					secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
 					C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
 					id: '00ad268c4d1f5826',
-					amount: 1,
+					amount: 1n,
 				},
 			],
 			unit: 'sat',
@@ -547,7 +546,7 @@ describe('test v4 encoding', () => {
 	test('removing DLEQ', async () => {
 		const proofs = [
 			{
-				amount: 1,
+				amount: 1n,
 				C: '03ff2e729416437f9ea8d022c501ff5b309d607f98c9ab53d51cd24185b4d3e42b',
 				id: '00b4cd27d8861a44',
 				secret: '10216467bb33f6f079ae92349ba54fa34df99ba24572645b8b813688c74b582d',
@@ -559,7 +558,7 @@ describe('test v4 encoding', () => {
 				},
 			},
 			{
-				amount: 4,
+				amount: 4n,
 				C: '02b457f8e1e151cd71dd3246b56d0f479ac63786e71916b46d16369cb6f78024b9',
 				id: '00b4cd27d8861a44',
 				secret: '1b1bc7a099a63c808c17f8ca4ede03f30d3c243ca34ec4d10a1327b7cfb3ead7',
@@ -571,7 +570,7 @@ describe('test v4 encoding', () => {
 				},
 			},
 			{
-				amount: 16,
+				amount: 16n,
 				C: '03570cdf33bc832a60660b3e7d8ddb74d0dd3158e0fde5b0f607555bb7e8e9fb0f',
 				id: '00b4cd27d8861a44',
 				secret: '8425354533436ca7c29b34daae3aef85ab08925c810d1db4f005259d79d7f9f6',
@@ -603,7 +602,7 @@ describe('test output selection', () => {
 		const amountsWeHave = [1, 2, 4, 4, 4, 8];
 		const proofsWeHave = amountsWeHave.map((amount) => {
 			return {
-				amount: amount,
+				amount: BigInt(amount),
 				id: 'id',
 				C: 'C',
 			} as Proof;
@@ -649,18 +648,21 @@ describe('test zero-knowledge utilities', () => {
 	// construct DLEQ
 	const fakeDleq = createDLEQProof(fakeBlindedMessage.B_, privkey);
 	// blind signature
-	const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, 1, '00');
+	const fakeBlindSignature = createBlindSignature(fakeBlindedMessage.B_, privkey, '00');
 	// unblind
-	const proof = constructProofFromPromise(fakeBlindSignature, r, fakeSecret, pubkey);
-	// serialize
-	const serializedProof = {
-		...serializeProof(proof),
+	const unblinded = constructUnblindedSignature(fakeBlindSignature, r, fakeSecret, pubkey);
+	// construct Proof directly (amount = 1, matching keyset key in tests below)
+	const serializedProof: Proof = {
+		id: unblinded.id,
+		amount: 1n,
+		C: unblinded.C.toHex(true),
+		secret: new TextDecoder().decode(unblinded.secret),
 		dleq: {
 			r: numberToHexPadded64(r),
 			e: bytesToHex(fakeDleq.e),
 			s: bytesToHex(fakeDleq.s),
 		},
-	} as Proof;
+	};
 
 	test('has valid dleq', () => {
 		const keyset = {
@@ -687,7 +689,7 @@ describe('test raw tokens', () => {
 		proofs: [
 			{
 				id: '00ad268c4d1f5826',
-				amount: 1,
+				amount: 1n,
 				secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
 				C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
 			},
