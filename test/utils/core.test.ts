@@ -479,7 +479,7 @@ describe('test getTokenMetadata', () => {
 describe('test keyset derivation', () => {
 	test('derive v0', () => {
 		const keys = PUBKEYS;
-		const keysetId = utils.deriveKeysetId(keys);
+		const keysetId = utils.deriveKeysetId(keys, { versionByte: 0 });
 		expect(keysetId).toBe('009a1f293253e41e');
 	});
 	test('derives NUT-02 version 1 vector 1', () => {

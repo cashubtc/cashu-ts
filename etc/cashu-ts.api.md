@@ -123,9 +123,6 @@ export type BlindSignature = {
     id: string;
 };
 
-// @public @deprecated
-export function bytesToNumber(bytes: Uint8Array): bigint;
-
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -259,9 +256,6 @@ export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter:
 // @public
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
 
-// @public @deprecated (undocumented)
-export function deriveKeysetId(keys: Keys, unit?: string, expiry?: number, versionByte?: number, isDeprecatedBase64?: boolean): string;
-
 // @public (undocumented)
 export type DeriveKeysetIdOptions = {
     expiry?: number;
@@ -316,10 +310,7 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 export function getDataField(secret: Secret | string): string;
 
 // @public
-export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
-
-// @public @deprecated (undocumented)
-export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
+export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
 // @public (undocumented)
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
@@ -1841,9 +1832,6 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean;
 
 // @public
 export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
-
-// @public @deprecated (undocumented)
-export function verifyKeysetId(keys: MintKeys): boolean;
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;

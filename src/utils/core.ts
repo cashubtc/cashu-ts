@@ -6,7 +6,6 @@ import {
 	encodeBase64toUint8,
 	encodeJsonToBase64,
 	encodeUint8toBase64Url,
-	isBase64String,
 } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -15,7 +14,6 @@ import type {
 	TokenMetadata,
 	DeprecatedToken,
 	Keys,
-	MintKeys,
 	Proof,
 	SerializedDLEQ,
 	Token,
@@ -24,7 +22,6 @@ import type {
 	V4InnerToken,
 	V4ProofTemplate,
 	HasKeysetKeys,
-	HasKeysetId,
 } from '../model/types';
 import { Bytes } from './Bytes';
 
@@ -189,18 +186,6 @@ function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
 		throw new Error(`Amount must be positive: ${parsed.toString()}, op: ${op}`);
 	}
 	return parsed;
-}
-
-/**
- * Converts a bytes array to a number.
- *
- * @deprecated We now use Bytes.toBigInt internally for better performance. This function is kept
- *   public for backward compatibility.
- * @param bytes To convert to number.
- * @returns Number as bigint.
- */
-export function bytesToNumber(bytes: Uint8Array): bigint {
-	return Bytes.toBigInt(bytes);
 }
 
 /**
@@ -409,24 +394,13 @@ function tokenFromTemplate(template: TokenV4Template): Token {
 }
 
 /**
- * Helper function to decode cashu tokens into object.
+ * Helper function to decode cashu tokens into an object.
  *
  * @param token An encoded cashu token (cashuB...)
- * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
+ * @param keysets Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`
  * @returns Cashu token object.
  */
-export function getDecodedToken(tokenString: string, keysetIds?: readonly string[]): Token;
-/**
- * @deprecated Pass keyset ids as `string[]` instead, eg: using KeyChain.getAllKeysetIds()
- */
-export function getDecodedToken(tokenString: string, keysetIds?: readonly HasKeysetId[]): Token;
-export function getDecodedToken(
-	tokenString: string,
-	keysetOrIds?: ReadonlyArray<string | HasKeysetId>,
-): Token {
-	// normalize to array of strings
-	const keysetIds = (keysetOrIds ?? []).map((ks) => (typeof ks === 'string' ? ks : ks.id));
-	// remove prefixes
+export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token {
 	const tokenStr = removePrefix(tokenString);
 	const token: Token = handleTokens(tokenStr);
 	token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
@@ -517,41 +491,12 @@ export type DeriveKeysetIdOptions = {
  * @returns Keyset id of the keys.
  * @throws If keyset versionByte is not valid.
  */
-export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
-/**
- * @deprecated Use the new options signature, which also adds keysets v2 support:
- *
- *       deriveKeysetId(keys, { unit, expiry, versionByte, input_fee_ppk });
- */
-export function deriveKeysetId(
-	keys: Keys,
-	unit?: string,
-	expiry?: number,
-	versionByte?: number,
-	isDeprecatedBase64?: boolean,
-): string;
-export function deriveKeysetId(
-	keys: Keys,
-	arg2?: string | DeriveKeysetIdOptions,
-	expiry?: number,
-	versionByte?: number,
-	isDeprecatedBase64?: boolean,
-	input_fee_ppk?: number,
-): string {
-	let unit: string = 'sat';
-	if (arg2 && typeof arg2 === 'object') {
-		// New signature
-		unit = arg2.unit ?? 'sat'; // default: sat
-		expiry = arg2.expiry;
-		versionByte = arg2.versionByte ?? 1; // default: 1
-		input_fee_ppk = arg2.input_fee_ppk;
-		isDeprecatedBase64 = arg2.isDeprecatedBase64 ?? false; // default: false
-	} else {
-		// Deprecated signature
-		unit = arg2 ?? 'sat'; // default: sat
-		versionByte = versionByte ?? 0; // default: 0
-		isDeprecatedBase64 = isDeprecatedBase64 ?? false; // default: false
-	}
+export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string {
+	const unit = options?.unit ?? 'sat'; // default: sat
+	const expiry = options?.expiry;
+	const versionByte = options?.versionByte ?? 1; // default: 1
+	const input_fee_ppk = options?.input_fee_ppk;
+	const isDeprecatedBase64 = options?.isDeprecatedBase64 ?? false; // default: false
 
 	if (isDeprecatedBase64) {
 		const pubkeysConcat = Object.entries(keys)
@@ -747,44 +692,14 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 }
 
 /**
- * @deprecated Use Keyset.verifyKeysetId(keys), or init a Keyset and call keyset.verify().
- */
-export function verifyKeysetId(keys: MintKeys): boolean {
-	// Note: we are NOT redirecting to Keyset.verifyKeysetId() here as that would
-	// couple the utils class to Keyset, and risks circular dependencies.
-	const isBase64 = isBase64String(keys.id);
-	const isValidHex = /^[a-fA-F0-9]+$/.test(keys.id);
-	const versionByte = isValidHex ? hexToBytes(keys.id)[0] : 0;
-	return (
-		deriveKeysetId(keys.keys, {
-			expiry: keys.final_expiry,
-			input_fee_ppk: keys.input_fee_ppk,
-			unit: keys.unit,
-			versionByte,
-			isDeprecatedBase64: isBase64 && !isValidHex,
-		}) === keys.id
-	);
-}
-
-/**
  * Maps the short keyset IDs stored in the token to actual keyset IDs that were fetched from the
  * Mint.
  *
  * @param proofs Array of Proofs.
- * @param keysets Optional. Array of full keyset IDs, eg: from KeyChain.getAllKeysetIds()
+ * @param keysets Array of full keyset ID strings, eg: from `KeyChain.getAllKeysetIds()`
  * @returns Array of Proofs with full keyset IDs.
  */
-function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly string[]): Proof[];
-/**
- * @deprecated Pass keyset ids as `string[]` instead.
- */
-function mapShortKeysetIds(proofs: Proof[], keysetIds?: readonly HasKeysetId[]): Proof[];
-function mapShortKeysetIds(
-	proofs: Proof[],
-	keysetOrIds?: ReadonlyArray<string | HasKeysetId>,
-): Proof[] {
-	// normalize to array of keyset ids
-	const keysetIds = (keysetOrIds ?? []).map((ks) => (typeof ks === 'string' ? ks : ks.id));
+function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof[] {
 	const newProofs: Proof[] = [];
 	for (const proof of proofs) {
 		let idBytes: Uint8Array;
