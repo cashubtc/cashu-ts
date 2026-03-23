@@ -43,16 +43,13 @@ export {
 // Wallet/Mint types used in the public API surface
 export type { CounterRange, CounterSource, OperationCounters } from './wallet/CounterSource';
 export type { SubscribeOpts, CancellerLike, SubscriptionCanceller } from './wallet/WalletEvents';
-export type * from './wallet/types/_deprecated';
 export type * from './wallet/types/config';
 export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
-export type * from './mint/types/_deprecated';
 export type * from './mint/types/payloads';
 export type * from './mint/types/responses';
 
 // Shared models & primitives
-export type * from './model/types/_deprecated';
 export type * from './model/types/blinded';
 export type { JsonRpcReqParams, RpcSubKinds } from './model/types/jsonrpc';
 export type * from './model/types/keyset';
