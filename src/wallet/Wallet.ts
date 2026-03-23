@@ -20,7 +20,6 @@ import {
 	type RestoreConfig,
 	type SecretsPolicy,
 	type SwapPreview,
-	type MeltBlanks,
 	type MintPreview,
 } from './types';
 import {
@@ -1710,6 +1709,22 @@ class Wallet {
 	// -----------------------------------------------------------------
 
 	/**
+	 * @internal
+	 */
+	validateMintQuote<TQuote extends MintQuoteBaseResponse>(quote: TQuote): void {
+		this.failIf(
+			quote.unit !== this.unit,
+			`Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
+		);
+		this.failIf(
+			'expiry' in quote &&
+				typeof quote.expiry === 'number' &&
+				quote.expiry < Math.floor(Date.now() / 1000),
+			`Mint quote ${quote.quote} has expired`,
+		);
+	}
+
+	/**
 	 * @deprecated Use mintProofsBolt11()
 	 */
 	async mintProofs(
@@ -1740,6 +1755,15 @@ class Wallet {
 		config?: MintProofsConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
+		if (typeof quote === 'string') {
+			// Skip checkMintQuoteBolt11 to avoid an extra round-trip. This method returns Proof[]
+			// so the quote object is never exposed to the caller — a stub is sufficient and
+			// an invalid quote will be exposed in the minting step.
+			const quoteObj = { quote };
+			const preview = await this.prepareMint('bolt11', amount, quoteObj, config, outputType);
+			return this.completeMint(preview);
+		}
+		this.validateMintQuote(quote);
 		const preview = await this.prepareMint('bolt11', amount, quote, config, outputType);
 		return this.completeMint(preview);
 	}
@@ -1786,20 +1810,24 @@ class Wallet {
 	 *
 	 * Returns a `MintPreview` that contains the exact mint payload and output data needed to
 	 * construct proofs. Persist this preview to support NUT-19 replay safety.
+	 * @param quote The mint quote. Only `quote` (ID) is required — a full `MintQuoteBolt11Response`
+	 *   works, but `{ quote: string }` is sufficient. Pass `config.privkey` to produce a NUT-20
+	 *   signature regardless of whether the quote carries a `pubkey` field.
 	 */
-	async prepareMint<TQuote extends MintQuoteBaseResponse | string>(
+	async prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
 		method: string,
 		amount: AmountLike,
 		quote: TQuote,
 		config?: MintProofsConfig,
 		outputType?: OutputType,
-	): Promise<MintPreview> {
+	): Promise<MintPreview<TQuote>> {
+		this.failIf(
+			typeof quote === 'string',
+			`prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
+		);
 		const requestedAmount = this.normalizeAmount(amount, `prepareMint: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
-
-		this.failIf(method === 'bolt12' && typeof quote === 'string', 'Bolt12 mint requires a quote');
-		const quoteId = typeof quote === 'string' ? quote : quote.quote;
 
 		// Shape output type and denominations for our proofs
 		// we are receiving, so no includeFees.
@@ -1827,14 +1855,17 @@ class Wallet {
 		const blindedMessages = outputs.map((d) => d.blindedMessage);
 		const mintPayload: MintRequest = {
 			outputs: blindedMessages,
-			quote: quoteId,
+			quote: quote.quote,
 		};
 
-		// Sign payload if the quote carries a public key
-		if (typeof quote !== 'string' && quote.pubkey) {
+		// Require a privkey when the quote is known to be locked
+		if ('pubkey' in quote && quote.pubkey) {
 			this.failIf(!privkey, 'Can not sign locked quote without private key');
-			const mintQuoteSignature = signMintQuote(privkey!, quote.quote, blindedMessages);
-			mintPayload.signature = mintQuoteSignature;
+		}
+		// Sign whenever a privkey is provided — quote.pubkey may be absent if only the
+		// quote ID was stored, but the caller still needs to produce a NUT-20 signature
+		if (privkey) {
+			mintPayload.signature = signMintQuote(privkey, quote.quote, blindedMessages);
 		}
 
 		return {
@@ -1842,7 +1873,7 @@ class Wallet {
 			payload: mintPayload,
 			outputData: outputs,
 			keysetId: keyset.id,
-			quote: quoteId,
+			quote,
 		};
 	}
 
@@ -1855,7 +1886,9 @@ class Wallet {
 	 * @param mintPreview Preview returned by prepareMint.
 	 * @returns Minted proofs.
 	 */
-	async completeMint(mintPreview: MintPreview): Promise<Proof[]> {
+	async completeMint(
+		mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
+	): Promise<Proof[]> {
 		const { payload, outputData, keysetId, method } = mintPreview;
 		const { signatures } = await this.mint.mint(method, payload);
 		this.failIf(
@@ -2072,8 +2105,7 @@ class Wallet {
 		outputType?: OutputType,
 	): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
 		const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
-		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
-		return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey, preferAsync);
+		return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey);
 	}
 
 	/**
@@ -2095,8 +2127,7 @@ class Wallet {
 		outputType?: OutputType,
 	): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
 		const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
-		const preferAsync: boolean = typeof config?.onChangeOutputsCreated === 'function';
-		return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey, preferAsync);
+		return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
 	}
 
 	/**
@@ -2107,15 +2138,16 @@ class Wallet {
 	 * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for
 	 * Lightning fee return and returns a MeltPreview, which you can melt using completeMelt.
 	 * @param method Payment method of the quote.
-	 * @param meltQuote The melt quote.
+	 * @param meltQuote The melt quote. Only `quote` (ID) and `amount` are required — a full
+	 *   `MeltQuoteBolt11Response` works, but `{ quote: string, amount: Amount }` is sufficient.
 	 * @param proofsToSend Proofs to melt.
-	 * @param config Optional (keysetId, onChangeOutputsCreated).
+	 * @param config Optional configuration (keysetId, privkey, etc.).
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns MeltPreview.
 	 * @throws If params are invalid.
 	 * @see https://github.com/cashubtc/nuts/blob/main/08.md.
 	 */
-	async prepareMelt<TQuote extends MeltQuoteBaseResponse>(
+	async prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
 		method: string,
 		meltQuote: TQuote,
 		proofsToSend: Proof[],
@@ -2123,7 +2155,7 @@ class Wallet {
 		outputType?: OutputType,
 	): Promise<MeltPreview<TQuote>> {
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
-		const { keysetId, onChangeOutputsCreated, onCountersReserved } = config || {};
+		const { keysetId, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		const sendAmount = sumProofs(proofsToSend);
 
@@ -2179,24 +2211,6 @@ class Wallet {
 			quote: meltQuote,
 		};
 
-		// Fire legacy event(s) after preview creation
-		// Note: These events are deprecated and should be removed in a future version
-		if (outputData.length > 0) {
-			const blanks: MeltBlanks<TQuote> = {
-				method: method as 'bolt11' | 'bolt12',
-				payload: {
-					quote: meltQuote.quote,
-					inputs: proofsToSend,
-					outputs: outputData.map((d) => d.blindedMessage),
-				},
-				outputData,
-				keyset,
-				quote: meltQuote,
-			};
-			this.safeCallback(onChangeOutputsCreated, blanks, { op: 'meltProofs' });
-			this.on._emitMeltBlanksCreated(blanks); // global callback
-		}
-
 		return meltPreview;
 	}
 
@@ -2204,8 +2218,7 @@ class Wallet {
 	 * Completes a pending melt by calling the melt endpoint and constructing change proofs.
 	 *
 	 * @remarks
-	 * Use with a MeltPreview returned from prepareMelt or the legacy MeltBlanks object returned by
-	 * the meltBlanksCreated or onChangeOutputsCreated callback. This method lets you sign P2PK locked
+	 * Use with a `MeltPreview` returned from `prepareMelt()`. This method lets you sign P2PK locked
 	 * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
 	 * @param meltPreview The preview from prepareMelt().
 	 * @param privkey The private key(s) for signing.
@@ -2213,14 +2226,11 @@ class Wallet {
 	 * @returns Updated MeltProofsResponse.
 	 * @throws If melt fails or signatures don't match output count.
 	 */
-	async completeMelt<TQuote extends MeltQuoteBaseResponse>(
-		meltPreview: MeltPreview<TQuote> | MeltBlanks<TQuote>,
+	async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
+		meltPreview: MeltPreview<TQuote>,
 		privkey?: string | string[],
 		preferAsync?: boolean,
 	): Promise<MeltProofsResponse<TQuote>> {
-		// Convert from legacy MeltBlanks if needed
-		meltPreview = this.maybeConvertMeltBlanks(meltPreview);
-
 		// Extract vars from MeltPreview
 		let inputs = meltPreview.inputs;
 		const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
@@ -2243,11 +2253,10 @@ class Wallet {
 			...(preferAsync ? { prefer_async: true } : {}),
 		};
 
-		// Make melt call (note: bolt11 has legacy data handling)
-		const meltResponse: MeltQuoteBaseResponse =
-			meltPreview.method === 'bolt11'
-				? await this.mint.meltBolt11(meltPayload)
-				: await this.mint.melt<TQuote>(meltPreview.method, meltPayload);
+		const meltResponse: MeltQuoteBaseResponse = await this.mint.melt<TQuote>(
+			meltPreview.method,
+			meltPayload,
+		);
 
 		// Check for too many blind signatures before mapping
 		this.failIf(
@@ -2265,36 +2274,9 @@ class Wallet {
 			this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
 		}
 
-		const mergedQuote = {
-			...meltPreview.quote,
-			...meltResponse,
-		} as TQuote;
-
-		return { quote: mergedQuote, change } as MeltProofsResponse<TQuote>;
-	}
-
-	/**
-	 * Helper to ease transition from MeltBlanks to MeltPreview.
-	 */
-	private maybeConvertMeltBlanks<TQuote extends MeltQuoteBaseResponse>(
-		melt: MeltPreview<TQuote> | MeltBlanks<TQuote>,
-	): MeltPreview<TQuote> {
-		// New shape already, just return as is
-		if (!('payload' in melt)) {
-			return melt;
-		}
-		// Legacy MeltBlanks, adapt it to MeltPreview
-		this._logger.warn(
-			'MeltBlanks objects and the meltBlanksCreated / onChangeOutputsCreated events are deprecated. Please use wallet.prepareMelt() to create a MeltPreview instead.',
-		);
-		const { method, payload, outputData, keyset, quote } = melt;
-		return {
-			method,
-			inputs: payload.inputs,
-			outputData,
-			keysetId: keyset.id,
-			quote,
-		};
+		// Merge preview quote with response to protect against incomplete response.
+		const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
+		return { quote: mergedQuote, change };
 	}
 
 	// -----------------------------------------------------------------

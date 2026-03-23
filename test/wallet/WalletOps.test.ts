@@ -4,6 +4,7 @@ import { Amount, type AmountLike } from '../../src/model/Amount';
 
 import type {
 	Proof,
+	MintQuoteBolt11Response,
 	MintQuoteBolt12Response,
 	MeltQuoteBaseResponse,
 	MeltQuoteBolt11Response,
@@ -74,10 +75,13 @@ type MintBolt12Fn = (
 	outputType?: OutputType,
 ) => Promise<{ proofs: Proof[] }>;
 
+type CheckMintQuoteBolt11Fn = (quote: string) => Promise<MintQuoteBolt11Response>;
+type ValidateMintQuoteFn = (quote: MintQuoteBolt11Response) => void;
+
 type PrepareMintFn = (
 	method: string,
 	amount: AmountLike,
-	quote: string | MintQuoteBolt12Response,
+	quote: MintQuoteBolt11Response | MintQuoteBolt12Response,
 	config?: MintProofsConfig,
 	outputType?: OutputType,
 ) => Promise<MintPreview>;
@@ -130,16 +134,26 @@ class MockWallet {
 	}));
 	mintProofsBolt11: Mock<MintBolt11Fn> = vi.fn<MintBolt11Fn>(async () => ({ proofs: [] }));
 	mintProofsBolt12: Mock<MintBolt12Fn> = vi.fn<MintBolt12Fn>(async () => ({ proofs: [] }));
-	prepareMint: Mock<PrepareMintFn> = vi.fn<PrepareMintFn>(async (m, _a, q, _c, _o) => ({
-		method: m,
-		payload: {
-			quote: typeof q === 'string' ? q : q.quote,
-			outputs: [],
-		},
-		outputData: [],
-		keysetId: '123',
-		quote: typeof q === 'string' ? q : q.quote,
-	}));
+	checkMintQuoteBolt11: Mock<CheckMintQuoteBolt11Fn> = vi.fn<CheckMintQuoteBolt11Fn>(
+		async (id) => ({
+			quote: id,
+			state: 'UNPAID' as any,
+			expiry: 0,
+			request: '',
+			amount: Amount.from(0),
+			unit: '',
+		}),
+	);
+	validateMintQuote: Mock<ValidateMintQuoteFn> = vi.fn<ValidateMintQuoteFn>();
+	prepareMint: Mock<PrepareMintFn> = vi.fn<PrepareMintFn>(async (m, _a, q, _c, _o) => {
+		return {
+			method: m,
+			payload: { quote: q.quote, outputs: [] },
+			outputData: [],
+			keysetId: '123',
+			quote: q,
+		};
+	});
 	completeMint: Mock<CompleteMintFn> = vi.fn<CompleteMintFn>(async () => []);
 	sendOffline: Mock<SendOfflineFn> = vi.fn<SendOfflineFn>(() => ({ keep: [], send: [] }));
 	prepareMelt: Mock<PrepareMeltFn> = vi.fn<PrepareMeltFn>(async (m, q, p, _c, _o) => ({
@@ -519,7 +533,8 @@ describe('WalletOps builders', () => {
 
 			expect(method).toBe('bolt11');
 			expect(Amount.from(amount).toNumber()).toBe(10);
-			expect(q).toBe(quote);
+			// MintBuilder resolves string quote IDs via checkMintQuoteBolt11 before calling prepareMint
+			expect(q.quote).toBe(quote);
 			expect(config).toEqual({ keysetId: 'kid' });
 			expect(maybeOT).toBeUndefined();
 		});
@@ -543,7 +558,8 @@ describe('WalletOps builders', () => {
 
 			expect(method).toBe('bolt11');
 			expect(Amount.from(amount).toNumber()).toBe(10);
-			expect(q).toBe(quote);
+			// MintBuilder resolves string quote IDs via checkMintQuoteBolt11 before calling prepareMint
+			expect(q.quote).toBe(quote);
 			expect(outputType).toEqual({ type: 'p2pk', options: { pubkey: 'P' }, denominations: [10] });
 
 			expect(config).toBeDefined();
@@ -589,7 +605,7 @@ describe('WalletOps builders', () => {
 				payload: { quote, outputs: [] },
 				outputData: [],
 				keysetId: '123',
-				quote,
+				quote: { quote, request: '', unit: '' },
 			};
 			wallet.prepareMint.mockResolvedValueOnce(preview);
 
@@ -648,7 +664,7 @@ describe('WalletOps builders', () => {
 				payload: { quote: mint12.quote, outputs: [] },
 				outputData: [],
 				keysetId: '123',
-				quote: mint12.quote,
+				quote: { quote: mint12.quote, request: '', unit: '' },
 			};
 			wallet.prepareMint.mockResolvedValueOnce(preview);
 
@@ -831,30 +847,6 @@ describe('WalletOps builders', () => {
 				factory,
 				denominations: [],
 			});
-		});
-
-		it('bolt11: forwards onChangeOutputsCreated callback', async () => {
-			const cb = vi.fn();
-			await ops.meltBolt11(melt11, proofs).onChangeOutputsCreated(cb).run();
-
-			expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
-			expect(wallet.completeMelt).toHaveBeenCalledTimes(1);
-
-			const [, , , cfg] = wallet.prepareMelt.mock.calls[0];
-			expect(cfg).toBeDefined();
-			expect((cfg as MeltProofsConfig).onChangeOutputsCreated).toBe(cb);
-		});
-
-		it('bolt12: forwards onChangeOutputsCreated callback', async () => {
-			const cb = vi.fn();
-			await ops.meltBolt12(melt12, proofs).onChangeOutputsCreated(cb).run();
-
-			expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
-			expect(wallet.completeMelt).toHaveBeenCalledTimes(1);
-
-			const [, , , cfg] = wallet.prepareMelt.mock.calls[0];
-			expect(cfg).toBeDefined();
-			expect((cfg as MeltProofsConfig).onChangeOutputsCreated).toBe(cb);
 		});
 
 		it('bolt12: forwards onCountersReserved callback', async () => {

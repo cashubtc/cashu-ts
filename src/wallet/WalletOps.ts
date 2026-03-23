@@ -20,6 +20,7 @@ import {
 	type MeltProofsConfig,
 	type MeltProofsResponse,
 	type MeltPreview,
+	type MintPreview,
 } from './types';
 import type { Wallet } from './Wallet';
 
@@ -44,6 +45,11 @@ export class WalletOps {
 	receive(token: Token | string) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
+	/**
+	 * @param quote Full `MintQuoteBolt11Response` or a bare quote ID string. Passing a string fetches
+	 *   the latest quote state from the mint (unit/expiry validation included). Pass the full object
+	 *   if you already have it to avoid the extra round-trip.
+	 */
 	mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>) {
 		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
 	}
@@ -504,7 +510,7 @@ export class ReceiveBuilder {
  * @example
  *
  *     const proofs = await wallet.ops
- *     	.mint(100, quote)
+ *     	.mintBolt11(100, quote)
  *     	.asDeterministic() // counter 0 auto reserves
  *     	.onCountersReserved((info) => console.log(info))
  *     	.privkey('sk')
@@ -644,23 +650,50 @@ export class MintBuilder<
 	 * for bolt12 quotes when `.privkey()` is set.
 	 * @returns A MintPreview containing the payload and output data needed to complete the mint.
 	 */
-	async prepare(this: MintBuilder<M, true>) {
+	async prepare(
+		this: MintBuilder<M, true>,
+	): Promise<
+		M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>
+	> {
 		// BOLT 11
 		if (this.method === 'bolt11') {
-			const quote = this.quote as string | MintQuoteBolt11Response;
-			// For object quotes, enforce privkey when the quote is locked
-			if (typeof quote !== 'string' && quote.pubkey && !this.config.privkey) {
+			const raw = this.quote as string | MintQuoteBolt11Response;
+			const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
+			this.wallet.validateMintQuote(quote);
+			// Enforce privkey when the quote is locked
+			if (quote.pubkey && !this.config.privkey) {
 				throw new Error('privkey is required for locked BOLT11 mint quotes');
 			}
-			return this.wallet.prepareMint(this.method, this.amount, quote, this.config, this.outputType);
+			return this.wallet.prepareMint(
+				this.method,
+				this.amount,
+				quote,
+				this.config,
+				this.outputType,
+			) as Promise<
+				M extends 'bolt11'
+					? MintPreview<MintQuoteBolt11Response>
+					: MintPreview<MintQuoteBolt12Response>
+			>;
 		}
 
 		// BOLT 12
 		const bolt12 = this.quote as MintQuoteBolt12Response;
+		this.wallet.validateMintQuote(bolt12);
 		if (!this.config.privkey) {
 			throw new Error('privkey is required for BOLT12 mint quotes');
 		}
-		return this.wallet.prepareMint(this.method, this.amount, bolt12, this.config, this.outputType);
+		return this.wallet.prepareMint(
+			this.method,
+			this.amount,
+			bolt12,
+			this.config,
+			this.outputType,
+		) as Promise<
+			M extends 'bolt11'
+				? MintPreview<MintQuoteBolt11Response>
+				: MintPreview<MintQuoteBolt12Response>
+		>;
 	}
 
 	/**
@@ -697,7 +730,9 @@ export class MintBuilder<
  * 	.run();
  * ```
  */
-export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11Response> {
+export class MeltBuilder<
+	TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBolt11Response,
+> {
 	private outputType?: OutputType;
 	private config: MeltProofsConfig = {};
 
@@ -788,20 +823,6 @@ export class MeltBuilder<TQuote extends MeltQuoteBaseResponse = MeltQuoteBolt11R
 	 */
 	onCountersReserved(cb: OnCountersReserved) {
 		this.config.onCountersReserved = cb;
-		return this;
-	}
-
-	/**
-	 * Receive a callback when NUT-08 blanks (0-sat change outputs) are created for async melts.
-	 *
-	 * @remarks
-	 * You can persist these blanks and later call `wallet.completeMelt(blanks)` to finalize and
-	 * recover change once the invoice/offer is paid.
-	 * @deprecated Use prepare() instead of run() and store the MeltPreview instead.
-	 * @param cb Callback invoked with the created blanks payload.
-	 */
-	onChangeOutputsCreated(cb: NonNullable<MeltProofsConfig['onChangeOutputsCreated']>) {
-		this.config.onChangeOutputsCreated = cb;
 		return this;
 	}
 

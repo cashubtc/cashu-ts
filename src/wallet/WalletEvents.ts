@@ -2,12 +2,10 @@ import type { Wallet } from './Wallet';
 import type {
 	Proof,
 	ProofState,
-	MeltQuoteBaseResponse,
 	MeltQuoteBolt11Response,
 	MintQuoteBolt11Response,
 } from '../model/types';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
-import type { MeltBlanks } from './types';
 import { hashToCurve } from '../crypto';
 import { type OperationCounters } from './CounterSource';
 import { safeCallback } from '../logger';
@@ -70,9 +68,6 @@ export class WalletEvents {
 
 	// Callbacks registered for Counters Reserved events
 	private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
-
-	// Callbacks registered for Melt blanks created events
-	private meltBlanksHandlers = new Set<(payload: MeltBlanks<MeltQuoteBaseResponse>) => void>();
 
 	// Binds an abort signal to each subscription canceller
 	private withAbort(
@@ -194,34 +189,6 @@ export class WalletEvents {
 	public _emitCountersReserved(payload: OperationCounters) {
 		for (const h of this.countersReservedHandlers) {
 			safeCallback(h, payload, this.wallet.logger, { event: 'countersReserved' });
-		}
-	}
-
-	/**
-	 * Register a callback fired whenever NUT-08 blanks are created during a melt.
-	 *
-	 * Called synchronously right after blanks are prepared (before the melt request), and the wallet
-	 * does not await your handler.
-	 *
-	 * Typical use: persist `payload` so you can later call `wallet.completeMelt(payload)`.
-	 *
-	 * @deprecated Use wallet.prepareMelt() and store the MeltPreview instead.
-	 */
-	public meltBlanksCreated(
-		cb: (payload: MeltBlanks<MeltQuoteBaseResponse>) => void,
-		opts?: SubscribeOpts,
-	): SubscriptionCanceller {
-		this.meltBlanksHandlers.add(cb);
-		const cancel = () => this.meltBlanksHandlers.delete(cb);
-		return this.withAbort(opts?.signal, cancel);
-	}
-
-	/**
-	 * @internal
-	 */
-	public _emitMeltBlanksCreated(payload: MeltBlanks<MeltQuoteBaseResponse>) {
-		for (const h of this.meltBlanksHandlers) {
-			safeCallback(h, payload, this.wallet.logger, { event: 'meltBlanksCreated' });
 		}
 	}
 
