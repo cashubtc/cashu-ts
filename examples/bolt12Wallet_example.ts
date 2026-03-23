@@ -137,7 +137,7 @@ const mintFromBolt12Quote = async (
 	quote: MintQuoteBolt12Response,
 ): Promise<Proof[]> => {
 	const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);
-	const availableToMint = updatedQuote.amount_paid.add(updatedQuote.amount_issued);
+	const availableToMint = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
 
 	if (availableToMint.lessThanOrEqual(0)) {
 		return [];
