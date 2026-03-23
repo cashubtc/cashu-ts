@@ -443,6 +443,7 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
 - Deprecated utility helpers and overloads in `src/utils/core`: `bytesToNumber`, `verifyKeysetId`, the positional `deriveKeysetId(...)` signature, and the `getDecodedToken(..., HasKeysetId[])` overload; use `Bytes.toBigInt`, `Keyset.verifyKeysetId(...)`, the options-based `deriveKeysetId(...)`, and `string[]` keyset IDs.
 - Deprecated NUT-11 helpers and aliases: the `parseP2PKSecret(Uint8Array)` overload, `WellKnownSecret`, `signP2PKSecret`, `verifyP2PKSecretSignature`, `getP2PKExpectedKWitnessPubkeys`, and `verifyP2PKSig`; use `parseP2PKSecret(string | Secret)`, `SecretKind`, `schnorrSignMessage`, `schnorrVerifyMessage`, `getP2PKExpectedWitnessPubkeys`, and `isP2PKSpendAuthorised()` / `verifyP2PKSpendingConditions()`.
+- Deprecated convenience aliases removed elsewhere in the API: `MintInfo.supportsBolt12Description` and `WSConnection.closeSubscription()`; use `supportsNut04Description('bolt12')` and `cancelSubscription()` instead.
 - Deprecated crypto/type aliases removed in the v4 cleanup, including `BlindedMessage`; use the non-deprecated names such as `RawBlindedMessage`.
 
 ---

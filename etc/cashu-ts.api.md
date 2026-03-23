@@ -976,8 +976,6 @@ export class MintInfo {
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     supportsAmountless(method?: string, unit?: string): boolean;
-    // @deprecated (undocumented)
-    get supportsBolt12Description(): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;
@@ -2011,8 +2009,6 @@ export class WSConnection {
     cancelSubscription<TPayload = unknown>(subId: string, callback: (payload: TPayload) => void, errorCallback?: (e: Error) => void): void;
     // (undocumented)
     close(): void;
-    // @deprecated (undocumented)
-    closeSubscription(subId: string): void;
     // (undocumented)
     connect(timeoutMs?: number): Promise<void>;
     // (undocumented)
