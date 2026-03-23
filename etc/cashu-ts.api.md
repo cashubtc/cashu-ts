@@ -426,9 +426,6 @@ export type GetKeysResponse = {
     keysets: MintKeys[];
 };
 
-// @public @deprecated (undocumented)
-export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[];
-
 // @public
 export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[];
 
@@ -1348,9 +1345,6 @@ export function parseHTLCSecret(secret: string | Secret): Secret;
 // @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
 
-// @public @deprecated (undocumented)
-export function parseP2PKSecret(secret: Uint8Array): Secret;
-
 // @public
 export function parseSecret(secret: string | Secret): Secret;
 
@@ -1714,9 +1708,6 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
 // @public
 export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[], logger?: Logger, message?: string): Proof[];
 
-// @public @deprecated
-export const signP2PKSecret: (secret: string, privateKey: PrivKey) => string;
-
 // @public (undocumented)
 export function sortProofsById(proofs: Proof[]): Proof[];
 
@@ -1835,12 +1826,6 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, mess
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
-
-// @public @deprecated
-export const verifyP2PKSecretSignature: (signature: string, secret: string, pubkey: string) => boolean;
-
-// @public @deprecated (undocumented)
-export function verifyP2PKSig(proof: Proof): boolean;
 
 // @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
@@ -2015,9 +2000,6 @@ export type WebSocketSupport = {
     unit: string;
     commands: string[];
 };
-
-// @public @deprecated (undocumented)
-export type WellKnownSecret = 'P2PK';
 
 // @public (undocumented)
 export class WSConnection {

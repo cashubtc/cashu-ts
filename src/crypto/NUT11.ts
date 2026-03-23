@@ -60,16 +60,7 @@ export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
  * @returns Secret object.
  * @throws If the JSON is invalid or NUT-10 secret is malformed.
  */
-export function parseP2PKSecret(secret: string | Secret): Secret;
-/**
- * @deprecated Pass a string or Secret instead.
- */
-export function parseP2PKSecret(secret: Uint8Array): Secret;
-export function parseP2PKSecret(secret: string | Uint8Array | Secret): Secret {
-	// Handle deprecated format
-	if (secret instanceof Uint8Array) {
-		secret = new TextDecoder().decode(secret);
-	}
+export function parseP2PKSecret(secret: string | Secret): Secret {
 	// HTLC extends P2PK, so we include it in our expected list.
 	return assertSecretKind(['P2PK', 'HTLC'], secret);
 }
@@ -641,45 +632,4 @@ export function buildLegacyP2PKSigAllMessage(
 		parts.push(quoteId);
 	}
 	return parts.join('');
-}
-
-/**
- * @deprecated - Use SecretKind for NUT-10 kinds.
- */
-export type WellKnownSecret = 'P2PK';
-
-/**
- * Signs a P2PK secret using Schnorr.
- *
- * @deprecated Use {@link schnorrSignMessage}
- */
-export const signP2PKSecret = (secret: string, privateKey: PrivKey): string => {
-	return schnorrSignMessage(secret, privateKey);
-};
-
-/**
- * Verifies a Schnorr signature on a P2PK secret.
- *
- * @deprecated Use {@link schnorrVerifyMessage}
- */
-export const verifyP2PKSecretSignature = (
-	signature: string,
-	secret: string,
-	pubkey: string,
-): boolean => {
-	return schnorrVerifyMessage(signature, secret, pubkey);
-};
-
-/**
- * @deprecated - Typo: use {@link getP2PKExpectedWitnessPubkeys} instead.
- */
-export function getP2PKExpectedKWitnessPubkeys(secretStr: string | Secret): string[] {
-	return getP2PKExpectedWitnessPubkeys(secretStr);
-}
-
-/**
- * @deprecated Use {@link isP2PKSpendAuthorised} or {@link verifyP2PKSpendingConditions} instead.
- */
-export function verifyP2PKSig(proof: Proof): boolean {
-	return isP2PKSpendAuthorised(proof);
 }
