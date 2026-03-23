@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, afterAll, afterEach, test, describe, expect, vi 
 import {
 	Mint,
 	Wallet,
+	KeyChain,
 	CheckStateEnum,
 	type Proof,
 	type MeltQuoteBolt11Response,
@@ -270,12 +271,9 @@ describe('test wallet init', () => {
 	});
 
 	test('should initialize with preloaded mint info, keys, and keysets without fetching', async () => {
-		const wallet = new Wallet(mintUrl, {
-			unit,
-			mintInfo: mintInfoResp,
-			keys: dummyKeysResp.keysets,
-			keysets: dummyKeysetResp.keysets,
-		});
+		const wallet = new Wallet(mintUrl, { unit });
+		const cache = KeyChain.mintToCacheDTO(mintUrl, dummyKeysetResp.keysets, dummyKeysResp.keysets);
+		wallet.loadMintFromCache(mintInfoResp, cache);
 		const spyMintInfo = vi.spyOn((wallet as any).mint, 'getInfo');
 		const spyKeySets = vi.spyOn((wallet as any).mint, 'getKeySets');
 		const spyKeys = vi.spyOn((wallet as any).mint, 'getKeys');

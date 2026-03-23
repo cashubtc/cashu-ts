@@ -4,16 +4,23 @@
 import { vi, describe, test, expect, beforeEach, afterEach, Mock, MockInstance } from 'vitest';
 
 vi.mock('../../src/wallet', () => {
-	// Define a constructor-style mock to ensure `new KeyChain(...)` yields an
-	// instance with `getCheapestKeyset` on it.
+	// Instance mock: getCheapestKeyset returns a stub keyset
 	const KeyChainMock = vi.fn(function (this: any, _mintUrl: string, _unit: string) {
-		// Attach as instance method
 		this.getCheapestKeyset = vi.fn().mockReturnValue({
 			id: '00authkeyset0001',
 			unit: 'auth',
 			keys: { 1: '02deadbeef', 2: '03cafebabe' },
 		});
 	});
+
+	// Static methods used by AuthManager.init
+	KeyChainMock.mintToCacheDTO = vi.fn((_mintUrl: string, _keysets: any, _keys: any) => ({
+		keysets: _keysets,
+		mintUrl: _mintUrl,
+	}));
+	KeyChainMock.fromCache = vi.fn(
+		(_mintUrl: string, _unit: string, _cache: any): any => new KeyChainMock(_mintUrl, _unit),
+	);
 
 	return {
 		KeyChain: KeyChainMock,
@@ -245,9 +252,8 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 		await am.ensure(5);
 
 		const KeyChainMock = (wallet as any).KeyChain as Mock;
-		expect(KeyChainMock).toHaveBeenCalledWith(
+		expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
 			mintUrl,
-			'auth',
 			[{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250 }],
 			[
 				{
@@ -259,6 +265,7 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 				},
 			],
 		);
+		expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
 		expect(outputsSpy).toHaveBeenCalledWith(2, expect.any(Object));
 		expect(am.poolSize).toBe(2);
 	});
@@ -328,13 +335,13 @@ describe('AuthManager: init fetches info then builds KeyChain via wallet mock', 
 
 		const KeyChainMock = (wallet as any).KeyChain as Mock;
 		expect(vi.isMockFunction(KeyChainMock)).toBe(true);
-		expect(KeyChainMock).toHaveBeenCalledTimes(1);
-		expect(KeyChainMock).toHaveBeenCalledWith(
+		// AuthManager now uses mintToCacheDTO + fromCache instead of the raw constructor
+		expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
 			mintUrl,
-			'auth',
 			[{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }],
 			[{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }],
 		);
+		expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
 
 		expect(am.activeAuthKeysetId).toBe('00authkeyset0001');
 	});

@@ -115,19 +115,21 @@ export type KeysetCache = MintKeyset & {
  * Cached view of a KeyChain.
  *
  * @remarks
- * This is the preferred format for persisting and restoring keychain state.
+ * This is the preferred format for persisting and restoring keychain state. The cache contains
+ * keysets for **all** units at the mint. Use `KeyChain.fromCache` (which takes an explicit `unit`)
+ * or `wallet.loadMintFromCache` to restore.
  */
 export type KeyChainCache = {
 	/**
-	 * Flattened keysets and, optionally, their keys.
+	 * Flattened keysets and, optionally, their keys. Contains all units.
 	 */
 	keysets: KeysetCache[];
-	/**
-	 * The unit this keychain is for, for example 'sat', 'usd'.
-	 */
-	unit: string;
 	/**
 	 * Mint URL that this cache belongs to.
 	 */
 	mintUrl: string;
+	/**
+	 * Unix timestamp (ms) when this cache was created. Use for TTL / staleness checks.
+	 */
+	savedAt?: number;
 };

@@ -62,27 +62,6 @@ export class Keyset {
 	}
 
 	/**
-	 * @deprecated Use `isActive` instead.
-	 */
-	get active(): boolean {
-		return this.isActive;
-	}
-
-	/**
-	 * @deprecated Use `fee` instead.
-	 */
-	get input_fee_ppk(): number {
-		return this.fee;
-	}
-
-	/**
-	 * @deprecated Use `expiry` instead.
-	 */
-	get final_expiry(): number | undefined {
-		return this.expiry;
-	}
-
-	/**
 	 * To Mint API MintKeyset format.
 	 *
 	 * @returns MintKeyset object.

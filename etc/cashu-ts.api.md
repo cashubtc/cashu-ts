@@ -588,36 +588,29 @@ export type JsonRpcReqParams = {
 
 // @public
 export class KeyChain {
-    constructor(mint: string | Mint, unit: string, cachedKeysets?: MintKeyset[], cachedKeys?: MintKeys[] | MintKeys);
+    constructor(mint: string | Mint, unit: string);
     get cache(): KeyChainCache;
     static cacheToMintDTO(cache: KeyChainCache): {
         keysets: MintKeyset[];
         keys: MintKeys[];
     };
     ensureKeysetKeys(id: string): Promise<Keyset>;
-    static fromCache(mint: string | Mint, cache: KeyChainCache): KeyChain;
+    static fromCache(mint: string | Mint, unit: string, cache: KeyChainCache): KeyChain;
     getAllKeys(): MintKeys[];
     getAllKeysetIds(): string[];
-    // @deprecated
-    getCache(): {
-        keysets: MintKeyset[];
-        keys: MintKeys[];
-        unit: string;
-        mintUrl: string;
-    };
     getCheapestKeyset(): Keyset;
     getKeyset(id?: string): Keyset;
     getKeysets(): Keyset[];
     init(forceRefresh?: boolean): Promise<void>;
     loadFromCache(cache: KeyChainCache): void;
-    static mintToCacheDTO(unit: string, mintUrl: string, allKeysets: MintKeyset[], allKeys: MintKeys[]): KeyChainCache;
+    static mintToCacheDTO(mintUrl: string, allKeysets: MintKeyset[], allKeys: MintKeys[]): KeyChainCache;
 }
 
 // @public
 export type KeyChainCache = {
     keysets: KeysetCache[];
-    unit: string;
     mintUrl: string;
+    savedAt?: number;
 };
 
 // @public
@@ -628,14 +621,10 @@ export type Keys = {
 // @public (undocumented)
 export class Keyset {
     constructor(id: string, unit: string, active: boolean, input_fee_ppk?: number, final_expiry?: number);
-    // @deprecated (undocumented)
-    get active(): boolean;
     // (undocumented)
     get expiry(): number | undefined;
     // (undocumented)
     get fee(): number;
-    // @deprecated (undocumented)
-    get final_expiry(): number | undefined;
     static fromMintApi(meta: MintKeyset, keys?: MintKeys): Keyset;
     // (undocumented)
     get hasHexId(): boolean;
@@ -643,8 +632,6 @@ export class Keyset {
     get hasKeys(): boolean;
     // (undocumented)
     get id(): string;
-    // @deprecated (undocumented)
-    get input_fee_ppk(): number;
     // (undocumented)
     get isActive(): boolean;
     // (undocumented)
@@ -1922,9 +1909,6 @@ export class Wallet {
         secretsPolicy?: SecretsPolicy;
         counterSource?: CounterSource;
         counterInit?: Record<string, number>;
-        keys?: MintKeys[] | MintKeys;
-        keysets?: MintKeyset[];
-        mintInfo?: GetInfoResponse;
         denominationTarget?: number;
         selectProofs?: SelectProofs;
         logger?: Logger;
