@@ -252,15 +252,14 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
  * @returns Encoded token.
  */
 export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
-	if (!hasNonHexId(token.proofs)) {
-		token.proofs = convertToShortKeysetId(token.proofs);
+	let proofs = token.proofs;
+	if (!hasNonHexId(proofs)) {
+		proofs = convertToShortKeysetId(proofs);
 	}
 	if (removeDleq) {
-		token.proofs = stripDleq(token.proofs);
+		proofs = stripDleq(proofs);
 	}
-	const v3TokenObj = {
-		token: [{ mint: token.mint, proofs: token.proofs }],
-	} as unknown as DeprecatedToken;
+	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs }] };
 	if (token.unit) {
 		v3TokenObj.unit = token.unit;
 	}
@@ -305,23 +304,24 @@ export function getEncodedToken(
 }
 
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
+	let proofs = token.proofs;
 	if (removeDleq) {
-		token.proofs = stripDleq(token.proofs);
+		proofs = stripDleq(proofs);
 	}
 	// Make sure each DLEQ has its blinding factor
-	token.proofs.forEach((p) => {
+	proofs.forEach((p) => {
 		if (p.dleq && p.dleq.r == undefined) {
 			throw new Error('Missing blinding factor in included DLEQ proof');
 		}
 	});
-	const nonHex = hasNonHexId(token.proofs);
+	const nonHex = hasNonHexId(proofs);
 	if (nonHex) {
 		throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
 	}
 	// Map keyset IDs to short IDs
-	token.proofs = convertToShortKeysetId(token.proofs);
+	proofs = convertToShortKeysetId(proofs);
 
-	const tokenTemplate = templateFromToken(token);
+	const tokenTemplate = templateFromToken({ ...token, proofs });
 
 	const encodedData = encodeCBOR(tokenTemplate);
 	const prefix = 'cashu';
