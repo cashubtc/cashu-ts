@@ -1,4 +1,4 @@
-import { Wallet, getDecodedToken, getEncodedTokenV4 } from '@cashu/cashu-ts';
+import { Wallet, getDecodedToken, getEncodedTokenV4, Amount, sumProofs } from '@cashu/cashu-ts';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import admin from 'firebase-admin';
@@ -6,7 +6,7 @@ import admin from 'firebase-admin';
 admin.initializeApp();
 
 export const ecashPayment = onRequest(async (req, res) => {
-	const waitedAmount = 10000;
+	const waitedAmount = Amount.from(10000);
 	const p2pkLock = '02b3af078efa4583111915fe4d169c26f6fee86e3920cbe815522e62b946411001';
 	const trustedMints = [
 		'https://mint.minibits.cash/Bitcoin',
@@ -53,8 +53,8 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	const totalAmount = decodedToken.proofs.reduce((sum, proof) => sum + proof.amount, 0);
-	const isWrongAmount = totalAmount !== waitedAmount;
+	const totalAmount = sumProofs(decodedToken);
+	const isWrongAmount = !waitedAmount.equals(totalAmount);
 	if (isWrongAmount) {
 		res.json({
 			success: false,

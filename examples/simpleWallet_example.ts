@@ -101,12 +101,7 @@ const runWalletExample = async () => {
 			// this will burn the current proofs at the mint, and return a fresh set of proofs, matching the amount we want to send
 			const { keep, send } = await wallet.send(amount, proofs, { includeFees: true });
 
-			console.log(
-				`sending ${send.reduce((a, b) => a + b.amount, 0)} keeping ${keep.reduce(
-					(a, b) => a + b.amount,
-					0,
-				)}`,
-			);
+			console.log(`sending ${sumProofs(send).toString()} keeping ${sumProofs(keep).toString()}`);
 			// first, let's update our store with the new proofs
 			proofs = keep;
 
@@ -136,7 +131,7 @@ const runWalletExample = async () => {
 			// this step is crucial. It will burn the received proofs, and create new ones,
 			// making sure the sender cannot try to double spend them.
 			const received = await wallet.receive(cashuString);
-			console.log('Received proofs:' + received.reduce((acc, proof) => acc + proof.amount, 0));
+			console.log('Received proofs:' + sumProofs(received).toString());
 
 			// after receiving, let's not forget to add the proofs back to our storage
 			proofs.push(...received);
@@ -193,8 +188,8 @@ const runWalletExample = async () => {
 						quote.payment_preimage,
 					);
 
-					console.log(`Ecash left: ${sumProofs(proofs)}`);
-					console.log(`Spent ecash notes: ${sumProofs(sentProofs)}`);
+					console.log(`Ecash left: ${sumProofs(proofs).toString()}`);
+					console.log(`Spent ecash notes: ${sumProofs(sentProofs).toString()}`);
 
 					// +++++++++++++++++++ THE END +++++++++++++++++++
 					// There are more advanced features that were not touched on in this example.
