@@ -192,6 +192,17 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	return retry();
 }
 
+/**
+ * Anti-fingerprinting: this function sets fetch RequestInit and privacy-hardened request headers on
+ * every fetch call to prevent a mint from tracking clients via browser-managed state (ETags,
+ * cookies, referrer).
+ *
+ * **Mobile (React Native / native HTTP clients):** These protections target the browser Fetch spec.
+ * Mobile runtimes use platform HTTP stacks (NSURLSession on iOS, OkHttp on Android) that manage
+ * their own caches independently of fetch RequestInit options. Mobile consumers MUST disable HTTP
+ * caching at the native layer or provide a `customRequest` implementation (via the Mint
+ * constructor) that uses a cache-disabled HTTP client.
+ */
 async function _request(options: RequestOptions): Promise<unknown> {
 	const {
 		endpoint,
