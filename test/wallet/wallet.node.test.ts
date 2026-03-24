@@ -3809,6 +3809,35 @@ describe('generic mint/melt methods', () => {
 			expect(quote.amount.toBigInt()).toBe(1000n);
 		});
 
+		test('checkMintQuoteBolt11 does not merge caller fields over mint response', async () => {
+			server.use(
+				http.get(mintUrl + '/v1/mint/quote/bolt11/bolt11-quote-merge', () =>
+					HttpResponse.json({
+						quote: 'bolt11-quote-merge',
+						request: 'lnbc-remote',
+						unit: 'sat',
+						amount: 1000,
+						state: MintQuoteState.PAID,
+						expiry: 3600,
+					}),
+				),
+			);
+			const wallet = new Wallet(mint, { unit });
+			await wallet.loadMint();
+
+			const quote = await wallet.checkMintQuoteBolt11({
+				quote: 'bolt11-quote-merge',
+				request: 'lnbc-local',
+				unit: 'usd',
+				amount: Amount.from(1),
+				state: MintQuoteState.UNPAID,
+				expiry: null,
+			});
+
+			expect(quote.request).toBe('lnbc-remote');
+			expect(quote.unit).toBe('sat');
+		});
+
 		test('checkMintQuote with custom method hits /v1/mint/quote/{method}/{id}', async () => {
 			server.use(
 				http.get(mintUrl + '/v1/mint/quote/bacs/bacs-quote-1', () =>
@@ -3955,6 +3984,37 @@ describe('generic mint/melt methods', () => {
 			expect(quote.quote).toBe('bacs-melt-1');
 			expect(quote.state).toBe(MeltQuoteState.PAID);
 			expect(quote.amount).toBeInstanceOf(Amount);
+		});
+
+		test('checkMeltQuoteBolt11 does not merge caller fields over mint response', async () => {
+			server.use(
+				http.get(mintUrl + '/v1/melt/quote/bolt11/bolt11-melt-merge', () =>
+					HttpResponse.json({
+						quote: 'bolt11-melt-merge',
+						amount: 5000,
+						unit: 'sat',
+						state: MeltQuoteState.PAID,
+						expiry: 3600,
+						fee_reserve: 50,
+						request: 'lnbc-remote',
+					}),
+				),
+			);
+			const wallet = new Wallet(mint, { unit });
+			await wallet.loadMint();
+
+			const quote = await wallet.checkMeltQuoteBolt11({
+				quote: 'bolt11-melt-merge',
+				amount: Amount.from(1),
+				unit: 'usd',
+				state: MeltQuoteState.UNPAID,
+				expiry: 1,
+				fee_reserve: Amount.from(1),
+				request: 'lnbc-local',
+			});
+
+			expect(quote.request).toBe('lnbc-remote');
+			expect(quote.unit).toBe('sat');
 		});
 
 		test('checkMeltQuote accepts quote object', async () => {

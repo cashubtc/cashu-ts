@@ -1682,11 +1682,7 @@ class Wallet {
 		quote: string | MintQuoteBolt11Response,
 	): Promise<MintQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const baseRes = await this.mint.checkMintQuoteBolt11(quoteId);
-		if (typeof quote === 'string') {
-			return baseRes;
-		}
-		return { ...baseRes, unit: baseRes.unit || quote.unit };
+		return this.mint.checkMintQuoteBolt11(quoteId);
 	}
 
 	/**
@@ -1724,7 +1720,10 @@ class Wallet {
 	 *
 	 * @remarks
 	 * Generic convenience method that calls `prepareMint(method, …)` followed by `completeMint()`.
-	 * For first-class methods, prefer `mintProofsBolt11()` or `mintProofsBolt12()`.
+	 *
+	 * Intended primarily for custom payment methods. For first-class methods, prefer
+	 * `mintProofsBolt11()` or `mintProofsBolt12()`, which keep the method-specific wallet ergonomics
+	 * and validation.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
 	 * @param amount Amount to mint.
 	 * @param quote The mint quote object (must have at least a `quote` field).
@@ -2095,11 +2094,7 @@ class Wallet {
 		quote: string | MeltQuoteBolt11Response,
 	): Promise<MeltQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const meltQuote = await this.mint.checkMeltQuoteBolt11(quoteId);
-		if (typeof quote === 'string') {
-			return meltQuote;
-		}
-		return { ...meltQuote, request: quote.request, unit: quote.unit };
+		return this.mint.checkMeltQuoteBolt11(quoteId);
 	}
 
 	/**
@@ -2121,7 +2116,10 @@ class Wallet {
 	 *
 	 * @remarks
 	 * Generic convenience method that calls `prepareMelt(method, …)` followed by `completeMelt()`.
-	 * For first-class methods, prefer `meltProofsBolt11()` or `meltProofsBolt12()`.
+	 *
+	 * Intended primarily for custom payment methods. For first-class methods, prefer
+	 * `meltProofsBolt11()` or `meltProofsBolt12()`, which keep the method-specific wallet
+	 * ergonomics.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
 	 * @param meltQuote The melt quote object (must have at least `quote` and `amount` fields).
 	 * @param proofsToSend Proofs to melt.

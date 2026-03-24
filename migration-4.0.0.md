@@ -451,7 +451,7 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 
 ## Generic mint/melt quote and proof methods
 
-The v3-deprecated wallet method aliases (`createMintQuote`, `checkMintQuote`, `mintProofs`, `createMeltQuote`, `checkMeltQuote`, `meltProofs`) have been **replaced** — not just removed — with generic versions that accept a `method` string as the first parameter. This enables support for custom payment methods (e.g., BACS, SWIFT) without requiring first-class library support.
+The v3-deprecated wallet method aliases (`createMintQuote`, `checkMintQuote`, `mintProofs`, `createMeltQuote`, `checkMeltQuote`, `meltProofs`) were removed. v4 also adds new generic methods that accept a `method` string as the first parameter, primarily to support custom payment methods (e.g., BACS, SWIFT) without requiring first-class library support.
 
 ### New generic methods on `Wallet`
 
@@ -473,7 +473,7 @@ The v3-deprecated wallet method aliases (`createMintQuote`, `checkMintQuote`, `m
 | `createMeltQuote(method, payload, options?)` | POST `/v1/melt/quote/{method}`        |
 | `checkMeltQuote(method, quote, options?)`    | GET `/v1/melt/quote/{method}/{quote}` |
 
-The existing bolt11/bolt12 convenience methods (`createMintQuoteBolt11`, `meltProofsBolt11`, etc.) are unchanged and now delegate to these generics internally.
+The existing bolt11/bolt12 convenience methods (`createMintQuoteBolt11`, `meltProofsBolt11`, etc.) remain the recommended APIs for built-in methods. Use the generics when you need custom methods or intentionally want the lower-level method-oriented flow.
 
 ### `Mint.mint()` and `Mint.melt()` options signature change
 
