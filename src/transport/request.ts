@@ -211,9 +211,19 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	void logger;
 
 	const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
-	const headers = {
-		...{ Accept: 'application/json, text/plain, */*' },
+	const headers: Record<string, string> = {
+		Accept: 'application/json, text/plain, */*',
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
+		// Defense-in-depth: prevent proxies and non-standard fetch implementations from caching.
+		// The primary protection is `cache: 'no-store'` on the fetch RequestInit (below),
+		// which prevents the browser from storing responses or sending ETag/If-None-Match headers.
+		// These request headers cover intermediary proxies that may ignore fetch-level cache modes.
+		'Cache-Control': 'no-store',
+		Pragma: 'no-cache',
+		// Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header and
+		// is silently ignored (users should use customRequest with Tor Browser for UA normalization).
+		// In Node.js this overrides the default `undici` identifier that would leak the runtime.
+		'User-Agent': 'Mozilla/5.0',
 		...requestHeaders,
 	};
 	const callerSignal = options.signal ?? undefined;
@@ -251,7 +261,18 @@ async function _request(options: RequestOptions): Promise<unknown> {
 
 	let response: Response;
 	try {
-		response = await fetch(endpoint, { body, headers, ...fetchOptions, signal });
+		response = await fetch(endpoint, {
+			body,
+			headers,
+			...fetchOptions,
+			signal,
+			// Anti-fingerprinting fetch options. These harden requests against a malicious mint
+			// tracking clients via browser-managed state (cache, cookies, referrer).
+			cache: 'no-store', // prevent ETag/If-None-Match and Last-Modified/If-Modified-Since
+			credentials: 'omit', // prevent cookie-based tracking (both sending and storing)
+			referrer: '', // prevent leaking the embedding page URL
+			referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+		});
 	} catch (err) {
 		const timedOut = !!timeoutController?.signal.aborted;
 		const callerAborted = !!callerSignal?.aborted;
