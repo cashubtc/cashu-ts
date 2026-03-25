@@ -141,11 +141,11 @@ describe('send', () => {
 				// p2pk: { pubkey: 'pk' }
 			},
 			{
-				send: { type: 'p2pk', options: { pubkey: 'pk' } },
+				send: { type: 'p2pk', options: { pubkey: '02' + 'aa'.repeat(32) } },
 			},
 		);
 
-		expectNUT10SecretDataToEqual([result.send[0]], 'pk');
+		expectNUT10SecretDataToEqual([result.send[0]], '02' + 'aa'.repeat(32));
 		expect(result.keep[0].secret.length).toBe(64);
 	});
 

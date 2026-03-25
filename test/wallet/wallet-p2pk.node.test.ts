@@ -6,13 +6,21 @@ import { mint, useTestServer } from './_setup';
 
 const server = useTestServer();
 
+// Valid-format 33-byte compressed pubkeys for testing
+const PK1 = '02' + 'aa'.repeat(32);
+const PK2 = '02' + 'bb'.repeat(32);
+const PK3 = '02' + 'cc'.repeat(32);
+const REFUND1 = '02' + 'dd'.repeat(32);
+const REFUND2 = '02' + 'ee'.repeat(32);
+const REFUND3 = '02' + 'ff'.repeat(32);
+
 describe('P2PK BlindingData', () => {
 	test('Create BlindingData locked to single pk with locktime and single refund key', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
+			{ pubkey: PK1, locktime: 212, refundKeys: [REFUND1] },
 			21,
 			keys,
 		);
@@ -20,9 +28,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1]);
 		});
 	});
 	test('Create BlindingData locked to single pk with locktime and multiple refund keys', async () => {
@@ -30,7 +38,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
+			{ pubkey: PK1, locktime: 212, refundKeys: [REFUND1, REFUND2] },
 			21,
 			keys,
 		);
@@ -38,21 +46,21 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1, REFUND2]);
 		});
 	});
 	test('Create BlindingData locked to single pk without locktime and no refund keys', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
+		const data = OutputData.createP2PKData({ pubkey: PK1 }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toEqual([]);
 		});
 	});
@@ -60,16 +68,12 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', requiredSignatures: 5 },
-			21,
-			keys,
-		);
+		const data = OutputData.createP2PKData({ pubkey: PK1, requiredSignatures: 5 }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toEqual([]);
 		});
 	});
@@ -77,17 +81,13 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'] },
-			21,
-			keys,
-		);
+		const data = OutputData.createP2PKData({ pubkey: [PK1, PK2, PK3] }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
+			expect(s[1].data).toBe(PK1);
+			expect(s[1].tags).toContainEqual(['pubkeys', PK2, PK3]);
 			expect(s[1].tags).not.toContainEqual(['n_sigs', '1']);
 		});
 	});
@@ -96,7 +96,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 2 },
+			{ pubkey: [PK1, PK2, PK3], requiredSignatures: 2 },
 			21,
 			keys,
 		);
@@ -104,8 +104,8 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
+			expect(s[1].data).toBe(PK1);
+			expect(s[1].tags).toContainEqual(['pubkeys', PK2, PK3]);
 			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
 		});
 	});
@@ -114,7 +114,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 5 },
+			{ pubkey: [PK1, PK2, PK3], requiredSignatures: 5 },
 			21,
 			keys,
 		);
@@ -122,8 +122,8 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
+			expect(s[1].data).toBe(PK1);
+			expect(s[1].tags).toContainEqual(['pubkeys', PK2, PK3]);
 			expect(s[1].tags).toContainEqual(['n_sigs', '3']);
 		});
 	});
@@ -133,9 +133,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: 'thisisatest',
+				pubkey: PK1,
 				locktime: 212,
-				refundKeys: ['iamarefund'],
+				refundKeys: [REFUND1],
 				requiredRefundSignatures: 1,
 			},
 			21,
@@ -145,9 +145,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1]);
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
@@ -156,7 +156,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
+			{ pubkey: PK1, locktime: 212, refundKeys: [REFUND1, REFUND2] },
 			21,
 			keys,
 		);
@@ -164,9 +164,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1, REFUND2]);
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
@@ -176,9 +176,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: 'thisisatest',
+				pubkey: PK1,
 				locktime: 212,
-				refundKeys: ['iamarefund', 'asecondrefund', 'athirdrefund'],
+				refundKeys: [REFUND1, REFUND2, REFUND3],
 				requiredRefundSignatures: 2,
 			},
 			21,
@@ -188,9 +188,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund', 'athirdrefund']);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1, REFUND2, REFUND3]);
 			expect(s[1].tags).toContainEqual(['n_sigs_refund', '2']);
 		});
 	});
@@ -200,9 +200,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: 'thisisatest',
+				pubkey: PK1,
 				locktime: 212,
-				refundKeys: ['iamarefund', 'asecondrefund', 'athirdrefund'],
+				refundKeys: [REFUND1, REFUND2, REFUND3],
 				requiredRefundSignatures: 5,
 			},
 			21,
@@ -212,9 +212,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund', 'athirdrefund']);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1, REFUND2, REFUND3]);
 			expect(s[1].tags).toContainEqual(['n_sigs_refund', '3']);
 		});
 	});
@@ -224,9 +224,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: ['thisisatest', 'asecondpk', 'athirdpk'],
+				pubkey: [PK1, PK2, PK3],
 				locktime: 212,
-				refundKeys: ['iamarefund', 'asecondrefund'],
+				refundKeys: [REFUND1, REFUND2],
 				requiredSignatures: 2,
 				requiredRefundSignatures: 1,
 			},
@@ -237,10 +237,10 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
+			expect(s[1].tags).toContainEqual(['pubkeys', PK2, PK3]);
+			expect(s[1].tags).toContainEqual(['refund', REFUND1, REFUND2]);
 			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
