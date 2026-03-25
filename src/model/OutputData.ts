@@ -15,11 +15,13 @@ import {
 	pointFromHex,
 	type DLEQ,
 	type BlindSignature,
+	derviveBip32SecretAndBlindingFactor,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
-import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
+import { Bytes, isBase64String, numberToHexPadded64, splitAmount } from '../utils';
 import { Amount, type AmountLike } from './Amount';
+import { HDKey } from '@scure/bip32';
 
 /**
  * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
@@ -287,6 +289,12 @@ export class OutputData implements OutputDataLike {
 		customSplit?: AmountLike[],
 	): OutputData[] {
 		const amounts = splitAmount(amount, keyset.keys, customSplit);
+		if (isBase64String(keyset.id)) {
+			const masterKey = HDKey.fromMasterSeed(seed);
+			return amounts.map((a, i) =>
+				this.createSingleDeterministicData(a, seed, counter + i, keyset.id, masterKey),
+			);
+		}
 		return amounts.map((a, i) =>
 			this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
 		);
@@ -301,14 +309,26 @@ export class OutputData implements OutputDataLike {
 		seed: Uint8Array,
 		counter: number,
 		keysetId: string,
+		masterKey?: HDKey,
 	) {
+		let secretBytes: Uint8Array | undefined = undefined;
+		let blindingFactorBytes: Uint8Array | undefined = undefined;
+		if (isBase64String(keysetId)) {
+			const hdKey = masterKey ?? HDKey.fromMasterSeed(seed);
+			const derivationResult = derviveBip32SecretAndBlindingFactor(hdKey, keysetId, counter);
+			secretBytes = derivationResult.secret;
+			blindingFactorBytes = derivationResult.blindingFactor;
+		} else {
+			secretBytes = deriveSecret(seed, keysetId, counter);
+			blindingFactorBytes = deriveBlindingFactor(seed, keysetId, counter);
+			//
+		}
 		const amountValue = Amount.from(amount);
-		const secretBytes = deriveSecret(seed, keysetId, counter);
 		const secretBytesAsHex = bytesToHex(secretBytes);
 		const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
 		// Note: Bytes.toBigInt is used here so invalid values bubble up as throws
 		// for BIP32-style retry logic (caller increments counter and retries).
-		const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
+		const deterministicR = Bytes.toBigInt(blindingFactorBytes);
 		const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
 		return new OutputData(
 			new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),

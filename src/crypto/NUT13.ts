@@ -45,6 +45,22 @@ export const deriveBlindingFactor = (
 	throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
 };
 
+export const derviveBip32SecretAndBlindingFactor = (
+	hdKey: HDKey,
+	keysetId: string,
+	counter: number,
+): { blindingFactor: Uint8Array; secret: Uint8Array } => {
+	const keysetIdInt = getKeysetIdInt(keysetId);
+	const baseDerivationPath = `${STANDARD_DERIVATION_PATH}/${keysetIdInt}'/${counter}'`;
+	const baseKey = hdKey.derive(baseDerivationPath);
+	const secret = baseKey.deriveChild(0).privateKey;
+	const blindingFactor = baseKey.deriveChild(1).privateKey;
+	if (secret === null || blindingFactor === null) {
+		throw new Error('Could not derive private key');
+	}
+	return { secret, blindingFactor };
+};
+
 const derive = (
 	seed: Uint8Array,
 	keysetId: string,
