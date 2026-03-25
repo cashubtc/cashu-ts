@@ -192,6 +192,15 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 	return retry();
 }
 
+/**
+ * Anti-fingerprinting: sets fetch RequestInit and privacy-hardened request headers to prevent a
+ * mint from tracking clients via browser-managed state (ETags, cookies, referrer).
+ *
+ * **Mobile (React Native / native HTTP clients):** Mobile runtimes use platform HTTP stacks
+ * (NSURLSession on iOS, OkHttp on Android) that manage their own caches independently. Mobile
+ * consumers MUST disable HTTP caching at the native layer or provide a `customRequest`
+ * implementation (via the Mint constructor) that uses a cache-disabled HTTP client.
+ */
 async function _request(options: RequestOptions): Promise<unknown> {
 	const {
 		endpoint,
@@ -211,9 +220,16 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	void logger;
 
 	const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
-	const headers = {
-		...{ Accept: 'application/json, text/plain, */*' },
+	const headers: Record<string, string> = {
+		Accept: 'application/json, text/plain, */*',
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
+		// The primary protection is `cache: 'no-store'` on RequestInit (below).
+		// These request headers cover intermediary proxies that may ignore fetch-level cache modes.
+		'Cache-Control': 'no-store',
+		Pragma: 'no-cache',
+		// Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header (silently ignored).
+		// In Node.js this overrides the default `undici` identifier that would leak the runtime.
+		'User-Agent': 'Mozilla/5.0',
 		...requestHeaders,
 	};
 	const callerSignal = options.signal ?? undefined;
@@ -251,7 +267,17 @@ async function _request(options: RequestOptions): Promise<unknown> {
 
 	let response: Response;
 	try {
-		response = await fetch(endpoint, { body, headers, ...fetchOptions, signal });
+		response = await fetch(endpoint, {
+			body,
+			headers,
+			...fetchOptions,
+			signal,
+			// Anti-fingerprinting fetch options.
+			cache: 'no-store', // prevent cache tracking (eg ETag)
+			credentials: 'omit', // prevent cookie-based tracking
+			referrer: '', // prevent leaking the embedding page URL
+			referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+		});
 	} catch (err) {
 		const timedOut = !!timeoutController?.signal.aborted;
 		const callerAborted = !!callerSignal?.aborted;
