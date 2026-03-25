@@ -1516,15 +1516,32 @@ class Wallet {
 	// Section: Create Mint Quote
 	// -----------------------------------------------------------------
 
-	// /**
-	//  * @deprecated Use createMintQuoteBolt11()
-	//  */
-	// async createMintQuote(
-	// 	amount: AmountLike,
-	// 	description?: string,
-	// ): Promise<MintQuoteBolt11Response> {
-	// 	return this.createMintQuoteBolt11(amount, description);
-	// }
+	/**
+	 * Creates a mint quote for any payment method.
+	 *
+	 * @remarks
+	 * Generic method for requesting a mint quote. The payload is method-specific but must at minimum
+	 * include the fields required by the mint for the given method. An optional `normalize` callback
+	 * can be used to coerce method-specific response fields.
+	 *
+	 * For first-class methods, prefer the typed helpers: `createMintQuoteBolt11()`,
+	 * `createMintQuoteBolt12()`.
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+	 * @param payload The request body to POST. `unit` is always set to the wallet's unit.
+	 * @param options.normalize Optional callback to normalize method-specific response fields.
+	 * @returns The mint quote response.
+	 */
+	async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+		method: string,
+		payload: Record<string, unknown>,
+		options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+	): Promise<TRes> {
+		const body = { ...payload, unit: this._unit };
+		const res = await this.mint.createMintQuote<TRes>(method, body, {
+			normalize: options?.normalize,
+		});
+		return { ...res, unit: res.unit || this._unit };
+	}
 
 	/**
 	 * Requests a mint quote from the mint. Response returns a Lightning payment request for the
@@ -1630,12 +1647,30 @@ class Wallet {
 	// Section: Check Mint Quote
 	// -----------------------------------------------------------------
 
-	// /**
-	//  * @deprecated Use checkMintQuoteBolt11()
-	//  */
-	// async checkMintQuote(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response> {
-	// 	return this.checkMintQuoteBolt11(quote);
-	// }
+	/**
+	 * Checks an existing mint quote for any payment method.
+	 *
+	 * @remarks
+	 * Generic method for checking a mint quote status. An optional `normalize` callback can be used
+	 * to coerce method-specific response fields.
+	 *
+	 * For first-class methods, prefer the typed helpers: `checkMintQuoteBolt11()`,
+	 * `checkMintQuoteBolt12()`.
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+	 * @param quote Quote ID or quote object (must have a `quote` field).
+	 * @param options.normalize Optional callback to normalize method-specific response fields.
+	 * @returns The mint quote response.
+	 */
+	async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+		method: string,
+		quote: string | Pick<TRes, 'quote'>,
+		options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+	): Promise<TRes> {
+		const quoteId = typeof quote === 'string' ? quote : (quote as { quote: string }).quote;
+		return this.mint.checkMintQuote<TRes>(method, quoteId, {
+			normalize: options?.normalize,
+		});
+	}
 
 	/**
 	 * Gets an existing mint quote from the mint.
@@ -1647,11 +1682,7 @@ class Wallet {
 		quote: string | MintQuoteBolt11Response,
 	): Promise<MintQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const baseRes = await this.mint.checkMintQuoteBolt11(quoteId);
-		if (typeof quote === 'string') {
-			return baseRes;
-		}
-		return { ...baseRes, unit: baseRes.unit || quote.unit };
+		return this.mint.checkMintQuoteBolt11(quoteId);
 	}
 
 	/**
@@ -1671,9 +1702,9 @@ class Wallet {
 	/**
 	 * @internal
 	 */
-	validateMintQuote<TQuote extends MintQuoteBaseResponse>(quote: TQuote): void {
+	validateMintQuote(quote: Partial<MintQuoteBaseResponse> & { expiry?: number | null }): void {
 		this.failIf(
-			quote.unit !== this.unit,
+			'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
 			`Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
 		);
 		this.failIf(
@@ -1684,17 +1715,42 @@ class Wallet {
 		);
 	}
 
-	// /**
-	//  * @deprecated Use mintProofsBolt11()
-	//  */
-	// async mintProofs(
-	// 	amount: AmountLike,
-	// 	quote: string | MintQuoteBolt11Response,
-	// 	config?: MintProofsConfig,
-	// 	outputType?: OutputType,
-	// ): Promise<Proof[]> {
-	// 	return this.mintProofsBolt11(amount, quote, config, outputType);
-	// }
+	/**
+	 * @internal
+	 */
+	validateMeltQuote(quote: Partial<MeltQuoteBaseResponse>): void {
+		this.failIf(
+			'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
+			`Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
+		);
+	}
+
+	/**
+	 * Mints proofs for any payment method.
+	 *
+	 * @remarks
+	 * Generic convenience method that calls `prepareMint(method, …)` followed by `completeMint()`.
+	 *
+	 * Intended primarily for custom payment methods. For first-class methods, prefer
+	 * `mintProofsBolt11()` or `mintProofsBolt12()`, which keep the method-specific wallet ergonomics
+	 * and validation.
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+	 * @param amount Amount to mint.
+	 * @param quote The mint quote object (must have at least a `quote` field).
+	 * @param config Optional parameters (e.g. privkey for locked quotes).
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns Minted proofs.
+	 */
+	async mintProofs<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
+		method: string,
+		amount: AmountLike,
+		quote: TQuote,
+		config?: MintProofsConfig,
+		outputType?: OutputType,
+	): Promise<Proof[]> {
+		const preview = await this.prepareMint(method, amount, quote, config, outputType);
+		return this.completeMint(preview);
+	}
 
 	/**
 	 * Mint proofs for a bolt11 quote.
@@ -1785,6 +1841,7 @@ class Wallet {
 			typeof quote === 'string',
 			`prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
 		);
+		this.validateMintQuote(quote);
 		const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
@@ -1867,15 +1924,32 @@ class Wallet {
 	// Section: Create Melt Quote
 	// -----------------------------------------------------------------
 
-	// /**
-	//  * @deprecated Use createMeltQuoteBolt11.
-	//  */
-	// async createMeltQuote(
-	// 	invoice: string,
-	// 	amountMsat?: AmountLike,
-	// ): Promise<MeltQuoteBolt11Response> {
-	// 	return this.createMeltQuoteBolt11(invoice, amountMsat);
-	// }
+	/**
+	 * Creates a melt quote for any payment method.
+	 *
+	 * @remarks
+	 * Generic method for requesting a melt quote. The payload is method-specific but must at minimum
+	 * include the fields required by the mint for the given method. An optional `normalize` callback
+	 * can be used to coerce method-specific response fields.
+	 *
+	 * For first-class methods, prefer the typed helpers: `createMeltQuoteBolt11()`,
+	 * `createMeltQuoteBolt12()`.
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+	 * @param payload The request body to POST. `unit` is always set to the wallet's unit.
+	 * @param options.normalize Optional callback to normalize method-specific response fields.
+	 * @returns The melt quote response.
+	 */
+	async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+		method: string,
+		payload: Record<string, unknown>,
+		options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+	): Promise<TRes> {
+		const body = { ...payload, unit: this._unit };
+		const res = await this.mint.createMeltQuote<TRes>(method, body, {
+			normalize: options?.normalize,
+		});
+		return { ...res, unit: res.unit || this._unit };
+	}
 
 	/**
 	 * Requests a melt quote from the mint. Response returns amount and fees for a given unit in order
@@ -1996,12 +2070,30 @@ class Wallet {
 	// Section: Check Melt Quote
 	// -----------------------------------------------------------------
 
-	// /**
-	//  * @deprecated Use checkMeltQuoteBolt11()
-	//  */
-	// async checkMeltQuote(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response> {
-	// 	return this.checkMeltQuoteBolt11(quote);
-	// }
+	/**
+	 * Checks an existing melt quote for any payment method.
+	 *
+	 * @remarks
+	 * Generic method for checking a melt quote status. An optional `normalize` callback can be used
+	 * to coerce method-specific response fields.
+	 *
+	 * For first-class methods, prefer the typed helpers: `checkMeltQuoteBolt11()`,
+	 * `checkMeltQuoteBolt12()`.
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+	 * @param quote Quote ID or quote object (must have a `quote` field).
+	 * @param options.normalize Optional callback to normalize method-specific response fields.
+	 * @returns The melt quote response.
+	 */
+	async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+		method: string,
+		quote: string | Pick<TRes, 'quote'>,
+		options?: { normalize?: (raw: Record<string, unknown>) => TRes },
+	): Promise<TRes> {
+		const quoteId = typeof quote === 'string' ? quote : (quote as { quote: string }).quote;
+		return this.mint.checkMeltQuote<TRes>(method, quoteId, {
+			normalize: options?.normalize,
+		});
+	}
 
 	/**
 	 * Returns an existing bolt11 melt quote from the mint.
@@ -2013,11 +2105,7 @@ class Wallet {
 		quote: string | MeltQuoteBolt11Response,
 	): Promise<MeltQuoteBolt11Response> {
 		const quoteId = typeof quote === 'string' ? quote : quote.quote;
-		const meltQuote = await this.mint.checkMeltQuoteBolt11(quoteId);
-		if (typeof quote === 'string') {
-			return meltQuote;
-		}
-		return { ...meltQuote, request: quote.request, unit: quote.unit };
+		return this.mint.checkMeltQuoteBolt11(quoteId);
 	}
 
 	/**
@@ -2034,17 +2122,32 @@ class Wallet {
 	// Section: Melt Proofs
 	// -----------------------------------------------------------------
 
-	// /**
-	//  * @deprecated Use meltProofsBolt11()
-	//  */
-	// async meltProofs(
-	// 	meltQuote: MeltQuoteBolt11Response,
-	// 	proofsToSend: Proof[],
-	// 	config?: MeltProofsConfig,
-	// 	outputType?: OutputType,
-	// ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
-	// 	return this.meltProofsBolt11(meltQuote, proofsToSend, config, outputType);
-	// }
+	/**
+	 * Melts proofs for any payment method.
+	 *
+	 * @remarks
+	 * Generic convenience method that calls `prepareMelt(method, …)` followed by `completeMelt()`.
+	 *
+	 * Intended primarily for custom payment methods. For first-class methods, prefer
+	 * `meltProofsBolt11()` or `meltProofsBolt12()`, which keep the method-specific wallet
+	 * ergonomics.
+	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
+	 * @param meltQuote The melt quote object (must have at least `quote` and `amount` fields).
+	 * @param proofsToSend Proofs to melt.
+	 * @param config Optional parameters.
+	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+	 * @returns MeltProofsResponse with quote and change proofs.
+	 */
+	async meltProofs<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
+		method: string,
+		meltQuote: TQuote,
+		proofsToSend: Proof[],
+		config?: MeltProofsConfig,
+		outputType?: OutputType,
+	): Promise<MeltProofsResponse<TQuote>> {
+		const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
+		return this.completeMelt<TQuote>(meltTxn, config?.privkey);
+	}
 
 	/**
 	 * Melt proofs for a bolt11 melt quote.
@@ -2114,6 +2217,7 @@ class Wallet {
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
 	): Promise<MeltPreview<TQuote>> {
+		this.validateMeltQuote(meltQuote);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset

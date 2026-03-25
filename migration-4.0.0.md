@@ -438,7 +438,7 @@ Previously, `cache.keysets` only contained keysets for the wallet's unit. It now
 These APIs were already deprecated in v3. In v4 they have been removed:
 
 - `Wallet` constructor preload options `keys`, `keysets`, and `mintInfo`; use `loadMintFromCache()` after construction.
-- Deprecated wallet method aliases: `wallet.swap`, `createMintQuote`, `checkMintQuote`, `mintProofs`, `createMeltQuote`, `checkMeltQuote`, and `meltProofs`; use `send`, `createMintQuoteBolt11`, `checkMintQuoteBolt11`, `mintProofsBolt11`, `createMeltQuoteBolt11`, `checkMeltQuoteBolt11`, and `meltProofsBolt11`.
+- Deprecated wallet method alias: `wallet.swap`; use `send`.
 - `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`.
 - `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
@@ -446,5 +446,98 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 - Deprecated NUT-11 helpers and aliases: the `parseP2PKSecret(Uint8Array)` overload, `WellKnownSecret`, `signP2PKSecret`, `verifyP2PKSecretSignature`, `getP2PKExpectedKWitnessPubkeys`, and `verifyP2PKSig`; use `parseP2PKSecret(string | Secret)`, `SecretKind`, `schnorrSignMessage`, `schnorrVerifyMessage`, `getP2PKExpectedWitnessPubkeys`, and `isP2PKSpendAuthorised()` / `verifyP2PKSpendingConditions()`.
 - Deprecated convenience aliases removed elsewhere in the API: `MintInfo.supportsBolt12Description` and `WSConnection.closeSubscription()`; use `supportsNut04Description('bolt12')` and `cancelSubscription()` instead.
 - Deprecated crypto/type aliases removed in the v4 cleanup, including `BlindedMessage`; use the non-deprecated names such as `RawBlindedMessage`.
+
+---
+
+## Generic mint/melt quote and proof methods
+
+The v3-deprecated wallet method aliases (`createMintQuote`, `checkMintQuote`, `mintProofs`, `createMeltQuote`, `checkMeltQuote`, `meltProofs`) were removed. v4 also adds new generic methods that accept a `method` string as the first parameter, primarily to support custom payment methods (e.g., BACS, SWIFT) without requiring first-class library support.
+
+### New generic methods on `Wallet`
+
+| Method                                                              | Description                                |
+| ------------------------------------------------------------------- | ------------------------------------------ |
+| `createMintQuote(method, payload, options?)`                        | Create a mint quote for any payment method |
+| `checkMintQuote(method, quote, options?)`                           | Check a mint quote for any payment method  |
+| `mintProofs(method, amount, quote, config?, outputType?)`           | Mint proofs for any payment method         |
+| `createMeltQuote(method, payload, options?)`                        | Create a melt quote for any payment method |
+| `checkMeltQuote(method, quote, options?)`                           | Check a melt quote for any payment method  |
+| `meltProofs(method, meltQuote, proofsToSend, config?, outputType?)` | Melt proofs for any payment method         |
+
+### New generic methods on `Mint` (low-level HTTP)
+
+| Method                                       | Description                           |
+| -------------------------------------------- | ------------------------------------- |
+| `createMintQuote(method, payload, options?)` | POST `/v1/mint/quote/{method}`        |
+| `checkMintQuote(method, quote, options?)`    | GET `/v1/mint/quote/{method}/{quote}` |
+| `createMeltQuote(method, payload, options?)` | POST `/v1/melt/quote/{method}`        |
+| `checkMeltQuote(method, quote, options?)`    | GET `/v1/melt/quote/{method}/{quote}` |
+
+The existing bolt11/bolt12 convenience methods (`createMintQuoteBolt11`, `meltProofsBolt11`, etc.) remain the recommended APIs for built-in methods. Use the generics when you need custom methods or intentionally want the lower-level method-oriented flow.
+
+### `Mint.mint()` and `Mint.melt()` options signature change
+
+The `options` parameter on `Mint.mint()` and `Mint.melt()` has been extended with an optional `normalize` callback. If you spread the options object or type it explicitly, update accordingly:
+
+```ts
+// Before
+await mint.mint('bolt11', payload, { customRequest: myFetch });
+await mint.melt('bolt11', payload, { customRequest: myFetch });
+
+// After — unchanged for basic usage, but the options type now includes `normalize`
+await mint.mint('bolt11', payload, { customRequest: myFetch });
+await mint.melt('bolt11', payload, { customRequest: myFetch });
+```
+
+### Migration for v3 deprecated aliases
+
+If you were still using the v3 deprecated aliases, update to the bolt11-specific methods or the new generics:
+
+```ts
+// Before (v3 deprecated aliases — these were bolt11 only)
+const quote = await wallet.createMintQuote(64);
+const checked = await wallet.checkMintQuote(quote.quote);
+const proofs = await wallet.mintProofs(64, quote);
+const meltQuote = await wallet.createMeltQuote(invoice);
+const meltChecked = await wallet.checkMeltQuote(meltQuote.quote);
+const result = await wallet.meltProofs(meltQuote, proofsToSend);
+
+// After — option A: use the bolt11-specific methods (recommended for bolt11)
+const quote = await wallet.createMintQuoteBolt11(64);
+const checked = await wallet.checkMintQuoteBolt11(quote.quote);
+const proofs = await wallet.mintProofsBolt11(64, quote);
+const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
+const meltChecked = await wallet.checkMeltQuoteBolt11(meltQuote.quote);
+const result = await wallet.meltProofsBolt11(meltQuote, proofsToSend);
+
+// After — option B: use the new generics (for custom payment methods)
+const quote = await wallet.createMintQuote('bacs', { amount: 5000n, ... });
+const checked = await wallet.checkMintQuote('bacs', quote.quote);
+const proofs = await wallet.mintProofs('bacs', 5000, quote);
+```
+
+### Normalize callback
+
+All generic methods accept an optional `normalize` callback for coercing method-specific response fields (e.g., converting wire numbers to `Amount` objects). The callback receives the raw wire data after base normalization has already been applied:
+
+```ts
+type BacsQuoteRes = MintQuoteBaseResponse & { amount: Amount; reference: string };
+
+const quote = await wallet.createMintQuote<BacsQuoteRes>(
+	'bacs',
+	{
+		amount: 5000n,
+		sort_code: '12-34-56',
+	},
+	{
+		normalize: (raw) => ({
+			...(raw as BacsQuoteRes),
+			amount: Amount.from(raw.amount as AmountLike),
+		}),
+	},
+);
+```
+
+For melt quotes, base fields (`amount`, `expiry`, `change`) are always normalized automatically. For bolt11/bolt12, `fee_reserve` and `request` are also normalized. The `normalize` callback runs last, after all built-in normalization.
 
 ---

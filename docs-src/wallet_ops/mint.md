@@ -53,7 +53,7 @@ const newProofs = await wallet.ops
 const quote12 = await wallet.createMintQuoteBolt12(pubkeyHex, { amount: 64 });
 // pay the BOLT12 offer, then refresh the quote...
 const updatedQuote = await wallet.checkMintQuoteBolt12(quote12.quote);
-const availableAmount = updatedQuote.amount_paid - updatedQuote.amount_issued;
+const availableAmount = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
 
 const preview = await wallet.ops
 	.mintBolt12(availableAmount, updatedQuote)
@@ -65,4 +65,7 @@ const newProofs = await wallet.completeMint(preview);
 ```
 
 - BOLT12 always requires the full quote object and `.privkey(...)`.
-- For arbitrary future mint methods, use `wallet.prepareMint(method, ...)` and `wallet.completeMint(...)`.
+- For custom payment methods (e.g., BACS, SWIFT), use the generic wallet methods directly:
+  `wallet.createMintQuote(method, ...)`, `wallet.checkMintQuote(method, ...)`,
+  `wallet.mintProofs(method, ...)`, or the two-step `wallet.prepareMint(method, ...)` /
+  `wallet.completeMint(...)`. See [Mint Token – Custom Methods](../usage/mint_token.md) for examples.

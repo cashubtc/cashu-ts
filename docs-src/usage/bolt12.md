@@ -16,13 +16,13 @@ const bolt12Quote = await wallet.createMintQuoteBolt12(bytesToHex(pubkey), {
 
 // Pay a BOLT12 offer
 const meltQuote = await wallet.createMeltQuoteBolt12(offer, 1000000); // amount in msat
-const { keep, send } = await wallet.send(meltQuote.amount + meltQuote.fee_reserve, proofs);
+const { keep, send } = await wallet.send(meltQuote.amount.add(meltQuote.fee_reserve), proofs);
 const { change } = await wallet.meltProofsBolt12(meltQuote, send);
 
 // Mint from accumulated BOLT12 payments
 const updatedQuote = await wallet.checkMintQuoteBolt12(bolt12Quote.quote);
-const availableAmount = updatedQuote.amount_paid - updatedQuote.amount_issued;
-if (availableAmount > 0) {
+const availableAmount = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
+if (availableAmount.greaterThan(0)) {
 	const preview = await wallet.prepareMint('bolt12', availableAmount, updatedQuote, {
 		privkey: bytesToHex(privateKey),
 	});
