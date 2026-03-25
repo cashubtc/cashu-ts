@@ -3786,6 +3786,28 @@ describe('generic mint/melt methods', () => {
 			expect(quote.amount.toBigInt()).toBe(5000n);
 		});
 
+		test('createMintQuote forces wallet unit over payload unit', async () => {
+			server.use(
+				http.post(mintUrl + '/v1/mint/quote/bacs', async ({ request }) => {
+					const body = (await request.json()) as { unit: string };
+					return HttpResponse.json({
+						quote: 'bacs-quote-unit',
+						request: 'CASHU-REF-UNIT',
+						unit: body.unit,
+					});
+				}),
+			);
+			const wallet = new Wallet(mint, { unit: 'sat' });
+			await wallet.loadMint();
+
+			const quote = await wallet.createMintQuote('bacs', {
+				amount: 5000n,
+				unit: 'usd',
+			});
+
+			expect(quote.unit).toBe('sat');
+		});
+
 		test('createMintQuote for bolt11 delegates correctly', async () => {
 			server.use(
 				http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
@@ -3917,6 +3939,19 @@ describe('generic mint/melt methods', () => {
 			expect(proofs).toHaveLength(1);
 			expect(proofs[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
 		});
+
+		test('mintProofs rejects quote objects in the wrong wallet unit', async () => {
+			const wallet = new Wallet(mint, { unit: 'sat' });
+			await wallet.loadMint();
+
+			await expect(
+				wallet.mintProofs('bacs', 1, {
+					quote: 'wrong-unit-mint-quote',
+					request: 'req',
+					unit: 'usd',
+				}),
+			).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
+		});
 	});
 
 	describe('wallet.createMeltQuote / checkMeltQuote', () => {
@@ -3962,6 +3997,31 @@ describe('generic mint/melt methods', () => {
 			expect(quote.fee_estimate).toBeInstanceOf(Amount);
 			expect(quote.fee_estimate.toBigInt()).toBe(50n);
 			expect(quote.reference).toBe('BACS-PAY-REF');
+		});
+
+		test('createMeltQuote forces wallet unit over payload unit', async () => {
+			server.use(
+				http.post(mintUrl + '/v1/melt/quote/bacs', async ({ request }) => {
+					const body = (await request.json()) as { unit: string };
+					return HttpResponse.json({
+						quote: 'bacs-melt-unit',
+						amount: 5000,
+						unit: body.unit,
+						state: MeltQuoteState.UNPAID,
+						expiry: 3600,
+					});
+				}),
+			);
+			const wallet = new Wallet(mint, { unit: 'sat' });
+			await wallet.loadMint();
+
+			const quote = await wallet.createMeltQuote('bacs', {
+				request: 'GB29NWBK60161331926819',
+				amount: 5000n,
+				unit: 'usd',
+			});
+
+			expect(quote.unit).toBe('sat');
 		});
 
 		test('checkMeltQuote with custom method hits /v1/melt/quote/{method}/{id}', async () => {
@@ -4074,6 +4134,23 @@ describe('generic mint/melt methods', () => {
 			expect(response.quote.state).toBe(MeltQuoteState.PAID);
 			expect(response.change).toHaveLength(1);
 			expect(response.change[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+		});
+
+		test('meltProofs rejects quote objects in the wrong wallet unit', async () => {
+			const wallet = new Wallet(mint, { unit: 'sat' });
+			await wallet.loadMint();
+
+			await expect(
+				wallet.meltProofs(
+					'bacs',
+					{
+						quote: 'wrong-unit-melt-quote',
+						amount: Amount.from(10),
+						unit: 'usd',
+					},
+					[{ id: '00bd033559de27d0', amount: 10n, secret: 'secret1', C: 'C1' }],
+				),
+			).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
 		});
 	});
 

@@ -1527,7 +1527,7 @@ class Wallet {
 	 * For first-class methods, prefer the typed helpers: `createMintQuoteBolt11()`,
 	 * `createMintQuoteBolt12()`.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
-	 * @param payload The request body to POST. `unit` will be injected if not present.
+	 * @param payload The request body to POST. `unit` is always set to the wallet's unit.
 	 * @param options.normalize Optional callback to normalize method-specific response fields.
 	 * @returns The mint quote response.
 	 */
@@ -1536,7 +1536,7 @@ class Wallet {
 		payload: Record<string, unknown>,
 		options?: { normalize?: (raw: Record<string, unknown>) => TRes },
 	): Promise<TRes> {
-		const body = { unit: this._unit, ...payload };
+		const body = { ...payload, unit: this._unit };
 		const res = await this.mint.createMintQuote<TRes>(method, body, {
 			normalize: options?.normalize,
 		});
@@ -1702,9 +1702,9 @@ class Wallet {
 	/**
 	 * @internal
 	 */
-	validateMintQuote<TQuote extends MintQuoteBaseResponse>(quote: TQuote): void {
+	validateMintQuote(quote: Partial<MintQuoteBaseResponse> & { expiry?: number | null }): void {
 		this.failIf(
-			quote.unit !== this.unit,
+			'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
 			`Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
 		);
 		this.failIf(
@@ -1712,6 +1712,16 @@ class Wallet {
 				typeof quote.expiry === 'number' &&
 				quote.expiry < Math.floor(Date.now() / 1000),
 			`Mint quote ${quote.quote} has expired`,
+		);
+	}
+
+	/**
+	 * @internal
+	 */
+	validateMeltQuote(quote: Partial<MeltQuoteBaseResponse>): void {
+		this.failIf(
+			'unit' in quote && typeof quote.unit === 'string' && quote.unit !== this.unit,
+			`Quote unit '${quote.unit}' does not match wallet unit '${this.unit}'`,
 		);
 	}
 
@@ -1831,6 +1841,7 @@ class Wallet {
 			typeof quote === 'string',
 			`prepareMint: expected a quote object, not a string ID. Use mintBolt11() which accepts string quote IDs.`,
 		);
+		this.validateMintQuote(quote);
 		const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
@@ -1924,7 +1935,7 @@ class Wallet {
 	 * For first-class methods, prefer the typed helpers: `createMeltQuoteBolt11()`,
 	 * `createMeltQuoteBolt12()`.
 	 * @param method The payment method (e.g., 'bolt11', 'bolt12', 'bacs', 'swift').
-	 * @param payload The request body to POST. `unit` will be injected if not present.
+	 * @param payload The request body to POST. `unit` is always set to the wallet's unit.
 	 * @param options.normalize Optional callback to normalize method-specific response fields.
 	 * @returns The melt quote response.
 	 */
@@ -1933,7 +1944,7 @@ class Wallet {
 		payload: Record<string, unknown>,
 		options?: { normalize?: (raw: Record<string, unknown>) => TRes },
 	): Promise<TRes> {
-		const body = { unit: this._unit, ...payload };
+		const body = { ...payload, unit: this._unit };
 		const res = await this.mint.createMeltQuote<TRes>(method, body, {
 			normalize: options?.normalize,
 		});
@@ -2206,6 +2217,7 @@ class Wallet {
 		config?: MeltProofsConfig,
 		outputType?: OutputType,
 	): Promise<MeltPreview<TQuote>> {
+		this.validateMeltQuote(meltQuote);
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 		const { keysetId, onCountersReserved } = config || {};
 		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
