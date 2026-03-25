@@ -36,7 +36,9 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           MAJOR_VERSION=$(echo $VERSION | cut -d. -f1)
-          if [ "$MAJOR_VERSION" = "3" ]; then
+          if echo "$VERSION" | grep -qE '[-](rc|alpha|beta)'; then
+            echo "tag=next" >> $GITHUB_OUTPUT
+          elif [ "$MAJOR_VERSION" = "4" ]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=v${MAJOR_VERSION}-lts" >> $GITHUB_OUTPUT
