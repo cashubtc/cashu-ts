@@ -193,15 +193,13 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
 }
 
 /**
- * Anti-fingerprinting: this function sets fetch RequestInit and privacy-hardened request headers on
- * every fetch call to prevent a mint from tracking clients via browser-managed state (ETags,
- * cookies, referrer).
+ * Anti-fingerprinting: sets fetch RequestInit and privacy-hardened request headers to prevent a
+ * mint from tracking clients via browser-managed state (ETags, cookies, referrer).
  *
- * **Mobile (React Native / native HTTP clients):** These protections target the browser Fetch spec.
- * Mobile runtimes use platform HTTP stacks (NSURLSession on iOS, OkHttp on Android) that manage
- * their own caches independently of fetch RequestInit options. Mobile consumers MUST disable HTTP
- * caching at the native layer or provide a `customRequest` implementation (via the Mint
- * constructor) that uses a cache-disabled HTTP client.
+ * **Mobile (React Native / native HTTP clients):** Mobile runtimes use platform HTTP stacks
+ * (NSURLSession on iOS, OkHttp on Android) that manage their own caches independently. Mobile
+ * consumers MUST disable HTTP caching at the native layer or provide a `customRequest`
+ * implementation (via the Mint constructor) that uses a cache-disabled HTTP client.
  */
 async function _request(options: RequestOptions): Promise<unknown> {
 	const {
@@ -225,14 +223,11 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	const headers: Record<string, string> = {
 		Accept: 'application/json, text/plain, */*',
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
-		// Defense-in-depth: prevent proxies and non-standard fetch implementations from caching.
-		// The primary protection is `cache: 'no-store'` on the fetch RequestInit (below),
-		// which prevents the browser from storing responses or sending ETag/If-None-Match headers.
+		// The primary protection is `cache: 'no-store'` on RequestInit (below).
 		// These request headers cover intermediary proxies that may ignore fetch-level cache modes.
 		'Cache-Control': 'no-store',
 		Pragma: 'no-cache',
-		// Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header and
-		// is silently ignored (users should use customRequest with Tor Browser for UA normalization).
+		// Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header (silently ignored).
 		// In Node.js this overrides the default `undici` identifier that would leak the runtime.
 		'User-Agent': 'Mozilla/5.0',
 		...requestHeaders,
@@ -277,10 +272,9 @@ async function _request(options: RequestOptions): Promise<unknown> {
 			headers,
 			...fetchOptions,
 			signal,
-			// Anti-fingerprinting fetch options. These harden requests against a malicious mint
-			// tracking clients via browser-managed state (cache, cookies, referrer).
-			cache: 'no-store', // prevent ETag/If-None-Match and Last-Modified/If-Modified-Since
-			credentials: 'omit', // prevent cookie-based tracking (both sending and storing)
+			// Anti-fingerprinting fetch options.
+			cache: 'no-store', // prevent cache tracking (eg ETag)
+			credentials: 'omit', // prevent cookie-based tracking
 			referrer: '', // prevent leaking the embedding page URL
 			referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
 		});
