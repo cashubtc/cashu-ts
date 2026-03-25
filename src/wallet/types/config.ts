@@ -128,7 +128,7 @@ export type SendConfig = {
 	keysetId?: string;
 	privkey?: string | string[];
 	includeFees?: boolean;
-	proofsWeHave?: Proof[];
+	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
 	onCountersReserved?: OnCountersReserved;
 };
 
@@ -148,7 +148,7 @@ export type ReceiveConfig = {
 	keysetId?: string;
 	privkey?: string | string[];
 	requireDleq?: boolean;
-	proofsWeHave?: Proof[];
+	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
 	onCountersReserved?: OnCountersReserved;
 };
 
@@ -158,7 +158,7 @@ export type ReceiveConfig = {
 export type MintProofsConfig = {
 	keysetId?: string;
 	privkey?: string;
-	proofsWeHave?: Proof[];
+	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
 	onCountersReserved?: OnCountersReserved;
 };
 

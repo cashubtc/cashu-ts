@@ -239,7 +239,7 @@ export class SendBuilder {
 	 * Has no effect if denominations (custom split) was specified.
 	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
 	 */
-	proofsWeHave(p: Proof[]) {
+	proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
 		this.config.proofsWeHave = p;
 		return this;
 	}
@@ -462,7 +462,7 @@ export class ReceiveBuilder {
 	 * Has no effect if denominations (custom split) was specified.
 	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
 	 */
-	proofsWeHave(p: Proof[]) {
+	proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
 		this.config.proofsWeHave = p;
 		return this;
 	}
@@ -627,7 +627,7 @@ export class MintBuilder<
 	 * Has no effect if denominations (custom split) was specified.
 	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
 	 */
-	proofsWeHave(p: Proof[]) {
+	proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
 		this.config.proofsWeHave = p;
 		return this;
 	}

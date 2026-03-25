@@ -408,7 +408,7 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function getKeepAmounts(proofsWeHave: Proof[], amountToKeep: AmountLike, keys: Keys, targetCount: number): Amount[];
+export function getKeepAmounts(proofsWeHave: Array<Pick<Proof, 'amount'>>, amountToKeep: AmountLike, keys: Keys, targetCount: number): Amount[];
 
 // @public
 export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): Amount[];
@@ -854,7 +854,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>>;
     privkey(k: string): MintBuilder<M, true>;
-    proofsWeHave(p: Proof[]): this;
+    proofsWeHave(p: Array<Pick<Proof, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
 }
 
@@ -1024,7 +1024,7 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string;
-    proofsWeHave?: Proof[];
+    proofsWeHave?: Array<Pick<Proof, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -1491,7 +1491,7 @@ export class ReceiveBuilder {
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
-    proofsWeHave(p: Proof[]): this;
+    proofsWeHave(p: Array<Pick<Proof, 'amount'>>): this;
     requireDleq(on?: boolean): this;
     run(): Promise<Proof[]>;
 }
@@ -1501,7 +1501,7 @@ export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
     requireDleq?: boolean;
-    proofsWeHave?: Proof[];
+    proofsWeHave?: Array<Pick<Proof, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -1586,7 +1586,7 @@ export class SendBuilder {
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
-    proofsWeHave(p: Proof[]): this;
+    proofsWeHave(p: Array<Pick<Proof, 'amount'>>): this;
     run(): Promise<SendResponse>;
 }
 
@@ -1595,7 +1595,7 @@ export type SendConfig = {
     keysetId?: string;
     privkey?: string | string[];
     includeFees?: boolean;
-    proofsWeHave?: Proof[];
+    proofsWeHave?: Array<Pick<Proof, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -1724,7 +1724,7 @@ export type SubscribeOpts = {
 export type SubscriptionCanceller = () => void;
 
 // @public (undocumented)
-export function sumProofs(proofs: Proof[]): Amount;
+export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount;
 
 // @public
 export type SwapMethod = {
@@ -1871,7 +1871,7 @@ export class Wallet {
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
-    getFeesForProofs(proofs: Proof[]): Amount;
+    getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
     groupProofsByState(proofs: Proof[]): Promise<{
