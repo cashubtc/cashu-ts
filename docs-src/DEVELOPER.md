@@ -284,20 +284,20 @@ npm install <pkg> --save-dev
 ## Versioning & Release Strategy
 
 Cashu-TS uses semantic versioning.
-The repository uses a single primary development branch, `main`, which represents the current major release (v3).
+
+The repository uses a single primary development branch, `main`, which tracks the current major release (v4).
+
 All new development is merged into `main` via pull requests.
 
-The previous major version (v3) is supported via a long-lived maintenance branch, which is used only for critical fixes.
+The previous major version (v3) is maintained on the `v3-dev` branch for critical fixes only.
 
-If you need to backport a feature to v3, open a separate PR targeting `v3-dev` (do not mix both in a single PR).
+If you need to backport a fix to v3, open a separate PR targeting `v3-dev` (do not mix both in a single PR).
 
 ## Releases
 
-Releases are automated and managed by CI. Maintainers should **not** create releases manually.
+### v4 stable releases (release-please)
 
-### Automated Releases (release-please)
-
-We use [release-please](https://github.com/googleapis/release-please) to automate our release cycle.
+Stable v4 releases on `main` are automated with [release-please](https://github.com/googleapis/release-please).
 
 #### How it works
 
@@ -309,23 +309,54 @@ We use [release-please](https://github.com/googleapis/release-please) to automat
   - Calculates the next version using **Semantic Versioning (SemVer)**:
     - `feat` → minor version bump
     - `fix` → patch version bump
-    - Breaking changes → major version bump
+    - Breaking changes (`feat!` / `fix!`) → major version bump
 
-#### Cutting a release
+#### Cutting a stable release
 
 - A release is created **by merging the Release PR**.
 - When the Release PR is merged:
   - A Git tag is created
   - A GitHub Release is published
-  - CI builds and publishes the package to npm (with provenance)
+  - CI builds and publishes the package to npm as `latest` (with provenance)
 
 **Merging the Release PR is the release action. No additional steps are required.**
+
+### v4 release candidates (manual)
+
+Release candidates are cut manually from a branch, keeping `main` clean for the pending release-please PR.
+
+1. Branch off `main` (e.g. `v4-rc1`).
+2. Bump `package.json` to the RC version (e.g. `4.0.0-rc.1`).
+3. Tag, push, and create a GitHub Release — mark it as a **pre-release**.
+4. The publish workflow (`version.yml`) detects the prerelease version and publishes to npm with the `next` dist-tag.
+5. For subsequent RCs, either add commits to the same branch or branch fresh from `main`.
+
+When the RC phase is complete, merge the release-please PR on `main` to cut the stable release.
+
+### v3 LTS releases (manual)
+
+v3 maintenance releases are handled manually — release-please only watches `main`.
+
+1. Cherry-pick or commit fixes to `v3-dev`.
+2. Bump `package.json` to the next patch version (e.g. `3.6.2`).
+3. Tag and push: `git tag v3.6.2 && git push origin v3-dev --tags`
+4. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
+5. The publish workflow detects major version 3 and publishes to npm with the `v3-lts` dist-tag.
+
+### npm dist-tags
+
+| Version            | npm dist-tag | Install command                      |
+| ------------------ | ------------ | ------------------------------------ |
+| v4 stable          | `latest`     | `npm install @cashu/cashu-ts`        |
+| v4 RC / prerelease | `next`       | `npm install @cashu/cashu-ts@next`   |
+| v3 LTS             | `v3-lts`     | `npm install @cashu/cashu-ts@v3-lts` |
 
 ### Notes on Versioning
 
 - Follow **Conventional Commits** to ensure correct version bumps.
 - Breaking API changes must be clearly marked to trigger a major version bump.
-- Version numbers are determined automatically by release-please; contributors should not attempt to control versions directly.
+- Stable version numbers on `main` are determined automatically by release-please; contributors should not attempt to control versions directly.
+- RC and v3 LTS versions are bumped manually in `package.json`.
 
 ## Troubleshooting (common issues)
 
