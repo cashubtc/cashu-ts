@@ -66,6 +66,27 @@ describe('testing uint8 encoding', () => {
 			},
 		]);
 	});
+	test('bigint amount round-trip', () => {
+		const unsafeAmount = 2n ** 53n + 1n; // first value above MAX_SAFE_INTEGER
+		const obj = [
+			{
+				id: '0NI3TUAs1Sfy',
+				amount: unsafeAmount,
+				C: '037695083226b9c63649d8068eb789a891e621e77dff4e7d75ac02479fe71c886b',
+				secret: 'lFcxbPO870srsOKb4e+MvRAmWBE206b6BMi5nKrq1t4=',
+			},
+		];
+		const encoded = encodeJsonToBase64(obj);
+		const decoded = encodeBase64ToJson<typeof obj>(encoded);
+		expect(decoded[0].amount).toBe(unsafeAmount);
+		expect(typeof decoded[0].amount).toBe('bigint');
+	});
+	test('safe integer amount stays number', () => {
+		const obj = [{ amount: 8 }];
+		const decoded = encodeBase64ToJson<typeof obj>(encodeJsonToBase64(obj));
+		expect(decoded[0].amount).toBe(8);
+		expect(typeof decoded[0].amount).toBe('number');
+	});
 	test('base64url: convert to/from base64', () => {
 		const base64url = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI_wn4-z77iPIn0';
 		// const base64 = 'eyJ0ZXN0RGF0YSI6IvCfj7PvuI/wn4+z77iPIn0='

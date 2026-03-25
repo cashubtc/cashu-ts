@@ -1,10 +1,5 @@
 # AGENTS
 
-Fast-start orientation for automation agents: what this repo is, where code lives,
-how to run it, and the key conventions.
-
-## Project snapshot
-
 - Cashu TS is a TypeScript library for Cashu wallets and mint interactions.
 - Public API surface is defined in `src/index.ts` and built for ESM.
 - Docs and examples live in `docs-src/` and `examples/`.
@@ -23,13 +18,14 @@ Local installs configure Husky hooks automatically.
 ## Repo map
 
 - `src/` core library source
-  - `wallet/` wallet logic, WalletOps builders, counters, events
+  - `auth/` OIDC auth helpers
+  - `crypto/` cryptographic primitives
+  - `logger/` library logger interface and ConsoleLogger
   - `mint/` mint client logic and request/response types
   - `model/` shared domain models, tokens, proofs, errors
-  - `crypto/` cryptographic primitives
   - `transport/` HTTP/WebSocket transport, request helpers
-  - `auth/` OIDC auth helpers
   - `utils/` various helpers (cbor, base64, bech32, Bytes etc)
+  - `wallet/` wallet logic, WalletOps builders, counters, events
 - `test/` unit + integration tests; `test/integration.test.ts` is a good live usage reference
 - `examples/` runnable examples and usage patterns
 - `docs-src/` contributor docs and usage recipes (rendered on docs site)
@@ -38,8 +34,7 @@ Local installs configure Husky hooks automatically.
 
 ## Entry points and API surface
 
-- `src/index.ts` exports the public API; start here when changing what gets
-  published.
+- `src/index.ts` exports the public API.
 - The build emits:
   - ESM runtime: `lib/**/*.js` (relative imports must include `.js`)
   - Types: `lib/types/index.d.ts` (rolled up)
@@ -54,7 +49,7 @@ Local installs configure Husky hooks automatically.
 
 CI check: `npm run prtasks` (lint, format, api:update, tests).
 Repo-wide lint checks: `npm run check-lint` and `npm run check-format`.
-Integration tests: `npm run test-integration` (requires local mint, see `Makefile`).
+Integration tests: `npm run test-integration` (requires local mint, see below).
 Consumer smoke tests: `npm run test:consumer`.
 Other scripts: see `package.json`.
 
@@ -64,6 +59,7 @@ Other scripts: see `package.json`.
 - `npm run compile` to build ESM output.
 - `npm test` for unit/browser test projects.
 - `npm run lint` / `npm run format` for local fixes.
+- `npm run api:update` for compile + api-extractor report update
 
 ## Integration tests (local mint)
 
@@ -129,22 +125,23 @@ Hooks are installed by Husky:
 4. Docs: verify usage recipes/examples if API shape or behavior changed.
 5. Build/runtime: ensure ESM expectations are met (relative `.js` in ESM builds).
 
-## Docs and usage recipes
+## Amount model (v4 breaking change)
 
-- Quick start and usage: `README.md`
-- Usage recipes: `docs-src/usage/usage_index.md`
-- WalletOps builders: `docs-src/wallet_ops/wallet_ops.md`
-- WalletEvents: `docs-src/wallet_events/wallet_events.md`
-- Deterministic counters: `docs-src/deterministic_counters.md`
+- `Proof.amount` is `bigint`, not `number`. This changed in v4.
+- `AmountLike` (`number | bigint | string | Amount`) is the flexible input type for consumers.
+- `Amount` (`src/model/Amount.ts`) is the normalization and arithmetic layer. Use `Amount.from(x)` to convert any `AmountLike`, `.toBigInt()` to extract the raw value.
+- Mint response DTOs are normalized to `Amount` before reaching consumers — API response amount fields return `Amount` objects, not raw numbers.
+- When constructing `Proof` objects, always normalize: `amount: Amount.from(x).toBigInt()`.
+- Avoid `number` in canonical domain models and avoid `bigint | number` in stored/core types.
 
 ## Branching and releases
 
-- `main` is the active development branch (v3).
-- `v2-dev` is the maintenance branch for v2 backports.
+- `main` is the active development branch (v4).
+- `v3-dev` is the maintenance branch for v3 backports.
 - Releases are automated with release-please; do not cut releases manually.
 
 ## Common pitfalls (save time)
 
-- Switching `main` ↔ `v2-dev`: run `npm ci` after checkout to refresh dependencies.
+- Switching `main` ↔ `v3-dev`: run `npm ci` after checkout to refresh dependencies.
 - Integration tests expect port `3338`; ensure no other service is bound.
 - API Extractor only updates with `npm run api:update`; `api:check` is read-only.
