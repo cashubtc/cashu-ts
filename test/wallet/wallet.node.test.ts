@@ -1523,11 +1523,11 @@ describe('send', () => {
 				// p2pk: { pubkey: 'pk' }
 			},
 			{
-				send: { type: 'p2pk', options: { pubkey: 'pk' } },
+				send: { type: 'p2pk', options: { pubkey: '02' + 'ab'.repeat(32) } },
 			},
 		);
 
-		expectNUT10SecretDataToEqual([result.send[0]], 'pk');
+		expectNUT10SecretDataToEqual([result.send[0]], '02' + 'ab'.repeat(32));
 		expect(result.keep[0].secret.length).toBe(64);
 	});
 
@@ -2437,12 +2437,21 @@ describe('multi mint', async () => {
 	});
 });
 describe('P2PK BlindingData', () => {
+	// Valid 64-char hex pubkeys (x-only, normalised to 02-prefixed by createSingleP2PKData)
+	const PK1 = 'aa'.repeat(32); // x-only → 02 + aa…
+	const PK2 = 'bb'.repeat(32);
+	const PK3 = 'cc'.repeat(32);
+	const RK1 = '02' + 'dd'.repeat(32); // compressed
+	const RK2 = '02' + 'ee'.repeat(32);
+	const RK3 = '03' + 'ff'.repeat(32);
+	const PK1_N = '02' + PK1; // normalised form of PK1
+
 	test('Create BlindingData locked to single pk with locktime and single refund key', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund'] },
+			{ pubkey: PK1, locktime: 212, refundKeys: [RK1] },
 			21,
 			keys,
 		);
@@ -2450,9 +2459,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
+			expect(s[1].tags).toContainEqual(['refund', RK1]);
 		});
 	});
 	test('Create BlindingData locked to single pk with locktime and multiple refund keys', async () => {
@@ -2460,7 +2469,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
+			{ pubkey: PK1, locktime: 212, refundKeys: [RK1, RK2] },
 			21,
 			keys,
 		);
@@ -2468,21 +2477,21 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
+			expect(s[1].tags).toContainEqual(['refund', RK1, RK2]);
 		});
 	});
 	test('Create BlindingData locked to single pk without locktime and no refund keys', async () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData({ pubkey: 'thisisatest' }, 21, keys);
+		const data = OutputData.createP2PKData({ pubkey: PK1 }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toEqual([]);
 		});
 	});
@@ -2490,16 +2499,12 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', requiredSignatures: 5 },
-			21,
-			keys,
-		);
+		const data = OutputData.createP2PKData({ pubkey: PK1, requiredSignatures: 5 }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toEqual([]);
 		});
 	});
@@ -2507,17 +2512,13 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'] },
-			21,
-			keys,
-		);
+		const data = OutputData.createP2PKData({ pubkey: [PK1, PK2, PK3] }, 21, keys);
 		const decoder = new TextDecoder();
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
+			expect(s[1].data).toBe(PK1_N);
+			expect(s[1].tags).toContainEqual(['pubkeys', '02' + PK2, '02' + PK3]);
 			expect(s[1].tags).not.toContainEqual(['n_sigs', '1']);
 		});
 	});
@@ -2526,7 +2527,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 2 },
+			{ pubkey: [PK1, PK2, PK3], requiredSignatures: 2 },
 			21,
 			keys,
 		);
@@ -2534,8 +2535,8 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
+			expect(s[1].data).toBe(PK1_N);
+			expect(s[1].tags).toContainEqual(['pubkeys', '02' + PK2, '02' + PK3]);
 			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
 		});
 	});
@@ -2544,7 +2545,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: ['thisisatest', 'asecondpk', 'athirdpk'], requiredSignatures: 5 },
+			{ pubkey: [PK1, PK2, PK3], requiredSignatures: 5 },
 			21,
 			keys,
 		);
@@ -2552,8 +2553,8 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
+			expect(s[1].data).toBe(PK1_N);
+			expect(s[1].tags).toContainEqual(['pubkeys', '02' + PK2, '02' + PK3]);
 			expect(s[1].tags).toContainEqual(['n_sigs', '3']);
 		});
 	});
@@ -2563,9 +2564,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: 'thisisatest',
+				pubkey: PK1,
 				locktime: 212,
-				refundKeys: ['iamarefund'],
+				refundKeys: [RK1],
 				requiredRefundSignatures: 1,
 			},
 			21,
@@ -2575,9 +2576,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund']);
+			expect(s[1].tags).toContainEqual(['refund', RK1]);
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
@@ -2586,7 +2587,7 @@ describe('P2PK BlindingData', () => {
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
-			{ pubkey: 'thisisatest', locktime: 212, refundKeys: ['iamarefund', 'asecondrefund'] },
+			{ pubkey: PK1, locktime: 212, refundKeys: [RK1, RK2] },
 			21,
 			keys,
 		);
@@ -2594,9 +2595,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
+			expect(s[1].tags).toContainEqual(['refund', RK1, RK2]);
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
 		});
 	});
@@ -2606,9 +2607,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: 'thisisatest',
+				pubkey: PK1,
 				locktime: 212,
-				refundKeys: ['iamarefund', 'asecondrefund', 'athirdrefund'],
+				refundKeys: [RK1, RK2, RK3],
 				requiredRefundSignatures: 2,
 			},
 			21,
@@ -2618,9 +2619,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund', 'athirdrefund']);
+			expect(s[1].tags).toContainEqual(['refund', RK1, RK2, RK3]);
 			expect(s[1].tags).toContainEqual(['n_sigs_refund', '2']);
 		});
 	});
@@ -2630,9 +2631,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: 'thisisatest',
+				pubkey: PK1,
 				locktime: 212,
-				refundKeys: ['iamarefund', 'asecondrefund', 'athirdrefund'],
+				refundKeys: [RK1, RK2, RK3],
 				requiredRefundSignatures: 5,
 			},
 			21,
@@ -2642,9 +2643,9 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund', 'athirdrefund']);
+			expect(s[1].tags).toContainEqual(['refund', RK1, RK2, RK3]);
 			expect(s[1].tags).toContainEqual(['n_sigs_refund', '3']);
 		});
 	});
@@ -2654,9 +2655,9 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		const data = OutputData.createP2PKData(
 			{
-				pubkey: ['thisisatest', 'asecondpk', 'athirdpk'],
+				pubkey: [PK1, PK2, PK3],
 				locktime: 212,
-				refundKeys: ['iamarefund', 'asecondrefund'],
+				refundKeys: [RK1, RK2],
 				requiredSignatures: 2,
 				requiredRefundSignatures: 1,
 			},
@@ -2667,12 +2668,92 @@ describe('P2PK BlindingData', () => {
 		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
 		allSecrets.forEach((s) => {
 			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe('thisisatest');
+			expect(s[1].data).toBe(PK1_N);
 			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['pubkeys', 'asecondpk', 'athirdpk']);
-			expect(s[1].tags).toContainEqual(['refund', 'iamarefund', 'asecondrefund']);
+			expect(s[1].tags).toContainEqual(['pubkeys', '02' + PK2, '02' + PK3]);
+			expect(s[1].tags).toContainEqual(['refund', RK1, RK2]);
 			expect(s[1].tags).toContainEqual(['n_sigs', '2']);
 			expect(s[1].tags).not.toContainEqual(['n_sigs_refund', '1']); // 1 is default
+		});
+	});
+	test('mixed-case duplicate lock keys are normalised and deduped', async () => {
+		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+		const keys = wallet.keyChain.getKeyset();
+		const upper = 'AA'.repeat(32); // x-only uppercase
+		const lower = 'aa'.repeat(32); // x-only lowercase (same key)
+		const prefixed = '02' + 'AA'.repeat(32); // compressed uppercase (same key)
+		const data = OutputData.createP2PKData({ pubkey: [upper, lower, prefixed] }, 21, keys);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			// All three inputs collapse to one canonical key
+			expect(s[1].data).toBe('02' + 'aa'.repeat(32));
+			expect(s[1].tags.find((t: string[]) => t[0] === 'pubkeys')).toBeUndefined();
+		});
+	});
+	test('mixed-case duplicate refund keys are normalised and deduped', async () => {
+		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+		const keys = wallet.keyChain.getKeyset();
+		const upper = '03' + 'BB'.repeat(32);
+		const lower = '03' + 'bb'.repeat(32); // same key
+		const data = OutputData.createP2PKData(
+			{ pubkey: PK1, locktime: 212, refundKeys: [upper, lower] },
+			21,
+			keys,
+		);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			const refundTag = s[1].tags.find((t: string[]) => t[0] === 'refund');
+			// Two inputs collapse to one canonical key
+			expect(refundTag).toEqual(['refund', '03' + 'bb'.repeat(32)]);
+		});
+	});
+	test('n_sigs is clamped when dedup reduces lock key count', async () => {
+		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+		const keys = wallet.keyChain.getKeyset();
+		// 3 keys requested with n_sigs=3, but they're all the same key after normalisation
+		const data = OutputData.createP2PKData(
+			{
+				pubkey: ['AA'.repeat(32), 'aa'.repeat(32), '02' + 'AA'.repeat(32)],
+				requiredSignatures: 3,
+			},
+			21,
+			keys,
+		);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			// Only 1 unique key remains, so n_sigs must not appear (clamped to 1 = default)
+			expect(s[1].tags.find((t: string[]) => t[0] === 'n_sigs')).toBeUndefined();
+			expect(s[1].tags.find((t: string[]) => t[0] === 'pubkeys')).toBeUndefined();
+		});
+	});
+	test('n_sigs_refund is clamped when dedup reduces refund key count', async () => {
+		const wallet = new Wallet(mint);
+		await wallet.loadMint();
+		const keys = wallet.keyChain.getKeyset();
+		// 3 refund keys with n_sigs_refund=3, but two are duplicates after normalisation → 2 unique
+		const data = OutputData.createP2PKData(
+			{
+				pubkey: PK1,
+				locktime: 212,
+				refundKeys: [RK1, RK2, '02' + 'DD'.repeat(32)], // last is duplicate of RK1
+				requiredRefundSignatures: 3,
+			},
+			21,
+			keys,
+		);
+		const decoder = new TextDecoder();
+		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
+		allSecrets.forEach((s) => {
+			const refundTag = s[1].tags.find((t: string[]) => t[0] === 'refund');
+			expect(refundTag).toEqual(['refund', RK1, RK2]);
+			// n_sigs_refund clamped from 3 → 2
+			expect(s[1].tags).toContainEqual(['n_sigs_refund', '2']);
 		});
 	});
 });

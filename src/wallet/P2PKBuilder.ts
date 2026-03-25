@@ -1,17 +1,6 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 import { type P2PKOptions, type P2PKTag } from './types/config';
-import { type SigFlag } from '../crypto';
-
-// Accept 33 byte compressed (02|03...), or 32 byte x-only,
-// normalised to lowercase 33 byte with 02 prefix for x only
-function normalisePubkey(pk: string): string {
-	const hex = pk.toLowerCase();
-	if (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03'))) return hex;
-	if (hex.length === 64) return `02${hex}`;
-	throw new Error(
-		`Invalid pubkey, expected 33 byte compressed or 32 byte x only, got length ${hex.length}`,
-	);
-}
+import { normalisePubkey, type SigFlag } from '../crypto';
 
 function toUnixSeconds(input: Date | number): number {
 	if (input instanceof Date) return Math.floor(input.getTime() / 1000);

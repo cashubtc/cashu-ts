@@ -70,6 +70,32 @@ export function parseP2PKSecret(secret: string | Secret): Secret {
 // ------------------------------
 
 /**
+ * Accept 33 byte compressed (02|03...), or 32 byte x-only, normalised to lowercase 33 byte with 02
+ * prefix for x only.
+ *
+ * @internal
+ */
+export function normalisePubkey(pk: string): string {
+	const hex = pk.toLowerCase();
+	if (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03'))) return hex;
+	if (hex.length === 64) return `02${hex}`;
+	throw new Error(
+		`Invalid pubkey, expected 33 byte compressed or 32 byte x only, got length ${hex.length}`,
+	);
+}
+
+/**
+ * Lenient version of normalisePubkey that returns undefined instead of throwing for invalid keys.
+ */
+function tryNormalisePubkey(pk: string): string | undefined {
+	try {
+		return normalisePubkey(pk);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * Returns the expected witness public keys from a NUT-11 P2PK secret.
  *
  * @remarks
@@ -119,10 +145,10 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
 		data = getDataField(secret);
 	}
 
-	// Add pubkeys
+	// Add pubkeys, normalise to canonical form and deduplicate
 	const pubkeys = getTag(secret, 'pubkeys') ?? [];
 	const allKeys = [data, ...pubkeys].filter(Boolean); // filter empty
-	return Array.from(new Set(allKeys)); // unique keys
+	return Array.from(new Set(allKeys.map(tryNormalisePubkey).filter(Boolean))) as string[];
 }
 
 /**
@@ -135,7 +161,8 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
  */
 export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
 	const secret = parseP2PKSecret(secretStr);
-	return getTag(secret, 'refund') ?? [];
+	const keys = getTag(secret, 'refund') ?? [];
+	return Array.from(new Set(keys.map(tryNormalisePubkey).filter(Boolean))) as string[];
 }
 
 /**
