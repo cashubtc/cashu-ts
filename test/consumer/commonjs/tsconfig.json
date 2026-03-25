@@ -1,12 +1,13 @@
 {
 	"compilerOptions": {
 		"target": "ES2020",
-		"module": "CommonJS",
-		"moduleResolution": "node",
+		"module": "Node16",
+		"moduleResolution": "node16",
 		"strict": true,
 		"esModuleInterop": true,
 		"skipLibCheck": true,
-		"noEmit": false
+		"noEmit": false,
+		"types": ["node"]
 	},
 	"include": ["**/*.ts"]
 }
