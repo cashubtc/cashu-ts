@@ -4,6 +4,7 @@
 
 ```ts
 
+import { HDKey } from '@scure/bip32';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -302,6 +303,12 @@ export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[]
 
 // @public (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
+
+// @public (undocumented)
+export const derviveBip32SecretAndBlindingFactor: (hdKey: HDKey, keysetId: string, counter: number) => {
+    blindingFactor: Uint8Array;
+    secret: Uint8Array;
+};
 
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
@@ -1220,7 +1227,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string, masterKey?: HDKey): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
