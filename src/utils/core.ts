@@ -111,14 +111,14 @@ export function splitAmount(
 /**
  * Creates a list of amounts to keep based on the proofs we have and the proofs we want to reach.
  *
- * @param proofsWeHave Complete set of proofs stored (from current mint)
+ * @param proofsWeHave Proofs stored (from current mint) — only `.amount` is read.
  * @param amountToKeep Amount to keep.
  * @param keys Keys of current keyset.
  * @param targetCount The target number of proofs to reach.
  * @returns An array of amounts to keep.
  */
 export function getKeepAmounts(
-	proofsWeHave: Proof[],
+	proofsWeHave: Array<Pick<Proof, 'amount'>>,
 	amountToKeep: AmountLike,
 	keys: Keys,
 	targetCount: number,
@@ -128,7 +128,7 @@ export function getKeepAmounts(
 	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
 	const amountsWeWant: Amount[] = [];
 	let runningTotal = Amount.zero();
-	const amountsWeHave = proofsWeHave.map((p: Proof) => p.amount);
+	const amountsWeHave = proofsWeHave.map((p) => p.amount);
 	const sortedKeyAmounts = getKeysetAmountsAsAmount(keys, 'asc');
 	for (const amt of sortedKeyAmounts) {
 		const countWeHave = amountsWeHave.filter((a) => amt.equals(a)).length;
@@ -579,8 +579,8 @@ export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
-export function sumProofs(proofs: Proof[]): Amount {
-	return Amount.sum(proofs.map((proof: Proof) => proof.amount));
+export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount {
+	return Amount.sum(proofs.map((proof) => proof.amount));
 }
 
 /**

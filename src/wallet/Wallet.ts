@@ -624,7 +624,7 @@ class Wallet {
 		keyset: Keyset,
 		outputType: OutputType,
 		includeFees: boolean = false,
-		proofsWeHave: Proof[] = [],
+		proofsWeHave: Array<Pick<Proof, 'amount'>> = [],
 	): OutputType {
 		let newAmount = this.parseAmount(amount, 'configureOutputs', true);
 
@@ -1344,7 +1344,7 @@ class Wallet {
 	 * @returns Fee amount.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
-	getFeesForProofs(proofs: Proof[]): Amount {
+	getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount {
 		const sumPPK = Amount.sum(proofs.map((proof) => this.getProofFeePPK(proof))).toBigInt();
 		return Amount.from((sumPPK + 999n) / 1000n);
 	}
@@ -1356,7 +1356,7 @@ class Wallet {
 	 * @returns FeePPK {number} The feePPK for the selected proof.
 	 * @throws Throws an error if the proofs keyset is unknown.
 	 */
-	private getProofFeePPK(proof: Proof): number {
+	private getProofFeePPK(proof: Pick<Proof, 'id'>): number {
 		try {
 			// We need the proof's keyset so use keyChain here
 			// We must NOT fallback to wallet's keyset
