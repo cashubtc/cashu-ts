@@ -24,9 +24,9 @@ npm run test:prepare
 
 This repository no longer uses a separate development branch. All development now happens directly against main.
 The project will continue to support the last prior major release on a version branch. At the time of this change
-main tracks v3, while the v2 linage exists on `v2-dev`.
+main tracks v4, while the v3 linage exists on `v3-dev`.
 
-If you are backporting fixes to the v2 line, please open pull requests against the `v2-dev` branch instead.
+If you are backporting fixes to the v3 line, please open pull requests against the `v3-dev` branch instead.
 
 Notes:
 
@@ -35,7 +35,7 @@ Notes:
 
 ### ⚠️ Important — run `npm ci` after switching major branches
 
-When switching between major branches (for example `main` for v3 and `v2-dev` for v2) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
+When switching between major branches (for example `main` for v4 and `v3-dev` for v3) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
 Always run a clean install after switching major branches to ensure `node_modules` matches the checked-in lockfile:
 
@@ -287,9 +287,9 @@ Cashu-TS uses semantic versioning.
 The repository uses a single primary development branch, `main`, which represents the current major release (v3).
 All new development is merged into `main` via pull requests.
 
-The previous major version (v2) is supported via a long-lived maintenance branch, which is used only for critical fixes.
+The previous major version (v3) is supported via a long-lived maintenance branch, which is used only for critical fixes.
 
-If you need to backport a feature to v2, open a separate PR targeting `v2-dev` (do not mix both in a single PR).
+If you need to backport a feature to v3, open a separate PR targeting `v3-dev` (do not mix both in a single PR).
 
 ## Releases
 

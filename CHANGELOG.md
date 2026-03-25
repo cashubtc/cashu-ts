@@ -55,7 +55,7 @@ New style changelog begins, containing features/fixes.
 ### Bug Fixes
 
 - **ci:** add missing permission ([05182da](https://github.com/cashubtc/cashu-ts/commit/05182da1807cedea3eab69773eb6f132c5813fe4))
-  ts/commit/950ae5495273cea30578a84d67934a42eb140f0d))
+	ts/commit/950ae5495273cea30578a84d67934a42eb140f0d))
 - standalone asset build in CI ([2cc1138](https://github.com/cashubtc/cashu-ts/commit/2cc1138bc195edd4566e69c5ef84dc06ef7948ec))
 
 ## [v3.0.0](https://github.com/cashubtc/cashu-ts/releases/tag/v3.0.0) (2025-10-24)
@@ -82,9 +82,7 @@ If upgrading from v2, please review the [migration guide](migration-3.0.0.md) fo
 
 ## [v2.8.1](https://github.com/cashubtc/cashu-ts/releases/tag/v2.8.1) (2025-11-17)
 
-This release is in maintenance mode.
-
-It receives critical fixes only, via the [v2-dev branch](https://github.com/cashubtc/cashu-ts/tree/v2-dev).
+This release is now obsolete.
 
 If upgrading from v1, please review the [migration guide](migration-2.0.0.md) for breaking changes.
 
