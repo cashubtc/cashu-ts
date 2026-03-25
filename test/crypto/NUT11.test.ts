@@ -672,6 +672,40 @@ describe('NUT-11 helper edge cases', () => {
 	test('getP2PKExpectedWitnessPubkeys: malformed secret -> []', () => {
 		expect(getP2PKExpectedWitnessPubkeys('not-json')).toEqual([]);
 	});
+
+	test('getP2PKWitnessPubkeys: normalises and dedupes mixed-case keys from untrusted secret', () => {
+		const xOnly = 'aa'.repeat(32);
+		const upper = '02' + 'AA'.repeat(32); // same key, uppercase
+		const lower = '02' + 'aa'.repeat(32); // canonical form
+		// Hand-craft a secret with duplicate pubkeys that differ only in case
+		const s = `["P2PK",{"nonce":"aa","data":"${upper}","tags":[["pubkeys","${xOnly}","${lower}"]]}]`;
+		const result = getP2PKWitnessPubkeys(s);
+		// All three should collapse to the single canonical key
+		expect(result).toEqual([lower]);
+	});
+
+	test('getP2PKWitnessRefundkeys: normalises and dedupes mixed-case keys from untrusted secret', () => {
+		const upper = '03' + 'CC'.repeat(32);
+		const lower = '03' + 'cc'.repeat(32);
+		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["refund","${upper}","${lower}"]]}]`;
+		const result = getP2PKWitnessRefundkeys(s);
+		expect(result).toEqual([lower]);
+	});
+
+	test('getP2PKWitnessPubkeys: silently drops invalid keys from untrusted secret', () => {
+		const valid = '02' + 'bb'.repeat(32);
+		const s = `["P2PK",{"nonce":"aa","data":"${valid}","tags":[["pubkeys","not-a-key","abc"]]}]`;
+		const result = getP2PKWitnessPubkeys(s);
+		// Only the valid data key survives; invalid pubkeys are dropped
+		expect(result).toEqual([valid]);
+	});
+
+	test('getP2PKWitnessRefundkeys: silently drops invalid keys from untrusted secret', () => {
+		const valid = '03' + 'dd'.repeat(32);
+		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["refund","${valid}","bad"]]}]`;
+		const result = getP2PKWitnessRefundkeys(s);
+		expect(result).toEqual([valid]);
+	});
 });
 
 describe('schnorrVerifyMessage & hasP2PKSignedProof', () => {

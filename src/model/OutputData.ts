@@ -15,6 +15,7 @@ import {
 	pointFromHex,
 	type DLEQ,
 	type BlindSignature,
+	normalisePubkey,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
@@ -154,9 +155,11 @@ export class OutputData implements OutputDataLike {
 
 	static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string) {
 		const amountValue = Amount.from(amount);
-		// normalise keys and clamp required signature counts to available keys
-		const lockKeys: string[] = Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey];
-		const refundKeys: string[] = p2pk.refundKeys ?? [];
+		// normalise keys to canonical form and deduplicate within each set
+		const lockKeys = [
+			...new Set((Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]).map(normalisePubkey)),
+		];
+		const refundKeys = [...new Set((p2pk.refundKeys ?? []).map(normalisePubkey))];
 		const reqLock = Math.max(1, Math.min(p2pk.requiredSignatures ?? 1, lockKeys.length));
 		const reqRefund = Math.max(
 			1,

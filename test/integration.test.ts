@@ -794,9 +794,10 @@ describe('Custom Outputs', () => {
 		const signedMeltKeep = wallet.signP2PKProofs(meltKeep, hexSk);
 		const unlockedProofs = await wallet.send(restAmount, signedMeltKeep);
 		// Just to receive them and lock them again, but this time overwriting the default factory
+		const testPk = '02' + 'ab'.repeat(32);
 		const newFactory: OutputType = {
 			type: 'factory',
-			factory: (a, k) => OutputData.createSingleP2PKData({ pubkey: 'testKey' }, a, k.id),
+			factory: (a, k) => OutputData.createSingleP2PKData({ pubkey: testPk }, a, k.id),
 		};
 		const newProofs = await wallet.receive(
 			{ proofs: unlockedProofs.send, mint: mintUrl, unit: wallet.unit },
@@ -804,7 +805,7 @@ describe('Custom Outputs', () => {
 			newFactory,
 		);
 		// We expect all received proofs to be locked using newFactory
-		expectNUT10SecretDataToEqual(newProofs, 'testKey');
+		expectNUT10SecretDataToEqual(newProofs, testPk);
 	});
 	test('Manual Factory Mint', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
@@ -813,13 +814,14 @@ describe('Custom Outputs', () => {
 			}
 			return inner;
 		}
-		const manualFactory: OutputType = { type: 'factory', factory: createFactory('mintTest') };
+		const mintPk = '02' + 'cd'.repeat(32);
+		const manualFactory: OutputType = { type: 'factory', factory: createFactory(mintPk) };
 		const wallet = new Wallet(mintUrl);
 		await wallet.loadMint();
 		const quote = await wallet.createMintQuoteBolt11(21);
 		await untilMintQuotePaid(wallet, quote);
 		const proofs = await wallet.mintProofsBolt11(21, quote.quote, {}, manualFactory);
-		expectNUT10SecretDataToEqual(proofs, 'mintTest');
+		expectNUT10SecretDataToEqual(proofs, mintPk);
 	});
 	test('Manual Factory Send', async () => {
 		function createFactory(pubkey: string): OutputDataFactory {
@@ -833,18 +835,20 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuoteBolt11(21);
 		await untilMintQuotePaid(wallet, quote);
 		const proofs = await wallet.mintProofsBolt11(21, quote.quote);
+		const sendPk = '02' + 'ee'.repeat(32);
+		const keepPk = '02' + 'ff'.repeat(32);
 		const amount = sumProofs(proofs).subtract(wallet.getFeesForProofs(proofs));
 		const { send, keep } = await wallet.send(
 			amount,
 			proofs,
 			{},
 			{
-				send: { type: 'factory', factory: createFactory('send') },
-				keep: { type: 'factory', factory: createFactory('keep') },
+				send: { type: 'factory', factory: createFactory(sendPk) },
+				keep: { type: 'factory', factory: createFactory(keepPk) },
 			},
 		);
-		expectNUT10SecretDataToEqual(send, 'send');
-		expectNUT10SecretDataToEqual(keep, 'keep');
+		expectNUT10SecretDataToEqual(send, sendPk);
+		expectNUT10SecretDataToEqual(keep, keepPk);
 	});
 	test('Manual BlindingData', async () => {
 		const wallet = new Wallet(mintUrl);
@@ -853,8 +857,10 @@ describe('Custom Outputs', () => {
 		const quote = await wallet.createMintQuoteBolt11(40);
 		await untilMintQuotePaid(wallet, quote);
 		const proofs = await wallet.mintProofsBolt11(40, quote.quote);
-		const data1 = OutputData.createP2PKData({ pubkey: 'key1' }, 10, keys);
-		const data2 = OutputData.createP2PKData({ pubkey: 'key2' }, 10, keys);
+		const pk1 = '02' + 'aa'.repeat(32);
+		const pk2 = '02' + 'bb'.repeat(32);
+		const data1 = OutputData.createP2PKData({ pubkey: pk1 }, 10, keys);
+		const data2 = OutputData.createP2PKData({ pubkey: pk2 }, 10, keys);
 		const customConfig: OutputConfig = {
 			keep: wallet.defaultOutputType(),
 			send: { type: 'custom', data: [...data1, ...data2] },
@@ -862,8 +868,8 @@ describe('Custom Outputs', () => {
 		const { send } = await wallet.send(20, proofs, {}, customConfig);
 		const key1Sends = send.slice(0, data1.length);
 		const key2Sends = send.slice(data1.length);
-		expectNUT10SecretDataToEqual(key1Sends, 'key1');
-		expectNUT10SecretDataToEqual(key2Sends, 'key2');
+		expectNUT10SecretDataToEqual(key1Sends, pk1);
+		expectNUT10SecretDataToEqual(key2Sends, pk2);
 	});
 });
 describe('Keep Vector and Reordering', () => {
