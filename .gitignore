@@ -1,4 +1,5 @@
 coverage
+test-results
 lib
 docs
 dist-scripts/
