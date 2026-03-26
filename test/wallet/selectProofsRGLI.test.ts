@@ -107,6 +107,23 @@ describe('selectProofsRGLI, focused unit tests', () => {
 		expect(calls.info).toHaveBeenCalled(); // covers the info log at the end
 	});
 
+	test('local improvement swaps in a better proof and re-inserts the replaced proof in sorted order', () => {
+		const proofs: Proof[] = [
+			{ id: 'A', amount: 4n, secret: 's4', C: 'C4' },
+			{ id: 'A', amount: 5n, secret: 's5', C: 'C5' },
+			{ id: 'A', amount: 6n, secret: 's6', C: 'C6' },
+		];
+		const kc = keychainStub({ A: 0 });
+		const randomValues = [0.4, 0.9, 0.9];
+		let index = 0;
+		vi.spyOn(Math, 'random').mockImplementation(() => randomValues[index++] ?? 0.9);
+
+		const res = selectProofsRGLI(proofs as any, 9, kc, false, false);
+
+		expect(res.send.map((p) => Number(p.amount)).sort((a, b) => a - b)).toEqual([4, 5]);
+		expect(res.keep.map((p) => Number(p.amount))).toEqual([6]);
+	});
+
 	test('timeout in exact match throws on time budget exceeded, using module mock and dynamic import', async () => {
 		vi.mock('../../src/logger', async () => {
 			const actual = await vi.importActual<typeof import('../../src/logger')>('../../src/logger');
