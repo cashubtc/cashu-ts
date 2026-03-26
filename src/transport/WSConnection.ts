@@ -12,29 +12,6 @@ interface RpcListener {
 type OnOpenSuccess = () => void;
 type OnOpenError = (err: Error) => void;
 
-export class ConnectionManager {
-	private static instance: ConnectionManager;
-	private connectionMap: Map<string, WSConnection> = new Map();
-
-	static getInstance() {
-		if (!ConnectionManager.instance) {
-			ConnectionManager.instance = new ConnectionManager();
-		}
-		return ConnectionManager.instance;
-	}
-
-	getConnection(url: string, logger?: Logger): WSConnection {
-		const existing = this.connectionMap.get(url);
-		if (existing) {
-			if (logger) existing.setLogger(logger);
-			return existing;
-		}
-		const newConn = new WSConnection(url, logger);
-		this.connectionMap.set(url, newConn);
-		return newConn;
-	}
-}
-
 export class WSConnection {
 	public readonly url: URL;
 	private readonly _WS: typeof WebSocket;

@@ -13,8 +13,7 @@ import type {
 } from './types';
 import type { GetKeysResponse, GetKeysetsResponse } from '../model/types/keyset';
 import request, {
-	ConnectionManager,
-	type WSConnection,
+	WSConnection,
 	setRequestLogger,
 	type RequestFn,
 	type RequestOptions,
@@ -745,7 +744,7 @@ class Mint {
 			const wsUrl = mintUrl.toString();
 
 			if (!this.ws) {
-				this.ws = ConnectionManager.getInstance().getConnection(wsUrl, this._logger);
+				this.ws = new WSConnection(wsUrl, this._logger);
 			}
 
 			await this.ws.ensureConnection();
