@@ -5,6 +5,10 @@ inputs:
     description: 'Container name used for logs and inspect'
     required: false
     default: 'mint'
+  upload_coverage:
+    description: 'Upload integration coverage to Codecov'
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -45,6 +49,14 @@ runs:
     - name: Run integration tests
       shell: bash
       run: npm run test-integration
+
+    - name: Upload integration coverage to Codecov
+      if: ${{ inputs.upload_coverage == 'true' }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ env.CODECOV_TOKEN }}
+        flags: integration
+        name: integration-cdk-stable
 
     - name: Dump mint logs on failure
       if: ${{ failure() }}
