@@ -52,8 +52,11 @@ jobs:
 
       - name: Test CDK stable
         uses: ./.github/actions/integration-against-mint
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           container_name: ${{ steps.start_stable.outputs.name }}
+          upload_coverage: 'true'
 
       - name: Stop CDK stable
         run: |
