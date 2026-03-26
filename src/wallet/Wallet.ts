@@ -151,9 +151,11 @@ class Wallet {
 	 * Create a wallet for a given mint and unit. Call `loadMint` before use.
 	 *
 	 * Binding, if `options.keysetId` is omitted, the wallet binds to the cheapest active keyset for
-	 * this unit during `loadMint`. The keychain only loads keysets for this unit.
+	 * this unit during `loadMint`.
 	 *
-	 * Caching, to preload, provide both `keysets` and `keys`, otherwise the cache is ignored.
+	 * Caching, preload mint info and keychain data by calling `loadMintFromCache` after construction.
+	 *
+	 * The keychain stores all loaded keysets and filters query results by the wallet unit.
 	 *
 	 * Deterministic secrets, pass `bip39seed` and optionally `secretsPolicy`. Deterministic outputs
 	 * reserve counters from `counterSource`, or an ephemeral in memory source if not supplied.
@@ -162,9 +164,6 @@ class Wallet {
 	 * Splitting, `denominationTarget` guides proof splits, default is 3. Override coin selection with
 	 * `selectProofs` if needed. Logging defaults to a null logger.
 	 *
-	 * @remarks
-	 * The options.keys, options.keysets, options.mintInfo options are deprecated. Use
-	 * wallet.loadMintFromCache() after init to load cached mint data.
 	 * @param mint Mint instance or URL.
 	 * @param options Optional settings.
 	 * @param options.unit Wallet unit, default 'sat'.
@@ -175,9 +174,6 @@ class Wallet {
 	 *   precedence over counterInit. Use when you need persistence across processes or devices.
 	 * @param options.counterInit Seed values for the built-in EphemeralCounterSource. Ignored if
 	 *   counterSource is also provided.
-	 * @param options.keys DEPRECATED: Use `wallet.loadMintFromCache` after init.
-	 * @param options.keysets DEPRECATED: Use `wallet.loadMintFromCache` after init.
-	 * @param options.mintInfo DEPRECATED: Use `wallet.loadMintFromCache` after init.
 	 * @param options.denominationTarget Target proofs per denomination, default 3.
 	 * @param options.selectProofs Custom proof selection function.
 	 * @param options.logger Logger instance, default null logger.

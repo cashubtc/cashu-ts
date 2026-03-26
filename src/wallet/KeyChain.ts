@@ -285,10 +285,8 @@ export class KeyChain {
 	}
 
 	/**
-	 * Returns all the keys in this KeyChain.
+	 * Returns `MintKeys` DTOs for this KeyChain's unit where keys are available.
 	 *
-	 * @remarks
-	 * This mirrors the old `wallet.getAllKeys()` behaviour and is the preferred replacement in v3.
 	 * @returns Array of MintKeys objects.
 	 * @throws If uninitialized.
 	 */
