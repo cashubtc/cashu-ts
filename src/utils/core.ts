@@ -166,7 +166,7 @@ export function getKeysetAmounts(keyset: Keys, order: 'asc' | 'desc' = 'desc'): 
 function getKeysetAmountsAsAmount(keyset: Keys, order: 'asc' | 'desc'): Amount[] {
 	const amounts = Object.keys(keyset).map((k: string) => Amount.from(k));
 	amounts.sort((a, b) => (order === 'desc' ? b.compareTo(a) : a.compareTo(b)));
-	return amounts; // always array
+	return amounts;
 }
 
 /**
@@ -189,31 +189,28 @@ function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
 }
 
 /**
- * Converts a hex string to a number.
- *
- * @param hex To convert to number.
- * @returns Number.
+ * Converts a hex string to a bigint scalar. Returns `0n` for empty/falsy input.
  */
 export function hexToNumber(hex: string): bigint {
-	return BigInt(`0x${hex}`);
+	return hex ? BigInt(`0x${hex}`) : 0n;
 }
 
 /**
- * Converts a number to a hex string of 64 characters.
- *
- * @param number (bigint) to conver to hex.
- * @returns Hex string start-padded to 64 characters.
+ * Converts a bigint scalar to a zero-padded 64-character hex string (32 bytes).
  */
-export function numberToHexPadded64(number: bigint): string {
-	return number.toString(16).padStart(64, '0');
-}
-
-export function isValidHex(str: string) {
-	return /^[a-f0-9]*$/i.test(str);
+export function numberToHexPadded64(scalar: bigint): string {
+	return scalar.toString(16).padStart(64, '0');
 }
 
 /**
- * Checks wether a proof or a list of proofs contains a non-hex id.
+ * Returns `true` if the string contains only hexadecimal characters (case-insensitive).
+ */
+export function isValidHex(str: string) {
+	return /^[a-f0-9]+$/i.test(str);
+}
+
+/**
+ * Checks whether a proof or a list of proofs contains a non-hex id.
  *
  * @param p Proof or list of proofs.
  * @returns Boolean.
@@ -225,7 +222,9 @@ export function hasNonHexId(p: Proof | Proof[]) {
 	return !isValidHex(p.id);
 }
 
-//used for json serialization
+/**
+ * `JSON.stringify` replacer that converts `bigint` values to strings.
+ */
 export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
@@ -268,10 +267,8 @@ function convertToShortKeysetId(proofs: Proof[]) {
 }
 
 /**
- * Helper function to encode a cashu token (defaults to v4 if keyset id allows it)
- *
- * @param token
- * @param [opts]
+ * Encodes a {@link Token} as a cashu token string. Defaults to v4 (CBOR) unless the proofs contain
+ * non-hex keyset ids.
  */
 export function getEncodedToken(
 	token: Token,
@@ -288,6 +285,9 @@ export function getEncodedToken(
 	return getEncodedTokenV4(token, opts?.removeDleq);
 }
 
+/**
+ * Encodes a {@link Token} as a v4 CBOR cashu token string (`cashuB…`).
+ */
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 	let proofs = token.proofs;
 	if (removeDleq) {
@@ -421,17 +421,11 @@ export function getTokenMetadata(token: string): TokenMetadata {
 		mint: tokenObj.mint,
 		amount: sumProofs(tokenObj.proofs),
 		...(tokenObj.memo && { memo: tokenObj.memo }),
-		incompleteProofs: tokenObj.proofs.map((p) => ({
-			secret: p.secret,
-			C: p.C,
-			amount: p.amount,
-			...(p.dleq && {
-				dleq: p.dleq,
-			}),
-			...(p.witness && {
-				witness: p.witness,
-			}),
-		})),
+		incompleteProofs: tokenObj.proofs.map((p) => {
+			const { id, ...rest } = p;
+			void id;
+			return rest;
+		}),
 	};
 }
 
@@ -510,13 +504,11 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
 
 	switch (versionByte) {
 		case 0: {
-			const pubkeysConcat = Object.entries(keys)
-				.sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
-				.map(([, pubKey]) => hexToBytes(pubKey))
-				.reduce(
-					(prev: Uint8Array, curr: Uint8Array) => mergeUInt8Arrays(prev, curr),
-					new Uint8Array(),
-				);
+			const pubkeysConcat = mergeUInt8Arrays(
+				...Object.entries(keys)
+					.sort(([amountA], [amountB]) => Amount.from(amountA).compareTo(amountB))
+					.map(([, pubKey]) => hexToBytes(pubKey)),
+			);
 			const hash = sha256(pubkeysConcat);
 			const hashHex = Bytes.toHex(hash).slice(0, 14);
 			return '00' + hashHex;
@@ -530,6 +522,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
 			);
 			let preimage = sortedEntries.map(([amount, pubkey]) => `${amount}:${pubkey}`).join(',');
 			preimage += `|unit:${unit}`;
+			// Per NUT-02: input_fee_ppk and expiry must be specified AND non-zero (truthy)
 			if (input_fee_ppk) {
 				preimage += `|input_fee_ppk:${input_fee_ppk}`;
 			}
@@ -545,22 +538,37 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
 	}
 }
 
-export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array {
-	// sum of individual array lengths
-	const mergedArray = new Uint8Array(a1.length + a2.length);
-	mergedArray.set(a1);
-	mergedArray.set(a2, a1.length);
-	return mergedArray;
+/**
+ * Concatenates one or more `Uint8Array` buffers into a single array.
+ */
+export function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
+	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
+	const merged = new Uint8Array(totalLength);
+	let offset = 0;
+	for (const arr of arrays) {
+		merged.set(arr, offset);
+		offset += arr.length;
+	}
+	return merged;
 }
 
+/**
+ * Returns a copy of `proofs` sorted by keyset id (lexicographic).
+ */
 export function sortProofsById(proofs: Proof[]) {
-	return proofs.sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
+	return [...proofs].sort((a: Proof, b: Proof) => a.id.localeCompare(b.id));
 }
 
+/**
+ * Type guard: returns `true` if `v` is a non-null object.
+ */
 export function isObj(v: unknown): v is object {
-	return typeof v === 'object';
+	return v != null && typeof v === 'object';
 }
 
+/**
+ * Throws if the mint response contains an `error` or `detail` message.
+ */
 export function checkResponse(data: { error?: string; detail?: string }) {
 	if (!isObj(data)) return;
 	if ('error' in data && data.error) {
@@ -571,14 +579,23 @@ export function checkResponse(data: { error?: string; detail?: string }) {
 	}
 }
 
+/**
+ * Joins URL path segments, stripping leading/trailing slashes from each part.
+ */
 export function joinUrls(...parts: string[]): string {
 	return parts.map((part: string) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
 }
 
+/**
+ * Strips a trailing slash from a URL.
+ */
 export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
 }
 
+/**
+ * Sums the `amount` field of the given proofs.
+ */
 export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount {
 	return Amount.sum(proofs.map((proof) => proof.amount));
 }
@@ -599,85 +616,13 @@ export function normalizeProofAmounts(
 	return raw.map((p) => ({ ...p, amount: Amount.from(p.amount).toBigInt() }));
 }
 
+/**
+ * Decodes an encoded cashu payment request string into a {@link PaymentRequest}.
+ */
 export function decodePaymentRequest(paymentRequest: string) {
 	return PaymentRequest.fromEncodedRequest(paymentRequest);
 }
 
-export class MessageNode {
-	private _value: string;
-	private _next: MessageNode | null;
-
-	public get value(): string {
-		return this._value;
-	}
-	public set value(message: string) {
-		this._value = message;
-	}
-	public get next(): MessageNode | null {
-		return this._next;
-	}
-	public set next(node: MessageNode | null) {
-		this._next = node;
-	}
-
-	constructor(message: string) {
-		this._value = message;
-		this._next = null;
-	}
-}
-
-export class MessageQueue {
-	private _first: MessageNode | null;
-	private _last: MessageNode | null;
-
-	public get first(): MessageNode | null {
-		return this._first;
-	}
-	public set first(messageNode: MessageNode | null) {
-		this._first = messageNode;
-	}
-	public get last(): MessageNode | null {
-		return this._last;
-	}
-	public set last(messageNode: MessageNode | null) {
-		this._last = messageNode;
-	}
-	private _size: number;
-	public get size(): number {
-		return this._size;
-	}
-	public set size(v: number) {
-		this._size = v;
-	}
-
-	constructor() {
-		this._first = null;
-		this._last = null;
-		this._size = 0;
-	}
-	enqueue(message: string): boolean {
-		const newNode = new MessageNode(message);
-		if (this._size === 0 || !this._last) {
-			this._first = newNode;
-			this._last = newNode;
-		} else {
-			this._last.next = newNode;
-			this._last = newNode;
-		}
-		this._size++;
-		return true;
-	}
-	dequeue(): string | null {
-		if (this._size === 0 || !this._first) return null;
-
-		const prev = this._first;
-		this._first = prev.next;
-		prev.next = null;
-
-		this._size--;
-		return prev.value;
-	}
-}
 /**
  * Removes all traces of DLEQs from a list of proofs.
  *
@@ -685,9 +630,9 @@ export class MessageQueue {
  */
 export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
 	return proofs.map((p) => {
-		const newP = { ...p };
-		delete newP['dleq'];
-		return newP;
+		const { dleq, ...rest } = p;
+		void dleq;
+		return rest;
 	});
 }
 
@@ -700,6 +645,7 @@ export function stripDleq(proofs: Proof[]): Array<Omit<Proof, 'dleq'>> {
  * @returns Array of Proofs with full keyset IDs.
  */
 function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof[] {
+	const uniqueIds = [...new Set(keysetIds.map((id) => id.toLowerCase()))];
 	const newProofs: Proof[] = [];
 	for (const proof of proofs) {
 		let idBytes: Uint8Array;
@@ -714,11 +660,12 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 		if (idBytes[0] === 0x00) {
 			newProofs.push(proof);
 		} else if (idBytes[0] === 0x01) {
-			if (!keysetIds) {
+			if (!uniqueIds.length) {
 				throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
 			}
 			// Look for a match: prefix(keyset ID) == short ID
-			const matches = keysetIds.filter((keyset) => proof.id === keyset.slice(0, proof.id.length));
+			const shortId = proof.id.toLowerCase();
+			const matches = uniqueIds.filter((id) => shortId === id.slice(0, shortId.length));
 			if (matches.length > 1) {
 				throw new Error(`Short keyset ID ${proof.id} is ambiguous.`);
 			}
@@ -766,26 +713,21 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
 	);
 }
 
-function concatByteArrays(...arrays: Uint8Array[]): Uint8Array {
-	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
-	const byteArray = new Uint8Array(totalLength);
-	let pointer = 0;
-	for (let i = 0; i < arrays.length; i++) {
-		byteArray.set(arrays[i], pointer);
-		pointer = pointer + arrays[i].length;
-	}
-	return byteArray;
-}
-
+/**
+ * Encodes a {@link Token} as a raw binary token (`craw` + `B` + CBOR).
+ */
 export function getEncodedTokenBinary(token: Token): Uint8Array {
 	const utf8Encoder = new TextEncoder();
 	const template = templateFromToken(token);
 	const binaryTemplate = encodeCBOR(template);
 	const prefix = utf8Encoder.encode('craw');
 	const version = utf8Encoder.encode('B');
-	return concatByteArrays(prefix, version, binaryTemplate);
+	return mergeUInt8Arrays(prefix, version, binaryTemplate);
 }
 
+/**
+ * Decodes a raw binary token (`craw` + `B` + CBOR) into a {@link Token}.
+ */
 export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	const utfDecoder = new TextDecoder();
 	const prefix = utfDecoder.decode(bytes.slice(0, 4));
@@ -821,13 +763,17 @@ export function deepEqual<T>(a: T, b: T): boolean {
 }
 
 function removePrefix(token: string): string {
-	const uriPrefixes = ['web+cashu://', 'cashu://', 'cashu:', 'cashu'];
-	uriPrefixes.forEach((prefix: string) => {
-		if (!token.startsWith(prefix)) {
-			return;
+	// Strip optional URI scheme first, then the required "cashu" token prefix
+	const uriSchemes = ['web+cashu://', 'cashu://', 'cashu:'];
+	for (const scheme of uriSchemes) {
+		if (token.startsWith(scheme)) {
+			token = token.slice(scheme.length);
+			break;
 		}
-		token = token.slice(prefix.length);
-	});
+	}
+	if (token.startsWith('cashu')) {
+		token = token.slice('cashu'.length);
+	}
 	return token;
 }
 

@@ -308,6 +308,29 @@ const ksFee: Amount = wallet.getFeesForKeyset(3, keysetId);
 
 ---
 
+## `MessageQueue` and `MessageNode` moved
+
+`MessageQueue` and `MessageNode` are no longer exported from `@cashu/cashu-ts` utils. `MessageQueue` is now exported from the transport module (`src/transport/WSConnection.ts`). `MessageNode` is no longer part of the public API.
+
+If you were importing these classes directly:
+
+```ts
+// Before
+import { MessageQueue, MessageNode } from '@cashu/cashu-ts';
+
+// After — MessageQueue is available from the transport module
+import { MessageQueue } from '@cashu/cashu-ts/transport/WSConnection';
+// MessageNode is removed; use MessageQueue.enqueue/dequeue instead
+```
+
+---
+
+## `mergeUInt8Arrays` signature change
+
+`mergeUInt8Arrays(a1, a2)` now accepts variadic arguments: `mergeUInt8Arrays(...arrays)`. Existing two-argument calls continue to work unchanged; you can now also pass more than two arrays in a single call.
+
+---
+
 ## Crypto primitive renames
 
 The following low-level exports from `@cashu/cashu-ts` (re-exported from the crypto layer) have been renamed for clarity. The old names no longer exist.
