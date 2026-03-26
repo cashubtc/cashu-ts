@@ -32,6 +32,22 @@ function makeExternal(format: BuildFormat) {
 	return (id: string) => isDependencyImport(id);
 }
 
+const sourceCoverage = {
+	provider: 'v8' as const,
+	reporter: ['text', 'lcov'],
+	include: ['src/**/*.ts'],
+	exclude: [
+		'**/index.ts',
+		'**/*.config.*',
+		'commitlint.config.cjs',
+		'examples/**',
+		'scripts/**',
+		'test/**',
+	],
+	excludeAfterRemap: true,
+	all: false,
+};
+
 export default defineConfig(({ command }) => {
 	const format = resolveFormat(command);
 
@@ -72,6 +88,7 @@ export default defineConfig(({ command }) => {
 		test: {
 			reporters: ['default', 'junit'],
 			outputFile: { junit: 'test-results/junit.xml' },
+			coverage: sourceCoverage,
 			projects: [
 				{
 					test: {
@@ -85,11 +102,6 @@ export default defineConfig(({ command }) => {
 							'test/consumer/**/*.test.ts',
 							...configDefaults.exclude,
 						],
-						coverage: {
-							provider: 'v8',
-							reporter: ['text', 'lcov'],
-							include: ['src/**'],
-						},
 					},
 				},
 				{
@@ -110,11 +122,6 @@ export default defineConfig(({ command }) => {
 							'test/**/**.node.test.ts',
 							...configDefaults.exclude,
 						],
-						coverage: {
-							provider: 'v8',
-							reporter: ['text', 'lcov'],
-							include: ['src/**'],
-						},
 					},
 				},
 				{
@@ -124,11 +131,6 @@ export default defineConfig(({ command }) => {
 						environment: 'node',
 						include: ['test/integration.test.ts'],
 						exclude: [...configDefaults.exclude],
-						coverage: {
-							provider: 'v8',
-							reporter: ['text', 'lcov'],
-							include: ['src/**'],
-						},
 					},
 				},
 			],

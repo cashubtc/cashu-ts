@@ -239,8 +239,8 @@ into the `coverage/` directory.
 After the run you can open the HTML report locally (`coverage/index.html`) in
 your browser to inspect per-file metrics.
 
-CI also publishes code coverage; the project site hosts the latest report (see the
-README badge/link for the public report).
+CI uploads coverage to Codecov from the main test workflow, and the README badge/link
+points to the latest public report there.
 
 ### Test file naming convention
 
