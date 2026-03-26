@@ -70,6 +70,8 @@ export default defineConfig(({ command }) => {
 		],
 
 		test: {
+			reporters: ['default', 'junit'],
+			outputFile: { junit: 'test-results/junit.xml' },
 			projects: [
 				{
 					test: {
@@ -85,6 +87,7 @@ export default defineConfig(({ command }) => {
 						],
 						coverage: {
 							provider: 'v8',
+							reporter: ['text', 'lcov'],
 							include: ['test/**/*.test.ts'],
 							exclude: [
 								'test/{auth,integration}.test.ts',
@@ -114,6 +117,7 @@ export default defineConfig(({ command }) => {
 						],
 						coverage: {
 							provider: 'v8',
+							reporter: ['text', 'lcov'],
 							include: ['test/**/*.test.ts'],
 							exclude: [
 								'test/{auth,integration}.test.ts',
@@ -132,6 +136,7 @@ export default defineConfig(({ command }) => {
 						exclude: [...configDefaults.exclude],
 						coverage: {
 							provider: 'v8',
+							reporter: ['text', 'lcov'],
 							include: ['test/integration.test.ts'],
 							exclude: [...configDefaults.exclude],
 						},
