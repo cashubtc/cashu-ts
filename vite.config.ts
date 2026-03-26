@@ -88,12 +88,7 @@ export default defineConfig(({ command }) => {
 						coverage: {
 							provider: 'v8',
 							reporter: ['text', 'lcov'],
-							include: ['test/**/*.test.ts'],
-							exclude: [
-								'test/{auth,integration}.test.ts',
-								'test/consumer/**/*.test.ts',
-								'test/**/**.browser.test.ts',
-							],
+							include: ['src/**'],
 						},
 					},
 				},
@@ -118,12 +113,7 @@ export default defineConfig(({ command }) => {
 						coverage: {
 							provider: 'v8',
 							reporter: ['text', 'lcov'],
-							include: ['test/**/*.test.ts'],
-							exclude: [
-								'test/{auth,integration}.test.ts',
-								'test/consumer/**/*.test.ts',
-								'test/**.node.test.ts',
-							],
+							include: ['src/**'],
 						},
 					},
 				},
@@ -137,8 +127,7 @@ export default defineConfig(({ command }) => {
 						coverage: {
 							provider: 'v8',
 							reporter: ['text', 'lcov'],
-							include: ['test/integration.test.ts'],
-							exclude: [...configDefaults.exclude],
+							include: ['src/**'],
 						},
 					},
 				},
