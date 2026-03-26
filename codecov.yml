@@ -1,0 +1,8 @@
+ignore:
+  - 'coverage/**'
+  - 'docs-src/**'
+  - 'examples/**'
+  - 'scripts/**'
+  - 'test/**'
+  - 'commitlint.config.cjs'
+  - '*.config.*'
