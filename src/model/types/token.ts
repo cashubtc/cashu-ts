@@ -2,7 +2,10 @@ import { type Amount } from '../Amount';
 import { type Proof } from './proof';
 
 /**
- * A Cashu v4 token.
+ * A normalized Cashu token.
+ *
+ * @remarks
+ * Used for decoded v3 and v4 token payloads in the public API.
  */
 export type Token = {
 	/**

@@ -839,7 +839,7 @@ class Wallet {
 	 * ```typescript
 	 * const result = await wallet.receive(
 	 * 	token,
-	 * 	{ includeFees: true },
+	 * 	{ requireDleq: true },
 	 * 	{ type: 'deterministic', counter: 0 },
 	 * );
 	 * ```

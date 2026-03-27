@@ -3,10 +3,10 @@
 # Get token data
 
 ```typescript
-import { getDecodedToken } from '@cashu/cashu-ts';
+import { getTokenMetadata } from '@cashu/cashu-ts';
 try {
-	const decodedToken = getDecodedToken(token);
-	console.log(decodedToken); // { mint: "https://mint.0xchat.com", unit: "sat", proofs: [...] }
+	const tokenMetadata = getTokenMetadata(token);
+	console.log(tokenMetadata); // { mint: "https://mint.0xchat.com", unit: "sat", amount: 1n, ... }
 } catch (_) {
 	console.log('Invalid token');
 }
