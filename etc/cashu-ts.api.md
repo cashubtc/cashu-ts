@@ -111,7 +111,7 @@ export interface AuthProvider {
     setCAT(cat: string | undefined): void;
 }
 
-// @public (undocumented)
+// @public
 export function bigIntStringify<T>(_key: unknown, value: T): string | T;
 
 // @public
@@ -126,7 +126,7 @@ export type BlindSignature = {
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
-// @public (undocumented)
+// @public
 export function checkResponse(data: {
     error?: string;
     detail?: string;
@@ -244,7 +244,7 @@ export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
 // @public
 export function createSecret(kind: SecretKind, data: string, tags?: string[][]): string;
 
-// @public (undocumented)
+// @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
 // @public
@@ -312,7 +312,7 @@ export function getDataField(secret: Secret | string): string;
 // @public
 export function getDecodedToken(tokenString: string, keysetIds: readonly string[]): Token;
 
-// @public (undocumented)
+// @public
 export function getDecodedTokenBinary(bytes: Uint8Array): Token;
 
 // @public
@@ -321,13 +321,13 @@ export function getEncodedToken(token: Token, opts?: {
     removeDleq?: boolean;
 }): string;
 
-// @public (undocumented)
+// @public
 export function getEncodedTokenBinary(token: Token): Uint8Array;
 
 // @public
 export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string;
 
-// @public (undocumented)
+// @public
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
@@ -543,16 +543,16 @@ export function invoiceHasAmountInHRP(invoice: string): boolean;
 // @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isObj(v: unknown): v is object;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isValidHex(str: string): boolean;
 
-// @public (undocumented)
+// @public
 export function joinUrls(...parts: string[]): string;
 
 // @public (undocumented)
@@ -764,37 +764,8 @@ export type MeltRequest = {
     prefer_async?: boolean;
 } & Record<string, unknown>;
 
-// @public (undocumented)
-export function mergeUInt8Arrays(a1: Uint8Array, a2: Uint8Array): Uint8Array;
-
-// @public (undocumented)
-export class MessageNode {
-    constructor(message: string);
-    // (undocumented)
-    get next(): MessageNode | null;
-    set next(node: MessageNode | null);
-    // (undocumented)
-    get value(): string;
-    set value(message: string);
-}
-
-// @public (undocumented)
-export class MessageQueue {
-    constructor();
-    // (undocumented)
-    dequeue(): string | null;
-    // (undocumented)
-    enqueue(message: string): boolean;
-    // (undocumented)
-    get first(): MessageNode | null;
-    set first(messageNode: MessageNode | null);
-    // (undocumented)
-    get last(): MessageNode | null;
-    set last(messageNode: MessageNode | null);
-    // (undocumented)
-    get size(): number;
-    set size(v: number);
-}
+// @public
+export function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array;
 
 // @public
 export class Mint {
@@ -1130,7 +1101,7 @@ export function normalizeProofAmounts(raw: Array<Omit<Proof, 'amount'> & {
 }>): Proof[];
 
 // @public
-export function numberToHexPadded64(number: bigint): string;
+export function numberToHexPadded64(scalar: bigint): string;
 
 // @public
 export type NUT10Option = {
@@ -1547,7 +1518,7 @@ export type RestoreConfig = {
 // @public (undocumented)
 export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
 
-// @public (undocumented)
+// @public
 export function sanitizeUrl(url: string): string;
 
 // @public
@@ -1724,7 +1695,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
 // @public
 export function signP2PKProofs(proofs: Proof[], privateKey: PrivKey | PrivKey[], logger?: Logger, message?: string): Proof[];
 
-// @public (undocumented)
+// @public
 export function sortProofsById(proofs: Proof[]): Proof[];
 
 // @public
@@ -1741,7 +1712,7 @@ export type SubscribeOpts = {
 // @public (undocumented)
 export type SubscriptionCanceller = () => void;
 
-// @public (undocumented)
+// @public
 export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount;
 
 // @public

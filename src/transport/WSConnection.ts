@@ -1,7 +1,44 @@
-import { MessageQueue } from '../utils';
 import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
 import { getWebSocketImpl } from './ws';
 import { type Logger, NULL_LOGGER } from '../logger';
+
+class MessageNode {
+	value: string;
+	next: MessageNode | null = null;
+	constructor(message: string) {
+		this.value = message;
+	}
+}
+
+/**
+ * Simple FIFO string queue backed by a singly-linked list.
+ */
+export class MessageQueue {
+	private _first: MessageNode | null = null;
+	private _last: MessageNode | null = null;
+	size = 0;
+
+	enqueue(message: string): boolean {
+		const node = new MessageNode(message);
+		if (this._last) {
+			this._last.next = node;
+		} else {
+			this._first = node;
+		}
+		this._last = node;
+		this.size++;
+		return true;
+	}
+
+	dequeue(): string | null {
+		if (!this._first) return null;
+		const node = this._first;
+		this._first = node.next;
+		if (!this._first) this._last = null;
+		this.size--;
+		return node.value;
+	}
+}
 
 // Internal interface for RPC listeners
 interface RpcListener {
