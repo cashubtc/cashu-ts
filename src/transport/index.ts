@@ -4,4 +4,4 @@ export type { RequestFn, RequestArgs, RequestOptions } from './request';
 
 export { injectWebSocketImpl } from './ws';
 
-export { WSConnection, ConnectionManager } from './WSConnection';
+export { WSConnection } from './WSConnection';
