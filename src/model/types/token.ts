@@ -2,7 +2,7 @@ import { type Amount } from '../Amount';
 import { type Proof } from './proof';
 
 /**
- * A Cashu token.
+ * A Cashu v4 token.
  */
 export type Token = {
 	/**
@@ -24,7 +24,7 @@ export type Token = {
 };
 
 /**
- * A Cashu token.
+ * A Cashu v3 token.
  */
 export type DeprecatedToken = {
 	/**
@@ -42,7 +42,7 @@ export type DeprecatedToken = {
 };
 
 /**
- * TokenEntry that stores proofs and mints.
+ * TokenEntry that stores proofs and mints for v3 token.
  */
 export type TokenEntry = {
 	/**

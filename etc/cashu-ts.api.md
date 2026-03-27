@@ -317,15 +317,11 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token;
 
 // @public
 export function getEncodedToken(token: Token, opts?: {
-    version?: 3 | 4;
     removeDleq?: boolean;
 }): string;
 
 // @public
 export function getEncodedTokenBinary(token: Token): Uint8Array;
-
-// @public
-export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string;
 
 // @public
 export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
@@ -1470,7 +1466,7 @@ export type RawTransport = {
 
 // @public
 export class ReceiveBuilder {
-    constructor(wallet: Wallet, token: Token | string);
+    constructor(wallet: Wallet, token: Token | string | Proof[]);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
     asFactory(factory: OutputDataFactory, denoms?: AmountLike[]): this;
@@ -1899,9 +1895,9 @@ export class Wallet {
     readonly ops: WalletOps;
     prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
-    prepareSwapToReceive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
+    prepareSwapToReceive(token: Token | string | Proof[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: Proof[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
-    receive(token: Token | string, config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
+    receive(token: Token | string | Proof[], config?: ReceiveConfig, outputType?: OutputType): Promise<Proof[]>;
     restore(start: number, count: number, config?: RestoreConfig): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
@@ -1976,7 +1972,7 @@ export class WalletOps {
     // (undocumented)
     mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
     // (undocumented)
-    receive(token: Token | string): ReceiveBuilder;
+    receive(token: Token | string | Proof[]): ReceiveBuilder;
     // (undocumented)
     send(amount: AmountLike, proofs: Proof[]): SendBuilder;
 }

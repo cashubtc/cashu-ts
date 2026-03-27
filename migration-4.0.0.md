@@ -456,6 +456,38 @@ Previously, `cache.keysets` only contained keysets for the wallet's unit. It now
 
 ---
 
+## `getEncodedTokenV3` removed
+
+V3 token encoding (`cashuA…`) is no longer supported. `getEncodedTokenV3` has been removed and the `version` option on `getEncodedToken` has been removed entirely. V3 token **decoding** is unaffected — `getDecodedToken` still handles `cashuA` tokens.
+
+```ts
+// Before
+import { getEncodedTokenV3, getEncodedToken } from '@cashu/cashu-ts';
+
+getEncodedTokenV3(token);
+getEncodedToken(token, { version: 3 });
+
+// After — encoding proofs with legacy base64 keyset IDs throws:
+// "Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first."
+getEncodedToken({ mint, proofs: proofsWithBase64KeysetIds });
+```
+
+To resolve this, swap the proofs at the mint. `wallet.receive()` now accepts `Proof[]` directly, so no token string is needed:
+
+```ts
+const freshProofs = await wallet.receive(legacyProofs);
+getEncodedToken({ mint, proofs: freshProofs }); // encodes as cashuB (v4)
+```
+
+If you have a stored `cashuA` string, you can pass that instead — v3 decoding still works:
+
+```ts
+const freshProofs = await wallet.receive('cashuAeyJ0b2tlbi...');
+getEncodedToken({ mint, proofs: freshProofs }); // encodes as cashuB (v4)
+```
+
+---
+
 ## Deprecated v3 APIs now removed
 
 These APIs were already deprecated in v3. In v4 they have been removed:

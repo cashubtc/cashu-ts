@@ -6,8 +6,9 @@ dist-scripts/
 node_modules
 temp
 test/__screenshots__
+test-results
 .DS_Store
 *.tgz
-
+.claude
 .githooks
 .husky/_

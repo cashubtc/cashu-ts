@@ -18,6 +18,79 @@ describe('receive', () => {
 	const tokenInput =
 		'cashuBo2FtdWh0dHA6Ly9sb2NhbGhvc3Q6MzMzOGF1Y3NhdGF0gaJhaUgAvQM1Wd4n0GFwgaNhYQFhc3hAMDFmOTEwNmQxNWMwMWI5NDBjOThlYTdlOTY4YTA2ZTNhZjY5NjE4ZWRiOGJlOGU1MWI1MTJkMDhlOTA3OTIxNmFjWCEC-F3YSw-EGENmy2kUYQavfA8m8u4K0oej5fqFJSi7Kd8';
 
+	test('receive Proof[] - happy path', async () => {
+		server.use(
+			http.post(mintUrl + '/v1/swap', () => {
+				return HttpResponse.json({
+					signatures: [
+						{
+							id: '00bd033559de27d0',
+							amount: 1,
+							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+						},
+					],
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const proofs = await wallet.receive([
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+				C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
+			},
+		]);
+		expect(proofs).toHaveLength(1);
+		expect(proofs[0].id).toBe('00bd033559de27d0');
+	});
+
+	test('receive Proof[] - unknown keyset ID throws', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		await expect(
+			wallet.receive([
+				{
+					id: 'deadbeefdeadbeef',
+					amount: 1n,
+					secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+					C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
+				},
+			]),
+		).rejects.toThrow('Proof has unrecognised keyset');
+	});
+
+	test('receive Proof[] - wrong-unit keyset ID throws', async () => {
+		const usdKeysetId = '009a1f293253e41f';
+		server.use(
+			http.get(mintUrl + '/v1/keysets', () =>
+				HttpResponse.json({
+					keysets: [
+						{ id: '00bd033559de27d0', unit: 'sat', active: true, input_fee_ppk: 0 },
+						{ id: usdKeysetId, unit: 'usd', active: true, input_fee_ppk: 0 },
+					],
+				}),
+			),
+		);
+		const wallet = new Wallet(mint, { unit }); // sat wallet
+		await wallet.loadMint();
+
+		// usdKeysetId is in the chain but belongs to usd — sat wallet should reject it
+		await expect(
+			wallet.receive([
+				{
+					id: usdKeysetId,
+					amount: 1n,
+					secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+					C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
+				},
+			]),
+		).rejects.toThrow('Proof has unrecognised keyset');
+	});
+
 	test('test receive token from wrong mint', async () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();

@@ -2,6 +2,8 @@
 
 # Receive
 
+`wallet.ops.receive(...)` accepts an encoded token string, a decoded `Token`, or raw `Proof[]`.
+
 ## 1) Default receive
 
 ```ts
@@ -10,6 +12,13 @@ const proofs = await wallet.ops.receive(token).run();
 // Or use prepare() instead of run() to do a dry run preview first
 const preview = await wallet.ops.receive(token).prepare();
 const { keep } = await wallet.completeSwap(preview);
+```
+
+You can also receive an array of raw proofs directly:
+
+```ts
+const oldProofs: Proof[] = [proof1, proof2, proof3, ...];
+const freshProofs = await wallet.ops.receive(oldProofs).run();
 ```
 
 ## 2) Deterministic receive with DLEQ requirement
