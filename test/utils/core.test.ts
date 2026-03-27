@@ -138,6 +138,25 @@ describe('test splitAmount zero handling', () => {
 	});
 });
 
+describe('test bigint stringify', () => {
+	test('JSON.stringify replacer converts bigint values to strings', () => {
+		const payload = {
+			amount: 123n,
+			nested: {
+				total: 456n,
+				label: 'ok',
+			},
+			list: [1n, 'two', 3],
+		};
+
+		const encoded = JSON.stringify(payload, utils.bigIntStringify);
+
+		expect(encoded).toBe(
+			'{"amount":"123","nested":{"total":"456","label":"ok"},"list":["1","two",3]}',
+		);
+	});
+});
+
 test('exact custom split preserves order', () => {
 	const chunks = utils.splitAmount(32, keys, [8, 4, 8, 2, 8, 2]);
 	expect(chunks.map((a) => a.toNumber())).toStrictEqual([8, 4, 8, 2, 8, 2]);
