@@ -70,7 +70,7 @@ export class AuthManager implements AuthProvider {
     ensure(minTokens: number): Promise<void>;
     ensureCAT(minValidSecs?: number): Promise<string | undefined>;
     exportPool(): Proof[];
-    getBlindAuthToken({ method, path, }: {
+    getBlindAuthToken(input: {
         method: 'GET' | 'POST';
         path: string;
     }): Promise<string>;

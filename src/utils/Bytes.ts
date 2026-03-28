@@ -1,3 +1,18 @@
+type Base64Encoding = 'base64';
+
+interface BufferLike {
+	toString(encoding: Base64Encoding): string;
+}
+
+interface BufferConstructorLike {
+	from(data: Uint8Array): BufferLike;
+	from(data: string, encoding: Base64Encoding): Uint8Array;
+}
+
+function getBufferConstructor(): BufferConstructorLike | undefined {
+	return (globalThis as typeof globalThis & { Buffer?: BufferConstructorLike }).Buffer;
+}
+
 export class Bytes {
 	static fromHex(hex: string): Uint8Array {
 		hex = hex.trim();
@@ -56,8 +71,9 @@ export class Bytes {
 	}
 
 	static toBase64(bytes: Uint8Array): string {
-		if (typeof Buffer !== 'undefined') {
-			return Buffer.from(bytes).toString('base64');
+		const bufferConstructor = getBufferConstructor();
+		if (bufferConstructor) {
+			return bufferConstructor.from(bytes).toString('base64');
 		}
 		// preventing stack overflow by chunking
 		if (bytes.length > 32768) {
@@ -78,8 +94,9 @@ export class Bytes {
 		while (normalizedBase64.length % 4) {
 			normalizedBase64 += '=';
 		}
-		if (typeof Buffer !== 'undefined') {
-			return new Uint8Array(Buffer.from(normalizedBase64, 'base64'));
+		const bufferConstructor = getBufferConstructor();
+		if (bufferConstructor) {
+			return new Uint8Array(bufferConstructor.from(normalizedBase64, 'base64'));
 		}
 		return new Uint8Array([...atob(normalizedBase64)].map((c) => c.charCodeAt(0)));
 	}

@@ -1,6 +1,6 @@
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
 	createP2PKsecret,
 	signP2PKProof,
@@ -36,6 +36,11 @@ import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
 
 const PRIVKEY = schnorr.utils.randomSecretKey();
 const PUBKEY = bytesToHex(getPubKeyFromPrivKey(PRIVKEY));
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
+
 describe('test create p2pk secret', () => {
 	test('create from key', async () => {
 		const secret = createP2PKsecret(PUBKEY);
