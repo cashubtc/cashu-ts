@@ -1,12 +1,7 @@
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import {
-	encodeBase64ToJson,
-	encodeBase64toUint8,
-	encodeJsonToBase64,
-	encodeUint8toBase64Url,
-} from './base64';
+import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
 import { PaymentRequest } from '../model/PaymentRequest';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -229,32 +224,6 @@ export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
 }
 
-/**
- * Helper function to encode a v3 cashu token.
- *
- * @param token To encode.
- * @returns Encoded token.
- */
-export function getEncodedTokenV3(token: Token, removeDleq?: boolean): string {
-	let proofs = token.proofs;
-	if (!hasNonHexId(proofs)) {
-		proofs = convertToShortKeysetId(proofs);
-	}
-	if (removeDleq) {
-		proofs = stripDleq(proofs);
-	}
-	const v3TokenObj: DeprecatedToken = { token: [{ mint: token.mint, proofs }] };
-	if (token.unit) {
-		v3TokenObj.unit = token.unit;
-	}
-	if (token.memo) {
-		v3TokenObj.memo = token.memo;
-	}
-	const prefix = 'cashu';
-	const version = 'A';
-	return prefix + version + encodeJsonToBase64(v3TokenObj);
-}
-
 /*
  * Convert a keyset ID into short form
  */
@@ -267,20 +236,13 @@ function convertToShortKeysetId(proofs: Proof[]) {
 }
 
 /**
- * Encodes a {@link Token} as a cashu token string. Defaults to v4 (CBOR) unless the proofs contain
- * non-hex keyset ids.
+ * Encodes a {@link Token} as a cashu token string.
  */
-export function getEncodedToken(
-	token: Token,
-	opts?: { version?: 3 | 4; removeDleq?: boolean },
-): string {
-	// Find out if it's a base64 keyset
-	const nonHex = hasNonHexId(token.proofs);
-	if (nonHex || opts?.version === 3) {
-		if (opts?.version === 4) {
-			throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
-		}
-		return getEncodedTokenV3(token, opts?.removeDleq);
+export function getEncodedToken(token: Token, opts?: { removeDleq?: boolean }): string {
+	if (hasNonHexId(token.proofs)) {
+		throw new Error(
+			'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
+		);
 	}
 	return getEncodedTokenV4(token, opts?.removeDleq);
 }

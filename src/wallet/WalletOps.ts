@@ -42,7 +42,7 @@ export class WalletOps {
 	send(amount: AmountLike, proofs: Proof[]) {
 		return new SendBuilder(this.wallet, amount, proofs);
 	}
-	receive(token: Token | string) {
+	receive(token: Token | string | Proof[]) {
 		return new ReceiveBuilder(this.wallet, token);
 	}
 	/**
@@ -350,7 +350,7 @@ export class SendBuilder {
  * @example
  *
  *     const proofs = await wallet.ops
- *     	.receive(token)
+ *     	.receive(token) // or array of proofs
  *     	.asDeterministic() // counter 0 auto reserves
  *     	.requireDleq(true)
  *     	.run();
@@ -361,7 +361,7 @@ export class ReceiveBuilder {
 
 	constructor(
 		private wallet: Wallet,
-		private token: Token | string,
+		private token: Token | string | Proof[],
 	) {}
 
 	/**

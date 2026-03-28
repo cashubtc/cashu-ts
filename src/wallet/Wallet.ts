@@ -839,18 +839,18 @@ class Wallet {
 	 * ```typescript
 	 * const result = await wallet.receive(
 	 * 	token,
-	 * 	{ includeFees: true },
+	 * 	{ requireDleq: true },
 	 * 	{ type: 'deterministic', counter: 0 },
 	 * );
 	 * ```
 	 *
-	 * @param token Token string or decoded token.
+	 * @param token Token string, decoded token, or raw proof array.
 	 * @param config Optional receive config.
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns Newly minted proofs.
 	 */
 	async receive(
-		token: Token | string,
+		token: Token | string | Proof[],
 		config?: ReceiveConfig,
 		outputType?: OutputType,
 	): Promise<Proof[]> {
@@ -877,39 +877,54 @@ class Wallet {
 	 * const { keep } = await wallet.completeSwap(txn);
 	 * ```
 	 *
-	 * @param token Token string or decoded token.
+	 * @param token Token string, decoded token, or raw proof array.
 	 * @param config Optional receive config.
 	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
 	 * @returns SwapPreview with metadata for swap transaction.
 	 */
 	async prepareSwapToReceive(
-		token: Token | string,
+		token: Token | string | Proof[],
 		config?: ReceiveConfig,
 		outputType?: OutputType,
 	): Promise<SwapPreview> {
 		const { keysetId, requireDleq, proofsWeHave, onCountersReserved } = config || {};
 		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
 
-		// Decode and validate token
-		const decodedToken = typeof token === 'string' ? this.decodeToken(token) : token;
-		const tokenMintUrl = sanitizeUrl(decodedToken.mint);
-		this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
-			token: tokenMintUrl,
-			wallet: this.mint.mintUrl,
-		});
-		this.failIf(decodedToken.unit !== this._unit, 'Token is not in wallet unit', {
-			token: decodedToken.unit,
-			wallet: this._unit,
-		});
+		// Extract proofs — either directly or by decoding the token
+		let proofs: Proof[];
+		if (Array.isArray(token)) {
+			proofs = token;
+		} else {
+			const decodedToken: Token = typeof token === 'string' ? this.decodeToken(token) : token;
+			const tokenMintUrl = sanitizeUrl(decodedToken.mint);
+			this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
+				token: tokenMintUrl,
+				wallet: this.mint.mintUrl,
+			});
+			this.failIf(decodedToken.unit !== this._unit, 'Token is not in wallet unit', {
+				token: decodedToken.unit,
+				wallet: this._unit,
+			});
+			({ proofs } = decodedToken);
+		}
 
-		// Extract token proofs
-		let proofs: Proof[] = [];
-		({ proofs } = decodedToken);
+		// Validate all proof keyset IDs use this wallet's unit
+		const knownIds = this._keyChain.getKeysets().map((k) => k.id);
+		const badProof = proofs.find((p) => !p.id || !knownIds.includes(p.id));
+		this.failIf(
+			!!badProof,
+			`Proof has unrecognised keyset. '${badProof?.id}' is not a ${this._unit} keyset from this mint`,
+			{
+				id: badProof?.id,
+				knownIds,
+			},
+		);
+
+		// Check total amount
 		const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
 		this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
 
 		// Check DLEQs if needed
-		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		if (requireDleq) {
 			for (const p of proofs) {
 				const ks = this._keyChain.getKeyset(p.id);
@@ -920,6 +935,7 @@ class Wallet {
 		}
 
 		// Shape receive output type and denominations
+		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
 		const swapFee = this.getFeesForProofs(proofs);
 		const receiveAmount = totalAmount.subtract(swapFee);
 		let receiveOT = this.configureOutputs(

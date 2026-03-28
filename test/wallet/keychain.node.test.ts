@@ -334,11 +334,42 @@ describe('KeyChain getters', () => {
 		expect(list.sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
 	});
 
+	test('getAllKeysetIds and getAllKeys span all units; getKeysets filters to wallet unit', async () => {
+		const usdKeysetId = '009a1f293253e41f';
+		// USD keyset has no keys entry — realistic for an inactive/old keyset
+		const multiUnitKeysetResp = {
+			keysets: [
+				...dummyKeysetResp.keysets,
+				{ id: usdKeysetId, unit: 'usd', active: false, input_fee_ppk: 0 },
+			],
+		};
+		server.use(http.get(mintUrl + '/v1/keysets', () => HttpResponse.json(multiUnitKeysetResp)));
+
+		const multiChain = new KeyChain(mint, 'sat');
+		await multiChain.init();
+
+		// getAllKeysetIds — includes all units, including usd keyset with no keys
+		const allIds = multiChain.getAllKeysetIds();
+		expect(allIds).toHaveLength(5);
+		expect(allIds).toContain(usdKeysetId);
+
+		// getAllKeys — only returns keysets with verified keys; usd has none so sat count unchanged
+		const allKeys = multiChain.getAllKeys();
+		expect(allKeys.every((k) => k.unit === 'sat')).toBe(true);
+
+		// getKeysets — sat only
+		const satKeysets = multiChain.getKeysets();
+		expect(satKeysets.every((k) => k.unit === 'sat')).toBe(true);
+		expect(satKeysets.find((k) => k.id === usdKeysetId)).toBeUndefined();
+	});
+
 	test('should throw getters if not initialized', () => {
 		const uninitChain = new KeyChain(mint, unit);
 		expect(() => uninitChain.getKeyset('any')).toThrow("Keyset 'any' not found");
 		expect(() => uninitChain.getCheapestKeyset()).toThrow('KeyChain not initialized');
 		expect(() => uninitChain.getKeysets()).toThrow('KeyChain not initialized');
+		expect(() => uninitChain.getAllKeys()).toThrow('KeyChain not initialized');
+		expect(() => uninitChain.getAllKeysetIds()).toThrow('KeyChain not initialized');
 	});
 });
 

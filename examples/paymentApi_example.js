@@ -1,4 +1,4 @@
-import { Wallet, getDecodedToken, getEncodedTokenV4, Amount, sumProofs } from '@cashu/cashu-ts';
+import { Wallet, getTokenMetadata, getEncodedTokenV4, Amount } from '@cashu/cashu-ts';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import admin from 'firebase-admin';
@@ -31,9 +31,9 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	let decodedToken;
+	let tokenMetadata;
 	try {
-		decodedToken = getDecodedToken(token);
+		tokenMetadata = getTokenMetadata(token);
 	} catch (error) {
 		res.json({
 			success: false,
@@ -43,7 +43,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	const isUnitSat = decodedToken.unit === 'sat';
+	const isUnitSat = tokenMetadata.unit === 'sat';
 	if (!isUnitSat) {
 		res.json({
 			success: false,
@@ -53,8 +53,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	const totalAmount = sumProofs(decodedToken);
-	const isWrongAmount = !waitedAmount.equals(totalAmount);
+	const isWrongAmount = !waitedAmount.equals(tokenMetadata.amount);
 	if (isWrongAmount) {
 		res.json({
 			success: false,
@@ -64,7 +63,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	const mintUrl = decodedToken.mint;
+	const mintUrl = tokenMetadata.mint;
 	const isTrustedMint = trustedMints.includes(mintUrl);
 	if (!isTrustedMint) {
 		res.json({

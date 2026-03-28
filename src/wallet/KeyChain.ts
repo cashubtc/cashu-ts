@@ -23,6 +23,12 @@ export class KeyChain {
 	private keysets: { [id: string]: Keyset } = {};
 	private pendingKeyFetches: Map<string, Promise<Keyset>> = new Map();
 
+	private assertInitialized(): void {
+		if (Object.keys(this.keysets).length === 0) {
+			throw new Error('KeyChain not initialized');
+		}
+	}
+
 	constructor(mint: string | Mint, unit: string) {
 		this.mint = typeof mint === 'string' ? new Mint(mint) : mint;
 		this.unit = unit;
@@ -274,9 +280,7 @@ export class KeyChain {
 	 * @throws If uninitialized or no keysets exist for the unit.
 	 */
 	getKeysets(): Keyset[] {
-		if (Object.keys(this.keysets).length === 0) {
-			throw new Error('KeyChain not initialized');
-		}
+		this.assertInitialized();
 		const unitKeysets = Object.values(this.keysets).filter((k) => k.unit === this.unit);
 		if (unitKeysets.length === 0) {
 			throw new Error(`No keysets found for unit: ${this.unit}`);
@@ -285,25 +289,27 @@ export class KeyChain {
 	}
 
 	/**
-	 * Returns `MintKeys` DTOs for this KeyChain's unit where keys are available.
+	 * Returns all the keys in this KeyChain across all units.
 	 *
 	 * @returns Array of MintKeys objects.
 	 * @throws If uninitialized.
 	 */
 	getAllKeys(): MintKeys[] {
-		return this.getKeysets()
+		this.assertInitialized();
+		return Object.values(this.keysets)
 			.map((k) => k.toMintKeys())
 			.filter((mk): mk is MintKeys => mk !== null);
 	}
 
 	/**
-	 * Returns all the keyset IDs in this KeyChain.
+	 * Returns all the keyset IDs in this KeyChain across all units.
 	 *
 	 * @returns Array of keyset IDs.
 	 * @throws If uninitialized.
 	 */
 	getAllKeysetIds(): string[] {
-		return this.getKeysets().map((k) => k.id);
+		this.assertInitialized();
+		return Object.keys(this.keysets);
 	}
 
 	// ---------------------------------------------------------------------
@@ -314,8 +320,7 @@ export class KeyChain {
 	 * Preferred consolidated cache representation.
 	 *
 	 * @remarks
-	 * Built from the live Keyset instances via their Mint DTO exporters. This is the canonical cache
-	 * API going forward.
+	 * Built from the live Keyset instances via their Mint DTO exporters.
 	 */
 	get cache(): KeyChainCache {
 		// Use Object.values directly — all units, not just this.unit
