@@ -32,7 +32,7 @@ beforeEach(() => {
 	);
 });
 
-describe('requests', () => {
+describe('requests', { timeout: 7500 }, () => {
 	test('request with body contains the correct headers', async () => {
 		let headers: Headers;
 
@@ -131,6 +131,116 @@ describe('requests', () => {
 		await expect(promise).rejects.toThrow(MintOperationError);
 		// assert that the error message is set correctly by the code
 		await expect(promise).rejects.toThrow('Minting is disabled');
+	});
+
+	test('uses raw text response as HttpResponseError message', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+				return new HttpResponse('plain text failure', { status: 404 });
+			}),
+		);
+
+		const wallet = new Wallet(mintUrl);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('plain text failure');
+	});
+
+	test('uses string detail field as HttpResponseError message', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+				return new HttpResponse(JSON.stringify({ detail: 'mint detail error' }), { status: 404 });
+			}),
+		);
+
+		const wallet = new Wallet(mintUrl);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('mint detail error');
+	});
+
+	test('uses primitive JSON error body as HttpResponseError message', async () => {
+		server.use(
+			http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+				return new HttpResponse(JSON.stringify('primitive failure'), { status: 404 });
+			}),
+		);
+
+		const wallet = new Wallet(mintUrl);
+		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('primitive failure');
+	});
+
+	test('maps empty success response body to bad response', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		server.use(
+			http.get(endpoint, () => {
+				return new HttpResponse('', { status: 200 });
+			}),
+		);
+
+		await expect(request({ endpoint })).rejects.toThrowError(
+			new HttpResponseError('bad response', 200),
+		);
+	});
+
+	test('maps malformed success JSON to bad response and logs parsing failure', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		const logger: Logger = {
+			error: vi.fn(),
+			warn: vi.fn(),
+			info: vi.fn(),
+			debug: vi.fn(),
+			trace: vi.fn(),
+			log: vi.fn(),
+		};
+
+		server.use(
+			http.get(endpoint, () => {
+				return new HttpResponse('{not-valid-json', { status: 200 });
+			}),
+		);
+
+		setRequestLogger(logger);
+		try {
+			await expect(request({ endpoint })).rejects.toThrow('bad response');
+			expect(logger.error).toHaveBeenCalledWith(
+				'Failed to parse HTTP response',
+				expect.objectContaining({ err: expect.any(Error) }),
+			);
+		} finally {
+			setRequestLogger(NULL_LOGGER);
+		}
+	});
+
+	test('maps AbortError fetch failures to NetworkError without timeout policy', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+			const abortError = new Error('aborted by runtime');
+			abortError.name = 'AbortError';
+			throw abortError;
+		});
+
+		try {
+			await expect(request({ endpoint })).rejects.toThrow('aborted by runtime');
+		} finally {
+			fetchMock.mockRestore();
+		}
+	});
+
+	test('falls back to bad response when reading error body throws', async () => {
+		const endpoint = mintUrl + '/v1/keys';
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+			ok: false,
+			status: 503,
+			text: vi.fn(async () => {
+				throw new Error('body read failed');
+			}),
+		} as unknown as Response);
+
+		try {
+			await expect(request({ endpoint })).rejects.toThrow('bad response');
+		} finally {
+			fetchMock.mockRestore();
+		}
 	});
 
 	describe('NUT-19 Cache retry logic', () => {
@@ -547,6 +657,62 @@ describe('requests', () => {
 			expect(requestCount).toBe(1);
 		});
 
+		test('handles already-aborted signal before retry delay starts', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			const retryPolicy: Nut19Policy = {
+				ttl: 60000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			const logger: Logger = {
+				error: vi.fn(),
+				warn: vi.fn(),
+				info: vi.fn(() => ac.abort()),
+				debug: vi.fn(),
+				trace: vi.fn(),
+				log: vi.fn(),
+			};
+
+			vi.spyOn(Math, 'random').mockReturnValue(1);
+			vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+				throw new TypeError('Network request failed');
+			});
+
+			setRequestLogger(logger);
+			try {
+				await expect(
+					request({ endpoint, signal: ac.signal, ...retryPolicy }),
+				).rejects.toMatchObject({
+					name: 'CallerAbortError',
+				});
+			} finally {
+				setRequestLogger(NULL_LOGGER);
+			}
+		});
+
+		test('waits through retry delay when caller signal remains active', async () => {
+			const endpoint = mintUrl + '/v1/keys';
+			const ac = new AbortController();
+			const retryPolicy: Nut19Policy = {
+				ttl: 5000,
+				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+			};
+			let requestCount = 0;
+
+			vi.spyOn(Math, 'random').mockReturnValue(0.01);
+			vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+				requestCount++;
+				if (requestCount === 1) {
+					throw new TypeError('Network request failed');
+				}
+				return new Response(JSON.stringify({ keysets: [] }), { status: 200 });
+			});
+
+			const result = await request({ endpoint, signal: ac.signal, ...retryPolicy });
+			expect(result).toEqual({ keysets: [] });
+			expect(requestCount).toBe(2);
+		});
+
 		test('caller abort during retry backoff rejects promptly and does not schedule another attempt', async () => {
 			vi.useFakeTimers();
 			try {
@@ -726,34 +892,41 @@ describe('requests', () => {
 			expect(requestCount).toBe(10);
 		});
 
-		test('Worst time scenario smaller than 7s', async () => {
-			const timer = performance.now();
-			const endpoint = mintUrl + '/v1/keys';
+		test('Worst time scenario stays within the capped backoff budget', async () => {
+			vi.useFakeTimers();
+			try {
+				const endpoint = mintUrl + '/v1/keys';
 
-			const retryPolicy: Nut19Policy = {
-				ttl: Infinity,
-				cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
-			};
-			// set jitter to 1, so we can get the longest time possible
-			vi.spyOn(Math, 'random').mockReturnValue(1);
+				const retryPolicy: Nut19Policy = {
+					ttl: Infinity,
+					cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
+				};
+				// Maximum jitter yields the worst-case delay sequence:
+				// 100 + 200 + 400 + 800 + 1000 * 5 = 6500ms total.
+				vi.spyOn(Math, 'random').mockReturnValue(1);
 
-			let requestCount = 0;
-			server.use(
-				http.get(endpoint, () => {
+				let requestCount = 0;
+				vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
 					requestCount++;
-					return Response.error();
-				}),
-			);
+					throw new TypeError('Network request failed');
+				});
 
-			await expect(
-				request({
+				const req = request({
 					endpoint,
 					...retryPolicy,
-				}),
-			).rejects.toThrow(NetworkError);
+				});
+				const rejection = req.catch((err) => err);
 
-			expect(requestCount).toBe(10);
-			expect(performance.now() - timer).toBeLessThan(7000);
+				await vi.advanceTimersByTimeAsync(6499);
+				expect(requestCount).toBeLessThan(10);
+
+				await vi.advanceTimersByTimeAsync(1);
+				const thrown = await rejection;
+				expect(thrown).toBeInstanceOf(NetworkError);
+				expect(requestCount).toBe(10);
+			} finally {
+				vi.useRealTimers();
+			}
 		});
 	});
-}, 7500);
+});

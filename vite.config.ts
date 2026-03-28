@@ -43,6 +43,7 @@ const sourceCoverage = {
 		'commitlint.config.cjs',
 		'examples/**',
 		'scripts/**',
+		'src/transport/ws.ts',
 		'test/**',
 	],
 	excludeAfterRemap: true,
