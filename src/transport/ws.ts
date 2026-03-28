@@ -8,6 +8,9 @@ export function injectWebSocketImpl(ws: typeof WebSocket) {
 	_WS = ws;
 }
 
+/**
+ * @internal
+ */
 export function getWebSocketImpl() {
 	if (_WS === undefined) {
 		throw new Error('WebSocket implementation not initialized');
