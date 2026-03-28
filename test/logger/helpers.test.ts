@@ -87,9 +87,8 @@ describe('safeCallback', () => {
 		expect((meta.error as Error).message).toBe('boom');
 
 		// The cb identity depends on the test runner (vi.fn() => "spy").
-		// Just assert it's a string (and optionally allow a small set).
+		// Just assert it's a string; Vitest may change the generated mock name.
 		expect(typeof meta.cb).toBe('string');
-		expect(['anonymous', 'spy', ''].includes(meta.cb)).toBe(true);
 	});
 
 	test('logs a warning including the callback name when available', () => {

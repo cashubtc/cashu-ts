@@ -1,5 +1,9 @@
-import { describe, test, expect, vi } from 'vitest';
+import { afterEach, describe, test, expect, vi } from 'vitest';
 import { ConsoleLogger, NULL_LOGGER } from '../../src/logger';
+
+afterEach(() => {
+	vi.restoreAllMocks();
+});
 
 describe('ConsoleLogger', () => {
 	test('logs messages at or above minLevel', () => {
