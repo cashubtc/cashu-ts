@@ -51,6 +51,7 @@ export const RESERVED_P2PK_TAGS = new Set([
 	'n_sigs',
 	'refund',
 	'n_sigs_refund',
+	'sigflag',
 ]);
 
 /**

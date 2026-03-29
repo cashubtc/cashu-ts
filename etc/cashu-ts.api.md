@@ -1680,7 +1680,13 @@ export type SigAllSigningPackage = {
 };
 
 // @public (undocumented)
-export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
+export type SigFlag = (typeof SigFlags)[keyof typeof SigFlags];
+
+// @public (undocumented)
+export const SigFlags: {
+    readonly SIG_INPUTS: "SIG_INPUTS";
+    readonly SIG_ALL: "SIG_ALL";
+};
 
 // @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;

@@ -16,7 +16,12 @@ import {
 	getSecretKind,
 } from './NUT10';
 
-export type SigFlag = 'SIG_INPUTS' | 'SIG_ALL';
+export const SigFlags = {
+	SIG_INPUTS: 'SIG_INPUTS',
+	SIG_ALL: 'SIG_ALL',
+} as const;
+export type SigFlag = (typeof SigFlags)[keyof typeof SigFlags];
+const VALID_SIG_FLAGS: ReadonlySet<SigFlag> = new Set(Object.values(SigFlags));
 
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
@@ -48,21 +53,29 @@ type WitnessData = {
  *
  * @param pubkey - The pubkey to add to Secret.data.
  * @param tags - Optional. Additional P2PK tags.
+ * @throws If the sigflag is unrecognised.
  */
 export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
-	return createSecret('P2PK', pubkey, tags);
+	const secret = createSecret('P2PK', pubkey, tags);
+	parseP2PKSecret(secret); // validates
+	return secret;
 }
 
 /**
- * Parse a P2PK Secret and validate NUT-10 shape.
+ * Parse a P2PK Secret and validate NUT-10 shape and NUT-11 constraints.
  *
  * @param secret - The Proof secret.
  * @returns Secret object.
- * @throws If the JSON is invalid or NUT-10 secret is malformed.
+ * @throws If the JSON is invalid, NUT-10 secret is malformed, or sigflag is unrecognised.
  */
 export function parseP2PKSecret(secret: string | Secret): Secret {
 	// HTLC extends P2PK, so we include it in our expected list.
-	return assertSecretKind(['P2PK', 'HTLC'], secret);
+	const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
+	const flag = getTagScalar(parsed, 'sigflag');
+	if (flag !== undefined && !VALID_SIG_FLAGS.has(flag as SigFlag)) {
+		throw new Error(`Invalid sigflag "${flag}": must be "SIG_INPUTS" or "SIG_ALL"`);
+	}
+	return parsed;
 }
 
 // ------------------------------
@@ -249,13 +262,12 @@ export function getP2PKNSigsRefund(secretStr: string | Secret): number {
  * Returns the sigflag from a NUT-11 P2PK secret.
  *
  * @param secretStr - The NUT-11 P2PK secret.
- * @returns The sigflag or 'SIG_INPUTS' (default)
- * @throws If secret is not P2PK.
+ * @returns The sigflag (`'SIG_INPUTS'` or `'SIG_ALL'`).
+ * @throws If secret is not P2PK, or if the sigflag tag contains an unrecognised value.
  */
 export function getP2PKSigFlag(secretStr: string | Secret): SigFlag {
-	const secret = parseP2PKSecret(secretStr);
-	const flag = getTagScalar(secret, 'sigflag');
-	return flag === 'SIG_ALL' ? 'SIG_ALL' : 'SIG_INPUTS';
+	const secret = parseP2PKSecret(secretStr); // also validates sigflag
+	return (getTagScalar(secret, 'sigflag') as SigFlag) ?? 'SIG_INPUTS';
 }
 
 /**
