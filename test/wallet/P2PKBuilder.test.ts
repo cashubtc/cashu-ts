@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { P2PKBuilder, P2PKOptions } from '../../src/';
+import { P2PKBuilder, type P2PKOptions } from '../../src/';
 
 // helpers to make valid hex keys
 const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
@@ -83,6 +83,24 @@ describe('P2PKBuilder.toOptions()', () => {
 		expect(o2.locktime).toBeTypeOf('number');
 		expect(o2.locktime).toBe(nowSec + 60);
 		expect(o2.sigFlag).toBe(undefined);
+	});
+
+	it('requireLockSignatures throws on non-integer and values less than 1', () => {
+		expect(() => new P2PKBuilder().requireLockSignatures(1.5)).toThrow(
+			/requiredSignatures must be a positive integer/i,
+		);
+		expect(() => new P2PKBuilder().requireLockSignatures(0)).toThrow(
+			/requiredSignatures must be a positive integer/i,
+		);
+	});
+
+	it('requireRefundSignatures throws on non-integer and values less than 1', () => {
+		expect(() => new P2PKBuilder().requireRefundSignatures(1.5)).toThrow(
+			/requiredRefundSignatures must be a positive integer/i,
+		);
+		expect(() => new P2PKBuilder().requireRefundSignatures(0)).toThrow(
+			/requiredRefundSignatures must be a positive integer/i,
+		);
 	});
 
 	it('throws when requiredSignatures exceeds available lock keys and omits when <= 1', () => {
