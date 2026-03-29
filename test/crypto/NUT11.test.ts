@@ -292,6 +292,18 @@ describe('test getP2PKSigFlag', () => {
 		expect(result).toBe('SIG_ALL');
 		expect(getP2PKSigFlag(secretStr)).toBe('SIG_ALL');
 	});
+	test('invalid sigflag throws', () => {
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["sigflag","FOOBAR"]]}]`;
+		expect(() => getP2PKSigFlag(secretStr)).toThrow(
+			'Invalid sigflag "FOOBAR": must be "SIG_INPUTS" or "SIG_ALL"',
+		);
+	});
+	test('parseP2PKSecret rejects inherited object keys as sigflag values', () => {
+		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["sigflag","toString"]]}]`;
+		expect(() => parseP2PKSecret(secretStr)).toThrow(
+			'Invalid sigflag "toString": must be "SIG_INPUTS" or "SIG_ALL"',
+		);
+	});
 });
 
 describe('test getP2PKLocktime', () => {
