@@ -12,6 +12,8 @@ import {
 	constructUnblindedSignature,
 	createRandomRawBlindedMessage,
 } from '../../src/crypto';
+import { OutputData } from '../../src/model/OutputData';
+import { Amount } from '../../src/model/Amount';
 
 describe('test hash_e', () => {
 	test('test hash_e function', async () => {
@@ -66,5 +68,52 @@ describe('test DLEQ scheme', () => {
 		// Wallet(Carol)
 		const isValid = verifyDLEQProof_reblind(blindMessage.secret, dleqProof, proof.C, mintPubKey);
 		expect(isValid).toBe(true);
+	});
+});
+
+describe('OutputData.toProof DLEQ verification', () => {
+	function mintSetup() {
+		const mintPrivKey = secp256k1.utils.randomSecretKey();
+		const mintPubKey = pointFromBytes(secp256k1.getPublicKey(mintPrivKey, true));
+		const blindMsg = createRandomRawBlindedMessage();
+		const blindSig = createBlindSignature(blindMsg.B_, mintPrivKey, 'test-keyset');
+		const dleq = createDLEQProof(blindMsg.B_, mintPrivKey);
+		const keyset = {
+			id: 'test-keyset',
+			keys: { '1': mintPubKey.toHex(true) },
+		};
+		const od = new OutputData(
+			{ amount: 1n, B_: blindMsg.B_.toHex(true), id: 'test-keyset' },
+			blindMsg.r,
+			blindMsg.secret,
+		);
+		return { mintPrivKey, mintPubKey, blindMsg, blindSig, dleq, keyset, od };
+	}
+
+	test('toProof succeeds with valid DLEQ', () => {
+		const { blindSig, dleq, keyset, od } = mintSetup();
+		const sig = {
+			id: 'test-keyset',
+			amount: Amount.from(1),
+			C_: blindSig.C_.toHex(true),
+			dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
+		};
+		const proof = od.toProof(sig, keyset);
+		expect(proof.amount).toBe(1n);
+		expect(proof.dleq).toBeDefined();
+	});
+
+	test('toProof throws on invalid DLEQ', () => {
+		const { blindSig, dleq, keyset, od } = mintSetup();
+		// Corrupt the DLEQ 'e' value
+		const badE = new Uint8Array(dleq.e);
+		badE[0] ^= 0xff;
+		const sig = {
+			id: 'test-keyset',
+			amount: Amount.from(1),
+			C_: blindSig.C_.toHex(true),
+			dleq: { s: bytesToHex(dleq.s), e: bytesToHex(badE) },
+		};
+		expect(() => od.toProof(sig, keyset)).toThrow('DLEQ verification failed');
 	});
 });
