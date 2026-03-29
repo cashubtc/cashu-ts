@@ -68,14 +68,9 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData({ pubkey: PK1, requiredSignatures: 5 }, 21, keys);
-		const decoder = new TextDecoder();
-		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
-		allSecrets.forEach((s) => {
-			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe(PK1);
-			expect(s[1].tags).toEqual([]);
-		});
+		expect(() =>
+			OutputData.createP2PKData({ pubkey: PK1, requiredSignatures: 5 }, 21, keys),
+		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(1\)/i);
 	});
 	test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
@@ -113,19 +108,9 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData(
-			{ pubkey: [PK1, PK2, PK3], requiredSignatures: 5 },
-			21,
-			keys,
-		);
-		const decoder = new TextDecoder();
-		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
-		allSecrets.forEach((s) => {
-			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe(PK1);
-			expect(s[1].tags).toContainEqual(['pubkeys', PK2, PK3]);
-			expect(s[1].tags).toContainEqual(['n_sigs', '3']);
-		});
+		expect(() =>
+			OutputData.createP2PKData({ pubkey: [PK1, PK2, PK3], requiredSignatures: 5 }, 21, keys),
+		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(3\)/i);
 	});
 	test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
@@ -198,25 +183,18 @@ describe('P2PK BlindingData', () => {
 		const wallet = new Wallet(mint);
 		await wallet.loadMint();
 		const keys = wallet.keyChain.getKeyset();
-		const data = OutputData.createP2PKData(
-			{
-				pubkey: PK1,
-				locktime: 212,
-				refundKeys: [REFUND1, REFUND2, REFUND3],
-				requiredRefundSignatures: 5,
-			},
-			21,
-			keys,
-		);
-		const decoder = new TextDecoder();
-		const allSecrets = data.map((d) => JSON.parse(decoder.decode(d.secret)));
-		allSecrets.forEach((s) => {
-			expect(s[0] === 'P2PK');
-			expect(s[1].data).toBe(PK1);
-			expect(s[1].tags).toContainEqual(['locktime', '212']);
-			expect(s[1].tags).toContainEqual(['refund', REFUND1, REFUND2, REFUND3]);
-			expect(s[1].tags).toContainEqual(['n_sigs_refund', '3']);
-		});
+		expect(() =>
+			OutputData.createP2PKData(
+				{
+					pubkey: PK1,
+					locktime: 212,
+					refundKeys: [REFUND1, REFUND2, REFUND3],
+					requiredRefundSignatures: 5,
+				},
+				21,
+				keys,
+			),
+		).toThrow(/requiredRefundSignatures \(5\) exceeds available refundKeys \(3\)/i);
 	});
 	test('Create BlindingData locked to multiple refund keys with expired multisig', async () => {
 		const wallet = new Wallet(mint);

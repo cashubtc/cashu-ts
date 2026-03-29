@@ -5,6 +5,7 @@ import { getValidSigners, schnorrSignMessage, schnorrVerifyMessage, type PrivKey
 import { deriveP2BKSecretKeys } from './NUT28';
 import { type Logger, NULL_LOGGER } from '../logger';
 import { type OutputDataLike } from '../model/OutputData';
+import type { P2PKOptions } from '../wallet/types/config';
 import {
 	getTagInt,
 	getTagScalar,
@@ -106,6 +107,80 @@ function tryNormalisePubkey(pk: string): string | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+function assertPositiveInteger(value: number, field: string): number {
+	if (!Number.isInteger(value) || value < 1) {
+		throw new Error(`${field} must be a positive integer`);
+	}
+	return value;
+}
+
+/**
+ * Validate and normalize P2PK/HTLC output options.
+ *
+ * @remarks
+ * Normalizes and deduplicates pubkeys, then enforces that requested signature thresholds are
+ * satisfiable by the resulting key sets.
+ */
+export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
+	const pubkeys = [
+		...new Set((Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]).map(normalisePubkey)),
+	];
+	const refundKeys = [...new Set((p2pk.refundKeys ?? []).map(normalisePubkey))];
+	if (pubkeys.length === 0) {
+		throw new Error('P2PK requires at least one pubkey');
+	}
+	if (refundKeys.length > 0 && p2pk.locktime === undefined) {
+		throw new Error('Refund pubkeys require a locktime');
+	}
+	const totalKeys = pubkeys.length + refundKeys.length;
+	if (totalKeys > 10) {
+		throw new Error(`Too many pubkeys, ${totalKeys} provided, maximum allowed is 10 in total`);
+	}
+	if (p2pk.sigFlag !== undefined && !VALID_SIG_FLAGS.has(p2pk.sigFlag)) {
+		throw new Error(`Invalid sigflag "${p2pk.sigFlag}": must be "SIG_INPUTS" or "SIG_ALL"`);
+	}
+
+	const requiredSignatures = assertPositiveInteger(
+		p2pk.requiredSignatures ?? 1,
+		'requiredSignatures',
+	);
+	if (requiredSignatures > pubkeys.length) {
+		throw new Error(
+			`requiredSignatures (${requiredSignatures}) exceeds available pubkeys (${pubkeys.length})`,
+		);
+	}
+
+	let requiredRefundSignatures: number | undefined;
+	if (p2pk.requiredRefundSignatures !== undefined) {
+		requiredRefundSignatures = assertPositiveInteger(
+			p2pk.requiredRefundSignatures,
+			'requiredRefundSignatures',
+		);
+		if (refundKeys.length === 0) {
+			throw new Error('requiredRefundSignatures requires refundKeys');
+		}
+		if (requiredRefundSignatures > refundKeys.length) {
+			throw new Error(
+				`requiredRefundSignatures (${requiredRefundSignatures}) exceeds available refundKeys (${refundKeys.length})`,
+			);
+		}
+	}
+
+	return {
+		pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys,
+		...(p2pk.locktime !== undefined ? { locktime: p2pk.locktime } : {}),
+		...(refundKeys.length > 0 ? { refundKeys } : {}),
+		...(requiredSignatures > 1 ? { requiredSignatures } : {}),
+		...(requiredRefundSignatures !== undefined && requiredRefundSignatures > 1
+			? { requiredRefundSignatures }
+			: {}),
+		...(p2pk.additionalTags?.length ? { additionalTags: p2pk.additionalTags } : {}),
+		...(p2pk.blindKeys ? { blindKeys: true } : {}),
+		...(p2pk.sigFlag !== undefined ? { sigFlag: p2pk.sigFlag } : {}),
+		...(p2pk.hashlock ? { hashlock: p2pk.hashlock } : {}),
+	};
 }
 
 /**

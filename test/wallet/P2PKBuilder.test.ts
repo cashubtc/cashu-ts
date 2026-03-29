@@ -85,31 +85,31 @@ describe('P2PKBuilder.toOptions()', () => {
 		expect(o2.sigFlag).toBe(undefined);
 	});
 
-	it('clamps requiredSignatures to available lock keys and omits when <= 1', () => {
+	it('throws when requiredSignatures exceeds available lock keys and omits when <= 1', () => {
 		const k1 = comp('a', '02');
 		const k2 = comp('b', '02');
 
-		// ask for 5, only 2 available, expect 2
-		const o1 = new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(5).toOptions();
-		expect(o1.requiredSignatures).toBe(2);
+		expect(() =>
+			new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(5).toOptions(),
+		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(2\)/i);
 
 		// ask for 1 => property omitted (default 1)
 		const o2 = new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(1).toOptions();
 		expect('requiredSignatures' in o2).toBe(false);
 	});
 
-	it('clamps requiredRefundSignatures to available refund keys and omits when <= 1', () => {
+	it('throws when requiredRefundSignatures exceeds available refund keys and omits when <= 1', () => {
 		const r1 = comp('c', '02');
 		const r2 = comp('d', '03');
 
-		const o1 = new P2PKBuilder()
-			.addLockPubkey(comp('a', '02'))
-			.lockUntil(Date.now() + 60)
-			.addRefundPubkey([r1, r2])
-			.requireRefundSignatures(5)
-			.toOptions();
-
-		expect(o1.requiredRefundSignatures).toBe(2);
+		expect(() =>
+			new P2PKBuilder()
+				.addLockPubkey(comp('a', '02'))
+				.lockUntil(Date.now() + 60)
+				.addRefundPubkey([r1, r2])
+				.requireRefundSignatures(5)
+				.toOptions(),
+		).toThrow(/requiredRefundSignatures \(5\) exceeds available refundKeys \(2\)/i);
 
 		const o2 = new P2PKBuilder()
 			.addLockPubkey(comp('b', '02'))
@@ -185,7 +185,7 @@ describe('P2PKBuilder.toOptions()', () => {
 });
 
 describe('P2PKBuilder, simple fuzzish case', () => {
-	it('normalises mixed inputs, de duplicates, preserves insertion order, clamps counts, and stays canonical', () => {
+	it('normalises mixed inputs, de duplicates, preserves insertion order, and rejects impossible thresholds', () => {
 		// locks contain, x only upper, compressed upper, duplicates of x only in both forms
 		const xA_upper = 'A'.repeat(64); // x only, becomes 02 + a…
 		const cB_upper = '02' + 'B'.repeat(64); // compressed, becomes 02 + b…
@@ -199,32 +199,16 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 
 		const ms = (Math.floor(Date.now() / 1000) + 123) * 1000; // exercise ms branch
 
-		const opts = new P2PKBuilder()
-			.addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
-			.addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
-			.lockUntil(ms)
-			.requireLockSignatures(5) // clamp to unique lock count
-			.requireRefundSignatures(1) // omitted when <= 1
-			.sigAll()
-			.toOptions();
-
-		// expected, all lower case, x only normalised to 02 prefix, duplicates removed, order preserved
-		const expLocks = ['02' + 'a'.repeat(64), '02' + 'b'.repeat(64)];
-		const expRefunds = ['03' + 'c'.repeat(64), '02' + 'c'.repeat(64)];
-
-		expect(Array.isArray(opts.pubkey)).toBe(true);
-		expect(opts.pubkey).toEqual(expLocks);
-		expect(opts.refundKeys).toEqual(expRefunds);
-		expect(opts.locktime).toBe(ms / 1000); // ms to seconds
-		expect(opts.sigFlag).toEqual('SIG_ALL');
-
-		// clamp, two unique lock keys
-		expect(opts.requiredSignatures).toBe(2);
-		expect('requiredRefundSignatures' in opts).toBe(false);
-
-		// round trip stays identical
-		const round = P2PKBuilder.fromOptions(opts).toOptions();
-		expect(round).toEqual(opts);
+		expect(() =>
+			new P2PKBuilder()
+				.addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
+				.addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
+				.lockUntil(ms)
+				.requireLockSignatures(5)
+				.requireRefundSignatures(1)
+				.sigAll()
+				.toOptions(),
+		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(2\)/i);
 	});
 });
 

@@ -1,6 +1,6 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 import { type P2PKOptions, type P2PKTag } from './types/config';
-import { normalisePubkey, type SigFlag } from '../crypto';
+import { normalisePubkey, normalizeP2PKOptions, type SigFlag } from '../crypto';
 
 function toUnixSeconds(input: Date | number): number {
 	if (input instanceof Date) return Math.floor(input.getTime() / 1000);
@@ -38,12 +38,16 @@ export class P2PKBuilder {
 	}
 
 	requireLockSignatures(n: number) {
-		this.nSigs = Math.max(1, Math.trunc(n));
+		if (!Number.isInteger(n) || n < 1)
+			throw new Error('requiredSignatures must be a positive integer');
+		this.nSigs = n;
 		return this;
 	}
 
 	requireRefundSignatures(n: number) {
-		this.nSigsRefund = Math.max(1, Math.trunc(n));
+		if (!Number.isInteger(n) || n < 1)
+			throw new Error('requiredRefundSignatures must be a positive integer');
+		this.nSigsRefund = n;
 		return this;
 	}
 
@@ -82,21 +86,6 @@ export class P2PKBuilder {
 		const refunds = Array.from(this.refundSet);
 
 		if (locks.length === 0) throw new Error('At least one lock pubkey is required');
-		if (refunds.length > 0 && this.locktime === undefined) {
-			throw new Error(
-				'Refund pubkeys require a locktime, add lockUntil(...) or remove refund keys',
-			);
-		}
-
-		const total = locks.length + refunds.length;
-		if (total > 10)
-			throw new Error(`Too many pubkeys, ${total} provided, maximum allowed is 10 in total`);
-
-		// Clamp required signatures to available keys
-		const reqLock = this.nSigs ? Math.min(Math.max(1, this.nSigs), locks.length) : undefined;
-		const reqRefund = this.nSigsRefund
-			? Math.min(Math.max(1, this.nSigsRefund), Math.max(1, refunds.length))
-			: undefined;
 
 		const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
 
@@ -104,13 +93,17 @@ export class P2PKBuilder {
 			pubkey,
 			...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
 			...(refunds.length ? { refundKeys: refunds } : {}),
-			...(reqLock && reqLock > 1 ? { requiredSignatures: reqLock } : {}),
-			...(reqRefund && reqRefund > 1 ? { requiredRefundSignatures: reqRefund } : {}),
+			...(this.nSigs && this.nSigs > 1 ? { requiredSignatures: this.nSigs } : {}),
+			...(this.nSigsRefund && this.nSigsRefund > 1
+				? { requiredRefundSignatures: this.nSigsRefund }
+				: {}),
 			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
 			...(this._blindKeys ? { blindKeys: true } : {}),
 			...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
 			...(this.hashlock ? { hashlock: this.hashlock } : {}),
 		};
+
+		normalizeP2PKOptions(p2pk); // throws if invalid options
 
 		// Ensure the secret is valid (not too long etc)
 		const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
