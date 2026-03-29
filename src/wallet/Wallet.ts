@@ -1244,6 +1244,13 @@ class Wallet {
 
 		// Construct proofs
 		const keyset = this.getKeyset(swapPreview.keysetId);
+		// Verify each signature amount matches the requested amount
+		for (let i = 0; i < swapTransaction.outputData.length; i++) {
+			this.failIf(
+				!signatures[i].amount.equals(swapTransaction.outputData[i].blindedMessage.amount),
+				`Mint returned signature with wrong amount: expected ${swapTransaction.outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}`,
+			);
+		}
 		const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
 		const reorderedProofs = Array(swapProofs.length);
 		const reorderedKeepVector = Array(swapTransaction.keepVector.length);
@@ -1929,6 +1936,13 @@ class Wallet {
 		this._logger.debug('MINT COMPLETED', {
 			amounts: outputData.map((o) => o.blindedMessage.amount),
 		});
+		// Verify each signature amount matches the requested amount
+		for (let i = 0; i < signatures.length; i++) {
+			this.failIf(
+				!signatures[i].amount.equals(outputData[i].blindedMessage.amount),
+				`Mint returned signature with wrong amount: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}`,
+			);
+		}
 		return outputData.map((d, i) => d.toProof(signatures[i], keyset));
 	}
 

@@ -526,35 +526,16 @@ describe('send', () => {
 			}),
 		);
 		server.use(
-			http.post(mintUrl + '/v1/swap', () => {
+			http.post(mintUrl + '/v1/swap', async ({ request }) => {
+				const body = (await request.json()) as {
+					outputs: { amount: number; B_: string; id: string }[];
+				};
 				return HttpResponse.json({
-					signatures: [
-						{
-							id: '00bd033559de27d0',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 1,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-						{
-							id: '00bd033559de27d0',
-							amount: 2,
-							C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-						},
-					],
+					signatures: body.outputs.map((o) => ({
+						id: o.id,
+						amount: o.amount,
+						C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+					})),
 				});
 			}),
 		);

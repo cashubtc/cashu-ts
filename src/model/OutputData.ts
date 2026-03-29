@@ -13,6 +13,7 @@ import {
 	deriveBlindingFactor,
 	deriveSecret,
 	pointFromHex,
+	verifyDLEQProof,
 	type DLEQ,
 	type BlindSignature,
 	normalisePubkey,
@@ -121,6 +122,16 @@ export class OutputData implements OutputDataLike {
 		}
 		const sigAmountKey = sig.amount.toString();
 		const A = pointFromHex(keyset.keys[sigAmountKey]);
+
+		// NUT-12: Verify DLEQ proof if present
+		if (dleq) {
+			const B_ = pointFromHex(this.blindedMessage.B_);
+			const C_ = pointFromHex(sig.C_);
+			if (!verifyDLEQProof(dleq, B_, C_, A)) {
+				throw new Error('DLEQ verification failed on mint response');
+			}
+		}
+
 		const blindSig: BlindSignature = { id: sig.id, C_: pointFromHex(sig.C_) };
 		const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
 		const proof: Proof = {
