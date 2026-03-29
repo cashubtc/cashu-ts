@@ -185,27 +185,49 @@ describe('P2PKBuilder.toOptions()', () => {
 });
 
 describe('P2PKBuilder, simple fuzzish case', () => {
-	it('normalises mixed inputs, de duplicates, preserves insertion order, and rejects impossible thresholds', () => {
-		// locks contain, x only upper, compressed upper, duplicates of x only in both forms
-		const xA_upper = 'A'.repeat(64); // x only, becomes 02 + a…
-		const cB_upper = '02' + 'B'.repeat(64); // compressed, becomes 02 + b…
-		const xA_lower = 'a'.repeat(64); // duplicate of xA
-		const cA_again = '02' + 'A'.repeat(64); // duplicate after normalisation
+	// locks contain x-only upper, compressed upper, duplicates of x-only in both forms
+	const xA_upper = 'A'.repeat(64); // x only, becomes 02 + a…
+	const cB_upper = '02' + 'B'.repeat(64); // compressed, becomes 02 + b…
+	const xA_lower = 'a'.repeat(64); // duplicate of xA_upper
+	const cA_again = '02' + 'A'.repeat(64); // duplicate after normalisation
+	// refunds: compressed 03 upper, x-only that collides with 02 form, duplicate 02 form
+	const r03C_upper = '03' + 'C'.repeat(64); // becomes 03 + c…
+	const rXc_lower = 'c'.repeat(64); // x only, becomes 02 + c…
+	const r02c_dup = '02' + 'c'.repeat(64); // duplicate of previous after normalisation
+	const ms = (Math.floor(Date.now() / 1000) + 123) * 1000; // exercise ms branch
 
-		// refunds contain, compressed 03 with upper hex, x only that collides with 02 form, and duplicate 02 form
-		const r03C_upper = '03' + 'C'.repeat(64); // becomes 03 + c…
-		const rXc_lower = 'c'.repeat(64); // x only, becomes 02 + c…
-		const r02c_dup = '02' + 'c'.repeat(64); // duplicate of previous after normalisation
+	it('normalises mixed inputs, deduplicates, preserves insertion order, and round-trips', () => {
+		const opts = new P2PKBuilder()
+			.addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
+			.addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
+			.lockUntil(ms)
+			.requireLockSignatures(2) // exactly the two unique lock keys
+			.sigAll()
+			.toOptions();
 
-		const ms = (Math.floor(Date.now() / 1000) + 123) * 1000; // exercise ms branch
+		const expLocks = ['02' + 'a'.repeat(64), '02' + 'b'.repeat(64)];
+		const expRefunds = ['03' + 'c'.repeat(64), '02' + 'c'.repeat(64)];
 
+		expect(Array.isArray(opts.pubkey)).toBe(true);
+		expect(opts.pubkey).toEqual(expLocks);
+		expect(opts.refundKeys).toEqual(expRefunds);
+		expect(opts.locktime).toBe(ms / 1000);
+		expect(opts.sigFlag).toEqual('SIG_ALL');
+		expect(opts.requiredSignatures).toBe(2);
+		expect('requiredRefundSignatures' in opts).toBe(false);
+
+		// round-trip stays identical
+		const round = P2PKBuilder.fromOptions(opts).toOptions();
+		expect(round).toEqual(opts);
+	});
+
+	it('rejects impossible thresholds after deduplication', () => {
 		expect(() =>
 			new P2PKBuilder()
 				.addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
 				.addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
 				.lockUntil(ms)
-				.requireLockSignatures(5)
-				.requireRefundSignatures(1)
+				.requireLockSignatures(5) // 5 > 2 unique lock keys
 				.sigAll()
 				.toOptions(),
 		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(2\)/i);

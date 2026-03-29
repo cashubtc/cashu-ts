@@ -5,7 +5,6 @@ import {
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type P2PKOptions } from '../wallet/types/config';
 import {
 	blindMessage,
 	constructUnblindedSignature,
@@ -16,6 +15,7 @@ import {
 	pointFromHex,
 	type DLEQ,
 	type BlindSignature,
+	type P2PKOptions,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';

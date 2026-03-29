@@ -1092,9 +1092,6 @@ export class NetworkError extends Error {
 }
 
 // @public
-export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions;
-
-// @public
 export function normalizeProofAmounts(raw: Array<Omit<Proof, 'amount'> & {
     amount: AmountLike;
 }>): Proof[];
@@ -1301,7 +1298,7 @@ export type P2PKOptions = {
 // @public (undocumented)
 export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
 
-// @public (undocumented)
+// @public
 export type P2PKTag = [key: string, ...values: string[]];
 
 // @public (undocumented)

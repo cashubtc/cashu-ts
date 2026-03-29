@@ -1,6 +1,5 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
-import { type P2PKOptions, type P2PKTag } from './types/config';
-import { normalisePubkey, normalizeP2PKOptions, type SigFlag } from '../crypto';
+import { normalisePubkey, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
 
 function toUnixSeconds(input: Date | number): number {
 	if (input instanceof Date) return Math.floor(input.getTime() / 1000);
@@ -103,9 +102,7 @@ export class P2PKBuilder {
 			...(this.hashlock ? { hashlock: this.hashlock } : {}),
 		};
 
-		normalizeP2PKOptions(p2pk); // throws if invalid options
-
-		// Ensure the secret is valid (not too long etc)
+		// Ensure the secret is valid (not too long etc); also validates options
 		const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
 		void smokeTest; // intentionally unused
 
