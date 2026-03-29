@@ -223,10 +223,6 @@ async function _request(options: RequestOptions): Promise<unknown> {
 	const headers: Record<string, string> = {
 		Accept: 'application/json, text/plain, */*',
 		...(body ? { 'Content-Type': 'application/json' } : undefined),
-		// The primary protection is `cache: 'no-store'` on RequestInit (below).
-		// These request headers cover intermediary proxies that may ignore fetch-level cache modes.
-		'Cache-Control': 'no-store',
-		Pragma: 'no-cache',
 		// Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header (silently ignored).
 		// In Node.js this overrides the default `undici` identifier that would leak the runtime.
 		'User-Agent': 'Mozilla/5.0',
