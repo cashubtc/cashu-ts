@@ -477,9 +477,6 @@ export function getTokenMetadata(token: string): TokenMetadata;
 export function getValidSigners(signatures: string[], message: string, pubkeys: string[]): string[];
 
 // @public
-export function handleTokens(token: string): Token;
-
-// @public
 export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean;
 
 // @public (undocumented)
