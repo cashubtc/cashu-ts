@@ -14,6 +14,7 @@ import {
 	deriveSecret,
 	pointFromHex,
 	serializeProof,
+	verifyDLEQProof,
 	type DLEQ,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
@@ -135,13 +136,23 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
 				r: this.blindingFactor,
 			};
 		}
+		const A = pointFromHex(keyset.keys[sig.amount]);
+
+		// NUT-12: Verify DLEQ proof if present
+		if (dleq) {
+			const B_ = pointFromHex(this.blindedMessage.B_);
+			const C_ = pointFromHex(sig.C_);
+			if (!verifyDLEQProof(dleq, B_, C_, A)) {
+				throw new Error('DLEQ verification failed on mint response');
+			}
+		}
+
 		const blindSignature = {
 			id: sig.id,
 			amount: sig.amount,
 			C_: pointFromHex(sig.C_),
 			dleq: dleq,
 		};
-		const A = pointFromHex(keyset.keys[sig.amount]);
 		const proof = constructProofFromPromise(blindSignature, this.blindingFactor, this.secret, A);
 		const serializedProof = {
 			...serializeProof(proof),
