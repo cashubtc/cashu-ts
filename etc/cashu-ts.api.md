@@ -1298,7 +1298,7 @@ export type P2PKOptions = {
 // @public (undocumented)
 export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
 
-// @public (undocumented)
+// @public
 export type P2PKTag = [key: string, ...values: string[]];
 
 // @public (undocumented)

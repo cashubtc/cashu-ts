@@ -15,7 +15,6 @@ import {
 	type SendConfig,
 	type ReceiveConfig,
 	type MintProofsConfig,
-	type P2PKOptions,
 	type OnCountersReserved,
 	type MeltProofsConfig,
 	type MeltProofsResponse,
@@ -23,6 +22,7 @@ import {
 	type MintPreview,
 } from './types';
 import type { Wallet } from './Wallet';
+import { type P2PKOptions } from '../crypto';
 
 export type MintMethod = 'bolt11' | 'bolt12';
 

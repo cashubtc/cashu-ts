@@ -5,17 +5,17 @@ import {
 	type SerializedBlindedSignature,
 	type SerializedDLEQ,
 } from './types';
-import { type P2PKOptions } from '../wallet';
 import {
 	blindMessage,
 	constructUnblindedSignature,
 	deriveP2BKBlindedPubkeys,
 	deriveBlindingFactor,
 	deriveSecret,
+	normalizeP2PKOptions,
 	pointFromHex,
 	type DLEQ,
 	type BlindSignature,
-	normalisePubkey,
+	type P2PKOptions,
 } from '../crypto';
 import { BlindedMessage } from './BlindedMessage';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
@@ -156,24 +156,16 @@ export class OutputData implements OutputDataLike {
 
 	static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string) {
 		const amountValue = Amount.from(amount);
-		// normalise keys to canonical form and deduplicate within each set
-		const lockKeys = [
-			...new Set((Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]).map(normalisePubkey)),
-		];
-		const refundKeys = [...new Set((p2pk.refundKeys ?? []).map(normalisePubkey))];
-		const reqLock = Math.max(1, Math.min(p2pk.requiredSignatures ?? 1, lockKeys.length));
-		const reqRefund = Math.max(
-			1,
-			Math.min(p2pk.requiredRefundSignatures ?? 1, refundKeys.length || 1),
-		);
-		// Sanity check - we always need at least one locking key
-		if (lockKeys.length === 0) {
-			throw new Error('P2PK requires at least one pubkey');
-		}
+		const normalized = normalizeP2PKOptions(p2pk);
+		const lockKeys = Array.isArray(normalized.pubkey) ? normalized.pubkey : [normalized.pubkey];
+		const refundKeys = normalized.refundKeys ?? [];
+		const reqLock = normalized.requiredSignatures ?? 1;
+		const reqRefund = normalized.requiredRefundSignatures ?? 1;
 
 		// Init vars
-		const isHTLC = typeof p2pk.hashlock === 'string' && p2pk.hashlock.length > 0;
-		let data = isHTLC ? (p2pk.hashlock as string) : lockKeys[0];
+		const hashlock = normalized.hashlock;
+		const isHTLC = typeof hashlock === 'string' && hashlock.length > 0;
+		let data = isHTLC ? hashlock : lockKeys[0];
 		let pubkeys = isHTLC ? lockKeys : lockKeys.slice(1);
 		let refund = refundKeys;
 
@@ -197,7 +189,7 @@ export class OutputData implements OutputDataLike {
 		// build P2PK Tags (NUT-11)
 		const tags: string[][] = [];
 
-		const ts = p2pk.locktime ?? NaN;
+		const ts = normalized.locktime ?? NaN;
 		if (Number.isSafeInteger(ts) && ts >= 0) {
 			tags.push(['locktime', String(ts)]);
 		}
@@ -216,17 +208,17 @@ export class OutputData implements OutputDataLike {
 			}
 		}
 
-		if (p2pk.sigFlag == 'SIG_ALL') {
+		if (normalized.sigFlag == 'SIG_ALL') {
 			tags.push(['sigflag', 'SIG_ALL']);
 		}
 
 		// Append additional tags if any
-		if (p2pk.additionalTags?.length) {
-			const normalized = p2pk.additionalTags.map(([k, ...vals]) => {
+		if (normalized.additionalTags?.length) {
+			const extraTags = normalized.additionalTags.map(([k, ...vals]) => {
 				assertValidTagKey(k); // Validate key
 				return [k, ...vals.map(String)]; // all to strings
 			});
-			tags.push(...normalized);
+			tags.push(...extraTags);
 		}
 
 		// Construct secret

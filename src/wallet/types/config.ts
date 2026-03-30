@@ -2,7 +2,7 @@ import type { Proof } from '../../model/types/proof';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
 import { type OperationCounters } from '../CounterSource';
-import { type SigFlag } from '../../crypto';
+import { type P2PKOptions } from '../../crypto';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
@@ -101,23 +101,6 @@ export interface OutputConfig {
 	send: OutputType;
 	keep?: OutputType;
 }
-
-/**
- * Options for configuring P2PK (Pay-to-Public-Key) locked proofs according to NUT-11.
- */
-export type P2PKOptions = {
-	pubkey: string | string[];
-	locktime?: number;
-	refundKeys?: string[];
-	requiredSignatures?: number;
-	requiredRefundSignatures?: number;
-	additionalTags?: P2PKTag[];
-	blindKeys?: boolean; // default false
-	sigFlag?: SigFlag;
-	hashlock?: string; // NUT-14 (HTLC)
-};
-
-export type P2PKTag = [key: string, ...values: string[]];
 
 export type OnCountersReserved = (info: OperationCounters) => void;
 

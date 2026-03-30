@@ -28,6 +28,8 @@ import {
 	createSecret,
 	getP2PKNSigsRefund,
 	isHTLCSpendAuthorised,
+	normalizeP2PKOptions,
+	type P2PKOptions,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -1431,5 +1433,66 @@ describe('NUT-11 test vectors', () => {
 		expect(() => assertSigAllInputs(proofs)).not.toThrow();
 		const mts = buildP2PKSigAllMessage(proofs, outputs, quote);
 		expect(isHTLCSpendAuthorised(proofs[0], NULL_LOGGER, mts)).toBe(true);
+	});
+});
+
+// helpers to make valid hex keys
+const _xonly = (ch: string) => ch.repeat(64);
+const _comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(64)}`;
+
+describe('normalizeP2PKOptions', () => {
+	const pk = _comp('a', '02');
+	const refundPk = _comp('b', '02');
+
+	it('throws when pubkey is an empty array', () => {
+		expect(() => normalizeP2PKOptions({ pubkey: [] as any })).toThrow(
+			/P2PK requires at least one pubkey/i,
+		);
+	});
+
+	it('throws when requiredSignatures is not an integer', () => {
+		expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 1.5 })).toThrow(
+			/requiredSignatures must be a positive integer/i,
+		);
+	});
+
+	it('throws when requiredSignatures is less than 1', () => {
+		expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 0 })).toThrow(
+			/requiredSignatures must be a positive integer/i,
+		);
+	});
+
+	it('throws when requiredRefundSignatures is set without refundKeys', () => {
+		expect(() =>
+			normalizeP2PKOptions({ pubkey: pk, locktime: 9999, requiredRefundSignatures: 1 }),
+		).toThrow(/requiredRefundSignatures requires refundKeys/i);
+	});
+
+	it('throws when requiredRefundSignatures is not an integer', () => {
+		expect(() =>
+			normalizeP2PKOptions({
+				pubkey: pk,
+				locktime: 9999,
+				refundKeys: [refundPk],
+				requiredRefundSignatures: 1.5,
+			}),
+		).toThrow(/requiredRefundSignatures must be a positive integer/i);
+	});
+
+	it('throws when requiredRefundSignatures is less than 1', () => {
+		expect(() =>
+			normalizeP2PKOptions({
+				pubkey: pk,
+				locktime: 9999,
+				refundKeys: [refundPk],
+				requiredRefundSignatures: 0,
+			}),
+		).toThrow(/requiredRefundSignatures must be a positive integer/i);
+	});
+
+	it('throws when sigFlag is not a valid SigFlag value', () => {
+		expect(() => normalizeP2PKOptions({ pubkey: pk, sigFlag: 'FOOBAR' as any })).toThrow(
+			/invalid sigflag/i,
+		);
 	});
 });
