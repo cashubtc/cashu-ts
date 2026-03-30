@@ -112,9 +112,6 @@ export interface AuthProvider {
 }
 
 // @public
-export function bigIntStringify<T>(_key: unknown, value: T): string | T;
-
-// @public
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public (undocumented)
@@ -125,12 +122,6 @@ export type BlindSignature = {
 
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
-
-// @public
-export function checkResponse(data: {
-    error?: string;
-    detail?: string;
-}): void;
 
 // @public
 export const CheckStateEnum: {
@@ -246,9 +237,6 @@ export function createSecret(kind: SecretKind, data: string, tags?: string[][]):
 
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
-
-// @public
-export function deepEqual<T>(a: T, b: T): boolean;
 
 // @public (undocumented)
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
@@ -404,9 +392,6 @@ export type GetInfoResponse = {
 };
 
 // @public
-export function getKeepAmounts(proofsWeHave: Array<Pick<Proof, 'amount'>>, amountToKeep: AmountLike, keys: Keys, targetCount: number): Amount[];
-
-// @public
 export function getKeysetAmounts(keyset: Keys, order?: 'asc' | 'desc'): Amount[];
 
 // @public (undocumented)
@@ -497,9 +482,6 @@ export type HasKeysetKeys = {
 };
 
 // @public
-export function hasNonHexId(p: Proof | Proof[]): boolean;
-
-// @public
 export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: string): boolean;
 
 // @public
@@ -507,9 +489,6 @@ export function hasTag(secret: Secret | string, key: string): boolean;
 
 // @public
 export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean;
-
-// @public
-export function hexToNumber(hex: string): bigint;
 
 // @public
 export type HTLCWitness = {
@@ -531,22 +510,13 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
 // @public
-export function invoiceHasAmountInHRP(invoice: string): boolean;
-
-// @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
-
-// @public
-export function isObj(v: unknown): v is object;
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public
 export function isValidHex(str: string): boolean;
-
-// @public
-export function joinUrls(...parts: string[]): string;
 
 // @public (undocumented)
 export type JsonRpcReqParams = {
@@ -756,9 +726,6 @@ export type MeltRequest = {
     outputs?: SerializedBlindedMessage[];
     prefer_async?: boolean;
 } & Record<string, unknown>;
-
-// @public
-export function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array;
 
 // @public
 export class Mint {
@@ -1092,9 +1059,6 @@ export class NetworkError extends Error {
 export function normalizeProofAmounts(raw: Array<Omit<Proof, 'amount'> & {
     amount: AmountLike;
 }>): Proof[];
-
-// @public
-export function numberToHexPadded64(scalar: bigint): string;
 
 // @public
 export type NUT10Option = {
@@ -1510,9 +1474,6 @@ export type RestoreConfig = {
 
 // @public (undocumented)
 export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
-
-// @public
-export function sanitizeUrl(url: string): string;
 
 // @public
 export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => string;

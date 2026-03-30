@@ -104,50 +104,6 @@ export function splitAmount(
 }
 
 /**
- * Creates a list of amounts to keep based on the proofs we have and the proofs we want to reach.
- *
- * @param proofsWeHave Proofs stored (from current mint) — only `.amount` is read.
- * @param amountToKeep Amount to keep.
- * @param keys Keys of current keyset.
- * @param targetCount The target number of proofs to reach.
- * @returns An array of amounts to keep.
- */
-export function getKeepAmounts(
-	proofsWeHave: Array<Pick<Proof, 'amount'>>,
-	amountToKeep: AmountLike,
-	keys: Keys,
-	targetCount: number,
-): Amount[] {
-	const normalizedAmountToKeep = toAmount(amountToKeep, 'getKeepAmounts.amountToKeep', true);
-	// determines amounts we need to reach the targetCount for each amount based on the amounts of the proofs we have
-	// it tries to select amounts so that the proofs we have and the proofs we want reach the targetCount
-	const amountsWeWant: Amount[] = [];
-	let runningTotal = Amount.zero();
-	const amountsWeHave = proofsWeHave.map((p) => p.amount);
-	const sortedKeyAmounts = getKeysetAmountsAsAmount(keys, 'asc');
-	for (const amt of sortedKeyAmounts) {
-		const countWeHave = amountsWeHave.filter((a) => amt.equals(a)).length;
-		const countWeWant = Math.max(targetCount - countWeHave, 0);
-		for (let i = 0; i < countWeWant; ++i) {
-			const nextTotal = runningTotal.add(amt);
-			if (nextTotal.greaterThan(normalizedAmountToKeep)) {
-				break;
-			}
-			amountsWeWant.push(amt);
-			runningTotal = nextTotal;
-		}
-	}
-	// use splitAmount to fill the rest between the sum of amountsWeHave and amountToKeep
-	const amountDiff = normalizedAmountToKeep.subtract(runningTotal);
-	if (!amountDiff.isZero()) {
-		for (const amt of splitAmount(amountDiff, keys)) {
-			amountsWeWant.push(amt);
-			runningTotal = runningTotal.add(amt);
-		}
-	}
-	return amountsWeWant.sort((a, b) => a.compareTo(b));
-}
-/**
  * Returns the amounts in the keyset sorted by the order specified.
  *
  * @param keyset To search in.
@@ -185,6 +141,8 @@ function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
 
 /**
  * Converts a hex string to a bigint scalar. Returns `0n` for empty/falsy input.
+ *
+ * @internal
  */
 export function hexToNumber(hex: string): bigint {
 	return hex ? BigInt(`0x${hex}`) : 0n;
@@ -192,6 +150,8 @@ export function hexToNumber(hex: string): bigint {
 
 /**
  * Converts a bigint scalar to a zero-padded 64-character hex string (32 bytes).
+ *
+ * @internal
  */
 export function numberToHexPadded64(scalar: bigint): string {
 	return scalar.toString(16).padStart(64, '0');
@@ -204,13 +164,7 @@ export function isValidHex(str: string) {
 	return /^[a-f0-9]+$/i.test(str);
 }
 
-/**
- * Checks whether a proof or a list of proofs contains a non-hex id.
- *
- * @param p Proof or list of proofs.
- * @returns Boolean.
- */
-export function hasNonHexId(p: Proof | Proof[]) {
+function hasNonHexId(p: Proof | Proof[]) {
 	if (Array.isArray(p)) {
 		return p.some((proof) => !isValidHex(proof.id));
 	}
@@ -219,6 +173,8 @@ export function hasNonHexId(p: Proof | Proof[]) {
 
 /**
  * `JSON.stringify` replacer that converts `bigint` values to strings.
+ *
+ * @internal
  */
 export function bigIntStringify<T>(_key: unknown, value: T) {
 	return typeof value === 'bigint' ? value.toString() : value;
@@ -502,10 +458,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
 	}
 }
 
-/**
- * Concatenates one or more `Uint8Array` buffers into a single array.
- */
-export function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
+function mergeUInt8Arrays(...arrays: Uint8Array[]): Uint8Array {
 	const totalLength = arrays.reduce((a, c) => a + c.length, 0);
 	const merged = new Uint8Array(totalLength);
 	let offset = 0;
@@ -525,26 +478,17 @@ export function sortProofsById(proofs: Proof[]) {
 
 /**
  * Type guard: returns `true` if `v` is a non-null object.
+ *
+ * @internal
  */
 export function isObj(v: unknown): v is object {
 	return v != null && typeof v === 'object';
 }
 
 /**
- * Throws if the mint response contains an `error` or `detail` message.
- */
-export function checkResponse(data: { error?: string; detail?: string }) {
-	if (!isObj(data)) return;
-	if ('error' in data && data.error) {
-		throw new Error(data.error);
-	}
-	if ('detail' in data && data.detail) {
-		throw new Error(data.detail);
-	}
-}
-
-/**
  * Joins URL path segments, stripping leading/trailing slashes from each part.
+ *
+ * @internal
  */
 export function joinUrls(...parts: string[]): string {
 	return parts.map((part: string) => part.replace(/(^\/+|\/+$)/g, '')).join('/');
@@ -552,6 +496,8 @@ export function joinUrls(...parts: string[]): string {
 
 /**
  * Strips a trailing slash from a URL.
+ *
+ * @internal
  */
 export function sanitizeUrl(url: string): string {
 	return url.replace(/\/$/, '');
@@ -704,28 +650,6 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
 	return tokenFromTemplate(decoded);
 }
 
-/**
- * Utility function for deep equality comparison of objects.
- */
-export function deepEqual<T>(a: T, b: T): boolean {
-	if (a === b) return true;
-	if (a == null || b == null) return false;
-	if (typeof a !== 'object' || typeof b !== 'object') return false;
-
-	if (Array.isArray(a) && Array.isArray(b)) {
-		if (a.length !== b.length) return false;
-		return a.every((item, index) => deepEqual(item, b[index]));
-	}
-
-	if (Array.isArray(a) || Array.isArray(b)) return false;
-
-	const keysA = Object.keys(a) as Array<keyof T>;
-	const keysB = Object.keys(b) as Array<keyof T>;
-	if (keysA.length !== keysB.length) return false;
-
-	return keysA.every((key) => keysB.includes(key) && deepEqual(a[key], b[key]));
-}
-
 function removePrefix(token: string): string {
 	// Strip optional URI scheme first, then the required "cashu" token prefix
 	const uriSchemes = ['web+cashu://', 'cashu://', 'cashu:'];
@@ -744,6 +668,8 @@ function removePrefix(token: string): string {
 /**
  * Detects whether a BOLT-11 Lightning invoice encodes a non-zero amount in the Human-Readable Part
  * (HRP).
+ *
+ * @internal
  */
 export function invoiceHasAmountInHRP(invoice: string): boolean {
 	return /^ln[a-z]{2,}[1-9][0-9]*(?:[mun]|0p)?1/i.test(invoice);

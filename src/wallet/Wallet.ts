@@ -76,13 +76,13 @@ import { Amount, type AmountLike } from '../model/Amount';
 
 import {
 	getDecodedToken,
-	getKeepAmounts,
 	hasValidDleq,
+	invoiceHasAmountInHRP,
+	sanitizeUrl,
 	splitAmount,
 	sumProofs,
-	sanitizeUrl,
-	invoiceHasAmountInHRP,
 } from '../utils';
+import { getKeepAmounts } from './_internal';
 import { type AuthProvider } from '../auth/AuthProvider';
 
 const PENDING_KEYSET_ID = '__PENDING__';
