@@ -325,15 +325,42 @@ import { MessageQueue } from '@cashu/cashu-ts/transport/WSConnection';
 
 ---
 
-## `mergeUInt8Arrays` signature change
+## Internal utility functions removed or restricted
 
-`mergeUInt8Arrays(a1, a2)` now accepts variadic arguments: `mergeUInt8Arrays(...arrays)`. Existing two-argument calls continue to work unchanged; you can now also pass more than two arrays in a single call.
+Several functions that were intended for internal use have been removed from the public API.
 
----
+### Removed entirely (dead code)
 
-## `handleTokens` no longer exported
+| Function        | Notes                                                                             |
+| --------------- | --------------------------------------------------------------------------------- |
+| `checkResponse` | Superseded by the `HttpResponseError` transport refactor in 2023. Had no callers. |
+| `deepEqual`     | Generic deep-equality helper. Had no callers inside or outside the library.       |
 
-`handleTokens` should always have been an internal function, but was exported. If you used this functions, please revert to using `getDecodedToken` (for fully hydrated Proofs) or `getTokenMetadata` (if you only want token/proof metadata).
+### Made private (no longer exported)
+
+| Function           | Notes                                                           |
+| ------------------ | --------------------------------------------------------------- |
+| `mergeUInt8Arrays` | Internal byte-buffer helper.                                    |
+| `hasNonHexId`      | Internal guard used inside token encoding.                      |
+| `getKeepAmounts`   | Internal wallet coin-selection algorithm. Removed from `utils`. |
+
+### Marked `@internal`
+
+The following are still exported but are excluded from the trimmed type definitions and not part of the supported public API. Remove any external dependencies on them.
+
+| Function                | Notes                                          |
+| ----------------------- | ---------------------------------------------- |
+| `hexToNumber`           | Crypto scalar helper (hex → bigint).           |
+| `numberToHexPadded64`   | Crypto scalar helper (bigint → 64-char hex).   |
+| `isObj`                 | HTTP response type guard.                      |
+| `joinUrls`              | Mint URL path builder.                         |
+| `sanitizeUrl`           | URL trailing-slash normaliser.                 |
+| `invoiceHasAmountInHRP` | BOLT-11 HRP amount detector.                   |
+| `bigIntStringify`       | `JSON.stringify` replacer for `bigint` values. |
+
+### `handleTokens` no longer exported
+
+`handleTokens` should always have been an internal function, but was exported. If you used this function, use `getDecodedToken` (for fully hydrated `Proof` objects) or `getTokenMetadata` (for token/proof metadata without keyset resolution) instead.
 
 ---
 
