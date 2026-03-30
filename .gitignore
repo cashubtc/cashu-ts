@@ -1,4 +1,5 @@
 coverage
+test-results
 lib
 docs
 dist-scripts/
@@ -7,6 +8,6 @@ temp
 test/__screenshots__
 .DS_Store
 *.tgz
-
+.claude
 .githooks
 .husky/_
