@@ -69,15 +69,13 @@ const derive = (
 
 	if (secretOrBlinding === DerivationType.BLINDING_FACTOR) {
 		const x = Bytes.toBigInt(hmacDigest);
-		// Optimization: single subtraction instead of modulo
-		// Probability of HMAC >= SECP256K1_N is ~2^-128
-		if (x >= SECP256K1_N) {
-			return Bytes.fromBigInt(x - SECP256K1_N);
-		}
-		if (x === 0n) {
+		// Reduce modulo curve order. Single subtraction suffices since HMAC output
+		// is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
+		const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
+		if (reduced === 0n) {
 			throw new Error('Derived invalid blinding scalar r == 0');
 		}
-		return hmacDigest;
+		return Bytes.fromBigInt(reduced);
 	}
 
 	return hmacDigest;

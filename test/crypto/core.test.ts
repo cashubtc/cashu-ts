@@ -76,6 +76,18 @@ describe('test blinding message', () => {
 			'025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b',
 		);
 	});
+
+	test('throws when r is zero', () => {
+		const secretUInt8 = new TextEncoder().encode(SECRET_MESSAGE);
+		expect(() => blindMessage(secretUInt8, 0n)).toThrow('Blinding factor r must be non-zero');
+	});
+
+	test('generates random r when none provided', () => {
+		const secretUInt8 = new TextEncoder().encode(SECRET_MESSAGE);
+		const { r } = blindMessage(secretUInt8);
+		expect(r).toBeTypeOf('bigint');
+		expect(r).not.toBe(0n);
+	});
 });
 
 describe('test unblinding signature', () => {
