@@ -392,12 +392,14 @@ export function getTokenMetadata(token: string): TokenMetadata {
 }
 
 /**
- * Helper function to decode different versions of cashu tokens into an object.
+ * Private helper function to decode different versions of cashu tokens into an object.
  *
+ * @remarks
+ * Callers should use {@link getDecodedToken} or {@link getTokenMetadata}
  * @param token An encoded cashu token (cashuB...)
  * @returns Cashu Token object.
  */
-export function handleTokens(token: string): Token {
+function handleTokens(token: string): Token {
 	const version = token.slice(0, 1);
 	const encodedToken = token.slice(1);
 	if (version === 'A') {
