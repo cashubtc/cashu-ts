@@ -1,5 +1,6 @@
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { getKeysetIdInt } from './core';
 import { HDKey } from '@scure/bip32';
 import { Bytes, isBase64String } from '../utils';
@@ -75,7 +76,7 @@ const derive = (
 		if (reduced === 0n) {
 			throw new Error('Derived invalid blinding scalar r == 0');
 		}
-		return Bytes.fromBigInt(reduced);
+		return numberToBytesBE(reduced, 32); // preserves 32-byte width
 	}
 
 	return hmacDigest;
