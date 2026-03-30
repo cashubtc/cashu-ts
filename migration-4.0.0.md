@@ -331,6 +331,12 @@ import { MessageQueue } from '@cashu/cashu-ts/transport/WSConnection';
 
 ---
 
+## `handleTokens` no longer exported
+
+`handleTokens` should always have been an internal function, but was exported. If you used this functions, please revert to using `getDecodedToken` (for fully hydrated Proofs) or `getTokenMetadata` (if you only want token/proof metadata).
+
+---
+
 ## Crypto primitive renames
 
 The following low-level exports from `@cashu/cashu-ts` (re-exported from the crypto layer) have been renamed for clarity. The old names no longer exist.
