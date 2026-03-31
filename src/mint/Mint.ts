@@ -534,7 +534,7 @@ class Mint {
 	 * This method enables support for custom payment methods without modifying the Mint class. It
 	 * constructs the endpoint as `/v1/melt/{method}` and POSTs the payload. The response must contain
 	 * the common fields: quote, amount, state, expiry. Method-specific fields (e.g. `fee_reserve` for
-	 * bolt11/bolt12) are normalised when present. Custom methods can supply an optional `normalize`
+	 * bolt11/bolt12) are normalized when present. Custom methods can supply an optional `normalize`
 	 * callback for their own fields.
 	 * @example
 	 *

@@ -10,6 +10,7 @@ import {
 	getTagScalar,
 	getDataField,
 	getTag,
+	getTags,
 	assertSecretKind,
 	createSecret,
 	type Secret,
@@ -26,89 +27,6 @@ const VALID_SIG_FLAGS: ReadonlySet<SigFlag> = new Set(Object.values(SigFlags));
 export type LockState = 'PERMANENT' | 'ACTIVE' | 'EXPIRED';
 
 export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
-
-export interface P2PKVerificationResult {
-	success: boolean;
-	path: P2PKSpendingPath;
-	lockState: LockState;
-	requiredSigners: number;
-	eligibleSigners: number;
-	receivedSigners: string[]; // hex pubkeys that actually signed
-}
-
-/**
- * @internal
- */
-type WitnessData = {
-	preimage?: string;
-	signatures: string[];
-};
-
-// ------------------------------
-// NUT-11 Secrets
-// ------------------------------
-
-/**
- * Create a P2PK secret.
- *
- * @param pubkey - The pubkey to add to Secret.data.
- * @param tags - Optional. Additional P2PK tags.
- * @throws If the sigflag is unrecognised.
- */
-export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
-	const secret = createSecret('P2PK', pubkey, tags);
-	parseP2PKSecret(secret); // validates
-	return secret;
-}
-
-/**
- * Parse a P2PK Secret and validate NUT-10 shape and NUT-11 constraints.
- *
- * @param secret - The Proof secret.
- * @returns Secret object.
- * @throws If the JSON is invalid, NUT-10 secret is malformed, or sigflag is unrecognised.
- */
-export function parseP2PKSecret(secret: string | Secret): Secret {
-	// HTLC extends P2PK, so we include it in our expected list.
-	const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
-	const flag = getTagScalar(parsed, 'sigflag');
-	if (flag !== undefined) assertSigFlag(flag);
-	return parsed;
-}
-
-// ------------------------------
-// Spending Condition Helpers
-// ------------------------------
-
-/**
- * Accept 33 byte compressed (02|03...), or 32 byte x-only, normalised to lowercase 33 byte with 02
- * prefix for x only.
- *
- * @internal
- */
-export function normalisePubkey(pk: string): string {
-	const hex = pk.toLowerCase();
-	if (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03'))) return hex;
-	if (hex.length === 64) return `02${hex}`;
-	throw new Error(
-		`Invalid pubkey, expected 33 byte compressed or 32 byte x only, got length ${hex.length}`,
-	);
-}
-
-/**
- * Lenient version of normalisePubkey that returns undefined instead of throwing for invalid keys.
- */
-function tryNormalisePubkey(pk: string): string | undefined {
-	try {
-		return normalisePubkey(pk);
-	} catch {
-		return undefined;
-	}
-}
-
-// ------------------------------
-// P2PK / HTLC Options
-// ------------------------------
 
 /**
  * Tag entry for additional NUT-11 P2PK secret tags.
@@ -130,6 +48,95 @@ export type P2PKOptions = {
 	hashlock?: string; // NUT-14 (HTLC)
 };
 
+export interface P2PKVerificationResult {
+	success: boolean;
+	path: P2PKSpendingPath;
+	lockState: LockState;
+	requiredSigners: number;
+	eligibleSigners: number;
+	receivedSigners: string[]; // hex pubkeys that actually signed
+}
+
+/**
+ * @internal
+ */
+type WitnessData = {
+	preimage?: string;
+	signatures: string[];
+};
+
+/**
+ * @internal
+ */
+const P2PK_KNOWN_TAG_KEYS = new Set([
+	'locktime',
+	'pubkeys',
+	'n_sigs',
+	'refund',
+	'n_sigs_refund',
+	'sigflag',
+]);
+
+// ------------------------------
+// NUT-11 Secrets
+// ------------------------------
+
+/**
+ * Create a P2PK secret.
+ *
+ * @param pubkey - The pubkey to add to Secret.data.
+ * @param tags - Optional. Additional P2PK tags.
+ * @throws If the sigflag is unrecognised.
+ */
+export function createP2PKsecret(pubkey: string, tags?: string[][]): string {
+	const secret = createSecret('P2PK', pubkey, tags);
+	parseP2PKSecret(secret); // validates
+	return secret;
+}
+
+/**
+ * Parse a P2PK Secret and validate NUT-10 shape and NUT-11 tag-level constraints.
+ *
+ * @remarks
+ * Layer 1 validation: Checks NUT-10 structure, rejects duplicate P2PK tag keys, and validates
+ * sigflag value. Does NOT validate cross-tag semantics (e.g. n_sigs <= pubkeys) — use
+ * {@link verifyP2PKSpendingConditions} for full semantic validation.
+ * @param secret - The Proof secret.
+ * @returns Secret object.
+ * @throws If the NUT-10 secret is malformed, tags are duplicated, or sigflag is unrecognised.
+ */
+export function parseP2PKSecret(secret: string | Secret): Secret {
+	// HTLC extends P2PK, so we include it in our expected list.
+	const parsed = assertSecretKind(['P2PK', 'HTLC'], secret);
+	assertNoDuplicateP2PKTags(getTags(parsed));
+	const flag = getTagScalar(parsed, 'sigflag');
+	if (flag !== undefined) assertSigFlag(flag);
+	return parsed;
+}
+
+// ------------------------------
+// Spending Condition Helpers
+// ------------------------------
+
+/**
+ * Validate that known P2PK tag keys do not appear more than once.
+ *
+ * @param tags - The tags array from a NUT-10 secret.
+ * @throws If any known P2PK tag key appears more than once.
+ * @internal
+ */
+function assertNoDuplicateP2PKTags(tags: string[][]): void {
+	const seen = new Set<string>();
+	for (const tag of tags) {
+		const key = tag[0];
+		if (!P2PK_KNOWN_TAG_KEYS.has(key)) continue;
+		if (seen.has(key)) {
+			throw new Error(`Duplicate P2PK tag "${key}"`);
+		}
+		seen.add(key);
+	}
+}
+
 function assertSigFlag(flag: string): asserts flag is SigFlag {
 	if (!VALID_SIG_FLAGS.has(flag as SigFlag)) {
 		throw new Error(`Invalid sigflag "${flag}": must be "SIG_INPUTS" or "SIG_ALL"`);
@@ -138,9 +145,123 @@ function assertSigFlag(flag: string): asserts flag is SigFlag {
 
 function assertPositiveInteger(value: number, field: string): number {
 	if (!Number.isInteger(value) || value < 1) {
-		throw new Error(`${field} must be a positive integer`);
+		throw new Error(`${field} must be a positive integer, got ${value}`);
 	}
 	return value;
+}
+
+/**
+ * Shared semantic validation for P2PK spending conditions.
+ *
+ * @remarks
+ * Used by both {@link normalizeP2PKOptions} (creation) and {@link assertP2PKSemantics} (receiving) to
+ * enforce the same rules.
+ * @internal
+ */
+function assertSpendingConditionRules(params: {
+	mainKeyCount: number;
+	refundKeyCount: number;
+	nSigs?: number;
+	nSigsRefund?: number;
+	hasLocktime: boolean;
+}): void {
+	const { mainKeyCount, refundKeyCount, nSigs, nSigsRefund, hasLocktime } = params;
+
+	if (nSigs !== undefined) {
+		assertPositiveInteger(nSigs, 'requiredSignatures (n_sigs)');
+		if (nSigs > mainKeyCount) {
+			throw new Error(
+				`requiredSignatures (n_sigs) (${nSigs}) exceeds available pubkeys (${mainKeyCount})`,
+			);
+		}
+	}
+
+	if (nSigsRefund !== undefined) {
+		assertPositiveInteger(nSigsRefund, 'requiredRefundSignatures (n_sigs_refund)');
+		if (refundKeyCount === 0) {
+			throw new Error('requiredRefundSignatures (n_sigs_refund) requires refund keys');
+		}
+		if (nSigsRefund > refundKeyCount) {
+			throw new Error(
+				`requiredRefundSignatures (n_sigs_refund) (${nSigsRefund}) exceeds available refund keys (${refundKeyCount})`,
+			);
+		}
+	}
+
+	if (refundKeyCount > 0 && !hasLocktime) {
+		throw new Error('refund keys require a locktime');
+	}
+}
+
+/**
+ * Validate cross-tag semantic invariants for a P2PK/HTLC secret.
+ *
+ * @remarks
+ * Layer 2 validation — checks relationships BETWEEN tags. Called after parseP2PKSecret() (Layer 1)
+ * has already validated tag-key uniqueness.
+ * @throws If spending conditions are malformed or unsatisfiable.
+ * @internal
+ */
+function assertP2PKSemantics(secret: Secret): void {
+	const mainKeys = getP2PKWitnessPubkeys(secret);
+	const refundKeys = getP2PKWitnessRefundkeys(secret);
+	const locktime = getP2PKLocktime(secret);
+
+	// Shared semantic validation
+	assertSpendingConditionRules({
+		mainKeyCount: mainKeys.length,
+		refundKeyCount: refundKeys.length,
+		nSigs: getTagInt(secret, 'n_sigs'),
+		nSigsRefund: getTagInt(secret, 'n_sigs_refund'),
+		hasLocktime: Number.isFinite(locktime),
+	});
+
+	// data pubkey must not be duplicated in pubkeys tag (P2PK only)
+	// Compare x-only (last 64 chars) to handle 02/03 prefix differences
+	if (getSecretKind(secret) === 'P2PK') {
+		const dataKey = trynormalizePubkey(getDataField(secret));
+		const pubkeysTag = getTag(secret, 'pubkeys');
+		if (dataKey && pubkeysTag) {
+			const dataXOnly = dataKey.slice(-64);
+			const tagXOnly = pubkeysTag
+				.map(trynormalizePubkey)
+				.filter(Boolean)
+				.map((k) => (k as string).slice(-64));
+			if (tagXOnly.includes(dataXOnly)) {
+				throw new Error('data pubkey must not be duplicated in pubkeys tag');
+			}
+		}
+	}
+}
+
+// ------------------------------
+// Normalizer Functions
+// ------------------------------
+
+/**
+ * Accept 33 byte compressed (02|03...), or 32 byte x-only, normalized to lowercase 33 byte with 02
+ * prefix for x only.
+ *
+ * @internal
+ */
+export function normalizePubkey(pk: string): string {
+	const hex = pk.toLowerCase();
+	if (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03'))) return hex;
+	if (hex.length === 64) return `02${hex}`;
+	throw new Error(
+		`Invalid pubkey, expected 33 byte compressed or 32 byte x only, got length ${hex.length}`,
+	);
+}
+
+/**
+ * Lenient version of normalizePubkey that returns undefined instead of throwing for invalid keys.
+ */
+function trynormalizePubkey(pk: string): string | undefined {
+	try {
+		return normalizePubkey(pk);
+	} catch {
+		return undefined;
+	}
 }
 
 /**
@@ -155,14 +276,11 @@ function assertPositiveInteger(value: number, field: string): number {
  */
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 	const pubkeys = [
-		...new Set((Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]).map(normalisePubkey)),
+		...new Set((Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]).map(normalizePubkey)),
 	];
-	const refundKeys = [...new Set((p2pk.refundKeys ?? []).map(normalisePubkey))];
+	const refundKeys = [...new Set((p2pk.refundKeys ?? []).map(normalizePubkey))];
 	if (pubkeys.length === 0) {
 		throw new Error('P2PK requires at least one pubkey');
-	}
-	if (refundKeys.length > 0 && p2pk.locktime === undefined) {
-		throw new Error('Refund pubkeys require a locktime');
 	}
 	const totalKeys = pubkeys.length + refundKeys.length;
 	if (totalKeys > 10) {
@@ -170,31 +288,17 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 	}
 	if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
-	const requiredSignatures = assertPositiveInteger(
-		p2pk.requiredSignatures ?? 1,
-		'requiredSignatures',
-	);
-	if (requiredSignatures > pubkeys.length) {
-		throw new Error(
-			`requiredSignatures (${requiredSignatures}) exceeds available pubkeys (${pubkeys.length})`,
-		);
-	}
+	const requiredSignatures = p2pk.requiredSignatures ?? 1;
+	const requiredRefundSignatures = p2pk.requiredRefundSignatures;
 
-	let requiredRefundSignatures: number | undefined;
-	if (p2pk.requiredRefundSignatures !== undefined) {
-		requiredRefundSignatures = assertPositiveInteger(
-			p2pk.requiredRefundSignatures,
-			'requiredRefundSignatures',
-		);
-		if (refundKeys.length === 0) {
-			throw new Error('requiredRefundSignatures requires refundKeys');
-		}
-		if (requiredRefundSignatures > refundKeys.length) {
-			throw new Error(
-				`requiredRefundSignatures (${requiredRefundSignatures}) exceeds available refundKeys (${refundKeys.length})`,
-			);
-		}
-	}
+	// Shared semantic validation
+	assertSpendingConditionRules({
+		mainKeyCount: pubkeys.length,
+		refundKeyCount: refundKeys.length,
+		nSigs: requiredSignatures,
+		nSigsRefund: requiredRefundSignatures,
+		hasLocktime: p2pk.locktime !== undefined,
+	});
 
 	return {
 		pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys,
@@ -210,6 +314,10 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
 		...(p2pk.hashlock ? { hashlock: p2pk.hashlock } : {}),
 	};
 }
+
+// ------------------------------
+// Tag Getters
+// ------------------------------
 
 /**
  * Returns the expected witness public keys from a NUT-11 P2PK secret.
@@ -261,10 +369,10 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
 		data = getDataField(secret);
 	}
 
-	// Add pubkeys, normalise to canonical form and deduplicate
+	// Add pubkeys, normalize to canonical form and deduplicate
 	const pubkeys = getTag(secret, 'pubkeys') ?? [];
 	const allKeys = [data, ...pubkeys].filter(Boolean); // filter empty
-	return Array.from(new Set(allKeys.map(tryNormalisePubkey).filter(Boolean))) as string[];
+	return Array.from(new Set(allKeys.map(trynormalizePubkey).filter(Boolean))) as string[];
 }
 
 /**
@@ -278,7 +386,7 @@ export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[] {
 export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[] {
 	const secret = parseP2PKSecret(secretStr);
 	const keys = getTag(secret, 'refund') ?? [];
-	return Array.from(new Set(keys.map(tryNormalisePubkey).filter(Boolean))) as string[];
+	return Array.from(new Set(keys.map(trynormalizePubkey).filter(Boolean))) as string[];
 }
 
 /**
@@ -336,7 +444,7 @@ export function getP2PKNSigs(secretStr: string | Secret): number {
 	if (!refundKeys.length && lockState === 'EXPIRED') {
 		return 0; // proof unlocked
 	}
-	return getTagInt(secret, 'n_sigs') ?? 1;
+	return Math.max(getTagInt(secret, 'n_sigs') ?? 1, 1);
 }
 
 /**
@@ -356,7 +464,7 @@ export function getP2PKNSigsRefund(secretStr: string | Secret): number {
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	// Refund lock applies if there are refund keys AND lock is expired
 	if (refundKeys.length && lockState === 'EXPIRED') {
-		return getTagInt(secret, 'n_sigs_refund') ?? 1;
+		return Math.max(getTagInt(secret, 'n_sigs_refund') ?? 1, 1);
 	}
 	return 0; // refund lock inactive
 }
@@ -384,7 +492,7 @@ export function getP2PKWitnessSignatures(witness: Proof['witness']): string[] {
 }
 
 /**
- * Normalise Proof.witness into a WitnessData object.
+ * Normalize Proof.witness into a WitnessData object.
  *
  * @param witness From Proof.
  * @returns WitnessData object or undefined.
@@ -403,7 +511,7 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
 		return undefined;
 	}
 	const data: WitnessData = {
-		// always normalise signatures to an array
+		// always normalize signatures to an array
 		signatures: parsed.signatures ?? [],
 	};
 
@@ -415,7 +523,7 @@ export function parseWitnessData(witness: Proof['witness']): WitnessData | undef
 }
 
 // ------------------------------
-// Signing and Verifying Proofs
+// Signing Proofs
 // ------------------------------
 
 /**
@@ -527,6 +635,10 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 	});
 }
 
+// ------------------------------
+// Verifying Proofs
+// ------------------------------
+
 /**
  * Verify P2PK spending conditions for a single input.
  *
@@ -539,13 +651,17 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
  * unlocked and spendable without witness signatures.
  *
  * @remarks
- * Returns a detailed P2PKVerificationResult showing the conditions. If you just want a boolean
- * result, use isP2PKSpendAuthorised().
+ * First validates the spending conditions are well-formed, then checks whether the proof's witness
+ * signatures meet the threshold.
+ *
+ * Wallets can call this with unsigned proofs on receive to validate conditions. Returns a detailed
+ * P2PKVerificationResult showing the conditions. If you just want a boolean result, use
+ * isP2PKSpendAuthorised().
  * @param proof - The Proof to check.
  * @param logger - Optional logger (default: NULL_LOGGER)
  * @param message - Optional. The message to sign (for SIG_ALL)
  * @returns A P2PKVerificationResult describing the spending outcome.
- * @throws If verification is impossible.
+ * @throws If spending conditions are malformed, or verification is impossible.
  */
 export function verifyP2PKSpendingConditions(
 	proof: Proof,
@@ -561,6 +677,10 @@ export function verifyP2PKSpendingConditions(
 	// Init
 	message = message ?? proof.secret; // default message is proof secret
 	const secret: Secret = parseP2PKSecret(proof.secret);
+
+	// Layer 2: validate cross-tag semantics (throws if malformed)
+	assertP2PKSemantics(secret);
+
 	const signatures = getP2PKWitnessSignatures(proof.witness);
 	const lockState: LockState = getP2PKLockState(secret);
 	const mainKeys = getP2PKWitnessPubkeys(secret);

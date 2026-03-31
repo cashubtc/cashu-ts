@@ -23,15 +23,15 @@ describe('P2PKBuilder.toOptions()', () => {
 		expect(opts.pubkey).toEqual([k1, k2, k3]);
 	});
 
-	it('normalises x-only lock keys to 02-prefixed compressed', () => {
+	it('normalizes x-only lock keys to 02-prefixed compressed', () => {
 		const x = xonly('1'); // 32-byte X-only
-		const expected = comp('1', '02'); // normalised
+		const expected = comp('1', '02'); // normalized
 
 		const opts = new P2PKBuilder().addLockPubkey(x).toOptions();
 		expect(opts.pubkey).toBe(expected);
 	});
 
-	it('normalises x-only refund keys to 02-prefixed compressed', () => {
+	it('normalizes x-only refund keys to 02-prefixed compressed', () => {
 		const x = xonly('2');
 		const expected = comp('2', '02');
 
@@ -66,7 +66,7 @@ describe('P2PKBuilder.toOptions()', () => {
 	it('throws if refund keys are provided without locktime', () => {
 		expect(() =>
 			new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02')).toOptions(),
-		).toThrow(/Refund pubkeys require a locktime/i);
+		).toThrow(/refund keys require a locktime/i);
 	});
 
 	it('accepts lockUntil as Date or number (unix seconds or ms)', () => {
@@ -87,19 +87,19 @@ describe('P2PKBuilder.toOptions()', () => {
 
 	it('requireLockSignatures throws on non-integer and values less than 1', () => {
 		expect(() => new P2PKBuilder().requireLockSignatures(1.5)).toThrow(
-			/requiredSignatures must be a positive integer/i,
+			/requiredSignatures \(n_sigs\) must be a positive integer/i,
 		);
 		expect(() => new P2PKBuilder().requireLockSignatures(0)).toThrow(
-			/requiredSignatures must be a positive integer/i,
+			/requiredSignatures \(n_sigs\) must be a positive integer/i,
 		);
 	});
 
 	it('requireRefundSignatures throws on non-integer and values less than 1', () => {
 		expect(() => new P2PKBuilder().requireRefundSignatures(1.5)).toThrow(
-			/requiredRefundSignatures must be a positive integer/i,
+			/requiredRefundSignatures \(n_sigs_refund\) must be a positive integer/i,
 		);
 		expect(() => new P2PKBuilder().requireRefundSignatures(0)).toThrow(
-			/requiredRefundSignatures must be a positive integer/i,
+			/requiredRefundSignatures \(n_sigs_refund\) must be a positive integer/i,
 		);
 	});
 
@@ -109,7 +109,7 @@ describe('P2PKBuilder.toOptions()', () => {
 
 		expect(() =>
 			new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(5).toOptions(),
-		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(2\)/i);
+		).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(2\)/i);
 
 		// ask for 1 => property omitted (default 1)
 		const o2 = new P2PKBuilder().addLockPubkey([k1, k2]).requireLockSignatures(1).toOptions();
@@ -127,7 +127,9 @@ describe('P2PKBuilder.toOptions()', () => {
 				.addRefundPubkey([r1, r2])
 				.requireRefundSignatures(5)
 				.toOptions(),
-		).toThrow(/requiredRefundSignatures \(5\) exceeds available refundKeys \(2\)/i);
+		).toThrow(
+			/requiredRefundSignatures \(n_sigs_refund\) \(5\) exceeds available refund keys \(2\)/i,
+		);
 
 		const o2 = new P2PKBuilder()
 			.addLockPubkey(comp('b', '02'))
@@ -214,7 +216,7 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 	const r02c_dup = '02' + 'c'.repeat(64); // duplicate of previous after normalisation
 	const ms = (Math.floor(Date.now() / 1000) + 123) * 1000; // exercise ms branch
 
-	it('normalises mixed inputs, deduplicates, preserves insertion order, and round-trips', () => {
+	it('normalizes mixed inputs, deduplicates, preserves insertion order, and round-trips', () => {
 		const opts = new P2PKBuilder()
 			.addLockPubkey([xA_upper, cB_upper, xA_lower, cA_again])
 			.addRefundPubkey([r03C_upper, rXc_lower, r02c_dup])
@@ -248,7 +250,7 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 				.requireLockSignatures(5) // 5 > 2 unique lock keys
 				.sigAll()
 				.toOptions(),
-		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(2\)/i);
+		).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(2\)/i);
 	});
 });
 

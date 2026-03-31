@@ -29,6 +29,7 @@ import {
 	getP2PKNSigsRefund,
 	isHTLCSpendAuthorised,
 	normalizeP2PKOptions,
+	verifyP2PKSpendingConditions,
 	type P2PKOptions,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
@@ -692,7 +693,7 @@ describe('NUT-11 helper edge cases', () => {
 		expect(getP2PKExpectedWitnessPubkeys('not-json')).toEqual([]);
 	});
 
-	test('getP2PKWitnessPubkeys: normalises and dedupes mixed-case keys from untrusted secret', () => {
+	test('getP2PKWitnessPubkeys: normalizes and dedupes mixed-case keys from untrusted secret', () => {
 		const xOnly = 'aa'.repeat(32);
 		const upper = '02' + 'AA'.repeat(32); // same key, uppercase
 		const lower = '02' + 'aa'.repeat(32); // canonical form
@@ -703,7 +704,7 @@ describe('NUT-11 helper edge cases', () => {
 		expect(result).toEqual([lower]);
 	});
 
-	test('getP2PKWitnessRefundkeys: normalises and dedupes mixed-case keys from untrusted secret', () => {
+	test('getP2PKWitnessRefundkeys: normalizes and dedupes mixed-case keys from untrusted secret', () => {
 		const upper = '03' + 'CC'.repeat(32);
 		const lower = '03' + 'cc'.repeat(32);
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["refund","${upper}","${lower}"]]}]`;
@@ -1444,31 +1445,31 @@ describe('normalizeP2PKOptions', () => {
 	const pk = _comp('a', '02');
 	const refundPk = _comp('b', '02');
 
-	it('throws when pubkey is an empty array', () => {
+	test('throws when pubkey is an empty array', () => {
 		expect(() => normalizeP2PKOptions({ pubkey: [] as any })).toThrow(
 			/P2PK requires at least one pubkey/i,
 		);
 	});
 
-	it('throws when requiredSignatures is not an integer', () => {
+	test('throws when requiredSignatures is not an integer', () => {
 		expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 1.5 })).toThrow(
-			/requiredSignatures must be a positive integer/i,
+			/requiredSignatures \(n_sigs\) must be a positive integer/i,
 		);
 	});
 
-	it('throws when requiredSignatures is less than 1', () => {
+	test('throws when requiredSignatures is less than 1', () => {
 		expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 0 })).toThrow(
-			/requiredSignatures must be a positive integer/i,
+			/requiredSignatures \(n_sigs\) must be a positive integer/i,
 		);
 	});
 
-	it('throws when requiredRefundSignatures is set without refundKeys', () => {
+	test('throws when requiredRefundSignatures is set without refundKeys', () => {
 		expect(() =>
 			normalizeP2PKOptions({ pubkey: pk, locktime: 9999, requiredRefundSignatures: 1 }),
-		).toThrow(/requiredRefundSignatures requires refundKeys/i);
+		).toThrow(/requiredRefundSignatures \(n_sigs_refund\) requires refund keys/i);
 	});
 
-	it('throws when requiredRefundSignatures is not an integer', () => {
+	test('throws when requiredRefundSignatures is not an integer', () => {
 		expect(() =>
 			normalizeP2PKOptions({
 				pubkey: pk,
@@ -1476,10 +1477,10 @@ describe('normalizeP2PKOptions', () => {
 				refundKeys: [refundPk],
 				requiredRefundSignatures: 1.5,
 			}),
-		).toThrow(/requiredRefundSignatures must be a positive integer/i);
+		).toThrow(/requiredRefundSignatures \(n_sigs_refund\) must be a positive integer/i);
 	});
 
-	it('throws when requiredRefundSignatures is less than 1', () => {
+	test('throws when requiredRefundSignatures is less than 1', () => {
 		expect(() =>
 			normalizeP2PKOptions({
 				pubkey: pk,
@@ -1487,12 +1488,287 @@ describe('normalizeP2PKOptions', () => {
 				refundKeys: [refundPk],
 				requiredRefundSignatures: 0,
 			}),
-		).toThrow(/requiredRefundSignatures must be a positive integer/i);
+		).toThrow(/requiredRefundSignatures \(n_sigs_refund\) must be a positive integer/i);
 	});
 
-	it('throws when sigFlag is not a valid SigFlag value', () => {
+	test('throws when sigFlag is not a valid SigFlag value', () => {
 		expect(() => normalizeP2PKOptions({ pubkey: pk, sigFlag: 'FOOBAR' as any })).toThrow(
 			/invalid sigflag/i,
 		);
+	});
+});
+
+describe('parseP2PKSecret — duplicate tag rejection', () => {
+	const makePk = () => bytesToHex(getPubKeyFromPrivKey(schnorr.utils.randomSecretKey()));
+	const pk1 = makePk();
+	const pk2 = makePk();
+
+	function makeSecret(tags: string[][]): string {
+		return JSON.stringify(['P2PK', { nonce: bytesToHex(randomBytes(32)), data: pk1, tags }]);
+	}
+
+	test('rejects duplicate locktime tags', () => {
+		const secret = makeSecret([
+			['sigflag', 'SIG_INPUTS'],
+			['locktime', '99999999999'],
+			['locktime', '1'],
+			['refund', pk2],
+		]);
+		expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "locktime"/);
+	});
+
+	test('rejects duplicate sigflag tags', () => {
+		const secret = makeSecret([
+			['sigflag', 'SIG_INPUTS'],
+			['sigflag', 'SIG_ALL'],
+		]);
+		expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "sigflag"/);
+	});
+
+	test('rejects duplicate n_sigs tags', () => {
+		const secret = makeSecret([
+			['pubkeys', pk2],
+			['n_sigs', '1'],
+			['n_sigs', '2'],
+		]);
+		expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "n_sigs"/);
+	});
+
+	test('rejects duplicate n_sigs_refund tags', () => {
+		const secret = makeSecret([
+			['locktime', '1'],
+			['refund', pk2],
+			['n_sigs_refund', '1'],
+			['n_sigs_refund', '2'],
+		]);
+		expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "n_sigs_refund"/);
+	});
+
+	test('rejects duplicate pubkeys tags', () => {
+		const secret = makeSecret([
+			['pubkeys', pk2],
+			['pubkeys', makePk()],
+		]);
+		expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "pubkeys"/);
+	});
+
+	test('rejects duplicate refund tags', () => {
+		const secret = makeSecret([
+			['locktime', '1'],
+			['refund', pk2],
+			['refund', makePk()],
+		]);
+		expect(() => parseP2PKSecret(secret)).toThrow(/Duplicate P2PK tag "refund"/);
+	});
+
+	test('allows unknown/custom tags (forward compatibility)', () => {
+		const secret = makeSecret([
+			['sigflag', 'SIG_INPUTS'],
+			['custom_tag', 'value1'],
+			['custom_tag', 'value2'], // duplicate custom tag is fine
+		]);
+		expect(() => parseP2PKSecret(secret)).not.toThrow();
+	});
+
+	test('allows valid secret with one of each tag', () => {
+		const secret = makeSecret([
+			['sigflag', 'SIG_INPUTS'],
+			['locktime', '99999999999'],
+			['pubkeys', pk2],
+			['n_sigs', '2'],
+			['refund', makePk()],
+			['n_sigs_refund', '1'],
+		]);
+		expect(() => parseP2PKSecret(secret)).not.toThrow();
+	});
+
+	test('applies to HTLC secrets too', () => {
+		const htlcSecret = JSON.stringify([
+			'HTLC',
+			{
+				nonce: bytesToHex(randomBytes(32)),
+				data: bytesToHex(randomBytes(32)), // hash
+				tags: [
+					['locktime', '99999999999'],
+					['locktime', '1'],
+					['pubkeys', pk1],
+					['refund', pk2],
+				],
+			},
+		]);
+		expect(() => parseP2PKSecret(htlcSecret)).toThrow(/Duplicate P2PK tag "locktime"/);
+	});
+});
+
+describe('verifyP2PKSpendingConditions — semantic validation', () => {
+	const makePk = () => bytesToHex(getPubKeyFromPrivKey(schnorr.utils.randomSecretKey()));
+	const pk1 = makePk();
+	const pk2 = makePk();
+	const pk3 = makePk();
+
+	function makeProof(tags: string[][], data?: string): Proof {
+		return {
+			amount: 1n,
+			id: '00000000000',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			secret: JSON.stringify([
+				'P2PK',
+				{ nonce: bytesToHex(randomBytes(32)), data: data ?? pk1, tags },
+			]),
+		};
+	}
+
+	test('rejects n_sigs=0', () => {
+		const proof = makeProof([
+			['sigflag', 'SIG_INPUTS'],
+			['n_sigs', '0'],
+			['pubkeys', pk2],
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/n_sigs\) must be a positive integer/,
+		);
+	});
+
+	test('rejects negative n_sigs', () => {
+		const proof = makeProof([
+			['n_sigs', '-1'],
+			['pubkeys', pk2],
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/n_sigs\) must be a positive integer/,
+		);
+	});
+
+	test('rejects impossible n_sigs threshold (n_sigs > available keys)', () => {
+		// 1 key in data, none in pubkeys, but n_sigs=3
+		const proof = makeProof([['n_sigs', '3']]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/n_sigs\) \(3\) exceeds available pubkeys \(1\)/,
+		);
+	});
+
+	test('rejects n_sigs_refund=0', () => {
+		const proof = makeProof([
+			['locktime', '1'],
+			['refund', pk2],
+			['n_sigs_refund', '0'],
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/n_sigs_refund\) must be a positive integer/,
+		);
+	});
+
+	test('rejects impossible n_sigs_refund threshold', () => {
+		const proof = makeProof([
+			['locktime', '1'],
+			['refund', pk2],
+			['n_sigs_refund', '3'],
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/n_sigs_refund\) \(3\) exceeds available refund keys \(1\)/,
+		);
+	});
+
+	test('rejects refund without locktime', () => {
+		const proof = makeProof([['refund', pk2]]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/refund keys require a locktime/);
+	});
+
+	test('rejects data pubkey duplicated in pubkeys tag', () => {
+		const proof = makeProof([
+			['pubkeys', pk1], // same as data field
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/data pubkey must not be duplicated in pubkeys tag/,
+		);
+	});
+
+	test('rejects data pubkey duplicated in pubkeys tag (x-only vs compressed)', () => {
+		// pk1 is 02-prefixed compressed, strip to x-only
+		const xOnly = pk1.slice(2);
+		const proof = makeProof([
+			['pubkeys', xOnly], // same key, different format
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
+			/data pubkey must not be duplicated in pubkeys tag/,
+		);
+	});
+
+	test('returns result for well-formed unsigned proof', () => {
+		const proof = makeProof([
+			['sigflag', 'SIG_INPUTS'],
+			['locktime', '99999999999'],
+			['pubkeys', pk2],
+			['n_sigs', '2'],
+			['refund', pk3],
+		]);
+		const result = verifyP2PKSpendingConditions(proof);
+		expect(result.success).toBe(false);
+		expect(result.path).toBe('FAILED');
+		expect(result.requiredSigners).toBe(2);
+		expect(result.eligibleSigners).toBe(2);
+		expect(result.receivedSigners).toEqual([]);
+	});
+
+	test('returns success for signed proof meeting threshold', () => {
+		const privKey = schnorr.utils.randomSecretKey();
+		const pubKey = bytesToHex(getPubKeyFromPrivKey(privKey));
+		const proof = makeProof([], pubKey);
+		const signedProof = signP2PKProof(proof, bytesToHex(privKey));
+		const result = verifyP2PKSpendingConditions(signedProof);
+		expect(result.success).toBe(true);
+		expect(result.path).toBe('MAIN');
+	});
+
+	test('duplicate locktime attack blocked at parse level before reaching semantics', () => {
+		// This is the exact attack from duplicate-tag-locktime.md
+		const attackerPk = makePk();
+		const victimPk = makePk();
+		const proof: Proof = {
+			amount: 1n,
+			id: '00000000000',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			secret: JSON.stringify([
+				'P2PK',
+				{
+					nonce: bytesToHex(randomBytes(32)),
+					data: victimPk,
+					tags: [
+						['sigflag', 'SIG_INPUTS'],
+						['locktime', '99999999999'], // wallet would show this
+						['locktime', '1'], // mint (CDK HashMap) would see this
+						['refund', attackerPk],
+					],
+				},
+			]),
+		};
+		// parseP2PKSecret catches this before any signature logic
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Duplicate P2PK tag "locktime"/);
+	});
+});
+
+describe('getP2PKNSigs / getP2PKNSigsRefund — clamping', () => {
+	const makePk = () => bytesToHex(getPubKeyFromPrivKey(schnorr.utils.randomSecretKey()));
+	const pk1 = makePk();
+
+	test('getP2PKNSigs returns 1 when n_sigs tag is absent', () => {
+		const secret = createP2PKsecret(pk1);
+		expect(getP2PKNSigs(secret)).toBe(1);
+	});
+
+	test('getP2PKNSigs returns value when n_sigs is valid positive integer', () => {
+		const pk2 = makePk();
+		const secret = JSON.stringify([
+			'P2PK',
+			{
+				nonce: bytesToHex(randomBytes(32)),
+				data: pk1,
+				tags: [
+					['pubkeys', pk2],
+					['n_sigs', '2'],
+				],
+			},
+		]);
+		expect(getP2PKNSigs(secret)).toBe(2);
 	});
 });

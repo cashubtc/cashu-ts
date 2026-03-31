@@ -89,7 +89,7 @@ export class Bytes {
 
 	static fromBase64(base64: string): Uint8Array {
 		base64 = base64.trim();
-		// normalise base64url to base64 and pad
+		// normalize base64url to base64 and pad
 		let normalizedBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
 		while (normalizedBase64.length % 4) {
 			normalizedBase64 += '=';

@@ -1,5 +1,5 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
-import { normalisePubkey, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
+import { normalizePubkey, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
 
 function toUnixSeconds(input: Date | number): number {
 	if (input instanceof Date) return Math.floor(input.getTime() / 1000);
@@ -21,13 +21,13 @@ export class P2PKBuilder {
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
-		for (const k of arr) this.lockSet.add(normalisePubkey(k));
+		for (const k of arr) this.lockSet.add(normalizePubkey(k));
 		return this;
 	}
 
 	addRefundPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
-		for (const k of arr) this.refundSet.add(normalisePubkey(k));
+		for (const k of arr) this.refundSet.add(normalizePubkey(k));
 		return this;
 	}
 
@@ -38,14 +38,16 @@ export class P2PKBuilder {
 
 	requireLockSignatures(n: number) {
 		if (!Number.isInteger(n) || n < 1)
-			throw new Error('requiredSignatures must be a positive integer');
+			throw new Error(`requiredSignatures (n_sigs) must be a positive integer, got ${n}`);
 		this.nSigs = n;
 		return this;
 	}
 
 	requireRefundSignatures(n: number) {
 		if (!Number.isInteger(n) || n < 1)
-			throw new Error('requiredRefundSignatures must be a positive integer');
+			throw new Error(
+				`requiredRefundSignatures (n_sigs_refund) must be a positive integer, got ${n}`,
+			);
 		this.nSigsRefund = n;
 		return this;
 	}
