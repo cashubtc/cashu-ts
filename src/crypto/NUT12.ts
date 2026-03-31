@@ -2,14 +2,7 @@ import { type DLEQ, hash_e, hashToCurve, createRandomSecretKey } from './core';
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { numberToBytesBE } from '@noble/curves/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-
-function arraysEqual(arr1: Uint8Array, arr2: Uint8Array) {
-	if (arr1.length !== arr2.length) return false;
-	for (let i = 0; i < arr1.length; i++) {
-		if (arr1[i] !== arr2[i]) return false;
-	}
-	return true;
-}
+import { Bytes } from '../utils';
 
 export const verifyDLEQProof = (
 	dleq: DLEQ,
@@ -26,7 +19,7 @@ export const verifyDLEQProof = (
 	const R_1 = sG.subtract(eA); // R1 = sG - eA
 	const R_2 = sB_.subtract(eC_); // R2 = sB' - eC'
 	const hash = hash_e([R_1, R_2, A, C_]); // e == hash(R1, R2, A, C')
-	return arraysEqual(hash, dleq.e);
+	return Bytes.equals(hash, dleq.e);
 };
 
 export const verifyDLEQProof_reblind = (
