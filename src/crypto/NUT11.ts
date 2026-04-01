@@ -183,15 +183,14 @@ function normalizePubkey(pk: string): string {
  *
  * @remarks
  * Pubkeys are normalized before dedupe.
- * @param keys - Raw key strings (empties are skipped).
- * @throws If any non-empty key is malformed.
+ * @param keys - Raw key strings.
+ * @throws If any key is malformed.
  * @internal
  */
 export function dedupeP2PKPubkeys(keys: string[]): string[] {
 	const seen = new Set<string>();
 	const result: string[] = [];
 	for (const raw of keys) {
-		if (!raw) continue;
 		const k = normalizePubkey(raw);
 		const xOnly = k.slice(-64);
 		if (!seen.has(xOnly)) {
@@ -260,29 +259,25 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
  *
  * @remarks
  * Does not tell you the pathway (Locktime or Refund MultiSig), only the keys that CAN currently
- * sign. If no keys are returned, the proof is unlocked.
+ * sign. If no keys are returned, the proof is unlocked or expired with no refund path.
  * @param secretStr - The NUT-11 P2PK secret.
  * @returns Array of public keys or empty array.
- * @throws If secret is not P2PK.
+ * @throws If the secret is malformed or not P2PK.
  */
 export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[] {
-	try {
-		const secret: Secret = parseP2PKSecret(secretStr);
-		const lockState: LockState = deriveLockState(getLocktime(secret));
-		const mainKeys = getP2PKWitnessPubkeys(secret);
-		const refundKeys = getP2PKWitnessRefundkeys(secret);
-		// Locktime pathway
-		if (lockState === 'ACTIVE' || lockState === 'PERMANENT') {
-			return mainKeys;
-		}
-		// Refund pathway
-		if (lockState === 'EXPIRED' && refundKeys.length) {
-			return Array.from(new Set([...mainKeys, ...refundKeys]));
-		}
-	} catch {
-		// do nothing
+	const secret: Secret = parseP2PKSecret(secretStr);
+	const lockState: LockState = deriveLockState(getLocktime(secret));
+	const mainKeys = getP2PKWitnessPubkeys(secret);
+	const refundKeys = getP2PKWitnessRefundkeys(secret);
+	// Locktime pathway
+	if (lockState === 'ACTIVE' || lockState === 'PERMANENT') {
+		return mainKeys;
 	}
-	return []; // Unlocked, malformed or expired with no refund keys
+	// Refund pathway
+	if (lockState === 'EXPIRED' && refundKeys.length) {
+		return Array.from(new Set([...mainKeys, ...refundKeys]));
+	}
+	return []; // Unlocked or expired with no refund keys
 }
 
 /**
@@ -494,7 +489,7 @@ export function verifyP2PKSpendingConditions(
 	message = message ?? proof.secret;
 	const secret: Secret = parseP2PKSecret(proof.secret);
 
-	// Extract keys (x-only deduped) and validate cross-tag semantics
+	// Extract keys and validate cross-tag semantics
 	const mainKeys = getP2PKWitnessPubkeys(secret);
 	const refundKeys = getP2PKWitnessRefundkeys(secret);
 	assertSpendingConditionRules({
@@ -760,11 +755,19 @@ function assertSpendingConditionRules(params: {
 function getP2PKWitnessPubkeys(secret: Secret): string[] {
 	const data = getSecretKind(secret) === 'P2PK' ? getDataField(secret) : '';
 	const pubkeys = getTag(secret, 'pubkeys') ?? [];
-	return dedupeP2PKPubkeys([data, ...pubkeys]);
+	const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
+	if (dedupeP2PKPubkeys(keys).length !== keys.length) {
+		throw new Error('Duplicate main pubkeys are not allowed');
+	}
+	return keys;
 }
 
 function getP2PKWitnessRefundkeys(secret: Secret): string[] {
-	return dedupeP2PKPubkeys(getTag(secret, 'refund') ?? []);
+	const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizePubkey(key));
+	if (dedupeP2PKPubkeys(keys).length !== keys.length) {
+		throw new Error('Duplicate refund pubkeys are not allowed');
+	}
+	return keys;
 }
 
 function getLocktime(secret: Secret): number {

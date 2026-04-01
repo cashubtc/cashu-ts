@@ -63,6 +63,16 @@ describe('P2PKBuilder.toOptions()', () => {
 		expect(() => new P2PKBuilder().toOptions()).toThrow(/At least one lock pubkey is required/i);
 	});
 
+	it('throws when an empty lock pubkey is added', () => {
+		expect(() => new P2PKBuilder().addLockPubkey('')).toThrow(/invalid pubkey/i);
+	});
+
+	it('throws when an empty refund pubkey is added', () => {
+		expect(() => new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey('')).toThrow(
+			/invalid pubkey/i,
+		);
+	});
+
 	it('throws if refund keys are provided without locktime', () => {
 		expect(() =>
 			new P2PKBuilder().addLockPubkey(comp('a', '02')).addRefundPubkey(comp('b', '02')).toOptions(),

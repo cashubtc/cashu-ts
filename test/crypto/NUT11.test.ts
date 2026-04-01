@@ -336,11 +336,13 @@ describe('verifyP2PKSpendingConditions metadata', () => {
 });
 
 describe('test getP2PKExpectedWitnessPubkeys', () => {
-	test('non-p2pk secret', async () => {
+	test('plain secret', async () => {
+		const secretStr = `"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06"`;
+		expect(() => getP2PKExpectedWitnessPubkeys(secretStr)).toThrow(/Invalid NUT-10 secret/);
+	});
+	test('unknown nut10 kind', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const result = getP2PKExpectedWitnessPubkeys(secretStr);
-		expect(result).toEqual([]);
-		expect(getP2PKExpectedWitnessPubkeys(secretStr)).toEqual([]);
+		expect(() => getP2PKExpectedWitnessPubkeys(secretStr)).toThrow(/Invalid secret kind/);
 	});
 	test('permanent lock, 1 pubkey', async () => {
 		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
@@ -623,41 +625,50 @@ describe('NUT-11 helper edge cases', () => {
 		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
 	});
 
-	test('getP2PKExpectedWitnessPubkeys: malformed secret -> []', () => {
-		expect(getP2PKExpectedWitnessPubkeys('not-json')).toEqual([]);
+	test('getP2PKExpectedWitnessPubkeys: malformed secret throws', () => {
+		expect(() => getP2PKExpectedWitnessPubkeys('not-json')).toThrow(/Can't parse secret/);
 	});
 
-	test('getP2PKWitnessPubkeys: normalizes and dedupes mixed-case keys from untrusted secret', () => {
+	test('getP2PKWitnessPubkeys: duplicate normalized keys in proof are rejected', () => {
 		const xOnly = 'aa'.repeat(32);
 		const upper = '02' + 'AA'.repeat(32); // same key, uppercase
 		const lower = '02' + 'aa'.repeat(32); // canonical form
 		// Hand-craft a secret with duplicate pubkeys that differ only in case
 		const s = `["P2PK",{"nonce":"aa","data":"${upper}","tags":[["pubkeys","${xOnly}","${lower}"]]}]`;
-		const result = getP2PKExpectedWitnessPubkeys(s);
-		// All three should collapse to the single canonical key
-		expect(result).toEqual([lower]);
+		expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(
+			'Duplicate main pubkeys are not allowed',
+		);
 	});
 
-	test('getP2PKWitnessRefundkeys: normalizes and dedupes mixed-case keys from untrusted secret', () => {
+	test('getP2PKWitnessPubkeys: parity-distinct duplicates in proof are rejected', () => {
+		const x = 'ab'.repeat(32);
+		const even = `02${x}`;
+		const odd = `03${x}`;
+		const s = `["P2PK",{"nonce":"aa","data":"${even}","tags":[["pubkeys","${odd}"]]}]`;
+		expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(
+			'Duplicate main pubkeys are not allowed',
+		);
+	});
+
+	test('getP2PKWitnessRefundkeys: duplicate normalized refund keys in proof are rejected', () => {
 		const upper = '03' + 'CC'.repeat(32);
 		const lower = '03' + 'cc'.repeat(32);
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund","${upper}","${lower}"]]}]`;
-		const result = getP2PKExpectedWitnessPubkeys(s);
-		expect(result).toEqual([PUBKEY, lower]);
+		expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(
+			'Duplicate refund pubkeys are not allowed',
+		);
 	});
 
 	test('getP2PKWitnessPubkeys: rejects secret with invalid pubkey in pubkeys tag', () => {
 		const valid = '02' + 'bb'.repeat(32);
 		const s = `["P2PK",{"nonce":"aa","data":"${valid}","tags":[["pubkeys","not-a-key"]]}]`;
-		// Malformed key = bad proof, getP2PKExpectedWitnessPubkeys returns [] via try/catch
-		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
+		expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(/Invalid pubkey/);
 	});
 
 	test('getP2PKWitnessRefundkeys: rejects secret with invalid pubkey in refund tag', () => {
 		const valid = '03' + 'dd'.repeat(32);
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund","${valid}","bad"]]}]`;
-		// Malformed key = bad proof
-		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
+		expect(() => getP2PKExpectedWitnessPubkeys(s)).toThrow(/Invalid pubkey/);
 	});
 });
 
@@ -1384,6 +1395,16 @@ describe('normalizeP2PKOptions', () => {
 		);
 	});
 
+	test('throws when pubkey contains an empty string', () => {
+		expect(() => normalizeP2PKOptions({ pubkey: [pk, ''] })).toThrow(/invalid pubkey/i);
+	});
+
+	test('throws when refundKeys contains an empty string', () => {
+		expect(() =>
+			normalizeP2PKOptions({ pubkey: pk, locktime: 9999, refundKeys: [refundPk, ''] }),
+		).toThrow(/invalid pubkey/i);
+	});
+
 	test('throws when requiredSignatures is not an integer', () => {
 		expect(() => normalizeP2PKOptions({ pubkey: pk, requiredSignatures: 1.5 })).toThrow(
 			/requiredSignatures \(n_sigs\) must be a positive integer/i,
@@ -1607,23 +1628,27 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
 		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/refund keys require a locktime/);
 	});
 
-	test('silently deduplicates data pubkey duplicated in pubkeys tag', () => {
+	test('rejects data pubkey duplicated in pubkeys tag', () => {
 		const proof = makeProof([
 			['pubkeys', pk1], // same as data field
 		]);
-		const result = verifyP2PKSpendingConditions(proof);
-		expect(result.main.pubkeys).toHaveLength(1);
-		expect(result.main.requiredSigners).toBe(1);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/duplicate main pubkeys/i);
 	});
 
-	test('silently deduplicates data pubkey in pubkeys tag (x-only vs compressed)', () => {
+	test('rejects data pubkey in pubkeys tag (x-only vs compressed)', () => {
 		const xOnly = pk1.slice(2);
 		const proof = makeProof([
 			['pubkeys', xOnly], // same key, different format
 		]);
-		const result = verifyP2PKSpendingConditions(proof);
-		expect(result.main.pubkeys).toHaveLength(1);
-		expect(result.main.requiredSigners).toBe(1);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/duplicate main pubkeys/i);
+	});
+
+	test('rejects duplicate refund pubkeys', () => {
+		const proof = makeProof([
+			['locktime', '1'],
+			['refund', pk2, pk2],
+		]);
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/duplicate refund pubkeys/i);
 	});
 
 	test('returns result for well-formed unsigned proof', () => {
