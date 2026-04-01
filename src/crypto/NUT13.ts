@@ -1,5 +1,6 @@
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { numberToBytesBE } from '@noble/curves/utils.js';
 import { getKeysetIdInt } from './core';
 import { HDKey } from '@scure/bip32';
 import { Bytes, isBase64String } from '../utils';
@@ -69,15 +70,13 @@ const derive = (
 
 	if (secretOrBlinding === DerivationType.BLINDING_FACTOR) {
 		const x = Bytes.toBigInt(hmacDigest);
-		// Optimization: single subtraction instead of modulo
-		// Probability of HMAC >= SECP256K1_N is ~2^-128
-		if (x >= SECP256K1_N) {
-			return Bytes.fromBigInt(x - SECP256K1_N);
-		}
-		if (x === 0n) {
+		// Reduce modulo curve order. Single subtraction suffices since HMAC output
+		// is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
+		const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
+		if (reduced === 0n) {
 			throw new Error('Derived invalid blinding scalar r == 0');
 		}
-		return hmacDigest;
+		return numberToBytesBE(reduced, 32); // preserves 32-byte width
 	}
 
 	return hmacDigest;
