@@ -210,10 +210,10 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 	const cB_upper = '02' + 'B'.repeat(64); // compressed, becomes 02 + b…
 	const xA_lower = 'a'.repeat(64); // duplicate of xA_upper
 	const cA_again = '02' + 'A'.repeat(64); // duplicate after normalisation
-	// refunds: compressed 03 upper, x-only that collides with 02 form, duplicate 02 form
+	// refunds: compressed 03 upper, x-only that collides by x-only identity, duplicate 02 form
 	const r03C_upper = '03' + 'C'.repeat(64); // becomes 03 + c…
-	const rXc_lower = 'c'.repeat(64); // x only, becomes 02 + c…
-	const r02c_dup = '02' + 'c'.repeat(64); // duplicate of previous after normalisation
+	const rXc_lower = 'c'.repeat(64); // x only, deduped against 03 + c… by x-only identity
+	const r02c_dup = '02' + 'c'.repeat(64); // same x-only key, deduped
 	const ms = (Math.floor(Date.now() / 1000) + 123) * 1000; // exercise ms branch
 
 	it('normalizes mixed inputs, deduplicates, preserves insertion order, and round-trips', () => {
@@ -226,7 +226,7 @@ describe('P2PKBuilder, simple fuzzish case', () => {
 			.toOptions();
 
 		const expLocks = ['02' + 'a'.repeat(64), '02' + 'b'.repeat(64)];
-		const expRefunds = ['03' + 'c'.repeat(64), '02' + 'c'.repeat(64)];
+		const expRefunds = ['03' + 'c'.repeat(64)];
 
 		expect(Array.isArray(opts.pubkey)).toBe(true);
 		expect(opts.pubkey).toEqual(expLocks);

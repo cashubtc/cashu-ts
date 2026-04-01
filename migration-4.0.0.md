@@ -531,9 +531,106 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 - `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
 - Deprecated utility helpers and overloads in `src/utils/core`: `bytesToNumber`, `verifyKeysetId`, the positional `deriveKeysetId(...)` signature, and the `getDecodedToken(..., HasKeysetId[])` overload; use `Bytes.toBigInt`, `Keyset.verifyKeysetId(...)`, the options-based `deriveKeysetId(...)`, and `string[]` keyset IDs.
-- Deprecated NUT-11 helpers and aliases: the `parseP2PKSecret(Uint8Array)` overload, `WellKnownSecret`, `signP2PKSecret`, `verifyP2PKSecretSignature`, `getP2PKExpectedKWitnessPubkeys`, and `verifyP2PKSig`; use `parseP2PKSecret(string | Secret)`, `SecretKind`, `schnorrSignMessage`, `schnorrVerifyMessage`, `getP2PKExpectedWitnessPubkeys`, and `isP2PKSpendAuthorised()` / `verifyP2PKSpendingConditions()`.
 - Deprecated convenience aliases removed elsewhere in the API: `MintInfo.supportsBolt12Description` and `WSConnection.closeSubscription()`; use `supportsNut04Description('bolt12')` and `cancelSubscription()` instead.
 - Deprecated crypto/type aliases removed in the v4 cleanup, including `BlindedMessage`; use the non-deprecated names such as `RawBlindedMessage`.
+
+---
+
+## NUT-11 / P2PK API changes
+
+v4 trims the public NUT-11 surface and moves callers toward two supported entry points:
+
+- `getP2PKExpectedWitnessPubkeys(secret)` if you only need to know which pubkeys can currently sign
+- `verifyP2PKSpendingConditions(proof, logger?, message?)` if you need the full lock/refund evaluation result
+
+### Removed deprecated aliases
+
+These older exports are gone in v4:
+
+- `parseP2PKSecret(Uint8Array)` overload
+- `WellKnownSecret`
+- `signP2PKSecret`
+- `verifyP2PKSecretSignature`
+- `getP2PKExpectedKWitnessPubkeys`
+- `verifyP2PKSig`
+
+Use these instead:
+
+- `parseP2PKSecret(string | Secret)`
+- `SecretKind`
+- `schnorrSignMessage(...)`
+- `schnorrVerifyMessage(...)`
+- `getP2PKExpectedWitnessPubkeys(...)`
+- `isP2PKSpendAuthorised(...)` or `verifyP2PKSpendingConditions(...)`
+
+### Removed low-level NUT-11 getters
+
+These helpers are no longer public:
+
+- `getP2PKWitnessPubkeys`
+- `getP2PKWitnessRefundkeys`
+- `getP2PKLocktime`
+- `getP2PKLockState`
+- `getP2PKNSigs`
+- `getP2PKNSigsRefund`
+
+If your code previously called those helpers and stitched the result together manually, migrate to `verifyP2PKSpendingConditions()` and read the returned metadata instead.
+
+```ts
+// Before
+const lockState = getP2PKLockState(proof.secret);
+const locktime = getP2PKLocktime(proof.secret);
+const mainKeys = getP2PKWitnessPubkeys(proof.secret);
+const refundKeys = getP2PKWitnessRefundkeys(proof.secret);
+const required = getP2PKNSigs(proof.secret);
+const refundRequired = getP2PKNSigsRefund(proof.secret);
+
+// After
+const result = verifyP2PKSpendingConditions(proof);
+const { lockState, locktime } = result;
+const mainKeys = result.main.pubkeys;
+const refundKeys = result.refund.pubkeys;
+const required = result.main.requiredSigners;
+const refundRequired = result.refund.requiredSigners;
+```
+
+### `P2PKVerificationResult` shape changed
+
+`verifyP2PKSpendingConditions()` still returns a detailed result object, but signer metadata is now grouped by path:
+
+```ts
+// Before
+result.requiredSigners;
+result.eligibleSigners;
+result.receivedSigners;
+
+// After
+result.locktime;
+result.main.requiredSigners;
+result.main.pubkeys;
+result.main.receivedSigners;
+result.refund.requiredSigners;
+result.refund.pubkeys;
+result.refund.receivedSigners;
+```
+
+This makes the result unambiguous when both main and refund paths exist.
+
+### `P2PKBuilder` now follows the same pubkey identity rules as NUT-11
+
+`P2PKBuilder.addLockPubkey()` and `addRefundPubkey()` now normalize and deduplicate keys by x-only pubkey identity. In practice, that means `02...` and `03...` encodings of the same x-only key are treated as the same signer, and the first one added wins.
+
+If your code relied on storing both encodings as distinct entries, update those expectations:
+
+```ts
+// Before
+new P2PKBuilder().addRefundPubkey(['03' + xOnly, '02' + xOnly]).toOptions().refundKeys;
+// => ['03' + xOnly, '02' + xOnly]
+
+// After
+new P2PKBuilder().addRefundPubkey(['03' + xOnly, '02' + xOnly]).toOptions().refundKeys;
+// => ['03' + xOnly]
+```
 
 ---
 

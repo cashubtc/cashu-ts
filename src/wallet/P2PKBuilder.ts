@@ -1,5 +1,5 @@
 import { assertValidTagKey, OutputData } from '../model/OutputData';
-import { normalizePubkey, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
+import { dedupeP2PKPubkeys, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
 
 function toUnixSeconds(input: Date | number): number {
 	if (input instanceof Date) return Math.floor(input.getTime() / 1000);
@@ -7,10 +7,9 @@ function toUnixSeconds(input: Date | number): number {
 }
 
 export class P2PKBuilder {
-	// A Set enforces uniqueness and preserves insertion order, which means
-	// the first added lock key also becomes primary (data) pubkey
-	private lockSet = new Set<string>();
-	private refundSet = new Set<string>();
+	// Keys are deduplicated by x-only identity and first-seen order preserved.
+	private lockKeys: string[] = [];
+	private refundKeys: string[] = [];
 	private locktime?: number;
 	private nSigs?: number;
 	private nSigsRefund?: number;
@@ -21,13 +20,13 @@ export class P2PKBuilder {
 
 	addLockPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
-		for (const k of arr) this.lockSet.add(normalizePubkey(k));
+		this.lockKeys = dedupeP2PKPubkeys([...this.lockKeys, ...arr]);
 		return this;
 	}
 
 	addRefundPubkey(pk: string | string[]) {
 		const arr = Array.isArray(pk) ? pk : [pk];
-		for (const k of arr) this.refundSet.add(normalizePubkey(k));
+		this.refundKeys = dedupeP2PKPubkeys([...this.refundKeys, ...arr]);
 		return this;
 	}
 
@@ -83,8 +82,8 @@ export class P2PKBuilder {
 	}
 
 	toOptions(): P2PKOptions {
-		const locks = Array.from(this.lockSet);
-		const refunds = Array.from(this.refundSet);
+		const locks = this.lockKeys;
+		const refunds = this.refundKeys;
 
 		if (locks.length === 0) throw new Error('At least one lock pubkey is required');
 

@@ -6,11 +6,7 @@ import {
 	signP2PKProof,
 	signP2PKProofs,
 	parseP2PKSecret,
-	getP2PKWitnessPubkeys,
-	getP2PKWitnessRefundkeys,
 	getP2PKExpectedWitnessPubkeys,
-	getP2PKLocktime,
-	getP2PKNSigs,
 	getP2PKSigFlag,
 	getP2PKWitnessSignatures,
 	Secret,
@@ -26,7 +22,6 @@ import {
 	assertSigAllInputs,
 	buildLegacyP2PKSigAllMessage,
 	createSecret,
-	getP2PKNSigsRefund,
 	isHTLCSpendAuthorised,
 	normalizeP2PKOptions,
 	verifyP2PKSpendingConditions,
@@ -213,58 +208,6 @@ describe('test create p2pk secret', () => {
 	});
 });
 
-describe('test getP2PKNSigs', () => {
-	test('non-p2pk secret', async () => {
-		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		expect(() => getP2PKNSigs(secretStr)).toThrow(/Invalid secret kind/);
-		expect(() => getP2PKNSigsRefund(secretStr)).toThrow(/Invalid secret kind/);
-	});
-	test('permanent lock, unspecified n_sigs', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		expect(getP2PKNSigs(secretStr)).toBe(1); // 1 is default
-		expect(getP2PKNSigsRefund(secretStr)).toBe(0);
-	});
-	test('permanent lock, 2 n_sigs', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["pubkeys","${PUBKEY2}"]]}]`;
-		expect(getP2PKNSigs(secretStr)).toBe(2);
-		expect(getP2PKNSigsRefund(secretStr)).toBe(0);
-	});
-	test('expired lock, 2 n_sigs, no refund keys is unlocked', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"]]}]`;
-		expect(getP2PKNSigs(secretStr)).toBe(0); // unlocked
-		expect(getP2PKNSigsRefund(secretStr)).toBe(0); // unlocked
-	});
-	test('expired lock, 2 n_sigs, 2 refund keys, unspecified n_sigs_refund', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-		const PRIVKEY3 = schnorr.utils.randomSecretKey();
-		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
-
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		expect(getP2PKNSigs(secretStr)).toBe(2);
-		expect(getP2PKNSigsRefund(secretStr)).toBe(1);
-	});
-	test('expired lock, 1 n_sigs, 2 refund keys, 2 n_sigs_refund', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-		const PRIVKEY3 = schnorr.utils.randomSecretKey();
-		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
-
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","1"],["n_sigs_refund","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		expect(getP2PKNSigs(secretStr)).toBe(1);
-		expect(getP2PKNSigsRefund(secretStr)).toBe(2);
-	});
-});
-
 describe('test getP2PKSigFlag', () => {
 	test('non-p2pk secret', async () => {
 		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
@@ -314,90 +257,81 @@ describe('test getP2PKSigFlag', () => {
 	});
 });
 
-describe('test getP2PKLocktime', () => {
+describe('verifyP2PKSpendingConditions metadata', () => {
 	test('non-p2pk secret', async () => {
-		const secretStr = `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		expect(() => getP2PKLocktime(secretStr)).toThrow(/Invalid secret kind/);
+		const proof: Proof = {
+			amount: 1n,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: `["BAD",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`,
+		};
+		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/Invalid secret kind/);
 	});
-	test('unspecified locktime', async () => {
+
+	test('surfaces default permanent locktime and main signer set', async () => {
 		const PRIVKEY2 = schnorr.utils.randomSecretKey();
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+		const proof: Proof = {
+			amount: 1n,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`,
+		};
 
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKLocktime(parsed);
-		expect(result).toBe(Infinity); // default
-		expect(getP2PKLocktime(secretStr)).toBe(Infinity); // default
+		const result = verifyP2PKSpendingConditions(proof);
+		expect(result).toMatchObject({
+			success: false,
+			path: 'FAILED',
+			locktime: Infinity,
+			lockState: 'PERMANENT',
+			main: { requiredSigners: 1, receivedSigners: [] },
+		});
+		expect(result.main.pubkeys).toHaveLength(2);
 	});
-	test('specified locktime', async () => {
+
+	test('surfaces explicit expired locktime and unlocked path without refund keys', async () => {
 		const PRIVKEY2 = schnorr.utils.randomSecretKey();
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
+		const proof: Proof = {
+			amount: 1n,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"]]}]`,
+		};
 
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["locktime","212"],["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKLocktime(parsed);
-		expect(result).toBe(212);
-		expect(getP2PKLocktime(secretStr)).toBe(212);
+		const result = verifyP2PKSpendingConditions(proof);
+		expect(result).toMatchObject({
+			success: true,
+			path: 'UNLOCKED',
+			locktime: 212,
+			lockState: 'EXPIRED',
+			main: { requiredSigners: 0, receivedSigners: [] },
+		});
+		expect(result.main.pubkeys).toHaveLength(2);
 	});
-});
 
-describe('test getP2PKWitnessPubkeys', () => {
-	test('data pubkey only', async () => {
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKWitnessPubkeys(parsed);
-		expect(result).toEqual([PUBKEY]);
-		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY]);
-	});
-	test('data + one pubkey', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKWitnessPubkeys(parsed);
-		expect(result).toEqual([PUBKEY, PUBKEY2]);
-		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2]);
-	});
-	test('data + 2 pubkeys', async () => {
+	test('surfaces refund signer set when refund path is active', async () => {
 		const PRIVKEY2 = schnorr.utils.randomSecretKey();
 		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
 		const PRIVKEY3 = schnorr.utils.randomSecretKey();
 		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["pubkeys","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKWitnessPubkeys(parsed);
-		expect(result).toEqual([PUBKEY, PUBKEY2, PUBKEY3]);
-		expect(getP2PKWitnessPubkeys(secretStr)).toEqual([PUBKEY, PUBKEY2, PUBKEY3]);
-	});
-});
+		const proof: Proof = {
+			amount: 1n,
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			id: '00000000000',
+			secret: `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["n_sigs","2"],["locktime","212"],["pubkeys","${PUBKEY2}"],["refund","${PUBKEY2}","${PUBKEY3}"]]}]`,
+		};
 
-describe('test getP2PKWitnessRefundkeys', () => {
-	test('no refund keys', async () => {
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}"}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKWitnessRefundkeys(parsed);
-		expect(result).toEqual([]);
-		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([]);
-	});
-	test('one refund pubkey', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["refund","${PUBKEY2}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKWitnessRefundkeys(parsed);
-		expect(result).toEqual([PUBKEY2]);
-		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([PUBKEY2]);
-	});
-	test('2 refund pubkeys', async () => {
-		const PRIVKEY2 = schnorr.utils.randomSecretKey();
-		const PUBKEY2 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY2));
-		const PRIVKEY3 = schnorr.utils.randomSecretKey();
-		const PUBKEY3 = bytesToHex(getPubKeyFromPrivKey(PRIVKEY3));
-		const secretStr = `["P2PK",{"nonce":"76f5bf3e36273bf1a09006ef32d4551c07a34e218c2fc84958425ad00abdfe06","data":"${PUBKEY}","tags":[["refund","${PUBKEY2}","${PUBKEY3}"]]}]`;
-		const parsed: Secret = parseP2PKSecret(secretStr);
-		const result = getP2PKWitnessRefundkeys(parsed);
-		expect(result).toEqual([PUBKEY2, PUBKEY3]);
-		expect(getP2PKWitnessRefundkeys(secretStr)).toEqual([PUBKEY2, PUBKEY3]);
+		const [signed] = signP2PKProofs([proof], [bytesToHex(PRIVKEY2)]);
+		const result = verifyP2PKSpendingConditions(signed);
+		expect(result).toMatchObject({
+			success: true,
+			path: 'REFUND',
+			locktime: 212,
+			lockState: 'EXPIRED',
+			refund: { requiredSigners: 1, receivedSigners: [PUBKEY2] },
+		});
+		expect(result.refund.pubkeys).toHaveLength(2);
 	});
 });
 
@@ -681,12 +615,12 @@ describe('NUT-11 helper edge cases', () => {
 
 	test('getP2PKWitnessPubkeys: empty pubkeys tag returns only data', () => {
 		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["pubkeys"]]}]`;
-		expect(getP2PKWitnessPubkeys(s)).toEqual([PUBKEY]);
+		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([PUBKEY]);
 	});
 
 	test('getP2PKWitnessRefundkeys: empty refund tag returns []', () => {
-		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["refund"]]}]`;
-		expect(getP2PKWitnessRefundkeys(s)).toEqual([]);
+		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund"]]}]`;
+		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
 	});
 
 	test('getP2PKExpectedWitnessPubkeys: malformed secret -> []', () => {
@@ -699,7 +633,7 @@ describe('NUT-11 helper edge cases', () => {
 		const lower = '02' + 'aa'.repeat(32); // canonical form
 		// Hand-craft a secret with duplicate pubkeys that differ only in case
 		const s = `["P2PK",{"nonce":"aa","data":"${upper}","tags":[["pubkeys","${xOnly}","${lower}"]]}]`;
-		const result = getP2PKWitnessPubkeys(s);
+		const result = getP2PKExpectedWitnessPubkeys(s);
 		// All three should collapse to the single canonical key
 		expect(result).toEqual([lower]);
 	});
@@ -707,24 +641,23 @@ describe('NUT-11 helper edge cases', () => {
 	test('getP2PKWitnessRefundkeys: normalizes and dedupes mixed-case keys from untrusted secret', () => {
 		const upper = '03' + 'CC'.repeat(32);
 		const lower = '03' + 'cc'.repeat(32);
-		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["refund","${upper}","${lower}"]]}]`;
-		const result = getP2PKWitnessRefundkeys(s);
-		expect(result).toEqual([lower]);
+		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund","${upper}","${lower}"]]}]`;
+		const result = getP2PKExpectedWitnessPubkeys(s);
+		expect(result).toEqual([PUBKEY, lower]);
 	});
 
-	test('getP2PKWitnessPubkeys: silently drops invalid keys from untrusted secret', () => {
+	test('getP2PKWitnessPubkeys: rejects secret with invalid pubkey in pubkeys tag', () => {
 		const valid = '02' + 'bb'.repeat(32);
-		const s = `["P2PK",{"nonce":"aa","data":"${valid}","tags":[["pubkeys","not-a-key","abc"]]}]`;
-		const result = getP2PKWitnessPubkeys(s);
-		// Only the valid data key survives; invalid pubkeys are dropped
-		expect(result).toEqual([valid]);
+		const s = `["P2PK",{"nonce":"aa","data":"${valid}","tags":[["pubkeys","not-a-key"]]}]`;
+		// Malformed key = bad proof, getP2PKExpectedWitnessPubkeys returns [] via try/catch
+		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
 	});
 
-	test('getP2PKWitnessRefundkeys: silently drops invalid keys from untrusted secret', () => {
+	test('getP2PKWitnessRefundkeys: rejects secret with invalid pubkey in refund tag', () => {
 		const valid = '03' + 'dd'.repeat(32);
-		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["refund","${valid}","bad"]]}]`;
-		const result = getP2PKWitnessRefundkeys(s);
-		expect(result).toEqual([valid]);
+		const s = `["P2PK",{"nonce":"aa","data":"${PUBKEY}","tags":[["locktime","1"],["refund","${valid}","bad"]]}]`;
+		// Malformed key = bad proof
+		expect(getP2PKExpectedWitnessPubkeys(s)).toEqual([]);
 	});
 });
 
@@ -1674,24 +1607,23 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
 		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(/refund keys require a locktime/);
 	});
 
-	test('rejects data pubkey duplicated in pubkeys tag', () => {
+	test('silently deduplicates data pubkey duplicated in pubkeys tag', () => {
 		const proof = makeProof([
 			['pubkeys', pk1], // same as data field
 		]);
-		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
-			/data pubkey must not be duplicated in pubkeys tag/,
-		);
+		const result = verifyP2PKSpendingConditions(proof);
+		expect(result.main.pubkeys).toHaveLength(1);
+		expect(result.main.requiredSigners).toBe(1);
 	});
 
-	test('rejects data pubkey duplicated in pubkeys tag (x-only vs compressed)', () => {
-		// pk1 is 02-prefixed compressed, strip to x-only
+	test('silently deduplicates data pubkey in pubkeys tag (x-only vs compressed)', () => {
 		const xOnly = pk1.slice(2);
 		const proof = makeProof([
 			['pubkeys', xOnly], // same key, different format
 		]);
-		expect(() => verifyP2PKSpendingConditions(proof)).toThrow(
-			/data pubkey must not be duplicated in pubkeys tag/,
-		);
+		const result = verifyP2PKSpendingConditions(proof);
+		expect(result.main.pubkeys).toHaveLength(1);
+		expect(result.main.requiredSigners).toBe(1);
 	});
 
 	test('returns result for well-formed unsigned proof', () => {
@@ -1705,9 +1637,9 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
 		const result = verifyP2PKSpendingConditions(proof);
 		expect(result.success).toBe(false);
 		expect(result.path).toBe('FAILED');
-		expect(result.requiredSigners).toBe(2);
-		expect(result.eligibleSigners).toBe(2);
-		expect(result.receivedSigners).toEqual([]);
+		expect(result.main.requiredSigners).toBe(2);
+		expect(result.main.pubkeys).toHaveLength(2);
+		expect(result.main.receivedSigners).toEqual([]);
 	});
 
 	test('returns success for signed proof meeting threshold', () => {
@@ -1747,28 +1679,38 @@ describe('verifyP2PKSpendingConditions — semantic validation', () => {
 	});
 });
 
-describe('getP2PKNSigs / getP2PKNSigsRefund — clamping', () => {
+describe('verifyP2PKSpendingConditions signer counts', () => {
 	const makePk = () => bytesToHex(getPubKeyFromPrivKey(schnorr.utils.randomSecretKey()));
 	const pk1 = makePk();
 
-	test('getP2PKNSigs returns 1 when n_sigs tag is absent', () => {
-		const secret = createP2PKsecret(pk1);
-		expect(getP2PKNSigs(secret)).toBe(1);
+	test('defaults requiredSigners to 1 when n_sigs tag is absent', () => {
+		const proof: Proof = {
+			amount: 1n,
+			id: '00000000000',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			secret: createP2PKsecret(pk1),
+		};
+		expect(verifyP2PKSpendingConditions(proof).main.requiredSigners).toBe(1);
 	});
 
-	test('getP2PKNSigs returns value when n_sigs is valid positive integer', () => {
+	test('uses n_sigs value when it is a valid positive integer', () => {
 		const pk2 = makePk();
-		const secret = JSON.stringify([
-			'P2PK',
-			{
-				nonce: bytesToHex(randomBytes(32)),
-				data: pk1,
-				tags: [
-					['pubkeys', pk2],
-					['n_sigs', '2'],
-				],
-			},
-		]);
-		expect(getP2PKNSigs(secret)).toBe(2);
+		const proof: Proof = {
+			amount: 1n,
+			id: '00000000000',
+			C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			secret: JSON.stringify([
+				'P2PK',
+				{
+					nonce: bytesToHex(randomBytes(32)),
+					data: pk1,
+					tags: [
+						['pubkeys', pk2],
+						['n_sigs', '2'],
+					],
+				},
+			]),
+		};
+		expect(verifyP2PKSpendingConditions(proof).main.requiredSigners).toBe(2);
 	});
 });
