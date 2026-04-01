@@ -113,8 +113,10 @@ export function createRandomRawBlindedMessage(): RawBlindedMessage {
  */
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage {
 	const Y = hashToCurve(secret);
-	if (!r) {
+	if (r === undefined) {
 		r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey());
+	} else if (r === 0n) {
+		throw new Error('Blinding factor r must be non-zero');
 	}
 	const rG = secp256k1.Point.BASE.multiply(r);
 	const B_ = Y.add(rG);
