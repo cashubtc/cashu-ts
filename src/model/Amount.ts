@@ -204,8 +204,8 @@ export class Amount {
 	/**
 	 * Returns `floor(this × numerator / denominator)` using integer arithmetic only.
 	 *
-	 * The natural complement to {@link ceilPercent} — use when you need the conservative lower bound,
-	 * e.g. "maximum spendable after reserving fees".
+	 * The natural complement to {@link Amount.ceilPercent} — use when you need the conservative lower
+	 * bound, e.g. "maximum spendable after reserving fees".
 	 *
 	 * @example Amount.floorPercent(98) // floor(98% of amount) amount.floorPercent(1, 200) //
 	 * floor(0.5% of amount)
