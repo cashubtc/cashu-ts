@@ -10,16 +10,20 @@ import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 export class Amount {
     // (undocumented)
     add(other: AmountLike): Amount;
+    ceilPercent(numerator: number, denominator?: number): Amount;
+    clamp(min: AmountLike, max: AmountLike): Amount;
     compareTo(other: AmountLike): -1 | 0 | 1;
     // (undocumented)
     divideBy(divisor: AmountLike): Amount;
     // (undocumented)
     equals(other: AmountLike): boolean;
+    floorPercent(numerator: number, denominator?: number): Amount;
     static from(input: AmountLike): Amount;
     // (undocumented)
     greaterThan(other: AmountLike): boolean;
     // (undocumented)
     greaterThanOrEqual(other: AmountLike): boolean;
+    inRange(min: AmountLike, max: AmountLike): boolean;
     isSafeNumber(): boolean;
     // (undocumented)
     isZero(): boolean;
@@ -37,6 +41,7 @@ export class Amount {
     multiplyBy(factor: AmountLike): Amount;
     // (undocumented)
     static one(): Amount;
+    scaledBy(numerator: AmountLike, denominator: AmountLike): Amount;
     // (undocumented)
     subtract(other: AmountLike): Amount;
     // (undocumented)

@@ -172,6 +172,118 @@ export class Amount {
 	}
 
 	// -----------------------------------------------------------------
+	// Section: Finance Helpers
+	// -----------------------------------------------------------------
+
+	/**
+	 * Returns `ceil(this × numerator / denominator)` using integer arithmetic only.
+	 *
+	 * The default denominator of 100 makes common percentage calculations natural. Use a larger
+	 * denominator to express fractional percentages without floats.
+	 *
+	 * @example Amount.ceilPercent(2) // ceil(2% of amount) amount.ceilPercent(1, 200) // ceil(0.5% of
+	 * amount) amount.ceilPercent(15, 10) // ceil(1.5% of amount)
+	 *
+	 * @throws If numerator or denominator are not positive integers.
+	 */
+	ceilPercent(numerator: number, denominator: number = 100): Amount {
+		if (!Number.isInteger(numerator) || numerator <= 0) {
+			throw new AmountError(`ceilPercent: numerator must be a positive integer, got ${numerator}`);
+		}
+		if (!Number.isInteger(denominator) || denominator <= 0) {
+			throw new AmountError(
+				`ceilPercent: denominator must be a positive integer, got ${denominator}`,
+			);
+		}
+		// ceil(a * n / d) = floor((a * n + d - 1) / d)
+		return this.multiplyBy(numerator)
+			.add(denominator - 1)
+			.divideBy(denominator);
+	}
+
+	/**
+	 * Returns `floor(this × numerator / denominator)` using integer arithmetic only.
+	 *
+	 * The natural complement to {@link ceilPercent} — use when you need the conservative lower bound,
+	 * e.g. "maximum spendable after reserving fees".
+	 *
+	 * @example Amount.floorPercent(98) // floor(98% of amount) amount.floorPercent(1, 200) //
+	 * floor(0.5% of amount)
+	 *
+	 * @throws If numerator or denominator are not positive integers.
+	 */
+	floorPercent(numerator: number, denominator: number = 100): Amount {
+		if (!Number.isInteger(numerator) || numerator <= 0) {
+			throw new AmountError(`floorPercent: numerator must be a positive integer, got ${numerator}`);
+		}
+		if (!Number.isInteger(denominator) || denominator <= 0) {
+			throw new AmountError(
+				`floorPercent: denominator must be a positive integer, got ${denominator}`,
+			);
+		}
+		return this.multiplyBy(numerator).divideBy(denominator);
+	}
+
+	/**
+	 * Returns true if this amount is within the inclusive range [min, max].
+	 *
+	 * @example Msats.inRange(data.minSendable, data.maxSendable)
+	 *
+	 * @throws If min > max.
+	 */
+	inRange(min: AmountLike, max: AmountLike): boolean {
+		const lo = Amount.from(min);
+		const hi = Amount.from(max);
+		if (lo.greaterThan(hi)) {
+			throw new AmountError(`inRange: min (${lo.toString()}) must be <= max (${hi.toString()})`);
+		}
+		return this.greaterThanOrEqual(lo) && this.lessThanOrEqual(hi);
+	}
+
+	/**
+	 * Clamps this amount to the inclusive range [min, max].
+	 *
+	 * @example Fee.clamp(MIN_FEE, tokenAmount) invoiceAmount.clamp(Amount.from(minSendable),
+	 * Amount.from(maxSendable))
+	 *
+	 * @throws If min > max.
+	 */
+	clamp(min: AmountLike, max: AmountLike): Amount {
+		const lo = Amount.from(min);
+		const hi = Amount.from(max);
+		if (lo.greaterThan(hi)) {
+			throw new AmountError(`clamp: min (${lo.toString()}) must be <= max (${hi.toString()})`);
+		}
+		return Amount.max(lo, Amount.min(hi, this));
+	}
+
+	/**
+	 * Returns `round(this × numerator / denominator)` using integer arithmetic only.
+	 *
+	 * Useful for proportional rescaling — currency conversion, capacity checks, partial fills —
+	 * without floating-point imprecision or overflow risk.
+	 *
+	 * Uses the identity: `round(a × b / c) = floor((2 × a × b + c) / (2 × c))`
+	 *
+	 * @example // Scale a 1000-sat amount down by a 3/4 ratio → 750 Amount.from(1000).scaledBy(3, 4)
+	 *
+	 *     // Proportional rescale: if neededAmount is too high, shrink estInvAmount to fit
+	 *     estInvAmount.scaledBy(tokenAmount, neededAmount).subtract(1);
+	 *
+	 * @throws If numerator or denominator are zero or negative.
+	 */
+	scaledBy(numerator: AmountLike, denominator: AmountLike): Amount {
+		const n = Amount.from(numerator);
+		const d = Amount.from(denominator);
+		if (n.isZero()) return Amount.zero();
+		if (d.isZero()) {
+			throw new AmountError('scaledBy: denominator must be > 0');
+		}
+		// round(a × n / d) = floor((2 × a × n + d) / (2 × d))
+		return this.multiplyBy(n).multiplyBy(2).add(d).divideBy(d.multiplyBy(2));
+	}
+
+	// -----------------------------------------------------------------
 	// Section: Comparison
 	// -----------------------------------------------------------------
 
