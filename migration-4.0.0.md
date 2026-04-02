@@ -2,25 +2,49 @@
 
 ⚠️ Upgrading to version 4.0.0 will come with breaking changes! Please follow the migration guide for a smooth transition to the new version.
 
-## Breaking changes
+**TIP**: If you use a coding agent, you can point them to `migration.4.0.0.SKILL.md`.
 
-### ESM-only package
+---
+
+## The `Amount` value object — what changed and what it means for your app
+
+The single most pervasive change in v4 is that many APIs which previously returned or accepted a plain `number` now use an `Amount` value object. This was a deliberate design choice: JavaScript `number` silently loses precision above `Number.MAX_SAFE_INTEGER` (2^53 - 1). While that limit is above the total Bitcoin supply in satoshis, it is reachable with millisatoshi accounting or high-volume stablecoin tokens — and a silent rounding error in a payment app is a serious bug.
+
+`Amount` is immutable, bigint-backed, and non-negative. It provides:
+
+- **Arithmetic**: `.add()`, `.subtract()`, `.multiplyBy()`, `.divideBy()`
+- **Comparison**: `.lessThan()`, `.greaterThan()`, `.equals()`, etc.
+- **Conversion**: `.toNumber()` (throws above `MAX_SAFE_INTEGER`), `.toBigInt()`, `.toString()`, `.toJSON()`
+- **Finance**: `.scaledBy()`, `.ceilPercent()`, `.floorPercent()`, `.clamp()`, `.inRange()`
+- **Construction**: `Amount.from(x)` accepts `number`, `bigint`, `string`, or another `Amount`
+
+### Choosing your migration strategy
+
+Before you start updating call sites, decide how deeply you want to adopt `Amount`:
+
+**Option A — Adopt `Amount` natively (recommended for new or large-amount apps)**
+Keep `Amount` flowing through your own functions and types. Call `.toNumber()` only at genuine display or float-arithmetic boundaries (e.g. fee percentage estimates, `Intl.NumberFormat` for decimal currencies). For integer-unit currencies like SAT, pass `.toBigInt()` directly — `Intl.NumberFormat` supports `bigint` natively in all modern environments.
+
+**Option B — Convert at the boundary (simplest for existing number-typed codebases)**
+Call `.toNumber()` immediately on every `Amount` the library returns, then leave all your internal types as `number`. Safe as long as your amounts stay within `Number.MAX_SAFE_INTEGER`.
+
+Both strategies are valid. The sections below show the mechanical changes required; the key question is whether you propagate `Amount` inward or flatten it at the edge.
+
+---
+
+## ESM-only package
 
 cashu-ts v4 ships **only ES modules**. The CommonJS build (`lib/cashu-ts.cjs`) has been removed.
-
-#### Why
 
 Our core dependencies (`@noble/curves`, `@noble/hashes`, `@scure/bip32`) are ESM-only.
 Maintaining a dual CJS build required bundling those deps into the CJS output, increasing
 complexity and risk of module-duplication bugs.
 
-#### What changed
-
 - `package.json` no longer has a `"require"` condition in `exports` or a `"main"` field pointing to a `.cjs` file.
 - `npm run compile` produces only the ESM bundle (`lib/cashu-ts.es.js`).
 - The IIFE standalone browser build is unchanged.
 
-#### Migration path for consumers
+### Migration
 
 | Current setup                     | Migration                                     |
 | --------------------------------- | --------------------------------------------- |
@@ -521,6 +545,53 @@ getEncodedToken({ mint, proofs: freshProofs }); // encodes as cashuB (v4)
 
 ---
 
+## `getDecodedToken` now requires `keysetIds`
+
+Prefer `getTokenMetadata` + `wallet.decodeToken()`
+
+`getDecodedToken` now requires a second argument: `keysetIds: readonly string[]`. This array is used to resolve v2 short keyset IDs to their full hex counterparts.
+
+**Passing an empty array is unsafe** — it throws the moment a token contains a v2 short keyset ID.
+
+### Recommended migration
+
+Instead of calling `getDecodedToken` directly, use the two-step pattern:
+
+```ts
+// Before
+import { getDecodedToken } from '@cashu/cashu-ts';
+const token = getDecodedToken(tokenString); // TS error in v4 — second arg required
+
+// After — Step 1: metadata before the wallet exists
+import { getTokenMetadata } from '@cashu/cashu-ts';
+const meta = getTokenMetadata(tokenString);
+// meta.mint, meta.unit, meta.amount (Amount), meta.incompleteProofs
+
+// After — Step 2: build and load the wallet
+const wallet = new Wallet(meta.mint, { unit: meta.unit });
+await wallet.loadMint(); // or wallet.loadMintFromCache(mintInfo, keyChainCache)
+
+// After — Step 3: fully hydrate the token
+const token = wallet.decodeToken(tokenString); // Token with complete Proof[]
+```
+
+### When to use each API
+
+| API                         | When to use                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------- |
+| `getTokenMetadata(str)`     | Before a wallet exists — get mint URL, unit, and amount to decide which wallet to create |
+| `wallet.decodeToken(str)`   | After wallet is loaded — get the complete `Token` with full `Proof[]`                    |
+| `getDecodedToken(str, ids)` | Advanced: you manage your own keyset cache and decode outside a wallet instance          |
+
+### If you only need amount / mint / unit
+
+```ts
+const { mint, unit, amount } = getTokenMetadata(tokenString);
+const sats = amount.toNumber(); // amount is Amount, not number
+```
+
+---
+
 ## Deprecated v3 APIs now removed
 
 These APIs were already deprecated in v3. In v4 they have been removed:
@@ -632,6 +703,27 @@ new P2PKBuilder().addRefundPubkey(['03' + xOnly, '02' + xOnly]).toOptions().refu
 // => ['03' + xOnly]
 ```
 
+### `P2PKBuilder.requireLockSignatures()` and `requireRefundSignatures()` now throw for invalid input
+
+Previously these methods silently clamped the value to at least 1 and truncated non-integers. They now throw if the argument is not a positive integer (`n < 1` or non-integer).
+
+```ts
+// Before — invalid values were silently clamped
+builder.requireLockSignatures(0); // stored as 1 (clamped)
+builder.requireLockSignatures(1.7); // stored as 1 (truncated)
+
+// After — throws immediately
+builder.requireLockSignatures(0); // throws: 'requiredSignatures must be a positive integer'
+builder.requireLockSignatures(1.7); // throws: 'requiredSignatures must be a positive integer'
+```
+
+Ensure any value passed to these methods is a positive integer, or guard it beforehand:
+
+```ts
+const n = Math.max(1, Math.trunc(rawValue));
+builder.requireLockSignatures(n);
+```
+
 ---
 
 ## Generic mint/melt quote and proof methods
@@ -724,5 +816,64 @@ const quote = await wallet.createMintQuote<BacsQuoteRes>(
 ```
 
 For melt quotes, base fields (`amount`, `expiry`, `change`) are always normalized automatically. For bolt11/bolt12, `fee_reserve` and `request` are also normalized. The `normalize` callback runs last, after all built-in normalization.
+
+---
+
+## Finance Helpers — going further with `Amount`
+
+Once you are propagating `Amount` natively, a set of Finance Helpers on the `Amount` class lets you replace common float-based patterns with exact integer arithmetic. All methods are chainable.
+
+### `ceilPercent(numerator, denominator = 100)`
+
+Returns `ceil(this × numerator / denominator)`. The default base of 100 makes integer percentages natural; use a larger denominator for fractional rates.
+
+```ts
+// Replaces: Math.ceil(amount * 0.02)
+const fee = amount.ceilPercent(2); // ceil(2%)
+
+// Replaces: Math.ceil(amount * 0.005)
+const fee = amount.ceilPercent(1, 200); // ceil(0.5%)
+
+// Fee with minimum: replaces Math.ceil(Math.max(2, amount * 0.02))
+const fee = amount.ceilPercent(2).clamp(2, amount);
+```
+
+### `floorPercent(numerator, denominator = 100)`
+
+Returns `floor(this × numerator / denominator)`. The complement to `ceilPercent` — use when you need the conservative lower bound.
+
+```ts
+// Replaces: Math.floor(amount * 0.98)
+const maxSpend = amount.floorPercent(98); // floor(98%)
+```
+
+### `scaledBy(numerator, denominator)`
+
+Returns `round(this × numerator / denominator)` using integer arithmetic. Useful for proportional rescaling where the ratio is a runtime value.
+
+Uses the identity `round(a × b / c) = floor((2 × a × b + c) / (2 × c))` — no floats, no overflow risk.
+
+```ts
+// Replaces: Math.round(estInvAmount * (tokenAmount / neededAmount)) - 1
+const adjusted = estInvAmount.scaledBy(tokenAmount, neededAmount).subtract(1);
+```
+
+### `clamp(min, max)`
+
+Bounds this amount to the inclusive range `[min, max]`. Throws if `min > max`.
+
+```ts
+// Replaces: Amount.max(MIN_FEE, Amount.min(tokenAmount, fee))
+const bounded = fee.clamp(MIN_FEE, tokenAmount);
+```
+
+### `inRange(min, max)`
+
+Returns `true` if this amount falls within `[min, max]` inclusive. Throws if `min > max`.
+
+```ts
+// Replaces: minSendable <= msats && msats <= maxSendable
+if (msats.inRange(data.minSendable, data.maxSendable)) { ... }
+```
 
 ---
