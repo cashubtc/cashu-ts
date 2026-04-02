@@ -266,13 +266,13 @@ async function _request(options: RequestOptions): Promise<unknown> {
 		response = await fetch(endpoint, {
 			body,
 			headers,
-			...fetchOptions,
-			signal,
 			// Anti-fingerprinting fetch options.
 			cache: 'no-store', // prevent cache tracking (eg ETag)
 			credentials: 'omit', // prevent cookie-based tracking
 			referrer: '', // prevent leaking the embedding page URL
 			referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+			...fetchOptions, // allows override of above options
+			signal, // not overridable (includes caller signal)
 		});
 	} catch (err) {
 		const timedOut = !!timeoutController?.signal.aborted;
