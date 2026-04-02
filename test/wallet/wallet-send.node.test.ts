@@ -17,6 +17,151 @@ function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
 	});
 }
 
+const plainSecret = '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13';
+const unknownKindSecret = JSON.stringify([
+	'TEST',
+	{ nonce: 'test1', data: 'some-test-data', tags: [] },
+]);
+const p2pkSecret = JSON.stringify([
+	'P2PK',
+	{
+		nonce: 'abc123',
+		data: '02' + 'aa'.repeat(32),
+		tags: [],
+	},
+]);
+
+describe('sendOffline witness normalization', () => {
+	test('strips witness from plain (non-NUT-10) secret', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const proofs: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: plainSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				witness: JSON.stringify({ signatures: ['deadbeef'] }),
+			},
+		];
+
+		const { send } = wallet.sendOffline(1, proofs);
+		expect(send).toHaveLength(1);
+		expect(send[0].witness).toBeUndefined();
+	});
+
+	test('preserves witness on NUT-10 P2PK secret', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+		const proofs: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: p2pkSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				witness: witnessStr,
+			},
+		];
+
+		const { send } = wallet.sendOffline(1, proofs);
+		expect(send).toHaveLength(1);
+		expect(send[0].witness).toBe(witnessStr);
+	});
+
+	test('serializes object witness on NUT-10 secret to JSON string', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const witnessObj = { signatures: ['cafebabe'] };
+		const proofs: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: p2pkSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				witness: witnessObj,
+			},
+		];
+
+		const { send } = wallet.sendOffline(1, proofs);
+		expect(send).toHaveLength(1);
+		expect(send[0].witness).toBe(JSON.stringify(witnessObj));
+	});
+
+	test('no-change when proof has no witness', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const proofs: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: plainSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+			},
+		];
+
+		const { send } = wallet.sendOffline(1, proofs);
+		expect(send).toHaveLength(1);
+		expect(send[0].witness).toBeUndefined();
+	});
+
+	test('preserves witness on NUT-10 unknown secret kind', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+		const proofs: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: unknownKindSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				witness: witnessStr,
+			},
+		];
+
+		const { send } = wallet.sendOffline(1, proofs);
+		expect(send).toHaveLength(1);
+		expect(send[0].witness).toBe(witnessStr);
+	});
+
+	test('mixed proofs: strips from plain, keeps on P2PK', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
+		const proofs: Proof[] = [
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: plainSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				witness: JSON.stringify({ signatures: ['deadbeef'] }),
+			},
+			{
+				id: '00bd033559de27d0',
+				amount: 1n,
+				secret: p2pkSecret,
+				C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+				witness: witnessStr,
+			},
+		];
+
+		const { send } = wallet.sendOffline(2, proofs);
+		expect(send).toHaveLength(2);
+		// plain secret — witness stripped
+		const plain = send.find((p) => p.secret === plainSecret)!;
+		expect(plain.witness).toBeUndefined();
+		// P2PK secret — witness kept
+		const p2pk = send.find((p) => p.secret === p2pkSecret)!;
+		expect(p2pk.witness).toBe(witnessStr);
+	});
+});
+
 describe('send', () => {
 	const proofs = [
 		{

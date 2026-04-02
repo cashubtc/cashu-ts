@@ -37,6 +37,7 @@ import {
 	buildP2PKSigAllMessage,
 	assertSigAllInputs,
 	buildLegacyP2PKSigAllMessage,
+	parseSecret,
 } from '../crypto';
 import { Mint } from '../mint';
 import { MintInfo } from '../model/MintInfo';
@@ -1417,13 +1418,28 @@ class Wallet {
 	 */
 	private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
 		return proofs.map((p) => {
-			const witness =
-				p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
+			const witness = this._normalizeWitness(p);
 			const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
 			void p2pk_e; // intentionally unused (linter)
 			// New proof object
 			return keepDleq && dleq ? { ...rest, dleq, witness } : { ...rest, witness };
 		});
+	}
+
+	/**
+	 * Normalizes a proof's witness for the mint payload.
+	 *
+	 * Serializes object witnesses to JSON and strips witnesses from non-NUT-10 secrets (plain secrets
+	 * with a witness field are rejected by mints).
+	 */
+	private _normalizeWitness(proof: Proof): string | undefined {
+		if (!proof.witness) return undefined;
+		try {
+			parseSecret(proof.secret);
+		} catch {
+			return undefined; // plain secret — strip stray witness
+		}
+		return typeof proof.witness !== 'string' ? JSON.stringify(proof.witness) : proof.witness;
 	}
 
 	/**
