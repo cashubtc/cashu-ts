@@ -70,7 +70,7 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		expect(() =>
 			OutputData.createP2PKData({ pubkey: PK1, requiredSignatures: 5 }, 21, keys),
-		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(1\)/i);
+		).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(1\)/i);
 	});
 	test('Create BlindingData locked to multiple pks with no requiredSignatures', async () => {
 		const wallet = new Wallet(mint);
@@ -110,7 +110,7 @@ describe('P2PK BlindingData', () => {
 		const keys = wallet.keyChain.getKeyset();
 		expect(() =>
 			OutputData.createP2PKData({ pubkey: [PK1, PK2, PK3], requiredSignatures: 5 }, 21, keys),
-		).toThrow(/requiredSignatures \(5\) exceeds available pubkeys \(3\)/i);
+		).toThrow(/requiredSignatures \(n_sigs\) \(5\) exceeds available pubkeys \(3\)/i);
 	});
 	test('Create BlindingData locked to single refund key with default requiredRefundSignatures', async () => {
 		const wallet = new Wallet(mint);
@@ -194,7 +194,9 @@ describe('P2PK BlindingData', () => {
 				21,
 				keys,
 			),
-		).toThrow(/requiredRefundSignatures \(5\) exceeds available refundKeys \(3\)/i);
+		).toThrow(
+			/requiredRefundSignatures \(n_sigs_refund\) \(5\) exceeds available refund keys \(3\)/i,
+		);
 	});
 	test('Create BlindingData locked to multiple refund keys with expired multisig', async () => {
 		const wallet = new Wallet(mint);

@@ -411,25 +411,7 @@ export type GetKeysResponse = {
 export function getP2PKExpectedWitnessPubkeys(secretStr: string | Secret): string[];
 
 // @public
-export function getP2PKLockState(secretStr: Secret | string, nowSeconds?: number): LockState;
-
-// @public
-export function getP2PKLocktime(secretStr: string | Secret): number;
-
-// @public
-export function getP2PKNSigs(secretStr: string | Secret): number;
-
-// @public
-export function getP2PKNSigsRefund(secretStr: string | Secret): number;
-
-// @public
 export function getP2PKSigFlag(secretStr: string | Secret): SigFlag;
-
-// @public
-export function getP2PKWitnessPubkeys(secretStr: string | Secret): string[];
-
-// @public
-export function getP2PKWitnessRefundkeys(secretStr: string | Secret): string[];
 
 // @public
 export function getP2PKWitnessSignatures(witness: Proof['witness']): string[];
@@ -1256,6 +1238,13 @@ export type P2PKOptions = {
     hashlock?: string;
 };
 
+// @public
+export interface P2PKPathInfo {
+    pubkeys: string[];
+    receivedSigners: string[];
+    requiredSigners: number;
+}
+
 // @public (undocumented)
 export type P2PKSpendingPath = 'MAIN' | 'REFUND' | 'UNLOCKED' | 'FAILED';
 
@@ -1264,17 +1253,11 @@ export type P2PKTag = [key: string, ...values: string[]];
 
 // @public (undocumented)
 export interface P2PKVerificationResult {
-    // (undocumented)
-    eligibleSigners: number;
-    // (undocumented)
     lockState: LockState;
-    // (undocumented)
+    locktime: number;
+    main: P2PKPathInfo;
     path: P2PKSpendingPath;
-    // (undocumented)
-    receivedSigners: string[];
-    // (undocumented)
-    requiredSigners: number;
-    // (undocumented)
+    refund: P2PKPathInfo;
     success: boolean;
 }
 
