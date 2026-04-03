@@ -8,13 +8,24 @@ const MAKEFILE = 'Makefile';
 
 type Dep = {
 	name: string;
+	githubRepo: string;
 	stableVar: string;
 	rcVar: string;
 };
 
 const DEPENDENCIES: Dep[] = [
-	{ name: 'cashubtc/mintd', stableVar: 'CDK_IMAGE', rcVar: 'CDK_IMAGE_RC' },
-	{ name: 'cashubtc/nutshell', stableVar: 'NUT_IMAGE', rcVar: 'NUT_IMAGE_RC' },
+	{
+		name: 'cashubtc/mintd',
+		githubRepo: 'cashubtc/cdk',
+		stableVar: 'CDK_IMAGE',
+		rcVar: 'CDK_IMAGE_RC',
+	},
+	{
+		name: 'cashubtc/nutshell',
+		githubRepo: 'cashubtc/nutshell',
+		stableVar: 'NUT_IMAGE',
+		rcVar: 'NUT_IMAGE_RC',
+	},
 ];
 
 // for github output
@@ -54,31 +65,27 @@ function writePrOutputs(updates: Update[]): void {
 	setGithubOutput('branch', 'automation/update-mint-images');
 }
 
-type DockerTag = {
-	name: string;
+type GithubRelease = {
+	tag_name: string;
+	prerelease: boolean;
+	draft: boolean;
 };
 
-type DockerHubResponse = {
-	results: DockerTag[];
-	next?: string | null;
-};
+async function fetchGithubReleases(repo: string): Promise<GithubRelease[]> {
+	const url = `https://api.github.com/repos/${repo}/releases?per_page=100`;
+	const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
+	const token = process.env.GITHUB_TOKEN;
+	if (token) headers['Authorization'] = `Bearer ${token}`;
 
-async function fetchTags(repo: string): Promise<string[]> {
-	let url: string | null = `https://hub.docker.com/v2/repositories/${repo}/tags?page_size=100`;
-	const tags: string[] = [];
-
-	while (url) {
-		const resp = await fetch(url);
-		if (!resp.ok) {
-			throw new Error(`Failed to fetch tags for ${repo}: ${resp.statusText}`);
-		}
-
-		const data = (await resp.json()) as DockerHubResponse;
-		tags.push(...data.results.map((t) => t.name));
-		url = data.next ?? null;
+	const resp = await fetch(url, { headers });
+	if (!resp.ok) {
+		throw new Error(`Failed to fetch releases for ${repo}: ${resp.statusText}`);
 	}
+	return (await resp.json()) as GithubRelease[];
+}
 
-	return tags;
+function tagToVersion(tag: string): string {
+	return tag.replace(/^v/, '');
 }
 
 function semverKey(tag: string): number[] {
@@ -86,22 +93,24 @@ function semverKey(tag: string): number[] {
 	return base.split('.').map((x) => parseInt(x, 10));
 }
 
-function isPureSemver(tag: string): boolean {
-	return /^\d+\.\d+\.\d+$/.test(tag);
+function isRc(version: string): boolean {
+	return /^\d+\.\d+\.\d+-rc\.\d+$/.test(version);
 }
 
-function isRc(tag: string): boolean {
-	return /^\d+\.\d+\.\d+-rc\.\d+$/.test(tag);
-}
-
-function getLatestStable(tags: string[]): string | null {
-	const stable = tags.filter(isPureSemver);
+function getLatestStable(releases: GithubRelease[]): string | null {
+	const stable = releases
+		.filter((r) => !r.draft && !r.prerelease)
+		.map((r) => tagToVersion(r.tag_name))
+		.filter((v) => /^\d+\.\d+\.\d+$/.test(v));
 	if (stable.length === 0) return null;
 	return stable.sort(compareSemver).pop()!;
 }
 
-function getLatestRc(tags: string[]): string | null {
-	const rcs = tags.filter(isRc);
+function getLatestRc(releases: GithubRelease[]): string | null {
+	const rcs = releases
+		.filter((r) => !r.draft && r.prerelease)
+		.map((r) => tagToVersion(r.tag_name))
+		.filter(isRc);
 	if (rcs.length === 0) return null;
 	return rcs.sort(compareSemver).pop()!;
 }
@@ -151,9 +160,9 @@ function updateMakefile(varName: string, newTag: string) {
 // -----------------------------
 async function main() {
 	for (const dep of DEPENDENCIES) {
-		const tags = await fetchTags(dep.name);
-		const stable = getLatestStable(tags);
-		const rc = getLatestRc(tags);
+		const releases = await fetchGithubReleases(dep.githubRepo);
+		const stable = getLatestStable(releases);
+		const rc = getLatestRc(releases);
 
 		if (stable) updateMakefile(dep.stableVar, `${dep.name}:${stable}`);
 

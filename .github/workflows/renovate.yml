@@ -27,6 +27,8 @@ jobs:
 
       - name: Update Makefile Docker versions
         id: update
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run update-docker-versions
 
       - name: Create Pull Request
