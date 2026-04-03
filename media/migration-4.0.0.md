@@ -2,25 +2,49 @@
 
 ⚠️ Upgrading to version 4.0.0 will come with breaking changes! Please follow the migration guide for a smooth transition to the new version.
 
-## Breaking changes
+**TIP**: If you use a coding agent, you can point them to `migration.4.0.0.SKILL.md`.
 
-### ESM-only package
+---
+
+## The `Amount` value object — what changed and what it means for your app
+
+The single most pervasive change in v4 is that many APIs which previously returned or accepted a plain `number` now use an `Amount` value object. This was a deliberate design choice: JavaScript `number` silently loses precision above `Number.MAX_SAFE_INTEGER` (2^53 - 1). While that limit is above the total Bitcoin supply in satoshis, it is reachable with millisatoshi accounting or high-volume stablecoin tokens — and a silent rounding error in a payment app is a serious bug.
+
+`Amount` is immutable, bigint-backed, and non-negative. It provides:
+
+- **Arithmetic**: `.add()`, `.subtract()`, `.multiplyBy()`, `.divideBy()`
+- **Comparison**: `.lessThan()`, `.greaterThan()`, `.equals()`, etc.
+- **Conversion**: `.toNumber()` (throws above `MAX_SAFE_INTEGER`), `.toBigInt()`, `.toString()`, `.toJSON()`
+- **Finance**: `.scaledBy()`, `.ceilPercent()`, `.floorPercent()`, `.clamp()`, `.inRange()`
+- **Construction**: `Amount.from(x)` accepts `number`, `bigint`, `string`, or another `Amount`
+
+### Choosing your migration strategy
+
+Before you start updating call sites, decide how deeply you want to adopt `Amount`:
+
+**Option A — Adopt `Amount` natively (recommended for new or large-amount apps)**
+Keep `Amount` flowing through your own functions and types. Call `.toNumber()` only at genuine display or float-arithmetic boundaries (e.g. fee percentage estimates, `Intl.NumberFormat` for decimal currencies). For integer-unit currencies like SAT, pass `.toBigInt()` directly — `Intl.NumberFormat` supports `bigint` natively in all modern environments.
+
+**Option B — Convert at the boundary (simplest for existing number-typed codebases)**
+Call `.toNumber()` immediately on every `Amount` the library returns, then leave all your internal types as `number`. Safe as long as your amounts stay within `Number.MAX_SAFE_INTEGER`.
+
+Both strategies are valid. The sections below show the mechanical changes required; the key question is whether you propagate `Amount` inward or flatten it at the edge.
+
+---
+
+## ESM-only package
 
 cashu-ts v4 ships **only ES modules**. The CommonJS build (`lib/cashu-ts.cjs`) has been removed.
-
-#### Why
 
 Our core dependencies (`@noble/curves`, `@noble/hashes`, `@scure/bip32`) are ESM-only.
 Maintaining a dual CJS build required bundling those deps into the CJS output, increasing
 complexity and risk of module-duplication bugs.
 
-#### What changed
-
 - `package.json` no longer has a `"require"` condition in `exports` or a `"main"` field pointing to a `.cjs` file.
 - `npm run compile` produces only the ESM bundle (`lib/cashu-ts.es.js`).
 - The IIFE standalone browser build is unchanged.
 
-#### Migration path for consumers
+### Migration
 
 | Current setup                     | Migration                                     |
 | --------------------------------- | --------------------------------------------- |
@@ -274,16 +298,7 @@ const total = proofs.reduce((sum, p) => sum + p.amount, 0n);
 const display: number = Number(proof.amount); // safe for typical sat amounts
 ```
 
-If you persist proofs to a database or serialize them to JSON, the `amount` field will now serialise as a JSON integer (unchanged over the wire), but your stored TypeScript types need updating to `bigint`.
-
-A `normalizeProofAmounts()` helper is exported for migrating stored proofs that were saved with `number` amounts:
-
-```ts
-import { normalizeProofAmounts } from '@cashu/cashu-ts';
-
-const legacyProofs = db.load(); // amount fields are numbers
-const proofs = normalizeProofAmounts(legacyProofs); // amount fields are bigints
-```
+If you persist proofs to JSON or a database, see the [Proof serialization](#proof-serialization) section below for the helper functions provided.
 
 ---
 
@@ -338,11 +353,12 @@ Several functions that were intended for internal use have been removed from the
 
 ### Made private (no longer exported)
 
-| Function           | Notes                                                           |
-| ------------------ | --------------------------------------------------------------- |
-| `mergeUInt8Arrays` | Internal byte-buffer helper.                                    |
-| `hasNonHexId`      | Internal guard used inside token encoding.                      |
-| `getKeepAmounts`   | Internal wallet coin-selection algorithm. Removed from `utils`. |
+| Function            | Notes                                                           |
+| ------------------- | --------------------------------------------------------------- |
+| `mergeUInt8Arrays`  | Internal byte-buffer helper.                                    |
+| `hasNonHexId`       | Internal guard used inside token encoding.                      |
+| `getKeepAmounts`    | Internal wallet coin-selection algorithm. Removed from `utils`. |
+| `getEncodedTokenV4` | Use `getEncodedToken` instead.                                  |
 
 ### Marked `@internal`
 
@@ -350,17 +366,47 @@ The following are still exported but are excluded from the trimmed type definiti
 
 | Function                | Notes                                          |
 | ----------------------- | ---------------------------------------------- |
+| `isValidHex`            | Internal helper.                               |
 | `hexToNumber`           | Crypto scalar helper (hex → bigint).           |
 | `numberToHexPadded64`   | Crypto scalar helper (bigint → 64-char hex).   |
 | `isObj`                 | HTTP response type guard.                      |
 | `joinUrls`              | Mint URL path builder.                         |
-| `sanitizeUrl`           | URL trailing-slash normaliser.                 |
+| `sanitizeUrl`           | URL trailing-slash normalizer.                 |
 | `invoiceHasAmountInHRP` | BOLT-11 HRP amount detector.                   |
 | `bigIntStringify`       | `JSON.stringify` replacer for `bigint` values. |
 
 ### `handleTokens` no longer exported
 
 `handleTokens` should always have been an internal function, but was exported. If you used this function, use `getDecodedToken` (for fully hydrated `Proof` objects) or `getTokenMetadata` (for token/proof metadata without keyset resolution) instead.
+
+---
+
+## Proof serialization
+
+Three helpers cover the common patterns for persisting and restoring proofs:
+
+| Function                     | Use case                                                                                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                           |
+| `deserializeProofs(json)`    | Restore `string \| string[]` back to `Proof[]`, with `amount` as `bigint`. Pass a `string[]` for individual proof strings (e.g. NutZap tags) or a single `string` for a JSON array blob. |
+| `normalizeProofAmounts(raw)` | Convert already-parsed proof objects (e.g. from a database row) to `Proof[]` by normalizing `amount` to `bigint`.                                                                        |
+
+```ts
+import { serializeProofs, deserializeProofs, normalizeProofAmounts } from '@cashu/cashu-ts';
+
+// localStorage — serializeProofs returns string[], so wrap with JSON.stringify for a single blob
+localStorage.setItem('proofs', JSON.stringify(serializeProofs(proofs)));
+const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
+
+// NutZap proof tags — one proof string per tag
+const proofTags = serializeProofs(proofs).map((s) => ['proof', s]);
+const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]));
+
+// Already-parsed objects (e.g. from a database query)
+const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
+```
+
+Use `getEncodedToken` when you need a full cashu token string (mint URL + unit metadata). Use `serializeProofs` when you only need to store or transmit raw proof arrays.
 
 ---
 
@@ -521,6 +567,53 @@ getEncodedToken({ mint, proofs: freshProofs }); // encodes as cashuB (v4)
 
 ---
 
+## `getDecodedToken` now requires `keysetIds`
+
+Prefer `getTokenMetadata` + `wallet.decodeToken()`
+
+`getDecodedToken` now requires a second argument: `keysetIds: readonly string[]`. This array is used to resolve v2 short keyset IDs to their full hex counterparts.
+
+**Passing an empty array is unsafe** — it throws the moment a token contains a v2 short keyset ID.
+
+### Recommended migration
+
+Instead of calling `getDecodedToken` directly, use the two-step pattern:
+
+```ts
+// Before
+import { getDecodedToken } from '@cashu/cashu-ts';
+const token = getDecodedToken(tokenString); // TS error in v4 — second arg required
+
+// After — Step 1: metadata before the wallet exists
+import { getTokenMetadata } from '@cashu/cashu-ts';
+const meta = getTokenMetadata(tokenString);
+// meta.mint, meta.unit, meta.amount (Amount), meta.incompleteProofs
+
+// After — Step 2: build and load the wallet
+const wallet = new Wallet(meta.mint, { unit: meta.unit });
+await wallet.loadMint(); // or wallet.loadMintFromCache(mintInfo, keyChainCache)
+
+// After — Step 3: fully hydrate the token
+const token = wallet.decodeToken(tokenString); // Token with complete Proof[]
+```
+
+### When to use each API
+
+| API                         | When to use                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------- |
+| `getTokenMetadata(str)`     | Before a wallet exists — get mint URL, unit, and amount to decide which wallet to create |
+| `wallet.decodeToken(str)`   | After wallet is loaded — get the complete `Token` with full `Proof[]`                    |
+| `getDecodedToken(str, ids)` | Advanced: you manage your own keyset cache and decode outside a wallet instance          |
+
+### If you only need amount / mint / unit
+
+```ts
+const { mint, unit, amount } = getTokenMetadata(tokenString);
+const sats = amount.toNumber(); // amount is Amount, not number
+```
+
+---
+
 ## Deprecated v3 APIs now removed
 
 These APIs were already deprecated in v3. In v4 they have been removed:
@@ -531,9 +624,127 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 - `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
 - Deprecated utility helpers and overloads in `src/utils/core`: `bytesToNumber`, `verifyKeysetId`, the positional `deriveKeysetId(...)` signature, and the `getDecodedToken(..., HasKeysetId[])` overload; use `Bytes.toBigInt`, `Keyset.verifyKeysetId(...)`, the options-based `deriveKeysetId(...)`, and `string[]` keyset IDs.
-- Deprecated NUT-11 helpers and aliases: the `parseP2PKSecret(Uint8Array)` overload, `WellKnownSecret`, `signP2PKSecret`, `verifyP2PKSecretSignature`, `getP2PKExpectedKWitnessPubkeys`, and `verifyP2PKSig`; use `parseP2PKSecret(string | Secret)`, `SecretKind`, `schnorrSignMessage`, `schnorrVerifyMessage`, `getP2PKExpectedWitnessPubkeys`, and `isP2PKSpendAuthorised()` / `verifyP2PKSpendingConditions()`.
 - Deprecated convenience aliases removed elsewhere in the API: `MintInfo.supportsBolt12Description` and `WSConnection.closeSubscription()`; use `supportsNut04Description('bolt12')` and `cancelSubscription()` instead.
 - Deprecated crypto/type aliases removed in the v4 cleanup, including `BlindedMessage`; use the non-deprecated names such as `RawBlindedMessage`.
+
+---
+
+## NUT-11 / P2PK API changes
+
+v4 trims the public NUT-11 surface and moves callers toward two supported entry points:
+
+- `getP2PKExpectedWitnessPubkeys(secret)` if you only need to know which pubkeys can currently sign
+- `verifyP2PKSpendingConditions(proof, logger?, message?)` if you need the full lock/refund evaluation result
+
+### Removed deprecated aliases
+
+These older exports are gone in v4:
+
+- `parseP2PKSecret(Uint8Array)` overload
+- `WellKnownSecret`
+- `signP2PKSecret`
+- `verifyP2PKSecretSignature`
+- `getP2PKExpectedKWitnessPubkeys`
+- `verifyP2PKSig`
+
+Use these instead:
+
+- `parseP2PKSecret(string | Secret)`
+- `SecretKind`
+- `schnorrSignMessage(...)`
+- `schnorrVerifyMessage(...)`
+- `getP2PKExpectedWitnessPubkeys(...)`
+- `isP2PKSpendAuthorised(...)` or `verifyP2PKSpendingConditions(...)`
+
+### Removed low-level NUT-11 getters
+
+These helpers are no longer public:
+
+- `getP2PKWitnessPubkeys`
+- `getP2PKWitnessRefundkeys`
+- `getP2PKLocktime`
+- `getP2PKLockState`
+- `getP2PKNSigs`
+- `getP2PKNSigsRefund`
+
+If your code previously called those helpers and stitched the result together manually, migrate to `verifyP2PKSpendingConditions()` and read the returned metadata instead.
+
+```ts
+// Before
+const lockState = getP2PKLockState(proof.secret);
+const locktime = getP2PKLocktime(proof.secret);
+const mainKeys = getP2PKWitnessPubkeys(proof.secret);
+const refundKeys = getP2PKWitnessRefundkeys(proof.secret);
+const required = getP2PKNSigs(proof.secret);
+const refundRequired = getP2PKNSigsRefund(proof.secret);
+
+// After
+const result = verifyP2PKSpendingConditions(proof);
+const { lockState, locktime } = result;
+const mainKeys = result.main.pubkeys;
+const refundKeys = result.refund.pubkeys;
+const required = result.main.requiredSigners;
+const refundRequired = result.refund.requiredSigners;
+```
+
+### `P2PKVerificationResult` shape changed
+
+`verifyP2PKSpendingConditions()` still returns a detailed result object, but signer metadata is now grouped by path:
+
+```ts
+// Before
+result.requiredSigners;
+result.eligibleSigners;
+result.receivedSigners;
+
+// After
+result.locktime;
+result.main.requiredSigners;
+result.main.pubkeys;
+result.main.receivedSigners;
+result.refund.requiredSigners;
+result.refund.pubkeys;
+result.refund.receivedSigners;
+```
+
+This makes the result unambiguous when both main and refund paths exist.
+
+### `P2PKBuilder` now follows the same pubkey identity rules as NUT-11
+
+`P2PKBuilder.addLockPubkey()` and `addRefundPubkey()` now normalize and deduplicate keys by x-only pubkey identity. In practice, that means `02...` and `03...` encodings of the same x-only key are treated as the same signer, and the first one added wins.
+
+If your code relied on storing both encodings as distinct entries, update those expectations:
+
+```ts
+// Before
+new P2PKBuilder().addRefundPubkey(['03' + xOnly, '02' + xOnly]).toOptions().refundKeys;
+// => ['03' + xOnly, '02' + xOnly]
+
+// After
+new P2PKBuilder().addRefundPubkey(['03' + xOnly, '02' + xOnly]).toOptions().refundKeys;
+// => ['03' + xOnly]
+```
+
+### `P2PKBuilder.requireLockSignatures()` and `requireRefundSignatures()` now throw for invalid input
+
+Previously these methods silently clamped the value to at least 1 and truncated non-integers. They now throw if the argument is not a positive integer (`n < 1` or non-integer).
+
+```ts
+// Before — invalid values were silently clamped
+builder.requireLockSignatures(0); // stored as 1 (clamped)
+builder.requireLockSignatures(1.7); // stored as 1 (truncated)
+
+// After — throws immediately
+builder.requireLockSignatures(0); // throws: 'requiredSignatures must be a positive integer'
+builder.requireLockSignatures(1.7); // throws: 'requiredSignatures must be a positive integer'
+```
+
+Ensure any value passed to these methods is a positive integer, or guard it beforehand:
+
+```ts
+const n = Math.max(1, Math.trunc(rawValue));
+builder.requireLockSignatures(n);
+```
 
 ---
 
@@ -627,5 +838,64 @@ const quote = await wallet.createMintQuote<BacsQuoteRes>(
 ```
 
 For melt quotes, base fields (`amount`, `expiry`, `change`) are always normalized automatically. For bolt11/bolt12, `fee_reserve` and `request` are also normalized. The `normalize` callback runs last, after all built-in normalization.
+
+---
+
+## Finance Helpers — going further with `Amount`
+
+Once you are propagating `Amount` natively, a set of Finance Helpers on the `Amount` class lets you replace common float-based patterns with exact integer arithmetic. All methods are chainable.
+
+### `ceilPercent(numerator, denominator = 100)`
+
+Returns `ceil(this × numerator / denominator)`. The default base of 100 makes integer percentages natural; use a larger denominator for fractional rates.
+
+```ts
+// Replaces: Math.ceil(amount * 0.02)
+const fee = amount.ceilPercent(2); // ceil(2%)
+
+// Replaces: Math.ceil(amount * 0.005)
+const fee = amount.ceilPercent(1, 200); // ceil(0.5%)
+
+// Fee with minimum: replaces Math.ceil(Math.max(2, amount * 0.02))
+const fee = amount.ceilPercent(2).clamp(2, amount);
+```
+
+### `floorPercent(numerator, denominator = 100)`
+
+Returns `floor(this × numerator / denominator)`. The complement to `ceilPercent` — use when you need the conservative lower bound.
+
+```ts
+// Replaces: Math.floor(amount * 0.98)
+const maxSpend = amount.floorPercent(98); // floor(98%)
+```
+
+### `scaledBy(numerator, denominator)`
+
+Returns `round(this × numerator / denominator)` using integer arithmetic. Useful for proportional rescaling where the ratio is a runtime value.
+
+Uses the identity `round(a × b / c) = floor((2 × a × b + c) / (2 × c))` — no floats, no overflow risk.
+
+```ts
+// Replaces: Math.round(estInvAmount * (tokenAmount / neededAmount)) - 1
+const adjusted = estInvAmount.scaledBy(tokenAmount, neededAmount).subtract(1);
+```
+
+### `clamp(min, max)`
+
+Bounds this amount to the inclusive range `[min, max]`. Throws if `min > max`.
+
+```ts
+// Replaces: Amount.max(MIN_FEE, Amount.min(tokenAmount, fee))
+const bounded = fee.clamp(MIN_FEE, tokenAmount);
+```
+
+### `inRange(min, max)`
+
+Returns `true` if this amount falls within `[min, max]` inclusive. Throws if `min > max`.
+
+```ts
+// Replaces: minSendable <= msats && msats <= maxSendable
+if (msats.inRange(data.minSendable, data.maxSendable)) { ... }
+```
 
 ---
