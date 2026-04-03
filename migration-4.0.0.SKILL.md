@@ -76,12 +76,19 @@ Actions:
 - Change proof literal amounts: `amount: 1000` → `amount: 1000n`
 - Change accumulator seeds: `reduce((sum, p) => sum + p.amount, 0)` → `…, 0n)`
 - Wrap for display: `Number(proof.amount)`
-- For proofs stored as **JSON** (localStorage, API, NutZap tags), use `serializeProofs`/`deserializeProofs`:
+- For proofs stored as **JSON** (localStorage, API, NutZap tags), use `serializeProofs`/`deserializeProofs`.
+  `serializeProofs` returns `string[]` (one JSON string per proof); `deserializeProofs` accepts `string | string[]`:
 
 ```ts
 import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';
-localStorage.setItem('proofs', serializeProofs(proofs));
-const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
+
+// localStorage — wrap with JSON.stringify/parse since serializeProofs returns string[]
+localStorage.setItem('proofs', JSON.stringify(serializeProofs(proofs)));
+const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
+
+// NutZap proof tags — one string per proof, pass string[] directly
+const proofTags = serializeProofs(proofs).map((s) => ['proof', s]);
+const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]));
 ```
 
 - For proofs from a **database** or other already-parsed source, use `normalizeProofAmounts`:

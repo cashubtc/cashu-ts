@@ -862,51 +862,81 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
 		{ id: '009a1f293253e41e', amount: 2n, secret: 'def', C: '02def' },
 	];
 
-	test('serializeProofs produces valid JSON with numeric amounts', () => {
-		const json = serializeProofs(proofs);
-		const parsed = JSON.parse(json);
-		expect(parsed[0].amount).toBe(1);
-		expect(parsed[1].amount).toBe(2);
-		expect(typeof parsed[0].amount).toBe('number');
+	describe('serializeProofs', () => {
+		test('returns one JSON string per proof', () => {
+			const result = serializeProofs(proofs);
+			expect(result).toHaveLength(2);
+			expect(typeof result[0]).toBe('string');
+			expect(typeof result[1]).toBe('string');
+		});
+
+		test('emits amounts as plain JSON numbers', () => {
+			const [s0, s1] = serializeProofs(proofs);
+			expect(JSON.parse(s0).amount).toBe(1);
+			expect(JSON.parse(s1).amount).toBe(2);
+		});
+
+		test('accepts a single proof', () => {
+			const result = serializeProofs(proofs[0]);
+			expect(result).toHaveLength(1);
+			expect(JSON.parse(result[0]).amount).toBe(1);
+		});
+
+		test('maps cleanly to NutZap proof tags', () => {
+			const tags = serializeProofs(proofs).map((s) => ['proof', s]);
+			expect(tags[0][0]).toBe('proof');
+			expect(JSON.parse(tags[0][1]).secret).toBe('abc');
+		});
 	});
 
-	test('deserializeProofs restores bigint amounts', () => {
-		const json = serializeProofs(proofs);
-		const restored = deserializeProofs(json);
-		expect(restored[0].amount).toBe(1n);
-		expect(restored[1].amount).toBe(2n);
-		expect(typeof restored[0].amount).toBe('bigint');
+	describe('deserializeProofs', () => {
+		test('restores bigint amounts from string[] (NutZap / DB)', () => {
+			const strings = serializeProofs(proofs);
+			const restored = deserializeProofs(strings);
+			expect(restored[0].amount).toBe(1n);
+			expect(restored[1].amount).toBe(2n);
+			expect(typeof restored[0].amount).toBe('bigint');
+		});
+
+		test('restores bigint amounts from string (localStorage JSON array)', () => {
+			const json = JSON.stringify(serializeProofs(proofs));
+			// JSON.parse gives string[], deserializeProofs accepts that
+			const restored = deserializeProofs(JSON.parse(json));
+			expect(restored[0].amount).toBe(1n);
+			expect(restored[1].amount).toBe(2n);
+		});
+
+		test('round-trips all proof fields', () => {
+			const restored = deserializeProofs(serializeProofs(proofs));
+			expect(restored[0].id).toBe(proofs[0].id);
+			expect(restored[0].secret).toBe(proofs[0].secret);
+			expect(restored[0].C).toBe(proofs[0].C);
+		});
+
+		test('handles amounts above MAX_SAFE_INTEGER without precision loss', () => {
+			const large = 2n ** 53n + 1n;
+			const p: Proof[] = [{ id: '009a1f293253e41e', amount: large, secret: 'abc', C: '02abc' }];
+			const restored = deserializeProofs(serializeProofs(p));
+			expect(restored[0].amount).toBe(large);
+		});
+
+		test('handles empty string[] input', () => {
+			expect(deserializeProofs([])).toEqual([]);
+		});
 	});
 
-	test('deserializeProofs round-trips all proof fields', () => {
-		const json = serializeProofs(proofs);
-		const restored = deserializeProofs(json);
-		expect(restored[0].id).toBe(proofs[0].id);
-		expect(restored[0].secret).toBe(proofs[0].secret);
-		expect(restored[0].C).toBe(proofs[0].C);
-	});
+	describe('normalizeProofAmounts', () => {
+		test('converts number amounts to bigint', () => {
+			const raw = [{ id: '009a1f293253e41e', amount: 4, secret: 'abc', C: '02abc' }];
+			const normalized = normalizeProofAmounts(raw);
+			expect(normalized[0].amount).toBe(4n);
+			expect(typeof normalized[0].amount).toBe('bigint');
+		});
 
-	test('deserializeProofs handles amounts above MAX_SAFE_INTEGER without precision loss', () => {
-		const large = 2n ** 53n + 1n; // 9007199254740993n — first integer above MAX_SAFE_INTEGER
-		const p: Proof[] = [{ id: '009a1f293253e41e', amount: large, secret: 'abc', C: '02abc' }];
-		const restored = deserializeProofs(serializeProofs(p));
-		expect(restored[0].amount).toBe(large);
-	});
-
-	test('deserializeProofs handles empty array', () => {
-		expect(deserializeProofs('[]')).toEqual([]);
-	});
-
-	test('normalizeProofAmounts converts number amounts to bigint', () => {
-		const raw = [{ id: '009a1f293253e41e', amount: 4, secret: 'abc', C: '02abc' }];
-		const normalized = normalizeProofAmounts(raw);
-		expect(normalized[0].amount).toBe(4n);
-		expect(typeof normalized[0].amount).toBe('bigint');
-	});
-
-	test('normalizeProofAmounts accepts string amounts', () => {
-		const raw = [{ id: '009a1f293253e41e', amount: '8', secret: 'abc', C: '02abc' }];
-		const normalized = normalizeProofAmounts(raw);
-		expect(normalized[0].amount).toBe(8n);
+		test('accepts string amounts', () => {
+			const raw = [{ id: '009a1f293253e41e', amount: '8', secret: 'abc', C: '02abc' }];
+			const normalized = normalizeProofAmounts(raw);
+			expect(normalized[0].amount).toBe(8n);
+		});
 	});
 });
