@@ -298,16 +298,7 @@ const total = proofs.reduce((sum, p) => sum + p.amount, 0n);
 const display: number = Number(proof.amount); // safe for typical sat amounts
 ```
 
-If you persist proofs to a database or serialize them to JSON, the `amount` field will now serialise as a JSON integer (unchanged over the wire), but your stored TypeScript types need updating to `bigint`.
-
-A `normalizeProofAmounts()` helper is exported for migrating stored proofs that were saved with `number` amounts:
-
-```ts
-import { normalizeProofAmounts } from '@cashu/cashu-ts';
-
-const legacyProofs = db.load(); // amount fields are numbers
-const proofs = normalizeProofAmounts(legacyProofs); // amount fields are bigints
-```
+If you persist proofs to JSON or a database, see the [Proof serialization](#proof-serialization) section below for the helper functions provided.
 
 ---
 
@@ -362,11 +353,12 @@ Several functions that were intended for internal use have been removed from the
 
 ### Made private (no longer exported)
 
-| Function           | Notes                                                           |
-| ------------------ | --------------------------------------------------------------- |
-| `mergeUInt8Arrays` | Internal byte-buffer helper.                                    |
-| `hasNonHexId`      | Internal guard used inside token encoding.                      |
-| `getKeepAmounts`   | Internal wallet coin-selection algorithm. Removed from `utils`. |
+| Function            | Notes                                                           |
+| ------------------- | --------------------------------------------------------------- |
+| `mergeUInt8Arrays`  | Internal byte-buffer helper.                                    |
+| `hasNonHexId`       | Internal guard used inside token encoding.                      |
+| `getKeepAmounts`    | Internal wallet coin-selection algorithm. Removed from `utils`. |
+| `getEncodedTokenV4` | Use `getEncodedToken` instead.                                  |
 
 ### Marked `@internal`
 
@@ -374,6 +366,7 @@ The following are still exported but are excluded from the trimmed type definiti
 
 | Function                | Notes                                          |
 | ----------------------- | ---------------------------------------------- |
+| `isValidHex`            | Internal helper.                               |
 | `hexToNumber`           | Crypto scalar helper (hex → bigint).           |
 | `numberToHexPadded64`   | Crypto scalar helper (bigint → 64-char hex).   |
 | `isObj`                 | HTTP response type guard.                      |
@@ -385,6 +378,31 @@ The following are still exported but are excluded from the trimmed type definiti
 ### `handleTokens` no longer exported
 
 `handleTokens` should always have been an internal function, but was exported. If you used this function, use `getDecodedToken` (for fully hydrated `Proof` objects) or `getTokenMetadata` (for token/proof metadata without keyset resolution) instead.
+
+---
+
+## Proof serialization
+
+Three helpers cover the common patterns for persisting and restoring proofs:
+
+| Function                     | Use case                                                                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serializeProofs(proofs)`    | Serialize `Proof[]` to a JSON string for storage or transmission.                                                                               |
+| `deserializeProofs(json)`    | Restore a JSON string back to `Proof[]`, with `amount` as `bigint`. Uses `JSONInt` internally to avoid silent precision loss on large integers. |
+| `normalizeProofAmounts(raw)` | Convert already-parsed proof objects (e.g. from a database row) to `Proof[]` by normalizing `amount` to `bigint`.                               |
+
+```ts
+import { serializeProofs, deserializeProofs, normalizeProofAmounts } from '@cashu/cashu-ts';
+
+// JSON storage (localStorage, API response, NutZap proof tag, etc.)
+localStorage.setItem('proofs', serializeProofs(proofs));
+const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
+
+// Already-parsed objects (e.g. from a database query)
+const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
+```
+
+Use `getEncodedToken` when you need a full cashu token string (mint URL + unit metadata). Use `serializeProofs` when you only need to store or transmit raw proof arrays.
 
 ---
 

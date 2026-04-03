@@ -276,6 +276,9 @@ export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number)
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
 
+// @public
+export function deserializeProofs(json: string): Proof[];
+
 // @public (undocumented)
 export type DeviceStartResponse = {
     device_code: string;
@@ -315,9 +318,6 @@ export function getEncodedToken(token: Token, opts?: {
 
 // @public
 export function getEncodedTokenBinary(token: Token): Uint8Array;
-
-// @public
-export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string;
 
 // @public
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined;
@@ -501,9 +501,6 @@ export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: s
 
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
-
-// @public
-export function isValidHex(str: string): boolean;
 
 // @public (undocumented)
 export type JsonRpcReqParams = {
@@ -1576,6 +1573,9 @@ export type SerializedMintKeys = {
 
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
+
+// @public
+export function serializeProofs(proofs: Proof[]): string;
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;

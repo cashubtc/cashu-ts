@@ -449,7 +449,7 @@ describe('test v4 encoding', () => {
 			],
 			unit: 'sat',
 		};
-		const encoded = utils.getEncodedTokenV4(v3Token);
+		const encoded = utils.getEncodedToken(v3Token);
 		const decodedEncodedToken = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
 		const decodedExpectedToken = utils.getDecodedToken(encodedV4, ['009a1f293253e41e']);
 		expect(decodedEncodedToken).toEqual(v3Token);
@@ -483,7 +483,7 @@ describe('test v4 encoding', () => {
 			unit: 'sat',
 		};
 
-		const encoded = utils.getEncodedTokenV4(v3Token);
+		const encoded = utils.getEncodedToken(v3Token);
 		const decodedEncodedToken = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
 		const decodedExpectedToken = utils.getDecodedToken(encodedV4, ['009a1f293253e41e']);
 		expect(decodedEncodedToken).toEqual(v3Token);
@@ -503,7 +503,7 @@ describe('test v4 encoding', () => {
 			],
 			unit: 'sat',
 		};
-		const encoded = utils.getEncodedTokenV4(token);
+		const encoded = utils.getEncodedToken(token);
 		const decoded = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
 		expect(decoded.proofs[0].amount).toBe(largeAmount);
 	});

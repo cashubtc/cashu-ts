@@ -76,11 +76,19 @@ Actions:
 - Change proof literal amounts: `amount: 1000` → `amount: 1000n`
 - Change accumulator seeds: `reduce((sum, p) => sum + p.amount, 0)` → `…, 0n)`
 - Wrap for display: `Number(proof.amount)`
-- Migrate stored proofs with `number` amounts on load:
+- For proofs stored as **JSON** (localStorage, API, NutZap tags), use `serializeProofs`/`deserializeProofs`:
+
+```ts
+import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';
+localStorage.setItem('proofs', serializeProofs(proofs));
+const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
+```
+
+- For proofs from a **database** or other already-parsed source, use `normalizeProofAmounts`:
 
 ```ts
 import { normalizeProofAmounts } from '@cashu/cashu-ts';
-const proofs = normalizeProofAmounts(legacyProofs); // converts number → bigint
+const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
 ```
 
 ---
@@ -288,7 +296,7 @@ Search: `\.active\b`, `\.input_fee_ppk\b`, `\.final_expiry\b`
 
 Search: `bytesToNumber`, `verifyKeysetId`, `deriveKeysetId`, `getDecodedToken.*HasKeysetId`,
 `handleTokens`, `checkResponse`, `deepEqual`, `mergeUInt8Arrays`, `hasNonHexId`,
-`getKeepAmounts`, `MessageQueue`, `MessageNode`
+`getKeepAmounts`, `getEncodedTokenV4`, `MessageQueue`, `MessageNode`
 
 See the full replacement table in `migration-4.0.0.md` → "Internal utility functions removed".
 
@@ -298,6 +306,7 @@ Key replacements:
 - `verifyKeysetId(id, keys)` → `Keyset.verifyKeysetId(id, keys)`
 - `deriveKeysetId(keys, unit)` → `deriveKeysetId({ keys, unit })`
 - `handleTokens(token)` → `getDecodedToken(token)` or `getTokenMetadata(token)`
+- `getEncodedTokenV4(token)` → `getEncodedToken(token)`
 - `MessageQueue` (from utils) → `import { MessageQueue } from '@cashu/cashu-ts/transport/WSConnection'`
 
 ---
@@ -407,7 +416,8 @@ npm test
 ```
 
 Remaining `number` / `bigint` mismatches on `Proof.amount` indicate stored proofs not yet
-passed through `normalizeProofAmounts()`. `Amount` type errors indicate `.toNumber()` or
+normalized — use `deserializeProofs()` for JSON sources or `normalizeProofAmounts()` for
+already-parsed objects (e.g. database rows). `Amount` type errors indicate `.toNumber()` or
 `Amount.from()` wrapping is missing.
 
 ---

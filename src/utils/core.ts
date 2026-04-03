@@ -3,6 +3,7 @@ import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { encodeBase64ToJson, encodeBase64toUint8, encodeUint8toBase64Url } from './base64';
 import { decodeCBOR, encodeCBOR } from './cbor';
+import { JSONInt } from './JSONInt';
 import { PaymentRequest } from '../model/PaymentRequest';
 import { Amount, type AmountLike } from '../model/Amount';
 import type {
@@ -159,6 +160,8 @@ export function numberToHexPadded64(scalar: bigint): string {
 
 /**
  * Returns `true` if the string contains only hexadecimal characters (case-insensitive).
+ *
+ * @internal
  */
 export function isValidHex(str: string) {
 	return /^[a-f0-9]+$/i.test(str);
@@ -205,8 +208,10 @@ export function getEncodedToken(token: Token, opts?: { removeDleq?: boolean }): 
 
 /**
  * Encodes a {@link Token} as a v4 CBOR cashu token string (`cashuB…`).
+ *
+ * @internal Use {@link getEncodedToken} instead.
  */
-export function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
+function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
 	let proofs = token.proofs;
 	if (removeDleq) {
 		proofs = stripDleq(proofs);
@@ -511,19 +516,43 @@ export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount {
 }
 
 /**
- * Normalizes raw proof objects (e.g. from a database or JSON.parse) into typed `Proof` objects by
- * converting `amount` to `bigint`.
+ * Normalizes raw proof objects (e.g. from a database query) into typed {@link Proof} objects by
+ * converting `amount` to `bigint`. Use {@link deserializeProofs} if your proofs are stored as JSON.
  *
  * @example
  *
- *     // Proofs loaded from a database where amount was stored as a number:
- *     const stored = JSON.parse(db.get('proofs')); // amount: number
- *     const proofs = normalizeProofAmounts(stored); // amount: bigint
+ *     const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
  */
 export function normalizeProofAmounts(
 	raw: Array<Omit<Proof, 'amount'> & { amount: AmountLike }>,
 ): Proof[] {
 	return raw.map((p) => ({ ...p, amount: Amount.from(p.amount).toBigInt() }));
+}
+
+/**
+ * Serializes an array of {@link Proof} objects to a JSON string. BigInt `amount` fields are emitted
+ * as plain JSON numbers.
+ *
+ * @example
+ *
+ *     localStorage.setItem('proofs', serializeProofs(proofs));
+ */
+export function serializeProofs(proofs: Proof[]): string {
+	return JSONInt.stringify(proofs) as string;
+}
+
+/**
+ * Deserializes a JSON string produced by {@link serializeProofs} back into typed {@link Proof}
+ * objects, restoring `amount` as `bigint` without silent precision loss.
+ *
+ * @example
+ *
+ *     const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
+ */
+export function deserializeProofs(json: string): Proof[] {
+	return normalizeProofAmounts(
+		JSONInt.parse(json) as Array<Omit<Proof, 'amount'> & { amount: AmountLike }>,
+	);
 }
 
 /**

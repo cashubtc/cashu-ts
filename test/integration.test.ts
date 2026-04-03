@@ -39,7 +39,6 @@ import {
 	P2PKBuilder,
 	MintQuoteBaseResponse,
 	getEncodedToken,
-	getEncodedTokenV4,
 	hexToNumber,
 	numberToHexPadded64,
 	sumProofs,
@@ -675,7 +674,7 @@ describe('dleq', () => {
 			mint: mintUrl,
 			proofs: send,
 		} as Token;
-		const encodedToken = getEncodedTokenV4(token);
+		const encodedToken = getEncodedToken(token);
 		const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
 		expect(newProofs).toBeDefined();
 		expect(sumProofs(newProofs).toNumber()).toEqual(7); // after 1 sat fee
