@@ -19,6 +19,7 @@ import {
 } from '../consts';
 import {
 	bigIntStringify,
+	getKeysetAmounts,
 	hasValidDleq,
 	hexToNumber,
 	invoiceHasAmountInHRP,
@@ -26,6 +27,7 @@ import {
 	serializeProofs,
 	deserializeProofs,
 	normalizeProofAmounts,
+	sortProofsById,
 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
@@ -923,6 +925,14 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
 		test('handles empty string[] input', () => {
 			expect(deserializeProofs([])).toEqual([]);
 		});
+
+		test('throws when string input is not a JSON array', () => {
+			expect(() => deserializeProofs('{"id":"abc"}')).toThrow('expected a JSON array of proofs');
+		});
+
+		test('handles empty JSON array string', () => {
+			expect(deserializeProofs('[]')).toEqual([]);
+		});
 	});
 
 	describe('normalizeProofAmounts', () => {
@@ -938,5 +948,135 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
 			const normalized = normalizeProofAmounts(raw);
 			expect(normalized[0].amount).toBe(8n);
 		});
+	});
+});
+
+describe('splitAmount edge cases', () => {
+	test('throws when keyset has no keys', () => {
+		const emptyKeyset: Keys = {};
+		expect(() => utils.splitAmount(10, emptyKeyset)).toThrow(/keyset is inactive/);
+	});
+
+	test('throws when remaining amount cannot be split', () => {
+		// keyset only has denomination 4, so amount 3 can't be represented
+		const sparse: Keys = { '4': 'deadbeef' };
+		expect(() => utils.splitAmount(3, sparse)).toThrow(/Unable to split remaining amount/);
+	});
+});
+
+describe('getKeysetAmounts', () => {
+	test('returns amounts in descending order by default', () => {
+		const amounts = getKeysetAmounts(keys);
+		const nums = amounts.map((a) => a.toNumber());
+		expect(nums).toStrictEqual([...nums].sort((a, b) => b - a));
+		expect(nums[0]).toBe(2048);
+	});
+
+	test('returns amounts in ascending order', () => {
+		const amounts = getKeysetAmounts(keys, 'asc');
+		const nums = amounts.map((a) => a.toNumber());
+		expect(nums[0]).toBe(1);
+		expect(nums[nums.length - 1]).toBe(2048);
+	});
+});
+
+describe('sortProofsById', () => {
+	test('sorts proofs by keyset id lexicographically', () => {
+		const proofs: Proof[] = [
+			{ id: 'ccc', amount: 1n, secret: 'a', C: '02a' },
+			{ id: 'aaa', amount: 2n, secret: 'b', C: '02b' },
+			{ id: 'bbb', amount: 4n, secret: 'c', C: '02c' },
+		];
+		const sorted = sortProofsById(proofs);
+		expect(sorted.map((p) => p.id)).toStrictEqual(['aaa', 'bbb', 'ccc']);
+	});
+
+	test('does not mutate the original array', () => {
+		const proofs: Proof[] = [
+			{ id: 'bbb', amount: 1n, secret: 'a', C: '02a' },
+			{ id: 'aaa', amount: 2n, secret: 'b', C: '02b' },
+		];
+		sortProofsById(proofs);
+		expect(proofs[0].id).toBe('bbb');
+	});
+});
+
+describe('getEncodedToken edge cases', () => {
+	test('throws for proofs with non-hex keyset IDs', () => {
+		const token: Token = {
+			mint: 'http://localhost:3338',
+			proofs: [{ id: 'not+hex!', amount: 1n, secret: 'abc', C: '02abc' }],
+			unit: 'sat',
+		};
+		expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
+	});
+});
+
+describe('getDecodedTokenBinary edge cases', () => {
+	test('throws for invalid binary prefix', () => {
+		const bad = new TextEncoder().encode('junkBdata');
+		expect(() => utils.getDecodedTokenBinary(bad)).toThrow(/not a valid binary token/);
+	});
+});
+
+describe('deriveKeysetId edge cases', () => {
+	test('throws for unknown version byte', () => {
+		expect(() => utils.deriveKeysetId(keys, { versionByte: 99 })).toThrow(
+			/Unrecognized keyset ID version/,
+		);
+	});
+});
+
+describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
+	const fullV2Id = NUT02_V2_VECTOR1_KEYS.id; // 01-prefixed, 66 hex chars
+
+	test('maps short v2 keyset ID back to full ID', () => {
+		// Encode a token using the full v2 ID — internally it gets truncated to 16 chars
+		const token: Token = {
+			mint: 'http://localhost:3338',
+			proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+			unit: 'sat',
+		};
+		const encoded = utils.getEncodedToken(token);
+		// Decode with the full keyset ID list so mapShortKeysetIds can resolve
+		const decoded = utils.getDecodedToken(encoded, [fullV2Id]);
+		expect(decoded.proofs[0].id).toBe(fullV2Id);
+	});
+
+	test('throws when v2 short ID has no keysets to map to', () => {
+		const token: Token = {
+			mint: 'http://localhost:3338',
+			proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+			unit: 'sat',
+		};
+		const encoded = utils.getEncodedToken(token);
+		expect(() => utils.getDecodedToken(encoded, [])).toThrow(
+			/short keyset ID v2 was encountered, but got no keysets/,
+		);
+	});
+
+	test('throws when v2 short ID matches no known keyset', () => {
+		const token: Token = {
+			mint: 'http://localhost:3338',
+			proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+			unit: 'sat',
+		};
+		const encoded = utils.getEncodedToken(token);
+		// Pass an unrelated keyset ID
+		expect(() => utils.getDecodedToken(encoded, ['00aaaaaaaaaaaaaaaa'])).toThrow(
+			/Couldn't map short keyset ID/,
+		);
+	});
+
+	test('throws when v2 short ID is ambiguous', () => {
+		const token: Token = {
+			mint: 'http://localhost:3338',
+			proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+			unit: 'sat',
+		};
+		const encoded = utils.getEncodedToken(token);
+		// Two full IDs that share the same 16-char prefix
+		const ambiguous = fullV2Id + 'aa';
+		expect(() => utils.getDecodedToken(encoded, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
 	});
 });
