@@ -8,7 +8,7 @@ import {
 	Token,
 	Wallet,
 } from '../src';
-import { getEncodedTokenV4, sumProofs } from '../src/utils';
+import { getEncodedToken, sumProofs } from '../src/utils';
 dns.setDefaultResultOrder('ipv4first');
 
 const externalInvoice =
@@ -115,7 +115,7 @@ const runWalletExample = async () => {
 				proofs: send,
 			};
 			// and finally, we can encode the token as a cashu string
-			const cashuString = getEncodedTokenV4(token);
+			const cashuString = getEncodedToken(token);
 
 			// we can now send the cashu string to someone, and they can receive the ecash! let's try that next
 			console.log(cashuString);
