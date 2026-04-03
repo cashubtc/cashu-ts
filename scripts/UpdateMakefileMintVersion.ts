@@ -9,6 +9,7 @@ const MAKEFILE = 'Makefile';
 type Dep = {
 	name: string;
 	githubRepo: string;
+	dockerTagPrefix: string;
 	stableVar: string;
 	rcVar: string;
 };
@@ -17,12 +18,14 @@ const DEPENDENCIES: Dep[] = [
 	{
 		name: 'cashubtc/mintd',
 		githubRepo: 'cashubtc/cdk',
+		dockerTagPrefix: 'v',
 		stableVar: 'CDK_IMAGE',
 		rcVar: 'CDK_IMAGE_RC',
 	},
 	{
 		name: 'cashubtc/nutshell',
 		githubRepo: 'cashubtc/nutshell',
+		dockerTagPrefix: '',
 		stableVar: 'NUT_IMAGE',
 		rcVar: 'NUT_IMAGE_RC',
 	},
@@ -84,7 +87,7 @@ async function fetchGithubReleases(repo: string): Promise<GithubRelease[]> {
 	return (await resp.json()) as GithubRelease[];
 }
 
-function tagToVersion(tag: string): string {
+function stripV(tag: string): string {
 	return tag.replace(/^v/, '');
 }
 
@@ -100,7 +103,7 @@ function isRc(version: string): boolean {
 function getLatestStable(releases: GithubRelease[]): string | null {
 	const stable = releases
 		.filter((r) => !r.draft && !r.prerelease)
-		.map((r) => tagToVersion(r.tag_name))
+		.map((r) => stripV(r.tag_name))
 		.filter((v) => /^\d+\.\d+\.\d+$/.test(v));
 	if (stable.length === 0) return null;
 	return stable.sort(compareSemver).pop()!;
@@ -109,7 +112,7 @@ function getLatestStable(releases: GithubRelease[]): string | null {
 function getLatestRc(releases: GithubRelease[]): string | null {
 	const rcs = releases
 		.filter((r) => !r.draft && r.prerelease)
-		.map((r) => tagToVersion(r.tag_name))
+		.map((r) => stripV(r.tag_name))
 		.filter(isRc);
 	if (rcs.length === 0) return null;
 	return rcs.sort(compareSemver).pop()!;
@@ -134,6 +137,11 @@ function compareSemver(a: string, b: string): number {
 	if (av.rc !== null && bv.rc !== null) return av.rc - bv.rc;
 
 	return 0;
+}
+
+async function dockerTagExists(repo: string, tag: string): Promise<boolean> {
+	const resp = await fetch(`https://hub.docker.com/v2/repositories/${repo}/tags/${tag}`);
+	return resp.ok;
 }
 
 function updateMakefile(varName: string, newTag: string) {
@@ -164,13 +172,25 @@ async function main() {
 		const stable = getLatestStable(releases);
 		const rc = getLatestRc(releases);
 
-		if (stable) updateMakefile(dep.stableVar, `${dep.name}:${stable}`);
+		if (stable) {
+			const dockerTag = `${dep.dockerTagPrefix}${stable}`;
+			if (await dockerTagExists(dep.name, dockerTag)) {
+				updateMakefile(dep.stableVar, `${dep.name}:${dockerTag}`);
+			} else {
+				console.log(`Docker image ${dep.name}:${dockerTag} not yet available, skipping`);
+			}
+		}
 
 		if (rc) {
 			const stableVer = stable ? semverKey(stable) : [0, 0, 0];
 			const rcVer = semverKey(rc.split('-')[0]);
 			if (rcVer.some((v, i) => v > (stableVer[i] || 0))) {
-				updateMakefile(dep.rcVar, `${dep.name}:${rc}`);
+				const dockerTag = `${dep.dockerTagPrefix}${rc}`;
+				if (await dockerTagExists(dep.name, dockerTag)) {
+					updateMakefile(dep.rcVar, `${dep.name}:${dockerTag}`);
+				} else {
+					console.log(`Docker image ${dep.name}:${dockerTag} not yet available, skipping`);
+				}
 			} else {
 				console.log(`RC ${rc} is not newer than stable ${stable}, skipping RC update`);
 			}
