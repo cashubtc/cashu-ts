@@ -1,4 +1,4 @@
-import { Wallet, getTokenMetadata, getEncodedTokenV4, Amount } from '@cashu/cashu-ts';
+import { Wallet, getTokenMetadata, getEncodedToken, Amount } from '@cashu/cashu-ts';
 import { getFirestore } from 'firebase-admin/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import admin from 'firebase-admin';
@@ -98,7 +98,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 		return;
 	}
 
-	const backToken = getEncodedTokenV4({ mint: mintUrl, proofs: receiveProofs });
+	const backToken = getEncodedToken({ mint: mintUrl, proofs: receiveProofs });
 
 	const db = getFirestore();
 	const collectionRef = db.collection('payments');
