@@ -385,18 +385,22 @@ The following are still exported but are excluded from the trimmed type definiti
 
 Three helpers cover the common patterns for persisting and restoring proofs:
 
-| Function                     | Use case                                                                                                                                        |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `serializeProofs(proofs)`    | Serialize `Proof[]` to a JSON string for storage or transmission.                                                                               |
-| `deserializeProofs(json)`    | Restore a JSON string back to `Proof[]`, with `amount` as `bigint`. Uses `JSONInt` internally to avoid silent precision loss on large integers. |
-| `normalizeProofAmounts(raw)` | Convert already-parsed proof objects (e.g. from a database row) to `Proof[]` by normalizing `amount` to `bigint`.                               |
+| Function                     | Use case                                                                                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                           |
+| `deserializeProofs(json)`    | Restore `string \| string[]` back to `Proof[]`, with `amount` as `bigint`. Pass a `string[]` for individual proof strings (e.g. NutZap tags) or a single `string` for a JSON array blob. |
+| `normalizeProofAmounts(raw)` | Convert already-parsed proof objects (e.g. from a database row) to `Proof[]` by normalizing `amount` to `bigint`.                                                                        |
 
 ```ts
 import { serializeProofs, deserializeProofs, normalizeProofAmounts } from '@cashu/cashu-ts';
 
-// JSON storage (localStorage, API response, NutZap proof tag, etc.)
-localStorage.setItem('proofs', serializeProofs(proofs));
-const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
+// localStorage — serializeProofs returns string[], so wrap with JSON.stringify for a single blob
+localStorage.setItem('proofs', JSON.stringify(serializeProofs(proofs)));
+const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
+
+// NutZap proof tags — one proof string per tag
+const proofTags = serializeProofs(proofs).map((s) => ['proof', s]);
+const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]));
 
 // Already-parsed objects (e.g. from a database query)
 const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));

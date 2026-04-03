@@ -530,29 +530,52 @@ export function normalizeProofAmounts(
 }
 
 /**
- * Serializes an array of {@link Proof} objects to a JSON string. BigInt `amount` fields are emitted
- * as plain JSON numbers.
+ * Serializes one or more {@link Proof} objects to an array of individual JSON strings, one per
+ * proof. BigInt `amount` fields are emitted as plain JSON numbers without precision loss.
  *
  * @example
  *
- *     localStorage.setItem('proofs', serializeProofs(proofs));
+ *     // NutZap proof tags
+ *     const proofTags = serializeProofs(proofs).map((s) => ['proof', s]);
+ *
+ *     // localStorage
+ *     localStorage.setItem('proofs', JSON.stringify(serializeProofs(proofs)));
  */
-export function serializeProofs(proofs: Proof[]): string {
-	return JSONInt.stringify(proofs) as string;
+export function serializeProofs(proofs: Proof | Proof[]): string[] {
+	const arr = Array.isArray(proofs) ? proofs : [proofs];
+	return arr.map((p) => JSONInt.stringify(p) as string);
 }
 
 /**
- * Deserializes a JSON string produced by {@link serializeProofs} back into typed {@link Proof}
- * objects, restoring `amount` as `bigint` without silent precision loss.
+ * Deserializes proofs from JSON back into typed {@link Proof} objects, restoring `amount` as
+ * `bigint` without silent precision loss.
+ *
+ * - Pass a `string[]` (individual proof JSON strings) when reading from NutZap proof tags or a
+ *   database.
+ * - Pass a `string` (a JSON array) when reading from a single stored blob e.g. localStorage.
  *
  * @example
  *
- *     const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
+ *     // NutZap proof tags
+ *     const proofs = deserializeProofs(
+ *     	event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]),
+ *     );
+ *
+ *     // localStorage
+ *     const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
  */
-export function deserializeProofs(json: string): Proof[] {
-	return normalizeProofAmounts(
-		JSONInt.parse(json) as Array<Omit<Proof, 'amount'> & { amount: AmountLike }>,
-	);
+export function deserializeProofs(json: string | string[]): Proof[] {
+	const raw: unknown[] = Array.isArray(json)
+		? json.map((s) => JSONInt.parse(s))
+		: toArray(JSONInt.parse(json));
+	return normalizeProofAmounts(raw as Array<Omit<Proof, 'amount'> & { amount: AmountLike }>);
+}
+
+function toArray(parsed: unknown): unknown[] {
+	if (!Array.isArray(parsed)) {
+		throw new TypeError('deserializeProofs: expected a JSON array of proofs');
+	}
+	return parsed;
 }
 
 /**

@@ -277,7 +277,7 @@ export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
 
 // @public
-export function deserializeProofs(json: string): Proof[];
+export function deserializeProofs(json: string | string[]): Proof[];
 
 // @public (undocumented)
 export type DeviceStartResponse = {
@@ -1575,7 +1575,7 @@ export type SerializedMintKeys = {
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
 
 // @public
-export function serializeProofs(proofs: Proof[]): string;
+export function serializeProofs(proofs: Proof | Proof[]): string[];
 
 // @public
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void;
