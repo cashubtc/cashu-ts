@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { parse, stringify } from '../../src/utils/JSONInt';
+import { JSONInt } from '../../src/utils/JSONInt';
 
 describe('bigint support baseline', () => {
 	const input = '{"big":9223372036854775807,"small":123}';
@@ -18,20 +18,20 @@ describe('native BigInt support: parse', () => {
 	const input = '{"big":92233720368547758070,"small":123}';
 
 	test('parses oversized integer tokens as bigint', () => {
-		const obj = parse(input) as { big: bigint; small: number };
+		const obj = JSONInt.parse(input) as { big: bigint; small: number };
 		expect(obj.small).toBe(123);
 		expect(obj.big.toString()).toBe('92233720368547758070');
 		expect(typeof obj.big).toBe('bigint');
 	});
 
 	test('supports parse/stringify roundtrip', () => {
-		const obj = parse(input);
-		const output = stringify(obj);
+		const obj = JSONInt.parse(input);
+		const output = JSONInt.stringify(obj);
 		expect(output).toBe(input);
 	});
 
 	test('supports long floats', () => {
-		const obj = parse('{"float":0.333333333333333333333333333333333333333333333333}') as {
+		const obj = JSONInt.parse('{"float":0.333333333333333333333333333333333333333333333333}') as {
 			float: number;
 		};
 		expect(obj.float).toBe(0.3333333333333333);
@@ -51,49 +51,51 @@ describe('native BigInt support: stringify', () => {
 		expect(obj.big.toString()).toBe('123456789012345678901234567890');
 		expect(typeof obj.big).toBe('bigint');
 
-		const output = stringify(obj);
+		const output = JSONInt.stringify(obj);
 		expect(output).toBe(
 			'{"big":123456789012345678901234567890,"small":-42,"bigConstructed":1,"smallConstructed":2}',
 		);
 	});
 
 	test('stringifies arrays with undefined as null', () => {
-		const output = stringify([1, undefined, 3]);
+		const output = JSONInt.stringify([1, undefined, 3]);
 		expect(output).toBe('[1,null,3]');
 	});
 
 	test('stringifies objects dropping undefined values', () => {
-		const output = stringify({ a: 1, b: undefined, c: 3 });
+		const output = JSONInt.stringify({ a: 1, b: undefined, c: 3 });
 		expect(output).toBe('{"a":1,"c":3}');
 	});
 
 	test('returns undefined for root undefined', () => {
-		expect(stringify(undefined)).toBeUndefined();
+		expect(JSONInt.stringify(undefined)).toBeUndefined();
 	});
 
 	test('respects toJSON output', () => {
-		const output = stringify({ value: { toJSON: () => 'ok' } });
+		const output = JSONInt.stringify({ value: { toJSON: () => 'ok' } });
 		expect(output).toBe('{"value":"ok"}');
 	});
 
 	test('supports replacer array and pretty spacing', () => {
-		const output = stringify({ a: 1, b: 2, c: 3 }, ['b', 'c'], 2);
+		const output = JSONInt.stringify({ a: 1, b: 2, c: 3 }, ['b', 'c'], 2);
 		expect(output).toBe('{\n  "b": 2,\n  "c": 3\n}');
 	});
 
 	test('supports replacer function for filtering', () => {
-		const output = stringify({ a: 1, b: 2 }, (key, value) => (key === 'b' ? undefined : value));
+		const output = JSONInt.stringify({ a: 1, b: 2 }, (key, value) =>
+			key === 'b' ? undefined : value,
+		);
 		expect(output).toBe('{"a":1}');
 	});
 
 	test('unboxes boxed primitives like native JSON.stringify', () => {
-		expect(stringify(new Number(2))).toBe('2');
-		expect(stringify(new String('x'))).toBe('"x"');
-		expect(stringify(new Boolean(false))).toBe('false');
+		expect(JSONInt.stringify(new Number(2))).toBe('2');
+		expect(JSONInt.stringify(new String('x'))).toBe('"x"');
+		expect(JSONInt.stringify(new Boolean(false))).toBe('false');
 	});
 
 	test('unboxes boxed primitives nested in objects and arrays', () => {
-		const output = stringify({
+		const output = JSONInt.stringify({
 			amount: new Number(2),
 			label: new String('x'),
 			flags: [new Boolean(false), new Number(3)],
@@ -105,8 +107,8 @@ describe('native BigInt support: stringify', () => {
 		const obj: { self?: unknown } = {};
 		obj.self = obj;
 
-		expect(() => stringify(obj)).toThrow(TypeError);
-		expect(() => stringify(obj)).toThrow('Converting circular structure to JSON');
+		expect(() => JSONInt.stringify(obj)).toThrow(TypeError);
+		expect(() => JSONInt.stringify(obj)).toThrow('Converting circular structure to JSON');
 	});
 });
 
@@ -116,7 +118,7 @@ describe('parse option: strict', () => {
 	test('duplicate keys overwrite by default', () => {
 		let result: unknown = 'before';
 		const tryParse = () => {
-			result = parse(dupkeys);
+			result = JSONInt.parse(dupkeys);
 		};
 		expect(tryParse).not.toThrow();
 		expect((result as { dupkey: string }).dupkey).toBe('value 2');
@@ -125,7 +127,7 @@ describe('parse option: strict', () => {
 	test('strict=true fails fast on duplicate keys', () => {
 		let result: unknown = 'before';
 		const tryParse = () => {
-			result = parse(dupkeys, undefined, { strict: true });
+			result = JSONInt.parse(dupkeys, undefined, { strict: true });
 		};
 
 		expect(tryParse).toThrow('Duplicate key "dupkey"');
@@ -154,13 +156,13 @@ describe('parse option: fallbackTo', () => {
 	});
 
 	test('defaults to number when BigInt is unavailable', () => {
-		const result = parse(input) as { key: number };
+		const result = JSONInt.parse(input) as { key: number };
 		expect(typeof result.key).toBe('number');
 		expect(result.key).toBe(12345678901234567);
 	});
 
 	test('returns string when fallbackTo=string', () => {
-		const result = parse(input, undefined, { fallbackTo: 'string' }) as {
+		const result = JSONInt.parse(input, undefined, { fallbackTo: 'string' }) as {
 			key: string;
 		};
 		expect(typeof result.key).toBe('string');
@@ -169,23 +171,23 @@ describe('parse option: fallbackTo', () => {
 
 	test('throws when fallbackTo=error', () => {
 		expect(() => {
-			parse(input, undefined, { fallbackTo: 'error' });
+			JSONInt.parse(input, undefined, { fallbackTo: 'error' });
 		}).toThrow();
 	});
 
 	test('throws when fallbackTo has invalid value', () => {
 		expect(() => {
-			parse(input, undefined, { fallbackTo: 'nope' as never });
+			JSONInt.parse(input, undefined, { fallbackTo: 'nope' as never });
 		}).toThrow('Incorrect value for fallbackTo option');
 	});
 });
 
 describe('__proto__ and constructor assignment', () => {
 	test('sets __proto__ property without changing object prototype', () => {
-		const obj1 = parse('{ "__proto__": 1000000000000000 }') as Record<string, unknown>;
+		const obj1 = JSONInt.parse('{ "__proto__": 1000000000000000 }') as Record<string, unknown>;
 		expect(Object.getPrototypeOf(obj1)).toBe(Object.prototype);
 
-		const obj2 = parse('{ "__proto__": { "admin": true } }') as {
+		const obj2 = JSONInt.parse('{ "__proto__": { "admin": true } }') as {
 			admin?: boolean;
 		};
 		expect(obj2.admin).not.toBe(true);
@@ -194,48 +196,50 @@ describe('__proto__ and constructor assignment', () => {
 
 describe('parse errors', () => {
 	test('rejects invalid escape sequences', () => {
-		expect(() => parse('"\\x"')).toThrow('Invalid escape');
+		expect(() => JSONInt.parse('"\\x"')).toThrow('Invalid escape');
 	});
 
 	test('rejects invalid unicode escapes', () => {
-		expect(() => parse('"\\u12G4"')).toThrow('Invalid unicode escape');
+		expect(() => JSONInt.parse('"\\u12G4"')).toThrow('Invalid unicode escape');
 	});
 
 	test('rejects unterminated strings', () => {
-		expect(() => parse('"unterminated')).toThrow('Unterminated string');
+		expect(() => JSONInt.parse('"unterminated')).toThrow('Unterminated string');
 	});
 
 	test('rejects unterminated arrays', () => {
-		expect(() => parse('[1, 2')).toThrow("Expected ','");
+		expect(() => JSONInt.parse('[1, 2')).toThrow("Expected ','");
 	});
 
 	test('rejects unterminated objects', () => {
-		expect(() => parse('{"a": 1')).toThrow("Expected ','");
+		expect(() => JSONInt.parse('{"a": 1')).toThrow("Expected ','");
 	});
 
 	test('rejects bad number tokens', () => {
-		expect(() => parse('-')).toThrow('Bad number');
-		expect(() => parse('1e+')).toThrow('Bad number');
+		expect(() => JSONInt.parse('-')).toThrow('Bad number');
+		expect(() => JSONInt.parse('1e+')).toThrow('Bad number');
 	});
 
 	test('rejects trailing input', () => {
-		expect(() => parse('true false')).toThrow('Unexpected trailing input');
+		expect(() => JSONInt.parse('true false')).toThrow('Unexpected trailing input');
 	});
 });
 
 describe('reviver behavior', () => {
 	test('reviver can drop object properties', () => {
-		const out = parse('{"a":1,"b":2}', (key, value) => (key === 'b' ? undefined : value));
+		const out = JSONInt.parse('{"a":1,"b":2}', (key, value) => (key === 'b' ? undefined : value));
 		expect(out).toEqual({ a: 1 });
 	});
 
 	test('reviver can transform array entries', () => {
-		const out = parse('[1,2,3]', (key, value) => (key === '1' ? 20 : value));
+		const out = JSONInt.parse('[1,2,3]', (key, value) => (key === '1' ? 20 : value));
 		expect(out).toEqual([1, 20, 3]);
 	});
 
 	test('reviver can delete array entries', () => {
-		const out = parse('[1,2,3]', (key, value) => (key === '1' ? undefined : value)) as number[];
+		const out = JSONInt.parse('[1,2,3]', (key, value) =>
+			key === '1' ? undefined : value,
+		) as number[];
 		expect(out.length).toBe(3);
 		expect(1 in out).toBe(false);
 	});

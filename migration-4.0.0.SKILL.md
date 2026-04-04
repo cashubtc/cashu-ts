@@ -50,6 +50,72 @@ Record the user's choice. It affects how you handle every `Amount` hit in Steps 
 
 ---
 
+## Step 0c — Amount, sign, and JSON boundaries
+
+Apply these rules throughout the migration:
+
+### `Amount` is non-negative only
+
+- `Amount` represents a **non-negative integer magnitude**
+- `Amount.from(...)` accepts `AmountLike`: `number | bigint | string | Amount`
+- string input must be a **non-negative decimal integer**
+- negative strings like `"-42"` are invalid and will throw
+
+Do **not** use `Amount` itself to represent signed debit/credit values.
+
+### `AmountLike` is magnitude-only
+
+`AmountLike` is:
+
+- `number | bigint | string | Amount`
+
+It is a flexible input type for magnitudes. It is **not** a signed amount type.
+If the app has incoming/outgoing or plus/minus semantics, model sign separately.
+
+`AmountLike` is primarily a boundary type. Use it when accepting integer input from JSON, storage, user input, or external APIs, then normalize back to `Amount` for domain logic.
+
+eg:
+
+```ts
+const someinteger: AmountLike = ...; // boundary variable
+const amount = Amount.from(someinteger); // bigint backed VO
+```
+
+### Model sign explicitly
+
+Prefer in-memory shapes like:
+
+- `{ amount: Amount, direction: "incoming" | "outgoing" }`
+- `{ amountAbs: Amount, isOutgoing: boolean }`
+
+If the app already persists signed strings like `"-105"`, preserve them only as a compatibility/storage shape. Do not propagate that pattern further inward unless required.
+
+### Keep `Amount` in memory; use `JSONInt` at JSON boundaries
+
+Default migration posture:
+
+- domain logic: `Amount`
+- persistence / transport JSON: `JSONInt.parse` / `JSONInt.stringify`
+- UI formatting: `Amount` or sign + `Amount`
+
+Do not flatten everything back to `number` unless the user explicitly chose that strategy in Step 0b.
+
+### Choose number conversion deliberately
+
+- `toNumber()` = safe or throw
+- `toNumberUnsafe()` = accept precision loss
+
+Use `toNumber()` for protocol or persistence boundaries that must not lie. Use `toNumberUnsafe()` only where lossy output is explicitly acceptable.
+
+### Agent guardrails
+
+- Never call `Amount.from()` on a signed string
+- Never assume `AmountLike` accepts negative values
+- Never use plain `JSON.stringify` / `JSON.parse` for bigint-bearing persisted state if `JSONInt` is available
+- Prefer bigint/string-safe formatting over eager `.toNumber()` for display
+
+---
+
 ## Step 1 — ESM-only: eliminate CJS imports
 
 Search: `require\(['"]@cashu/cashu-ts['"]\)`

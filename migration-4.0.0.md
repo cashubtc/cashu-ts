@@ -23,12 +23,98 @@ The single most pervasive change in v4 is that many APIs which previously return
 Before you start updating call sites, decide how deeply you want to adopt `Amount`:
 
 **Option A — Adopt `Amount` natively (recommended for new or large-amount apps)**
-Keep `Amount` flowing through your own functions and types. Call `.toNumber()` only at genuine display or float-arithmetic boundaries (e.g. fee percentage estimates, `Intl.NumberFormat` for decimal currencies). For integer-unit currencies like SAT, pass `.toBigInt()` directly — `Intl.NumberFormat` supports `bigint` natively in all modern environments.
+Keep `Amount` flowing through your own functions and types. Convert to `number` only at boundaries that truly require a JavaScript number. For display, prefer bigint/string-safe formatting where possible: for integer-unit currencies like SAT, pass `.toBigInt()` directly to `Intl.NumberFormat`; for decimal or minor-unit currencies, use formatting helpers that preserve precision instead of eagerly calling `.toNumber()`.
 
 **Option B — Convert at the boundary (simplest for existing number-typed codebases)**
 Call `.toNumber()` immediately on every `Amount` the library returns, then leave all your internal types as `number`. Safe as long as your amounts stay within `Number.MAX_SAFE_INTEGER`.
 
 Both strategies are valid. The sections below show the mechanical changes required; the key question is whether you propagate `Amount` inward or flatten it at the edge.
+
+### Recommendations for "Option A"
+
+The following notes may help you plan the migration to bigint support in your app.
+
+#### 1. `Amount` is non-negative only
+
+`Amount` is a bigint-backed value object for **non-negative integer magnitudes**.
+
+- `Amount.from(...)` accepts `AmountLike`: `number | bigint | string | Amount`
+- string input must be a **non-negative decimal integer**
+- negative strings like `"-42"` are invalid and will throw
+- do not use `Amount` itself to represent signed debit/credit values
+
+#### 2. `AmountLike` is magnitude-only input
+
+`AmountLike` is:
+
+- `number | bigint | string | Amount`
+
+It exists so APIs can accept integer magnitudes flexibly. It is **not** a signed amount type.
+If your app has incoming/outgoing, debit/credit, or plus/minus semantics, model sign separately.
+
+`AmountLike` is primarily a boundary type. Use it when accepting integer input from JSON, storage, user input, or external APIs, then normalize back to `Amount` for domain logic.
+
+eg:
+
+```ts
+const someinteger: AmountLike = ...; // boundary variable
+const amount = Amount.from(someinteger); // bigint backed VO
+```
+
+#### 3. Model signed amounts explicitly
+
+Recommended in-memory shapes:
+
+- `{ amount: Amount, direction: "incoming" | "outgoing" }`
+- `{ amountAbs: Amount, isOutgoing: boolean }`
+
+Avoid encoding sign inside an `Amount` or assuming `AmountLike` accepts negative strings.
+If you currently persist signed scalars like `"-105"`, treat that as a legacy storage/wire shape, not the ideal in-memory model.
+
+#### 4. Keep `Amount` in memory; convert only at true boundaries
+
+Best practice:
+
+- domain logic: `Amount`
+- persistence / transport JSON: `JSONInt`
+- UI formatting: `Amount` or sign + `Amount`
+
+Do not flatten everything back to `number` unless you have consciously chosen a safe-integer-only strategy.
+
+#### 5. `toNumber()` vs `toNumberUnsafe()` is an explicit policy choice
+
+- `toNumber()` = safe or throw
+- `toNumberUnsafe()` = accept precision loss
+
+Use `toNumber()` when a boundary must not lie. Use `toNumberUnsafe()` only when lossy output is acceptable. Prefer `toString()`, `toBigInt()`, or `toJSON()` when possible.
+
+#### 6. `JSONInt` is the default JSON boundary for integer-bearing payloads
+
+Use `JSONInt.stringify` / `JSONInt.parse` for:
+
+- localStorage
+- IndexedDB snapshots
+- backup/export/import files
+- Nostr / NWC / event payloads
+- any persisted or transported object graph that may contain bigint-backed values
+
+Do not rely on plain `JSON.stringify` / `JSON.parse` for bigint-bearing structures if `JSONInt` is available.
+
+#### 7. `Amount.toJSON()` helps, but it is not your app's full JSON policy
+
+`Amount.toJSON()` emits:
+
+- `number` for safe integers
+- decimal `string` for larger values
+
+That solves leaf-value emission, but apps still need a consistent whole-payload JSON policy. That policy should be `JSONInt`.
+
+#### 8. For display, prefer bigint/string-safe formatting
+
+Do not immediately call `toNumber()` just to render an integer amount.
+
+- For integer units, `Intl.NumberFormat` supports `bigint`
+- For minor-unit currencies, prefer bigint/string-aware formatting helpers over unsafe `number` conversion
 
 ---
 
