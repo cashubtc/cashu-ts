@@ -18,7 +18,7 @@ CDK_IMAGE ?= cashubtc/mintd:v0.16.0
 CDK_NAME ?= cashu-dev-cdk
 
 NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
-NUT_IMAGE ?= cashubtc/nutshell:0.19.2
+NUT_IMAGE ?= cashubtc/nutshell:0.20.0
 NUT_NAME ?= cashu-dev-nutshell
 
 # ------------------------
