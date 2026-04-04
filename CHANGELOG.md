@@ -1,5 +1,63 @@
 # Changelog
 
+## [4.0.0](https://github.com/cashubtc/cashu-ts/compare/v3.6.1...v4.0.0) (2026-04-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **utils:** restrict internal functions from public API surface ([#570](https://github.com/cashubtc/cashu-ts/issues/570))
+* remove handleTokens from public API ([#569](https://github.com/cashubtc/cashu-ts/issues/569))
+* **p2pk:** add normalizeP2PKOptions ([#564](https://github.com/cashubtc/cashu-ts/issues/564))
+* remove v3 token encoding; accept raw proofs in receive flows ([#558](https://github.com/cashubtc/cashu-ts/issues/558))
+* generic mint/melt methods for custom payment types ([#544](https://github.com/cashubtc/cashu-ts/issues/544))
+* multi-unit KeyChain, cache API cleanup, deprecation removal ([#540](https://github.com/cashubtc/cashu-ts/issues/540))
+* Add bigint support to CBOR for creqA payment requests ([#538](https://github.com/cashubtc/cashu-ts/issues/538))
+* Proof.amount → bigint, strip crypto primitives, consolidate melt ([#537](https://github.com/cashubtc/cashu-ts/issues/537))
+* tighten mint/melt API; remove MeltBlanks and prefer_async ([#534](https://github.com/cashubtc/cashu-ts/issues/534))
+* migrate amount-bearing APIs to use Amount VO ([#533](https://github.com/cashubtc/cashu-ts/issues/533))
+* remove support for CJS build ([#524](https://github.com/cashubtc/cashu-ts/issues/524))
+
+### Features
+
+* Add bigint support to CBOR for creqA payment requests ([#538](https://github.com/cashubtc/cashu-ts/issues/538)) ([7a54a91](https://github.com/cashubtc/cashu-ts/commit/7a54a91cf550d34b3a005a86db948d0235a4b08e))
+* allow consumers to override anti-fingerprinting headers ([#580](https://github.com/cashubtc/cashu-ts/issues/580)) ([31268a1](https://github.com/cashubtc/cashu-ts/commit/31268a15e60bb81bfd64ab3a5ff68812ab5d3302))
+* bigint roundtrip for v3/v4 tokens, wire in the enhanced CBOR ([#539](https://github.com/cashubtc/cashu-ts/issues/539)) ([88bffc0](https://github.com/cashubtc/cashu-ts/commit/88bffc01a3d929cef9e86c0bc72532a6c64ddc40))
+* extend Amount utils, update migration docs ([#584](https://github.com/cashubtc/cashu-ts/issues/584)) ([4d4529c](https://github.com/cashubtc/cashu-ts/commit/4d4529c2a6e75b3a005891453d3fe13fa8f2fdd2))
+* generic mint/melt methods for custom payment types ([#544](https://github.com/cashubtc/cashu-ts/issues/544)) ([6c9121b](https://github.com/cashubtc/cashu-ts/commit/6c9121b3c77803618d3b15a2ab51ff58c91c7bb2))
+* migrate amount-bearing APIs to use Amount VO ([#533](https://github.com/cashubtc/cashu-ts/issues/533)) ([ae5d41d](https://github.com/cashubtc/cashu-ts/commit/ae5d41d00ccd309c3fa29a23230354ca8c789c30))
+* multi-unit KeyChain, cache API cleanup, deprecation removal ([#540](https://github.com/cashubtc/cashu-ts/issues/540)) ([2ac031d](https://github.com/cashubtc/cashu-ts/commit/2ac031d449321bb79915e639b4806de3a7399c6a))
+* Proof.amount → bigint, strip crypto primitives, consolidate melt ([#537](https://github.com/cashubtc/cashu-ts/issues/537)) ([c426323](https://github.com/cashubtc/cashu-ts/commit/c42632321bc9f3e252ba568908f45d9475574370))
+* remove v3 token encoding; accept raw proofs in receive flows ([#558](https://github.com/cashubtc/cashu-ts/issues/558)) ([abd1efc](https://github.com/cashubtc/cashu-ts/commit/abd1efc9d62024925238df3f86830487080d0681))
+* tighten mint/melt API; remove MeltBlanks and prefer_async ([#534](https://github.com/cashubtc/cashu-ts/issues/534)) ([8ef99c9](https://github.com/cashubtc/cashu-ts/commit/8ef99c90fff8337ff063a9c02218e51997e5c348))
+* **utils:** add serializeProofs/deserializeProofs, make getEncodedTokenV4 internal ([2c92842](https://github.com/cashubtc/cashu-ts/commit/2c92842a96e30d6bd850c60d71f3062d015668cf))
+
+
+### Bug Fixes
+
+* harden fetch RequestInit against client fingerprinting ([#545](https://github.com/cashubtc/cashu-ts/issues/545)) ([2af85d1](https://github.com/cashubtc/cashu-ts/commit/2af85d10fd34c82c84fb7219e7244c723519db0f))
+* normalize and dedup p2pk pubkeys / refund keys at edges (was just in P2PKBuilder) ([#546](https://github.com/cashubtc/cashu-ts/issues/546)) ([99964a7](https://github.com/cashubtc/cashu-ts/commit/99964a742f875ac4b04e81764af6edc09ce400d6))
+* **p2pk:** add sigflag validation ([#563](https://github.com/cashubtc/cashu-ts/issues/563)) ([b8ad4a9](https://github.com/cashubtc/cashu-ts/commit/b8ad4a9897df7959ff33aa652c728a34c7ddc435))
+* prevent getEncodedToken from mutating input token proofs ([#536](https://github.com/cashubtc/cashu-ts/issues/536)) ([dc90078](https://github.com/cashubtc/cashu-ts/commit/dc9007829e6f0fc31dcb0c39d0bb212f512aa5e1)), closes [#535](https://github.com/cashubtc/cashu-ts/issues/535)
+* reject zero blinding factor in NUT-13 derivation and blindMessage ([#572](https://github.com/cashubtc/cashu-ts/issues/572)) ([8ad5064](https://github.com/cashubtc/cashu-ts/commit/8ad5064ce91e39140bf4d400081a5da82e84a1d5))
+* remove Pragma and Cache-Control headers. These are not supported in CDK cors preflight ([#566](https://github.com/cashubtc/cashu-ts/issues/566)) ([f431bbf](https://github.com/cashubtc/cashu-ts/commit/f431bbfaddb2e7f545128377842e41ab03f152f1))
+* switch to GH releases for renovate ([#585](https://github.com/cashubtc/cashu-ts/issues/585)) ([1749279](https://github.com/cashubtc/cashu-ts/commit/174927906825f66d9f465307810a5181e2bdca4e))
+* update release-please-action to v4.4.0 for Node.js 24 support ([#583](https://github.com/cashubtc/cashu-ts/issues/583)) ([f45d657](https://github.com/cashubtc/cashu-ts/commit/f45d657037d79126c80a0c377268480cc197bad3))
+* use constant time byte check for verifyDLEQProof ([#574](https://github.com/cashubtc/cashu-ts/issues/574)) ([494c969](https://github.com/cashubtc/cashu-ts/commit/494c969a121a2d220ad1b2be351eb397a6a0abc0))
+* verify DLEQ proofs and amounts on mint BlindSignature responses (NUT-12) ([#567](https://github.com/cashubtc/cashu-ts/issues/567)) ([0cc9da9](https://github.com/cashubtc/cashu-ts/commit/0cc9da9dce63ad02b9f71e1647d1e9ab081e9707))
+* **wallet:** remove witness from plain secret (not nut-10) proofs in normalization ([#579](https://github.com/cashubtc/cashu-ts/issues/579)) ([7d61d7e](https://github.com/cashubtc/cashu-ts/commit/7d61d7e33f8d3355063c86c272cea22fafa667be))
+
+
+### Miscellaneous Chores
+
+* remove support for CJS build ([#524](https://github.com/cashubtc/cashu-ts/issues/524)) ([b0e417e](https://github.com/cashubtc/cashu-ts/commit/b0e417edbd9cf0e8d358ed2c67525b37d78cdc7c))
+* **utils:** restrict internal functions from public API surface ([#570](https://github.com/cashubtc/cashu-ts/issues/570)) ([dff7005](https://github.com/cashubtc/cashu-ts/commit/dff7005b2eb83f0124f4fe1ce02fdc73388fb2ef))
+
+
+### Code Refactoring
+
+* **p2pk:** add normalizeP2PKOptions ([#564](https://github.com/cashubtc/cashu-ts/issues/564)) ([04c4d92](https://github.com/cashubtc/cashu-ts/commit/04c4d925ee55e0468c508a4329c5614be42b7918))
+* remove handleTokens from public API ([#569](https://github.com/cashubtc/cashu-ts/issues/569)) ([19e0830](https://github.com/cashubtc/cashu-ts/commit/19e08309578631ba9e1a307e90a55ca59da003b1))
+
 ## [3.6.1](https://github.com/cashubtc/cashu-ts/compare/v3.6.0...v3.6.1) (2026-03-17)
 
 
