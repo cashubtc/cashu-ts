@@ -69,6 +69,7 @@ export * from './crypto';
 
 // Core Utils
 export * from './utils/core';
+export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 
 // Payment request facade (tests rely on these at top level)
 export { PaymentRequest } from './model/PaymentRequest';

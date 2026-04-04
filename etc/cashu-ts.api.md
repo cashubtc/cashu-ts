@@ -502,6 +502,18 @@ export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: s
 // @public
 export function isP2PKSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
+// @public
+export const JSONInt: JSONIntApi;
+
+// @public (undocumented)
+export interface JSONIntApi {
+    parse(source: string, reviver?: (this: unknown, key: string, value: unknown) => unknown, options?: {
+        strict?: boolean;
+        fallbackTo?: 'number' | 'string' | 'error';
+    }): unknown;
+    stringify(value: unknown, replacer?: ((this: unknown, key: string, value: unknown) => unknown) | ReadonlyArray<string | number>, space?: string | number): string | undefined;
+}
+
 // @public (undocumented)
 export type JsonRpcReqParams = {
     kind: RpcSubKinds;
