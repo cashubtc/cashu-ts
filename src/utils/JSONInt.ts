@@ -30,7 +30,10 @@ export interface JSONIntApi {
 	 * Bigint aware JSON parser.
 	 *
 	 * @remarks
-	 * Unquoted JSON number tokens are parsed to BigInt.
+	 * Returns `unknown`, so validate or cast the result to an application-specific type.
+	 *
+	 * Unquoted JSON number tokens are parsed to BigInt when outside the safe integer range, otherwise
+	 * to number.
 	 */
 	parse(
 		source: string,
@@ -42,10 +45,13 @@ export interface JSONIntApi {
 	): unknown;
 
 	/**
-	 * Bigint aware JSON stringify.
+	 * BigInt aware JSON stringify.
 	 *
 	 * @remarks
-	 * BigInt is stringified as an unquoted JSON number token.
+	 * - BigInt is stringified as an unquoted JSON number token.
+	 * - Parsing the result may yield `number` or `bigint` depending on the value and parse options.
+	 * - Returns `undefined` for top-level values that JSON cannot represent, matching `JSON.stringify`
+	 *   behavior.
 	 */
 	stringify(
 		value: unknown,
