@@ -900,9 +900,18 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
 			expect(typeof restored[0].amount).toBe('bigint');
 		});
 
-		test('restores bigint amounts from string (localStorage JSON array)', () => {
+		test('restores bigint amounts from raw localStorage string (serializeProofs blob)', () => {
+			// serializeProofs returns string[], JSON.stringify wraps it as a JSON array of strings
+			const raw = JSON.stringify(serializeProofs(proofs));
+			// pass the raw string directly — no JSON.parse needed
+			const restored = deserializeProofs(raw);
+			expect(restored[0].amount).toBe(1n);
+			expect(restored[1].amount).toBe(2n);
+		});
+
+		test('restores bigint amounts from JSON.parse of localStorage (string[])', () => {
 			const json = JSON.stringify(serializeProofs(proofs));
-			// JSON.parse gives string[], deserializeProofs accepts that
+			// JSON.parse gives string[], deserializeProofs accepts that too
 			const restored = deserializeProofs(JSON.parse(json));
 			expect(restored[0].amount).toBe(1n);
 			expect(restored[1].amount).toBe(2n);
@@ -932,6 +941,20 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
 
 		test('handles empty JSON array string', () => {
 			expect(deserializeProofs('[]')).toEqual([]);
+		});
+
+		test('handles already-parsed object[] (e.g. plain JSON.parse of stored proofs)', () => {
+			const legacyObjects = [
+				{ id: '009a1f293253e41e', amount: 1, secret: 'abc', C: '02abc' },
+				{ id: '009a1f293253e41e', amount: 2, secret: 'def', C: '02def' },
+			];
+			// Simulates: deserializeProofs(JSON.parse(localStorage.getItem('proofs')))
+			// where localStorage held a plain JSON array of objects from v3
+			const restored = deserializeProofs(legacyObjects);
+			expect(restored[0].amount).toBe(1n);
+			expect(restored[1].amount).toBe(2n);
+			expect(restored[0].id).toBe('009a1f293253e41e');
+			expect(restored[0].secret).toBe('abc');
 		});
 	});
 

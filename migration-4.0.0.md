@@ -469,27 +469,29 @@ The following are still exported but are excluded from the trimmed type definiti
 
 ## Proof serialization
 
+`ProofLike` is a new exported type: a proof-shaped object whose `amount` has not yet been normalized to `bigint` (i.e. `Omit<Proof, 'amount'> & { amount: AmountLike }`). Use it to model proofs from external storage where `amount` may be a `number`, `string`, or `bigint`.
+
 Three helpers cover the common patterns for persisting and restoring proofs:
 
-| Function                     | Use case                                                                                                                                                                                 |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                           |
-| `deserializeProofs(json)`    | Restore `string \| string[]` back to `Proof[]`, with `amount` as `bigint`. Pass a `string[]` for individual proof strings (e.g. NutZap tags) or a single `string` for a JSON array blob. |
-| `normalizeProofAmounts(raw)` | Convert already-parsed proof objects (e.g. from a database row) to `Proof[]` by normalizing `amount` to `bigint`.                                                                        |
+| Function                     | Use case                                                                                                                                                                                                                                                         |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                                                                                                   |
+| `deserializeProofs(json)`    | Restore `string \| string[] \| ProofLike[]` back to `Proof[]`, with `amount` as `bigint`. Pass a raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings (e.g. NutZap tags), or a `ProofLike[]` for already-parsed objects. |
+| `normalizeProofAmounts(raw)` | Lower-level building block: convert `ProofLike[]` to `Proof[]` by normalizing `amount` to `bigint`. Called internally by `deserializeProofs`; use directly when you already have typed `ProofLike[]` and want to skip string-detection.                          |
 
 ```ts
-import { serializeProofs, deserializeProofs, normalizeProofAmounts } from '@cashu/cashu-ts';
+import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';
 
-// localStorage — serializeProofs returns string[], so wrap with JSON.stringify for a single blob
+// localStorage — serializeProofs returns string[], so wrap with JSON.stringify for storage.
 localStorage.setItem('proofs', JSON.stringify(serializeProofs(proofs)));
-const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
+const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
 
 // NutZap proof tags — one proof string per tag
 const proofTags = serializeProofs(proofs).map((s) => ['proof', s]);
 const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]));
 
-// Already-parsed objects (e.g. from a database query)
-const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
+// Already-parsed objects (e.g. from a database query) — also accepted directly
+const proofs = deserializeProofs(db.query('SELECT * FROM proofs'));
 ```
 
 Use `getEncodedToken` when you need a full cashu token string (mint URL + unit metadata). Use `serializeProofs` when you only need to store or transmit raw proof arrays.

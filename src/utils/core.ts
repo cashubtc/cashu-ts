@@ -11,6 +11,7 @@ import type {
 	DeprecatedToken,
 	Keys,
 	Proof,
+	ProofLike,
 	SerializedDLEQ,
 	Token,
 	TokenV4Template,
@@ -523,9 +524,7 @@ export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount {
  *
  *     const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
  */
-export function normalizeProofAmounts(
-	raw: Array<Omit<Proof, 'amount'> & { amount: AmountLike }>,
-): Proof[] {
+export function normalizeProofAmounts(raw: ProofLike[]): Proof[] {
 	return raw.map((p) => ({ ...p, amount: Amount.from(p.amount).toBigInt() }));
 }
 
@@ -553,6 +552,7 @@ export function serializeProofs(proofs: Proof | Proof[]): string[] {
  * - Pass a `string[]` (individual proof JSON strings) when reading from NutZap proof tags or a
  *   database.
  * - Pass a `string` (a JSON array) when reading from a single stored blob e.g. localStorage.
+ * - Pass a `ProofLike[]` of already-parsed proof objects for legacy data or database rows.
  *
  * @example
  *
@@ -561,21 +561,19 @@ export function serializeProofs(proofs: Proof | Proof[]): string[] {
  *     	event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]),
  *     );
  *
- *     // localStorage
- *     const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
+ *     // localStorage — pass the raw string, no JSON.parse needed
+ *     const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
  */
-export function deserializeProofs(json: string | string[]): Proof[] {
-	const raw: unknown[] = Array.isArray(json)
-		? json.map((s) => JSONInt.parse(s))
-		: toArray(JSONInt.parse(json));
-	return normalizeProofAmounts(raw as Array<Omit<Proof, 'amount'> & { amount: AmountLike }>);
-}
-
-function toArray(parsed: unknown): unknown[] {
-	if (!Array.isArray(parsed)) {
-		throw new TypeError('deserializeProofs: expected a JSON array of proofs');
+export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[] {
+	if (!Array.isArray(json)) {
+		const parsed = JSONInt.parse(json);
+		if (!Array.isArray(parsed)) {
+			throw new TypeError('deserializeProofs: expected a JSON array of proofs');
+		}
+		json = parsed;
 	}
-	return parsed;
+	const raw = json.map((s: unknown) => (typeof s === 'string' ? JSONInt.parse(s) : s));
+	return normalizeProofAmounts(raw as ProofLike[]);
 }
 
 /**

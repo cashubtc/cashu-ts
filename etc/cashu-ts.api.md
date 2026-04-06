@@ -277,7 +277,7 @@ export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
 
 // @public
-export function deserializeProofs(json: string | string[]): Proof[];
+export function deserializeProofs(json: string | string[] | ProofLike[]): Proof[];
 
 // @public (undocumented)
 export type DeviceStartResponse = {
@@ -1052,9 +1052,7 @@ export class NetworkError extends Error {
 }
 
 // @public
-export function normalizeProofAmounts(raw: Array<Omit<Proof, 'amount'> & {
-    amount: AmountLike;
-}>): Proof[];
+export function normalizeProofAmounts(raw: ProofLike[]): Proof[];
 
 // @public
 export type NUT10Option = {
@@ -1375,6 +1373,11 @@ export type Proof = {
     dleq?: SerializedDLEQ;
     p2pk_e?: string;
     witness?: string | P2PKWitness | HTLCWitness;
+};
+
+// @public
+export type ProofLike = Omit<Proof, 'amount'> & {
+    amount: AmountLike;
 };
 
 // @public

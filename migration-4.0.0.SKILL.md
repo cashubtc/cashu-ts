@@ -142,27 +142,25 @@ Actions:
 - Change proof literal amounts: `amount: 1000` → `amount: 1000n`
 - Change accumulator seeds: `reduce((sum, p) => sum + p.amount, 0)` → `…, 0n)`
 - Wrap for display: `Number(proof.amount)`
-- For proofs stored as **JSON** (localStorage, API, NutZap tags), use `serializeProofs`/`deserializeProofs`.
-  `serializeProofs` returns `string[]` (one JSON string per proof); `deserializeProofs` accepts `string | string[]`:
+- `ProofLike` is a new exported type: `Omit<Proof, 'amount'> & { amount: AmountLike }` — a proof where `amount` is not yet `bigint`.
+- Use `serializeProofs`/`deserializeProofs` for proof serialization. `serializeProofs` returns `string[]` (one JSON string per proof). `deserializeProofs` accepts `string | string[] | ProofLike[]` — pass the raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings, or a `ProofLike[]` for already-parsed objects:
 
 ```ts
 import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';
 
-// localStorage — wrap with JSON.stringify/parse since serializeProofs returns string[]
+// localStorage — serializeProofs returns string[], so wrap with JSON.stringify for storage.
 localStorage.setItem('proofs', JSON.stringify(serializeProofs(proofs)));
-const proofs = deserializeProofs(JSON.parse(localStorage.getItem('proofs') ?? '[]'));
+const proofs = deserializeProofs(localStorage.getItem('proofs') ?? '[]');
 
 // NutZap proof tags — one string per proof, pass string[] directly
 const proofTags = serializeProofs(proofs).map((s) => ['proof', s]);
 const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map((t) => t[1]));
+
+// Already-parsed objects (e.g. from a database query) — also accepted directly
+const proofs = deserializeProofs(db.query('SELECT * FROM proofs'));
 ```
 
-- For proofs from a **database** or other already-parsed source, use `normalizeProofAmounts`:
-
-```ts
-import { normalizeProofAmounts } from '@cashu/cashu-ts';
-const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
-```
+`normalizeProofAmounts(raw: ProofLike[])` is the lower-level building block that `deserializeProofs` uses internally. Call it directly when you already have typed `ProofLike[]` and want to skip the string-detection logic.
 
 ---
 
