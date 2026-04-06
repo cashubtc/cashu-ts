@@ -83,12 +83,16 @@ DEV=1 make nutshell-stable-down
 - Avoid breaking API changes unless the change targets next major version.
 - Commit messages follow Conventional Commits; template in `.gitmessage`.
 - Test naming: files with `.node.` run only in Node; `.browser.` would run in browser.
-- Prefer clear, boring code over clever tricks.
-- Make invalid states unrepresentable (model with types).
 - Keep changes scoped; one concern per PR.
+- Prefer the smallest reasonable diff that fully fixes the bug.
+- Match the existing local style and abstraction level before introducing new structure.
+- Prefer clear, boring code over clever tricks.
 - Be explicit about errors; fail fast with actionable messages.
+- Make invalid states unrepresentable (model with types).
 - Optimize for readability over micro-performance.
 - Prefer early exits and flatter structures to avoid deep if/else nesting.
+- Do not add one-off helpers, new type aliases, exported types, or wider public API signatures unless they are clearly justified.
+- If a broader refactor seems better than a local fix, explain the tradeoff first.
 - If it's not "Zen" (PEP 20) in spirit, then don't do it.
 
 ## Linting and TypeScript rules
