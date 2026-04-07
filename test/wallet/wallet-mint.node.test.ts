@@ -136,7 +136,8 @@ describe('requestTokens', () => {
 			expiry: null,
 		};
 
-		const previewA = await wallet.prepareMint('bolt11', 1, quoteA);
+		const dummyPrivkey = '1'.repeat(64);
+		const previewA = await wallet.prepareMint('bolt11', 1, quoteA, { privkey: dummyPrivkey });
 		const previewB = await wallet.prepareMint('bolt11', 2, quoteB);
 
 		expect(batchCalls).toBe(0);
