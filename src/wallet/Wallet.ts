@@ -52,7 +52,7 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 // shared primitives and options
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
-import type { SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { KeyChainCache } from '../model/types/keyset';
 import type {
@@ -1821,29 +1821,6 @@ class Wallet {
 	}
 
 	/**
-	 * Batch mint proofs for a bolt11 quote.
-	 *
-	 * @param quotes Mint quote ID or object (bolt11).
-	 * @param config Optional parameters.
-	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns Minted proofs.
-	 */
-	async batchMintProofsBolt11(
-		quotes: Array<Pick<MintQuoteBolt11Response, 'amount' | 'quote'>>,
-		signatures?: Array<string | null>,
-		config?: Omit<MintProofsConfig, 'privkey'>,
-		outputType?: OutputType,
-	): Promise<Proof[]> {
-		const ids: string[] = [];
-		const amounts: Amount[] = [];
-		for (const quote of quotes) {
-			ids.push(quote.quote);
-			amounts.push(quote.amount);
-		}
-		return this._batchMintProofs('bolt11', ids, amounts, signatures, config, outputType);
-	}
-
-	/**
 	 * Mints proofs for a bolt12 quote.
 	 *
 	 * @remarks
@@ -1987,75 +1964,74 @@ class Wallet {
 	}
 
 	/**
-	 * Internal helper for minting proofs with bolt11 or bolt12.
+	 * Complete a batch of prepared mint transactions in a single request.
 	 *
 	 * @remarks
-	 * Handles blinded messages, signatures, and proof construction. Use public methods like
-	 * mintProofs or helpers for API access.
-	 * @param method 'bolt11' or 'bolt12'.
-	 * @param amount Amount to mint (must be positive).
-	 * @param quote Quote ID or object.
-	 * @param config Optional (privkey, keysetId).
-	 * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
-	 * @returns Minted proofs.
-	 * @throws If params are invalid or mint returns errors.
+	 * Accepts an array of `MintPreview` objects (each produced by `prepareMint()`) and consolidates
+	 * them into one batch request. All previews must share the same `method` and `keysetId`.
+	 * @param previews Array of mint previews to complete as a batch.
+	 * @returns Minted proofs for all previews combined.
 	 */
-	private async _batchMintProofs(
-		method: 'bolt11' | 'bolt12',
-		quoteIds: string[],
-		amounts: Amount[],
-		nut20Signatures?: Array<string | null>,
-		config?: Omit<MintProofsConfig, 'privkey'>,
-		outputType?: OutputType,
+	async completeBatchMint(
+		previews: Array<MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>>,
 	): Promise<Proof[]> {
-		// this.assertAmount(amount, `_mintProofs: ${method}`);
-		outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
-		const { keysetId, proofsWeHave, onCountersReserved } = config ?? {};
+		this.failIf(previews.length === 0, 'completeBatchMint: no previews provided');
 
-		// Shape output type and denominations for our proofs
-		// we are receiving, so no includeFees.
-		const mintAmount = Amount.sum(amounts);
-		const keyset = this.getKeyset(keysetId); // specified or wallet keyset
-		let mintOT = this.configureOutputs(
-			mintAmount,
-			keyset,
-			outputType,
-			false, // no fees
-			proofsWeHave,
-		);
-
-		// Assign counters atomically if OutputType is deterministic
-		// and the counter is zero (auto-assign)
-		const autoCounters = await this.addCountersToOutputTypes(keyset.id, mintOT);
-		[mintOT] = autoCounters.outputTypes;
-		if (autoCounters.used) {
-			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'mintProofs' });
+		const { method, keysetId } = previews[0];
+		for (const p of previews) {
+			this.failIf(
+				p.method !== method,
+				`completeBatchMint: mixed methods (${method} vs ${p.method})`,
+			);
+			this.failIf(
+				p.keysetId !== keysetId,
+				`completeBatchMint: mixed keysets (${keysetId} vs ${p.keysetId})`,
+			);
 		}
-		this._logger.debug('mint counter', { counter: autoCounters.used, mintOT });
 
-		// Create outputs and mint payload
-		const outputs = this.createOutputData(mintAmount, keyset, mintOT);
-		const blindedMessages = outputs.map((d) => d.blindedMessage);
-		const mintPayload: BatchMintRequest = {
-			outputs: blindedMessages,
-			quotes: quoteIds,
-			quote_amounts: amounts,
-			signatures: nut20Signatures,
+		// Consolidate previews into a single BatchMintRequest
+		const quotes: string[] = [];
+		const quoteAmounts: Amount[] = [];
+		const allOutputs: SerializedBlindedMessage[] = [];
+		const allOutputData: OutputDataLike[] = [];
+		const signatures: Array<string | null> = [];
+		let hasSignatures = false;
+
+		for (const preview of previews) {
+			quotes.push(preview.payload.quote);
+			quoteAmounts.push(Amount.sum(preview.payload.outputs.map((o) => o.amount)));
+			allOutputs.push(...preview.payload.outputs);
+			allOutputData.push(...preview.outputData);
+			const sig = preview.payload.signature ?? null;
+			signatures.push(sig);
+			if (sig) hasSignatures = true;
+		}
+
+		const batchPayload: BatchMintRequest = {
+			quotes,
+			quote_amounts: quoteAmounts,
+			outputs: allOutputs,
+			...(hasSignatures ? { signatures } : {}),
 		};
 
-		let signatures;
-		if (method === 'bolt12') {
-			({ signatures } = await this.mint.mintBatchBolt12(mintPayload));
-		} else {
-			({ signatures } = await this.mint.mintBatchBolt11(mintPayload));
-		}
+		const { signatures: sigs } = await this.mint.mintBatch(method, batchPayload);
 		this.failIf(
-			signatures.length !== outputs.length,
-			`Mint returned ${signatures.length} signatures, expected ${outputs.length}`,
+			sigs.length !== allOutputData.length,
+			`Mint returned ${sigs.length} signatures, expected ${allOutputData.length}`,
 		);
 
-		this._logger.debug('MINT COMPLETED', { amounts: outputs.map((o) => o.blindedMessage.amount) });
-		return outputs.map((d, i) => d.toProof(signatures[i], keyset));
+		const keyset = this.getKeyset(keysetId);
+		this._logger.debug('BATCH MINT COMPLETED', {
+			quotes: quotes.length,
+			amounts: allOutputData.map((o) => o.blindedMessage.amount),
+		});
+		for (let i = 0; i < sigs.length; i++) {
+			this.failIf(
+				!sigs[i].amount.equals(allOutputData[i].blindedMessage.amount),
+				`Mint returned signature with wrong amount: expected ${allOutputData[i].blindedMessage.amount.toString()}, got ${sigs[i].amount.toString()}`,
+			);
+		}
+		return allOutputData.map((d, i) => d.toProof(sigs[i], keyset));
 	}
 
 	// -----------------------------------------------------------------

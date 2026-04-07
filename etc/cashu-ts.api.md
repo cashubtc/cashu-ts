@@ -1830,7 +1830,6 @@ export class Wallet {
         selectProofs?: SelectProofs;
         logger?: Logger;
     });
-    batchMintProofsBolt11(quotes: Array<Pick<MintQuoteBolt11Response, 'amount' | 'quote'>>, signatures?: Array<string | null>, config?: Omit<MintProofsConfig, 'privkey'>, outputType?: OutputType): Promise<Proof[]>;
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
         proofs: Proof[];
         lastCounterWithSignature?: number;
@@ -1847,6 +1846,7 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
+    completeBatchMint(previews: Array<MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;

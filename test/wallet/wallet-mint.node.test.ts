@@ -94,6 +94,61 @@ describe('requestTokens', () => {
 		expect(proofs[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
 	});
 
+	test('completeBatchMint consolidates multiple prepareMint previews', async () => {
+		let batchCalls = 0;
+		server.use(
+			http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+				batchCalls += 1;
+				const body = (await request.json()) as {
+					quotes: string[];
+					quote_amounts: unknown[];
+					outputs: unknown[];
+				};
+				expect(body.quotes).toEqual(['quote-a', 'quote-b']);
+				expect(body.quote_amounts).toHaveLength(2);
+				// Return one signature per output
+				return HttpResponse.json({
+					signatures: body.outputs.map((o: { amount: unknown }) => ({
+						id: '00bd033559de27d0',
+						amount: o.amount,
+						C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+					})),
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const quoteA: MintQuoteBolt11Response = {
+			quote: 'quote-a',
+			request: 'lnbc...',
+			amount: Amount.from(1),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+		const quoteB: MintQuoteBolt11Response = {
+			quote: 'quote-b',
+			request: 'lnbc...',
+			amount: Amount.from(2),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+
+		const previewA = await wallet.prepareMint('bolt11', 1, quoteA);
+		const previewB = await wallet.prepareMint('bolt11', 2, quoteB);
+
+		expect(batchCalls).toBe(0);
+
+		const proofs = await wallet.completeBatchMint([previewA, previewB]);
+
+		expect(batchCalls).toBe(1);
+		const totalAmount = proofs.reduce((sum, p) => sum + p.amount, 0n);
+		expect(totalAmount).toBe(3n);
+		expect(proofs.every((p) => p.id === '00bd033559de27d0')).toBe(true);
+	});
+
 	test('test requestTokens bad response', async () => {
 		server.use(
 			http.post(mintUrl + '/v1/mint/bolt11', () => {
