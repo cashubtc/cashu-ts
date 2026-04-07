@@ -633,6 +633,90 @@ describe('Mint normalization', () => {
 		});
 	});
 
+	it('mintBatchBolt11 posts to /v1/mint/bolt11/batch and normalizes signature amounts', async () => {
+		const requestSpy = vi.fn(async (options: ReqArgs) => {
+			expect(options.endpoint).toBe(mintUrl + '/v1/mint/bolt11/batch');
+			expect(options.method).toBe('POST');
+			return {
+				signatures: [
+					{ amount: 1, C_: '02sig1', id: '00' },
+					{ amount: 2, C_: '02sig2', id: '00' },
+				],
+			};
+		});
+		const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+		const response = await mint.mintBatchBolt11({
+			quotes: ['q1', 'q2'],
+			quote_amounts: [1n, 2n] as any,
+			outputs: [],
+		});
+
+		expect(response.signatures).toHaveLength(2);
+		expect(response.signatures[0].amount.toBigInt()).toBe(1n);
+		expect(response.signatures[1].amount.toBigInt()).toBe(2n);
+	});
+
+	it('mintBatchBolt12 posts to /v1/mint/bolt12/batch and normalizes signature amounts', async () => {
+		const requestSpy = vi.fn(async (options: ReqArgs) => {
+			expect(options.endpoint).toBe(mintUrl + '/v1/mint/bolt12/batch');
+			expect(options.method).toBe('POST');
+			return {
+				signatures: [{ amount: 4, C_: '02sig', id: '00' }],
+			};
+		});
+		const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+		const response = await mint.mintBatchBolt12({
+			quotes: ['q1'],
+			quote_amounts: [4n] as any,
+			outputs: [],
+		});
+
+		expect(response.signatures).toHaveLength(1);
+		expect(response.signatures[0].amount.toBigInt()).toBe(4n);
+	});
+
+	it('mintBatch throws on invalid method string', async () => {
+		const mint = new Mint(mintUrl, { customRequest: makeRequest({}) });
+
+		await expect(
+			mint.mintBatch('bad method', { quotes: [], quote_amounts: [], outputs: [] }),
+		).rejects.toThrow('Invalid mint method: bad method');
+	});
+
+	it('mintBatch throws on invalid response (missing signatures array)', async () => {
+		const logger = createLogger();
+		const mint = new Mint(mintUrl, {
+			customRequest: makeRequest({ not_signatures: true }),
+			logger,
+		});
+
+		await expect(
+			mint.mintBatch('bolt11', { quotes: ['q1'], quote_amounts: [1n] as any, outputs: [] }),
+		).rejects.toThrow('Invalid response from mint');
+		expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+			data: { not_signatures: true },
+			op: 'mintBatch.bolt11',
+		});
+	});
+
+	it('mintBatch throws on invalid response (signatures is not an array)', async () => {
+		const logger = createLogger();
+		const mint = new Mint(mintUrl, {
+			customRequest: makeRequest({ signatures: {} }),
+			logger,
+		});
+
+		await expect(
+			mint.mintBatch('bolt11', { quotes: ['q1'], quote_amounts: [1n] as any, outputs: [] }),
+		).rejects.toThrow('Invalid response from mint');
+		expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+			data: { signatures: {} },
+			op: 'mintBatch.bolt11',
+		});
+	});
+
 	it('throws on invalid minted signatures responses', async () => {
 		const logger = createLogger();
 		const mint = new Mint(mintUrl, {

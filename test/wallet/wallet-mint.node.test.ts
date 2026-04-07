@@ -108,7 +108,7 @@ describe('requestTokens', () => {
 				expect(body.quote_amounts).toHaveLength(2);
 				// Return one signature per output
 				return HttpResponse.json({
-					signatures: body.outputs.map((o: { amount: unknown }) => ({
+					signatures: (body.outputs as Array<{ amount: unknown }>).map((o) => ({
 						id: '00bd033559de27d0',
 						amount: o.amount,
 						C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
