@@ -487,6 +487,7 @@ describe('generic mint/melt methods', () => {
 				expiry: 1,
 				fee_reserve: Amount.from(1),
 				request: 'lnbc-local',
+				payment_preimage: null,
 			});
 
 			expect(quote.request).toBe('lnbc-remote');
@@ -536,9 +537,10 @@ describe('generic mint/melt methods', () => {
 			const wallet = new Wallet(mint, { unit, logger });
 			await wallet.loadMint();
 
-			const meltQuote: Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = {
+			const meltQuote: Pick<MeltQuoteBaseResponse, 'amount' | 'quote' | 'state'> = {
 				quote: 'bacs-melt-1',
 				amount: Amount.from(10),
+				state: MeltQuoteState.UNPAID,
 			};
 			const proofsToSend: Proof[] = [
 				{ id: '00bd033559de27d0', amount: 8n, secret: 'secret1', C: 'C1' },

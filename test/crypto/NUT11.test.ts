@@ -25,7 +25,6 @@ import {
 	isHTLCSpendAuthorised,
 	normalizeP2PKOptions,
 	verifyP2PKSpendingConditions,
-	type P2PKOptions,
 } from '../../src/crypto';
 import { Proof, P2PKWitness } from '../../src/model/types';
 import { sha256 } from '@noble/hashes/sha2.js';

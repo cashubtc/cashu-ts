@@ -8,7 +8,7 @@ import {
 	injectWebSocketImpl,
 	RateLimitError,
 } from '../../src';
-import type { AuthProvider, Logger } from '../../src';
+import type { AuthProvider, Logger, RequestFn } from '../../src';
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { MINTINFORESP } from '../consts';
@@ -23,11 +23,11 @@ type ReqArgs = {
 const mintUrl = 'https://localhost:3338';
 const fakeWsUrl = 'wss://mint.example/cashu/v1/ws?token=abc';
 
-const makeRequest = <T>(payload: T) => {
-	return async (options: ReqArgs): Promise<T> => {
+const makeRequest = <T>(payload: T): RequestFn => {
+	return (async (options: ReqArgs): Promise<T> => {
 		void options;
 		return payload;
-	};
+	}) as RequestFn;
 };
 
 function createLogger(): Logger {
@@ -60,7 +60,7 @@ describe('Mint normalization', () => {
 				'4': { disabled: false, methods: [] },
 				'5': { disabled: false, methods: [] },
 			},
-		}));
+		})) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const info1 = await mint.getLazyMintInfo();
@@ -266,7 +266,7 @@ describe('Mint normalization', () => {
 				expect(options.cached_endpoints).toEqual([{ method: 'POST', path: '/v1/swap' }]);
 				return { signatures: [{ amount: 1, C_: '02sig', id: '00' }] };
 			},
-		);
+		) as RequestFn;
 		const authProvider: AuthProvider = {
 			getBlindAuthToken: vi.fn(async () => 'bat123'),
 			getCAT: vi.fn(() => 'cat-fallback'),
@@ -311,7 +311,7 @@ describe('Mint normalization', () => {
 			expect(options.headers?.['Clear-auth']).toBe('cat-fallback');
 			expect(options.headers?.['Blind-auth']).toBeUndefined();
 			return { signatures: [{ amount: 1, C_: '02sig', id: '00' }] };
-		});
+		}) as RequestFn;
 		const authProvider: AuthProvider = {
 			getBlindAuthToken: vi.fn(async () => 'unused'),
 			getCAT: vi.fn(() => 'cat-fallback'),
@@ -355,7 +355,7 @@ describe('Mint normalization', () => {
 				expiry: null,
 				amount: 21,
 			};
-		});
+		}) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const response = await mint.createMintQuoteBolt11({
@@ -381,7 +381,7 @@ describe('Mint normalization', () => {
 				amount_paid: 5,
 				amount_issued: 4,
 			};
-		});
+		}) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const response = await mint.createMintQuoteBolt12({
@@ -402,7 +402,7 @@ describe('Mint normalization', () => {
 			return {
 				signatures: [{ amount: 2, C_: '02sig', id: '00' }],
 			};
-		});
+		}) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const response = await mint.mintBolt11({ quote: 'q1', outputs: [] });
@@ -424,7 +424,7 @@ describe('Mint normalization', () => {
 				fee_reserve: 1,
 				change: [{ amount: 3, C_: '02change', id: '00' }],
 			};
-		});
+		}) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const response = await mint.checkMeltQuoteBolt11('q1');
@@ -440,25 +440,25 @@ describe('Mint normalization', () => {
 			paid: false,
 			expiry: 123,
 			note: 'custom',
-		}));
+		})) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const mintQuote = await mint.createMintQuote(
 			'custom-pay',
 			{ unit: 'sat' },
 			{
-				normalize: (raw) => ({ ...raw, tag: 'mint' }),
+				normalize: (raw) => ({ ...raw, tag: 'mint' }) as any,
 			},
 		);
 		const meltQuote = await mint.checkMeltQuote('custom-pay', 'q1', {
-			normalize: (raw) => ({ ...raw, tag: 'melt' }),
-			customRequest: async () => ({
+			normalize: (raw) => ({ ...raw, tag: 'melt' }) as any,
+			customRequest: (async () => ({
 				quote: 'q1',
 				amount: 1,
 				unit: 'sat',
 				state: MeltQuoteState.UNPAID,
 				expiry: 123,
-			}),
+			})) as RequestFn,
 		});
 
 		expect(mintQuote).toMatchObject({ tag: 'mint', note: 'custom' });
@@ -536,7 +536,7 @@ describe('Mint normalization', () => {
 		const requestSpy = vi.fn(async (options: ReqArgs) => {
 			expect(options.endpoint).toBe('https://alt.example/v1/keys/ab_c-d');
 			return { keysets: [] };
-		});
+		}) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const response = await mint.getKeys('ab/c+d', 'https://alt.example');
@@ -566,7 +566,6 @@ describe('Mint normalization', () => {
 				unit: 'sat',
 				options: {
 					amountless: { amount_msat: 5000n },
-					mpp: { amount: 21n },
 				},
 			});
 			return {
@@ -578,7 +577,7 @@ describe('Mint normalization', () => {
 				request: 'ln-offer',
 				fee_reserve: 1,
 			};
-		});
+		}) as RequestFn;
 		const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
 		const response = await mint.createMeltQuoteBolt12({
@@ -586,7 +585,6 @@ describe('Mint normalization', () => {
 			unit: 'sat',
 			options: {
 				amountless: { amount_msat: '5000' },
-				mpp: { amount: '21' },
 			},
 		});
 

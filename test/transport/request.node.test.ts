@@ -113,7 +113,7 @@ describe('requests', { timeout: 7500 }, () => {
 
 		const wallet = new Wallet(mintUrl);
 		wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
-		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrowError(HttpResponseError);
+		await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow(HttpResponseError);
 	});
 	test('handles NetworkError on network failure', async () => {
 		server.use(
@@ -189,9 +189,7 @@ describe('requests', { timeout: 7500 }, () => {
 			}),
 		);
 
-		await expect(request({ endpoint })).rejects.toThrowError(
-			new HttpResponseError('bad response', 200),
-		);
+		await expect(request({ endpoint })).rejects.toThrow(new HttpResponseError('bad response', 200));
 	});
 
 	test('maps malformed success JSON to bad response and logs parsing failure', async () => {

@@ -560,7 +560,7 @@ describe('mint api', () => {
 		});
 		mint.disconnectWebSocket();
 		expect(res).toBe(1);
-		expect(callback).toBeCalled();
+		expect(callback).toHaveBeenCalled();
 	});
 	test('websocket mint quote updates on multiple ids', async () => {
 		const mint = new Mint(mintUrl);
@@ -711,7 +711,7 @@ describe('dleq', () => {
 		});
 		expect(() => {
 			wallet.sendOffline(4, proofs, { requireDleq: true });
-		}).toThrowError(new Error('Not enough funds available to send'));
+		}).toThrow(new Error('Not enough funds available to send'));
 	});
 	test('receive with invalid dleq', async () => {
 		const wallet = new Wallet(mintUrl);

@@ -84,11 +84,11 @@ describe('test split custom amounts ', () => {
 	});
 	const tooMuch = [512, 512];
 	test('testing amount 512 but split too much', async () => {
-		expect(() => utils.splitAmount(512, keys, tooMuch)).toThrowError();
+		expect(() => utils.splitAmount(512, keys, tooMuch)).toThrow();
 	});
 	const illegal = [3, 3];
 	test('testing non pow2', async () => {
-		expect(() => utils.splitAmount(6, keys, illegal)).toThrowError();
+		expect(() => utils.splitAmount(6, keys, illegal)).toThrow();
 	});
 	const empty: Array<number> = [];
 	test('testing empty', async () => {
@@ -126,9 +126,7 @@ describe('test splitAmount zero handling', () => {
 	});
 
 	test('value=0 with nonzero split throws', () => {
-		expect(() => utils.splitAmount(0, keys, [2])).toThrowError(
-			/Split is greater than total amount/,
-		);
+		expect(() => utils.splitAmount(0, keys, [2])).toThrow(/Split is greater than total amount/);
 	});
 
 	test('positive value ignores zeros in split', () => {

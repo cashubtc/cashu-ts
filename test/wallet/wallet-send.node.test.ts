@@ -570,7 +570,7 @@ describe('send', () => {
 		];
 		const result = await wallet.send(3, overpayProofs, {
 			includeFees: true,
-			proofsWeHave: [{ secret: '123', C: '123', amount: 64n, id: 'id' }],
+			proofsWeHave: [{ secret: '123', C: '123', amount: 64n, id: 'id' } as Proof],
 		});
 
 		// Swap 8, get 7 back (after 1*600ppk = 1 sat fee).

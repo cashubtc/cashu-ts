@@ -81,7 +81,7 @@ describe('testing WSConnection', () => {
 				callback,
 				errorCallback,
 			);
-		}).toThrowError('Socket is not open');
+		}).toThrow('Socket is not open');
 		expect(errorCallback).not.toHaveBeenCalled(); // No soft callback invocation
 	});
 	test('unsubscribing', async () => {
@@ -167,9 +167,9 @@ describe('WSConnection – socket-not-open paths', () => {
 
 	test('sendRequest subscribe throws when socket not open', () => {
 		const conn = new WSConnection(fakeUrl);
-		expect(() => conn.sendRequest('subscribe', { kind: 'bolt11_mint_quote', filters: [] })).toThrow(
-			'Socket not open',
-		);
+		expect(() =>
+			conn.sendRequest('subscribe', { subId: 'test', kind: 'bolt11_mint_quote', filters: [] }),
+		).toThrow('Socket not open');
 	});
 });
 
@@ -179,9 +179,9 @@ describe('WSConnection – close and lifecycle', () => {
 		const conn = new WSConnection(fakeUrl);
 
 		conn.setLogger(logger);
-		expect(() => conn.sendRequest('subscribe', { kind: 'bolt11_mint_quote', filters: [] })).toThrow(
-			'Socket not open',
-		);
+		expect(() =>
+			conn.sendRequest('subscribe', { subId: 'test', kind: 'bolt11_mint_quote', filters: [] }),
+		).toThrow('Socket not open');
 		expect(logger.error).toHaveBeenCalledWith('Attempted sendRequest, but socket was not open');
 	});
 
@@ -368,7 +368,7 @@ describe('WSConnection – close and lifecycle', () => {
 
 		await new Promise<void>((res) => {
 			conn.onClose(() => setTimeout(res, 0));
-			serverSocket.close({ code: 4001, reason: 'abnormal' });
+			serverSocket.close({ wasClean: true, code: 4001, reason: 'abnormal' });
 		});
 
 		expect(errorCb).toHaveBeenCalledWith(expect.any(Error));
@@ -693,7 +693,7 @@ describe('WSConnection – listener management', () => {
 
 		await new Promise<void>((res) => {
 			conn.onClose(() => setTimeout(res, 0));
-			serverSocket.close({ code: 4001 });
+			serverSocket.close({ wasClean: true, reason: 'foo', code: 4001 });
 		});
 
 		expect(errorCb1).toHaveBeenCalled();
