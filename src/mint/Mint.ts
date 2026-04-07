@@ -358,33 +358,6 @@ class Mint {
 	}
 
 	/**
-	 * Mints new tokens by requesting blind signatures on the provided outputs. Mints multiple quotes
-	 * at once.
-	 *
-	 * @param mintPayload Payload containing the outputs to get blind signatures on.
-	 * @param customRequest Optional override for the request function.
-	 * @returns Serialized blinded signatures.
-	 */
-	async mintBolt11Batch(
-		mintPayload: BatchMintRequest,
-		customRequest?: RequestFn,
-	): Promise<MintResponse> {
-		const data = await this.requestWithAuth<MintResponse>(
-			'POST',
-			'/v1/mint/bolt11/batch',
-			{ requestBody: mintPayload },
-			customRequest,
-		);
-
-		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
-			throw new Error('Invalid response from mint');
-		}
-
-		return data;
-	}
-
-	/**
 	 * Mints new tokens using a BOLT12 quote by requesting blind signatures on the provided outputs.
 	 *
 	 * @remarks
@@ -434,6 +407,77 @@ class Mint {
 	}
 
 	// -----------------------------------------------------------------
+	// Section: Mint Batch
+	// -----------------------------------------------------------------
+
+	/**
+	 * Mints new tokens by requesting blind signatures on the provided outputs. Mints multiple quotes
+	 * at once.
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @param customRequest Optional override for the request function.
+	 * @returns Serialized blinded signatures.
+	 */
+	async mintBatchBolt11(
+		mintPayload: BatchMintRequest,
+		customRequest?: RequestFn,
+	): Promise<MintResponse> {
+		return this.mintBatch('bolt11', mintPayload, { customRequest });
+	}
+
+	/**
+	 * Mints new tokens using multiple BOLT12 quotes by requesting blind signatures on the provided
+	 * outputs.
+	 *
+	 * @param mintPayload Payload containing the outputs to get blind signatures on.
+	 * @param customRequest Optional override for the request function.
+	 * @returns Serialized blinded signatures.
+	 */
+	async mintBatchBolt12(
+		mintPayload: BatchMintRequest,
+		customRequest?: RequestFn,
+	): Promise<MintResponse> {
+		return this.mintBatch('bolt12', mintPayload, { customRequest });
+	}
+
+	/**
+	 * Mints a batch of new tokens for a given payment method.
+	 *
+	 * @remarks
+	 * Uses `/v1/mint/{method}/batch` and validates method format. Signature amounts are always
+	 * normalized. Custom methods can supply an optional `normalize` callback for any additional
+	 * response fields.
+	 * @param method The minting method (e.g., 'bolt11', 'bolt12', or custom method name).
+	 * @param mintPayload Payload containing the quote ID and outputs to get blind signatures on.
+	 * @param options.customRequest Optional override for the request function.
+	 * @param options.normalize Optional callback to normalize method-specific response fields.
+	 * @returns Serialized blinded signatures for the requested outputs.
+	 */
+	async mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(
+		method: string,
+		mintPayload: BatchMintRequest,
+		options?: {
+			customRequest?: RequestFn;
+			normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
+		},
+	): Promise<MintResponse & TRes> {
+		failIf(!this.isValidMethodString(method), `Invalid mint method: ${method}`, this._logger);
+		const data = await this.requestWithAuth<MintResponse & TRes>(
+			'POST',
+			`/v1/mint/${method}/batch`,
+			{ requestBody: mintPayload },
+			options?.customRequest,
+		);
+
+		if (!isObj(data) || !Array.isArray(data?.signatures)) {
+			this._logger.error('Invalid response from mint...', { data, op: `mintBatch.${method}` });
+			throw new Error('Invalid response from mint');
+		}
+		data.signatures = this.normalizeSignatureAmounts(data.signatures);
+		return options?.normalize ? options.normalize(data) : data;
+	}
+
+	// -----------------------------------------------------------------
 	// Section: Create Melt Quote
 	// -----------------------------------------------------------------
 
@@ -464,33 +508,6 @@ class Mint {
 			options?.customRequest,
 		);
 		return this.normalizeMeltQuoteResponse(method, response, options?.normalize);
-	}
-
-	/**
-	 * Mints new tokens using multiple BOLT12 quotes by requesting blind signatures on the provided
-	 * outputs.
-	 *
-	 * @param mintPayload Payload containing the outputs to get blind signatures on.
-	 * @param customRequest Optional override for the request function.
-	 * @returns Serialized blinded signatures.
-	 */
-	async mintBolt12Batch(
-		mintPayload: BatchMintRequest,
-		customRequest?: RequestFn,
-	): Promise<MintResponse> {
-		const data = await this.requestWithAuth<MintResponse>(
-			'POST',
-			'/v1/mint/bolt12/batch',
-			{ requestBody: mintPayload },
-			customRequest,
-		);
-
-		if (!isObj(data) || !Array.isArray(data?.signatures)) {
-			this._logger.error('Invalid response from mint...', { data, op: 'mintBolt11' });
-			throw new Error('Invalid response from mint');
-		}
-
-		return data;
 	}
 
 	/**

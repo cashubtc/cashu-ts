@@ -784,10 +784,14 @@ export class Mint {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
     }): Promise<MintResponse & TRes>;
+    mintBatch<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: BatchMintRequest, options?: {
+        customRequest?: RequestFn;
+        normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
+    }): Promise<MintResponse & TRes>;
+    mintBatchBolt11(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintBatchBolt12(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt11Batch(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
-    mintBolt12Batch(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;

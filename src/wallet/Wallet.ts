@@ -2045,9 +2045,9 @@ class Wallet {
 
 		let signatures;
 		if (method === 'bolt12') {
-			({ signatures } = await this.mint.mintBolt12Batch(mintPayload));
+			({ signatures } = await this.mint.mintBatchBolt12(mintPayload));
 		} else {
-			({ signatures } = await this.mint.mintBolt11Batch(mintPayload));
+			({ signatures } = await this.mint.mintBatchBolt11(mintPayload));
 		}
 		this.failIf(
 			signatures.length !== outputs.length,
