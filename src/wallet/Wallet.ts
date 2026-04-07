@@ -2023,7 +2023,7 @@ class Wallet {
 		const keyset = this.getKeyset(keysetId);
 		this._logger.debug('BATCH MINT COMPLETED', {
 			quotes: quotes.length,
-			amounts: allOutputData.map((o) => o.blindedMessage.amount),
+			amounts: allOutputData.map((o) => o.blindedMessage.amount.toString()),
 		});
 		for (let i = 0; i < sigs.length; i++) {
 			this.failIf(
@@ -2449,7 +2449,9 @@ class Wallet {
 		if (preferAsync) {
 			this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
 		} else {
-			this._logger.debug('MELT COMPLETED', { changeAmounts: change.map((p) => p.amount) });
+			this._logger.debug('MELT COMPLETED', {
+				changeAmounts: change.map((p) => p.amount.toString()),
+			});
 		}
 
 		// Merge preview quote with response to protect against incomplete response.
