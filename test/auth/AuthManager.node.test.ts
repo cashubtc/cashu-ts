@@ -67,13 +67,16 @@ function decodeBAT(batHeader: string): { id: string; secret: string; C: string }
 const fakeSig = { amount: 1, id: 'k', C_: 'C_' };
 
 function stubOutputs(n: number, keysetId = '00authkeyset0001') {
-	return vi.spyOn(OutputData, 'createRandomData').mockImplementation((): any[] => {
-		return Array.from({ length: n }, (_, i) => ({
-			blindedMessage: `BM_${i}`,
+	let callCount = 0;
+	return vi.spyOn(OutputData, 'createRandomData').mockImplementation((count?: number): any[] => {
+		const len = count ?? n;
+		const batch = callCount++;
+		return Array.from({ length: len }, (_, i) => ({
+			blindedMessage: `BM_${batch}_${i}`,
 			toProof: () => ({
 				id: keysetId,
-				C: `C_${i}`,
-				secret: `SECRET_${i}`,
+				C: `C_${batch}_${i}`,
+				secret: `SECRET_${batch}_${i}`,
 				dleq: { e: 'e', s: 's' },
 				amount: 1,
 			}),
@@ -220,17 +223,21 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 		} as any;
 	}
 
-	test('ensure() mints up to desired target but not beyond bat_max_mint', async () => {
+	test('ensure() loops to fill pool up to desired target respecting bat_max_mint', async () => {
 		const am = new AuthManager(mintUrl, { request: reqSpy, desiredPoolSize: 5, maxPerMint: 99 });
 		am['info'] = fakeInfo({ batMax: 2 });
 		seedKeychain(am);
 
 		const outputsSpy = stubOutputs(2);
-		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
+		// 3 rounds: 2 + 2 + 1 = 5
+		reqSpy
+			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] })
+			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] })
+			.mockResolvedValueOnce({ signatures: [fakeSig] });
 		await am.ensure(5);
 
-		expect(outputsSpy).toHaveBeenCalled();
-		expect(am.poolSize).toBe(2);
+		expect(outputsSpy).toHaveBeenCalledTimes(3);
+		expect(am.poolSize).toBe(5);
 	});
 
 	test('ensure() normalizes bigint info and auth keyset fields during init', async () => {
@@ -262,7 +269,10 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 					},
 				],
 			})
-			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
+			// 3 rounds: 2 + 2 + 1 = 5
+			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] })
+			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] })
+			.mockResolvedValueOnce({ signatures: [fakeSig] });
 
 		await am.ensure(5);
 
@@ -281,8 +291,8 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 			],
 		);
 		expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
-		expect(outputsSpy).toHaveBeenCalledWith(2, expect.any(Object));
-		expect(am.poolSize).toBe(2);
+		expect(outputsSpy).toHaveBeenCalledTimes(3);
+		expect(am.poolSize).toBe(5);
 	});
 
 	test('ensure() rejects out-of-range auth keyset metadata during init', async () => {
@@ -310,7 +320,7 @@ describe('AuthManager: BAT pool minting/topUp/ensure', () => {
 	});
 
 	test('topUp/end-to-end: creates proofs, validates DLEQ, pushes to pool', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy });
+		const am = new AuthManager(mintUrl, { request: reqSpy, desiredPoolSize: 3 });
 		am['info'] = fakeInfo({ batMax: 3 });
 		seedKeychain(am);
 
@@ -451,7 +461,7 @@ describe('getBlindAuthToken coverage', () => {
 
 		const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap' });
 		const parsed = decodeBAT(bat);
-		expect(parsed).toEqual({ id: '00authkeyset0001', secret: 'SECRET_0', C: 'C_0' });
+		expect(parsed).toEqual({ id: '00authkeyset0001', secret: 'SECRET_0_0', C: 'C_0_0' });
 
 		// CDK's URL_SAFE engine (general_purpose::URL_SAFE) requires padding.
 		// Verify the base64url portion retains '=' padding so the mint can decode it.
@@ -594,7 +604,7 @@ test('withLock serialises concurrent BAT pops', async () => {
 });
 
 test('topUp sets Clear-auth header when mint endpoint requires CAT', async () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy });
+	const am = new AuthManager(mintUrl, { request: reqSpy, desiredPoolSize: 1 });
 	// Mint requires CAT on /v1/auth/blind/mint
 	am['info'] = (function () {
 		return {

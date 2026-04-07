@@ -1,14 +1,4 @@
-import type { AuthProvider } from './AuthProvider';
-import request, { type RequestFn } from '../transport';
-import {
-	joinUrls,
-	hasValidDleq,
-	Bytes,
-	encodeUint8toBase64UrlPadded,
-	normalizeMintKeys,
-	normalizeMintKeyset,
-	normalizeSafeIntegerMetadata,
-} from '../utils';
+import { type Logger, NULL_LOGGER } from '../logger';
 import { Amount } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
@@ -19,9 +9,19 @@ import type {
 	Proof,
 	SerializedBlindedSignature,
 } from '../model/types';
-import { type Logger, NULL_LOGGER } from '../logger';
-import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
+import request, { type RequestFn } from '../transport';
+import {
+	Bytes,
+	encodeUint8toBase64UrlPadded,
+	hasValidDleq,
+	joinUrls,
+	normalizeMintKeys,
+	normalizeMintKeyset,
+	normalizeSafeIntegerMetadata,
+} from '../utils';
 import { KeyChain, type Keyset } from '../wallet';
+import type { AuthProvider } from './AuthProvider';
+import { type OIDCAuth, type TokenResponse } from './OIDCAuth';
 
 export type AuthManagerOptions = {
 	/**
@@ -211,9 +211,12 @@ export class AuthManager implements AuthProvider {
 		if (this.pool.length >= minTokens) return;
 		const toTarget = Math.max(this.desiredPoolSize, minTokens);
 		const batMax = this.getBatMaxMint();
-		const batch = Math.min(toTarget - this.pool.length, batMax);
-		if (batch <= 0) return;
-		await this.topUp(batch);
+
+		while (this.pool.length < toTarget) {
+			const batch = Math.min(toTarget - this.pool.length, batMax);
+			if (batch <= 0) break;
+			await this.topUp(batch);
+		}
 	}
 
 	/**
