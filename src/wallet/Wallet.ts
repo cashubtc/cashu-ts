@@ -85,7 +85,7 @@ import {
 } from '../utils';
 import { getKeepAmounts } from './_internal';
 import { type AuthProvider } from '../auth/AuthProvider';
-import { type BatchMintRequest } from '../model/types/NUTXX';
+import { type BatchMintRequest } from '../model/types/NUT29';
 
 const PENDING_KEYSET_ID = '__PENDING__';
 

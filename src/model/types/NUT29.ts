@@ -2,7 +2,7 @@ import { type Amount } from '../Amount';
 import { type SerializedBlindedMessage } from './blinded';
 
 /**
- * Payload that needs to be sent to the mint when requesting a NUT-XX batched mint.
+ * Payload that needs to be sent to the mint when requesting a NUT-29 batched mint.
  */
 export type BatchMintRequest = {
 	/**

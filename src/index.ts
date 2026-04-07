@@ -61,7 +61,7 @@ export * from './model/types/NUT07';
 export type * from './model/types/NUT19';
 export type * from './model/types/NUT23';
 export type * from './model/types/NUT25';
-export type { BatchMintRequest } from './model/types/NUTXX';
+export type { BatchMintRequest } from './model/types/NUT29';
 export type * from './model/types/proof';
 export type { Token, TokenMetadata } from './model/types/token';
 

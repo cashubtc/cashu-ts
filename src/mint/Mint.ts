@@ -53,7 +53,7 @@ import {
 	type SerializedBlindedMessage,
 	type SerializedBlindedSignature,
 } from '../model/types';
-import { type BatchMintRequest } from '../model/types/NUTXX';
+import { type BatchMintRequest } from '../model/types/NUT29';
 
 /**
  * Class represents Cashu Mint API.
