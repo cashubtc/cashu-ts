@@ -21,6 +21,7 @@ import {
 	type SecretsPolicy,
 	type SwapPreview,
 	type MintPreview,
+	type BatchMintPreview,
 } from './types';
 import {
 	type CounterSource,
@@ -31,6 +32,7 @@ import {
 
 import {
 	signMintQuote,
+	findSigningKey,
 	signP2PKProofs as cryptoSignP2PKProofs,
 	hashToCurve,
 	isP2PKSigAll,
@@ -52,7 +54,7 @@ import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } f
 // shared primitives and options
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
-import type { SerializedBlindedMessage, SerializedBlindedSignature } from '../model/types/blinded';
+import type { SerializedBlindedSignature } from '../model/types/blinded';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import type { KeyChainCache } from '../model/types/keyset';
 import type {
@@ -1918,7 +1920,13 @@ class Wallet {
 		// Sign whenever a privkey is provided — quote.pubkey may be absent if only the
 		// quote ID was stored, but the caller still needs to produce a NUT-20 signature
 		if (privkey) {
-			mintPayload.signature = signMintQuote(privkey, quote.quote, blindedMessages);
+			const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
+			const signingKey = quotePubkey
+				? findSigningKey(quotePubkey, privkey)
+				: Array.isArray(privkey)
+					? privkey[0]
+					: privkey;
+			mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
 		}
 
 		return {
@@ -1964,74 +1972,139 @@ class Wallet {
 	}
 
 	/**
-	 * Complete a batch of prepared mint transactions in a single request.
+	 * Prepare a batched mint transaction (NUT-29).
 	 *
 	 * @remarks
-	 * Accepts an array of `MintPreview` objects (each produced by `prepareMint()`) and consolidates
-	 * them into one batch request. All previews must share the same `method` and `keysetId`.
-	 * @param previews Array of mint previews to complete as a batch.
-	 * @returns Minted proofs for all previews combined.
+	 * Creates a single consolidated set of outputs for all quotes and signs each locked quote over
+	 * the complete output array, as required by NUT-29. This enables output consolidation (e.g. two
+	 * quotes of 5 and 3 sats produce a single 8 sat output instead of separate sets).
+	 *
+	 * If a `privkey` is provided in `config`, it is used to sign every locked quote in the batch. The
+	 * method validates that the key can sign for each locked quote's pubkey.
+	 * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
+	 * @param entries Array of per-quote parameters: `{ amount, quote }`.
+	 * @param config Optional config applied to the entire batch (keysetId, privkey, counters, etc.).
+	 * @param outputType Optional output type override applied to the consolidated outputs.
+	 * @returns A `BatchMintPreview` ready to pass to `completeBatchMint`.
 	 */
-	async completeBatchMint(
-		previews: Array<MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>>,
-	): Promise<Proof[]> {
-		this.failIf(previews.length === 0, 'completeBatchMint: no previews provided');
+	async prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
+		method: string,
+		entries: Array<{
+			amount: AmountLike;
+			quote: TQuote;
+		}>,
+		config?: MintProofsConfig,
+		outputType?: OutputType,
+	): Promise<BatchMintPreview<TQuote>> {
+		this.failIf(entries.length === 0, 'prepareBatchMint: no entries provided');
 
-		const { method, keysetId } = previews[0];
-		for (const p of previews) {
+		const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
+
+		// Validate all quotes
+		for (const entry of entries) {
 			this.failIf(
-				p.method !== method,
-				`completeBatchMint: mixed methods (${method} vs ${p.method})`,
+				typeof entry.quote === 'string',
+				`prepareBatchMint: expected a quote object, not a string ID`,
 			);
-			this.failIf(
-				p.keysetId !== keysetId,
-				`completeBatchMint: mixed keysets (${keysetId} vs ${p.keysetId})`,
-			);
+			this.validateMintQuote(entry.quote);
 		}
 
-		// Consolidate previews into a single BatchMintRequest
-		const quotes: string[] = [];
-		const quoteAmounts: Amount[] = [];
-		const allOutputs: SerializedBlindedMessage[] = [];
-		const allOutputData: OutputDataLike[] = [];
+		// Check locked quotes: require a privkey and verify it can sign
+		const hasLockedQuotes = entries.some((e) => 'pubkey' in e.quote && e.quote.pubkey);
+		if (hasLockedQuotes) {
+			this.failIf(!privkey, 'Can not sign locked quotes without private key');
+		}
+
+		// Parse amounts and determine keyset
+		const keyset = this.getKeyset(keysetId);
+		const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
+		const totalAmount = Amount.sum(amounts);
+
+		// Shape consolidated outputs over the total amount
+		outputType = outputType ?? this.defaultOutputType();
+		let mintOT = this.configureOutputs(
+			totalAmount,
+			keyset,
+			outputType,
+			false, // no fees
+			proofsWeHave,
+		);
+
+		// Assign counters atomically if deterministic
+		const autoCounters = await this.addCountersToOutputTypes(keyset.id, mintOT);
+		[mintOT] = autoCounters.outputTypes;
+		if (autoCounters.used) {
+			this.safeCallback(onCountersReserved, autoCounters.used, { op: 'mintProofs' });
+		}
+
+		// Create consolidated output data
+		const outputs = this.createOutputData(totalAmount, keyset, mintOT);
+		const blindedMessages = outputs.map((d) => d.blindedMessage);
+
+		// Sign each locked quote over ALL blinded messages (NUT-29).
+		// Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
+		// Each locked quote's pubkey is matched against the provided privkey(s).
 		const signatures: Array<string | null> = [];
 		let hasSignatures = false;
-
-		for (const preview of previews) {
-			quotes.push(preview.payload.quote);
-			quoteAmounts.push(Amount.sum(preview.payload.outputs.map((o) => o.amount)));
-			allOutputs.push(...preview.payload.outputs);
-			allOutputData.push(...preview.outputData);
-			const sig = preview.payload.signature ?? null;
-			signatures.push(sig);
-			if (sig) hasSignatures = true;
+		for (const entry of entries) {
+			const quotePubkey =
+				'pubkey' in entry.quote ? (entry.quote.pubkey as string | undefined) : undefined;
+			if (quotePubkey && privkey) {
+				const signingKey = findSigningKey(quotePubkey, privkey);
+				signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
+				hasSignatures = true;
+			} else {
+				signatures.push(null);
+			}
 		}
 
 		const batchPayload: BatchMintRequest = {
-			quotes,
-			quote_amounts: quoteAmounts,
-			outputs: allOutputs,
+			quotes: entries.map((e) => e.quote.quote),
+			quote_amounts: amounts,
+			outputs: blindedMessages,
 			...(hasSignatures ? { signatures } : {}),
 		};
 
-		const { signatures: sigs } = await this.mint.mintBatch(method, batchPayload);
+		return {
+			method,
+			payload: batchPayload,
+			outputData: outputs,
+			keysetId: keyset.id,
+			quotes: entries.map((e) => e.quote),
+		};
+	}
+
+	/**
+	 * Complete a prepared batch mint transaction.
+	 *
+	 * @remarks
+	 * Use with a `BatchMintPreview` returned by `prepareBatchMint()`.
+	 * @param batchPreview Preview returned by prepareBatchMint.
+	 * @returns Minted proofs.
+	 */
+	async completeBatchMint(
+		batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
+	): Promise<Proof[]> {
+		const { method, payload, outputData, keysetId } = batchPreview;
+
+		const { signatures: sigs } = await this.mint.mintBatch(method, payload);
 		this.failIf(
-			sigs.length !== allOutputData.length,
-			`Mint returned ${sigs.length} signatures, expected ${allOutputData.length}`,
+			sigs.length !== outputData.length,
+			`Mint returned ${sigs.length} signatures, expected ${outputData.length}`,
 		);
 
 		const keyset = this.getKeyset(keysetId);
 		this._logger.debug('BATCH MINT COMPLETED', {
-			quotes: quotes.length,
-			amounts: allOutputData.map((o) => o.blindedMessage.amount.toString()),
+			quotes: payload.quotes.length,
+			amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
 		});
 		for (let i = 0; i < sigs.length; i++) {
 			this.failIf(
-				!sigs[i].amount.equals(allOutputData[i].blindedMessage.amount),
-				`Mint returned signature with wrong amount: expected ${allOutputData[i].blindedMessage.amount.toString()}, got ${sigs[i].amount.toString()}`,
+				!sigs[i].amount.equals(outputData[i].blindedMessage.amount),
+				`Mint returned signature with wrong amount: expected ${outputData[i].blindedMessage.amount.toString()}, got ${sigs[i].amount.toString()}`,
 			);
 		}
-		return allOutputData.map((d, i) => d.toProof(sigs[i], keyset));
+		return outputData.map((d, i) => d.toProof(sigs[i], keyset));
 	}
 
 	// -----------------------------------------------------------------

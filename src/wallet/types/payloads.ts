@@ -6,6 +6,7 @@ import {
 	type MintQuoteBaseResponse,
 	type SwapRequest,
 	type MintRequest,
+	type BatchMintRequest,
 } from '../../model/types';
 
 /**
@@ -31,6 +32,31 @@ export interface MintPreview<
 	 * Mint Quote object.
 	 */
 	quote: TQuote;
+}
+
+/**
+ * Preview of a batched mint transaction created by prepareBatchMint.
+ */
+export interface BatchMintPreview<
+	TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
+> {
+	method: string;
+	/**
+	 * Batch mint payload to be sent to the mint.
+	 */
+	payload: BatchMintRequest;
+	/**
+	 * Blinding data required to construct proofs (consolidated across all quotes).
+	 */
+	outputData: OutputDataLike[];
+	/**
+	 * Keyset ID used to prepare the outputs.
+	 */
+	keysetId: string;
+	/**
+	 * Mint Quote objects included in this batch.
+	 */
+	quotes: TQuote[];
 }
 
 /**

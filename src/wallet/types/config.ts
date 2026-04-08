@@ -140,7 +140,7 @@ export type ReceiveConfig = {
  */
 export type MintProofsConfig = {
 	keysetId?: string;
-	privkey?: string;
+	privkey?: string | string[];
 	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
 	onCountersReserved?: OnCountersReserved;
 };

@@ -226,6 +226,23 @@ export const schnorrVerifyMessage = (
 };
 
 /**
+ * Find the private key that can sign for a given compressed public key.
+ *
+ * @param pubkey Compressed SEC1 public key (33 bytes, hex-encoded) to match against.
+ * @param privkeys One or more candidate private keys (hex-encoded).
+ * @returns The matching private key hex string.
+ * @throws If no candidate key derives to the expected pubkey.
+ */
+export function findSigningKey(pubkey: string, privkeys: string | string[]): string {
+	const keys = Array.isArray(privkeys) ? privkeys : [privkeys];
+	for (const key of keys) {
+		const derived = bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
+		if (derived === pubkey) return key;
+	}
+	throw new Error(`No private key matches quote pubkey ${pubkey}`);
+}
+
+/**
  * Returns the set of unique public keys that have produced a valid Schnorr signature for a given
  * message.
  *

@@ -117,6 +117,16 @@ export interface AuthProvider {
 }
 
 // @public
+export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
+    keysetId: string;
+    // (undocumented)
+    method: string;
+    outputData: OutputDataLike[];
+    payload: BatchMintRequest;
+    quotes: TQuote[];
+}
+
+// @public
 export type BatchMintRequest = {
     quotes: string[];
     quote_amounts: Amount[];
@@ -309,6 +319,9 @@ export type DLEQ = {
 
 // @public (undocumented)
 export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N ? Acc[number] : Enumerate<N, [...Acc, Acc['length']]>;
+
+// @public
+export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
 
 // @public
 export function getDataField(secret: Secret | string): string;
@@ -983,7 +996,7 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
 // @public
 export type MintProofsConfig = {
     keysetId?: string;
-    privkey?: string;
+    privkey?: string | string[];
     proofsWeHave?: Array<Pick<Proof, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
@@ -1846,7 +1859,7 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
-    completeBatchMint(previews: Array<MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>>): Promise<Proof[]>;
+    completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
@@ -1894,6 +1907,10 @@ export class Wallet {
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
+    prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, entries: Array<{
+        amount: AmountLike;
+        quote: TQuote;
+    }>, config?: MintProofsConfig, outputType?: OutputType): Promise<BatchMintPreview<TQuote>>;
     prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: Proof[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string | Proof[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;

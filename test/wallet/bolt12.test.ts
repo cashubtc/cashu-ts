@@ -532,7 +532,11 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		await expect(
 			wallet.mintProofsBolt12(
 				21,
-				{ quote: 'q1', request: 'lno1offer...', pubkey: '1234' } as any,
+				{
+					quote: 'q1',
+					request: 'lno1offer...',
+					pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+				} as any,
 				'',
 			),
 		).rejects.toThrow('Can not sign locked quote without private key');
@@ -540,7 +544,11 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
 		const proofs = await wallet.mintProofsBolt12(
 			21,
-			{ quote: 'q1', request: 'lno1offer...', pubkey: '1234' } as any,
+			{
+				quote: 'q1',
+				request: 'lno1offer...',
+				pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+			} as any,
 			privkey,
 		);
 		expect(proofs).toHaveLength(3);
@@ -585,7 +593,11 @@ describe('Wallet (BOLT12) – wrappers', () => {
 		const preview = await wallet.prepareMint(
 			'bolt12',
 			21,
-			{ quote: 'q1', request: 'lno1offer...', pubkey: '1234' } as any,
+			{
+				quote: 'q1',
+				request: 'lno1offer...',
+				pubkey: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+			} as any,
 			{ privkey },
 		);
 
