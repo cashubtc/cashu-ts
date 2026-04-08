@@ -1975,19 +1975,23 @@ class Wallet {
 	 * Prepare a batched mint transaction (NUT-29).
 	 *
 	 * @remarks
-	 * Creates a single consolidated set of outputs for all quotes and signs each locked quote over
-	 * the complete output array, as required by NUT-29. This enables output consolidation (e.g. two
-	 * quotes of 5 and 3 sats produce a single 8 sat output instead of separate sets).
+	 * Creates a single consolidated set of outputs for all quotes.
 	 *
-	 * If a `privkey` is provided in `config`, it is used to sign every locked quote in the batch. The
-	 * method validates that the key can sign for each locked quote's pubkey.
+	 * NOTE:
+	 *
+	 * - Any quote without a pubkey is considered unlocked. Pass `pubkey` for locked quotes.
+	 * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch with fail.
+	 * - `BatchMintPreview` contains `bigint` values. Use `JSONInt.stringify` to serialize (not
+	 *   `JSON.stringify`).
+	 *
 	 * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
 	 * @param entries Array of per-quote parameters: `{ amount, quote }`.
 	 * @param config Optional config applied to the entire batch (keysetId, privkey, counters, etc.).
 	 * @param outputType Optional output type override applied to the consolidated outputs.
 	 * @returns A `BatchMintPreview` ready to pass to `completeBatchMint`.
+	 * @experimental only supported by CDK mint >= 0.16.0
 	 */
-	async prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(
+	async prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'>>(
 		method: string,
 		entries: Array<{
 			amount: AmountLike;
@@ -2017,7 +2021,9 @@ class Wallet {
 
 		// Parse amounts and determine keyset
 		const keyset = this.getKeyset(keysetId);
-		const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
+		const amounts = entries.map((e) =>
+			this.parseAmount(e.amount, `prepareBatchMint: ${method}`).toBigInt(),
+		);
 		const totalAmount = Amount.sum(amounts);
 
 		// Shape consolidated outputs over the total amount
@@ -2047,13 +2053,17 @@ class Wallet {
 		const signatures: Array<string | null> = [];
 		let hasSignatures = false;
 		for (const entry of entries) {
-			const quotePubkey =
-				'pubkey' in entry.quote ? (entry.quote.pubkey as string | undefined) : undefined;
+			const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
 			if (quotePubkey && privkey) {
 				const signingKey = findSigningKey(quotePubkey, privkey);
 				signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
 				hasSignatures = true;
 			} else {
+				if (privkey && !quotePubkey) {
+					this._logger.warn(
+						`prepareBatchMint: privkey supplied but quote '${entry.quote.quote}' has no pubkey — treating as unlocked`,
+					);
+				}
 				signatures.push(null);
 			}
 		}
@@ -2081,6 +2091,7 @@ class Wallet {
 	 * Use with a `BatchMintPreview` returned by `prepareBatchMint()`.
 	 * @param batchPreview Preview returned by prepareBatchMint.
 	 * @returns Minted proofs.
+	 * @experimental only supported by CDK mint >= 0.16.0
 	 */
 	async completeBatchMint(
 		batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,

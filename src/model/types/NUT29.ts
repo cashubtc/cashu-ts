@@ -1,4 +1,3 @@
-import { type Amount } from '../Amount';
 import { type SerializedBlindedMessage } from './blinded';
 
 /**
@@ -12,7 +11,7 @@ export type BatchMintRequest = {
 	/**
 	 * Array of amounts that shall be minted per quote id.
 	 */
-	quote_amounts: Amount[];
+	quote_amounts: bigint[];
 	/**
 	 * Outputs (blinded messages) to be signed by the mint.
 	 */

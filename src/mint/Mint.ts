@@ -462,10 +462,14 @@ class Mint {
 		},
 	): Promise<MintResponse & TRes> {
 		failIf(!this.isValidMethodString(method), `Invalid mint method: ${method}`, this._logger);
+		const body = {
+			...mintPayload,
+			quote_amounts: mintPayload.quote_amounts.map((a) => Amount.from(a).toBigInt()),
+		};
 		const data = await this.requestWithAuth<MintResponse & TRes>(
 			'POST',
 			`/v1/mint/${method}/batch`,
-			{ requestBody: mintPayload },
+			{ requestBody: body },
 			options?.customRequest,
 		);
 

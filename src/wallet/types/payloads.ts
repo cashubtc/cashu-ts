@@ -36,9 +36,12 @@ export interface MintPreview<
 
 /**
  * Preview of a batched mint transaction created by prepareBatchMint.
+ *
+ * Contains `bigint` values (in `payload.quote_amounts` and `outputData`). Use `JSONInt.stringify`
+ * instead of `JSON.stringify` to serialize.
  */
 export interface BatchMintPreview<
-	TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
+	TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
 > {
 	method: string;
 	/**

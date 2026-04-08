@@ -117,7 +117,7 @@ export interface AuthProvider {
 }
 
 // @public
-export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
+export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
     keysetId: string;
     // (undocumented)
     method: string;
@@ -129,7 +129,7 @@ export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'qu
 // @public
 export type BatchMintRequest = {
     quotes: string[];
-    quote_amounts: Amount[];
+    quote_amounts: bigint[];
     outputs: SerializedBlindedMessage[];
     signatures?: Array<string | null>;
 };
@@ -1907,7 +1907,7 @@ export class Wallet {
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
     readonly ops: WalletOps;
-    prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, entries: Array<{
+    prepareBatchMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'>>(method: string, entries: Array<{
         amount: AmountLike;
         quote: TQuote;
     }>, config?: MintProofsConfig, outputType?: OutputType): Promise<BatchMintPreview<TQuote>>;
