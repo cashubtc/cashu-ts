@@ -1921,6 +1921,10 @@ class Wallet {
 		// quote ID was stored, but the caller still needs to produce a NUT-20 signature
 		if (privkey) {
 			const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
+			this.failIf(
+				!quotePubkey && Array.isArray(privkey),
+				`prepareMint: multiple privkeys supplied for quote '${quote.quote}' without pubkey`,
+			);
 			const signingKey = quotePubkey
 				? findSigningKey(quotePubkey, privkey)
 				: Array.isArray(privkey)

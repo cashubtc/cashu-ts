@@ -341,6 +341,28 @@ describe('requestTokens', () => {
 		expect(typeof preview.payload.signature).toBe('string');
 	});
 
+	test('prepareMint fails when multiple privkeys and no quote pubkey', async () => {
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const quote: MintQuoteBolt11Response = {
+			quote: 'locked-mismatch',
+			request: 'lnbc...',
+			amount: Amount.from(1),
+			unit: 'sat',
+			state: MintQuoteState.UNPAID,
+			expiry: null,
+		};
+
+		const pk1 = '0000000000000000000000000000000000000000000000000000000000000001';
+		const pk2 = '0000000000000000000000000000000000000000000000000000000000000002';
+		await expect(
+			wallet.prepareMint('bolt11', 1, quote, {
+				privkey: [pk1, pk2],
+			}),
+		).rejects.toThrow('multiple privkeys supplied for quote');
+	});
+
 	test('prepareBatchMint fails when no privkey matches locked quote pubkey', async () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
