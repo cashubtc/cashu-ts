@@ -11,6 +11,9 @@ import {
 
 /**
  * Preview of a mint transaction created by prepareMint.
+ *
+ * @remarks
+ * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export interface MintPreview<
 	TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
@@ -37,8 +40,8 @@ export interface MintPreview<
 /**
  * Preview of a batched mint transaction created by prepareBatchMint.
  *
- * Contains `bigint` values (in `payload.quote_amounts` and `outputData`). Use `JSONInt.stringify`
- * instead of `JSON.stringify` to serialize.
+ * @remarks
+ * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export interface BatchMintPreview<
 	TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
@@ -64,6 +67,9 @@ export interface BatchMintPreview<
 
 /**
  * Preview of a Melt transaction created by prepareMelt.
+ *
+ * @remarks
+ * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export interface MeltPreview<
 	TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
@@ -89,6 +95,9 @@ export interface MeltPreview<
 
 /**
  * Includes all data required to swap inputs for outputs and construct proofs from them.
+ *
+ * @remarks
+ * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export type SwapTransaction = {
 	/**
@@ -111,6 +120,9 @@ export type SwapTransaction = {
 
 /**
  * Preview of a swap transaction created by prepareSend / prepareReceive.
+ *
+ * @remarks
+ * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export type SwapPreview = {
 	/**
