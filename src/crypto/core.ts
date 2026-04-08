@@ -237,7 +237,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
 	const keys = Array.isArray(privkeys) ? privkeys : [privkeys];
 	for (const key of keys) {
 		const derived = bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
-		if (derived === pubkey) return key;
+		if (derived.toLowerCase() === pubkey.toLowerCase()) return key;
 	}
 	throw new Error(`No private key matches quote pubkey ${pubkey}`);
 }

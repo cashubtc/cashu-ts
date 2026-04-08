@@ -1926,6 +1926,7 @@ class Wallet {
 				: Array.isArray(privkey)
 					? privkey[0]
 					: privkey;
+			this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
 			mintPayload.signature = signMintQuote(signingKey, quote.quote, blindedMessages);
 		}
 
