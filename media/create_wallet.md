@@ -21,7 +21,7 @@ const keychainCache = wallet1.keyChain.cache; // KeyChainCache
 const mintInfoCache = wallet1.getMintInfo().cache; // GetInfoResponse
 
 // Advanced: With cached mint data (avoids network calls on startup)
-const wallet2 = new Wallet(keychainCache.mintUrl); // unit defaults to 'sat'
+const wallet2 = new Wallet(keychainCache.mintUrl, { unit: keychainCache.unit });
 wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 // wallet2 is now ready to use
 ```
