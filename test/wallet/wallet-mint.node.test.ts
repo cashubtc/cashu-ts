@@ -288,6 +288,44 @@ describe('requestTokens', () => {
 		expect(capturedBody).not.toHaveProperty('signatures');
 	});
 
+	test('prepareBatchMint treats quotes without pubkey as unlocked even when privkey is supplied', async () => {
+		let capturedBody: Record<string, unknown> | undefined;
+		server.use(
+			http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+				capturedBody = (await request.json()) as Record<string, unknown>;
+				const body = capturedBody as { outputs: Array<{ amount: unknown }> };
+				return HttpResponse.json({
+					signatures: body.outputs.map((o) => ({
+						id: '00bd033559de27d0',
+						amount: o.amount,
+						C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+					})),
+				});
+			}),
+		);
+		const wallet = new Wallet(mint, { unit });
+		await wallet.loadMint();
+
+		const quoteA = { quote: 'stored-a' };
+		const quoteB = { quote: 'stored-b' };
+
+		const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
+		const batchPreview = await wallet.prepareBatchMint(
+			'bolt11',
+			[
+				{ amount: 2, quote: quoteA },
+				{ amount: 3, quote: quoteB },
+			],
+			{ privkey },
+		);
+
+		expect(batchPreview.payload.signatures).toBeUndefined();
+
+		const proofs = await wallet.completeBatchMint(batchPreview);
+		expect(proofs.reduce((sum, p) => sum + p.amount, 0n)).toBe(5n);
+		expect(capturedBody).not.toHaveProperty('signatures');
+	});
+
 	test('prepareBatchMint fails when locked quotes have no privkey', async () => {
 		const wallet = new Wallet(mint, { unit });
 		await wallet.loadMint();
