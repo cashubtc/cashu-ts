@@ -1,128 +1,128 @@
-import { assertValidTagKey, OutputData } from '../model/OutputData';
 import { dedupeP2PKPubkeys, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
+import { assertValidTagKey, OutputData } from '../model/OutputData';
 
 function toUnixSeconds(input: Date | number): number {
-	if (input instanceof Date) return Math.floor(input.getTime() / 1000);
-	return input < 1e12 ? Math.floor(input) : Math.floor(input / 1000); // > 1e12 = ms
+  if (input instanceof Date) return Math.floor(input.getTime() / 1000);
+  return input < 1e12 ? Math.floor(input) : Math.floor(input / 1000); // > 1e12 = ms
 }
 
 export class P2PKBuilder {
-	// Keys are deduplicated by x-only identity and first-seen order preserved.
-	private lockKeys: string[] = [];
-	private refundKeys: string[] = [];
-	private locktime?: number;
-	private nSigs?: number;
-	private nSigsRefund?: number;
-	private extraTags: P2PKTag[] = [];
-	private _blindKeys?: boolean;
-	private sigFlag?: SigFlag;
-	private hashlock?: string;
+  // Keys are deduplicated by x-only identity and first-seen order preserved.
+  private lockKeys: string[] = [];
+  private refundKeys: string[] = [];
+  private locktime?: number;
+  private nSigs?: number;
+  private nSigsRefund?: number;
+  private extraTags: P2PKTag[] = [];
+  private _blindKeys?: boolean;
+  private sigFlag?: SigFlag;
+  private hashlock?: string;
 
-	addLockPubkey(pk: string | string[]) {
-		const arr = Array.isArray(pk) ? pk : [pk];
-		this.lockKeys = dedupeP2PKPubkeys([...this.lockKeys, ...arr]);
-		return this;
-	}
+  addLockPubkey(pk: string | string[]) {
+    const arr = Array.isArray(pk) ? pk : [pk];
+    this.lockKeys = dedupeP2PKPubkeys([...this.lockKeys, ...arr]);
+    return this;
+  }
 
-	addRefundPubkey(pk: string | string[]) {
-		const arr = Array.isArray(pk) ? pk : [pk];
-		this.refundKeys = dedupeP2PKPubkeys([...this.refundKeys, ...arr]);
-		return this;
-	}
+  addRefundPubkey(pk: string | string[]) {
+    const arr = Array.isArray(pk) ? pk : [pk];
+    this.refundKeys = dedupeP2PKPubkeys([...this.refundKeys, ...arr]);
+    return this;
+  }
 
-	lockUntil(when: Date | number) {
-		this.locktime = toUnixSeconds(when);
-		return this;
-	}
+  lockUntil(when: Date | number) {
+    this.locktime = toUnixSeconds(when);
+    return this;
+  }
 
-	requireLockSignatures(n: number) {
-		if (!Number.isInteger(n) || n < 1)
-			throw new Error(`requiredSignatures (n_sigs) must be a positive integer, got ${n}`);
-		this.nSigs = n;
-		return this;
-	}
+  requireLockSignatures(n: number) {
+    if (!Number.isInteger(n) || n < 1)
+      throw new Error(`requiredSignatures (n_sigs) must be a positive integer, got ${n}`);
+    this.nSigs = n;
+    return this;
+  }
 
-	requireRefundSignatures(n: number) {
-		if (!Number.isInteger(n) || n < 1)
-			throw new Error(
-				`requiredRefundSignatures (n_sigs_refund) must be a positive integer, got ${n}`,
-			);
-		this.nSigsRefund = n;
-		return this;
-	}
+  requireRefundSignatures(n: number) {
+    if (!Number.isInteger(n) || n < 1)
+      throw new Error(
+        `requiredRefundSignatures (n_sigs_refund) must be a positive integer, got ${n}`,
+      );
+    this.nSigsRefund = n;
+    return this;
+  }
 
-	addTag(key: string, values?: string[] | string) {
-		assertValidTagKey(key); //  Validate key
-		const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
-		this.extraTags.push([key, ...vals.map(String)]); // all to strings
-		return this;
-	}
+  addTag(key: string, values?: string[] | string) {
+    assertValidTagKey(key); //  Validate key
+    const vals = values === undefined ? [] : Array.isArray(values) ? values : [values];
+    this.extraTags.push([key, ...vals.map(String)]); // all to strings
+    return this;
+  }
 
-	addTags(tags: P2PKTag[]) {
-		for (const [k, ...vals] of tags) this.addTag(k, vals);
-		return this;
-	}
+  addTags(tags: P2PKTag[]) {
+    for (const [k, ...vals] of tags) this.addTag(k, vals);
+    return this;
+  }
 
-	blindKeys() {
-		this._blindKeys = true;
-		return this;
-	}
+  blindKeys() {
+    this._blindKeys = true;
+    return this;
+  }
 
-	sigAll() {
-		this.sigFlag = 'SIG_ALL';
-		return this;
-	}
+  sigAll() {
+    this.sigFlag = 'SIG_ALL';
+    return this;
+  }
 
-	/**
-	 * Converts a `P2PK` output into a NUT-14 `HTLC` kind output.
-	 */
-	addHashlock(hashlock: string) {
-		this.hashlock = hashlock;
-		return this;
-	}
+  /**
+   * Converts a `P2PK` output into a NUT-14 `HTLC` kind output.
+   */
+  addHashlock(hashlock: string) {
+    this.hashlock = hashlock;
+    return this;
+  }
 
-	toOptions(): P2PKOptions {
-		const locks = this.lockKeys;
-		const refunds = this.refundKeys;
+  toOptions(): P2PKOptions {
+    const locks = this.lockKeys;
+    const refunds = this.refundKeys;
 
-		if (locks.length === 0) throw new Error('At least one lock pubkey is required');
+    if (locks.length === 0) throw new Error('At least one lock pubkey is required');
 
-		const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
+    const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
 
-		const p2pk: P2PKOptions = {
-			pubkey,
-			...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
-			...(refunds.length ? { refundKeys: refunds } : {}),
-			...(this.nSigs && this.nSigs > 1 ? { requiredSignatures: this.nSigs } : {}),
-			...(this.nSigsRefund && this.nSigsRefund > 1
-				? { requiredRefundSignatures: this.nSigsRefund }
-				: {}),
-			...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
-			...(this._blindKeys ? { blindKeys: true } : {}),
-			...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
-			...(this.hashlock ? { hashlock: this.hashlock } : {}),
-		};
+    const p2pk: P2PKOptions = {
+      pubkey,
+      ...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
+      ...(refunds.length ? { refundKeys: refunds } : {}),
+      ...(this.nSigs && this.nSigs > 1 ? { requiredSignatures: this.nSigs } : {}),
+      ...(this.nSigsRefund && this.nSigsRefund > 1
+        ? { requiredRefundSignatures: this.nSigsRefund }
+        : {}),
+      ...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
+      ...(this._blindKeys ? { blindKeys: true } : {}),
+      ...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
+      ...(this.hashlock ? { hashlock: this.hashlock } : {}),
+    };
 
-		// Ensure the secret is valid (not too long etc); also validates options
-		const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
-		void smokeTest; // intentionally unused
+    // Ensure the secret is valid (not too long etc); also validates options
+    const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
+    void smokeTest; // intentionally unused
 
-		return p2pk;
-	}
+    return p2pk;
+  }
 
-	static fromOptions(opts: P2PKOptions): P2PKBuilder {
-		const b = new P2PKBuilder();
-		const locks = Array.isArray(opts.pubkey) ? opts.pubkey : [opts.pubkey];
-		b.addLockPubkey(locks);
-		if (opts.locktime !== undefined) b.lockUntil(opts.locktime);
-		if (opts.refundKeys?.length) b.addRefundPubkey(opts.refundKeys);
-		if (opts.requiredSignatures !== undefined) b.requireLockSignatures(opts.requiredSignatures);
-		if (opts.requiredRefundSignatures !== undefined)
-			b.requireRefundSignatures(opts.requiredRefundSignatures);
-		if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
-		if (opts.blindKeys) b.blindKeys();
-		if (opts.sigFlag == 'SIG_ALL') b.sigAll();
-		if (opts.hashlock) b.addHashlock(opts.hashlock);
-		return b;
-	}
+  static fromOptions(opts: P2PKOptions): P2PKBuilder {
+    const b = new P2PKBuilder();
+    const locks = Array.isArray(opts.pubkey) ? opts.pubkey : [opts.pubkey];
+    b.addLockPubkey(locks);
+    if (opts.locktime !== undefined) b.lockUntil(opts.locktime);
+    if (opts.refundKeys?.length) b.addRefundPubkey(opts.refundKeys);
+    if (opts.requiredSignatures !== undefined) b.requireLockSignatures(opts.requiredSignatures);
+    if (opts.requiredRefundSignatures !== undefined)
+      b.requireRefundSignatures(opts.requiredRefundSignatures);
+    if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
+    if (opts.blindKeys) b.blindKeys();
+    if (opts.sigFlag == 'SIG_ALL') b.sigAll();
+    if (opts.hashlock) b.addHashlock(opts.hashlock);
+    return b;
+  }
 }

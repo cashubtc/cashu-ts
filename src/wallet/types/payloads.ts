@@ -1,13 +1,13 @@
-import { type OutputDataLike } from '../../model/OutputData';
-import { type Proof } from '../../model/types/proof';
 import { type AmountLike } from '../../model/Amount';
+import { type OutputDataLike } from '../../model/OutputData';
 import {
-	type MeltQuoteBaseResponse,
-	type MintQuoteBaseResponse,
-	type SwapRequest,
-	type MintRequest,
-	type BatchMintRequest,
+  type MeltQuoteBaseResponse,
+  type MintQuoteBaseResponse,
+  type SwapRequest,
+  type MintRequest,
+  type BatchMintRequest,
 } from '../../model/types';
+import { type Proof } from '../../model/types/proof';
 
 /**
  * Preview of a mint transaction created by prepareMint.
@@ -16,25 +16,25 @@ import {
  * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export interface MintPreview<
-	TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
+  TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
 > {
-	method: string;
-	/**
-	 * Mint payload to be sent to the mint.
-	 */
-	payload: MintRequest;
-	/**
-	 * Blinding data required to construct proofs.
-	 */
-	outputData: OutputDataLike[];
-	/**
-	 * Keyset ID used to prepare the outputs.
-	 */
-	keysetId: string;
-	/**
-	 * Mint Quote object.
-	 */
-	quote: TQuote;
+  method: string;
+  /**
+   * Mint payload to be sent to the mint.
+   */
+  payload: MintRequest;
+  /**
+   * Blinding data required to construct proofs.
+   */
+  outputData: OutputDataLike[];
+  /**
+   * Keyset ID used to prepare the outputs.
+   */
+  keysetId: string;
+  /**
+   * Mint Quote object.
+   */
+  quote: TQuote;
 }
 
 /**
@@ -44,25 +44,25 @@ export interface MintPreview<
  * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export interface BatchMintPreview<
-	TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
+  TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
 > {
-	method: string;
-	/**
-	 * Batch mint payload to be sent to the mint.
-	 */
-	payload: BatchMintRequest;
-	/**
-	 * Blinding data required to construct proofs (consolidated across all quotes).
-	 */
-	outputData: OutputDataLike[];
-	/**
-	 * Keyset ID used to prepare the outputs.
-	 */
-	keysetId: string;
-	/**
-	 * Mint Quote objects included in this batch.
-	 */
-	quotes: TQuote[];
+  method: string;
+  /**
+   * Batch mint payload to be sent to the mint.
+   */
+  payload: BatchMintRequest;
+  /**
+   * Blinding data required to construct proofs (consolidated across all quotes).
+   */
+  outputData: OutputDataLike[];
+  /**
+   * Keyset ID used to prepare the outputs.
+   */
+  keysetId: string;
+  /**
+   * Mint Quote objects included in this batch.
+   */
+  quotes: TQuote[];
 }
 
 /**
@@ -72,25 +72,25 @@ export interface BatchMintPreview<
  * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export interface MeltPreview<
-	TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
+  TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
 > {
-	method: string;
-	/**
-	 * Inputs (Proofs) to be melted.
-	 */
-	inputs: Proof[];
-	/**
-	 * Outputs (blinded messages) that can be filled by the mint to return overpaid fees.
-	 */
-	outputData: OutputDataLike[];
-	/**
-	 * Keyset ID used to prepare the outputs.
-	 */
-	keysetId: string;
-	/**
-	 * Melt Quote object.
-	 */
-	quote: TQuote;
+  method: string;
+  /**
+   * Inputs (Proofs) to be melted.
+   */
+  inputs: Proof[];
+  /**
+   * Outputs (blinded messages) that can be filled by the mint to return overpaid fees.
+   */
+  outputData: OutputDataLike[];
+  /**
+   * Keyset ID used to prepare the outputs.
+   */
+  keysetId: string;
+  /**
+   * Melt Quote object.
+   */
+  quote: TQuote;
 }
 
 /**
@@ -100,22 +100,22 @@ export interface MeltPreview<
  * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export type SwapTransaction = {
-	/**
-	 * Payload that will be sent to the mint for a swap.
-	 */
-	payload: SwapRequest;
-	/**
-	 * Blinding data required to construct proofs.
-	 */
-	outputData: OutputDataLike[];
-	/**
-	 * List of booleans to determine which proofs to keep.
-	 */
-	keepVector: boolean[];
-	/**
-	 * Indices that can be used to restore original output data.
-	 */
-	sortedIndices: number[];
+  /**
+   * Payload that will be sent to the mint for a swap.
+   */
+  payload: SwapRequest;
+  /**
+   * Blinding data required to construct proofs.
+   */
+  outputData: OutputDataLike[];
+  /**
+   * List of booleans to determine which proofs to keep.
+   */
+  keepVector: boolean[];
+  /**
+   * Indices that can be used to restore original output data.
+   */
+  sortedIndices: number[];
 };
 
 /**
@@ -125,32 +125,32 @@ export type SwapTransaction = {
  * Contains `bigint` values. Use `JSONInt.stringify`
  */
 export type SwapPreview = {
-	/**
-	 * Amount being sent or received (excluding fees).
-	 */
-	amount: AmountLike;
-	/**
-	 * Total fees for the swap (inc receiver's fees if applicable)
-	 */
-	fees: AmountLike;
-	/**
-	 * Keyset ID used to prepare the outputs.
-	 */
-	keysetId: string;
-	/**
-	 * Input Proofs for this transaction.
-	 */
-	inputs: Proof[];
-	/**
-	 * Blinding data to construct proofs to send.
-	 */
-	sendOutputs?: OutputDataLike[];
-	/**
-	 * Blinding data to construct proofs to keep.
-	 */
-	keepOutputs?: OutputDataLike[];
-	/**
-	 * Proofs not selected for this transaction (can be returned to storage).
-	 */
-	unselectedProofs?: Proof[];
+  /**
+   * Amount being sent or received (excluding fees).
+   */
+  amount: AmountLike;
+  /**
+   * Total fees for the swap (inc receiver's fees if applicable)
+   */
+  fees: AmountLike;
+  /**
+   * Keyset ID used to prepare the outputs.
+   */
+  keysetId: string;
+  /**
+   * Input Proofs for this transaction.
+   */
+  inputs: Proof[];
+  /**
+   * Blinding data to construct proofs to send.
+   */
+  sendOutputs?: OutputDataLike[];
+  /**
+   * Blinding data to construct proofs to keep.
+   */
+  keepOutputs?: OutputDataLike[];
+  /**
+   * Proofs not selected for this transaction (can be returned to storage).
+   */
+  unselectedProofs?: Proof[];
 };

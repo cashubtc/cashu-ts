@@ -38,11 +38,11 @@ Now returns the following:
 
 ```typescript
 type MintQuoteResponse = {
-	request: string;
-	quote: string;
-	paid: boolean;
-	expiry: number;
-	state: MintQuoteState;
+  request: string;
+  quote: string;
+  paid: boolean;
+  expiry: number;
+  state: MintQuoteState;
 };
 ```
 
@@ -56,14 +56,14 @@ where `request` is the invoice to be paid, and `quote` is the identifier used to
 
 ```typescript
 type MeltQuoteResponse = {
-	quote: string;
-	amount: number;
-	fee_reserve: number;
-	paid: boolean;
-	expiry: number;
-	payment_preimage: string;
-	state: MeltQuoteState;
-	change?: Array<SerializedBlindedSignature>;
+  quote: string;
+  amount: number;
+  fee_reserve: number;
+  paid: boolean;
+  expiry: number;
+  payment_preimage: string;
+  state: MeltQuoteState;
+  change?: Array<SerializedBlindedSignature>;
 };
 ```
 
@@ -84,9 +84,9 @@ where `Proofs` are the newly created `Proofs` from the received token. Will now 
 
 ```typescript
 type MintKeys = {
-	id: string;
-	unit: string;
-	keys: Keys;
+  id: string;
+  unit: string;
+  keys: Keys;
 };
 
 type Keys = { [amount: number]: string };
@@ -99,9 +99,9 @@ Used to be a string array, but now contains the additional fields `active` and `
 
 ```typescript
 type MintKeyset = {
-	id: string;
-	unit: string;
-	active: boolean;
+  id: string;
+  unit: string;
+  active: boolean;
 };
 ```
 

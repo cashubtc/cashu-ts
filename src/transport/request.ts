@@ -1,10 +1,10 @@
-import {
-	HttpResponseError,
-	NetworkError,
-	MintOperationError,
-	RateLimitError,
-} from '../model/Errors';
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
+import {
+  HttpResponseError,
+  NetworkError,
+  MintOperationError,
+  RateLimitError,
+} from '../model/Errors';
 import { type Nut19Policy } from '../model/types';
 import { JSONInt } from '../utils/JSONInt';
 
@@ -12,10 +12,10 @@ import { JSONInt } from '../utils/JSONInt';
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 export type RequestArgs = {
-	endpoint: string;
-	requestBody?: Record<string, unknown>;
-	headers?: Record<string, string>;
-	logger?: Logger;
+  endpoint: string;
+  requestBody?: Record<string, unknown>;
+  headers?: Record<string, string>;
+  logger?: Logger;
 };
 
 /**
@@ -24,50 +24,50 @@ export type RequestArgs = {
  * errors) before the promise resolves or rejects.
  */
 export type ResponseMeta = {
-	/**
-	 * The request endpoint URL. Useful for global callbacks to identify which mint the response came
-	 * from.
-	 */
-	endpoint: string;
-	/**
-	 * HTTP status code of the response.
-	 */
-	status: number;
-	/**
-	 * Parsed `Retry-After` in ms (via `parseRetryAfter`). Present only when the header exists and is
-	 * parseable.
-	 */
-	retryAfterMs?: number;
-	/**
-	 * Raw value of the `RateLimit` (or Cloudflare `Ratelimit`) header, if present.
-	 */
-	rateLimit?: string;
-	/**
-	 * Raw value of the `RateLimit-Policy` (or Cloudflare `Ratelimit-Policy`) header, if present.
-	 */
-	rateLimitPolicy?: string;
-	/**
-	 * Full raw response headers.
-	 */
-	headers: Headers;
+  /**
+   * The request endpoint URL. Useful for global callbacks to identify which mint the response came
+   * from.
+   */
+  endpoint: string;
+  /**
+   * HTTP status code of the response.
+   */
+  status: number;
+  /**
+   * Parsed `Retry-After` in ms (via `parseRetryAfter`). Present only when the header exists and is
+   * parseable.
+   */
+  retryAfterMs?: number;
+  /**
+   * Raw value of the `RateLimit` (or Cloudflare `Ratelimit`) header, if present.
+   */
+  rateLimit?: string;
+  /**
+   * Raw value of the `RateLimit-Policy` (or Cloudflare `Ratelimit-Policy`) header, if present.
+   */
+  rateLimitPolicy?: string;
+  /**
+   * Full raw response headers.
+   */
+  headers: Headers;
 };
 
 export type RequestOptions = RequestArgs &
-	Omit<RequestInit, 'body' | 'headers'> &
-	Partial<Nut19Policy> & {
-		/**
-		 * Per-request timeout in milliseconds. If a single fetch hangs longer than this, it is aborted
-		 * and treated as a NetworkError (triggering retry on cached endpoints). Without this, a hung
-		 * connection can consume the entire TTL retry window.
-		 */
-		requestTimeout?: number;
-		/**
-		 * Optional callback invoked on every HTTP response with structured rate-limit metadata. Fires
-		 * before the promise resolves (on success) or rejects (on error), so consumers always receive
-		 * metadata even when the request fails.
-		 */
-		onResponseMeta?: (meta: ResponseMeta) => void;
-	};
+  Omit<RequestInit, 'body' | 'headers'> &
+  Partial<Nut19Policy> & {
+    /**
+     * Per-request timeout in milliseconds. If a single fetch hangs longer than this, it is aborted
+     * and treated as a NetworkError (triggering retry on cached endpoints). Without this, a hung
+     * connection can consume the entire TTL retry window.
+     */
+    requestTimeout?: number;
+    /**
+     * Optional callback invoked on every HTTP response with structured rate-limit metadata. Fires
+     * before the promise resolves (on success) or rejects (on error), so consumers always receive
+     * metadata even when the request fails.
+     */
+    onResponseMeta?: (meta: ResponseMeta) => void;
+  };
 
 /**
  * Cashu api error.
@@ -77,9 +77,9 @@ export type RequestOptions = RequestArgs &
  * - Error: HTTP error message (non NUT-00 response)
  */
 export type ApiError = {
-	code?: number;
-	detail?: unknown;
-	error?: string;
+  code?: number;
+  detail?: unknown;
+  error?: string;
 };
 
 /**
@@ -94,25 +94,25 @@ export type ApiError = {
  * to `0`.
  */
 export function parseRetryAfter(header: string | null): number | undefined {
-	if (header === null) return undefined;
+  if (header === null) return undefined;
 
-	const header_value = header.trim();
-	if (header_value === '') return undefined;
+  const header_value = header.trim();
+  if (header_value === '') return undefined;
 
-	//delta-seconds (non-negative integer)
-	if (/^\d+$/.test(header_value)) {
-		return Math.max(Number(header_value) * 1000, 0);
-	}
+  //delta-seconds (non-negative integer)
+  if (/^\d+$/.test(header_value)) {
+    return Math.max(Number(header_value) * 1000, 0);
+  }
 
-	//HTTP-date (must contain at least one letter, e.g. month name / day name)
-	if (/[a-zA-Z]/.test(header_value)) {
-		const date = new Date(header_value).getTime();
-		if (!Number.isNaN(date)) {
-			return Math.max(date - Date.now(), 0);
-		}
-	}
+  //HTTP-date (must contain at least one letter, e.g. month name / day name)
+  if (/[a-zA-Z]/.test(header_value)) {
+    const date = new Date(header_value).getTime();
+    if (!Number.isNaN(date)) {
+      return Math.max(date - Date.now(), 0);
+    }
+  }
 
-	return undefined;
+  return undefined;
 }
 
 let globalRequestOptions: Partial<RequestOptions> = {};
@@ -125,7 +125,7 @@ let requestLogger = NULL_LOGGER;
  *   https://developer.mozilla.org/en-US/docs/Web/API/fetch#options.
  */
 export function setGlobalRequestOptions(options: Partial<RequestOptions>): void {
-	globalRequestOptions = options;
+  globalRequestOptions = options;
 }
 
 /**
@@ -134,7 +134,7 @@ export function setGlobalRequestOptions(options: Partial<RequestOptions>): void 
  * @param {Logger} logger The logger instance to use.
  */
 export function setRequestLogger(logger: Logger): void {
-	requestLogger = logger;
+  requestLogger = logger;
 }
 
 const MAX_CACHED_RETRIES = 9; // 10 requests total
@@ -142,11 +142,11 @@ const MAX_DELAY = 1000; // 1 sec
 const BASE_DELAY = 100; // 100 ms
 
 class CallerAbortError extends NetworkError {
-	constructor(message: string) {
-		super(message);
-		this.name = 'CallerAbortError';
-		Object.setPrototypeOf(this, CallerAbortError.prototype);
-	}
+  constructor(message: string) {
+    super(message);
+    this.name = 'CallerAbortError';
+    Object.setPrototypeOf(this, CallerAbortError.prototype);
+  }
 }
 
 /**
@@ -159,51 +159,51 @@ class CallerAbortError extends NetworkError {
  * caller immediately.
  */
 function isRetryableError(e: unknown): boolean {
-	if (e instanceof CallerAbortError) return false;
-	if (e instanceof NetworkError) return true;
-	return e instanceof HttpResponseError && e.status >= 500;
+  if (e instanceof CallerAbortError) return false;
+  if (e instanceof NetworkError) return true;
+  return e instanceof HttpResponseError && e.status >= 500;
 }
 
 function waitWithAbort(delayMs: number, signal?: AbortSignal | null): Promise<void> {
-	if (!signal) {
-		return new Promise((resolve) => setTimeout(resolve, delayMs));
-	}
+  if (!signal) {
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
 
-	return new Promise((resolve, reject) => {
-		if (signal.aborted) {
-			reject(new CallerAbortError('Request aborted by caller'));
-			return;
-		}
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new CallerAbortError('Request aborted by caller'));
+      return;
+    }
 
-		const onAbort = () => {
-			clearTimeout(timeoutId);
-			signal.removeEventListener('abort', onAbort);
-			reject(new CallerAbortError('Request aborted by caller'));
-		};
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      signal.removeEventListener('abort', onAbort);
+      reject(new CallerAbortError('Request aborted by caller'));
+    };
 
-		signal.addEventListener('abort', onAbort, { once: true });
+    signal.addEventListener('abort', onAbort, { once: true });
 
-		const timeoutId = setTimeout(() => {
-			signal.removeEventListener('abort', onAbort);
-			resolve();
-		}, delayMs);
-	});
+    const timeoutId = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delayMs);
+  });
 }
 
 function getEndpointPathnameSafe(endpoint: string): string | undefined {
-	try {
-		return new URL(endpoint).pathname;
-	} catch {
-		if (endpoint.startsWith('/')) {
-			return endpoint.split(/[?#]/, 1)[0];
-		}
-		return undefined;
-	}
+  try {
+    return new URL(endpoint).pathname;
+  } catch {
+    if (endpoint.startsWith('/')) {
+      return endpoint.split(/[?#]/, 1)[0];
+    }
+    return undefined;
+  }
 }
 
 function endpointPathMatchesCachedPath(endpointPath: string, cachedPath: string): boolean {
-	if (endpointPath === cachedPath) return true;
-	return endpointPath.endsWith(cachedPath);
+  if (endpointPath === cachedPath) return true;
+  return endpointPath.endsWith(cachedPath);
 }
 
 /**
@@ -211,63 +211,63 @@ function endpointPathMatchesCachedPath(endpointPath: string, cachedPath: string)
  * executed directly without retries.
  */
 async function requestWithRetry(options: RequestOptions): Promise<unknown> {
-	const { ttl, cached_endpoints, endpoint } = options;
-	const endpointPathname = getEndpointPathnameSafe(endpoint);
-	const requestMethod = options.method?.toUpperCase() ?? 'GET';
+  const { ttl, cached_endpoints, endpoint } = options;
+  const endpointPathname = getEndpointPathnameSafe(endpoint);
+  const requestMethod = options.method?.toUpperCase() ?? 'GET';
 
-	// there should be at least one cached_endpoint, also ttl is already mapped null->Infinity
-	const isCachable =
-		endpointPathname !== undefined &&
-		cached_endpoints?.some(
-			(cached_endpoint) =>
-				endpointPathMatchesCachedPath(endpointPathname, cached_endpoint.path) &&
-				cached_endpoint.method === requestMethod,
-		) &&
-		!!ttl;
+  // there should be at least one cached_endpoint, also ttl is already mapped null->Infinity
+  const isCachable =
+    endpointPathname !== undefined &&
+    cached_endpoints?.some(
+      (cached_endpoint) =>
+        endpointPathMatchesCachedPath(endpointPathname, cached_endpoint.path) &&
+        cached_endpoint.method === requestMethod,
+    ) &&
+    !!ttl;
 
-	if (!isCachable) {
-		return await _request(options);
-	}
+  if (!isCachable) {
+    return await _request(options);
+  }
 
-	let retries = 0;
-	const startTime = Date.now();
+  let retries = 0;
+  const startTime = Date.now();
 
-	const retry = async (): Promise<unknown> => {
-		try {
-			return await _request(options);
-		} catch (e) {
-			if (isRetryableError(e)) {
-				const totalElapsedTime = Date.now() - startTime;
-				const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
+  const retry = async (): Promise<unknown> => {
+    try {
+      return await _request(options);
+    } catch (e) {
+      if (isRetryableError(e)) {
+        const totalElapsedTime = Date.now() - startTime;
+        const shouldRetry = retries < MAX_CACHED_RETRIES && (!ttl || totalElapsedTime < ttl);
 
-				if (shouldRetry) {
-					const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
+        if (shouldRetry) {
+          const cappedDelay = Math.min(2 ** retries * BASE_DELAY, MAX_DELAY);
 
-					const delay = Math.random() * cappedDelay;
+          const delay = Math.random() * cappedDelay;
 
-					if (totalElapsedTime + delay > ttl) {
-						requestLogger.error(`Network Error: request abandoned after ${retries} retries`, {
-							e,
-							retries,
-						});
-						throw e;
-					}
-					retries++;
-					requestLogger.info(`Network Error: attempting retry ${retries} in ${delay}ms`, {
-						e,
-						retries,
-						delay,
-					});
+          if (totalElapsedTime + delay > ttl) {
+            requestLogger.error(`Network Error: request abandoned after ${retries} retries`, {
+              e,
+              retries,
+            });
+            throw e;
+          }
+          retries++;
+          requestLogger.info(`Network Error: attempting retry ${retries} in ${delay}ms`, {
+            e,
+            retries,
+            delay,
+          });
 
-					await waitWithAbort(delay, options.signal);
-					return retry();
-				}
-			}
-			requestLogger.error(`Request failed and could not be retried`, { e });
-			throw e;
-		}
-	};
-	return retry();
+          await waitWithAbort(delay, options.signal);
+          return retry();
+        }
+      }
+      requestLogger.error(`Request failed and could not be retried`, { e });
+      throw e;
+    }
+  };
+  return retry();
 }
 
 /**
@@ -280,182 +280,182 @@ async function requestWithRetry(options: RequestOptions): Promise<unknown> {
  * implementation (via the Mint constructor) that uses a cache-disabled HTTP client.
  */
 async function _request(options: RequestOptions): Promise<unknown> {
-	const {
-		endpoint,
-		requestBody,
-		headers: requestHeaders,
-		requestTimeout,
-		onResponseMeta,
-		// consumed by requestWithRetry, excluded from raw fetch options
-		cached_endpoints,
-		ttl,
-		logger,
-		...fetchOptions
-	} = options;
+  const {
+    endpoint,
+    requestBody,
+    headers: requestHeaders,
+    requestTimeout,
+    onResponseMeta,
+    // consumed by requestWithRetry, excluded from raw fetch options
+    cached_endpoints,
+    ttl,
+    logger,
+    ...fetchOptions
+  } = options;
 
-	// Intentionally unused vars (extracted from fetchOptions)
-	void cached_endpoints;
-	void ttl;
-	void logger;
+  // Intentionally unused vars (extracted from fetchOptions)
+  void cached_endpoints;
+  void ttl;
+  void logger;
 
-	const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
-	const headers: Record<string, string> = {
-		Accept: 'application/json, text/plain, */*',
-		...(body ? { 'Content-Type': 'application/json' } : undefined),
-		// Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header (silently ignored).
-		// In Node.js this overrides the default `undici` identifier that would leak the runtime.
-		'User-Agent': 'Mozilla/5.0',
-		...requestHeaders,
-	};
-	const callerSignal = options.signal ?? undefined;
-	if (callerSignal?.aborted) {
-		throw new CallerAbortError('Request aborted by caller');
-	}
+  const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
+  const headers: Record<string, string> = {
+    Accept: 'application/json, text/plain, */*',
+    ...(body ? { 'Content-Type': 'application/json' } : undefined),
+    // Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header (silently ignored).
+    // In Node.js this overrides the default `undici` identifier that would leak the runtime.
+    'User-Agent': 'Mozilla/5.0',
+    ...requestHeaders,
+  };
+  const callerSignal = options.signal ?? undefined;
+  if (callerSignal?.aborted) {
+    throw new CallerAbortError('Request aborted by caller');
+  }
 
-	// Construct an AbortController based on timeout, user signal, or both!
-	const timeoutController = requestTimeout !== undefined ? new AbortController() : undefined;
-	let signal: AbortSignal | undefined = callerSignal;
-	let timeoutId: ReturnType<typeof setTimeout> | undefined;
-	let cleanupAbortListeners: (() => void) | undefined;
+  // Construct an AbortController based on timeout, user signal, or both!
+  const timeoutController = requestTimeout !== undefined ? new AbortController() : undefined;
+  let signal: AbortSignal | undefined = callerSignal;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let cleanupAbortListeners: (() => void) | undefined;
 
-	if (timeoutController) {
-		timeoutId = setTimeout(() => timeoutController.abort(), requestTimeout);
+  if (timeoutController) {
+    timeoutId = setTimeout(() => timeoutController.abort(), requestTimeout);
 
-		if (!callerSignal) {
-			signal = timeoutController.signal;
-		} else {
-			const combinedController = new AbortController();
-			const forwardAbort = () => combinedController.abort();
-			if (callerSignal.aborted || timeoutController.signal.aborted) {
-				forwardAbort();
-			} else {
-				callerSignal.addEventListener('abort', forwardAbort, { once: true });
-				timeoutController.signal.addEventListener('abort', forwardAbort, { once: true });
-				cleanupAbortListeners = () => {
-					callerSignal.removeEventListener('abort', forwardAbort);
-					timeoutController.signal.removeEventListener('abort', forwardAbort);
-				};
-			}
-			signal = combinedController.signal;
-		}
-	}
+    if (!callerSignal) {
+      signal = timeoutController.signal;
+    } else {
+      const combinedController = new AbortController();
+      const forwardAbort = () => combinedController.abort();
+      if (callerSignal.aborted || timeoutController.signal.aborted) {
+        forwardAbort();
+      } else {
+        callerSignal.addEventListener('abort', forwardAbort, { once: true });
+        timeoutController.signal.addEventListener('abort', forwardAbort, { once: true });
+        cleanupAbortListeners = () => {
+          callerSignal.removeEventListener('abort', forwardAbort);
+          timeoutController.signal.removeEventListener('abort', forwardAbort);
+        };
+      }
+      signal = combinedController.signal;
+    }
+  }
 
-	let response: Response;
-	try {
-		response = await fetch(endpoint, {
-			body,
-			headers,
-			// Anti-fingerprinting fetch options.
-			cache: 'no-store', // prevent cache tracking (eg ETag)
-			credentials: 'omit', // prevent cookie-based tracking
-			referrer: '', // prevent leaking the embedding page URL
-			referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
-			...fetchOptions, // allows override of above options
-			signal, // not overridable (includes caller signal)
-		});
-	} catch (err) {
-		const timedOut = !!timeoutController?.signal.aborted;
-		const callerAborted = !!callerSignal?.aborted;
-		if (timedOut) {
-			throw new NetworkError(`Request timed out after ${requestTimeout}ms`);
-		}
-		if (callerAborted) {
-			throw new CallerAbortError(err instanceof Error ? err.message : 'Request aborted by caller');
-		}
-		if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
-			throw new NetworkError(err.message);
-		}
-		// A fetch() promise only rejects when the request fails,
-		// for example, because of a badly-formed request URL or a network error.
-		throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
-	} finally {
-		clearTimeout(timeoutId);
-		cleanupAbortListeners?.();
-	}
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      body,
+      headers,
+      // Anti-fingerprinting fetch options.
+      cache: 'no-store', // prevent cache tracking (eg ETag)
+      credentials: 'omit', // prevent cookie-based tracking
+      referrer: '', // prevent leaking the embedding page URL
+      referrerPolicy: 'no-referrer', // belt-and-braces for referrer across all contexts
+      ...fetchOptions, // allows override of above options
+      signal, // not overridable (includes caller signal)
+    });
+  } catch (err) {
+    const timedOut = !!timeoutController?.signal.aborted;
+    const callerAborted = !!callerSignal?.aborted;
+    if (timedOut) {
+      throw new NetworkError(`Request timed out after ${requestTimeout}ms`);
+    }
+    if (callerAborted) {
+      throw new CallerAbortError(err instanceof Error ? err.message : 'Request aborted by caller');
+    }
+    if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
+      throw new NetworkError(err.message);
+    }
+    // A fetch() promise only rejects when the request fails,
+    // for example, because of a badly-formed request URL or a network error.
+    throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
+  } finally {
+    clearTimeout(timeoutId);
+    cleanupAbortListeners?.();
+  }
 
-	// Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
-	const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
+  // Parse Retry-After once for reuse in both ResponseMeta and RateLimitError
+  const retryAfterMs = parseRetryAfter(response.headers.get('Retry-After'));
 
-	// Build and fire ResponseMeta callback before any throw or return
-	if (onResponseMeta && response.headers) {
-		const meta: ResponseMeta = {
-			endpoint,
-			status: response.status,
-			retryAfterMs,
-			rateLimit: response.headers.get('RateLimit') ?? undefined,
-			rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
-			headers: response.headers,
-		};
-		safeCallback(onResponseMeta, meta, requestLogger, {
-			op: 'request.onResponseMeta',
-			status: response.status,
-			endpoint,
-		});
-	}
+  // Build and fire ResponseMeta callback before any throw or return
+  if (onResponseMeta && response.headers) {
+    const meta: ResponseMeta = {
+      endpoint,
+      status: response.status,
+      retryAfterMs,
+      rateLimit: response.headers.get('RateLimit') ?? undefined,
+      rateLimitPolicy: response.headers.get('RateLimit-Policy') ?? undefined,
+      headers: response.headers,
+    };
+    safeCallback(onResponseMeta, meta, requestLogger, {
+      op: 'request.onResponseMeta',
+      status: response.status,
+      endpoint,
+    });
+  }
 
-	if (!response.ok) {
-		let errorData: ApiError;
-		try {
-			errorData = parseErrorBody(await response.text());
-		} catch {
-			errorData = { error: 'bad response' };
-		}
+  if (!response.ok) {
+    let errorData: ApiError;
+    try {
+      errorData = parseErrorBody(await response.text());
+    } catch {
+      errorData = { error: 'bad response' };
+    }
 
-		if (response.status === 429) {
-			throw new RateLimitError('429 Too Many Requests', retryAfterMs);
-		}
+    if (response.status === 429) {
+      throw new RateLimitError('429 Too Many Requests', retryAfterMs);
+    }
 
-		if (
-			response.status === 400 &&
-			'code' in errorData &&
-			typeof errorData.code === 'number' &&
-			'detail' in errorData &&
-			typeof errorData.detail === 'string'
-		) {
-			throw new MintOperationError(errorData.code, errorData.detail);
-		}
+    if (
+      response.status === 400 &&
+      'code' in errorData &&
+      typeof errorData.code === 'number' &&
+      'detail' in errorData &&
+      typeof errorData.detail === 'string'
+    ) {
+      throw new MintOperationError(errorData.code, errorData.detail);
+    }
 
-		let errorMessage = 'HTTP request failed';
-		if ('error' in errorData && typeof errorData.error === 'string') {
-			errorMessage = errorData.error;
-		} else if ('detail' in errorData && typeof errorData.detail === 'string') {
-			errorMessage = errorData.detail;
-		}
+    let errorMessage = 'HTTP request failed';
+    if ('error' in errorData && typeof errorData.error === 'string') {
+      errorMessage = errorData.error;
+    } else if ('detail' in errorData && typeof errorData.detail === 'string') {
+      errorMessage = errorData.detail;
+    }
 
-		throw new HttpResponseError(errorMessage, response.status);
-	}
+    throw new HttpResponseError(errorMessage, response.status);
+  }
 
-	try {
-		const responseText = await response.text();
-		if (!responseText) {
-			throw new Error('Empty response body');
-		}
-		return JSONInt.parse(responseText);
-	} catch (err) {
-		requestLogger.error('Failed to parse HTTP response', { err });
-		throw new HttpResponseError('bad response', response.status);
-	}
+  try {
+    const responseText = await response.text();
+    if (!responseText) {
+      throw new Error('Empty response body');
+    }
+    return JSONInt.parse(responseText);
+  } catch (err) {
+    requestLogger.error('Failed to parse HTTP response', { err });
+    throw new HttpResponseError('bad response', response.status);
+  }
 }
 
 /**
  * Try extract a normalized error message.
  */
 function parseErrorBody(errorText: string): ApiError {
-	if (!errorText) return { detail: 'bad response' };
-	let parsed: unknown;
-	try {
-		parsed = JSONInt.parse(errorText);
-	} catch {
-		return { detail: errorText };
-	}
-	if (
-		typeof parsed === 'object' &&
-		parsed !== null &&
-		('detail' in parsed || 'code' in parsed || 'error' in parsed)
-	) {
-		return parsed as ApiError;
-	}
-	return { detail: parsed };
+  if (!errorText) return { detail: 'bad response' };
+  let parsed: unknown;
+  try {
+    parsed = JSONInt.parse(errorText);
+  } catch {
+    return { detail: errorText };
+  }
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    ('detail' in parsed || 'code' in parsed || 'error' in parsed)
+  ) {
+    return parsed as ApiError;
+  }
+  return { detail: parsed };
 }
 
 /**
@@ -466,29 +466,29 @@ function parseErrorBody(errorText: string): ApiError {
  * endpoints without retry logic.
  */
 export default async function request<T>(options: RequestOptions): Promise<T> {
-	const perRequest = options.onResponseMeta;
-	const globalMeta = globalRequestOptions.onResponseMeta;
-	const merged: RequestOptions = { ...options, ...globalRequestOptions };
+  const perRequest = options.onResponseMeta;
+  const globalMeta = globalRequestOptions.onResponseMeta;
+  const merged: RequestOptions = { ...options, ...globalRequestOptions };
 
-	// Default: per-request callback only
-	if (perRequest) merged.onResponseMeta = perRequest;
+  // Default: per-request callback only
+  if (perRequest) merged.onResponseMeta = perRequest;
 
-	// Both set: wrap in safeCallback so a throw in one doesn't prevent the other from firing.
-	if (perRequest && globalMeta && perRequest !== globalMeta) {
-		merged.onResponseMeta = (meta) => {
-			safeCallback(perRequest, meta, requestLogger, {
-				op: 'request.onResponseMeta',
-				scope: 'per-request',
-				endpoint: options.endpoint,
-			});
-			safeCallback(globalMeta, meta, requestLogger, {
-				op: 'request.onResponseMeta',
-				scope: 'global',
-				endpoint: options.endpoint,
-			});
-		};
-	}
+  // Both set: wrap in safeCallback so a throw in one doesn't prevent the other from firing.
+  if (perRequest && globalMeta && perRequest !== globalMeta) {
+    merged.onResponseMeta = (meta) => {
+      safeCallback(perRequest, meta, requestLogger, {
+        op: 'request.onResponseMeta',
+        scope: 'per-request',
+        endpoint: options.endpoint,
+      });
+      safeCallback(globalMeta, meta, requestLogger, {
+        op: 'request.onResponseMeta',
+        scope: 'global',
+        endpoint: options.endpoint,
+      });
+    };
+  }
 
-	const data = await requestWithRetry(merged);
-	return data as T;
+  const data = await requestWithRetry(merged);
+  return data as T;
 }

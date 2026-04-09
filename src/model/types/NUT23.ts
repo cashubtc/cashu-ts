@@ -1,41 +1,42 @@
+import type { Amount, AmountLike } from '../Amount';
+
 import {
-	type MintQuoteBaseRequest,
-	type MintQuoteBaseResponse,
-	type MintQuoteState,
+  type MintQuoteBaseRequest,
+  type MintQuoteBaseResponse,
+  type MintQuoteState,
 } from './NUT04';
 import { type MeltQuoteBaseRequest, type MeltQuoteBaseResponse } from './NUT05';
-import type { Amount, AmountLike } from '../Amount';
 
 /**
  * Payload that needs to be sent to the mint when requesting a mint.
  */
 export type MintQuoteBolt11Request = MintQuoteBaseRequest & {
-	/**
-	 * Amount to be minted.
-	 */
-	amount: AmountLike;
-	/**
-	 * Description for the invoice.
-	 */
-	description?: string;
+  /**
+   * Amount to be minted.
+   */
+  amount: AmountLike;
+  /**
+   * Description for the invoice.
+   */
+  description?: string;
 };
 
 /**
  * Response from the mint after requesting a BOLT11 mint quote.
  */
 export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
-	/**
-	 * Amount requested for mint quote.
-	 */
-	amount: Amount;
-	/**
-	 * State of the mint quote.
-	 */
-	state: MintQuoteState;
-	/**
-	 * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
-	 */
-	expiry: number | null;
+  /**
+   * Amount requested for mint quote.
+   */
+  amount: Amount;
+  /**
+   * State of the mint quote.
+   */
+  state: MintQuoteState;
+  /**
+   * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
+   */
+  expiry: number | null;
 };
 
 /**
@@ -47,14 +48,14 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
  * - Mpp: multi-path payments (NUT-15)
  */
 export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
-	options?: {
-		amountless?: {
-			amount_msat: AmountLike;
-		};
-		mpp?: {
-			amount: AmountLike;
-		};
-	};
+  options?: {
+    amountless?: {
+      amount_msat: AmountLike;
+    };
+    mpp?: {
+      amount: AmountLike;
+    };
+  };
 };
 
 /**
@@ -62,17 +63,17 @@ export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
  * for paying Lightning Network offers.
  */
 export type MeltQuoteBolt11Response = MeltQuoteBaseResponse & {
-	/**
-	 * Payment request for the melt quote.
-	 */
-	request: string; // LN invoice
-	/**
-	 * Fee reserve to be added to the amount.
-	 */
-	fee_reserve: Amount;
-	/**
-	 * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
-	 * depending on which LN-backend the mint uses.
-	 */
-	payment_preimage: string | null;
+  /**
+   * Payment request for the melt quote.
+   */
+  request: string; // LN invoice
+  /**
+   * Fee reserve to be added to the amount.
+   */
+  fee_reserve: Amount;
+  /**
+   * Preimage of the paid invoice. is null if it the invoice has not been paid yet. can be null,
+   * depending on which LN-backend the mint uses.
+   */
+  payment_preimage: string | null;
 };

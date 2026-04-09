@@ -1,25 +1,25 @@
-import type { Proof } from '../../model/types/proof';
+import { type P2PKOptions } from '../../crypto';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
+import type { Proof } from '../../model/types/proof';
 import { type OperationCounters } from '../CounterSource';
-import { type P2PKOptions } from '../../crypto';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
 
 export type RestoreConfig = {
-	keysetId?: string;
+  keysetId?: string;
 };
 
 /**
  * Shared properties for most `OutputType` variants (except 'custom').
  */
 export interface SharedOutputTypeProps {
-	/**
-	 * Optional custom amounts for splitting outputs.
-	 *
-	 * @default Uses basic splitAmount if omitted.
-	 */
-	denominations?: AmountLike[];
+  /**
+   * Optional custom amounts for splitting outputs.
+   *
+   * @default Uses basic splitAmount if omitted.
+   */
+  denominations?: AmountLike[];
 }
 
 /**
@@ -35,50 +35,50 @@ export interface SharedOutputTypeProps {
  *     const deterministic: OutputType = { type: 'deterministic', counter: 0 };
  */
 export type OutputType =
-	| ({
-			/**
-			 * Random blinding factors (default behavior).
-			 */
-			type: 'random';
-	  } & SharedOutputTypeProps)
-	| ({
-			/**
-			 * Deterministic outputs based on a counter.
-			 *
-			 * @remarks
-			 * Counter: 0 means “auto-assign from wallet’s CounterSource”. Any positive value is used as
-			 * the exact starting counter without reservation. Negative values are invalid.
-			 */
-			type: 'deterministic';
-			counter: number;
-	  } & SharedOutputTypeProps)
-	| ({
-			/**
-			 * Pay-to-public-key (P2PK) outputs.
-			 *
-			 * @see P2PKOptions
-			 */
-			type: 'p2pk';
-			options: P2PKOptions;
-	  } & SharedOutputTypeProps)
-	| ({
-			/**
-			 * Factory-generated OutputData.
-			 *
-			 * @remarks
-			 * Outputs count from denominations or basic split.
-			 * @see OutputDataFactory
-			 */
-			type: 'factory';
-			factory: OutputDataFactory;
-	  } & SharedOutputTypeProps)
-	| {
-			/**
-			 * Pre-created OutputData, bypassing splitting.
-			 */
-			type: 'custom';
-			data: OutputDataLike[];
-	  };
+  | ({
+      /**
+       * Random blinding factors (default behavior).
+       */
+      type: 'random';
+    } & SharedOutputTypeProps)
+  | ({
+      /**
+       * Deterministic outputs based on a counter.
+       *
+       * @remarks
+       * Counter: 0 means “auto-assign from wallet’s CounterSource”. Any positive value is used as
+       * the exact starting counter without reservation. Negative values are invalid.
+       */
+      type: 'deterministic';
+      counter: number;
+    } & SharedOutputTypeProps)
+  | ({
+      /**
+       * Pay-to-public-key (P2PK) outputs.
+       *
+       * @see P2PKOptions
+       */
+      type: 'p2pk';
+      options: P2PKOptions;
+    } & SharedOutputTypeProps)
+  | ({
+      /**
+       * Factory-generated OutputData.
+       *
+       * @remarks
+       * Outputs count from denominations or basic split.
+       * @see OutputDataFactory
+       */
+      type: 'factory';
+      factory: OutputDataFactory;
+    } & SharedOutputTypeProps)
+  | {
+      /**
+       * Pre-created OutputData, bypassing splitting.
+       */
+      type: 'custom';
+      data: OutputDataLike[];
+    };
 
 /**
  * Output config for send/swap operations.
@@ -92,14 +92,14 @@ export type OutputType =
  * @example
  *
  *     const config: OutputConfig = {
- *     	send: { type: 'random', denominations: [1, 2] },
- *     	keep: { type: 'deterministic', counter: 0 },
+ *       send: { type: 'random', denominations: [1, 2] },
+ *       keep: { type: 'deterministic', counter: 0 },
  *     };
  *     await wallet.send(3, proofs, config, { includeFees: true });
  */
 export interface OutputConfig {
-	send: OutputType;
-	keep?: OutputType;
+  send: OutputType;
+  keep?: OutputType;
 }
 
 export type OnCountersReserved = (info: OperationCounters) => void;
@@ -108,48 +108,48 @@ export type OnCountersReserved = (info: OperationCounters) => void;
  * Configuration for send operations.
  */
 export type SendConfig = {
-	keysetId?: string;
-	privkey?: string | string[];
-	includeFees?: boolean;
-	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
-	onCountersReserved?: OnCountersReserved;
+  keysetId?: string;
+  privkey?: string | string[];
+  includeFees?: boolean;
+  proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+  onCountersReserved?: OnCountersReserved;
 };
 
 /**
  * Configuration for offline send operations.
  */
 export type SendOfflineConfig = {
-	requireDleq?: boolean;
-	includeFees?: boolean;
-	exactMatch?: boolean;
+  requireDleq?: boolean;
+  includeFees?: boolean;
+  exactMatch?: boolean;
 };
 
 /**
  * Configuration for receive operations.
  */
 export type ReceiveConfig = {
-	keysetId?: string;
-	privkey?: string | string[];
-	requireDleq?: boolean;
-	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
-	onCountersReserved?: OnCountersReserved;
+  keysetId?: string;
+  privkey?: string | string[];
+  requireDleq?: boolean;
+  proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+  onCountersReserved?: OnCountersReserved;
 };
 
 /**
  * Configuration for minting operations.
  */
 export type MintProofsConfig = {
-	keysetId?: string;
-	privkey?: string | string[];
-	proofsWeHave?: Array<Pick<Proof, 'amount'>>;
-	onCountersReserved?: OnCountersReserved;
+  keysetId?: string;
+  privkey?: string | string[];
+  proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+  onCountersReserved?: OnCountersReserved;
 };
 
 /**
  * Configuration for melting operations.
  */
 export type MeltProofsConfig = {
-	keysetId?: string;
-	privkey?: string | string[];
-	onCountersReserved?: OnCountersReserved;
+  keysetId?: string;
+  privkey?: string | string[];
+  onCountersReserved?: OnCountersReserved;
 };

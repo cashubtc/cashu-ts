@@ -10,12 +10,12 @@ import { NULL_LOGGER } from './NullLogger';
  * @throws {Error} Always throws with the given message.
  */
 export function fail(
-	message: string,
-	logger: Logger = NULL_LOGGER,
-	context?: Record<string, unknown>,
+  message: string,
+  logger: Logger = NULL_LOGGER,
+  context?: Record<string, unknown>,
 ): never {
-	logger.error(message, context);
-	throw new Error(message);
+  logger.error(message, context);
+  throw new Error(message);
 }
 
 /**
@@ -28,12 +28,12 @@ export function fail(
  * @throws {Error} If condition is true, throws with the given message.
  */
 export function failIf(
-	condition: boolean,
-	message: string,
-	logger: Logger = NULL_LOGGER,
-	context?: Record<string, unknown>,
+  condition: boolean,
+  message: string,
+  logger: Logger = NULL_LOGGER,
+  context?: Record<string, unknown>,
 ): asserts condition is false {
-	if (condition) fail(message, logger, context);
+  if (condition) fail(message, logger, context);
 }
 
 /**
@@ -47,12 +47,12 @@ export function failIf(
  * @throws {Error} If value is null or undefined.
  */
 export function failIfNullish<T>(
-	value: T,
-	message: string,
-	logger: Logger = NULL_LOGGER,
-	context?: Record<string, unknown>,
+  value: T,
+  message: string,
+  logger: Logger = NULL_LOGGER,
+  context?: Record<string, unknown>,
 ): asserts value is Exclude<T, null | undefined> {
-	if (value == null) fail(message, logger, context);
+  if (value == null) fail(message, logger, context);
 }
 
 /**
@@ -68,7 +68,7 @@ export function failIfNullish<T>(
  *
  * ```ts
  * if (autoCounters.used) {
- * 	safeCallback(onCountersReserved, autoCounters.used, _logger, { keysetId });
+ *   safeCallback(onCountersReserved, autoCounters.used, _logger, { keysetId });
  * }
  * ```
  *
@@ -79,37 +79,37 @@ export function failIfNullish<T>(
  * @param context Optional structured context for the log.
  */
 export function safeCallback<T>(
-	cb: ((p: T) => void | Promise<void>) | undefined,
-	payload: T,
-	logger: Logger = NULL_LOGGER,
-	context?: Record<string, unknown>,
+  cb: ((p: T) => void | Promise<void>) | undefined,
+  payload: T,
+  logger: Logger = NULL_LOGGER,
+  context?: Record<string, unknown>,
 ): void {
-	if (!cb) return;
+  if (!cb) return;
 
-	try {
-		const maybePromise = cb(payload);
-		if (maybePromise && typeof maybePromise.then === 'function') {
-			maybePromise.catch((error) => {
-				try {
-					logger.warn('callback failed', {
-						...(context ?? {}),
-						error,
-						cb: cb.name ?? '',
-					});
-				} catch {
-					/* ignore logger errors */
-				}
-			});
-		}
-	} catch (error) {
-		try {
-			logger.warn('callback failed', {
-				...(context ?? {}),
-				error,
-				cb: cb.name ?? '',
-			});
-		} catch {
-			/* ignore logger errors */
-		}
-	}
+  try {
+    const maybePromise = cb(payload);
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      maybePromise.catch((error) => {
+        try {
+          logger.warn('callback failed', {
+            ...(context ?? {}),
+            error,
+            cb: cb.name ?? '',
+          });
+        } catch {
+          /* ignore logger errors */
+        }
+      });
+    }
+  } catch (error) {
+    try {
+      logger.warn('callback failed', {
+        ...(context ?? {}),
+        error,
+        cb: cb.name ?? '',
+      });
+    } catch {
+      /* ignore logger errors */
+    }
+  }
 }

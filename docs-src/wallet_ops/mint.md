@@ -6,8 +6,8 @@
 
 ```ts
 const newProofs = await wallet.ops
-	.mintBolt11(100, quote) // quote: string | MintQuoteBolt11Response
-	.run();
+  .mintBolt11(100, quote) // quote: string | MintQuoteBolt11Response
+  .run();
 ```
 
 ## 2) Two-step BOLT11 mint with `prepare()`
@@ -26,11 +26,11 @@ const newProofs = await wallet.completeMint(preview);
 
 ```ts
 const newProofs = await wallet.ops
-	.mintBolt11(250, quote)
-	.asDeterministic(0, [128, 64]) // counter=0 => auto-reserve, split must include denoms
-	.keyset('0123456')
-	.onCountersReserved((info) => console.log(info))
-	.run();
+  .mintBolt11(250, quote)
+  .asDeterministic(0, [128, 64]) // counter=0 => auto-reserve, split must include denoms
+  .keyset('0123456')
+  .onCountersReserved((info) => console.log(info))
+  .run();
 ```
 
 ## 4) Locked BOLT11 quote signing
@@ -42,9 +42,9 @@ const quote = await wallet.createLockedMintQuote(64, pubkey);
 
 // Sign and mint
 const newProofs = await wallet.ops
-	.mintBolt11(50, quote)
-	.privkey('user-secret-key') // sign locked mint quote
-	.run();
+  .mintBolt11(50, quote)
+  .privkey('user-secret-key') // sign locked mint quote
+  .run();
 ```
 
 ## 5) Two-step BOLT12 mint
@@ -56,10 +56,10 @@ const updatedQuote = await wallet.checkMintQuoteBolt12(quote12.quote);
 const availableAmount = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
 
 const preview = await wallet.ops
-	.mintBolt12(availableAmount, updatedQuote)
-	.privkey(privkeyHex)
-	.asRandom([32, 16, 16])
-	.prepare();
+  .mintBolt12(availableAmount, updatedQuote)
+  .privkey(privkeyHex)
+  .asRandom([32, 16, 16])
+  .prepare();
 
 const newProofs = await wallet.completeMint(preview);
 ```

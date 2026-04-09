@@ -125,7 +125,7 @@ If the file must stay CJS, wrap in an async IIFE:
 
 ```js
 (async () => {
-	const { Wallet } = await import('@cashu/cashu-ts');
+  const { Wallet } = await import('@cashu/cashu-ts');
 })();
 ```
 

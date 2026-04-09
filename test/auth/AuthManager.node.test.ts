@@ -2,30 +2,30 @@
 import { vi, describe, test, expect, beforeEach, afterEach, Mock, MockInstance } from 'vitest';
 
 vi.mock('../../src/wallet', () => {
-	// Instance mock: getCheapestKeyset returns a stub keyset
-	const KeyChainMock = vi.fn(function (this: any, _mintUrl: string, _unit: string) {
-		this.getCheapestKeyset = vi.fn().mockReturnValue({
-			id: '00authkeyset0001',
-			unit: 'auth',
-			keys: { 1: '02deadbeef', 2: '03cafebabe' },
-		});
-	}) as Mock & {
-		mintToCacheDTO: Mock;
-		fromCache: Mock;
-	};
+  // Instance mock: getCheapestKeyset returns a stub keyset
+  const KeyChainMock = vi.fn(function (this: any, _mintUrl: string, _unit: string) {
+    this.getCheapestKeyset = vi.fn().mockReturnValue({
+      id: '00authkeyset0001',
+      unit: 'auth',
+      keys: { 1: '02deadbeef', 2: '03cafebabe' },
+    });
+  }) as Mock & {
+    mintToCacheDTO: Mock;
+    fromCache: Mock;
+  };
 
-	// Static methods used by AuthManager.init
-	KeyChainMock.mintToCacheDTO = vi.fn((_mintUrl: string, _keysets: any, _keys: any) => ({
-		keysets: _keysets,
-		mintUrl: _mintUrl,
-	}));
-	KeyChainMock.fromCache = vi.fn(
-		(_mintUrl: string, _unit: string, _cache: any): any => new KeyChainMock(_mintUrl, _unit),
-	);
+  // Static methods used by AuthManager.init
+  KeyChainMock.mintToCacheDTO = vi.fn((_mintUrl: string, _keysets: any, _keys: any) => ({
+    keysets: _keysets,
+    mintUrl: _mintUrl,
+  }));
+  KeyChainMock.fromCache = vi.fn(
+    (_mintUrl: string, _unit: string, _cache: any): any => new KeyChainMock(_mintUrl, _unit),
+  );
 
-	return {
-		KeyChain: KeyChainMock,
-	};
+  return {
+    KeyChain: KeyChainMock,
+  };
 });
 
 // 2) Now import everything else
@@ -41,17 +41,17 @@ import type { Logger } from '../../src/logger';
 const mintUrl = 'http://mint.local';
 
 function getKeyChainMock(): Mock & {
-	mintToCacheDTO: Mock;
-	fromCache: Mock;
+  mintToCacheDTO: Mock;
+  fromCache: Mock;
 } {
-	return (
-		wallet as unknown as {
-			KeyChain: Mock & {
-				mintToCacheDTO: Mock;
-				fromCache: Mock;
-			};
-		}
-	).KeyChain;
+  return (
+    wallet as unknown as {
+      KeyChain: Mock & {
+        mintToCacheDTO: Mock;
+        fromCache: Mock;
+      };
+    }
+  ).KeyChain;
 }
 
 /* --------------------------
@@ -59,8 +59,8 @@ function getKeyChainMock(): Mock & {
  * -------------------------- */
 
 function decodeBAT(batHeader: string): { id: string; secret: string; C: string } {
-	const base64url = batHeader.slice('authA'.length);
-	return JSON.parse(Bytes.toString(encodeBase64toUint8(base64url)));
+  const base64url = batHeader.slice('authA'.length);
+  return JSON.parse(Bytes.toString(encodeBase64toUint8(base64url)));
 }
 
 /**
@@ -69,35 +69,35 @@ function decodeBAT(batHeader: string): { id: string; secret: string; C: string }
 const fakeSig = { amount: 1, id: 'k', C_: 'C_' };
 
 function stubOutputs(n: number, keysetId = '00authkeyset0001') {
-	return vi.spyOn(OutputData, 'createRandomData').mockImplementation((): any[] => {
-		return Array.from({ length: n }, (_, i) => ({
-			blindedMessage: `BM_${i}`,
-			toProof: () => ({
-				id: keysetId,
-				C: `C_${i}`,
-				secret: `SECRET_${i}`,
-				dleq: { e: 'e', s: 's' },
-				amount: 1,
-			}),
-		}));
-	});
+  return vi.spyOn(OutputData, 'createRandomData').mockImplementation((): any[] => {
+    return Array.from({ length: n }, (_, i) => ({
+      blindedMessage: `BM_${i}`,
+      toProof: () => ({
+        id: keysetId,
+        C: `C_${i}`,
+        secret: `SECRET_${i}`,
+        dleq: { e: 'e', s: 's' },
+        amount: 1,
+      }),
+    }));
+  });
 }
 
 function fakeInfo({
-	batMax = 10,
-	needCATForMint = false,
-	blindProtected = true,
+  batMax = 10,
+  needCATForMint = false,
+  blindProtected = true,
 }: {
-	batMax?: number;
-	needCATForMint?: boolean;
-	blindProtected?: boolean;
+  batMax?: number;
+  needCATForMint?: boolean;
+  blindProtected?: boolean;
 }) {
-	return {
-		nuts: { '22': { bat_max_mint: batMax } },
-		requiresClearAuthToken: (method: string, path: string) =>
-			needCATForMint && method === 'POST' && path === '/v1/auth/blind/mint',
-		requiresBlindAuthToken: () => blindProtected,
-	} as any;
+  return {
+    nuts: { '22': { bat_max_mint: batMax } },
+    requiresClearAuthToken: (method: string, path: string) =>
+      needCATForMint && method === 'POST' && path === '/v1/auth/blind/mint',
+    requiresBlindAuthToken: () => blindProtected,
+  } as any;
 }
 
 /* --------------------------
@@ -107,575 +107,575 @@ let reqSpy: ReturnType<typeof vi.fn>;
 let hasValidDleqSpy: MockInstance;
 
 beforeEach(() => {
-	reqSpy = vi.fn();
-	hasValidDleqSpy = vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
+  reqSpy = vi.fn();
+  hasValidDleqSpy = vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
 
-	const KeyChainMock = getKeyChainMock();
-	if (vi.isMockFunction(KeyChainMock)) KeyChainMock.mockClear();
+  const KeyChainMock = getKeyChainMock();
+  if (vi.isMockFunction(KeyChainMock)) KeyChainMock.mockClear();
 });
 
 afterEach(() => {
-	vi.restoreAllMocks();
+  vi.restoreAllMocks();
 });
 
 /* --------------------------
  * CAT lifecycle
  * -------------------------- */
 describe('AuthManager: CAT lifecycle', () => {
-	test('setCAT/getCAT/hasCAT + clearing refresh & expiry on unset', () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		expect(am.getCAT()).toBeUndefined();
-		expect(am.hasCAT).toBe(false);
+  test('setCAT/getCAT/hasCAT + clearing refresh & expiry on unset', () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    expect(am.getCAT()).toBeUndefined();
+    expect(am.hasCAT).toBe(false);
 
-		am.setCAT('cat-token');
-		expect(am.getCAT()).toBe('cat-token');
-		expect(am.hasCAT).toBe(true);
+    am.setCAT('cat-token');
+    expect(am.getCAT()).toBe('cat-token');
+    expect(am.hasCAT).toBe(true);
 
-		am['tokens'].refreshToken = 'r';
-		am['tokens'].expiresAt = Date.now() + 10_000;
-		am.setCAT(undefined);
+    am['tokens'].refreshToken = 'r';
+    am['tokens'].expiresAt = Date.now() + 10_000;
+    am.setCAT(undefined);
 
-		expect(am.getCAT()).toBeUndefined();
-		expect(am['tokens'].refreshToken).toBeUndefined();
-		expect(am['tokens'].expiresAt).toBeUndefined();
-	});
+    expect(am.getCAT()).toBeUndefined();
+    expect(am['tokens'].refreshToken).toBeUndefined();
+    expect(am['tokens'].expiresAt).toBeUndefined();
+  });
 
-	test('ensureCAT returns CAT when valid, else tries refresh via attached OIDC', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		am['tokens'] = {
-			accessToken: 'old-cat',
-			refreshToken: 'rrr',
-			expiresAt: Date.now() + 1_000,
-		};
+  test('ensureCAT returns CAT when valid, else tries refresh via attached OIDC', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['tokens'] = {
+      accessToken: 'old-cat',
+      refreshToken: 'rrr',
+      expiresAt: Date.now() + 1_000,
+    };
 
-		const refresh = vi.fn().mockResolvedValue({
-			access_token: 'new-cat',
-			refresh_token: 'new-refresh',
-			expires_in: 300,
-		});
-		am['oidc'] = { refresh } as any;
+    const refresh = vi.fn().mockResolvedValue({
+      access_token: 'new-cat',
+      refresh_token: 'new-refresh',
+      expires_in: 300,
+    });
+    am['oidc'] = { refresh } as any;
 
-		const cat = await am.ensureCAT(30);
-		expect(refresh).toHaveBeenCalledWith('rrr');
-		expect(cat).toBe('new-cat');
-	});
+    const cat = await am.ensureCAT(30);
+    expect(refresh).toHaveBeenCalledWith('rrr');
+    expect(cat).toBe('new-cat');
+  });
 
-	test('ensureCAT returns possibly expired CAT if no OIDC or refresh fails', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console as any });
-		am['tokens'] = { accessToken: 'old-cat', expiresAt: Date.now() - 1000 };
-		const cat = await am.ensureCAT(30);
-		expect(cat).toBe('old-cat');
-	});
+  test('ensureCAT returns possibly expired CAT if no OIDC or refresh fails', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console as any });
+    am['tokens'] = { accessToken: 'old-cat', expiresAt: Date.now() - 1000 };
+    const cat = await am.ensureCAT(30);
+    expect(cat).toBe('old-cat');
+  });
 });
 
 describe('AuthManager: constructor limits', () => {
-	test('clamps oversized desiredPoolSize and maxPerMint to internal cap and warns', () => {
-		const logger: Logger = {
-			error: vi.fn(),
-			warn: vi.fn(),
-			info: vi.fn(),
-			debug: vi.fn(),
-			trace: vi.fn(),
-			log: vi.fn(),
-		};
+  test('clamps oversized desiredPoolSize and maxPerMint to internal cap and warns', () => {
+    const logger: Logger = {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
 
-		const am = new AuthManager(mintUrl, {
-			request: reqSpy as RequestFn,
-			desiredPoolSize: 1_000,
-			maxPerMint: 1_000,
-			logger,
-		});
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 1_000,
+      maxPerMint: 1_000,
+      logger,
+    });
 
-		expect(am.poolTarget).toBe(100);
-		expect(am['maxPerMint']).toBe(100);
-		expect(logger.warn).toHaveBeenCalledTimes(2);
-	});
+    expect(am.poolTarget).toBe(100);
+    expect(am['maxPerMint']).toBe(100);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
 });
 
 test('ensureCAT warns when refresh throws', async () => {
-	const am = new AuthManager('http://mint', { request: vi.fn(), logger: console as any });
-	am['tokens'] = { accessToken: 'old', refreshToken: 'rr', expiresAt: Date.now() - 1 };
-	am['oidc'] = { refresh: vi.fn().mockRejectedValue(new Error('nope')) } as any;
-	const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-	const cat = await am.ensureCAT(30);
-	expect(cat).toBeUndefined();
-	expect(warn).toHaveBeenCalled();
-	warn.mockRestore();
+  const am = new AuthManager('http://mint', { request: vi.fn(), logger: console as any });
+  am['tokens'] = { accessToken: 'old', refreshToken: 'rr', expiresAt: Date.now() - 1 };
+  am['oidc'] = { refresh: vi.fn().mockRejectedValue(new Error('nope')) } as any;
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const cat = await am.ensureCAT(30);
+  expect(cat).toBeUndefined();
+  expect(warn).toHaveBeenCalled();
+  warn.mockRestore();
 });
 
 test('ensureCAT sets expiresAt from JWT exp when expires_in is missing', async () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	am['tokens'] = { accessToken: 'stale', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
-	const expSec = Math.floor(Date.now() / 1000) + 300;
-	const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64');
-	const payload = Buffer.from(JSON.stringify({ exp: expSec })).toString('base64');
-	const jwt = `${header}.${payload}.sig`;
-	const refresh = vi.fn().mockResolvedValue({ access_token: jwt });
-	am['oidc'] = { refresh } as any;
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  am['tokens'] = { accessToken: 'stale', refreshToken: 'rrr', expiresAt: Date.now() - 1 };
+  const expSec = Math.floor(Date.now() / 1000) + 300;
+  const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64');
+  const payload = Buffer.from(JSON.stringify({ exp: expSec })).toString('base64');
+  const jwt = `${header}.${payload}.sig`;
+  const refresh = vi.fn().mockResolvedValue({ access_token: jwt });
+  am['oidc'] = { refresh } as any;
 
-	const cat = await am.ensureCAT(30);
-	expect(cat).toBe(jwt);
-	expect(refresh).toHaveBeenCalledWith('rrr');
+  const cat = await am.ensureCAT(30);
+  expect(cat).toBe(jwt);
+  expect(refresh).toHaveBeenCalledWith('rrr');
 });
 
 test('ensureCAT treats token with unknown expiry as valid', async () => {
-	const am = new AuthManager('http://mint', { request: vi.fn() });
-	am['tokens'] = { accessToken: 'cat-without-expiry' };
-	const cat = await am.ensureCAT(9999);
-	expect(cat).toBe('cat-without-expiry');
+  const am = new AuthManager('http://mint', { request: vi.fn() });
+  am['tokens'] = { accessToken: 'cat-without-expiry' };
+  const cat = await am.ensureCAT(9999);
+  expect(cat).toBe('cat-without-expiry');
 });
 
 test('updateFromOIDC leaves expiresAt undefined on malformed JWT', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	const bad = 'hdr.bad-base64.sig';
-	am['updateFromOIDC']({ access_token: bad });
-	expect(am['tokens'].expiresAt).toBeUndefined();
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  const bad = 'hdr.bad-base64.sig';
+  am['updateFromOIDC']({ access_token: bad });
+  expect(am['tokens'].expiresAt).toBeUndefined();
 });
 
 /* --------------------------
  * BAT pool minting/ensure/topUp
  * -------------------------- */
 describe('AuthManager: BAT pool minting/topUp/ensure', () => {
-	function seedKeychain(am: AuthManager, keysetId = '00authkeyset0001') {
-		am['keychain'] = {
-			getCheapestKeyset: vi.fn().mockReturnValue({
-				id: keysetId,
-				unit: 'auth',
-				keys: { 1: '02deadbeef' },
-			}),
-		} as any;
-	}
+  function seedKeychain(am: AuthManager, keysetId = '00authkeyset0001') {
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({
+        id: keysetId,
+        unit: 'auth',
+        keys: { 1: '02deadbeef' },
+      }),
+    } as any;
+  }
 
-	test('ensure() mints up to desired target but not beyond bat_max_mint', async () => {
-		const am = new AuthManager(mintUrl, {
-			request: reqSpy as RequestFn,
-			desiredPoolSize: 5,
-			maxPerMint: 99,
-		});
-		am['info'] = fakeInfo({ batMax: 2 });
-		seedKeychain(am);
+  test('ensure() mints up to desired target but not beyond bat_max_mint', async () => {
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 5,
+      maxPerMint: 99,
+    });
+    am['info'] = fakeInfo({ batMax: 2 });
+    seedKeychain(am);
 
-		const outputsSpy = stubOutputs(2);
-		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
-		await am.ensure(5);
+    const outputsSpy = stubOutputs(2);
+    reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
+    await am.ensure(5);
 
-		expect(outputsSpy).toHaveBeenCalled();
-		expect(am.poolSize).toBe(2);
-	});
+    expect(outputsSpy).toHaveBeenCalled();
+    expect(am.poolSize).toBe(2);
+  });
 
-	test('ensure() normalizes bigint info and auth keyset fields during init', async () => {
-		const am = new AuthManager(mintUrl, {
-			request: reqSpy as RequestFn,
-			desiredPoolSize: 5,
-			maxPerMint: 99,
-		});
-		const outputsSpy = stubOutputs(2);
-		reqSpy
-			.mockResolvedValueOnce({
-				name: 'mint',
-				pubkey: '02abcd',
-				version: 'test',
-				contact: [],
-				nuts: {
-					'4': { disabled: false, methods: [] },
-					'5': { disabled: false, methods: [] },
-					'22': { bat_max_mint: 2n },
-				},
-			})
-			.mockResolvedValueOnce({
-				keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250n }],
-			})
-			.mockResolvedValueOnce({
-				keysets: [
-					{
-						id: '00k',
-						unit: 'auth',
-						input_fee_ppk: 250n,
-						final_expiry: 1_754_296_607n,
-						keys: { 1: '02aa' },
-					},
-				],
-			})
-			.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
+  test('ensure() normalizes bigint info and auth keyset fields during init', async () => {
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 5,
+      maxPerMint: 99,
+    });
+    const outputsSpy = stubOutputs(2);
+    reqSpy
+      .mockResolvedValueOnce({
+        name: 'mint',
+        pubkey: '02abcd',
+        version: 'test',
+        contact: [],
+        nuts: {
+          '4': { disabled: false, methods: [] },
+          '5': { disabled: false, methods: [] },
+          '22': { bat_max_mint: 2n },
+        },
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250n }],
+      })
+      .mockResolvedValueOnce({
+        keysets: [
+          {
+            id: '00k',
+            unit: 'auth',
+            input_fee_ppk: 250n,
+            final_expiry: 1_754_296_607n,
+            keys: { 1: '02aa' },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ signatures: [fakeSig, fakeSig] });
 
-		await am.ensure(5);
+    await am.ensure(5);
 
-		const KeyChainMock = getKeyChainMock();
-		expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
-			mintUrl,
-			[{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250 }],
-			[
-				{
-					id: '00k',
-					unit: 'auth',
-					input_fee_ppk: 250,
-					final_expiry: 1_754_296_607,
-					keys: { 1: '02aa' },
-				},
-			],
-		);
-		expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
-		expect(outputsSpy).toHaveBeenCalledWith(2, expect.any(Object));
-		expect(am.poolSize).toBe(2);
-	});
+    const KeyChainMock = getKeyChainMock();
+    expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
+      mintUrl,
+      [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 250 }],
+      [
+        {
+          id: '00k',
+          unit: 'auth',
+          input_fee_ppk: 250,
+          final_expiry: 1_754_296_607,
+          keys: { 1: '02aa' },
+        },
+      ],
+    );
+    expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
+    expect(outputsSpy).toHaveBeenCalledWith(2, expect.any(Object));
+    expect(am.poolSize).toBe(2);
+  });
 
-	test('ensure() rejects out-of-range auth keyset metadata during init', async () => {
-		const am = new AuthManager(mintUrl, {
-			request: reqSpy as RequestFn,
-			desiredPoolSize: 5,
-			maxPerMint: 99,
-		});
-		reqSpy
-			.mockResolvedValueOnce({
-				name: 'mint',
-				pubkey: '02abcd',
-				version: 'test',
-				contact: [],
-				nuts: {
-					'4': { disabled: false, methods: [] },
-					'5': { disabled: false, methods: [] },
-					'22': { bat_max_mint: 2n },
-				},
-			})
-			.mockResolvedValueOnce({
-				keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 9007199254740993n }],
-			})
-			.mockResolvedValueOnce({
-				keysets: [{ id: '00k', unit: 'auth', input_fee_ppk: 250n, keys: { 1: '02aa' } }],
-			});
+  test('ensure() rejects out-of-range auth keyset metadata during init', async () => {
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 5,
+      maxPerMint: 99,
+    });
+    reqSpy
+      .mockResolvedValueOnce({
+        name: 'mint',
+        pubkey: '02abcd',
+        version: 'test',
+        contact: [],
+        nuts: {
+          '4': { disabled: false, methods: [] },
+          '5': { disabled: false, methods: [] },
+          '22': { bat_max_mint: 2n },
+        },
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 9007199254740993n }],
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', input_fee_ppk: 250n, keys: { 1: '02aa' } }],
+      });
 
-		await expect(am.ensure(5)).rejects.toThrow('keyset.input_fee_ppk');
-	});
+    await expect(am.ensure(5)).rejects.toThrow('keyset.input_fee_ppk');
+  });
 
-	test('topUp/end-to-end: creates proofs, validates DLEQ, pushes to pool', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		am['info'] = fakeInfo({ batMax: 3 });
-		seedKeychain(am);
+  test('topUp/end-to-end: creates proofs, validates DLEQ, pushes to pool', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 3 });
+    seedKeychain(am);
 
-		const outputsSpy = stubOutputs(3);
-		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig, fakeSig] });
-		await am.ensure(3);
+    const outputsSpy = stubOutputs(3);
+    reqSpy.mockResolvedValueOnce({ signatures: [fakeSig, fakeSig, fakeSig] });
+    await am.ensure(3);
 
-		expect(am.poolSize).toBe(3);
-		expect(outputsSpy).toHaveBeenCalledWith(3, expect.any(Object));
-	});
+    expect(am.poolSize).toBe(3);
+    expect(outputsSpy).toHaveBeenCalledWith(3, expect.any(Object));
+  });
 });
 
 /* --------------------------
  * init behaviour
  * -------------------------- */
 describe('AuthManager: init fetches info then builds KeyChain via wallet mock', () => {
-	test('init fetches /v1/info, keysets, keys and constructs KeyChain once', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  test('init fetches /v1/info, keysets, keys and constructs KeyChain once', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
 
-		reqSpy
-			.mockResolvedValueOnce({
-				name: 'mint',
-				version: 'x',
-				methods: {},
-				nuts: { '22': { bat_max_mint: 7 }, '21': { client_id: 'cashu-client' } },
-			})
-			.mockResolvedValueOnce({
-				keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }],
-			})
-			.mockResolvedValueOnce({
-				keysets: [{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }],
-			});
+    reqSpy
+      .mockResolvedValueOnce({
+        name: 'mint',
+        version: 'x',
+        methods: {},
+        nuts: { '22': { bat_max_mint: 7 }, '21': { client_id: 'cashu-client' } },
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }],
+      })
+      .mockResolvedValueOnce({
+        keysets: [{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }],
+      });
 
-		await am['init']();
+    await am['init']();
 
-		expect(am['info']).toBeTruthy();
+    expect(am['info']).toBeTruthy();
 
-		const KeyChainMock = getKeyChainMock();
-		expect(vi.isMockFunction(KeyChainMock)).toBe(true);
-		// AuthManager now uses mintToCacheDTO + fromCache instead of the raw constructor
-		expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
-			mintUrl,
-			[{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }],
-			[{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }],
-		);
-		expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
+    const KeyChainMock = getKeyChainMock();
+    expect(vi.isMockFunction(KeyChainMock)).toBe(true);
+    // AuthManager now uses mintToCacheDTO + fromCache instead of the raw constructor
+    expect(KeyChainMock.mintToCacheDTO).toHaveBeenCalledWith(
+      mintUrl,
+      [{ id: '00k', unit: 'auth', active: true, input_fee_ppk: 0 }],
+      [{ id: '00k', unit: 'auth', keys: { 1: '02aa' } }],
+    );
+    expect(KeyChainMock.fromCache).toHaveBeenCalledWith(mintUrl, 'auth', expect.any(Object));
 
-		expect(am.activeAuthKeysetId).toBe('00authkeyset0001');
-	});
+    expect(am.activeAuthKeysetId).toBe('00authkeyset0001');
+  });
 });
 
 /* --------------------------
  * misc guards
  * -------------------------- */
 test('getBatMaxMint returns lower of manager maxPerMint and mint n22.bat_max_mint', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, maxPerMint: 3 });
-	am['info'] = fakeInfo({ batMax: 7 });
-	expect(am['getBatMaxMint']()).toBe(3);
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, maxPerMint: 3 });
+  am['info'] = fakeInfo({ batMax: 7 });
+  expect(am['getBatMaxMint']()).toBe(3);
 });
 
 /* ---------- activeAuthKeysetId error path ---------- */
 
 test('activeAuthKeysetId returns undefined when keychain.getCheapestKeyset throws', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	am['keychain'] = {
-		getCheapestKeyset: vi.fn(() => {
-			throw new Error('boom');
-		}),
-	} as any;
-	expect(am.activeAuthKeysetId).toBeUndefined();
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  am['keychain'] = {
+    getCheapestKeyset: vi.fn(() => {
+      throw new Error('boom');
+    }),
+  } as any;
+  expect(am.activeAuthKeysetId).toBeUndefined();
 });
 
 /* ---------- validForAtLeast: no access token ---------- */
 
 test('ensureCAT returns undefined when no CAT and no OIDC, hitting validForAtLeast no-token path', async () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	// no tokens at all
-	const cat = await am.ensureCAT(30);
-	expect(cat).toBeUndefined();
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  // no tokens at all
+  const cat = await am.ensureCAT(30);
+  expect(cat).toBeUndefined();
 });
 
 /* ---------- updateFromOIDC early return ---------- */
 
 test('updateFromOIDC early-returns when access_token missing', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	am['tokens'] = { accessToken: 'keep-me', refreshToken: 'r', expiresAt: 123 };
-	am['updateFromOIDC']({} as any);
-	expect(am.getCAT()).toBe('keep-me');
-	expect(am['tokens'].refreshToken).toBe('r');
-	expect(am['tokens'].expiresAt).toBe(123);
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  am['tokens'] = { accessToken: 'keep-me', refreshToken: 'r', expiresAt: 123 };
+  am['updateFromOIDC']({} as any);
+  expect(am.getCAT()).toBe('keep-me');
+  expect(am['tokens'].refreshToken).toBe('r');
+  expect(am['tokens'].expiresAt).toBe(123);
 });
 
 /* ---------- parseJwtExpSec edge cases ---------- */
 
 test('parseJwtExpSec returns undefined when token is undefined', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	expect(am['parseJwtExpSec']()).toBeUndefined();
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  expect(am['parseJwtExpSec']()).toBeUndefined();
 });
 
 test('parseJwtExpSec returns undefined when JWT has wrong number of parts', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	expect(am['parseJwtExpSec']('abc.def')).toBeUndefined();
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  expect(am['parseJwtExpSec']('abc.def')).toBeUndefined();
 });
 
 /* ---------- ensure early return when pool already sufficient ---------- */
 
 test('ensure() returns early when pool already has >= minTokens (no network)', async () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, desiredPoolSize: 10 });
-	am['info'] = fakeInfo({ batMax: 10 }); // so init() short-circuits if needed later
-	am['keychain'] = {
-		getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
-	} as any;
-	am['pool'] = [{ id: 'k', C: 'C', secret: 'S', amount: 1 } as any];
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, desiredPoolSize: 10 });
+  am['info'] = fakeInfo({ batMax: 10 }); // so init() short-circuits if needed later
+  am['keychain'] = {
+    getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
+  } as any;
+  am['pool'] = [{ id: 'k', C: 'C', secret: 'S', amount: 1 } as any];
 
-	await am.ensure(1);
-	// should not mint
-	expect(reqSpy).not.toHaveBeenCalled();
+  await am.ensure(1);
+  // should not mint
+  expect(reqSpy).not.toHaveBeenCalled();
 });
 
 /* ---------- getBlindAuthToken: success, warn, and error paths ---------- */
 
 describe('getBlindAuthToken coverage', () => {
-	test('success path: mints if needed, serialises without dleq', async () => {
-		const am = new AuthManager(mintUrl, {
-			request: reqSpy as RequestFn,
-			desiredPoolSize: 1,
-			logger: console as any,
-		});
-		am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
-		am['keychain'] = {
-			getCheapestKeyset: vi
-				.fn()
-				.mockReturnValue({ id: '00authkeyset0001', unit: 'auth', keys: { 1: '02aa' } }),
-		} as any;
+  test('success path: mints if needed, serialises without dleq', async () => {
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 1,
+      logger: console as any,
+    });
+    am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+    am['keychain'] = {
+      getCheapestKeyset: vi
+        .fn()
+        .mockReturnValue({ id: '00authkeyset0001', unit: 'auth', keys: { 1: '02aa' } }),
+    } as any;
 
-		stubOutputs(1);
-		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
+    stubOutputs(1);
+    reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
-		const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap' });
-		const parsed = decodeBAT(bat);
-		expect(parsed).toEqual({ id: '00authkeyset0001', secret: 'SECRET_0', C: 'C_0' });
+    const bat = await am.getBlindAuthToken({ method: 'POST', path: '/v1/swap' });
+    const parsed = decodeBAT(bat);
+    expect(parsed).toEqual({ id: '00authkeyset0001', secret: 'SECRET_0', C: 'C_0' });
 
-		// CDK's URL_SAFE engine (general_purpose::URL_SAFE) requires padding.
-		// Verify the base64url portion retains '=' padding so the mint can decode it.
-		const b64part = bat.slice('authA'.length);
-		expect(b64part.length % 4).toBe(0);
-	});
+    // CDK's URL_SAFE engine (general_purpose::URL_SAFE) requires padding.
+    // Verify the base64url portion retains '=' padding so the mint can decode it.
+    const b64part = bat.slice('authA'.length);
+    expect(b64part.length % 4).toBe(0);
+  });
 
-	test('warn path: endpoint not protected by NUT-22', async () => {
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		const am = new AuthManager(mintUrl, {
-			request: reqSpy as RequestFn,
-			desiredPoolSize: 1,
-			logger: console as any,
-		});
-		am['info'] = fakeInfo({ batMax: 1, blindProtected: false });
-		am['keychain'] = {
-			getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', unit: 'auth', keys: { 1: '02aa' } }),
-		} as any;
+  test('warn path: endpoint not protected by NUT-22', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const am = new AuthManager(mintUrl, {
+      request: reqSpy as RequestFn,
+      desiredPoolSize: 1,
+      logger: console as any,
+    });
+    am['info'] = fakeInfo({ batMax: 1, blindProtected: false });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', unit: 'auth', keys: { 1: '02aa' } }),
+    } as any;
 
-		// seed pool to avoid mint
-		am['pool'] = [{ id: 'k', C: 'C', secret: 'S', amount: 1 } as any];
-		await am.getBlindAuthToken({ method: 'POST', path: '/not-protected' });
-		expect(warn).toHaveBeenCalled();
-		warn.mockRestore();
-	});
+    // seed pool to avoid mint
+    am['pool'] = [{ id: 'k', C: 'C', secret: 'S', amount: 1 } as any];
+    await am.getBlindAuthToken({ method: 'POST', path: '/not-protected' });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
 
-	test('error path: ensure completes but pool remains empty', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
-		am['keychain'] = {
-			getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
-		} as any;
+  test('error path: ensure completes but pool remains empty', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
+    } as any;
 
-		const ensureSpy = vi.spyOn(am as any, 'ensure').mockResolvedValue(undefined);
-		await expect(am.getBlindAuthToken({ method: 'POST', path: '/v1/anything' })).rejects.toThrow(
-			'AuthManager: no BATs available and minting failed',
-		);
-		expect(ensureSpy).toHaveBeenCalledWith(1);
-		ensureSpy.mockRestore();
-	});
+    const ensureSpy = vi.spyOn(am as any, 'ensure').mockResolvedValue(undefined);
+    await expect(am.getBlindAuthToken({ method: 'POST', path: '/v1/anything' })).rejects.toThrow(
+      'AuthManager: no BATs available and minting failed',
+    );
+    expect(ensureSpy).toHaveBeenCalledWith(1);
+    ensureSpy.mockRestore();
+  });
 });
 
 /* ---------- importPool / exportPool ---------- */
 
 test('importPool dedupes by secret and exportPool deep-copies and preserves missing dleq', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
 
-	const a: Proof = { id: 'k', C: 'C1', secret: 'S', dleq: { e: 'e1', s: 's1' }, amount: 1n };
-	const b: Proof = { id: 'k', C: 'C2', secret: 'S', dleq: { e: 'e2', s: 's2' }, amount: 1n }; // dup secret
-	const c: Proof = { id: 'k', C: 'C3', secret: 'T', amount: 1 } as any; // no dleq
+  const a: Proof = { id: 'k', C: 'C1', secret: 'S', dleq: { e: 'e1', s: 's1' }, amount: 1n };
+  const b: Proof = { id: 'k', C: 'C2', secret: 'S', dleq: { e: 'e2', s: 's2' }, amount: 1n }; // dup secret
+  const c: Proof = { id: 'k', C: 'C3', secret: 'T', amount: 1 } as any; // no dleq
 
-	am.importPool([a, b, c], 'replace');
-	const snap = am.exportPool();
-	expect(snap).toHaveLength(2);
-	expect(snap.find((p) => p.secret === 'T')!.dleq).toBeUndefined();
+  am.importPool([a, b, c], 'replace');
+  const snap = am.exportPool();
+  expect(snap).toHaveLength(2);
+  expect(snap.find((p) => p.secret === 'T')!.dleq).toBeUndefined();
 
-	// deep copy check
-	snap[0].secret = 'mut';
-	const snap2 = am.exportPool();
-	expect(snap2[0].secret).not.toBe('mut');
+  // deep copy check
+  snap[0].secret = 'mut';
+  const snap2 = am.exportPool();
+  expect(snap2[0].secret).not.toBe('mut');
 });
 
 /* ---------- topUp error branches ---------- */
 
 describe('topUp error branches', () => {
-	test('requires CAT when mint endpoint is Clear-auth protected', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		am['info'] = fakeInfo({ batMax: 1, needCATForMint: true });
-		am['keychain'] = {
-			getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
-		} as any;
+  test('requires CAT when mint endpoint is Clear-auth protected', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1, needCATForMint: true });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
+    } as any;
 
-		stubOutputs(1);
-		await expect(am.ensure(1)).rejects.toThrow('Clear-auth token required');
-	});
+    stubOutputs(1);
+    await expect(am.ensure(1)).rejects.toThrow('Clear-auth token required');
+  });
 
-	test('throws on bad BAT mint response length', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		am['info'] = fakeInfo({ batMax: 1 });
-		am['keychain'] = {
-			getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
-		} as any;
+  test('throws on bad BAT mint response length', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1 });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
+    } as any;
 
-		stubOutputs(1);
-		reqSpy.mockResolvedValueOnce({ signatures: [] });
-		await expect(am.ensure(1)).rejects.toThrow('bad BAT mint response');
-	});
+    stubOutputs(1);
+    reqSpy.mockResolvedValueOnce({ signatures: [] });
+    await expect(am.ensure(1)).rejects.toThrow('bad BAT mint response');
+  });
 
-	test('throws when DLEQ is invalid', async () => {
-		const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-		am['info'] = fakeInfo({ batMax: 1 });
-		am['keychain'] = {
-			getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
-		} as any;
+  test('throws when DLEQ is invalid', async () => {
+    const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+    am['info'] = fakeInfo({ batMax: 1 });
+    am['keychain'] = {
+      getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
+    } as any;
 
-		stubOutputs(1);
-		hasValidDleqSpy.mockReturnValue(false);
-		reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
+    stubOutputs(1);
+    hasValidDleqSpy.mockReturnValue(false);
+    reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
-		await expect(am.ensure(1)).rejects.toThrow('invalid DLEQ');
-	});
+    await expect(am.ensure(1)).rejects.toThrow('invalid DLEQ');
+  });
 });
 
 /* ---------- getBatMaxMint & getActiveKeys guards ---------- */
 
 test('getBatMaxMint throws if mint info not loaded', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	expect(() => am['getBatMaxMint']()).toThrow('mint info not loaded');
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  expect(() => am['getBatMaxMint']()).toThrow('mint info not loaded');
 });
 
 test('getActiveKeys throws if keychain not initialised', () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	expect(() => am['getActiveKeys']()).toThrow('keyset not loaded');
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  expect(() => am['getActiveKeys']()).toThrow('keyset not loaded');
 });
 
 /* ---------- withLock via concurrent getBlindAuthToken ---------- */
 
 test('withLock serialises concurrent BAT pops', async () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console as any });
-	am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
-	am['keychain'] = {
-		getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
-	} as any;
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn, logger: console as any });
+  am['info'] = fakeInfo({ batMax: 1, blindProtected: true });
+  am['keychain'] = {
+    getCheapestKeyset: vi.fn().mockReturnValue({ id: 'k', keys: { 1: '02aa' } }),
+  } as any;
 
-	// seed pool with two
-	am['pool'] = [
-		{ id: 'k', C: 'C1', secret: 'S1', amount: 1 } as any,
-		{ id: 'k', C: 'C2', secret: 'S2', amount: 1 } as any,
-	];
+  // seed pool with two
+  am['pool'] = [
+    { id: 'k', C: 'C1', secret: 'S1', amount: 1 } as any,
+    { id: 'k', C: 'C2', secret: 'S2', amount: 1 } as any,
+  ];
 
-	const [b1, b2] = await Promise.all([
-		am.getBlindAuthToken({ method: 'POST', path: '/x' }),
-		am.getBlindAuthToken({ method: 'POST', path: '/x' }),
-	]);
+  const [b1, b2] = await Promise.all([
+    am.getBlindAuthToken({ method: 'POST', path: '/x' }),
+    am.getBlindAuthToken({ method: 'POST', path: '/x' }),
+  ]);
 
-	const s1 = decodeBAT(b1).secret;
-	const s2 = decodeBAT(b2).secret;
-	expect(s1).not.toBe(s2);
-	expect(am.poolSize).toBe(0);
+  const s1 = decodeBAT(b1).secret;
+  const s2 = decodeBAT(b2).secret;
+  expect(s1).not.toBe(s2);
+  expect(am.poolSize).toBe(0);
 });
 
 test('topUp sets Clear-auth header when mint endpoint requires CAT', async () => {
-	const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
-	// Mint requires CAT on /v1/auth/blind/mint
-	am['info'] = (function () {
-		return {
-			nuts: { '22': { bat_max_mint: 1 } },
-			requiresClearAuthToken: (m: string, p: string) => m === 'POST' && p === '/v1/auth/blind/mint',
-			requiresBlindAuthToken: () => true,
-		} as any;
-	})();
+  const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
+  // Mint requires CAT on /v1/auth/blind/mint
+  am['info'] = (function () {
+    return {
+      nuts: { '22': { bat_max_mint: 1 } },
+      requiresClearAuthToken: (m: string, p: string) => m === 'POST' && p === '/v1/auth/blind/mint',
+      requiresBlindAuthToken: () => true,
+    } as any;
+  })();
 
-	// Keychain stub
-	am['keychain'] = {
-		getCheapestKeyset: vi.fn().mockReturnValue({
-			id: 'k',
-			unit: 'auth',
-			keys: { 1: '02aa' },
-		}),
-	} as any;
+  // Keychain stub
+  am['keychain'] = {
+    getCheapestKeyset: vi.fn().mockReturnValue({
+      id: 'k',
+      unit: 'auth',
+      keys: { 1: '02aa' },
+    }),
+  } as any;
 
-	// Have a valid CAT available so ensureCAT succeeds
-	am['tokens'] = { accessToken: 'cat123' }; // no expiresAt means treated as valid
+  // Have a valid CAT available so ensureCAT succeeds
+  am['tokens'] = { accessToken: 'cat123' }; // no expiresAt means treated as valid
 
-	// Mint one BAT
-	vi.spyOn(OutputData, 'createRandomData').mockImplementation((): any[] => [
-		{
-			blindedMessage: 'BM',
-			toProof: () => ({
-				id: 'k',
-				C: 'C',
-				secret: 'S',
-				amount: 1,
-				dleq: { e: 'e', s: 's' },
-			}),
-		},
-	]);
-	vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
-	reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
+  // Mint one BAT
+  vi.spyOn(OutputData, 'createRandomData').mockImplementation((): any[] => [
+    {
+      blindedMessage: 'BM',
+      toProof: () => ({
+        id: 'k',
+        C: 'C',
+        secret: 'S',
+        amount: 1,
+        dleq: { e: 'e', s: 's' },
+      }),
+    },
+  ]);
+  vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
+  reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
-	await am.ensure(1);
+  await am.ensure(1);
 
-	// Assert the Clear-auth header was set
-	expect(reqSpy).toHaveBeenCalledTimes(1);
-	const callArg = reqSpy.mock.calls[0][0] as any;
-	expect(callArg.endpoint).toBe('http://mint.local/v1/auth/blind/mint');
-	expect(callArg.method).toBe('POST');
-	expect(callArg.headers?.['Clear-auth']).toBe('cat123');
+  // Assert the Clear-auth header was set
+  expect(reqSpy).toHaveBeenCalledTimes(1);
+  const callArg = reqSpy.mock.calls[0][0] as any;
+  expect(callArg.endpoint).toBe('http://mint.local/v1/auth/blind/mint');
+  expect(callArg.method).toBe('POST');
+  expect(callArg.headers?.['Clear-auth']).toBe('cat123');
 });

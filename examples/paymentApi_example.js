@@ -6,114 +6,114 @@ import admin from 'firebase-admin';
 admin.initializeApp();
 
 export const ecashPayment = onRequest(async (req, res) => {
-	const waitedAmount = Amount.from(10000);
-	const p2pkLock = '02b3af078efa4583111915fe4d169c26f6fee86e3920cbe815522e62b946411001';
-	const trustedMints = [
-		'https://mint.minibits.cash/Bitcoin',
-		'https://mint.lnwallet.app',
-		'https://mint.coinos.io',
-		'https://mint.lnserver.com',
-		'https://mint.0xchat.com',
-	];
+  const waitedAmount = Amount.from(10000);
+  const p2pkLock = '02b3af078efa4583111915fe4d169c26f6fee86e3920cbe815522e62b946411001';
+  const trustedMints = [
+    'https://mint.minibits.cash/Bitcoin',
+    'https://mint.lnwallet.app',
+    'https://mint.coinos.io',
+    'https://mint.lnserver.com',
+    'https://mint.0xchat.com',
+  ];
 
-	const uid = req.body.uid;
-	const token = req.body.ecashToken;
+  const uid = req.body.uid;
+  const token = req.body.ecashToken;
 
-	const auth = admin.auth();
-	try {
-		await auth.getUser(uid);
-	} catch (error) {
-		res.json({
-			success: false,
-			error: 'uid_not_found',
-			message: 'Uid not found',
-		});
-		return;
-	}
+  const auth = admin.auth();
+  try {
+    await auth.getUser(uid);
+  } catch (error) {
+    res.json({
+      success: false,
+      error: 'uid_not_found',
+      message: 'Uid not found',
+    });
+    return;
+  }
 
-	let tokenMetadata;
-	try {
-		tokenMetadata = getTokenMetadata(token);
-	} catch (error) {
-		res.json({
-			success: false,
-			error: 'invalid_token',
-			message: 'Invalid token',
-		});
-		return;
-	}
+  let tokenMetadata;
+  try {
+    tokenMetadata = getTokenMetadata(token);
+  } catch (error) {
+    res.json({
+      success: false,
+      error: 'invalid_token',
+      message: 'Invalid token',
+    });
+    return;
+  }
 
-	const isUnitSat = tokenMetadata.unit === 'sat';
-	if (!isUnitSat) {
-		res.json({
-			success: false,
-			error: 'invalid_unit',
-			message: 'Token unit is not satoshi',
-		});
-		return;
-	}
+  const isUnitSat = tokenMetadata.unit === 'sat';
+  if (!isUnitSat) {
+    res.json({
+      success: false,
+      error: 'invalid_unit',
+      message: 'Token unit is not satoshi',
+    });
+    return;
+  }
 
-	const isWrongAmount = !waitedAmount.equals(tokenMetadata.amount);
-	if (isWrongAmount) {
-		res.json({
-			success: false,
-			error: 'wrong_amount',
-			message: `Wrong amount, must be ${waitedAmount} satoshi`,
-		});
-		return;
-	}
+  const isWrongAmount = !waitedAmount.equals(tokenMetadata.amount);
+  if (isWrongAmount) {
+    res.json({
+      success: false,
+      error: 'wrong_amount',
+      message: `Wrong amount, must be ${waitedAmount} satoshi`,
+    });
+    return;
+  }
 
-	const mintUrl = tokenMetadata.mint;
-	const isTrustedMint = trustedMints.includes(mintUrl);
-	if (!isTrustedMint) {
-		res.json({
-			success: false,
-			error: 'untrusted_mint',
-			message: 'Untrusted mint',
-		});
-		return;
-	}
+  const mintUrl = tokenMetadata.mint;
+  const isTrustedMint = trustedMints.includes(mintUrl);
+  if (!isTrustedMint) {
+    res.json({
+      success: false,
+      error: 'untrusted_mint',
+      message: 'Untrusted mint',
+    });
+    return;
+  }
 
-	const wallet = new Wallet(mintUrl);
-	await wallet.loadMint();
+  const wallet = new Wallet(mintUrl);
+  await wallet.loadMint();
 
-	let receiveProofs;
-	try {
-		receiveProofs = await wallet.ops.receive(token).asP2PK({ pubkey: p2pkLock }).run();
-	} catch (error) {
-		if (error.code === 11001) {
-			res.json({
-				success: false,
-				error: 'token_spent',
-				message: 'Token already spent',
-			});
-			return;
-		}
+  let receiveProofs;
+  try {
+    receiveProofs = await wallet.ops.receive(token).asP2PK({ pubkey: p2pkLock }).run();
+  } catch (error) {
+    if (error.code === 11001) {
+      res.json({
+        success: false,
+        error: 'token_spent',
+        message: 'Token already spent',
+      });
+      return;
+    }
 
-		res.json({
-			success: false,
-			error: 'cannot_receive_token',
-			message: `Cannot receive token: ${error.code}`,
-		});
-		return;
-	}
+    res.json({
+      success: false,
+      error: 'cannot_receive_token',
+      message: `Cannot receive token: ${error.code}`,
+    });
+    return;
+  }
 
-	const backToken = getEncodedToken({ mint: mintUrl, proofs: receiveProofs });
+  const backToken = getEncodedToken({ mint: mintUrl, proofs: receiveProofs });
 
-	const db = getFirestore();
-	const collectionRef = db.collection('payments');
-	await collectionRef.add({
-		uid,
-		ecashToken: backToken,
-	});
+  const db = getFirestore();
+  const collectionRef = db.collection('payments');
+  await collectionRef.add({
+    uid,
+    ecashToken: backToken,
+  });
 
-	await db.collection('users').doc(uid).update({
-		plan: 'Unlimited',
-	});
+  await db.collection('users').doc(uid).update({
+    plan: 'Unlimited',
+  });
 
-	res.json({
-		success: true,
-		message: 'Payment accepted',
-	});
-	return;
+  res.json({
+    success: true,
+    message: 'Payment accepted',
+  });
+  return;
 });

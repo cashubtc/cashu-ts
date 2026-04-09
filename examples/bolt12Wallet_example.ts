@@ -15,141 +15,141 @@ const privateKey = randomBytes(32);
 const pubkey = secp256k1.getPublicKey(privateKey, true);
 
 const runBolt12WalletExample = async () => {
-	try {
-		console.log('🚀 BOLT12 Wallet Example');
-		console.log('========================\n');
+  try {
+    console.log('🚀 BOLT12 Wallet Example');
+    console.log('========================\n');
 
-		// Initialize wallet
-		const wallet = new Wallet(MINT_URL);
-		await wallet.loadMint();
+    // Initialize wallet
+    const wallet = new Wallet(MINT_URL);
+    await wallet.loadMint();
 
-		// Create reusable BOLT12 offer
-		console.log('📋 Creating BOLT12 mint quote (reusable offer)');
-		const bolt12MintQuote = await wallet.createMintQuoteBolt12(bytesToHex(pubkey));
-		console.log(`✅ BOLT12 offer created: ${bolt12MintQuote.request}\n`);
+    // Create reusable BOLT12 offer
+    console.log('📋 Creating BOLT12 mint quote (reusable offer)');
+    const bolt12MintQuote = await wallet.createMintQuoteBolt12(bytesToHex(pubkey));
+    console.log(`✅ BOLT12 offer created: ${bolt12MintQuote.request}\n`);
 
-		// Mint initial proofs via BOLT11
-		let proofs = await mintInitialProofs(wallet);
-		let totalSent = Amount.zero();
+    // Mint initial proofs via BOLT11
+    let proofs = await mintInitialProofs(wallet);
+    let totalSent = Amount.zero();
 
-		// Pay BOLT12 offer multiple times
-		// NOTE: CDK currently only lets us pay each offer once because there is a unique constraint on the offer.
-		console.log(`🔄 Making ${PAYMENT_CYCLES} payments to BOLT12 offer\n`);
+    // Pay BOLT12 offer multiple times
+    // NOTE: CDK currently only lets us pay each offer once because there is a unique constraint on the offer.
+    console.log(`🔄 Making ${PAYMENT_CYCLES} payments to BOLT12 offer\n`);
 
-		for (let cycle = 1; cycle <= PAYMENT_CYCLES; cycle++) {
-			console.log(`--- Payment ${cycle}/${PAYMENT_CYCLES} ---`);
+    for (let cycle = 1; cycle <= PAYMENT_CYCLES; cycle++) {
+      console.log(`--- Payment ${cycle}/${PAYMENT_CYCLES} ---`);
 
-			try {
-				// Pay the BOLT12 offer
-				const { remainingProofs, sentAmount } = await payBolt12Offer(
-					wallet,
-					bolt12MintQuote.request,
-					PAYMENT_AMOUNT,
-					proofs,
-				);
+      try {
+        // Pay the BOLT12 offer
+        const { remainingProofs, sentAmount } = await payBolt12Offer(
+          wallet,
+          bolt12MintQuote.request,
+          PAYMENT_AMOUNT,
+          proofs,
+        );
 
-				proofs = remainingProofs;
-				totalSent.add(sentAmount);
+        proofs = remainingProofs;
+        totalSent.add(sentAmount);
 
-				// Mint new proofs from accumulated payments
-				const newProofs = await mintFromBolt12Quote(wallet, bolt12MintQuote);
-				proofs.push(...newProofs);
+        // Mint new proofs from accumulated payments
+        const newProofs = await mintFromBolt12Quote(wallet, bolt12MintQuote);
+        proofs.push(...newProofs);
 
-				console.log(`💰 Balance: ${sumProofs(proofs)} sats\n`);
+        console.log(`💰 Balance: ${sumProofs(proofs)} sats\n`);
 
-				if (cycle < PAYMENT_CYCLES) {
-					await new Promise((resolve) => setTimeout(resolve, 1000));
-				}
-			} catch (error) {
-				console.error(`❌ Payment ${cycle} failed:`, error);
-				break;
-			}
-		}
+        if (cycle < PAYMENT_CYCLES) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        console.error(`❌ Payment ${cycle} failed:`, error);
+        break;
+      }
+    }
 
-		// Final summary
-		console.log('🎯 Summary');
-		console.log('==========');
-		console.log(`💰 Final balance: ${sumProofs(proofs)} sats`);
-		console.log(`📤 Total sent: ${totalSent} sats`);
-		console.log(`✅ BOLT12 example completed!`);
-	} catch (error) {
-		console.error('❌ Error:', error);
-	}
+    // Final summary
+    console.log('🎯 Summary');
+    console.log('==========');
+    console.log(`💰 Final balance: ${sumProofs(proofs)} sats`);
+    console.log(`📤 Total sent: ${totalSent} sats`);
+    console.log(`✅ BOLT12 example completed!`);
+  } catch (error) {
+    console.error('❌ Error:', error);
+  }
 };
 
 runBolt12WalletExample();
 
 // Helper functions
 const waitForMintQuote = async (wallet: Wallet, quoteId: string): Promise<Proof[]> => {
-	while (true) {
-		const quote = await wallet.checkMintQuoteBolt11(quoteId);
+  while (true) {
+    const quote = await wallet.checkMintQuoteBolt11(quoteId);
 
-		if (quote.state === MintQuoteState.PAID) {
-			return await wallet.mintProofsBolt11(INITIAL_MINT_AMOUNT, quoteId);
-		} else if (quote.state === MintQuoteState.ISSUED) {
-			throw new Error('Quote has already been issued');
-		}
+    if (quote.state === MintQuoteState.PAID) {
+      return await wallet.mintProofsBolt11(INITIAL_MINT_AMOUNT, quoteId);
+    } else if (quote.state === MintQuoteState.ISSUED) {
+      throw new Error('Quote has already been issued');
+    }
 
-		await new Promise((resolve) => setTimeout(resolve, 1000));
-	}
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 };
 
 const mintInitialProofs = async (wallet: Wallet): Promise<Proof[]> => {
-	console.log(`💰 Minting ${INITIAL_MINT_AMOUNT} sats via BOLT11...`);
+  console.log(`💰 Minting ${INITIAL_MINT_AMOUNT} sats via BOLT11...`);
 
-	const bolt11Quote = await wallet.createMintQuoteBolt11(INITIAL_MINT_AMOUNT);
-	console.log(`Pay this invoice: ${bolt11Quote.request}`);
+  const bolt11Quote = await wallet.createMintQuoteBolt11(INITIAL_MINT_AMOUNT);
+  console.log(`Pay this invoice: ${bolt11Quote.request}`);
 
-	const proofs = await waitForMintQuote(wallet, bolt11Quote.quote);
-	console.log(`✅ Minted ${sumProofs(proofs)} sats`);
+  const proofs = await waitForMintQuote(wallet, bolt11Quote.quote);
+  console.log(`✅ Minted ${sumProofs(proofs)} sats`);
 
-	return proofs;
+  return proofs;
 };
 
 const payBolt12Offer = async (
-	wallet: Wallet,
-	offer: string,
-	amount: number,
-	proofs: Proof[],
+  wallet: Wallet,
+  offer: string,
+  amount: number,
+  proofs: Proof[],
 ): Promise<{ remainingProofs: Proof[]; sentAmount: Amount }> => {
-	// Create melt quote
-	const meltQuote = await wallet.createMeltQuoteBolt12(offer, amount * 1000);
-	const totalNeeded = meltQuote.amount.add(meltQuote.fee_reserve);
+  // Create melt quote
+  const meltQuote = await wallet.createMeltQuoteBolt12(offer, amount * 1000);
+  const totalNeeded = meltQuote.amount.add(meltQuote.fee_reserve);
 
-	if (sumProofs(proofs).lessThan(totalNeeded)) {
-		throw new Error(`Insufficient balance: need ${totalNeeded}, have ${sumProofs(proofs)}`);
-	}
+  if (sumProofs(proofs).lessThan(totalNeeded)) {
+    throw new Error(`Insufficient balance: need ${totalNeeded}, have ${sumProofs(proofs)}`);
+  }
 
-	// Send payment
-	const { keep, send } = await wallet.send(totalNeeded, proofs, { includeFees: true });
-	const { change } = await wallet.meltProofsBolt12(meltQuote, send);
+  // Send payment
+  const { keep, send } = await wallet.send(totalNeeded, proofs, { includeFees: true });
+  const { change } = await wallet.meltProofsBolt12(meltQuote, send);
 
-	console.log(`💸 Paid ${amount} sats to BOLT12 offer (fee: ${meltQuote.fee_reserve} sats)`);
+  console.log(`💸 Paid ${amount} sats to BOLT12 offer (fee: ${meltQuote.fee_reserve} sats)`);
 
-	return {
-		remainingProofs: [...keep, ...change],
-		sentAmount: sumProofs(send),
-	};
+  return {
+    remainingProofs: [...keep, ...change],
+    sentAmount: sumProofs(send),
+  };
 };
 
 const mintFromBolt12Quote = async (
-	wallet: Wallet,
-	quote: MintQuoteBolt12Response,
+  wallet: Wallet,
+  quote: MintQuoteBolt12Response,
 ): Promise<Proof[]> => {
-	const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);
-	const availableToMint = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
+  const updatedQuote = await wallet.checkMintQuoteBolt12(quote.quote);
+  const availableToMint = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
 
-	if (availableToMint.lessThanOrEqual(0)) {
-		return [];
-	}
+  if (availableToMint.lessThanOrEqual(0)) {
+    return [];
+  }
 
-	console.log(`💎 Minting ${availableToMint} sats from BOLT12 payments`);
-	const newProofs = await wallet.mintProofsBolt12(
-		availableToMint,
-		updatedQuote,
-		bytesToHex(privateKey),
-	);
+  console.log(`💎 Minting ${availableToMint} sats from BOLT12 payments`);
+  const newProofs = await wallet.mintProofsBolt12(
+    availableToMint,
+    updatedQuote,
+    bytesToHex(privateKey),
+  );
 
-	console.log(`✅ Minted ${newProofs.length} new proofs`);
-	return newProofs;
+  console.log(`✅ Minted ${newProofs.length} new proofs`);
+  return newProofs;
 };

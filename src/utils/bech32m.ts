@@ -12,10 +12,10 @@ const LIMIT_LENGTH = 1023;
  * @throws Error if the string doesn't have a valid bech32m separator structure.
  */
 function assertBech32mFormat(str: string): asserts str is Bech32mString {
-	const separatorIndex = str.lastIndexOf('1');
-	if (separatorIndex < 1 || separatorIndex === str.length - 1) {
-		throw new Error('Invalid bech32m string: missing or misplaced separator');
-	}
+  const separatorIndex = str.lastIndexOf('1');
+  if (separatorIndex < 1 || separatorIndex === str.length - 1) {
+    throw new Error('Invalid bech32m string: missing or misplaced separator');
+  }
 }
 
 /**
@@ -26,8 +26,8 @@ function assertBech32mFormat(str: string): asserts str is Bech32mString {
  * @returns The bech32m encoded string.
  */
 function encodeBech32m(hrp: string, data: Uint8Array, limitLength = LIMIT_LENGTH): string {
-	const words = bech32m.toWords(data);
-	return bech32m.encode(hrp, words, limitLength);
+  const words = bech32m.toWords(data);
+  return bech32m.encode(hrp, words, limitLength);
 }
 
 /**
@@ -37,13 +37,13 @@ function encodeBech32m(hrp: string, data: Uint8Array, limitLength = LIMIT_LENGTH
  * @returns An object containing the human-readable part (hrp) and the decoded data.
  */
 function decodeBech32m(
-	encoded: string,
-	limitLength = LIMIT_LENGTH,
+  encoded: string,
+  limitLength = LIMIT_LENGTH,
 ): { hrp: string; data: Uint8Array } {
-	assertBech32mFormat(encoded);
-	const { prefix, words } = bech32m.decode(encoded, limitLength);
-	const data = bech32m.fromWords(words);
-	return { hrp: prefix, data };
+  assertBech32mFormat(encoded);
+  const { prefix, words } = bech32m.decode(encoded, limitLength);
+  const data = bech32m.fromWords(words);
+  return { hrp: prefix, data };
 }
 
 /**
@@ -53,7 +53,7 @@ function decodeBech32m(
  * @returns The decoded data as Uint8Array.
  */
 function decodeBech32mToBytes(encoded: string, limitLength = LIMIT_LENGTH): Uint8Array {
-	return decodeBech32m(encoded, limitLength).data;
+  return decodeBech32m(encoded, limitLength).data;
 }
 
 /**
@@ -64,15 +64,15 @@ function decodeBech32mToBytes(encoded: string, limitLength = LIMIT_LENGTH): Uint
  * @returns True if the string is valid bech32m (and matches expectedHrp if provided)
  */
 function isBech32m(str: string, expectedHrp?: string, limitLength = LIMIT_LENGTH): boolean {
-	try {
-		const { hrp } = decodeBech32m(str, limitLength);
-		if (expectedHrp !== undefined && hrp !== expectedHrp) {
-			return false;
-		}
-		return true;
-	} catch {
-		return false;
-	}
+  try {
+    const { hrp } = decodeBech32m(str, limitLength);
+    if (expectedHrp !== undefined && hrp !== expectedHrp) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export { encodeBech32m, decodeBech32m, decodeBech32mToBytes, isBech32m };

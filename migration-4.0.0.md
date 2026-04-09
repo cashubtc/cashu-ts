@@ -150,8 +150,8 @@ If you must keep a CJS entry point, use a dynamic import wrapper:
 ```js
 // CJS compatibility using an IIFE
 (async () => {
-	const { Wallet } = await import('@cashu/cashu-ts');
-	// ...
+  const { Wallet } = await import('@cashu/cashu-ts');
+  // ...
 })();
 ```
 
@@ -514,18 +514,18 @@ These are low-level primitives not typically used by application code. If you us
 ```ts
 // Before
 import {
-	RawProof,
-	constructProofFromPromise,
-	createRandomBlindedMessage,
-	verifyProof,
+  RawProof,
+  constructProofFromPromise,
+  createRandomBlindedMessage,
+  verifyProof,
 } from '@cashu/cashu-ts';
 
 // After
 import {
-	UnblindedSignature,
-	constructUnblindedSignature,
-	createRandomRawBlindedMessage,
-	verifyUnblindedSignature,
+  UnblindedSignature,
+  constructUnblindedSignature,
+  createRandomRawBlindedMessage,
+  verifyUnblindedSignature,
 } from '@cashu/cashu-ts';
 ```
 
@@ -911,17 +911,17 @@ All generic methods accept an optional `normalize` callback for coercing method-
 type BacsQuoteRes = MintQuoteBaseResponse & { amount: Amount; reference: string };
 
 const quote = await wallet.createMintQuote<BacsQuoteRes>(
-	'bacs',
-	{
-		amount: 5000n,
-		sort_code: '12-34-56',
-	},
-	{
-		normalize: (raw) => ({
-			...(raw as BacsQuoteRes),
-			amount: Amount.from(raw.amount as AmountLike),
-		}),
-	},
+  'bacs',
+  {
+    amount: 5000n,
+    sort_code: '12-34-56',
+  },
+  {
+    normalize: (raw) => ({
+      ...(raw as BacsQuoteRes),
+      amount: Amount.from(raw.amount as AmountLike),
+    }),
+  },
 );
 ```
 

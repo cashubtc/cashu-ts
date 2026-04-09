@@ -29,8 +29,8 @@ where
 
 ```typescript
 export type OutputAmounts = {
-	sendAmounts: Array<number>;
-	keepAmounts?: Array<number>;
+  sendAmounts: Array<number>;
+  keepAmounts?: Array<number>;
 };
 ```
 
@@ -75,10 +75,10 @@ To check the state of a `Proof`, call `CashuWallet.checkProofsStates`. `checkPro
 
 ```ts
 type Token = {
-	mint: string;
-	proofs: Array<Proof>;
-	memo?: string;
-	unit?: string;
+  mint: string;
+  proofs: Array<Proof>;
+  memo?: string;
+  unit?: string;
 };
 ```
 

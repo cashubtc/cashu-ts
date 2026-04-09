@@ -18,26 +18,26 @@ export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {
-	type MintMethod,
-	type MintQuoteFor,
-	SendBuilder,
-	ReceiveBuilder,
-	MintBuilder,
-	MeltBuilder,
-	WalletOps,
+  type MintMethod,
+  type MintQuoteFor,
+  SendBuilder,
+  ReceiveBuilder,
+  MintBuilder,
+  MeltBuilder,
+  WalletOps,
 } from './wallet/WalletOps';
 
 // AUTH module
 export {
-	OIDCAuth,
-	AuthManager,
-	createAuthWallet,
-	type AuthProvider,
-	type AuthManagerOptions,
-	type TokenResponse,
-	type DeviceStartResponse,
-	type OIDCConfig,
-	type OIDCAuthOptions,
+  OIDCAuth,
+  AuthManager,
+  createAuthWallet,
+  type AuthProvider,
+  type AuthManagerOptions,
+  type TokenResponse,
+  type DeviceStartResponse,
+  type OIDCConfig,
+  type OIDCAuthOptions,
 } from './auth';
 
 // Wallet/Mint types used in the public API surface
@@ -76,21 +76,21 @@ export { JSONInt, type JSONIntApi } from './utils/JSONInt';
 export { PaymentRequest } from './model/PaymentRequest';
 export { PaymentRequestTransportType } from './wallet/types';
 export type {
-	PaymentRequestPayload,
-	PaymentRequestTransport,
-	RawPaymentRequest,
-	RawTransport,
-	NUT10Option,
-	RawNUT10Option,
+  PaymentRequestPayload,
+  PaymentRequestTransport,
+  RawPaymentRequest,
+  RawTransport,
+  NUT10Option,
+  RawNUT10Option,
 } from './wallet/types';
 
 // Logging & errors
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
-	MintOperationError,
-	NetworkError,
-	HttpResponseError,
-	RateLimitError,
+  MintOperationError,
+  NetworkError,
+  HttpResponseError,
+  RateLimitError,
 } from './model/Errors';
 
 // Low-level helpers/types that appear in public surfaces
@@ -101,8 +101,8 @@ export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
 export type { RequestFn, RequestArgs, RequestOptions, ResponseMeta } from './transport';
 export {
-	SigAll,
-	type SigAllApi,
-	type SigAllDigests,
-	type SigAllSigningPackage,
+  SigAll,
+  type SigAllApi,
+  type SigAllDigests,
+  type SigAllSigningPackage,
 } from './model/SigAll';

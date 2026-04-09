@@ -1,34 +1,35 @@
-import {
-	type MeltQuoteBolt11Response,
-	type MeltQuoteBolt12Response,
-	type MeltQuoteBaseResponse,
-	type MintQuoteBolt12Response,
-	type MintQuoteBolt11Response,
-} from '../model/types';
+import { type P2PKOptions } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
+import {
+  type MeltQuoteBolt11Response,
+  type MeltQuoteBolt12Response,
+  type MeltQuoteBaseResponse,
+  type MintQuoteBolt12Response,
+  type MintQuoteBolt11Response,
+} from '../model/types';
 import type { Proof } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+
 import {
-	type OutputType,
-	type OutputConfig,
-	type SendConfig,
-	type ReceiveConfig,
-	type MintProofsConfig,
-	type OnCountersReserved,
-	type MeltProofsConfig,
-	type MeltProofsResponse,
-	type MeltPreview,
-	type MintPreview,
+  type OutputType,
+  type OutputConfig,
+  type SendConfig,
+  type ReceiveConfig,
+  type MintProofsConfig,
+  type OnCountersReserved,
+  type MeltProofsConfig,
+  type MeltProofsResponse,
+  type MeltPreview,
+  type MintPreview,
 } from './types';
 import type { Wallet } from './Wallet';
-import { type P2PKOptions } from '../crypto';
 
 export type MintMethod = 'bolt11' | 'bolt12';
 
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
-	? string | MintQuoteBolt11Response
-	: MintQuoteBolt12Response;
+  ? string | MintQuoteBolt11Response
+  : MintQuoteBolt12Response;
 
 /**
  * Fluent operations builder for a Wallet instance.
@@ -38,30 +39,30 @@ export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
  * you do not customise an output side, the wallet’s policy defaults apply.
  */
 export class WalletOps {
-	constructor(private wallet: Wallet) {}
-	send(amount: AmountLike, proofs: Proof[]) {
-		return new SendBuilder(this.wallet, amount, proofs);
-	}
-	receive(token: Token | string | Proof[]) {
-		return new ReceiveBuilder(this.wallet, token);
-	}
-	/**
-	 * @param quote Full `MintQuoteBolt11Response` or a bare quote ID string. Passing a string fetches
-	 *   the latest quote state from the mint (unit/expiry validation included). Pass the full object
-	 *   if you already have it to avoid the extra round-trip.
-	 */
-	mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>) {
-		return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
-	}
-	mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>) {
-		return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
-	}
-	meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
-		return new MeltBuilder<MeltQuoteBolt11Response>(this.wallet, 'bolt11', quote, proofs);
-	}
-	meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
-		return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
-	}
+  constructor(private wallet: Wallet) {}
+  send(amount: AmountLike, proofs: Proof[]) {
+    return new SendBuilder(this.wallet, amount, proofs);
+  }
+  receive(token: Token | string | Proof[]) {
+    return new ReceiveBuilder(this.wallet, token);
+  }
+  /**
+   * @param quote Full `MintQuoteBolt11Response` or a bare quote ID string. Passing a string fetches
+   *   the latest quote state from the mint (unit/expiry validation included). Pass the full object
+   *   if you already have it to avoid the extra round-trip.
+   */
+  mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>) {
+    return new MintBuilder<'bolt11'>(this.wallet, 'bolt11', amount, quote);
+  }
+  mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>) {
+    return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
+  }
+  meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
+    return new MeltBuilder<MeltQuoteBolt11Response>(this.wallet, 'bolt11', quote, proofs);
+  }
+  meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
+    return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
+  }
 }
 
 /**
@@ -73,273 +74,273 @@ export class WalletOps {
  * @example
  *
  *     const { keep, send } = await wallet.ops
- *     	.send(5, proofs)
- *     	.asDeterministic() // counter 0 means auto reserve via CounterSource
- *     	.keepAsRandom()
- *     	.includeFees(true) // sender pays receiver’s future spend fee
- *     	.run();
+ *       .send(5, proofs)
+ *       .asDeterministic() // counter 0 means auto reserve via CounterSource
+ *       .keepAsRandom()
+ *       .includeFees(true) // sender pays receiver’s future spend fee
+ *       .run();
  */
 export class SendBuilder {
-	private sendOT?: OutputType;
-	private keepOT?: OutputType;
-	private config: SendConfig = {};
-	private offlineExact?: { requireDleq: boolean };
-	private offlineClose?: { requireDleq: boolean };
-	private amount: Amount;
+  private sendOT?: OutputType;
+  private keepOT?: OutputType;
+  private config: SendConfig = {};
+  private offlineExact?: { requireDleq: boolean };
+  private offlineClose?: { requireDleq: boolean };
+  private amount: Amount;
 
-	constructor(
-		private wallet: Wallet,
-		amount: AmountLike,
-		private proofs: Proof[],
-	) {
-		this.amount = Amount.from(amount);
-	}
+  constructor(
+    private wallet: Wallet,
+    amount: AmountLike,
+    private proofs: Proof[],
+  ) {
+    this.amount = Amount.from(amount);
+  }
 
-	/**
-	 * Use random blinding for the sent outputs.
-	 *
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: AmountLike[]) {
-		this.sendOT = { type: 'random', denominations: denoms };
-		return this;
-	}
+  /**
+   * Use random blinding for the sent outputs.
+   *
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asRandom(denoms?: AmountLike[]) {
+    this.sendOT = { type: 'random', denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use deterministic outputs for the sent proofs.
-	 *
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: AmountLike[]) {
-		this.sendOT = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use deterministic outputs for the sent proofs.
+   *
+   * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.sendOT = { type: 'deterministic', counter, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use P2PK locked outputs for the sent proofs.
-	 *
-	 * @param options NUT 11 options like pubkey and locktime.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-		this.sendOT = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use P2PK locked outputs for the sent proofs.
+   *
+   * @param options NUT 11 options like pubkey and locktime.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
+    this.sendOT = { type: 'p2pk', options, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use a factory to generate OutputData for the sent proofs.
-	 *
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
-		this.sendOT = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use a factory to generate OutputData for the sent proofs.
+   *
+   * @param factory OutputDataFactory used to produce blinded messages.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.sendOT = { type: 'factory', factory, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Provide pre created OutputData for the sent proofs.
-	 *
-	 * @param data Fully formed OutputData. Their amounts must sum to the send amount, otherwise the
-	 *   wallet will throw.
-	 */
-	asCustom(data: OutputDataLike[]) {
-		this.sendOT = { type: 'custom', data };
-		return this;
-	}
+  /**
+   * Provide pre created OutputData for the sent proofs.
+   *
+   * @param data Fully formed OutputData. Their amounts must sum to the send amount, otherwise the
+   *   wallet will throw.
+   */
+  asCustom(data: OutputDataLike[]) {
+    this.sendOT = { type: 'custom', data };
+    return this;
+  }
 
-	/**
-	 * Use random blinding for change outputs.
-	 *
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	keepAsRandom(denoms?: AmountLike[]) {
-		this.keepOT = { type: 'random', denominations: denoms };
-		return this;
-	}
+  /**
+   * Use random blinding for change outputs.
+   *
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  keepAsRandom(denoms?: AmountLike[]) {
+    this.keepOT = { type: 'random', denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use deterministic outputs for change.
-	 *
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	keepAsDeterministic(counter = 0, denoms?: AmountLike[]) {
-		this.keepOT = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use deterministic outputs for change.
+   *
+   * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  keepAsDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.keepOT = { type: 'deterministic', counter, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use P2PK locked change (NUT 11).
-	 *
-	 * @param options Locking options applied to the kept proofs.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-		this.keepOT = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use P2PK locked change (NUT 11).
+   *
+   * @param options Locking options applied to the kept proofs.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  keepAsP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
+    this.keepOT = { type: 'p2pk', options, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use a factory to generate OutputData for change.
-	 *
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
-		this.keepOT = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use a factory to generate OutputData for change.
+   *
+   * @param factory OutputDataFactory used to produce blinded messages.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  keepAsFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.keepOT = { type: 'factory', factory, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Provide pre created OutputData for change.
-	 *
-	 * @param data Fully formed OutputData for the keep (change) amount.
-	 */
-	keepAsCustom(data: OutputDataLike[]) {
-		this.keepOT = { type: 'custom', data };
-		return this;
-	}
+  /**
+   * Provide pre created OutputData for change.
+   *
+   * @param data Fully formed OutputData for the keep (change) amount.
+   */
+  keepAsCustom(data: OutputDataLike[]) {
+    this.keepOT = { type: 'custom', data };
+    return this;
+  }
 
-	/**
-	 * Make the sender cover the receiver’s future spend fee.
-	 *
-	 * @param on When true, include fees in the sent amount. Default true if called.
-	 */
-	includeFees(on = true) {
-		this.config.includeFees = on;
-		return this;
-	}
+  /**
+   * Make the sender cover the receiver’s future spend fee.
+   *
+   * @param on When true, include fees in the sent amount. Default true if called.
+   */
+  includeFees(on = true) {
+    this.config.includeFees = on;
+    return this;
+  }
 
-	/**
-	 * Use a specific keyset for the operation.
-	 *
-	 * @param id Keyset id to use for mint keys and fee lookup.
-	 */
-	keyset(id: string) {
-		this.config.keysetId = id;
-		return this;
-	}
+  /**
+   * Use a specific keyset for the operation.
+   *
+   * @param id Keyset id to use for mint keys and fee lookup.
+   */
+  keyset(id: string) {
+    this.config.keysetId = id;
+    return this;
+  }
 
-	/**
-	 * Private key(s) used to sign P2PK locked proofs.
-	 *
-	 * @param k Single key or array of multisig keys.
-	 */
-	privkey(k: string | string[]) {
-		this.config.privkey = k;
-		return this;
-	}
+  /**
+   * Private key(s) used to sign P2PK locked proofs.
+   *
+   * @param k Single key or array of multisig keys.
+   */
+  privkey(k: string | string[]) {
+    this.config.privkey = k;
+    return this;
+  }
 
-	/**
-	 * Provide existing proofs to help optimise denomination selection.
-	 *
-	 * @remarks
-	 * Has no effect if denominations (custom split) was specified.
-	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
-	 */
-	proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
-		this.config.proofsWeHave = p;
-		return this;
-	}
+  /**
+   * Provide existing proofs to help optimise denomination selection.
+   *
+   * @remarks
+   * Has no effect if denominations (custom split) was specified.
+   * @param p Proofs currently held by the wallet, used to hit denomination targets.
+   */
+  proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
+    this.config.proofsWeHave = p;
+    return this;
+  }
 
-	/**
-	 * Receive a callback once counters are atomically reserved for deterministic outputs.
-	 *
-	 * @param cb Called with OperationCounters when counters are reserved.
-	 */
-	onCountersReserved(cb: OnCountersReserved) {
-		this.config.onCountersReserved = cb;
-		return this;
-	}
+  /**
+   * Receive a callback once counters are atomically reserved for deterministic outputs.
+   *
+   * @param cb Called with OperationCounters when counters are reserved.
+   */
+  onCountersReserved(cb: OnCountersReserved) {
+    this.config.onCountersReserved = cb;
+    return this;
+  }
 
-	/**
-	 * Force a pure offline, exact match selection. No mint calls are made. If an exact match cannot
-	 * be found, this throws.
-	 *
-	 * @param requireDleq Only consider proofs with a DLEQ when true.
-	 */
-	offlineExactOnly(requireDleq = false) {
-		this.offlineExact = { requireDleq };
-		return this;
-	}
+  /**
+   * Force a pure offline, exact match selection. No mint calls are made. If an exact match cannot
+   * be found, this throws.
+   *
+   * @param requireDleq Only consider proofs with a DLEQ when true.
+   */
+  offlineExactOnly(requireDleq = false) {
+    this.offlineExact = { requireDleq };
+    return this;
+  }
 
-	/**
-	 * Force a pure offline selection that allows a close match, overspend permitted per wallet RGLI.
-	 * No mint calls are made. Returns the best offline subset found, or throws if funds are
-	 * insufficient.
-	 *
-	 * @param requireDleq Only consider proofs with a DLEQ when true.
-	 */
-	offlineCloseMatch(requireDleq = false) {
-		this.offlineClose = { requireDleq };
-		return this;
-	}
+  /**
+   * Force a pure offline selection that allows a close match, overspend permitted per wallet RGLI.
+   * No mint calls are made. Returns the best offline subset found, or throws if funds are
+   * insufficient.
+   *
+   * @param requireDleq Only consider proofs with a DLEQ when true.
+   */
+  offlineCloseMatch(requireDleq = false) {
+    this.offlineClose = { requireDleq };
+    return this;
+  }
 
-	/**
-	 * Prepare the swap to send.
-	 *
-	 * @remarks
-	 * Call `wallet.completeSwap(SwapPreview)` to complete the send.
-	 * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
-	 */
-	async prepare() {
-		// Construct an OutputConfig using default send if no customizations
-		const outputConfig: OutputConfig = {
-			send: this.sendOT ?? this.wallet.defaultOutputType(),
-			...(this.keepOT ? { keep: this.keepOT } : {}),
-		};
-		return this.wallet.prepareSwapToSend(this.amount, this.proofs, this.config, outputConfig);
-	}
+  /**
+   * Prepare the swap to send.
+   *
+   * @remarks
+   * Call `wallet.completeSwap(SwapPreview)` to complete the send.
+   * @returns A SwapPreview containing inputs, outputs, amount, fee and unselectedProofs.
+   */
+  async prepare() {
+    // Construct an OutputConfig using default send if no customizations
+    const outputConfig: OutputConfig = {
+      send: this.sendOT ?? this.wallet.defaultOutputType(),
+      ...(this.keepOT ? { keep: this.keepOT } : {}),
+    };
+    return this.wallet.prepareSwapToSend(this.amount, this.proofs, this.config, outputConfig);
+  }
 
-	/**
-	 * Execute the send.
-	 *
-	 * @returns The split result with kept and sent proofs.
-	 */
-	async run() {
-		// If an offline mode is requested, forbid custom OutputTypes,
-		// because offline uses existing proofs and cannot honour new outputs.
-		if ((this.offlineExact || this.offlineClose) && (this.sendOT || this.keepOT)) {
-			throw new Error(
-				'Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.',
-			);
-		}
+  /**
+   * Execute the send.
+   *
+   * @returns The split result with kept and sent proofs.
+   */
+  async run() {
+    // If an offline mode is requested, forbid custom OutputTypes,
+    // because offline uses existing proofs and cannot honour new outputs.
+    if ((this.offlineExact || this.offlineClose) && (this.sendOT || this.keepOT)) {
+      throw new Error(
+        'Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.',
+      );
+    }
 
-		// Strict offline, exact match only
-		if (this.offlineExact) {
-			// Sign if needed
-			if (this.config.privkey) {
-				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
-			}
-			return this.wallet.sendOffline(this.amount, this.proofs, {
-				includeFees: this.config.includeFees,
-				exactMatch: true,
-				requireDleq: this.offlineExact.requireDleq,
-			});
-		}
+    // Strict offline, exact match only
+    if (this.offlineExact) {
+      // Sign if needed
+      if (this.config.privkey) {
+        this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+      }
+      return this.wallet.sendOffline(this.amount, this.proofs, {
+        includeFees: this.config.includeFees,
+        exactMatch: true,
+        requireDleq: this.offlineExact.requireDleq,
+      });
+    }
 
-		// Offline close match, may overshoot
-		if (this.offlineClose) {
-			// Sign if needed
-			if (this.config.privkey) {
-				this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
-			}
-			return this.wallet.sendOffline(this.amount, this.proofs, {
-				includeFees: this.config.includeFees,
-				exactMatch: false,
-				requireDleq: this.offlineClose.requireDleq,
-			});
-		}
+    // Offline close match, may overshoot
+    if (this.offlineClose) {
+      // Sign if needed
+      if (this.config.privkey) {
+        this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+      }
+      return this.wallet.sendOffline(this.amount, this.proofs, {
+        includeFees: this.config.includeFees,
+        exactMatch: false,
+        requireDleq: this.offlineClose.requireDleq,
+      });
+    }
 
-		// Construct an OutputConfig using default send if no customizations
-		const outputConfig: OutputConfig = {
-			send: this.sendOT ?? this.wallet.defaultOutputType(),
-			...(this.keepOT ? { keep: this.keepOT } : {}),
-		};
-		return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
-	}
+    // Construct an OutputConfig using default send if no customizations
+    const outputConfig: OutputConfig = {
+      send: this.sendOT ?? this.wallet.defaultOutputType(),
+      ...(this.keepOT ? { keep: this.keepOT } : {}),
+    };
+    return this.wallet.send(this.amount, this.proofs, this.config, outputConfig);
+  }
 }
 
 /**
@@ -350,152 +351,152 @@ export class SendBuilder {
  * @example
  *
  *     const proofs = await wallet.ops
- *     	.receive(token) // or array of proofs
- *     	.asDeterministic() // counter 0 auto reserves
- *     	.requireDleq(true)
- *     	.run();
+ *       .receive(token) // or array of proofs
+ *       .asDeterministic() // counter 0 auto reserves
+ *       .requireDleq(true)
+ *       .run();
  */
 export class ReceiveBuilder {
-	private outputType?: OutputType;
-	private config: ReceiveConfig = {};
+  private outputType?: OutputType;
+  private config: ReceiveConfig = {};
 
-	constructor(
-		private wallet: Wallet,
-		private token: Token | string | Proof[],
-	) {}
+  constructor(
+    private wallet: Wallet,
+    private token: Token | string | Proof[],
+  ) {}
 
-	/**
-	 * Use random blinding for the received outputs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: AmountLike[]) {
-		this.outputType = { type: 'random', denominations: denoms };
-		return this;
-	}
+  /**
+   * Use random blinding for the received outputs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asRandom(denoms?: AmountLike[]) {
+    this.outputType = { type: 'random', denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use deterministic outputs for the received proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: AmountLike[]) {
-		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use deterministic outputs for the received proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.outputType = { type: 'deterministic', counter, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use P2PK locked outputs for the received proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param options NUT 11 options like pubkey and locktime.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use P2PK locked outputs for the received proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param options NUT 11 options like pubkey and locktime.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
+    this.outputType = { type: 'p2pk', options, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use a factory to generate OutputData for received proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
-		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use a factory to generate OutputData for received proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param factory OutputDataFactory used to produce blinded messages.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.outputType = { type: 'factory', factory, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Provide pre created OutputData for received proofs.
-	 *
-	 * @param data Fully formed OutputData for the final amount.
-	 */
-	asCustom(data: OutputDataLike[]) {
-		this.outputType = { type: 'custom', data };
-		return this;
-	}
+  /**
+   * Provide pre created OutputData for received proofs.
+   *
+   * @param data Fully formed OutputData for the final amount.
+   */
+  asCustom(data: OutputDataLike[]) {
+    this.outputType = { type: 'custom', data };
+    return this;
+  }
 
-	/**
-	 * Use a specific keyset for the operation.
-	 *
-	 * @param id Keyset id to use for mint keys and fee lookup.
-	 */
-	keyset(id: string) {
-		this.config.keysetId = id;
-		return this;
-	}
+  /**
+   * Use a specific keyset for the operation.
+   *
+   * @param id Keyset id to use for mint keys and fee lookup.
+   */
+  keyset(id: string) {
+    this.config.keysetId = id;
+    return this;
+  }
 
-	/**
-	 * Require all incoming proofs to have a valid DLEQ for the selected keyset.
-	 *
-	 * @param on When true, proofs without DLEQ are rejected.
-	 */
-	requireDleq(on = true) {
-		this.config.requireDleq = on;
-		return this;
-	}
+  /**
+   * Require all incoming proofs to have a valid DLEQ for the selected keyset.
+   *
+   * @param on When true, proofs without DLEQ are rejected.
+   */
+  requireDleq(on = true) {
+    this.config.requireDleq = on;
+    return this;
+  }
 
-	/**
-	 * Private key(s) used to sign P2PK locked incoming proofs.
-	 *
-	 * @param k Single key or array of multisig keys.
-	 */
-	privkey(k: string | string[]) {
-		this.config.privkey = k;
-		return this;
-	}
+  /**
+   * Private key(s) used to sign P2PK locked incoming proofs.
+   *
+   * @param k Single key or array of multisig keys.
+   */
+  privkey(k: string | string[]) {
+    this.config.privkey = k;
+    return this;
+  }
 
-	/**
-	 * Provide existing proofs to help optimise denomination selection.
-	 *
-	 * @remarks
-	 * Has no effect if denominations (custom split) was specified.
-	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
-	 */
-	proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
-		this.config.proofsWeHave = p;
-		return this;
-	}
+  /**
+   * Provide existing proofs to help optimise denomination selection.
+   *
+   * @remarks
+   * Has no effect if denominations (custom split) was specified.
+   * @param p Proofs currently held by the wallet, used to hit denomination targets.
+   */
+  proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
+    this.config.proofsWeHave = p;
+    return this;
+  }
 
-	/**
-	 * Receive a callback once counters are atomically reserved for deterministic outputs.
-	 *
-	 * @param cb Called with OperationCounters when counters are reserved.
-	 */
-	onCountersReserved(cb: OnCountersReserved) {
-		this.config.onCountersReserved = cb;
-		return this;
-	}
+  /**
+   * Receive a callback once counters are atomically reserved for deterministic outputs.
+   *
+   * @param cb Called with OperationCounters when counters are reserved.
+   */
+  onCountersReserved(cb: OnCountersReserved) {
+    this.config.onCountersReserved = cb;
+    return this;
+  }
 
-	/**
-	 * Prepare the swap to receive.
-	 *
-	 * @remarks
-	 * Call `wallet.completeSwap(SwapPreview)` to complete the receive.
-	 * @returns A SwapPreview containing inputs, outputs, amount, and fee.
-	 */
-	async prepare() {
-		return this.wallet.prepareSwapToReceive(this.token, this.config, this.outputType);
-	}
+  /**
+   * Prepare the swap to receive.
+   *
+   * @remarks
+   * Call `wallet.completeSwap(SwapPreview)` to complete the receive.
+   * @returns A SwapPreview containing inputs, outputs, amount, and fee.
+   */
+  async prepare() {
+    return this.wallet.prepareSwapToReceive(this.token, this.config, this.outputType);
+  }
 
-	/**
-	 * Execute the receive.
-	 *
-	 * @returns The new proofs.
-	 */
-	async run() {
-		return this.wallet.receive(this.token, this.config, this.outputType);
-	}
+  /**
+   * Execute the receive.
+   *
+   * @returns The new proofs.
+   */
+  async run() {
+    return this.wallet.receive(this.token, this.config, this.outputType);
+  }
 }
 
 /**
@@ -510,204 +511,204 @@ export class ReceiveBuilder {
  * @example
  *
  *     const proofs = await wallet.ops
- *     	.mintBolt11(100, quote)
- *     	.asDeterministic() // counter 0 auto reserves
- *     	.onCountersReserved((info) => console.log(info))
- *     	.privkey('sk')
- *     	.run();
+ *       .mintBolt11(100, quote)
+ *       .asDeterministic() // counter 0 auto reserves
+ *       .onCountersReserved((info) => console.log(info))
+ *       .privkey('sk')
+ *       .run();
  */
 export class MintBuilder<
-	M extends MintMethod,
-	HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
+  M extends MintMethod,
+  HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
 > {
-	private outputType?: OutputType;
-	private config: MintProofsConfig = {};
-	private amount: Amount;
+  private outputType?: OutputType;
+  private config: MintProofsConfig = {};
+  private amount: Amount;
 
-	// phantom field to satisfy linter (erased at emit)
-	private readonly _hasPrivkey!: HasPrivKey;
+  // phantom field to satisfy linter (erased at emit)
+  private readonly _hasPrivkey!: HasPrivKey;
 
-	constructor(
-		private wallet: Wallet,
-		private method: M,
-		amount: AmountLike,
-		private quote: MintQuoteFor<M>,
-	) {
-		this.amount = Amount.from(amount);
-		void this._hasPrivkey; // intentionally unused (phantom field)
-	}
+  constructor(
+    private wallet: Wallet,
+    private method: M,
+    amount: AmountLike,
+    private quote: MintQuoteFor<M>,
+  ) {
+    this.amount = Amount.from(amount);
+    void this._hasPrivkey; // intentionally unused (phantom field)
+  }
 
-	/**
-	 * Use random blinding for the minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: AmountLike[]) {
-		this.outputType = { type: 'random', denominations: denoms };
-		return this;
-	}
+  /**
+   * Use random blinding for the minted proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asRandom(denoms?: AmountLike[]) {
+    this.outputType = { type: 'random', denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use deterministic outputs for the minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: AmountLike[]) {
-		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use deterministic outputs for the minted proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.outputType = { type: 'deterministic', counter, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use P2PK locked outputs for the minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param options NUT 11 options like pubkey and locktime.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use P2PK locked outputs for the minted proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param options NUT 11 options like pubkey and locktime.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
+    this.outputType = { type: 'p2pk', options, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use a factory to generate OutputData for minted proofs.
-	 *
-	 * @remarks
-	 * If denoms specified, proofsWeHave() will have no effect.
-	 * @param factory OutputDataFactory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
-		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use a factory to generate OutputData for minted proofs.
+   *
+   * @remarks
+   * If denoms specified, proofsWeHave() will have no effect.
+   * @param factory OutputDataFactory used to produce blinded messages.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.outputType = { type: 'factory', factory, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Provide pre created OutputData for minted proofs.
-	 *
-	 * @param data Fully formed OutputData for the final amount.
-	 */
-	asCustom(data: OutputDataLike[]) {
-		this.outputType = { type: 'custom', data };
-		return this;
-	}
+  /**
+   * Provide pre created OutputData for minted proofs.
+   *
+   * @param data Fully formed OutputData for the final amount.
+   */
+  asCustom(data: OutputDataLike[]) {
+    this.outputType = { type: 'custom', data };
+    return this;
+  }
 
-	/**
-	 * Use a specific keyset for the operation.
-	 *
-	 * @param id Keyset id to use for mint keys and fee lookup.
-	 */
-	keyset(id: string) {
-		this.config.keysetId = id;
-		return this;
-	}
+  /**
+   * Use a specific keyset for the operation.
+   *
+   * @param id Keyset id to use for mint keys and fee lookup.
+   */
+  keyset(id: string) {
+    this.config.keysetId = id;
+    return this;
+  }
 
-	/**
-	 * Private key to sign locked mint quotes.
-	 *
-	 * @param k Private key for locked quotes.
-	 */
-	privkey(k: string): MintBuilder<M, true> {
-		// For bolt11 - privkey is sent in the config
-		// For bolt12 - privkey is sent positionally in run()
-		this.config.privkey = k;
-		return this as MintBuilder<M, true>;
-	}
+  /**
+   * Private key to sign locked mint quotes.
+   *
+   * @param k Private key for locked quotes.
+   */
+  privkey(k: string): MintBuilder<M, true> {
+    // For bolt11 - privkey is sent in the config
+    // For bolt12 - privkey is sent positionally in run()
+    this.config.privkey = k;
+    return this as MintBuilder<M, true>;
+  }
 
-	/**
-	 * Provide existing proofs to help optimise denomination selection.
-	 *
-	 * @remarks
-	 * Has no effect if denominations (custom split) was specified.
-	 * @param p Proofs currently held by the wallet, used to hit denomination targets.
-	 */
-	proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
-		this.config.proofsWeHave = p;
-		return this;
-	}
+  /**
+   * Provide existing proofs to help optimise denomination selection.
+   *
+   * @remarks
+   * Has no effect if denominations (custom split) was specified.
+   * @param p Proofs currently held by the wallet, used to hit denomination targets.
+   */
+  proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
+    this.config.proofsWeHave = p;
+    return this;
+  }
 
-	/**
-	 * Receive a callback once counters are atomically reserved for deterministic outputs.
-	 *
-	 * @param cb Called with OperationCounters when counters are reserved.
-	 */
-	onCountersReserved(cb: OnCountersReserved) {
-		this.config.onCountersReserved = cb;
-		return this;
-	}
+  /**
+   * Receive a callback once counters are atomically reserved for deterministic outputs.
+   *
+   * @param cb Called with OperationCounters when counters are reserved.
+   */
+  onCountersReserved(cb: OnCountersReserved) {
+    this.config.onCountersReserved = cb;
+    return this;
+  }
 
-	/**
-	 * Prepare the mint.
-	 *
-	 * @remarks
-	 * Call `wallet.completeMint(MintPreview)` to complete the mint. This method can only be called
-	 * for bolt12 quotes when `.privkey()` is set.
-	 * @returns A MintPreview containing the payload and output data needed to complete the mint.
-	 */
-	async prepare(
-		this: MintBuilder<M, true>,
-	): Promise<
-		M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>
-	> {
-		// BOLT 11
-		if (this.method === 'bolt11') {
-			const raw = this.quote as string | MintQuoteBolt11Response;
-			const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
-			this.wallet.validateMintQuote(quote);
-			// Enforce privkey when the quote is locked
-			if (quote.pubkey && !this.config.privkey) {
-				throw new Error('privkey is required for locked BOLT11 mint quotes');
-			}
-			return this.wallet.prepareMint(
-				this.method,
-				this.amount,
-				quote,
-				this.config,
-				this.outputType,
-			) as Promise<
-				M extends 'bolt11'
-					? MintPreview<MintQuoteBolt11Response>
-					: MintPreview<MintQuoteBolt12Response>
-			>;
-		}
+  /**
+   * Prepare the mint.
+   *
+   * @remarks
+   * Call `wallet.completeMint(MintPreview)` to complete the mint. This method can only be called
+   * for bolt12 quotes when `.privkey()` is set.
+   * @returns A MintPreview containing the payload and output data needed to complete the mint.
+   */
+  async prepare(
+    this: MintBuilder<M, true>,
+  ): Promise<
+    M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>
+  > {
+    // BOLT 11
+    if (this.method === 'bolt11') {
+      const raw = this.quote as string | MintQuoteBolt11Response;
+      const quote = typeof raw === 'string' ? await this.wallet.checkMintQuoteBolt11(raw) : raw;
+      this.wallet.validateMintQuote(quote);
+      // Enforce privkey when the quote is locked
+      if (quote.pubkey && !this.config.privkey) {
+        throw new Error('privkey is required for locked BOLT11 mint quotes');
+      }
+      return this.wallet.prepareMint(
+        this.method,
+        this.amount,
+        quote,
+        this.config,
+        this.outputType,
+      ) as Promise<
+        M extends 'bolt11'
+          ? MintPreview<MintQuoteBolt11Response>
+          : MintPreview<MintQuoteBolt12Response>
+      >;
+    }
 
-		// BOLT 12
-		const bolt12 = this.quote as MintQuoteBolt12Response;
-		this.wallet.validateMintQuote(bolt12);
-		if (!this.config.privkey) {
-			throw new Error('privkey is required for BOLT12 mint quotes');
-		}
-		return this.wallet.prepareMint(
-			this.method,
-			this.amount,
-			bolt12,
-			this.config,
-			this.outputType,
-		) as Promise<
-			M extends 'bolt11'
-				? MintPreview<MintQuoteBolt11Response>
-				: MintPreview<MintQuoteBolt12Response>
-		>;
-	}
+    // BOLT 12
+    const bolt12 = this.quote as MintQuoteBolt12Response;
+    this.wallet.validateMintQuote(bolt12);
+    if (!this.config.privkey) {
+      throw new Error('privkey is required for BOLT12 mint quotes');
+    }
+    return this.wallet.prepareMint(
+      this.method,
+      this.amount,
+      bolt12,
+      this.config,
+      this.outputType,
+    ) as Promise<
+      M extends 'bolt11'
+        ? MintPreview<MintQuoteBolt11Response>
+        : MintPreview<MintQuoteBolt12Response>
+    >;
+  }
 
-	/**
-	 * Execute minting against the quote.
-	 *
-	 * @remarks
-	 * This is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
-	 * This method can only be called for bolt12 quotes when `.privkey()` is set.
-	 * @returns The newly minted proofs.
-	 */
-	async run(this: MintBuilder<M, true>) {
-		const preview = await this.prepare();
-		return this.wallet.completeMint(preview);
-	}
+  /**
+   * Execute minting against the quote.
+   *
+   * @remarks
+   * This is equivalent to `const preview = await prepare(); await wallet.completeMint(preview)`.
+   * This method can only be called for bolt12 quotes when `.privkey()` is set.
+   * @returns The newly minted proofs.
+   */
+  async run(this: MintBuilder<M, true>) {
+    const preview = await this.prepare();
+    return this.wallet.completeMint(preview);
+  }
 }
 
 /**
@@ -724,141 +725,141 @@ export class MintBuilder<
  *
  * // BOLT12 melt with deterministic change and NUT-08 blanks callback
  * await wallet.ops
- * 	.meltBolt12(quote12, proofs)
- * 	.asDeterministic() // counter 0 auto reserves
- * 	.onCountersReserved((info) => console.log('Reserved', info))
- * 	.run();
+ *   .meltBolt12(quote12, proofs)
+ *   .asDeterministic() // counter 0 auto reserves
+ *   .onCountersReserved((info) => console.log('Reserved', info))
+ *   .run();
  * ```
  */
 export class MeltBuilder<
-	TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBolt11Response,
+  TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'> = MeltQuoteBolt11Response,
 > {
-	private outputType?: OutputType;
-	private config: MeltProofsConfig = {};
+  private outputType?: OutputType;
+  private config: MeltProofsConfig = {};
 
-	constructor(
-		private wallet: Wallet,
-		private method: string,
-		private quote: TQuote,
-		private proofs: Proof[],
-	) {}
+  constructor(
+    private wallet: Wallet,
+    private method: string,
+    private quote: TQuote,
+    private proofs: Proof[],
+  ) {}
 
-	/**
-	 * Use random blinding for change outputs.
-	 *
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asRandom(denoms?: AmountLike[]) {
-		this.outputType = { type: 'random', denominations: denoms };
-		return this;
-	}
+  /**
+   * Use random blinding for change outputs.
+   *
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asRandom(denoms?: AmountLike[]) {
+    this.outputType = { type: 'random', denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use deterministic outputs for change.
-	 *
-	 * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asDeterministic(counter = 0, denoms?: AmountLike[]) {
-		this.outputType = { type: 'deterministic', counter, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use deterministic outputs for change.
+   *
+   * @param counter Starting counter. Zero means auto reserve using the wallet’s CounterSource.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asDeterministic(counter = 0, denoms?: AmountLike[]) {
+    this.outputType = { type: 'deterministic', counter, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use P2PK-locked change (NUT-11).
-	 *
-	 * @param options NUT-11 locking options (e.g., pubkey, locktime).
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
-		this.outputType = { type: 'p2pk', options, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use P2PK-locked change (NUT-11).
+   *
+   * @param options NUT-11 locking options (e.g., pubkey, locktime).
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asP2PK(options: P2PKOptions, denoms?: AmountLike[]) {
+    this.outputType = { type: 'p2pk', options, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Use a factory to generate OutputData for change.
-	 *
-	 * @param factory Factory used to produce blinded messages.
-	 * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
-	 */
-	asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
-		this.outputType = { type: 'factory', factory, denominations: denoms };
-		return this;
-	}
+  /**
+   * Use a factory to generate OutputData for change.
+   *
+   * @param factory Factory used to produce blinded messages.
+   * @param denoms Optional custom split. Can be partial if you only need SOME specific amounts.
+   */
+  asFactory(factory: OutputDataFactory, denoms?: AmountLike[]) {
+    this.outputType = { type: 'factory', factory, denominations: denoms };
+    return this;
+  }
 
-	/**
-	 * Provide pre-created OutputData for change.
-	 *
-	 * @param data Fully formed OutputData for the change amount.
-	 */
-	asCustom(data: OutputDataLike[]) {
-		this.outputType = { type: 'custom', data };
-		return this;
-	}
+  /**
+   * Provide pre-created OutputData for change.
+   *
+   * @param data Fully formed OutputData for the change amount.
+   */
+  asCustom(data: OutputDataLike[]) {
+    this.outputType = { type: 'custom', data };
+    return this;
+  }
 
-	/**
-	 * Use a specific keyset for the melt operation.
-	 *
-	 * @param id Keyset id to use for mint keys and fee lookup.
-	 */
-	keyset(id: string) {
-		this.config.keysetId = id;
-		return this;
-	}
+  /**
+   * Use a specific keyset for the melt operation.
+   *
+   * @param id Keyset id to use for mint keys and fee lookup.
+   */
+  keyset(id: string) {
+    this.config.keysetId = id;
+    return this;
+  }
 
-	/**
-	 * Private key(s) used to sign P2PK locked proofs.
-	 *
-	 * @param k Single key or array of multisig keys.
-	 */
-	privkey(k: string | string[]) {
-		this.config.privkey = k;
-		return this;
-	}
+  /**
+   * Private key(s) used to sign P2PK locked proofs.
+   *
+   * @param k Single key or array of multisig keys.
+   */
+  privkey(k: string | string[]) {
+    this.config.privkey = k;
+    return this;
+  }
 
-	/**
-	 * Receive a callback once counters are atomically reserved for deterministic outputs.
-	 *
-	 * @param cb Called with OperationCounters when counters are reserved.
-	 */
-	onCountersReserved(cb: OnCountersReserved) {
-		this.config.onCountersReserved = cb;
-		return this;
-	}
+  /**
+   * Receive a callback once counters are atomically reserved for deterministic outputs.
+   *
+   * @param cb Called with OperationCounters when counters are reserved.
+   */
+  onCountersReserved(cb: OnCountersReserved) {
+    this.config.onCountersReserved = cb;
+    return this;
+  }
 
-	/**
-	 * Prepare the melt.
-	 *
-	 * @remarks
-	 * Call `wallet.completeMelt(MeltPreview)` to complete the melt.
-	 * @returns A MeltPreview containing inputs, outputs, amount, and fee.
-	 */
-	async prepare(): Promise<MeltPreview<TQuote>> {
-		return await this.wallet.prepareMelt<TQuote>(
-			this.method,
-			this.quote,
-			this.proofs,
-			this.config,
-			this.outputType,
-		);
-	}
+  /**
+   * Prepare the melt.
+   *
+   * @remarks
+   * Call `wallet.completeMelt(MeltPreview)` to complete the melt.
+   * @returns A MeltPreview containing inputs, outputs, amount, and fee.
+   */
+  async prepare(): Promise<MeltPreview<TQuote>> {
+    return await this.wallet.prepareMelt<TQuote>(
+      this.method,
+      this.quote,
+      this.proofs,
+      this.config,
+      this.outputType,
+    );
+  }
 
-	/**
-	 * Execute the melt against the quote.
-	 *
-	 * @returns The melt result: `{ quote, change }`.
-	 */
-	async run(): Promise<MeltProofsResponse<TQuote>> {
-		// Step 1, preview and allocate NUT-08 blanks
-		const preview = await this.wallet.prepareMelt<TQuote>(
-			this.method,
-			this.quote,
-			this.proofs,
-			this.config,
-			this.outputType,
-		);
+  /**
+   * Execute the melt against the quote.
+   *
+   * @returns The melt result: `{ quote, change }`.
+   */
+  async run(): Promise<MeltProofsResponse<TQuote>> {
+    // Step 1, preview and allocate NUT-08 blanks
+    const preview = await this.wallet.prepareMelt<TQuote>(
+      this.method,
+      this.quote,
+      this.proofs,
+      this.config,
+      this.outputType,
+    );
 
-		// Step 2, sign if needed and complete the melt
-		return this.wallet.completeMelt(preview, this.config.privkey);
-	}
+    // Step 2, sign if needed and complete the melt
+    return this.wallet.completeMelt(preview, this.config.privkey);
+  }
 }

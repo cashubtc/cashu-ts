@@ -15,7 +15,7 @@ const mintQuote = await wallet.createMintQuoteBolt11(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state === MintQuoteState.PAID) {
-	const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
+  const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
 }
 // store proofs in your app ..
 ```
@@ -36,12 +36,12 @@ const mintQuote = await wallet.createMintQuoteBolt11(64);
 
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state !== MintQuoteState.PAID) {
-	throw new Error('Mint quote is not paid yet');
+  throw new Error('Mint quote is not paid yet');
 }
 
 const preview = await wallet.prepareMint('bolt11', 64, mintQuote.quote, undefined, {
-	type: 'deterministic',
-	counter: 0,
+  type: 'deterministic',
+  counter: 0,
 });
 
 // Persist `preview` here if you want to retry safely later.
@@ -62,19 +62,19 @@ const privkey = randomBytes(32);
 const pubkey = bytesToHex(secp256k1.getPublicKey(privkey, true));
 
 const mintQuote = await wallet.createMintQuoteBolt12(pubkey, {
-	amount: 64,
-	description: 'Top up wallet',
+  amount: 64,
+  description: 'Top up wallet',
 });
 
 // pay the BOLT12 offer here, then re-check the quote...
 const updatedQuote = await wallet.checkMintQuoteBolt12(mintQuote.quote);
 const availableAmount = updatedQuote.amount_paid.subtract(updatedQuote.amount_issued);
 if (availableAmount.lessThanOrEqual(0)) {
-	throw new Error('No paid amount available to mint');
+  throw new Error('No paid amount available to mint');
 }
 
 const preview = await wallet.prepareMint('bolt12', availableAmount, updatedQuote, {
-	privkey: bytesToHex(privkey),
+  privkey: bytesToHex(privkey),
 });
 const proofs = await wallet.completeMint(preview);
 ```
@@ -87,18 +87,18 @@ The mint must advertise the method at `/v1/mint/quote/{method}`.
 
 ```ts
 import {
-	Wallet,
-	Amount,
-	MintQuoteState,
-	type MintQuoteBaseResponse,
-	type AmountLike,
+  Wallet,
+  Amount,
+  MintQuoteState,
+  type MintQuoteBaseResponse,
+  type AmountLike,
 } from '@cashu/cashu-ts';
 
 // Define your custom quote response type
 type BacsMintQuoteResponse = MintQuoteBaseResponse & {
-	amount: Amount;
-	state: MintQuoteState;
-	reference: string; // bank transfer reference
+  amount: Amount;
+  state: MintQuoteState;
+  reference: string; // bank transfer reference
 };
 
 const wallet = new Wallet('http://localhost:3338');
@@ -106,18 +106,18 @@ await wallet.loadMint();
 
 // Create a mint quote using the generic method
 const mintQuote = await wallet.createMintQuote<BacsMintQuoteResponse>(
-	'bacs',
-	{
-		amount: 5000n,
-		sort_code: '12-34-56',
-		account_number: '12345678',
-	},
-	{
-		normalize: (raw) => ({
-			...(raw as BacsMintQuoteResponse),
-			amount: Amount.from(raw.amount as AmountLike),
-		}),
-	},
+  'bacs',
+  {
+    amount: 5000n,
+    sort_code: '12-34-56',
+    account_number: '12345678',
+  },
+  {
+    normalize: (raw) => ({
+      ...(raw as BacsMintQuoteResponse),
+      amount: Amount.from(raw.amount as AmountLike),
+    }),
+  },
 );
 
 // mintQuote.reference → "CASHU-ABC123" (bank transfer reference to show user)
@@ -125,14 +125,14 @@ const mintQuote = await wallet.createMintQuote<BacsMintQuoteResponse>(
 
 // Check the quote status
 const updated = await wallet.checkMintQuote<BacsMintQuoteResponse>('bacs', mintQuote.quote, {
-	normalize: (raw) => ({
-		...(raw as BacsMintQuoteResponse),
-		amount: Amount.from(raw.amount as AmountLike),
-	}),
+  normalize: (raw) => ({
+    ...(raw as BacsMintQuoteResponse),
+    amount: Amount.from(raw.amount as AmountLike),
+  }),
 });
 
 // Mint once the bank transfer is confirmed
 if (updated.state === MintQuoteState.PAID) {
-	const proofs = await wallet.mintProofs('bacs', 5000, updated);
+  const proofs = await wallet.mintProofs('bacs', 5000, updated);
 }
 ```
