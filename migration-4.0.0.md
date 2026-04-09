@@ -61,17 +61,7 @@ const someinteger: AmountLike = ...; // boundary variable
 const amount = Amount.from(someinteger); // bigint backed VO
 ```
 
-#### 3. Model signed amounts explicitly
-
-Recommended in-memory shapes:
-
-- `{ amount: Amount, direction: "incoming" | "outgoing" }`
-- `{ amountAbs: Amount, isOutgoing: boolean }`
-
-Avoid encoding sign inside an `Amount` or assuming `AmountLike` accepts negative strings.
-If you currently persist signed scalars like `"-105"`, treat that as a legacy storage/wire shape, not the ideal in-memory model.
-
-#### 4. Keep `Amount` in memory; convert only at true boundaries
+#### 3. Keep `Amount` in memory; convert only at true boundaries
 
 Best practice:
 
@@ -81,14 +71,14 @@ Best practice:
 
 Do not flatten everything back to `number` unless you have consciously chosen a safe-integer-only strategy.
 
-#### 5. `toNumber()` vs `toNumberUnsafe()` is an explicit policy choice
+#### 4. `toNumber()` vs `toNumberUnsafe()` is an explicit policy choice
 
 - `toNumber()` = safe or throw
 - `toNumberUnsafe()` = accept precision loss
 
 Use `toNumber()` when a boundary must not lie. Use `toNumberUnsafe()` only when lossy output is acceptable. Prefer `toString()`, `toBigInt()`, or `toJSON()` when possible.
 
-#### 6. `JSONInt` is the default JSON boundary for integer-bearing payloads
+#### 5. `JSONInt` is the default JSON boundary for integer-bearing payloads
 
 Use `JSONInt.stringify` / `JSONInt.parse` for:
 
@@ -100,7 +90,7 @@ Use `JSONInt.stringify` / `JSONInt.parse` for:
 
 Do not rely on plain `JSON.stringify` / `JSON.parse` for bigint-bearing structures if `JSONInt` is available.
 
-#### 7. `Amount.toJSON()` helps, but it is not your app's full JSON policy
+#### 6. `Amount.toJSON()` helps, but it is not your app's full JSON policy
 
 `Amount.toJSON()` emits:
 
@@ -109,7 +99,7 @@ Do not rely on plain `JSON.stringify` / `JSON.parse` for bigint-bearing structur
 
 That solves leaf-value emission, but apps still need a consistent whole-payload JSON policy. That policy should be `JSONInt`.
 
-#### 8. For display, prefer bigint/string-safe formatting
+#### 7. For display, prefer bigint/string-safe formatting
 
 Do not immediately call `toNumber()` just to render an integer amount.
 

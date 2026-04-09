@@ -81,15 +81,6 @@ const someinteger: AmountLike = ...; // boundary variable
 const amount = Amount.from(someinteger); // bigint backed VO
 ```
 
-### Model sign explicitly
-
-Prefer in-memory shapes like:
-
-- `{ amount: Amount, direction: "incoming" | "outgoing" }`
-- `{ amountAbs: Amount, isOutgoing: boolean }`
-
-If the app already persists signed strings like `"-105"`, preserve them only as a compatibility/storage shape. Do not propagate that pattern further inward unless required.
-
 ### Keep `Amount` in memory; use `JSONInt` at JSON boundaries
 
 Default migration posture:
