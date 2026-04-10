@@ -92,6 +92,41 @@ describe('stringifyOutputTypeForLog', () => {
     expect(result).toBe(JSON.stringify({ type: 'custom', outputs: 2, amounts: ['1', '2'] }));
   });
 
+  test('formats empty denominations for all non-custom output types', () => {
+    expect(
+      stringifyOutputTypeForLog({
+        type: 'random',
+      }),
+    ).toBe(JSON.stringify({ type: 'random', denominations: [] }));
+
+    expect(
+      stringifyOutputTypeForLog({
+        type: 'deterministic',
+        counter: 0,
+      }),
+    ).toBe(JSON.stringify({ type: 'deterministic', counter: 0, denominations: [] }));
+
+    expect(
+      stringifyOutputTypeForLog({
+        type: 'factory',
+        factory: (amount, keys) => OutputData.createRandomData(amount, keys)[0],
+      }),
+    ).toBe(JSON.stringify({ type: 'factory', denominations: [] }));
+
+    expect(
+      stringifyOutputTypeForLog({
+        type: 'p2pk',
+        options: { pubkey: '02'.padEnd(66, '1') },
+      }),
+    ).toBe(
+      JSON.stringify({
+        type: 'p2pk',
+        options: { pubkey: '02'.padEnd(66, '1') },
+        denominations: [],
+      }),
+    );
+  });
+
   test('returns unknown for unknown type', () => {
     const data = OutputData.createRandomData(3, keyset, [1, 2]);
     const result = stringifyOutputTypeForLog({
