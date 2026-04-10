@@ -1203,6 +1203,22 @@ export class OutputData implements OutputDataLike {
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
 }
 
+// @public (undocumented)
+export interface OutputDataCreator {
+    // (undocumented)
+    createDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
+    // (undocumented)
+    createP2PKData(p2pk: P2PKOptions, amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
+    // (undocumented)
+    createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
+    // (undocumented)
+    createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
+    // (undocumented)
+    createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
+    // (undocumented)
+    createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
+}
+
 // @public
 export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
@@ -1841,6 +1857,7 @@ export class Wallet {
         counterInit?: Record<string, number>;
         denominationTarget?: number;
         selectProofs?: SelectProofs;
+        outputDataCreator?: OutputDataCreator;
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
