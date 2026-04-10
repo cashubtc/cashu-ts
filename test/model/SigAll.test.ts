@@ -208,6 +208,11 @@ describe('SigAll — serializePackage / deserializePackage', () => {
     expect(() => SigAll.deserializePackage(encoded)).toThrow('must be a JSON object');
   });
 
+  test('throws on invalid JSON', () => {
+    const encoded = 'sigallA' + btoa('{not valid json}').replace(/=+$/, '');
+    expect(() => SigAll.deserializePackage(encoded)).toThrow('Failed to parse signing package');
+  });
+
   test('throws on invalid version', () => {
     expect(() =>
       SigAll.deserializePackage(
