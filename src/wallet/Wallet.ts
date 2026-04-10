@@ -22,6 +22,7 @@ import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
+import { defaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -146,6 +147,7 @@ class Wallet {
   private _counterSource: CounterSource;
   private _boundKeysetId: string = PENDING_KEYSET_ID;
   private _selectProofs: SelectProofs;
+  private _outputDataCreator: OutputDataCreator;
   private _logger: Logger;
 
   /**
@@ -177,6 +179,7 @@ class Wallet {
    *   counterSource is also provided.
    * @param options.denominationTarget Target proofs per denomination, default 3.
    * @param options.selectProofs Custom proof selection function.
+   * @param options.outputDataCreator Custom OutputDataCreator implementation.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -191,6 +194,7 @@ class Wallet {
       counterInit?: Record<string, number>; // optional, starting "next" per keyset
       denominationTarget?: number;
       selectProofs?: SelectProofs; // optional override
+      outputDataCreator?: OutputDataCreator;
       logger?: Logger;
     },
   ) {
@@ -198,6 +202,7 @@ class Wallet {
     this.on = new WalletEvents(this);
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
     this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
+    this._outputDataCreator = options?.outputDataCreator ?? defaultOutputDataCreator;
     this.mint =
       typeof mint === 'string'
         ? new Mint(mint, { authProvider: options?.authProvider, logger: this._logger })
@@ -565,6 +570,7 @@ class Wallet {
       keysetId: id,
       bip39seed: this._seed,
       secretsPolicy: this._secretsPolicy,
+      outputDataCreator: this._outputDataCreator,
       logger: this._logger,
       counterSource: opts?.counterSource ?? this._counterSource,
     });
@@ -728,14 +734,18 @@ class Wallet {
     let outputData: OutputDataLike[];
     switch (outputType.type) {
       case 'random':
-        outputData = OutputData.createRandomData(outputAmount, keyset, outputType.denominations);
+        outputData = this._outputDataCreator.createRandomData(
+          outputAmount,
+          keyset,
+          outputType.denominations,
+        );
         break;
       case 'deterministic':
         this.failIfNullish(
           this._seed,
           'Deterministic outputs require a seed configured in the wallet',
         );
-        outputData = OutputData.createDeterministicData(
+        outputData = this._outputDataCreator.createDeterministicData(
           outputAmount,
           this._seed,
           outputType.counter,
@@ -744,7 +754,7 @@ class Wallet {
         );
         break;
       case 'p2pk':
-        outputData = OutputData.createP2PKData(
+        outputData = this._outputDataCreator.createP2PKData(
           outputType.options,
           outputAmount,
           keyset,
@@ -1520,7 +1530,13 @@ class Wallet {
     // create deterministic blank outputs for unknown restore amounts
     // Note: zero amount + zero denomination passes splitAmount validation
     const zeros = Array(count).fill(0);
-    const outputData = OutputData.createDeterministicData(0, this._seed, start, keyset, zeros);
+    const outputData = this._outputDataCreator.createDeterministicData(
+      0,
+      this._seed,
+      start,
+      keyset,
+      zeros,
+    );
 
     const { outputs, signatures } = await this.mint.restore({
       outputs: outputData.map((d) => d.blindedMessage),
