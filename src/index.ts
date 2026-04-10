@@ -97,6 +97,7 @@ export {
 export { Amount, AmountError, type AmountLike } from './model/Amount';
 export { OutputData } from './model/OutputData';
 export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
+export type { OutputDataCreator } from './model/OutputDataCreator';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
 export type { RequestFn, RequestArgs, RequestOptions, ResponseMeta } from './transport';

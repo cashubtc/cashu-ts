@@ -1,22 +1,18 @@
-import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 import {
-  blindMessage,
   constructUnblindedSignature,
-  deriveP2BKBlindedPubkeys,
-  deriveBlindingFactor,
-  deriveSecret,
-  normalizeP2PKOptions,
   pointFromHex,
   verifyDLEQProof,
   type DLEQ,
   type BlindSignature,
   type P2PKOptions,
 } from '../crypto';
-import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
+import { numberToHexPadded64 } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
-import { BlindedMessage } from './BlindedMessage';
+import { emphemeralEStore } from './EphemeralEStore';
+import { defaultOutputDataCreator } from './OutputDataCreator';
 import {
   type HasKeysetKeys,
   type Proof,
@@ -24,6 +20,15 @@ import {
   type SerializedBlindedSignature,
   type SerializedDLEQ,
 } from './types';
+
+/**
+ * Maximum secret length.
+ *
+ * @remarks
+ * Based on the Nutshell default mint_max_secret_length.
+ * @internal
+ */
+export const MAX_SECRET_LENGTH = 1024;
 
 /**
  * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
@@ -70,15 +75,6 @@ export function assertValidTagKey(key: string) {
   }
 }
 
-/**
- * Maximum secret length.
- *
- * @remarks
- * Based on the Nutshell default mint_max_secret_length.
- * @internal
- */
-export const MAX_SECRET_LENGTH = 1024;
-
 export function isOutputDataFactory(
   value: OutputData[] | OutputDataFactory,
 ): value is OutputDataFactory {
@@ -87,16 +83,6 @@ export function isOutputDataFactory(
 
 // Holds the map of Pubkey blinding factors for a given OutputData
 // This avoids changing the shape of the OutputDataLike interface
-const EPHEMERAL_E = new WeakMap<OutputData, string>(); // one-shot
-function setEphemeralE(target: OutputData, Ehex?: string) {
-  if (Ehex) EPHEMERAL_E.set(target, Ehex);
-}
-function takeEphemeralE(target: OutputData): string | undefined {
-  const e = EPHEMERAL_E.get(target);
-  if (!e) return;
-  EPHEMERAL_E.delete(target); // one-shot to avoid leakage
-  return e;
-}
 
 export class OutputData implements OutputDataLike {
   blindedMessage: SerializedBlindedMessage;
@@ -151,7 +137,7 @@ export class OutputData implements OutputDataLike {
     };
 
     // Add P2BK (Pay to Blinded Key) blinding factors if needed
-    const Ehex = takeEphemeralE(this);
+    const Ehex = emphemeralEStore.takeEphemeralE(this);
     if (Ehex) proof.p2pk_e = Ehex;
 
     return proof;
@@ -162,130 +148,20 @@ export class OutputData implements OutputDataLike {
     amount: AmountLike,
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
-  ) {
-    const amounts = splitAmount(amount, keyset.keys, customSplit);
-    return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
+  ): OutputData[] {
+    return defaultOutputDataCreator.createP2PKData(p2pk, amount, keyset, customSplit);
   }
 
   static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string) {
-    const amountValue = Amount.from(amount);
-    const normalized = normalizeP2PKOptions(p2pk);
-    const lockKeys = Array.isArray(normalized.pubkey) ? normalized.pubkey : [normalized.pubkey];
-    const refundKeys = normalized.refundKeys ?? [];
-    const reqLock = normalized.requiredSignatures ?? 1;
-    const reqRefund = normalized.requiredRefundSignatures ?? 1;
-
-    // Init vars
-    const hashlock = normalized.hashlock;
-    const isHTLC = typeof hashlock === 'string' && hashlock.length > 0;
-    let data = isHTLC ? hashlock : lockKeys[0];
-    let pubkeys = isHTLC ? lockKeys : lockKeys.slice(1);
-    let refund = refundKeys;
-
-    // Optional key blinding (P2BK)
-    let Ehex: string | undefined;
-    if (p2pk.blindKeys) {
-      const ordered = [...lockKeys, ...refundKeys];
-      const { blinded, Ehex: _E } = deriveP2BKBlindedPubkeys(ordered);
-      if (isHTLC) {
-        // hashlock is in data, all locking keys into pubkeys
-        pubkeys = blinded.slice(0, lockKeys.length);
-      } else {
-        // first locking key in data, rest into pubkeys
-        data = blinded[0];
-        pubkeys = blinded.slice(1, lockKeys.length);
-      }
-      refund = blinded.slice(lockKeys.length);
-      Ehex = _E;
-    }
-
-    // build P2PK Tags (NUT-11)
-    const tags: string[][] = [];
-
-    const ts = normalized.locktime ?? NaN;
-    if (Number.isSafeInteger(ts) && ts >= 0) {
-      tags.push(['locktime', String(ts)]);
-    }
-
-    if (pubkeys.length > 0) {
-      tags.push(['pubkeys', ...pubkeys]);
-      if (reqLock > 1) {
-        tags.push(['n_sigs', String(reqLock)]);
-      }
-    }
-
-    if (refund.length > 0) {
-      tags.push(['refund', ...refund]);
-      if (reqRefund > 1) {
-        tags.push(['n_sigs_refund', String(reqRefund)]);
-      }
-    }
-
-    if (normalized.sigFlag == 'SIG_ALL') {
-      tags.push(['sigflag', 'SIG_ALL']);
-    }
-
-    // Append additional tags if any
-    if (normalized.additionalTags?.length) {
-      const extraTags = normalized.additionalTags.map(([k, ...vals]) => {
-        assertValidTagKey(k); // Validate key
-        return [k, ...vals.map(String)]; // all to strings
-      });
-      tags.push(...extraTags);
-    }
-
-    // Construct secret
-    const kind = isHTLC ? 'HTLC' : 'P2PK';
-    const newSecret: [string, { nonce: string; data: string; tags: string[][] }] = [
-      kind,
-      {
-        nonce: bytesToHex(randomBytes(32)),
-        data,
-        tags,
-      },
-    ];
-
-    // blind the message
-    const parsed = JSON.stringify(newSecret);
-
-    // Check secret length, counting Unicode code points
-    // Same semantics as Nutshell python: len(str)
-    const charCount = [...parsed].length;
-    if (charCount > MAX_SECRET_LENGTH) {
-      throw new Error(`Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`);
-    }
-    // blind the message
-    const secretBytes = new TextEncoder().encode(parsed);
-    const { r, B_ } = blindMessage(secretBytes);
-
-    // create OutputData
-    const od = new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
-      r,
-      secretBytes,
-    );
-
-    // stash Ehex - we add it to Proof later @see: toProof()
-    if (p2pk.blindKeys && Ehex) setEphemeralE(od, Ehex);
-
-    return od;
+    return defaultOutputDataCreator.createSingleP2PKData(p2pk, amount, keysetId);
   }
 
   static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]) {
-    const amounts = splitAmount(amount, keyset.keys, customSplit);
-    return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
+    return defaultOutputDataCreator.createRandomData(amount, keyset, customSplit);
   }
 
   static createSingleRandomData(amount: AmountLike, keysetId: string) {
-    const amountValue = Amount.from(amount);
-    const randomHex = bytesToHex(randomBytes(32));
-    const secretBytes = new TextEncoder().encode(randomHex);
-    const { r, B_ } = blindMessage(secretBytes);
-    return new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
-      r,
-      secretBytes,
-    );
+    return defaultOutputDataCreator.createSingleRandomData(amount, keysetId);
   }
 
   static createDeterministicData(
@@ -295,9 +171,12 @@ export class OutputData implements OutputDataLike {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputData[] {
-    const amounts = splitAmount(amount, keyset.keys, customSplit);
-    return amounts.map((a, i) =>
-      this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
+    return defaultOutputDataCreator.createDeterministicData(
+      amount,
+      seed,
+      counter,
+      keyset,
+      customSplit,
     );
   }
 
@@ -311,19 +190,7 @@ export class OutputData implements OutputDataLike {
     counter: number,
     keysetId: string,
   ) {
-    const amountValue = Amount.from(amount);
-    const secretBytes = deriveSecret(seed, keysetId, counter);
-    const secretBytesAsHex = bytesToHex(secretBytes);
-    const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-    // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
-    // for BIP32-style retry logic (caller increments counter and retries).
-    const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
-    const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
-    return new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
-      r,
-      utf8SecretBytes,
-    );
+    return defaultOutputDataCreator.createSingleDeterministicData(amount, seed, counter, keysetId);
   }
 
   /**
