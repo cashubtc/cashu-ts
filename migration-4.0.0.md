@@ -35,6 +35,7 @@ Both strategies are valid. The sections below show the mechanical changes requir
 - `Amount` is for non-negative integer magnitudes only. Model sign separately.
 - `AmountLike` is a boundary type: `number | bigint | string | Amount`.
 - Normalize external input with `Amount.from(...)`, then keep `Amount` in domain logic.
+- If you round-trip an `Amount` through plain JSON, rehydrate it with `Amount.fromJSON(...)`.
 - Prefer `JSONInt.stringify` / `JSONInt.parse` for persisted or transported integer-bearing payloads.
 - `toNumber()` is safe-or-throw; `toNumberUnsafe()` is explicitly lossy.
 - For display, prefer string-safe formatting and avoid eager `.toNumber()`.
@@ -113,9 +114,12 @@ const n = meltQuote.amount;
 const sats = meltQuote.fee_reserve.add(meltQuote.amount).toNumber();
 const n = meltQuote.amount.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
 
-// Safe JSON serialisation: Amount.toJSON() emits a number for safe values,
-// a decimal string for values above MAX_SAFE_INTEGER
-JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":1000}'
+// Safe JSON serialisation: Amount.toJSON() emits a decimal string
+JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":"1000"}'
+
+// Rehydrate a JSON leaf value back to Amount
+const parsed = JSON.parse('{"amount":"1000"}');
+const amount = Amount.fromJSON(parsed.amount);
 ```
 
 ---
@@ -176,14 +180,14 @@ const n: number = total.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
 
 Both fields on the `SwapPreview` type (returned by `prepareSwapToSend()` / `prepareSwapToReceive()`) are typed as `Amount`.
 
-If you persist or deserialize previews yourself, rehydrate those fields before calling `Amount` methods:
+If you persist or deserialize previews yourself, rehydrate before calling `Amount` methods. In arithmetic expressions, you only need to rehydrate the operand you are invoking the method on: methods like `.subtract(...)` already accept `AmountLike` for the argument.
 
 ```ts
 // Before
-const net = preview.amount.subtract(preview.fees);
+const net = preview.amount - preview.fees;
 
 // After — if the preview came from JSON/storage
-const net = Amount.from(preview.amount).subtract(Amount.from(preview.fees));
+const net = Amount.from(preview.amount).subtract(preview.fees);
 const n: number = net.toNumber();
 ```
 
@@ -203,19 +207,17 @@ const sats: number | undefined = request.amount?.toNumber();
 
 ---
 
-## Utility functions `splitAmount`, `getKeepAmounts`, and `getKeysetAmounts` now return `Amount[]`
+## Utility functions `splitAmount` and `getKeysetAmounts` now return `Amount[]`
 
-These functions in `@cashu/cashu-ts` previously returned `number[]`; they now return `Amount[]`.
+These public functions in `@cashu/cashu-ts` previously returned `number[]`; they now return `Amount[]`.
 
 ```ts
 // Before
 const chunks: number[] = splitAmount(1000, keys);
-const keep: number[] = getKeepAmounts(proofs, 500, keys, 3);
 const denominations: number[] = getKeysetAmounts(keyset);
 
 // After
 const chunks: Amount[] = splitAmount(1000, keys);
-const keep: Amount[] = getKeepAmounts(proofs, 500, keys, 3);
 const denominations: Amount[] = getKeysetAmounts(keyset);
 
 // Convert to numbers where needed
@@ -308,7 +310,9 @@ const total = proofs.reduce((sum, p) => sum + p.amount, 0);
 
 // After
 const proof: Proof = { id, amount: Amount.from(1000), C, secret };
-const total = proofs.reduce((sum, p) => sum.add(p.amount), Amount.zero());
+const total: Amount = proofs.reduce((sum, p) => sum.add(p.amount), Amount.zero());
+// or more simply
+const total: Amount = sumProofs(proofs);
 
 // Convert or compare explicitly when needed
 const display: number = proof.amount.toNumber();
@@ -340,9 +344,9 @@ const ksFee: Amount = wallet.getFeesForKeyset(3, keysetId);
 
 ---
 
-## `MessageQueue` and `MessageNode` moved
+## `MessageQueue` and `MessageNode` are no longer public top-level utils
 
-`MessageQueue` and `MessageNode` are no longer exported from `@cashu/cashu-ts` utils. `MessageQueue` is now exported from the transport module (`src/transport/WSConnection.ts`). `MessageNode` is no longer part of the public API.
+`MessageQueue` and `MessageNode` are no longer exported from `@cashu/cashu-ts` utils. `MessageNode` is no longer part of the public API, and `MessageQueue` should be treated as internal rather than migrated as a supported import.
 
 If you were importing these classes directly:
 
@@ -350,9 +354,8 @@ If you were importing these classes directly:
 // Before
 import { MessageQueue, MessageNode } from '@cashu/cashu-ts';
 
-// After — MessageQueue is available from the transport module
-import { MessageQueue } from '@cashu/cashu-ts/transport/WSConnection';
-// MessageNode is removed; use MessageQueue.enqueue/dequeue instead
+// After
+// Use supported WSConnection APIs instead of importing queue internals directly
 ```
 
 ---
@@ -394,7 +397,7 @@ The following are still exported but are excluded from the trimmed type definiti
 
 ### `handleTokens` no longer exported
 
-`handleTokens` should always have been an internal function, but was exported. If you used this function, use `getDecodedToken` (for fully hydrated `Proof` objects) or `getTokenMetadata` (for token/proof metadata without keyset resolution) instead.
+`handleTokens` should always have been an internal function, but was exported. If you used this function, prefer `getTokenMetadata` before a wallet exists, then `wallet.decodeToken(...)` after the wallet is loaded. Use `getDecodedToken(str, keysetIds)` only in advanced flows where you already manage keyset IDs yourself.
 
 ---
 
@@ -409,6 +412,8 @@ Three helpers cover the common patterns for persisting and restoring proofs:
 | `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                                                                                                              |
 | `deserializeProofs(json)`    | Restore `string \| string[] \| ProofLike[]` back to `Proof[]`, with `amount` normalized to `Amount`. Pass a raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings (e.g. NutZap tags), or a `ProofLike[]` for already-parsed objects. |
 | `normalizeProofAmounts(raw)` | Lower-level building block: convert `ProofLike[]` to `Proof[]` by normalizing `amount` to `Amount`. Called internally by `deserializeProofs`; use directly when you already have typed `ProofLike[]` and want to skip string-detection.                                     |
+
+**Tip**: Core wallet flows now accept `ProofLike[]` directly. If you already have deserialized proof objects from JSON or storage, you can usually pass them straight into wallet APIs such as `wallet.receive(...)`, `wallet.send(...)`, `wallet.sendOffline(...)`, `wallet.prepareSwapToSend(...)`, `wallet.meltProofs...(...)`, and `wallet.signP2PKProofs(...)` without calling `normalizeProofAmounts(...)` yourself first. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
 
 ```ts
 import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';

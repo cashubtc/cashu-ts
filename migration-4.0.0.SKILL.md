@@ -89,6 +89,8 @@ Default migration posture:
 - persistence / transport JSON: `JSONInt.parse` / `JSONInt.stringify`
 - UI formatting: `Amount` or sign + `Amount`
 
+If you round-trip an `Amount` through plain JSON at a leaf field, rehydrate it with `Amount.fromJSON(...)`.
+
 Do not flatten everything back to `number` unless the user explicitly chose that strategy in Step 0b.
 
 ### Choose number conversion deliberately
@@ -153,6 +155,8 @@ const proofs = deserializeProofs(db.query('SELECT * FROM proofs'));
 
 `normalizeProofAmounts(raw: ProofLike[])` is the lower-level building block that `deserializeProofs` uses internally. Call it directly when you already have typed `ProofLike[]` and want to normalize `amount` to `Amount` without the string-detection logic.
 
+Core wallet flows now accept `ProofLike[]` directly. If deserialized proofs are only being passed into wallet APIs such as `send`, `sendOffline`, `receive`, `prepareSwapToSend`, `meltProofs...`, or `signP2PKProofs`, you can often skip manual normalization and pass the array straight in. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
+
 ---
 
 ## Step 3 — `Amount` value object (was `number`)
@@ -184,17 +188,18 @@ If adopting Amount natively, see **Step 9** for Finance Helpers that replace com
 
 ---
 
-## Step 4 — `SwapPreview.amount` / `.fees` now `AmountLike`
+## Step 4 — `SwapPreview.amount` / `.fees` now `Amount`
 
 Search: `preview\.amount\b`, `preview\.fees\b`
 
-Wrap before arithmetic:
+If the preview came directly from the wallet, these fields are already `Amount`.
+If you persisted and later reloaded the preview, rehydrate before arithmetic. Only wrap the operand you call the method on: methods like `.subtract(...)` already accept `AmountLike` for the argument.
 
 ```ts
 // Before
-const net = preview.amount.subtract(preview.fees);
+const net = preview.amount - preview.fees;
 // After
-const net = Amount.from(preview.amount).subtract(Amount.from(preview.fees));
+const net = Amount.from(preview.amount).subtract(preview.fees);
 ```
 
 ---
@@ -203,7 +208,8 @@ const net = Amount.from(preview.amount).subtract(Amount.from(preview.fees));
 
 Search: `MintPreview`, `prepareMint`
 
-`preview.quote` is now the full quote object (or `{ quote: string }` if a string ID was passed).
+`preview.quote` is now the full quote object. If you only have a quote ID string, wrap it as
+`{ quote: string }` for manually constructed preview values.
 Access the ID via `preview.quote.quote`. Update any manually constructed `MintPreview` values:
 
 ```ts
@@ -367,9 +373,9 @@ Key replacements:
 - `bytesToNumber(b)` → `Bytes.toBigInt(b)`
 - `verifyKeysetId(id, keys)` → `Keyset.verifyKeysetId(id, keys)`
 - `deriveKeysetId(keys, unit)` → `deriveKeysetId({ keys, unit })`
-- `handleTokens(token)` → `getDecodedToken(token)` or `getTokenMetadata(token)`
+- `handleTokens(token)` → `getTokenMetadata(token)` before a wallet exists, then `wallet.decodeToken(token)` after the wallet is loaded; use `getDecodedToken(token, keysetIds)` only in advanced flows
 - `getEncodedTokenV4(token)` → `getEncodedToken(token)`
-- `MessageQueue` (from utils) → `import { MessageQueue } from '@cashu/cashu-ts/transport/WSConnection'`
+- `MessageQueue` / `MessageNode` → remove direct imports and use supported `WSConnection` APIs instead
 
 ---
 
