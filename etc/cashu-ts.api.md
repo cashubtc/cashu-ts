@@ -19,6 +19,8 @@ export class Amount {
     equals(other: AmountLike): boolean;
     floorPercent(numerator: number, denominator?: number): Amount;
     static from(input: AmountLike): Amount;
+    // Warning: (ae-forgotten-export) The symbol "AmountJson" needs to be exported by the entry point index.d.ts
+    static fromJSON(input: AmountJson): Amount;
     // (undocumented)
     greaterThan(other: AmountLike): boolean;
     // (undocumented)
@@ -47,7 +49,7 @@ export class Amount {
     // (undocumented)
     static sum(values: Iterable<AmountLike>): Amount;
     toBigInt(): bigint;
-    toJSON(): number | string;
+    toJSON(): string;
     toNumber(): number;
     toNumberUnsafe(): number;
     toString(): string;
