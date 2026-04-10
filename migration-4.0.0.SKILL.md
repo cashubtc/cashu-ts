@@ -1,6 +1,6 @@
 ---
 name: cashu-ts-migrate-v3-to-v4
-description: This skill should be used when an agent needs to "upgrade cashu-ts from v3 to v4", "migrate @cashu/cashu-ts to version 4", "apply the cashu-ts v4 breaking changes", or "update a codebase to use cashu-ts 4.0.0". Provides a step-by-step mechanical recipe to locate and fix every breaking change introduced in v4.
+description: This skill should be used when an agent needs to "upgrade cashu-ts from v3 to v4" in a codebase. Provides a step-by-step guide to fix every breaking change introduced in v4.
 version: 1.0.0
 ---
 
@@ -45,7 +45,7 @@ v4 introduces an `Amount` value object (bigint-backed, immutable) wherever the l
 
 Record the user's choice. It affects how you handle every `Amount` hit in Steps 3–5:
 
-- Choice **a**: propagate `Amount` / `AmountLike` through the app's own functions and types; use `.toNumber()` only for float arithmetic (fee percentages etc.) and `Intl.NumberFormat` display of decimal units. Use `.toBigInt()` for integer units (SAT, JPY) passed to `Intl.NumberFormat` — it supports `bigint` natively.
+- Choice **a**: propagate `Amount` / `AmountLike` through the app's own functions and types; use `.toNumber()` only for float arithmetic (fee percentages etc.). For display, prefer string-safe formatting; for integer units (SAT, JPY), avoid eager `.toNumber()` and use runtime-appropriate bigint/string formatting rather than assuming `Intl.NumberFormat` bigint support.
 - Choice **b**: apply `.toNumber()` at each library call-site and leave all internal types as `number`.
 
 ---
@@ -124,16 +124,16 @@ Ensure `package.json` has `"type": "module"` or the bundler outputs ESM.
 
 ---
 
-## Step 2 — `Proof.amount`: `number` → `bigint`
+## Step 2 — `Proof.amount`: `number` → `Amount`
 
 Search: `\.amount` near proof construction/access; `amount:` in proof literals.
 
 Actions:
 
-- Change proof literal amounts: `amount: 1000` → `amount: 1000n`
-- Change accumulator seeds: `reduce((sum, p) => sum + p.amount, 0)` → `…, 0n)`
-- Wrap for display: `Number(proof.amount)`
-- `ProofLike` is a new exported type: `Omit<Proof, 'amount'> & { amount: AmountLike }` — a proof where `amount` is not yet `bigint`.
+- Change proof literal amounts: `amount: 1000` → `amount: Amount.from(1000)`
+- Change accumulators: `reduce((sum, p) => sum + p.amount, 0)` → `reduce((sum, p) => sum.add(p.amount), Amount.zero())` or for proofs, use `sumProofs()`.
+- Wrap for display or comparisons: `proof.amount.toString()`, `proof.amount.equals(1000)`
+- `ProofLike` is a new exported type: `Omit<Proof, 'amount'> & { amount: AmountLike }` — a proof where `amount` is not yet normalized to `Amount`.
 - Use `serializeProofs`/`deserializeProofs` for proof serialization. `serializeProofs` returns `string[]` (one JSON string per proof). `deserializeProofs` accepts `string | string[] | ProofLike[]` — pass the raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings, or a `ProofLike[]` for already-parsed objects:
 
 ```ts
@@ -151,7 +151,7 @@ const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map(
 const proofs = deserializeProofs(db.query('SELECT * FROM proofs'));
 ```
 
-`normalizeProofAmounts(raw: ProofLike[])` is the lower-level building block that `deserializeProofs` uses internally. Call it directly when you already have typed `ProofLike[]` and want to skip the string-detection logic.
+`normalizeProofAmounts(raw: ProofLike[])` is the lower-level building block that `deserializeProofs` uses internally. Call it directly when you already have typed `ProofLike[]` and want to normalize `amount` to `Amount` without the string-detection logic.
 
 ---
 
@@ -177,7 +177,7 @@ const total = sendAmt + fee;
 ```ts
 const fee: Amount = wallet.getFeesForProofs(proofs);
 const total = Amount.from(sendAmt).add(fee);
-// JSON serialisation is automatic — Amount.toJSON() emits a plain number
+// JSON serialisation is automatic — Amount.toJSON() emits a string
 ```
 
 If adopting Amount natively, see **Step 9** for Finance Helpers that replace common float patterns (`ceilPercent`, `floorPercent`, `scaledBy`, `clamp`, `inRange`).
@@ -477,10 +477,11 @@ npx tsc --noEmit
 npm test
 ```
 
-Remaining `number` / `bigint` mismatches on `Proof.amount` indicate stored proofs not yet
+Remaining `AmountLike` / `Amount` mismatches on `Proof.amount` indicate stored proofs not yet
 normalized — use `deserializeProofs()` for JSON sources or `normalizeProofAmounts()` for
-already-parsed objects (e.g. database rows). `Amount` type errors indicate `.toNumber()` or
-`Amount.from()` wrapping is missing.
+already-parsed objects (e.g. database rows). More generally, `Amount` type errors usually mean
+either a boundary value needs `Amount.from(...)`, or code that previously used `number` now needs
+to keep an `Amount` rather than converting it.
 
 ---
 

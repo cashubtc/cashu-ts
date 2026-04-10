@@ -8,6 +8,7 @@ import {
   Amount,
   type AmountLike,
   type HasKeysetKeys,
+  type ProofLike,
 } from '../../src';
 
 import { hexToBytes } from '@noble/curves/utils.js';
@@ -44,6 +45,39 @@ describe('receive', () => {
         C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
       },
     ]);
+    expect(proofs).toHaveLength(1);
+    expect(proofs[0].id).toBe('00bd033559de27d0');
+  });
+
+  test('receive ProofLike[] from JSON.parse - happy path', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/swap', () => {
+        return HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const storedProofs = JSON.parse(
+      JSON.stringify([
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(1),
+          secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
+          C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
+        },
+      ]),
+    ) as ProofLike[];
+
+    const proofs = await wallet.receive(storedProofs);
     expect(proofs).toHaveLength(1);
     expect(proofs[0].id).toBe('00bd033559de27d0');
   });

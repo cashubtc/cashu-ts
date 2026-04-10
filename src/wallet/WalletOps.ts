@@ -8,8 +8,9 @@ import {
   type MintQuoteBolt12Response,
   type MintQuoteBolt11Response,
 } from '../model/types';
-import type { Proof } from '../model/types/proof';
+import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+import { normalizeProofAmounts } from '../utils';
 
 import {
   type OutputType,
@@ -40,10 +41,10 @@ export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
  */
 export class WalletOps {
   constructor(private wallet: Wallet) {}
-  send(amount: AmountLike, proofs: Proof[]) {
+  send(amount: AmountLike, proofs: ProofLike[]) {
     return new SendBuilder(this.wallet, amount, proofs);
   }
-  receive(token: Token | string | Proof[]) {
+  receive(token: Token | string | ProofLike[]) {
     return new ReceiveBuilder(this.wallet, token);
   }
   /**
@@ -57,10 +58,10 @@ export class WalletOps {
   mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>) {
     return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
   }
-  meltBolt11(quote: MeltQuoteBolt11Response, proofs: Proof[]) {
+  meltBolt11(quote: MeltQuoteBolt11Response, proofs: ProofLike[]) {
     return new MeltBuilder<MeltQuoteBolt11Response>(this.wallet, 'bolt11', quote, proofs);
   }
-  meltBolt12(quote: MeltQuoteBolt12Response, proofs: Proof[]) {
+  meltBolt12(quote: MeltQuoteBolt12Response, proofs: ProofLike[]) {
     return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
   }
 }
@@ -91,7 +92,7 @@ export class SendBuilder {
   constructor(
     private wallet: Wallet,
     amount: AmountLike,
-    private proofs: Proof[],
+    private proofs: ProofLike[],
   ) {
     this.amount = Amount.from(amount);
   }
@@ -312,7 +313,10 @@ export class SendBuilder {
     if (this.offlineExact) {
       // Sign if needed
       if (this.config.privkey) {
-        this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+        this.proofs = this.wallet.signP2PKProofs(
+          normalizeProofAmounts(this.proofs),
+          this.config.privkey,
+        );
       }
       return this.wallet.sendOffline(this.amount, this.proofs, {
         includeFees: this.config.includeFees,
@@ -325,7 +329,10 @@ export class SendBuilder {
     if (this.offlineClose) {
       // Sign if needed
       if (this.config.privkey) {
-        this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
+        this.proofs = this.wallet.signP2PKProofs(
+          normalizeProofAmounts(this.proofs),
+          this.config.privkey,
+        );
       }
       return this.wallet.sendOffline(this.amount, this.proofs, {
         includeFees: this.config.includeFees,
@@ -362,7 +369,7 @@ export class ReceiveBuilder {
 
   constructor(
     private wallet: Wallet,
-    private token: Token | string | Proof[],
+    private token: Token | string | ProofLike[],
   ) {}
 
   /**
@@ -741,7 +748,7 @@ export class MeltBuilder<
     private wallet: Wallet,
     private method: string,
     private quote: TQuote,
-    private proofs: Proof[],
+    private proofs: ProofLike[],
   ) {}
 
   /**

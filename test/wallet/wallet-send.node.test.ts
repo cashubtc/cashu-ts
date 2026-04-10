@@ -1,7 +1,14 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
 
-import { Wallet, Amount, OutputData, type Proof, type OutputConfig } from '../../src';
+import {
+  Wallet,
+  Amount,
+  OutputData,
+  type Proof,
+  type ProofLike,
+  type OutputConfig,
+} from '../../src';
 
 import { Bytes } from '../../src/utils';
 import { hexToBytes } from '@noble/curves/utils.js';
@@ -160,6 +167,26 @@ describe('sendOffline witness normalization', () => {
     const p2pk = send.find((p) => p.secret === p2pkSecret)!;
     expect(p2pk.witness).toBe(witnessStr);
   });
+
+  test('accepts deserialized ProofLike[] input', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const storedProofs = JSON.parse(
+      JSON.stringify([
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(1),
+          secret: plainSecret,
+          C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        },
+      ]),
+    ) as ProofLike[];
+
+    const { send } = wallet.sendOffline(1, storedProofs);
+    expect(send).toHaveLength(1);
+    expect(send[0].amount).toEqual(Amount.from(1));
+  });
 });
 
 describe('send', () => {
@@ -208,6 +235,18 @@ describe('send', () => {
       expect(result.send).toHaveLength(1);
       expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     }
+  });
+
+  test('test send accepts deserialized ProofLike[] input', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const storedProofs = JSON.parse(JSON.stringify(proofs)) as ProofLike[];
+    const result = await wallet.send(1, storedProofs);
+
+    expect(result.keep).toHaveLength(0);
+    expect(result.send).toHaveLength(1);
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('test send over paying. Should return change', async () => {
@@ -881,6 +920,32 @@ describe('send', () => {
     await expect(
       wallet.prepareSwapToSend(3, proofs, { includeFees: true }, outputConfig),
     ).rejects.toThrow('Manual counter ranges overlap');
+  });
+
+  test('prepareSwapToSend accepts deserialized ProofLike[] input', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const storedProofs = JSON.parse(
+      JSON.stringify([
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(1),
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        },
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(8),
+          secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+          C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        },
+      ]),
+    ) as ProofLike[];
+
+    const res = await wallet.prepareSwapToSend(3, storedProofs, { includeFees: true });
+    expect(res.inputs.length).toBeGreaterThan(0);
+    expect(res.inputs.every((p) => p.amount instanceof Amount)).toBe(true);
   });
   test('manual counters advances cursor, then auto allocation must not reuse counters', async () => {
     server.use(

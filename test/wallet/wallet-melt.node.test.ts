@@ -4,6 +4,7 @@ import { test, describe, expect, vi } from 'vitest';
 import {
   Wallet,
   type Proof,
+  type ProofLike,
   type MeltQuoteBolt11Response,
   MeltQuoteState,
   OutputData,
@@ -131,6 +132,57 @@ describe('melt proofs', () => {
 
     expect(response.quote.state).toBe(MeltQuoteState.PAID);
     expect(response.quote.payment_preimage).toBe('preimage');
+    expect(response.change).toHaveLength(0);
+  });
+
+  test('test melt proofs accepts deserialized ProofLike[] input', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', () => {
+        return HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 12,
+          unit: 'sat',
+          fee_reserve: 0,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          payment_preimage: 'preimage',
+          request: 'bolt11request',
+          change: [],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(12),
+      fee_reserve: Amount.from(0),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+    };
+    const storedProofs = JSON.parse(
+      JSON.stringify([
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(8),
+          secret: 'secret1',
+          C: 'C1',
+        },
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(4),
+          secret: 'secret2',
+          C: 'C2',
+        },
+      ]),
+    ) as ProofLike[];
+
+    const response = await wallet.meltProofsBolt11(meltQuote, storedProofs);
+    expect(response.quote.state).toBe(MeltQuoteState.PAID);
     expect(response.change).toHaveLength(0);
   });
 

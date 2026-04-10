@@ -300,7 +300,7 @@ describe('WalletOps builders', () => {
       const [amount, sentProofs, config] = wallet.sendOffline.mock.calls[0];
 
       expect(Amount.from(amount).equals(5)).toBeTruthy();
-      expect(sentProofs).toBe(proofs);
+      expect(sentProofs).toStrictEqual(proofs);
       expect(config).toEqual({ includeFees: true, exactMatch: true, requireDleq: false });
       expect(wallet.send).not.toHaveBeenCalled();
     });

@@ -8,7 +8,7 @@
 
 ## The `Amount` value object — what changed and what it means for your app
 
-The single most pervasive change in v4 is that many APIs which previously returned or accepted a plain `number` now use an `Amount` value object. This was a deliberate design choice: JavaScript `number` silently loses precision above `Number.MAX_SAFE_INTEGER` (2^53 - 1). While that limit is above the total Bitcoin supply in satoshis, it is reachable with millisatoshi accounting or high-volume stablecoin tokens — and a silent rounding error in a payment app is a serious bug.
+Many v4 APIs that previously returned or accepted `number` now use `Amount`. This avoids silent precision loss above `Number.MAX_SAFE_INTEGER`, which matters for millisatoshi or other high-volume integer accounting.
 
 `Amount` is immutable, bigint-backed, and non-negative. It provides:
 
@@ -23,88 +23,26 @@ The single most pervasive change in v4 is that many APIs which previously return
 Before you start updating call sites, decide how deeply you want to adopt `Amount`:
 
 **Option A — Adopt `Amount` natively (recommended for new or large-amount apps)**
-Keep `Amount` flowing through your own functions and types. Convert to `number` only at boundaries that truly require a JavaScript number. For display, prefer bigint/string-safe formatting where possible: for integer-unit currencies like SAT, pass `.toBigInt()` directly to `Intl.NumberFormat`; for decimal or minor-unit currencies, use formatting helpers that preserve precision instead of eagerly calling `.toNumber()`.
+Keep `Amount` flowing through your own functions and types. Convert to `number` only at boundaries that truly require a JavaScript number. For display, prefer string-safe formatting where possible: for integer-unit currencies like SAT, avoid eager `.toNumber()` and use runtime-appropriate bigint/string formatting; for decimal or minor-unit currencies, use formatting helpers that preserve precision instead of eagerly calling `.toNumber()`.
 
 **Option B — Convert at the boundary (simplest for existing number-typed codebases)**
 Call `.toNumber()` immediately on every `Amount` the library returns, then leave all your internal types as `number`. Safe as long as your amounts stay within `Number.MAX_SAFE_INTEGER`.
 
 Both strategies are valid. The sections below show the mechanical changes required; the key question is whether you propagate `Amount` inward or flatten it at the edge.
 
-### Recommendations for "Option A"
+### Practical `Amount` rules
 
-The following notes may help you plan the migration to bigint support in your app.
-
-#### 1. `Amount` is non-negative only
-
-`Amount` is a bigint-backed value object for **non-negative integer magnitudes**.
-
-- `Amount.from(...)` accepts `AmountLike`: `number | bigint | string | Amount`
-- string input must be a **non-negative decimal integer**
-- negative strings like `"-42"` are invalid and will throw
-- do not use `Amount` itself to represent signed debit/credit values
-
-#### 2. `AmountLike` is magnitude-only input
-
-`AmountLike` is:
-
-- `number | bigint | string | Amount`
-
-It exists so APIs can accept integer magnitudes flexibly. It is **not** a signed amount type.
-If your app has incoming/outgoing, debit/credit, or plus/minus semantics, model sign separately.
-
-`AmountLike` is primarily a boundary type. Use it when accepting integer input from JSON, storage, user input, or external APIs, then normalize back to `Amount` for domain logic.
-
-eg:
+- `Amount` is for non-negative integer magnitudes only. Model sign separately.
+- `AmountLike` is a boundary type: `number | bigint | string | Amount`.
+- Normalize external input with `Amount.from(...)`, then keep `Amount` in domain logic.
+- Prefer `JSONInt.stringify` / `JSONInt.parse` for persisted or transported integer-bearing payloads.
+- `toNumber()` is safe-or-throw; `toNumberUnsafe()` is explicitly lossy.
+- For display, prefer string-safe formatting and avoid eager `.toNumber()`.
 
 ```ts
-const someinteger: AmountLike = ...; // boundary variable
-const amount = Amount.from(someinteger); // bigint backed VO
+const raw: AmountLike = getExternalAmount();
+const amount = Amount.from(raw);
 ```
-
-#### 3. Keep `Amount` in memory; convert only at true boundaries
-
-Best practice:
-
-- domain logic: `Amount`
-- persistence / transport JSON: `JSONInt`
-- UI formatting: `Amount` or sign + `Amount`
-
-Do not flatten everything back to `number` unless you have consciously chosen a safe-integer-only strategy.
-
-#### 4. `toNumber()` vs `toNumberUnsafe()` is an explicit policy choice
-
-- `toNumber()` = safe or throw
-- `toNumberUnsafe()` = accept precision loss
-
-Use `toNumber()` when a boundary must not lie. Use `toNumberUnsafe()` only when lossy output is acceptable. Prefer `toString()`, `toBigInt()`, or `toJSON()` when possible.
-
-#### 5. `JSONInt` is the default JSON boundary for integer-bearing payloads
-
-Use `JSONInt.stringify` / `JSONInt.parse` for:
-
-- localStorage
-- IndexedDB snapshots
-- backup/export/import files
-- Nostr / NWC / event payloads
-- any persisted or transported object graph that may contain bigint-backed values
-
-Do not rely on plain `JSON.stringify` / `JSON.parse` for bigint-bearing structures if `JSONInt` is available.
-
-#### 6. `Amount.toJSON()` helps, but it is not your app's full JSON policy
-
-`Amount.toJSON()` emits:
-
-- `number` for safe integers
-- decimal `string` for larger values
-
-That solves leaf-value emission, but apps still need a consistent whole-payload JSON policy. That policy should be `JSONInt`.
-
-#### 7. For display, prefer bigint/string-safe formatting
-
-Do not immediately call `toNumber()` just to render an integer amount.
-
-- For integer units, `Intl.NumberFormat` supports `bigint`
-- For minor-unit currencies, prefer bigint/string-aware formatting helpers over unsafe `number` conversion
 
 ---
 
@@ -182,9 +120,9 @@ JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":1000}'
 
 ---
 
-## `SerializedBlindedMessage.amount` is now `bigint`
+## `SerializedBlindedMessage.amount` is now `Amount`
 
-`SerializedBlindedMessage` is the outbound wire type sent to the mint. Its `amount` field is now typed as `bigint` (previously `number`) so that `JSONInt.stringify` always emits a raw numeric token — even for msat values above `Number.MAX_SAFE_INTEGER`.
+`SerializedBlindedMessage` is the outbound wire type sent to the mint. Its `amount` field is now typed as `Amount` (previously `number`), consistent with the rest of the v4 amount model.
 
 This type is not typically constructed directly by application code; it is produced internally by `BlindedMessage.getSerializedBlindedMessage()`. If you build `SerializedBlindedMessage` objects manually, update the `amount` field:
 
@@ -193,7 +131,7 @@ This type is not typically constructed directly by application code; it is produ
 const output: SerializedBlindedMessage = { amount: 1000, id: keysetId, B_: hex };
 
 // After
-const output: SerializedBlindedMessage = { amount: 1000n, id: keysetId, B_: hex };
+const output: SerializedBlindedMessage = { amount: Amount.from(1000), id: keysetId, B_: hex };
 ```
 
 ### Removed
@@ -234,17 +172,17 @@ const n: number = total.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
 
 ---
 
-## `SwapPreview.amount` and `SwapPreview.fees` are now `AmountLike`
+## `SwapPreview.amount` and `SwapPreview.fees` are now `Amount`
 
-Both fields on the `SwapPreview` type (returned by `prepareSend()` / `prepareReceive()`) are now typed as `AmountLike` rather than `Amount`. The wallet still returns `Amount` objects at runtime; the looser type allows deserialized previews (where amounts are plain numbers) to satisfy the type without wrapping in `Amount.from()`.
+Both fields on the `SwapPreview` type (returned by `prepareSwapToSend()` / `prepareSwapToReceive()`) are typed as `Amount`.
 
-If you call `Amount` methods on these fields, wrap them first:
+If you persist or deserialize previews yourself, rehydrate those fields before calling `Amount` methods:
 
 ```ts
-// Before — worked because the type was Amount
+// Before
 const net = preview.amount.subtract(preview.fees);
 
-// After — use Amount.from() to restore arithmetic
+// After — if the preview came from JSON/storage
 const net = Amount.from(preview.amount).subtract(Amount.from(preview.fees));
 const n: number = net.toNumber();
 ```
@@ -326,7 +264,7 @@ const mySelector: SelectProofs = (proofs, amountToSelect: AmountLike, ...) => { 
 
 ## `MintPreview.quote` is now the full quote object
 
-`prepareMint()` previously stored only the quote ID string in `MintPreview.quote`. It now stores the full quote object returned by the mint, giving consumers access to informational fields (`expiry`, `request`, `amount`, `unit`) needed for NUT-19 retry flows.
+`prepareMint()` previously stored only the quote ID string in `MintPreview.quote`. It now stores the full quote object passed into `prepareMint()`, giving consumers access to informational fields (`expiry`, `request`, `amount`, `unit`) needed for NUT-19 retry flows.
 
 ```ts
 // Before — quote was a plain string
@@ -338,12 +276,14 @@ const preview = await wallet.prepareMint('bolt11', 1000, quoteResponse);
 preview.quote.expiry; // number | null — accessible now
 preview.quote.request; // string — Lightning invoice
 
-// If you passed a string quote ID, the field is { quote: string }
-const preview2 = await wallet.prepareMint('bolt11', 1000, 'q123');
+// prepareMint() now expects a quote object, not a string ID
+const preview2 = await wallet.prepareMint('bolt11', 1000, { quote: 'q123' });
 preview2.quote; // { quote: 'q123' }
 ```
 
 The type is `MintPreview<TQuote>` where `TQuote extends { quote: string }` (defaults to `MintQuoteBaseResponse`).
+
+If you only have a bolt11 quote ID string, use `mintProofsBolt11(amount, quoteId)` rather than `prepareMint()`.
 
 If you construct a `MintPreview` manually (e.g., after deserialization), update the `quote` field from a bare string to an object:
 
@@ -357,9 +297,9 @@ const preview: MintPreview = { ..., quote: mintQuoteResponse };
 
 ---
 
-## `Proof.amount` is now `bigint`
+## `Proof.amount` is now `Amount`
 
-The `amount` field on the `Proof` type has changed from `number` to `bigint`. This affects any code that constructs, stores, or compares proof amounts.
+The `amount` field on the `Proof` type has changed from `number` to `Amount`. This affects any code that constructs, stores, or compares proof amounts.
 
 ```ts
 // Before
@@ -367,11 +307,12 @@ const proof: Proof = { id, amount: 1000, C, secret };
 const total = proofs.reduce((sum, p) => sum + p.amount, 0);
 
 // After
-const proof: Proof = { id, amount: 1000n, C, secret };
-const total = proofs.reduce((sum, p) => sum + p.amount, 0n);
+const proof: Proof = { id, amount: Amount.from(1000), C, secret };
+const total = proofs.reduce((sum, p) => sum.add(p.amount), Amount.zero());
 
-// Convert to number when needed (e.g. display)
-const display: number = Number(proof.amount); // safe for typical sat amounts
+// Convert or compare explicitly when needed
+const display: number = proof.amount.toNumber();
+const isExact = proof.amount.equals(1000);
 ```
 
 If you persist proofs to JSON or a database, see the [Proof serialization](#proof-serialization) section below for the helper functions provided.
@@ -459,15 +400,15 @@ The following are still exported but are excluded from the trimmed type definiti
 
 ## Proof serialization
 
-`ProofLike` is a new exported type: a proof-shaped object whose `amount` has not yet been normalized to `bigint` (i.e. `Omit<Proof, 'amount'> & { amount: AmountLike }`). Use it to model proofs from external storage where `amount` may be a `number`, `string`, or `bigint`.
+`ProofLike` is a new exported type: a proof-shaped object whose `amount` has not yet been normalized to `Amount` (i.e. `Omit<Proof, 'amount'> & { amount: AmountLike }`). Use it to model proofs from external storage where `amount` may be a `number`, `string`, `bigint`, or `Amount`.
 
 Three helpers cover the common patterns for persisting and restoring proofs:
 
-| Function                     | Use case                                                                                                                                                                                                                                                         |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                                                                                                   |
-| `deserializeProofs(json)`    | Restore `string \| string[] \| ProofLike[]` back to `Proof[]`, with `amount` as `bigint`. Pass a raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings (e.g. NutZap tags), or a `ProofLike[]` for already-parsed objects. |
-| `normalizeProofAmounts(raw)` | Lower-level building block: convert `ProofLike[]` to `Proof[]` by normalizing `amount` to `bigint`. Called internally by `deserializeProofs`; use directly when you already have typed `ProofLike[]` and want to skip string-detection.                          |
+| Function                     | Use case                                                                                                                                                                                                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serializeProofs(proofs)`    | Serialize `Proof \| Proof[]` to `string[]` (one JSON string per proof) without precision loss.                                                                                                                                                                              |
+| `deserializeProofs(json)`    | Restore `string \| string[] \| ProofLike[]` back to `Proof[]`, with `amount` normalized to `Amount`. Pass a raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings (e.g. NutZap tags), or a `ProofLike[]` for already-parsed objects. |
+| `normalizeProofAmounts(raw)` | Lower-level building block: convert `ProofLike[]` to `Proof[]` by normalizing `amount` to `Amount`. Called internally by `deserializeProofs`; use directly when you already have typed `ProofLike[]` and want to skip string-detection.                                     |
 
 ```ts
 import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';
@@ -629,7 +570,7 @@ getEncodedToken(token, { version: 3 });
 getEncodedToken({ mint, proofs: proofsWithBase64KeysetIds });
 ```
 
-To resolve this, swap the proofs at the mint. `wallet.receive()` now accepts `Proof[]` directly, so no token string is needed:
+To resolve this, swap the proofs at the mint. `wallet.receive()` now accepts proof arrays directly, including deserialized/stored `ProofLike[]`, so no token string is needed:
 
 ```ts
 const freshProofs = await wallet.receive(legacyProofs);
@@ -921,58 +862,19 @@ For melt quotes, base fields (`amount`, `expiry`, `change`) are always normalize
 
 ## Finance Helpers — going further with `Amount`
 
-Once you are propagating `Amount` natively, a set of Finance Helpers on the `Amount` class lets you replace common float-based patterns with exact integer arithmetic. All methods are chainable.
+If you adopt `Amount` natively, it has methods to replace common float-based patterns with exact integer arithmetic:
 
-### `ceilPercent(numerator, denominator = 100)`
-
-Returns `ceil(this × numerator / denominator)`. The default base of 100 makes integer percentages natural; use a larger denominator for fractional rates.
+- `ceilPercent(numerator, denominator = 100)` for rounded-up percentages
+- `floorPercent(numerator, denominator = 100)` for conservative lower bounds
+- `scaledBy(numerator, denominator)` for proportional rescaling
+- `clamp(min, max)` for bounding into a closed range
+- `inRange(min, max)` for inclusive range checks
 
 ```ts
-// Replaces: Math.ceil(amount * 0.02)
-const fee = amount.ceilPercent(2); // ceil(2%)
-
-// Replaces: Math.ceil(amount * 0.005)
-const fee = amount.ceilPercent(1, 200); // ceil(0.5%)
-
-// Fee with minimum: replaces Math.ceil(Math.max(2, amount * 0.02))
 const fee = amount.ceilPercent(2).clamp(2, amount);
-```
-
-### `floorPercent(numerator, denominator = 100)`
-
-Returns `floor(this × numerator / denominator)`. The complement to `ceilPercent` — use when you need the conservative lower bound.
-
-```ts
-// Replaces: Math.floor(amount * 0.98)
-const maxSpend = amount.floorPercent(98); // floor(98%)
-```
-
-### `scaledBy(numerator, denominator)`
-
-Returns `round(this × numerator / denominator)` using integer arithmetic. Useful for proportional rescaling where the ratio is a runtime value.
-
-Uses the identity `round(a × b / c) = floor((2 × a × b + c) / (2 × c))` — no floats, no overflow risk.
-
-```ts
-// Replaces: Math.round(estInvAmount * (tokenAmount / neededAmount)) - 1
+const maxSpend = amount.floorPercent(98);
 const adjusted = estInvAmount.scaledBy(tokenAmount, neededAmount).subtract(1);
-```
-
-### `clamp(min, max)`
-
-Bounds this amount to the inclusive range `[min, max]`. Throws if `min > max`.
-
-```ts
-// Replaces: Amount.max(MIN_FEE, Amount.min(tokenAmount, fee))
 const bounded = fee.clamp(MIN_FEE, tokenAmount);
-```
-
-### `inRange(min, max)`
-
-Returns `true` if this amount falls within `[min, max]` inclusive. Throws if `min > max`.
-
-```ts
-// Replaces: minSendable <= msats && msats <= maxSendable
 if (msats.inRange(data.minSendable, data.maxSendable)) { ... }
 ```
 

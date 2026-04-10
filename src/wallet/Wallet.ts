@@ -41,12 +41,13 @@ import type { SerializedBlindedSignature } from '../model/types/blinded';
 import type { KeyChainCache } from '../model/types/keyset';
 import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
-import type { Proof } from '../model/types/proof';
+import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
   getDecodedToken,
   hasValidDleq,
   invoiceHasAmountInHRP,
+  normalizeProofAmounts,
   sanitizeUrl,
   splitAmount,
   sumProofs,
@@ -268,6 +269,10 @@ class Wallet {
     } catch (e) {
       this.fail((e as Error).message, { op, amount });
     }
+  }
+
+  private normalizeInputProofs(proofs: ProofLike[]): Proof[] {
+    return normalizeProofAmounts(proofs);
   }
 
   /**
@@ -853,7 +858,7 @@ class Wallet {
    * @returns Newly minted proofs.
    */
   async receive(
-    token: Token | string | Proof[],
+    token: Token | string | ProofLike[],
     config?: ReceiveConfig,
     outputType?: OutputType,
   ): Promise<Proof[]> {
@@ -886,7 +891,7 @@ class Wallet {
    * @returns SwapPreview with metadata for swap transaction.
    */
   async prepareSwapToReceive(
-    token: Token | string | Proof[],
+    token: Token | string | ProofLike[],
     config?: ReceiveConfig,
     outputType?: OutputType,
   ): Promise<SwapPreview> {
@@ -896,7 +901,7 @@ class Wallet {
     // Extract proofs — either directly or by decoding the token
     let proofs: Proof[];
     if (Array.isArray(token)) {
-      proofs = token;
+      proofs = this.normalizeInputProofs(token);
     } else {
       const decodedToken: Token = typeof token === 'string' ? this.decodeToken(token) : token;
       const tokenMintUrl = sanitizeUrl(decodedToken.mint);
@@ -987,16 +992,25 @@ class Wallet {
    * @returns SendResponse with keep/send proofs.
    * @throws Throws if the send cannot be completed offline.
    */
-  sendOffline(amount: AmountLike, proofs: Proof[], config?: SendOfflineConfig): SendResponse {
+  sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
+    let normalizedProofs = this.normalizeInputProofs(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
       // Only use proofs that have a DLEQ
-      proofs = proofs.filter((p: Proof) => p.dleq != undefined);
+      normalizedProofs = normalizedProofs.filter((p) => p.dleq != undefined);
     }
-    this.failIf(sumProofs(proofs).lessThan(sendAmount), 'Not enough funds available to send');
+    this.failIf(
+      sumProofs(normalizedProofs).lessThan(sendAmount),
+      'Not enough funds available to send',
+    );
 
-    const { keep, send } = this.selectProofsToSend(proofs, sendAmount, includeFees, exactMatch);
+    const { keep, send } = this.selectProofsToSend(
+      normalizedProofs,
+      sendAmount,
+      includeFees,
+      exactMatch,
+    );
     // Ensure witnesses are serialized, strip DLEQ if not required
     const sendPrepared = this._prepareInputsForMint(send, requireDleq);
     return { keep, send: sendPrepared };
@@ -1030,11 +1044,12 @@ class Wallet {
    */
   async send(
     amount: AmountLike,
-    proofs: Proof[],
+    proofs: ProofLike[],
     config?: SendConfig,
     outputConfig?: OutputConfig,
   ): Promise<SendResponse> {
     const sendAmount = this.parseAmount(amount, 'send');
+    const normalizedProofs = this.normalizeInputProofs(proofs);
     const { keysetId, includeFees = false } = config || {};
     // Fallback to policy defaults if no outputConfig
     outputConfig = outputConfig ?? {
@@ -1069,7 +1084,7 @@ class Wallet {
       }
 
       // Proceed with offline exact-match attempt
-      const { keep, send } = this.sendOffline(sendAmount, proofs, {
+      const { keep, send } = this.sendOffline(sendAmount, normalizedProofs, {
         includeFees,
         exactMatch: true,
         requireDleq: false, // safety
@@ -1086,7 +1101,7 @@ class Wallet {
     }
 
     // Prepare and complete the send
-    const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
+    const txn = await this.prepareSwapToSend(sendAmount, normalizedProofs, config, outputConfig);
     return await this.completeSwap(txn, config?.privkey);
   }
 
@@ -1115,11 +1130,12 @@ class Wallet {
    */
   async prepareSwapToSend(
     amount: AmountLike,
-    proofs: Proof[],
+    proofs: ProofLike[],
     config?: SendConfig,
     outputConfig?: OutputConfig,
   ): Promise<SwapPreview> {
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
+    const normalizedProofs = this.normalizeInputProofs(proofs);
     const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
     // Fallback to policy defaults if no outputConfig
@@ -1142,7 +1158,7 @@ class Wallet {
 
     // Select the subset of proofs needed to cover the swap (sendTarget + swap fee)
     const { keep: unselectedProofs, send: selectedProofs } = this.selectProofsToSend(
-      proofs,
+      normalizedProofs,
       sendAmount,
       true, // Include fees to cover swap fee
     );
@@ -1336,27 +1352,28 @@ class Wallet {
    * @returns Signed proofs.
    */
   signP2PKProofs(
-    proofs: Proof[],
+    proofs: ProofLike[],
     privkey: string | string[],
     outputData?: OutputDataLike[],
     quoteId?: string,
   ): Proof[] {
+    const normalizedProofs = this.normalizeInputProofs(proofs);
     // Normal case, sign everything as usual
-    if (!isP2PKSigAll(proofs)) {
-      return cryptoSignP2PKProofs(proofs, privkey, this._logger);
+    if (!isP2PKSigAll(normalizedProofs)) {
+      return cryptoSignP2PKProofs(normalizedProofs, privkey, this._logger);
     }
 
     // Ensure SIG_ALL conditions are met
     this.failIfNullish(outputData, 'OutputData is required for SIG_ALL proof signing.');
-    assertSigAllInputs(proofs);
+    assertSigAllInputs(normalizedProofs);
 
     // SIG_ALL is in flux currently, so let's generate all known message formats
     // and sign the first proof only against each message...
-    const [first, ...rest] = proofs;
+    const [first, ...rest] = normalizedProofs;
     let signedFirst = first;
     const messages = [
-      buildLegacyP2PKSigAllMessage(proofs, outputData, quoteId),
-      buildP2PKSigAllMessage(proofs, outputData, quoteId),
+      buildLegacyP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
+      buildP2PKSigAllMessage(normalizedProofs, outputData, quoteId),
     ];
     for (const msg of messages) {
       signedFirst = cryptoSignP2PKProofs([signedFirst], privkey, this._logger, msg)[0];
@@ -2377,11 +2394,12 @@ class Wallet {
   async meltProofs<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
     method: string,
     meltQuote: TQuote,
-    proofsToSend: Proof[],
+    proofsToSend: ProofLike[],
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<TQuote>> {
-    const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
+    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
+    const meltTxn = await this.prepareMelt(method, meltQuote, normalizedProofs, config, outputType);
     return this.completeMelt<TQuote>(meltTxn, config?.privkey);
   }
 
@@ -2399,11 +2417,18 @@ class Wallet {
    */
   async meltProofsBolt11(
     meltQuote: MeltQuoteBolt11Response,
-    proofsToSend: Proof[],
+    proofsToSend: ProofLike[],
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
-    const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
+    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
+    const meltTxn = await this.prepareMelt(
+      'bolt11',
+      meltQuote,
+      normalizedProofs,
+      config,
+      outputType,
+    );
     return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey);
   }
 
@@ -2421,11 +2446,18 @@ class Wallet {
    */
   async meltProofsBolt12(
     meltQuote: MeltQuoteBolt12Response,
-    proofsToSend: Proof[],
+    proofsToSend: ProofLike[],
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
-    const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
+    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
+    const meltTxn = await this.prepareMelt(
+      'bolt12',
+      meltQuote,
+      normalizedProofs,
+      config,
+      outputType,
+    );
     return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
   }
 
@@ -2449,15 +2481,16 @@ class Wallet {
   async prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(
     method: string,
     meltQuote: TQuote,
-    proofsToSend: Proof[],
+    proofsToSend: ProofLike[],
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
     this.validateMeltQuote(meltQuote);
+    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved } = config || {};
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset
-    const sendAmount = sumProofs(proofsToSend);
+    const sendAmount = sumProofs(normalizedProofs);
 
     // feeReserve is the overage above the invoice/offer amount.
     // In the common case where selected proofs = amount + fee_reserve,
@@ -2508,7 +2541,7 @@ class Wallet {
     // Create melt preview
     const meltPreview: MeltPreview<TQuote> = {
       method,
-      inputs: proofsToSend,
+      inputs: normalizedProofs,
       outputData,
       keysetId: keyset.id,
       quote: meltQuote,
