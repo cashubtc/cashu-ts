@@ -5,9 +5,10 @@ import {
   schnorrSignDigest,
 } from '../crypto';
 import { parseWitnessData } from '../crypto/NUT11';
-import { Bytes, encodeUint8toBase64Url, JSONInt } from '../utils';
+import { Bytes, encodeUint8toBase64Url } from '../utils';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
+import { Amount } from './Amount';
 import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 
 /**
@@ -98,7 +99,7 @@ function serializePackage(pkg: SigAllSigningPackage): string {
   if (pkg.digests) ordered.digests = pkg.digests;
   if (pkg.witness) ordered.witness = pkg.witness;
 
-  const json = JSONInt.stringify(ordered) ?? '{}';
+  const json = JSON.stringify(ordered) ?? '{}';
   const base64url = encodeUint8toBase64Url(Bytes.fromString(json));
 
   return `${SIGALL_PREFIX}${base64url}`;
@@ -126,7 +127,7 @@ function deserializePackage(
   let data: unknown;
 
   try {
-    data = JSONInt.parse(json);
+    data = JSON.parse(json);
   } catch (e) {
     throw new Error(
       `Failed to parse signing package JSON: ${e instanceof Error ? e.message : String(e)}`,
@@ -172,17 +173,14 @@ function deserializePackage(
 
     if (!output || typeof output !== 'object') throw new Error(`Invalid output at index ${i}`);
 
-    const amountType = typeof output.amount;
-    if (amountType !== 'number' && amountType !== 'bigint') {
-      throw new Error(`Output ${i}: amount must be a number`);
-    }
+    if (typeof output.amount !== 'string') throw new Error(`Output ${i}: amount must be a string`);
 
     if (!output.B_ || typeof output.B_ !== 'string') throw new Error(`Output ${i}: B_ invalid`);
 
     if (!output.id || typeof output.id !== 'string') throw new Error(`Output ${i}: id invalid`);
 
-    // Rehydrate raw JSON token (number | bigint) to bigint to satisfy SerializedBlindedMessage contract.
-    output.amount = BigInt(output.amount as number | bigint);
+    // Rehydrate SerializedBlindedMessage.amount
+    output.amount = Amount.from(output.amount);
   }
 
   const digests = pkg.digests as Record<string, string> | undefined;

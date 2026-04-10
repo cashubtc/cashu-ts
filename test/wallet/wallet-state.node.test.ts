@@ -1,6 +1,6 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
-import { Wallet, CheckStateEnum } from '../../src';
+import { Wallet, CheckStateEnum, Amount } from '../../src';
 import { mint, unit, mintUrl, useTestServer } from './_setup';
 
 const server = useTestServer();
@@ -44,37 +44,37 @@ describe('groupProofsByState', () => {
     const proofs = [
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a14',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 128n,
+        amount: Amount.from(128),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a15',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 4n,
+        amount: Amount.from(4),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a16',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a17',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 16n,
+        amount: Amount.from(16),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a18',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -120,11 +120,11 @@ describe('groupProofsByState', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const result = await wallet.groupProofsByState(proofs);
-    expect(result.unspent[0].amount).toEqual(8n);
-    expect(result.unspent[1].amount).toEqual(4n);
-    expect(result.spent[0].amount).toEqual(2n);
-    expect(result.spent[1].amount).toEqual(128n);
-    expect(result.spent[2].amount).toEqual(16n);
-    expect(result.pending[0].amount).toEqual(1n);
+    expect(result.unspent[0].amount.equals(8n)).toBeTruthy();
+    expect(result.unspent[1].amount.equals(4n)).toBeTruthy();
+    expect(result.spent[0].amount.equals(2n)).toBeTruthy();
+    expect(result.spent[1].amount.equals(128n)).toBeTruthy();
+    expect(result.spent[2].amount.equals(16n)).toBeTruthy();
+    expect(result.pending[0].amount.equals(1n)).toBeTruthy();
   });
 });

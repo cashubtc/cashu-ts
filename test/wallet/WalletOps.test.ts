@@ -169,8 +169,8 @@ class MockWallet {
 // ---- Fixtures ---------------------------------------------------------------
 
 const proofs: Proof[] = [
-  { amount: 2n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-  { amount: 3n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+  { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'test', C: 'test' },
+  { amount: Amount.from(3), id: '00bd033559de27d0', secret: 'test', C: 'test' },
 ];
 
 const token =
@@ -230,7 +230,7 @@ describe('WalletOps builders', () => {
       expect(wallet.send).toHaveBeenCalledTimes(1);
       const [amount, sentProofs, config, maybeOutputConfig] = wallet.send.mock.calls[0];
 
-      expect(Amount.from(amount).toNumber()).toBe(5);
+      expect(Amount.from(amount).equals(5)).toBeTruthy();
       expect(sentProofs).toBe(proofs);
       expect(config).toEqual({ includeFees: true, keysetId: 'kid' });
       expect(maybeOutputConfig).toEqual({
@@ -241,7 +241,7 @@ describe('WalletOps builders', () => {
     it('accepts AmountLike for send amount', async () => {
       await ops.send(Amount.from(5), proofs).run();
       expect(wallet.send).toHaveBeenCalledTimes(1);
-      expect(Amount.from(wallet.send.mock.calls[0][0]).toNumber()).toBe(5);
+      expect(Amount.from(wallet.send.mock.calls[0][0]).equals(5)).toBeTruthy();
     });
 
     it('calls wallet.prepareSwapToSend with defaults when no OutputType was set', async () => {
@@ -251,7 +251,7 @@ describe('WalletOps builders', () => {
       const [amount, sentProofs, config, maybeOutputConfig] =
         wallet.prepareSwapToSend.mock.calls[0];
 
-      expect(Amount.from(amount).toNumber()).toBe(5);
+      expect(Amount.from(amount).equals(5)).toBeTruthy();
       expect(sentProofs).toBe(proofs);
       expect(config).toEqual({ includeFees: true, keysetId: 'kid' });
       expect(maybeOutputConfig).toEqual({
@@ -299,7 +299,7 @@ describe('WalletOps builders', () => {
       expect(wallet.sendOffline).toHaveBeenCalledTimes(1);
       const [amount, sentProofs, config] = wallet.sendOffline.mock.calls[0];
 
-      expect(Amount.from(amount).toNumber()).toBe(5);
+      expect(Amount.from(amount).equals(5)).toBeTruthy();
       expect(sentProofs).toBe(proofs);
       expect(config).toEqual({ includeFees: true, exactMatch: true, requireDleq: false });
       expect(wallet.send).not.toHaveBeenCalled();
@@ -532,7 +532,7 @@ describe('WalletOps builders', () => {
       const [method, amount, q, config, maybeOT] = wallet.prepareMint.mock.calls[0];
 
       expect(method).toBe('bolt11');
-      expect(Amount.from(amount).toNumber()).toBe(10);
+      expect(Amount.from(amount).equals(10)).toBeTruthy();
       // MintBuilder resolves string quote IDs via checkMintQuoteBolt11 before calling prepareMint
       expect(q.quote).toBe(quote);
       expect(config).toEqual({ keysetId: 'kid' });
@@ -542,7 +542,7 @@ describe('WalletOps builders', () => {
     it('accepts AmountLike for mint amount', async () => {
       await ops.mintBolt11('10', quote).prepare();
       expect(wallet.prepareMint).toHaveBeenCalledTimes(1);
-      expect(Amount.from(wallet.prepareMint.mock.calls[0][1]).toNumber()).toBe(10);
+      expect(Amount.from(wallet.prepareMint.mock.calls[0][1]).equals(10)).toBeTruthy();
     });
 
     it('calls wallet.prepareMint with custom OutputType and config', async () => {
@@ -557,7 +557,7 @@ describe('WalletOps builders', () => {
       const [method, amount, q, config, outputType] = wallet.prepareMint.mock.calls[0];
 
       expect(method).toBe('bolt11');
-      expect(Amount.from(amount).toNumber()).toBe(10);
+      expect(Amount.from(amount).equals(10)).toBeTruthy();
       // MintBuilder resolves string quote IDs via checkMintQuoteBolt11 before calling prepareMint
       expect(q.quote).toBe(quote);
       expect(outputType).toEqual({ type: 'p2pk', options: { pubkey: 'P' }, denominations: [10] });
@@ -651,7 +651,7 @@ describe('WalletOps builders', () => {
       const [method, amount, q, cfg, ot] = wallet.prepareMint.mock.calls[0];
 
       expect(method).toBe('bolt12');
-      expect(Amount.from(amount).toNumber()).toBe(7);
+      expect(Amount.from(amount).equals(7)).toBeTruthy();
       expect(q).toBe(mint12);
       expect(cfg).toMatchObject({ keysetId: 'kid', privkey: 'sk' });
       expect(typeof cfg!.onCountersReserved).toBe('function');

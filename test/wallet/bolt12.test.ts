@@ -488,7 +488,7 @@ describe('Wallet (BOLT12) – wrappers', () => {
       unit: 'sat',
       request: 'lno1offer...',
     };
-    const proof: Proof = { amount: 128n, secret: 'secret1', C: 'C1', id: 'foo' };
+    const proof: Proof = { amount: Amount.from(128), secret: 'secret1', C: 'C1', id: 'foo' };
     const res = await wallet.meltProofsBolt12(meltQuote as any, [proof]);
     expect(res.quote.quote).toEqual('m1');
     expect(res.change).toEqual([]);

@@ -2,6 +2,7 @@ import { test, describe, expect } from 'vitest';
 import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { Amount } from '../../src';
 
 /**
  * NUT-29 test vectors for batch mint signatures.
@@ -22,12 +23,12 @@ describe('NUT-29 batch mint signatures', () => {
 
   const allOutputs = [
     {
-      amount: 1n,
+      amount: Amount.from(1),
       id: keysetId,
       B_: '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2',
     },
     {
-      amount: 1n,
+      amount: Amount.from(1),
       id: keysetId,
       B_: '021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59',
     },

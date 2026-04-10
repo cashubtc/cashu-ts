@@ -2,6 +2,7 @@ import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { selectProofsRGLI } from '../../src/wallet/SelectProofs';
 import { Proof } from '../../src/model/types';
 import { Amount } from '../../src/model/Amount';
+import { sumProofs } from '../../src';
 
 // -----------------------------------------------------------------
 // Most paths are exercised via wallet tests.
@@ -101,9 +102,9 @@ describe('selectProofsRGLI, focused unit tests', () => {
     const { logger, calls } = loggerSpy();
 
     const res = selectProofsRGLI(proofs as any, 15, kc, true, false, logger);
-    const sum = res.send.reduce((a, p) => a + p.amount.toNumber(), 0);
+    const sum = sumProofs(res.send);
     const fee = Math.ceil((res.send.length * 600) / 1000);
-    expect(sum - fee).toBeGreaterThanOrEqual(15);
+    expect(sum.subtract(fee).greaterThanOrEqual(15)).toBeTruthy();
     expect(calls.info).toHaveBeenCalled(); // covers the info log at the end
   });
 

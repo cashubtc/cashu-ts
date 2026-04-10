@@ -34,7 +34,7 @@ describe('payment requests', () => {
     const decodedRequest = decodePaymentRequest(pr);
     expect(decodedRequest).toBeDefined();
     expect(decodedRequest.id).toBe('4840f51e');
-    expect(decodedRequest.amount?.toNumber()).toBe(1000);
+    expect(decodedRequest.amount?.equals(1000)).toBeTruthy();
     expect(decodedRequest.unit).toBe('sat');
     expect(decodedRequest.mints).toStrictEqual(['https://mint.com']);
     expect(decodedRequest.description).toBe('test');
@@ -136,7 +136,7 @@ describe('payment requests', () => {
       // Decode and verify all fields
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
       expect(decoded.id).toBe('test_id_123');
-      expect(decoded.amount?.toNumber()).toBe(500);
+      expect(decoded.amount?.equals(500)).toBeTruthy();
       expect(decoded.unit).toBe('sat');
       expect(decoded.mints).toEqual(['https://mint.example.com']);
       expect(decoded.description).toBe('Test payment request');
@@ -169,7 +169,7 @@ describe('payment requests', () => {
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
 
       expect(decoded.id).toBe('http_test');
-      expect(decoded.amount?.toNumber()).toBe(250);
+      expect(decoded.amount?.equals(250)).toBeTruthy();
       expect(decoded.transport![0].type).toBe(PaymentRequestTransportType.POST);
       expect(decoded.transport![0].target).toBe('https://api.example.com/payment');
       expect(decoded.transport![0].tags).toEqual([
@@ -216,7 +216,7 @@ describe('payment requests', () => {
       const decoded = PaymentRequest.fromEncodedRequest(encoded);
 
       expect(decoded.id).toBe('p2pk_test');
-      expect(decoded.amount?.toNumber()).toBe(1000);
+      expect(decoded.amount?.equals(1000)).toBeTruthy();
       expect(decoded.unit).toBe('sat');
       expect(decoded.description).toBe('Locked payment');
       // Note: nut10 is decoded from creqB format, but only first entry is stored
@@ -233,7 +233,7 @@ describe('payment requests', () => {
 
       // Verify all fields preserved
       expect(decoded.id).toBe(pr.id);
-      expect(decoded.amount?.toNumber()).toBe(pr.amount?.toNumber());
+      expect(decoded.amount?.equals(pr.amount!)).toBeTruthy();
       expect(decoded.unit).toBe(pr.unit);
       expect(decoded.mints).toEqual(pr.mints);
       expect(decoded.transport![0].type).toBe(pr.transport![0].type);

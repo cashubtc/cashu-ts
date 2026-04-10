@@ -1,5 +1,5 @@
 import { test, describe, expect } from 'vitest';
-import { type Keys, type Proof } from '../../src';
+import { Amount, type Keys, type Proof } from '../../src';
 import { PUBKEYS } from '../consts';
 import { getKeepAmounts } from '../../src/wallet/_internal';
 
@@ -7,7 +7,7 @@ describe('getKeepAmounts', () => {
   const amountsWeHave = [1, 2, 4, 4, 4, 8];
   const proofsWeHave = amountsWeHave.map((amount) => {
     return {
-      amount: BigInt(amount),
+      amount: Amount.from(amount),
       id: 'id',
       C: 'C',
     } as Proof;

@@ -35,7 +35,7 @@ import type { Proof } from '../../src/model/types';
 import * as utils from '../../src/utils';
 import { encodeBase64toUint8, Bytes } from '../../src/utils';
 import { OutputData } from '../../src/model/OutputData';
-import { RequestFn } from '../../src';
+import { Amount, RequestFn } from '../../src';
 import type { Logger } from '../../src/logger';
 
 const mintUrl = 'http://mint.local';
@@ -537,8 +537,20 @@ describe('getBlindAuthToken coverage', () => {
 test('importPool dedupes by secret and exportPool deep-copies and preserves missing dleq', () => {
   const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
 
-  const a: Proof = { id: 'k', C: 'C1', secret: 'S', dleq: { e: 'e1', s: 's1' }, amount: 1n };
-  const b: Proof = { id: 'k', C: 'C2', secret: 'S', dleq: { e: 'e2', s: 's2' }, amount: 1n }; // dup secret
+  const a: Proof = {
+    id: 'k',
+    C: 'C1',
+    secret: 'S',
+    dleq: { e: 'e1', s: 's1' },
+    amount: Amount.from(1),
+  };
+  const b: Proof = {
+    id: 'k',
+    C: 'C2',
+    secret: 'S',
+    dleq: { e: 'e2', s: 's2' },
+    amount: Amount.from(1),
+  }; // dup secret
   const c: Proof = { id: 'k', C: 'C3', secret: 'T', amount: 1 } as any; // no dleq
 
   am.importPool([a, b, c], 'replace');

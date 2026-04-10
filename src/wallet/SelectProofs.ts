@@ -44,7 +44,7 @@ export function selectProofsRGLI(
   // Caches proof amount (number) and fee
   interface ProofWithFee {
     proof: Proof;
-    amountNum: number; // Number(proof.amount)
+    amountNum: number; // proof.amount.toNumber()
     exFee: number;
     ppkfee: number;
   }

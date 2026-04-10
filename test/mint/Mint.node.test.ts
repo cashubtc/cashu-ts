@@ -643,7 +643,7 @@ describe('Mint normalization', () => {
           { amount: 2, C_: '02sig2', id: '00' },
         ],
       };
-    });
+    }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
     const response = await mint.mintBatchBolt11({
@@ -664,7 +664,7 @@ describe('Mint normalization', () => {
       return {
         signatures: [{ amount: 4, C_: '02sig', id: '00' }],
       };
-    });
+    }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
     const response = await mint.mintBatchBolt12({

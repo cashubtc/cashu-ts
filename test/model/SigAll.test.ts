@@ -1,16 +1,23 @@
 import { test, describe, expect } from 'vitest';
 import { SigAll, SigAllSigningPackage, MeltQuoteState, Amount } from '../../src';
-import type { OutputDataLike, Proof, P2PKWitness, SerializedBlindedMessage } from '../../src';
+import type {
+  OutputDataLike,
+  Proof,
+  P2PKWitness,
+  SerializedBlindedMessage,
+  MeltPreview,
+  SwapPreview,
+} from '../../src';
 
 const dummyProof: Proof = {
   id: 'testid',
-  amount: 32n,
+  amount: Amount.from(32),
   secret: 'dummysecret',
   C: '02' + '1'.repeat(64),
 };
 
 const dummyBlindedMessage: SerializedBlindedMessage = {
-  amount: 32n,
+  amount: Amount.from(32),
   id: 'bm1',
   B_: 'dummyB',
 };
@@ -34,7 +41,7 @@ function makeSwapPreview() {
     keysetIdts: [],
     method: 'swap',
     keysetId: 'dummy-keyset-id',
-  };
+  } as SwapPreview;
 }
 
 function makeMeltPreview() {
@@ -43,17 +50,17 @@ function makeMeltPreview() {
     outputData: [dummyOutput],
     quote: {
       quote: 'dummyquote',
-      amount: 32,
+      amount: Amount.from(32),
       unit: 'sat',
       state: MeltQuoteState.PENDING,
       expiry: Date.now() + 10000,
     },
-    amount: 32,
+    amount: Amount.from(32),
     fees: 0,
     keysetIdts: [],
     method: 'melt',
     keysetId: 'dummy-keyset-id',
-  };
+  } as MeltPreview;
 }
 
 // Helper: encode an arbitrary object as a sigallA-prefixed string,
@@ -166,7 +173,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
   });
 
   test('round-trip preserves large (unsafe integer) output amounts', () => {
-    const largeAmount = 9007199254740993n; // > MAX_SAFE_INTEGER
+    const largeAmount = Amount.from(9007199254740993n); // > MAX_SAFE_INTEGER
     const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
     const pkg: SigAllSigningPackage = {
       version: 'sigallA',
@@ -176,7 +183,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
       digests: SigAll.computeDigests([dummyProof], [largeBm]),
     };
     const parsed = SigAll.deserializePackage(SigAll.serializePackage(pkg));
-    expect(parsed.outputs[0].amount).toBe(largeAmount);
+    expect(parsed.outputs[0].amount.equals(largeAmount)).toBeTruthy();
   });
 
   test('serialization is deterministic', () => {
@@ -310,7 +317,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           digests: { current: 'a'.repeat(64) },
         }),
       ),
-    ).toThrow('amount must be a number');
+    ).toThrow('amount must be a string');
   });
 
   test('throws on invalid output shape — missing B_', () => {
@@ -320,7 +327,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           version: 'sigallA',
           type: 'swap',
           inputs: [],
-          outputs: [{ amount: 1, id: 'id1' }],
+          outputs: [{ amount: '1', id: 'id1' }],
           digests: { current: 'a'.repeat(64) },
         }),
       ),
@@ -334,7 +341,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           version: 'sigallA',
           type: 'swap',
           inputs: [],
-          outputs: [{ amount: 1, B_: 'x' }],
+          outputs: [{ amount: '1', B_: 'x' }],
           digests: { current: 'a'.repeat(64) },
         }),
       ),

@@ -3,6 +3,7 @@ import { WalletEvents } from '../../src/wallet/WalletEvents';
 import type { Proof } from '../../src/model/types';
 import { hashToCurve } from '../../src/crypto';
 import { OperationCounters } from '../../src/wallet';
+import { Amount } from '../../src';
 
 // Helper: flush microtasks (needed because cancelSafely runs them async)
 const flushMicrotasks = async (n = 2) => {
@@ -173,7 +174,9 @@ describe('WalletEvents', () => {
     it('proofStateUpdates subscribes and forwards payloads with proof attached', async () => {
       const cb = vi.fn();
       const err = vi.fn();
-      const proofs: Proof[] = [{ amount: 2n, id: '00bd033559de27d0', secret: 's1', C: 'test' }];
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
+      ];
       await events.proofStateUpdates(proofs, cb, err);
 
       const ws = mock.mint.webSocketConnection!;
@@ -383,8 +386,8 @@ describe('WalletEvents', () => {
   describe('proofStatesStream', () => {
     it('yields payloads until error completes the stream, then cancels', async () => {
       const proofs: Proof[] = [
-        { amount: 2n, id: '00bd033559de27d0', secret: 's1', C: 'test' },
-        { amount: 2n, id: '00bd033559de27d0', secret: 's2', C: 'test2' },
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's2', C: 'test2' },
       ];
       const iter = events.proofStatesStream(proofs);
 
@@ -412,7 +415,9 @@ describe('WalletEvents', () => {
     });
 
     it('aborts the stream and cancels subscription', async () => {
-      const proofs: Proof[] = [{ amount: 2n, id: '00bd033559de27d0', secret: 's1', C: 'test' }];
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
+      ];
 
       const ac = new AbortController();
       const iter = events.proofStatesStream(proofs, { signal: ac.signal });
@@ -437,7 +442,7 @@ describe('WalletEvents', () => {
     });
 
     it('buffers with maxBuffer, drops oldest by default, calls onDrop', async () => {
-      const proofs: Proof[] = [{ amount: 1n, id: 'i', secret: 's', C: 'c' }];
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const dropped: any[] = [];
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 2,
@@ -467,7 +472,7 @@ describe('WalletEvents', () => {
     });
 
     it('drop:newest discards incoming payload and reports it via onDrop', async () => {
-      const proofs: Proof[] = [{ amount: 1n, id: 'i', secret: 's', C: 'c' }];
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const dropped: any[] = [];
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 2,
@@ -498,7 +503,7 @@ describe('WalletEvents', () => {
     });
 
     it('onDrop exceptions are swallowed', async () => {
-      const proofs: Proof[] = [{ amount: 1n, id: 'i', secret: 's', C: 'c' }];
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 1,
         onDrop: () => {
@@ -592,7 +597,7 @@ describe('WalletEvents', () => {
 
   describe('proofStatesStream immediate abort', () => {
     it('does not emit and cancels immediately when signal is already aborted', async () => {
-      const proofs: Proof[] = [{ amount: 1n, id: 'z', secret: 's', C: 'c' }];
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'z', secret: 's', C: 'c' }];
       const ac = new AbortController();
       ac.abort(); // aborted before creating the stream
 
@@ -610,7 +615,7 @@ describe('WalletEvents', () => {
 
   describe("proofStatesStream drop:'newest' without onDrop", () => {
     it('drops the incoming payload and does not enqueue it (no onDrop provided)', async () => {
-      const proofs: Proof[] = [{ amount: 1n, id: 'd', secret: 's', C: 'c' }];
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'd', secret: 's', C: 'c' }];
       const iter = events.proofStatesStream(proofs, { maxBuffer: 1, drop: 'newest' });
 
       const out: any[] = [];
@@ -633,7 +638,7 @@ describe('WalletEvents', () => {
     });
 
     it('drops incoming payload silently when buffer full and no onDrop provided', async () => {
-      const proofs: Proof[] = [{ amount: 1n, id: 'd', secret: 's', C: 'c' }];
+      const proofs: Proof[] = [{ amount: Amount.from(1), id: 'd', secret: 's', C: 'c' }];
       const iter = events.proofStatesStream(proofs, { maxBuffer: 1, drop: 'newest' });
 
       const out: any[] = [];

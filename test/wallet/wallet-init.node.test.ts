@@ -509,7 +509,7 @@ describe('test fees', () => {
     const fee = await wallet.checkMeltQuoteBolt11('test');
     const amount = 2000;
 
-    expect(fee.fee_reserve.add(amount).toNumber()).toEqual(2020);
+    expect(fee.fee_reserve.add(amount).equals(2020)).toBeTruthy();
   });
 });
 

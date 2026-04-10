@@ -150,7 +150,7 @@ describe('mint api', () => {
     const proofs = await wallet.mintProofsBolt11(1337, request.quote);
     expect(proofs).toBeDefined();
     // expect that the sum of all tokens.proofs.amount is equal to the requested amount
-    expect(sumProofs(proofs).toNumber()).toBe(1337);
+    expect(sumProofs(proofs).equals(1337)).toBeTruthy();
   });
   test('invoice with description', async () => {
     const wallet = new Wallet(mintUrl, { unit });
@@ -168,7 +168,7 @@ describe('mint api', () => {
     const fee = (await wallet.createMeltQuoteBolt11(invoice)).fee_reserve;
     expect(fee).toBeDefined();
     // because external invoice, fee should be > 0
-    expect(fee.toNumber()).toBeGreaterThan(0);
+    expect(fee.greaterThan(0)).toBeTruthy();
   });
   test('pay external invoice', async () => {
     const invoice =
@@ -180,15 +180,15 @@ describe('mint api', () => {
     const proofs = await wallet.mintProofsBolt11(3000, request.quote);
     const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
     const fee = meltQuote.fee_reserve;
-    expect(fee.toNumber()).toBeGreaterThan(0);
+    expect(fee.greaterThan(0)).toBeTruthy();
     // get the quote from the mint
     const quote_ = await wallet.checkMeltQuoteBolt11(meltQuote.quote);
     expect(quote_).toBeDefined();
-    const sendResponse = await wallet.send(2000 + fee.toNumber(), proofs, { includeFees: true });
+    const sendResponse = await wallet.send(fee.add(2000), proofs, { includeFees: true });
     const response = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
     expect(response).toBeDefined();
     // expect that we have not received the fee back, since it was external
-    expect(response.change.reduce((a, b) => a + Number(b.amount), 0)).toBeLessThan(fee.toNumber());
+    expect(sumProofs(response.change).lessThan(fee)).toBeTruthy();
     // check states of spent and kept proofs after payment
     const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
     expect(sentProofsStates).toBeDefined();
@@ -217,7 +217,7 @@ describe('mint api', () => {
     expect(sendResponse.keep).toBeDefined();
     expect(sendResponse.send.length).toBe(1);
     expect(sendResponse.keep.length).toBe(0);
-    expect(sumProofs(sendResponse.send).toNumber()).toBe(64);
+    expect(sumProofs(sendResponse.send).equals(64)).toBeTruthy();
   });
   test('test send tokens with change', async () => {
     const wallet = new Wallet(mintUrl, { unit });
@@ -233,8 +233,8 @@ describe('mint api', () => {
     // The 32 would have been selected (fee: 1 sat), leaving 4,64 unspent
     // We expect: 16, 4, 1 change + 4,64 unspent = 5 proofs (total 89)
     expect(sendResponse.keep.length).toBe(5);
-    expect(sumProofs(sendResponse.send).toNumber()).toBe(10);
-    expect(sumProofs(sendResponse.keep).toNumber()).toBe(89);
+    expect(sumProofs(sendResponse.send).equals(10)).toBeTruthy();
+    expect(sumProofs(sendResponse.keep).equals(89)).toBeTruthy();
   });
   test('receive tokens with previous split', async () => {
     const wallet = new Wallet(mintUrl, { unit });
@@ -285,11 +285,7 @@ describe('mint api', () => {
     expect(e.message.toLowerCase()).toMatch(/witness.*p2pk.*signature/); // nutshell + cdk
     // Try and receive them with Bob's secret key (should suceed)
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
-    expect(
-      proofs.reduce((curr, acc) => {
-        return curr + Number(acc.amount);
-      }, 0),
-    ).toBe(63);
+    expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
   test('send and receive p2pk with SIG_ALL', async () => {
     const wallet = new Wallet(mintUrl, { unit });
@@ -319,11 +315,7 @@ describe('mint api', () => {
     expect(e.message.toLowerCase()).toMatch(/no witness|signatures not provided/); // nutshell + cdk
     // Try and receive them with Bob's secret key (should suceed)
     const { keep } = await wallet.completeSwap(txn, bytesToHex(privKeyBob));
-    expect(
-      keep.reduce((curr, acc) => {
-        return curr + Number(acc.amount);
-      }, 0),
-    ).toBe(64);
+    expect(sumProofs(keep).equals(64)).toBeTruthy();
   });
   test('send and receive p2pk with additional tags', async () => {
     const wallet = new Wallet(mintUrl, { unit });
@@ -361,12 +353,7 @@ describe('mint api', () => {
 
     // Try and receive them with Alice's secret key (should succeed)
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyAlice) });
-
-    expect(
-      proofs.reduce((curr, acc) => {
-        return curr + Number(acc.amount);
-      }, 0),
-    ).toBe(63);
+    expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
 
   test('send and receive p2bk', async () => {
@@ -399,11 +386,7 @@ describe('mint api', () => {
     // Try and receive them with Bob's secret key (should suceed)
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     // console.log('P2BK RECEIVE', proofs);
-    expect(
-      proofs.reduce((curr, acc) => {
-        return curr + Number(acc.amount);
-      }, 0),
-    ).toBe(63);
+    expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
 
   test('send and receive p2bk SCHNORR', async () => {
@@ -436,11 +419,7 @@ describe('mint api', () => {
     const proofs = await wallet.receive(encoded, { privkey: bytesToHex(privKeyBob) });
     // console.log('P2BK RECEIVE', proofs);
 
-    expect(
-      proofs.reduce((curr, acc) => {
-        return curr + Number(acc.amount);
-      }, 0),
-    ).toBe(63);
+    expect(sumProofs(proofs).equals(63)).toBeTruthy();
   });
   test('mint and melt p2pk', async () => {
     const invoice =
@@ -459,7 +438,7 @@ describe('mint api', () => {
       .run();
     const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
     const fee = meltRequest.fee_reserve;
-    expect(fee.toNumber()).toBeGreaterThan(0);
+    expect(fee.greaterThan(0)).toBeTruthy();
     const signedProofs = wallet.signP2PKProofs(proofs, bytesToHex(privKeyBob));
     const response = await wallet.meltProofsBolt11(meltRequest, signedProofs);
     expect(response).toBeDefined();
@@ -485,7 +464,7 @@ describe('mint api', () => {
     // console.log('input proofs', proofs);
     const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
     const fee = meltRequest.fee_reserve;
-    expect(fee.toNumber()).toBeGreaterThan(0);
+    expect(fee.greaterThan(0)).toBeTruthy();
     const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
     const response = await wallet.completeMelt(melt, bytesToHex(privKeyBob));
     expect(response).toBeDefined();
@@ -504,7 +483,7 @@ describe('mint api', () => {
     // prepare to melt
     const meltRequest = await wallet.createMeltQuoteBolt11(invoice);
     const fee = meltRequest.fee_reserve;
-    expect(fee.toNumber()).toBeGreaterThan(0);
+    expect(fee.greaterThan(0)).toBeTruthy();
     const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
     // complete melt async
     const response = await wallet.completeMelt(melt, undefined, true);
@@ -677,7 +656,7 @@ describe('dleq', () => {
     const encodedToken = getEncodedToken(token);
     const newProofs = await wallet.receive(encodedToken, { requireDleq: true });
     expect(newProofs).toBeDefined();
-    expect(sumProofs(newProofs).toNumber()).toEqual(7); // after 1 sat fee
+    expect(sumProofs(newProofs).equals(7)).toBeTruthy(); // after 1 sat fee
   });
   test('send strip dleq', async () => {
     const wallet = new Wallet(mintUrl);
@@ -763,7 +742,7 @@ describe('Custom Outputs', () => {
     expectNUT10SecretDataToEqual(proofs, hexPk);
     // Lets melt some of these proofs to pay an invoice
     const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
-    const meltAmount = meltQuote.amount.toNumber() + meltQuote.fee_reserve.toNumber();
+    const meltAmount = meltQuote.amount.add(meltQuote.fee_reserve);
     // Use our keepFactory for the change (keep) outputs
     const customConfig: OutputConfig = {
       keep: keepFactory,
@@ -885,7 +864,7 @@ describe('Keep Vector and Reordering', () => {
       {}, // config
       { type: 'random', denominations: testOutputAmounts }, // outputType
     );
-    receiveProofs.forEach((p, i) => expect(Number(p.amount)).toBe(testOutputAmounts[i]));
+    receiveProofs.forEach((p, i) => expect(p.amount.equals(testOutputAmounts[i])).toBeTruthy());
   });
   test('Send', async () => {
     const wallet = new Wallet(mintUrl);
@@ -900,7 +879,7 @@ describe('Keep Vector and Reordering', () => {
       send: { type: 'random', denominations: testOutputAmounts },
     };
     const { send } = await wallet.send(32, testProofs, {}, customConfig);
-    send.forEach((p, i) => expect(Number(p.amount)).toBe(testOutputAmounts[i]));
+    send.forEach((p, i) => expect(p.amount.equals(testOutputAmounts[i])).toBeTruthy());
   });
   test('Send with partial keep denominations (wants 16,8 but the rest can be anything)', async () => {
     const wallet = new Wallet(mintUrl);
@@ -916,10 +895,10 @@ describe('Keep Vector and Reordering', () => {
       send: { type: 'random', denominations: testSendAmounts },
     };
     const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
-    // console.log(send.map((p) => p.amount));
-    // console.log(keep.map((p) => p.amount));
-    send.forEach((p, i) => expect(Number(p.amount)).toBe(testSendAmounts[i]));
-    keep.forEach((p, i) => expect(Number(p.amount)).toBe(expectedKeep[i]));
+    // console.log(send.map((p) => p.amount.toString()));
+    // console.log(keep.map((p) => p.amount.toString()));
+    send.forEach((p, i) => expect(p.amount.equals(testSendAmounts[i])).toBeTruthy());
+    keep.forEach((p, i) => expect(p.amount.equals(expectedKeep[i])).toBeTruthy());
   });
   test('Send with partial send denominations (wants 16,8 but the rest can be anything)', async () => {
     const wallet = new Wallet(mintUrl);
@@ -943,8 +922,8 @@ describe('Keep Vector and Reordering', () => {
     // 	'keep',
     // 	keep.map((p) => p.amount),
     // );
-    send.forEach((p, i) => expect(Number(p.amount)).toBe(expectedSend[i]));
-    keep.forEach((p, i) => expect(Number(p.amount)).toBe(testKeepAmounts[i]));
+    send.forEach((p, i) => expect(p.amount.equals(expectedSend[i])).toBeTruthy());
+    keep.forEach((p, i) => expect(p.amount.equals(testKeepAmounts[i])).toBeTruthy());
   });
 });
 describe('Wallet Restore', () => {
@@ -957,7 +936,7 @@ describe('Wallet Restore', () => {
     const proofs = await wallet.ops.mintBolt11(70, mintQuote.quote).asDeterministic(5).run();
     const { proofs: restoredProofs, lastCounterWithSignature } = await wallet.batchRestore();
     expect(restoredProofs).toEqual(proofs);
-    expect(sumProofs(restoredProofs).toNumber()).toBe(70);
+    expect(sumProofs(restoredProofs).equals(70)).toBeTruthy();
     expect(lastCounterWithSignature).toBe(7);
   });
 });
@@ -1008,7 +987,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
       // mint with NUT-19 cache retry - should handle network failure
       const proofs = await wallet.mintProofsBolt11(100, request.quote);
       expect(proofs).toBeDefined();
-      expect(sumProofs(proofs).toNumber()).toBe(100);
+      expect(sumProofs(proofs).equals(100)).toBeTruthy();
       expect(fetchCallCount).toBe(3); // 1 + 2 retries
     } finally {
       // restore original fetch

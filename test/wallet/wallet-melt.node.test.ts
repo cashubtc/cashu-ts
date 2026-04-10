@@ -190,7 +190,7 @@ describe('melt proofs', () => {
     const data: OutputData[] = [
       new OutputData(
         {
-          amount: 0n,
+          amount: Amount.zero(),
           B_: '0280999e99569db86fff252e9fe235d5ab0583c5e48e9a6d30b7159ddb2354a664',
           id: '00bd033559de27d0',
         },
@@ -204,7 +204,7 @@ describe('melt proofs', () => {
       ),
       new OutputData(
         {
-          amount: 0n,
+          amount: Amount.zero(),
           B_: '0366a12d8f642a9209b2a2b62dd46133d67c61395758760b037526d8ea6ebb0b58',
           id: '00bd033559de27d0',
         },
