@@ -1,4 +1,4 @@
-import { type AmountLike } from '../../model/Amount';
+import { type Amount } from '../../model/Amount';
 import { type OutputDataLike } from '../../model/OutputData';
 import {
   type MeltQuoteBaseResponse,
@@ -13,7 +13,7 @@ import { type Proof } from '../../model/types/proof';
  * Preview of a mint transaction created by prepareMint.
  *
  * @remarks
- * Contains `bigint` values. Use `JSONInt.stringify`
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
  */
 export interface MintPreview<
   TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse,
@@ -41,7 +41,7 @@ export interface MintPreview<
  * Preview of a batched mint transaction created by prepareBatchMint.
  *
  * @remarks
- * Contains `bigint` values. Use `JSONInt.stringify`
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
  */
 export interface BatchMintPreview<
   TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse,
@@ -69,7 +69,7 @@ export interface BatchMintPreview<
  * Preview of a Melt transaction created by prepareMelt.
  *
  * @remarks
- * Contains `bigint` values. Use `JSONInt.stringify`
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
  */
 export interface MeltPreview<
   TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
@@ -97,7 +97,7 @@ export interface MeltPreview<
  * Includes all data required to swap inputs for outputs and construct proofs from them.
  *
  * @remarks
- * Contains `bigint` values. Use `JSONInt.stringify`
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
  */
 export type SwapTransaction = {
   /**
@@ -122,17 +122,17 @@ export type SwapTransaction = {
  * Preview of a swap transaction created by prepareSend / prepareReceive.
  *
  * @remarks
- * Contains `bigint` values. Use `JSONInt.stringify`
+ * Contains JSON-unsafe values (`bigint`, `Uint8Array`). Not intended for direct serialization.
  */
 export type SwapPreview = {
   /**
    * Amount being sent or received (excluding fees).
    */
-  amount: AmountLike;
+  amount: Amount;
   /**
    * Total fees for the swap (inc receiver's fees if applicable)
    */
-  fees: AmountLike;
+  fees: Amount;
   /**
    * Keyset ID used to prepare the outputs.
    */

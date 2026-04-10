@@ -5,7 +5,13 @@ export class AmountError extends Error {
   }
 }
 
+/**
+ * All types that can be converted to an {@link Amount} value object.
+ */
 export type AmountLike = number | bigint | string | Amount;
+/**
+ * JSON native types that can be converted to an {@link Amount} value object.
+ */
 export type AmountJson = number | string;
 
 /**
@@ -18,6 +24,7 @@ export type AmountJson = number | string;
  *     Amount.from('21'); // string
  *     Amount.from(21); // number
  *     Amount.from(21n); // bigint
+ *     Amount.fromJSON('21'); // accepts string | number
  *     Amount.zero();
  *     Amount.one();
  */

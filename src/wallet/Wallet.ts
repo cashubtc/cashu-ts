@@ -964,7 +964,7 @@ class Wallet {
     // Return SwapPreview
     return {
       amount: receiveAmount,
-      fees: Amount.from(swapFee),
+      fees: swapFee,
       keysetId: keyset.id,
       inputs: proofs,
       keepOutputs: outputs,
@@ -1190,7 +1190,7 @@ class Wallet {
     // Return SwapPreview
     return {
       amount: sendAmountTarget,
-      fees: Amount.from(swapFee),
+      fees: swapFee,
       keysetId: keyset.id,
       inputs: selectedProofs,
       sendOutputs,

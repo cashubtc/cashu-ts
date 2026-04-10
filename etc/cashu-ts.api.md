@@ -19,7 +19,6 @@ export class Amount {
     equals(other: AmountLike): boolean;
     floorPercent(numerator: number, denominator?: number): Amount;
     static from(input: AmountLike): Amount;
-    // Warning: (ae-forgotten-export) The symbol "AmountJson" needs to be exported by the entry point index.d.ts
     static fromJSON(input: AmountJson): Amount;
     // (undocumented)
     greaterThan(other: AmountLike): boolean;
@@ -62,7 +61,10 @@ export class AmountError extends Error {
     constructor(message: string);
 }
 
-// @public (undocumented)
+// @public
+export type AmountJson = number | string;
+
+// @public
 export type AmountLike = number | bigint | string | Amount;
 
 // @public
@@ -1754,8 +1756,8 @@ export type SwapMethod = {
 
 // @public
 export type SwapPreview = {
-    amount: AmountLike;
-    fees: AmountLike;
+    amount: Amount;
+    fees: Amount;
     keysetId: string;
     inputs: Proof[];
     sendOutputs?: OutputDataLike[];
