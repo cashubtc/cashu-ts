@@ -1,7 +1,8 @@
 import { test, describe, expect } from 'vitest';
-import { Amount, type Keys, type Proof } from '../../src';
+import { Amount, type Keys, type Proof, OutputType } from '../../src';
 import { PUBKEYS } from '../consts';
-import { getKeepAmounts } from '../../src/wallet/_internal';
+import { getKeepAmounts, stringifyOutputTypeForLog } from '../../src/wallet/_internal';
+import { OutputData } from '../../src/model/OutputData';
 
 describe('getKeepAmounts', () => {
   const amountsWeHave = [1, 2, 4, 4, 4, 8];
@@ -33,5 +34,70 @@ describe('getKeepAmounts', () => {
 
     amountsToKeep = getKeepAmounts(proofsWeHave, '22', keys, 2);
     expect(amountsToKeep.map((a) => a.toNumber())).toEqual([1, 1, 2, 2, 8, 8]);
+  });
+});
+
+describe('stringifyOutputTypeForLog', () => {
+  const keyset = { id: '00bd033559de27d0', keys: PUBKEYS as Keys };
+
+  test('formats random denominations as strings', () => {
+    const result = stringifyOutputTypeForLog({
+      type: 'random',
+      denominations: [Amount.from(1), 2n, '4'],
+    });
+    expect(result).toBe(JSON.stringify({ type: 'random', denominations: ['1', '2', '4'] }));
+  });
+
+  test('formats deterministic denominations and counter', () => {
+    const result = stringifyOutputTypeForLog({
+      type: 'deterministic',
+      counter: 7,
+      denominations: [1, Amount.from(2)],
+    });
+    expect(result).toBe(
+      JSON.stringify({ type: 'deterministic', counter: 7, denominations: ['1', '2'] }),
+    );
+  });
+
+  test('formats factory denominations as strings', () => {
+    const result = stringifyOutputTypeForLog({
+      type: 'factory',
+      factory: (amount, keys) => OutputData.createRandomData(amount, keys)[0],
+      denominations: [1, Amount.from(2)],
+    });
+    expect(result).toBe(JSON.stringify({ type: 'factory', denominations: ['1', '2'] }));
+  });
+
+  test('formats p2pk denominations as strings', () => {
+    const result = stringifyOutputTypeForLog({
+      type: 'p2pk',
+      options: { pubkey: '02'.padEnd(66, '1') },
+      denominations: [1, Amount.from(2)],
+    });
+    expect(result).toBe(
+      JSON.stringify({
+        type: 'p2pk',
+        options: { pubkey: '02'.padEnd(66, '1') },
+        denominations: ['1', '2'],
+      }),
+    );
+  });
+
+  test('formats custom outputs as amount strings without serializing bigint internals', () => {
+    const data = OutputData.createRandomData(3, keyset, [1, 2]);
+    const result = stringifyOutputTypeForLog({
+      type: 'custom',
+      data,
+    });
+    expect(result).toBe(JSON.stringify({ type: 'custom', outputs: 2, amounts: ['1', '2'] }));
+  });
+
+  test('returns unknown for unknown type', () => {
+    const data = OutputData.createRandomData(3, keyset, [1, 2]);
+    const result = stringifyOutputTypeForLog({
+      type: 'badtype',
+      data,
+    } as unknown as OutputType);
+    expect(result).toBe('Unknown');
   });
 });

@@ -53,7 +53,7 @@ import {
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
-import { getKeepAmounts } from './_internal';
+import { getKeepAmounts, stringifyOutputTypeForLog } from './_internal';
 import {
   type CounterSource,
   EphemeralCounterSource,
@@ -696,44 +696,6 @@ class Wallet {
   }
 
   /**
-   * Helper to properly format OutputTypes for logs.
-   */
-  private stringifyOutputTypeForLog(ot: OutputType): string {
-    switch (ot.type) {
-      case 'custom':
-        return JSON.stringify({
-          type: 'custom',
-          outputs: ot.data.length,
-          amounts: ot.data.map((d) => d.blindedMessage.amount.toString()),
-        });
-      case 'factory':
-        return JSON.stringify({
-          type: 'factory',
-          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
-        });
-      case 'deterministic':
-        return JSON.stringify({
-          type: 'deterministic',
-          counter: ot.counter,
-          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
-        });
-      case 'p2pk':
-        return JSON.stringify({
-          type: 'p2pk',
-          options: ot.options,
-          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
-        });
-      case 'random':
-        return JSON.stringify({
-          type: 'random',
-          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
-        });
-      default:
-        return 'Unknown';
-    }
-  }
-
-  /**
    * Generates blinded messages based on the specified output type.
    *
    * @param amount The total amount for outputs.
@@ -996,7 +958,7 @@ class Wallet {
     }
     this._logger.debug('receive counter', {
       counter: autoCounters.used,
-      receiveOT: this.stringifyOutputTypeForLog(receiveOT),
+      receiveOT: stringifyOutputTypeForLog(receiveOT),
     });
 
     // Create outputs and execute swap
@@ -1224,8 +1186,8 @@ class Wallet {
     }
     this._logger.debug('send counters', {
       counter: autoCounters.used,
-      sendOT: this.stringifyOutputTypeForLog(sendOT),
-      keepOT: this.stringifyOutputTypeForLog(keepOT),
+      sendOT: stringifyOutputTypeForLog(sendOT),
+      keepOT: stringifyOutputTypeForLog(keepOT),
     });
 
     // Create the output data
@@ -1949,7 +1911,7 @@ class Wallet {
     }
     this._logger.debug('mint counter', {
       counter: autoCounters.used,
-      mintOT: this.stringifyOutputTypeForLog(mintOT),
+      mintOT: stringifyOutputTypeForLog(mintOT),
     });
 
     // Create outputs and mint payload
@@ -2536,7 +2498,7 @@ class Wallet {
       }
       this._logger.debug('melt counter', {
         counter: autoCounters.used,
-        meltOT: this.stringifyOutputTypeForLog(meltOT),
+        meltOT: stringifyOutputTypeForLog(meltOT),
       });
       // Generate the blank outputs (no fees as we are receiving change)
       // Remember, zero amount + zero denomination passes splitAmount validation

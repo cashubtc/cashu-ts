@@ -5,6 +5,8 @@ import { Amount, type AmountLike } from '../model/Amount';
 import type { Keys, Proof } from '../model/types';
 import { splitAmount } from '../utils/core';
 
+import { type OutputType } from './types';
+
 function getKeysetAmountsAsc(keys: Keys): Amount[] {
   const amounts = Object.keys(keys).map((k) => Amount.from(k));
   amounts.sort((a, b) => a.compareTo(b));
@@ -50,4 +52,42 @@ export function getKeepAmounts(
     }
   }
   return amountsWeWant.sort((a, b) => a.compareTo(b));
+}
+
+/**
+ * Helper to properly format OutputTypes for logs.
+ */
+export function stringifyOutputTypeForLog(ot: OutputType): string {
+  switch (ot.type) {
+    case 'custom':
+      return JSON.stringify({
+        type: 'custom',
+        outputs: ot.data.length,
+        amounts: ot.data.map((d) => d.blindedMessage.amount.toString()),
+      });
+    case 'factory':
+      return JSON.stringify({
+        type: 'factory',
+        denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+      });
+    case 'deterministic':
+      return JSON.stringify({
+        type: 'deterministic',
+        counter: ot.counter,
+        denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+      });
+    case 'p2pk':
+      return JSON.stringify({
+        type: 'p2pk',
+        options: ot.options,
+        denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+      });
+    case 'random':
+      return JSON.stringify({
+        type: 'random',
+        denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+      });
+    default:
+      return 'Unknown';
+  }
 }
