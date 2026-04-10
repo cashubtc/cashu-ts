@@ -11,7 +11,6 @@ import {
 import { numberToHexPadded64 } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
-import { emphemeralEStore } from './EphemeralEStore';
 import { defaultOutputDataCreator } from './OutputDataCreator';
 import {
   type HasKeysetKeys,
@@ -38,6 +37,7 @@ export interface OutputDataLike {
   blindedMessage: SerializedBlindedMessage;
   blindingFactor: bigint;
   secret: Uint8Array;
+  ephemeralE?: string;
 
   toProof: (signature: SerializedBlindedSignature, keyset: HasKeysetKeys) => Proof;
 }
@@ -81,22 +81,22 @@ export function isOutputDataFactory(
   return typeof value === 'function';
 }
 
-// Holds the map of Pubkey blinding factors for a given OutputData
-// This avoids changing the shape of the OutputDataLike interface
-
 export class OutputData implements OutputDataLike {
   blindedMessage: SerializedBlindedMessage;
   blindingFactor: bigint;
   secret: Uint8Array;
+  ephemeralE?: string;
 
   constructor(
     blindedMessage: SerializedBlindedMessage,
     blindingFactor: bigint,
     secret: Uint8Array,
+    ephemeralE?: string,
   ) {
     this.secret = secret;
     this.blindingFactor = blindingFactor;
     this.blindedMessage = blindedMessage;
+    this.ephemeralE = ephemeralE;
   }
 
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
@@ -137,8 +137,7 @@ export class OutputData implements OutputDataLike {
     };
 
     // Add P2BK (Pay to Blinded Key) blinding factors if needed
-    const Ehex = emphemeralEStore.takeEphemeralE(this);
-    if (Ehex) proof.p2pk_e = Ehex;
+    if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
 
     return proof;
   }

@@ -12,8 +12,12 @@ import { Bytes, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
-import { emphemeralEStore } from './EphemeralEStore';
-import { assertValidTagKey, MAX_SECRET_LENGTH, OutputData } from './OutputData';
+import {
+  assertValidTagKey,
+  MAX_SECRET_LENGTH,
+  OutputData,
+  type OutputDataLike,
+} from './OutputData';
 import type { HasKeysetKeys } from './types';
 
 export interface OutputDataCreator {
@@ -22,27 +26,27 @@ export interface OutputDataCreator {
     amount: AmountLike,
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
-  ): OutputData[];
-  createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
+  ): OutputDataLike[];
+  createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike;
   createRandomData(
     amount: AmountLike,
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
-  ): OutputData[];
-  createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
+  ): OutputDataLike[];
+  createSingleRandomData(amount: AmountLike, keysetId: string): OutputDataLike;
   createDeterministicData(
     amount: AmountLike,
     seed: Uint8Array,
     counter: number,
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
-  ): OutputData[];
+  ): OutputDataLike[];
   createSingleDeterministicData(
     amount: AmountLike,
     seed: Uint8Array,
     counter: number,
     keysetId: string,
-  ): OutputData;
+  ): OutputDataLike;
 }
 
 export class DefaultOutputDataCreator implements OutputDataCreator {
@@ -148,16 +152,12 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     const { r, B_ } = blindMessage(secretBytes);
 
     // create OutputData
-    const od = new OutputData(
+    return new OutputData(
       new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
       r,
       secretBytes,
+      Ehex,
     );
-
-    // stash Ehex - we add it to Proof later @see: toProof()
-    if (p2pk.blindKeys && Ehex) emphemeralEStore.setEphemeralE(od, Ehex);
-
-    return od;
   }
 
   createRandomData(

@@ -116,4 +116,26 @@ describe('OutputData.toProof DLEQ verification', () => {
     };
     expect(() => od.toProof(sig, keyset)).toThrow('DLEQ verification failed');
   });
+
+  test('toProof preserves p2pk_e from OutputData instance', () => {
+    const { blindSig, keyset, od } = mintSetup();
+    const p2pkE = secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true);
+    const p2pkOutput = new OutputData(
+      od.blindedMessage,
+      od.blindingFactor,
+      od.secret,
+      bytesToHex(p2pkE),
+    );
+    const sig = {
+      id: 'test-keyset',
+      amount: Amount.from(1),
+      C_: blindSig.C_.toHex(true),
+    };
+
+    const proof = p2pkOutput.toProof(sig, keyset);
+    const proofAgain = p2pkOutput.toProof(sig, keyset);
+
+    expect(proof.p2pk_e).toBe(bytesToHex(p2pkE));
+    expect(proofAgain.p2pk_e).toBe(bytesToHex(p2pkE));
+  });
 });
