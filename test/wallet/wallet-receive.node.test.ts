@@ -5,6 +5,7 @@ import {
   Wallet,
   getDecodedToken,
   OutputData,
+  Amount,
   type AmountLike,
   type HasKeysetKeys,
 } from '../../src';
@@ -38,7 +39,7 @@ describe('receive', () => {
     const proofs = await wallet.receive([
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
         C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
       },
@@ -55,7 +56,7 @@ describe('receive', () => {
       wallet.receive([
         {
           id: 'deadbeefdeadbeef',
-          amount: 1n,
+          amount: Amount.from(1),
           secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
           C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
         },
@@ -83,7 +84,7 @@ describe('receive', () => {
       wallet.receive([
         {
           id: usdKeysetId,
-          amount: 1n,
+          amount: Amount.from(1),
           secret: '407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837',
           C: '02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea',
         },
@@ -134,7 +135,7 @@ describe('receive', () => {
     const proofs = await wallet.receive(unsanitizedToken);
 
     expect(proofs).toHaveLength(1);
-    expect(proofs).toMatchObject([{ amount: 1n, id: '00bd033559de27d0' }]);
+    expect(proofs).toMatchObject([{ amount: Amount.from(1), id: '00bd033559de27d0' }]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
   });
@@ -159,7 +160,7 @@ describe('receive', () => {
     const proofs = await wallet.receive(tokenInput);
 
     expect(proofs).toHaveLength(1);
-    expect(proofs).toMatchObject([{ amount: 1n, id: '00bd033559de27d0' }]);
+    expect(proofs).toMatchObject([{ amount: Amount.from(1), id: '00bd033559de27d0' }]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
   });
@@ -186,7 +187,7 @@ describe('receive', () => {
     const proofs = await wallet.receive(decodedInput);
 
     expect(proofs).toHaveLength(1);
-    expect(proofs).toMatchObject([{ amount: 1n, id: 'z32vUtKgNCm1' }]);
+    expect(proofs).toMatchObject([{ amount: Amount.from(1), id: 'z32vUtKgNCm1' }]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
   });
@@ -226,9 +227,9 @@ describe('receive', () => {
 
     expect(proofs).toHaveLength(3);
     expect(proofs).toMatchObject([
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -297,8 +298,8 @@ describe('receive', () => {
     const proofs = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
     expect(proofs).toHaveLength(2);
     expect(proofs).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(proofs[0].secret).toBe(
       '8e0ad268631046765b570f85fe0951710c6e0e13c81b3df50ddfee21d235d132', // counter:0
@@ -312,8 +313,8 @@ describe('receive', () => {
     const proofs2 = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
     expect(proofs2).toHaveLength(2);
     expect(proofs2).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(proofs2[0].secret).toBe(
       'c756ae91cf316eaa4b845edcca35f04ee9d1732c10e7205b0ef30123bcbbc1b8', // counter:2
@@ -327,8 +328,8 @@ describe('receive', () => {
     const proofs3 = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 0 });
     expect(proofs3).toHaveLength(2);
     expect(proofs3).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(proofs3[0].secret).toBe(
       'f6305874d89704b77de6fcf94c796cd274154cdbf824d35cbc72bfdc6ed60414', // counter:4
@@ -366,8 +367,8 @@ describe('receive', () => {
     const proofs = await wallet.receive(token3sat, {}, { type: 'deterministic', counter: 5 });
     expect(proofs).toHaveLength(2);
     expect(proofs).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(proofs[0].secret).toBe(
       'c3cad2ac3da43f84995a7ea362bd5509a992ef3684c151f5f3945b1a1f026efd', // counter:5
@@ -410,8 +411,8 @@ describe('receive', () => {
     );
     expect(proofs).toHaveLength(2);
     expect(proofs).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     const allSecrets = proofs.map((d) => JSON.parse(d.secret));
     allSecrets.forEach((s) => {
@@ -450,8 +451,8 @@ describe('receive', () => {
     const proofs = await wallet.receive(token3sat, {}, { type: 'factory', factory: customFactory });
     expect(proofs).toHaveLength(2);
     expect(proofs).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -492,9 +493,9 @@ describe('receive', () => {
     const proofs = await wallet.receive(token3sat, {}, { type: 'custom', data: customData });
     expect(proofs).toHaveLength(3);
     expect(proofs).toMatchObject([
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -546,28 +547,28 @@ describe('receive', () => {
     await wallet.loadMint();
 
     const existingProofs = [
-      { amount: 2n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-      { amount: 2n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
-      { amount: 2n, id: '00bd033559de27d0', secret: 'test', C: 'test' },
+      { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'test', C: 'test' },
+      { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'test', C: 'test' },
+      { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'test', C: 'test' },
     ];
     const tok = {
       mint: 'http://localhost:3338',
       proofs: [
         {
           id: '00bd033559de27d0',
-          amount: 1n,
+          amount: Amount.from(1),
           secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
           C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
         },
         {
           id: '00bd033559de27d0',
-          amount: 2n,
+          amount: Amount.from(2),
           secret: 'e7c1b76d1b31e2bca2b229d160bdf6046f33bc4570222304b65110d926f7af89',
           C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
         },
         {
           id: '00bd033559de27d0',
-          amount: 2n,
+          amount: Amount.from(2),
           secret: 'de55c15faefded7f9c999c3d4c62f81b0c6fe21a752fdeff6b084cf2df2f5cf3',
           C: '02de40c59d90383b8853ccf3a4b20864ac83ba758fce3d959dbb89361002e8ce47',
         },
@@ -579,10 +580,10 @@ describe('receive', () => {
     // as we already have the target amount of 2s
     expect(proofs).toHaveLength(4);
     expect(proofs).toMatchObject([
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
-      { amount: 2n, id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
     ]);
   });
 
@@ -613,8 +614,8 @@ describe('receive', () => {
     });
     expect(proofs).toHaveLength(2);
     expect(proofs).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
@@ -647,8 +648,8 @@ describe('receive', () => {
     });
     expect(proofs).toHaveLength(2);
     expect(proofs).toMatchObject([
-      { amount: 2n, id: '00bd033559de27d0' },
-      { amount: 1n, id: '00bd033559de27d0' },
+      { amount: Amount.from(2), id: '00bd033559de27d0' },
+      { amount: Amount.from(1), id: '00bd033559de27d0' },
     ]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);

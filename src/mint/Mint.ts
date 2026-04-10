@@ -1006,7 +1006,7 @@ class Mint {
   ): SerializedBlindedMessage[] {
     return messages.map((message) => ({
       ...message,
-      amount: Amount.from(message.amount).toBigInt(),
+      amount: Amount.from(message.amount),
     }));
   }
 

@@ -138,7 +138,7 @@ export class OutputData implements OutputDataLike {
     const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
     const proof: Proof = {
       id: sig.id,
-      amount: sig.amount.toBigInt(),
+      amount: sig.amount,
       C: unblinded.C.toHex(true),
       secret: new TextDecoder().decode(unblinded.secret),
       ...(dleq && {

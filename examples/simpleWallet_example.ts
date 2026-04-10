@@ -70,7 +70,7 @@ const runWalletExample = async () => {
         if (quote.state === MintQuoteState.PAID) {
           //if the quote was paid, we can ask the mint to issue the signatures for the ecash
           const response = await wallet.mintProofsBolt11(mintAmount, quote.quote);
-          console.log(`minted proofs: ${response.map((p) => p.amount).join(', ')} sats`);
+          console.log(`minted proofs: ${response.map((p) => p.amount.toString()).join(', ')} sats`);
 
           // let's store the proofs in the storage we previously created
           proofs = response;
@@ -153,9 +153,9 @@ const runWalletExample = async () => {
       // After creating the melt quote, we can initiate the melting process.
       const amountToMelt = quote.amount.add(quote.fee_reserve);
 
-      console.log(`quote amount: ${quote.amount}`);
-      console.log(`fee reserve proofs: ${quote.fee_reserve}`);
-      console.log(`Total quote amount: ${amountToMelt}`);
+      console.log(`quote amount: ${quote.amount.toString()}`);
+      console.log(`fee reserve proofs: ${quote.fee_reserve.toString()}`);
+      console.log(`Total quote amount: ${amountToMelt.toString()}`);
 
       // in order to get the correct amount of proofs for the melt request, we can use the `send` function we used before
       const { keep, send } = await wallet.send(amountToMelt, proofs, {

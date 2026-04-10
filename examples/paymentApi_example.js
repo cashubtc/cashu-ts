@@ -58,7 +58,7 @@ export const ecashPayment = onRequest(async (req, res) => {
     res.json({
       success: false,
       error: 'wrong_amount',
-      message: `Wrong amount, must be ${waitedAmount} satoshi`,
+      message: `Wrong amount, must be ${waitedAmount.toString()} satoshi`,
     });
     return;
   }

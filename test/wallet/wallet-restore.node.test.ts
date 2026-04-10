@@ -1,7 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect, vi } from 'vitest';
 
-import { Wallet, type Proof } from '../../src';
+import { Wallet, Amount, type Proof } from '../../src';
 
 import { randomBytes } from '@noble/hashes/utils.js';
 import { useTestServer, mint, unit, dummyKeysResp, mintUrl, logger } from './_setup';
@@ -96,6 +96,6 @@ describe('restore', () => {
     expect(Array.isArray(res.proofs)).toBe(true);
     expect(res.proofs.length).toBeGreaterThan(0);
     // proofs should be of amount 1 because we overprinted 1 in the signatures
-    expect(res.proofs.every((p: any) => p.amount === 1n)).toBe(true);
+    expect(res.proofs.every((p) => p.amount.equals(Amount.from(1)))).toBe(true);
   });
 });

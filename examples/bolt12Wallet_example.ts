@@ -55,7 +55,7 @@ const runBolt12WalletExample = async () => {
         const newProofs = await mintFromBolt12Quote(wallet, bolt12MintQuote);
         proofs.push(...newProofs);
 
-        console.log(`💰 Balance: ${sumProofs(proofs)} sats\n`);
+        console.log(`💰 Balance: ${sumProofs(proofs).toString()} sats\n`);
 
         if (cycle < PAYMENT_CYCLES) {
           await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -69,8 +69,8 @@ const runBolt12WalletExample = async () => {
     // Final summary
     console.log('🎯 Summary');
     console.log('==========');
-    console.log(`💰 Final balance: ${sumProofs(proofs)} sats`);
-    console.log(`📤 Total sent: ${totalSent} sats`);
+    console.log(`💰 Final balance: ${sumProofs(proofs).toString()} sats`);
+    console.log(`📤 Total sent: ${totalSent.toString()} sats`);
     console.log(`✅ BOLT12 example completed!`);
   } catch (error) {
     console.error('❌ Error:', error);
@@ -101,7 +101,7 @@ const mintInitialProofs = async (wallet: Wallet): Promise<Proof[]> => {
   console.log(`Pay this invoice: ${bolt11Quote.request}`);
 
   const proofs = await waitForMintQuote(wallet, bolt11Quote.quote);
-  console.log(`✅ Minted ${sumProofs(proofs)} sats`);
+  console.log(`✅ Minted ${sumProofs(proofs).toString()} sats`);
 
   return proofs;
 };
@@ -117,14 +117,18 @@ const payBolt12Offer = async (
   const totalNeeded = meltQuote.amount.add(meltQuote.fee_reserve);
 
   if (sumProofs(proofs).lessThan(totalNeeded)) {
-    throw new Error(`Insufficient balance: need ${totalNeeded}, have ${sumProofs(proofs)}`);
+    throw new Error(
+      `Insufficient balance: need ${totalNeeded.toString()}, have ${sumProofs(proofs).toString()}`,
+    );
   }
 
   // Send payment
   const { keep, send } = await wallet.send(totalNeeded, proofs, { includeFees: true });
   const { change } = await wallet.meltProofsBolt12(meltQuote, send);
 
-  console.log(`💸 Paid ${amount} sats to BOLT12 offer (fee: ${meltQuote.fee_reserve} sats)`);
+  console.log(
+    `💸 Paid ${amount} sats to BOLT12 offer (fee: ${meltQuote.fee_reserve.toString()} sats)`,
+  );
 
   return {
     remainingProofs: [...keep, ...change],

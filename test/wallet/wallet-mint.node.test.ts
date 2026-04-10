@@ -49,7 +49,7 @@ describe('requestTokens', () => {
     const proofs = await wallet.mintProofsBolt11(1, mintQuote);
 
     expect(proofs).toHaveLength(1);
-    expect(proofs[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
   });
@@ -91,7 +91,7 @@ describe('requestTokens', () => {
 
     expect(mintCalls).toBe(1);
     expect(proofs).toHaveLength(1);
-    expect(proofs[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('prepareBatchMint consolidates outputs and completeBatchMint sends batch request', async () => {
@@ -153,17 +153,14 @@ describe('requestTokens', () => {
     expect(batchPreview.method).toBe('bolt11');
     expect(batchPreview.quotes).toHaveLength(2);
     // Consolidated outputs: 5+3=8 should produce fewer outputs than separate 5 and 3
-    const outputTotal = batchPreview.outputData.reduce(
-      (sum, o) => sum + BigInt(o.blindedMessage.amount),
-      0n,
-    );
-    expect(outputTotal).toBe(8n);
+    const outputTotal = Amount.sum(batchPreview.outputData.map((o) => o.blindedMessage.amount));
+    expect(outputTotal.equals(8)).toBe(true);
 
     const proofs = await wallet.completeBatchMint(batchPreview);
 
     expect(batchCalls).toBe(1);
-    const totalAmount = proofs.reduce((sum, p) => sum + p.amount, 0n);
-    expect(totalAmount).toBe(8n);
+    const totalAmount = Amount.sum(proofs.map((p) => p.amount));
+    expect(totalAmount.equals(8)).toBe(true);
     expect(proofs.every((p) => p.id === '00bd033559de27d0')).toBe(true);
 
     // Verify NUT-20 signatures: first quote has signature, second is null
@@ -236,8 +233,8 @@ describe('requestTokens', () => {
 
     // Complete the batch to verify full round-trip
     const proofs = await wallet.completeBatchMint(batchPreview);
-    const totalAmount = proofs.reduce((sum, p) => sum + p.amount, 0n);
-    expect(totalAmount).toBe(5n);
+    const totalAmount = Amount.sum(proofs.map((p) => p.amount));
+    expect(totalAmount.equals(5)).toBe(true);
   });
 
   test('prepareBatchMint omits signatures when all quotes are unlocked', async () => {
@@ -284,7 +281,7 @@ describe('requestTokens', () => {
     expect(batchPreview.payload.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
-    expect(proofs.reduce((sum, p) => sum + p.amount, 0n)).toBe(5n);
+    expect(Amount.sum(proofs.map((p) => p.amount)).equals(5)).toBe(true);
     expect(capturedBody).not.toHaveProperty('signatures');
   });
 
@@ -322,7 +319,7 @@ describe('requestTokens', () => {
     expect(batchPreview.payload.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
-    expect(proofs.reduce((sum, p) => sum + p.amount, 0n)).toBe(5n);
+    expect(Amount.sum(proofs.map((p) => p.amount)).equals(5)).toBe(true);
     expect(capturedBody).not.toHaveProperty('signatures');
   });
 
@@ -817,7 +814,7 @@ describe('generic mint/melt methods', () => {
       const proofs = await wallet.mintProofs('bacs', 1, customQuote);
 
       expect(proofs).toHaveLength(1);
-      expect(proofs[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+      expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     });
 
     test('mintProofs rejects quote objects in the wrong wallet unit', async () => {
@@ -1007,15 +1004,15 @@ describe('generic mint/melt methods', () => {
         state: MeltQuoteState.UNPAID,
       };
       const proofsToSend: Proof[] = [
-        { id: '00bd033559de27d0', amount: 8n, secret: 'secret1', C: 'C1' },
-        { id: '00bd033559de27d0', amount: 5n, secret: 'secret2', C: 'C2' },
+        { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+        { id: '00bd033559de27d0', amount: Amount.from(5), secret: 'secret2', C: 'C2' },
       ];
 
       const response = await wallet.meltProofs('bacs', meltQuote, proofsToSend);
 
       expect(response.quote.state).toBe(MeltQuoteState.PAID);
       expect(response.change).toHaveLength(1);
-      expect(response.change[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+      expect(response.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     });
 
     test('meltProofs rejects quote objects in the wrong wallet unit', async () => {
@@ -1030,7 +1027,7 @@ describe('generic mint/melt methods', () => {
             amount: Amount.from(10),
             unit: 'usd',
           },
-          [{ id: '00bd033559de27d0', amount: 10n, secret: 'secret1', C: 'C1' }],
+          [{ id: '00bd033559de27d0', amount: Amount.from(10), secret: 'secret1', C: 'C1' }],
         ),
       ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
     });

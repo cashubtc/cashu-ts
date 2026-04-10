@@ -126,7 +126,7 @@ export function selectProofsRGLI(
   const proofWithFees = proofs.map((p) => {
     // Guard: this algorithm uses number arithmetic throughout. Amounts above MAX_SAFE_INTEGER
     // (e.g. high-value proofs in msat-denomination mints) require a custom SelectProofs impl.
-    if (p.amount > BigInt(Number.MAX_SAFE_INTEGER)) {
+    if (p.amount.greaterThan(Number.MAX_SAFE_INTEGER)) {
       fail(
         'selectProofsRGLI does not support proof amounts > Number.MAX_SAFE_INTEGER. ' +
           'Provide a custom SelectProofs implementation for msat-scale wallets.',
@@ -134,7 +134,7 @@ export function selectProofsRGLI(
       );
     }
     const ppkfee = feeForProof(p);
-    const amountNum = Number(p.amount); // safe: guarded above
+    const amountNum = p.amount.toNumber(); // safe: guarded above
     const exFee = includeFees ? amountNum - ppkfee / 1000 : amountNum;
     const obj = { proof: p, amountNum, exFee, ppkfee };
     // Sum all economical proofs (filtered below)

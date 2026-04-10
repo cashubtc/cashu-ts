@@ -83,7 +83,7 @@ describe('OutputData.toProof DLEQ verification', () => {
       keys: { '1': mintPubKey.toHex(true) },
     };
     const od = new OutputData(
-      { amount: 1n, B_: blindMsg.B_.toHex(true), id: 'test-keyset' },
+      { amount: Amount.from(1), B_: blindMsg.B_.toHex(true), id: 'test-keyset' },
       blindMsg.r,
       blindMsg.secret,
     );
@@ -99,7 +99,7 @@ describe('OutputData.toProof DLEQ verification', () => {
       dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
     };
     const proof = od.toProof(sig, keyset);
-    expect(proof.amount).toBe(1n);
+    expect(proof.amount.equals(Amount.from(1))).toBe(true);
     expect(proof.dleq).toBeDefined();
   });
 

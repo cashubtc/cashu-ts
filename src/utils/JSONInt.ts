@@ -1,3 +1,5 @@
+import { Amount } from '../model/Amount';
+
 /**
  * BigInt-safe JSON parser/stringifier.
  *
@@ -442,7 +444,12 @@ function stringify(
   const serialize = (holder: Record<string, unknown>, key: string): string | undefined => {
     let val: unknown = holder[key];
 
-    if (isToJSONCapable(val)) {
+    // Amount VO: emit as an unquoted integer (like u64), not a quoted string.
+    // JSON.stringify uses Amount.toJSON() → string (safe for app storage).
+    // JSONInt.stringify uses toBigInt() → unquoted integer (correct for wire format).
+    if (val instanceof Amount) {
+      val = val.toBigInt();
+    } else if (isToJSONCapable(val)) {
       val = val.toJSON(key);
     }
     if (typeof replacer === 'function') {

@@ -1,4 +1,4 @@
-import { type AmountLike } from '../Amount';
+import { type Amount, type AmountLike } from '../Amount';
 
 import { type SerializedDLEQ } from './blinded';
 
@@ -23,7 +23,7 @@ export type Proof = {
   /**
    * Amount denominated in unit of the mints keyset id.
    */
-  amount: bigint;
+  amount: Amount;
   /**
    * The initial secret that was (randomly) chosen for the creation of this proof.
    */

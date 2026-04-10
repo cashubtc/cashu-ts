@@ -62,13 +62,13 @@ describe('melt proofs', () => {
     const proofsToSend: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: 'secret1',
         C: 'C1',
       },
       {
         id: '00bd033559de27d0',
-        amount: 5n,
+        amount: Amount.from(5),
         secret: 'secret2',
         C: 'C2',
       },
@@ -78,8 +78,8 @@ describe('melt proofs', () => {
     expect(response.quote.state).toBe(MeltQuoteState.PAID);
     expect(response.quote.payment_preimage).toBe('preimage');
     expect(response.change).toHaveLength(2);
-    expect(response.change[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(response.change[1]).toMatchObject({ amount: 2n, id: '00bd033559de27d0' });
+    expect(response.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(response.change[1]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(response.change[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(response.change[0].secret)).toBe(true);
   });
@@ -116,13 +116,13 @@ describe('melt proofs', () => {
     const proofsToSend: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: 'secret1',
         C: 'C1',
       },
       {
         id: '00bd033559de27d0',
-        amount: 4n,
+        amount: Amount.from(4),
         secret: 'secret2',
         C: 'C2',
       },
@@ -166,13 +166,13 @@ describe('melt proofs', () => {
     const proofsToSend: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: 'secret1',
         C: 'C1',
       },
       {
         id: '00bd033559de27d0',
-        amount: 5n,
+        amount: Amount.from(5),
         secret: 'secret2',
         C: 'C2',
       },
@@ -236,13 +236,13 @@ describe('melt proofs', () => {
     const proofsToSend: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: 'secret1',
         C: 'C1',
       },
       {
         id: '00bd033559de27d0',
-        amount: 5n,
+        amount: Amount.from(5),
         secret: 'secret2',
         C: 'C2',
       },
@@ -279,13 +279,13 @@ describe('melt proofs', () => {
       const proofsToSend: Proof[] = [
         {
           id: '00bd033559de27d0',
-          amount: 8n,
+          amount: Amount.from(8),
           secret: 'secret1',
           C: 'C1',
         },
         {
           id: '00bd033559de27d0',
-          amount: 5n,
+          amount: Amount.from(5),
           secret: 'secret2',
           C: 'C2',
         },
@@ -346,13 +346,13 @@ describe('melt proofs', () => {
       const proofsToSend: Proof[] = [
         {
           id: '00bd033559de27d0',
-          amount: 8n,
+          amount: Amount.from(8),
           secret: 'secret1',
           C: 'C1',
         },
         {
           id: '00bd033559de27d0',
-          amount: 5n,
+          amount: Amount.from(5),
           secret: 'secret2',
           C: 'C2',
         },
@@ -396,7 +396,7 @@ describe('melt proofs', () => {
       // response sanity (v3 contract)
       expect(res.quote.state).toBe(MeltQuoteState.PAID);
       expect(res.change).toHaveLength(2);
-      expect(res.change[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+      expect(res.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     });
   });
 
@@ -443,13 +443,13 @@ describe('melt proofs', () => {
     const proofsToSend: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: 'secret1',
         C: 'C1',
       },
       {
         id: '00bd033559de27d0',
-        amount: 5n,
+        amount: Amount.from(5),
         secret: 'secret2',
         C: 'C2',
       },
@@ -459,7 +459,7 @@ describe('melt proofs', () => {
     expect(response.quote.state).toBe(MeltQuoteState.PAID);
     expect(response.quote.payment_preimage).toBe('preimage');
     expect(response.change).toHaveLength(2);
-    expect(response.change[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(response.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('mint.meltBolt11 rejects response missing state', async () => {
@@ -531,13 +531,13 @@ describe('melt proofs', () => {
     const proofsToSend: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: 'secret1',
         C: 'C1',
       },
       {
         id: '00bd033559de27d0',
-        amount: 4n,
+        amount: Amount.from(4),
         secret: 'secret2',
         C: 'C2',
       },
@@ -561,7 +561,7 @@ describe('async melt preference body', () => {
     const proofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -606,7 +606,7 @@ describe('async melt preference body', () => {
     const proofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -693,7 +693,7 @@ describe('async melt preference body', () => {
     const proofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -754,7 +754,7 @@ describe('async melt preference body', () => {
     const proofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },

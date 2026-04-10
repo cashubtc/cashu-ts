@@ -172,7 +172,7 @@ describe('test decode token', () => {
       proofs: [
         {
           C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-          amount: 1n,
+          amount: Amount.from(1),
           id: 'I2yN+iRYfkzT',
           secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs=',
         },
@@ -195,7 +195,7 @@ describe('test decode token', () => {
       proofs: [
         {
           C: '02195081e622f98bfc19a05ebe2341d955c0d12588c5948c858d07adec007bc1e4',
-          amount: 1n,
+          amount: Amount.from(1),
           id: 'I2yN+iRYfkzT',
           secret: '97zfmmaGf5k8Mg0gajpnbmpervTtEeE8wwKri7rWpUs=',
         },
@@ -219,7 +219,7 @@ describe('test decode token', () => {
           secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
           C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
           id: '00ad268c4d1f5826',
-          amount: 1n,
+          amount: Amount.from(1),
         },
       ],
     };
@@ -239,19 +239,19 @@ describe('test decode token', () => {
           secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
           C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
           id: '00ffd48b8f5ecf80',
-          amount: 1n,
+          amount: Amount.from(1),
         },
         {
           secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
           C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
           id: '00ad268c4d1f5826',
-          amount: 2n,
+          amount: Amount.from(2),
         },
         {
           secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
           C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
           id: '00ad268c4d1f5826',
-          amount: 1n,
+          amount: Amount.from(1),
         },
       ],
     };
@@ -276,7 +276,7 @@ describe('test getTokenMetadata', () => {
       incompleteProofs: [
         {
           C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
-          amount: 4n,
+          amount: Amount.from(4),
           dleq: {
             e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
             r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
@@ -286,7 +286,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
-          amount: 2n,
+          amount: Amount.from(2),
           dleq: {
             e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
             r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
@@ -296,7 +296,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
-          amount: 2n,
+          amount: Amount.from(2),
           dleq: {
             e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
             r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
@@ -306,7 +306,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
-          amount: 1n,
+          amount: Amount.from(1),
           dleq: {
             e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
             r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
@@ -316,7 +316,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
-          amount: 1n,
+          amount: Amount.from(1),
           dleq: {
             e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
             r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
@@ -338,7 +338,7 @@ describe('test getTokenMetadata', () => {
       incompleteProofs: [
         {
           C: '027f390f7160a0171e0113a4311564447b2942833ae9dff0beb49cb314677ba6a4',
-          amount: 4n,
+          amount: Amount.from(4),
           dleq: {
             e: 'b5e5011baeb4c13d5c448745ae3b4dc4bf517b51e4eb03e9f74204e2c693cebe',
             r: '7b7e868012f0d462406be790f713d8a42762c4a9efbbe2134df1cf9fc581df98',
@@ -348,7 +348,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '03957a7e9ab75f2152ba9eb5f1b6f3cd12dbb2b3100d4fabc3fd457f95b11dcbce',
-          amount: 2n,
+          amount: Amount.from(2),
           dleq: {
             e: 'bff2e8aee32ac15b21b38e991394f23e84c56845b1f74710d6741c67117c7d11',
             r: '46d74791d56760b39317555f1283e2f4ad1cfa4a36a67c04e6cde510f22ed1ee',
@@ -358,7 +358,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '026f79804899c4c830475fab2bb030734f569d784cf7a02adf744e1fa695ab3d2d',
-          amount: 2n,
+          amount: Amount.from(2),
           dleq: {
             e: '3d7e00ffae6a115875b47fa4d5d41338f2105e53c354c96fe9449d1d9285d009',
             r: 'b1347b584b48517761475c3a58fca47f80c368fcbbe06abdfdc8258235b41e21',
@@ -368,7 +368,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '03d01a81d573403e2803496358b2abefc2f4592e51d3f41f907e2d6c4792a6518f',
-          amount: 1n,
+          amount: Amount.from(1),
           dleq: {
             e: '5b0a219b83f0a5935dbd48187d7de38b06f22093e29394e919aeb9d4e6579103',
             r: '16fa016d727fd7ac4cc390c18f33611d9418eba8fe557e168f671de99ae34b99',
@@ -378,7 +378,7 @@ describe('test getTokenMetadata', () => {
         },
         {
           C: '0342d3499d47354e8c270f3d95b37d88cd2cbbc238a13d3ff02ad0f340d59e4fdd',
-          amount: 1n,
+          amount: Amount.from(1),
           dleq: {
             e: 'cfd3ef7d297dd21a4d9a76d63947fd47eb61cae331f8b8765df3b6e46d4d30a1',
             r: 'b2cdebe02d50fcb9a82cd2956123a4ff868f20696fea7c3df596b2100d2968a0',
@@ -447,7 +447,7 @@ describe('test v4 encoding', () => {
           secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
           C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
           id: '00ad268c4d1f5826',
-          amount: 1n,
+          amount: Amount.from(1),
         },
       ],
       unit: 'sat',
@@ -468,19 +468,19 @@ describe('test v4 encoding', () => {
           secret: 'acc12435e7b8484c3cf1850149218af90f716a52bf4a5ed347e48ecc13f77388',
           C: '0244538319de485d55bed3b29a642bee5879375ab9e7a620e11e48ba482421f3cf',
           id: '00ffd48b8f5ecf80',
-          amount: 1n,
+          amount: Amount.from(1),
         },
         {
           secret: '1323d3d4707a58ad2e23ada4e9f1f49f5a5b4ac7b708eb0d61f738f48307e8ee',
           C: '023456aa110d84b4ac747aebd82c3b005aca50bf457ebd5737a4414fac3ae7d94d',
           id: '00ad268c4d1f5826',
-          amount: 2n,
+          amount: Amount.from(2),
         },
         {
           secret: '56bcbcbb7cc6406b3fa5d57d2174f4eff8b4402b176926d3a57d3c3dcbb59d57',
           C: '0273129c5719e599379a974a626363c333c56cafc0e6d01abe46d5808280789c63',
           id: '00ad268c4d1f5826',
-          amount: 1n,
+          amount: Amount.from(1),
         },
       ],
       unit: 'sat',
@@ -493,7 +493,7 @@ describe('test v4 encoding', () => {
     expect(decodedExpectedToken).toEqual(decodedEncodedToken);
   });
   test('bigint amount > MAX_SAFE_INTEGER roundtrips through v4 encoding', () => {
-    const largeAmount = 2n ** 53n + 1n; // 9007199254740993n — first integer above MAX_SAFE_INTEGER
+    const largeAmount = Amount.from(2n ** 53n + 1n); // 9007199254740993 — first integer above MAX_SAFE_INTEGER
     const token = {
       mint: 'http://localhost:3338',
       proofs: [
@@ -508,7 +508,7 @@ describe('test v4 encoding', () => {
     };
     const encoded = utils.getEncodedToken(token);
     const decoded = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
-    expect(decoded.proofs[0].amount).toBe(largeAmount);
+    expect(decoded.proofs[0].amount.equals(largeAmount)).toBe(true);
   });
   test('getEncodedToken does not mutate input token proof IDs', () => {
     const token = {
@@ -516,7 +516,7 @@ describe('test v4 encoding', () => {
       proofs: [
         {
           id: '01884a74bb2fc5ee6e5f958f89f9e4e6cf79241fbc9fd1012d6811b054a78beffe',
-          amount: 1n,
+          amount: Amount.from(1),
           secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
           C: '02698c4e2b5f9534cd0687d87513c759790cf829aa5739184a3e3735471fbda904',
         },
@@ -530,7 +530,7 @@ describe('test v4 encoding', () => {
   test('removing DLEQ', async () => {
     const proofs = [
       {
-        amount: 1n,
+        amount: Amount.from(1),
         C: '03ff2e729416437f9ea8d022c501ff5b309d607f98c9ab53d51cd24185b4d3e42b',
         id: '00b4cd27d8861a44',
         secret: '10216467bb33f6f079ae92349ba54fa34df99ba24572645b8b813688c74b582d',
@@ -542,7 +542,7 @@ describe('test v4 encoding', () => {
         },
       },
       {
-        amount: 4n,
+        amount: Amount.from(4),
         C: '02b457f8e1e151cd71dd3246b56d0f479ac63786e71916b46d16369cb6f78024b9',
         id: '00b4cd27d8861a44',
         secret: '1b1bc7a099a63c808c17f8ca4ede03f30d3c243ca34ec4d10a1327b7cfb3ead7',
@@ -554,7 +554,7 @@ describe('test v4 encoding', () => {
         },
       },
       {
-        amount: 16n,
+        amount: Amount.from(16),
         C: '03570cdf33bc832a60660b3e7d8ddb74d0dd3158e0fde5b0f607555bb7e8e9fb0f',
         id: '00b4cd27d8861a44',
         secret: '8425354533436ca7c29b34daae3aef85ab08925c810d1db4f005259d79d7f9f6',
@@ -607,7 +607,7 @@ describe('test zero-knowledge utilities', () => {
   // construct Proof directly (amount = 1, matching keyset key in tests below)
   const serializedProof: Proof = {
     id: unblinded.id,
-    amount: 1n,
+    amount: Amount.from(1),
     C: unblinded.C.toHex(true),
     secret: new TextDecoder().decode(unblinded.secret),
     dleq: {
@@ -642,7 +642,7 @@ describe('test raw tokens', () => {
     proofs: [
       {
         id: '00ad268c4d1f5826',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
         C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
       },
@@ -858,8 +858,8 @@ describe('invoiceHasAmountInHRP()', () => {
 
 describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
   const proofs: Proof[] = [
-    { id: '009a1f293253e41e', amount: 1n, secret: 'abc', C: '02abc' },
-    { id: '009a1f293253e41e', amount: 2n, secret: 'def', C: '02def' },
+    { id: '009a1f293253e41e', amount: Amount.from(1), secret: 'abc', C: '02abc' },
+    { id: '009a1f293253e41e', amount: Amount.from(2), secret: 'def', C: '02def' },
   ];
 
   describe('serializeProofs', () => {
@@ -890,29 +890,29 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
   });
 
   describe('deserializeProofs', () => {
-    test('restores bigint amounts from string[] (NutZap / DB)', () => {
+    test('restores Amount objects from string[] (NutZap / DB)', () => {
       const strings = serializeProofs(proofs);
       const restored = deserializeProofs(strings);
-      expect(restored[0].amount).toBe(1n);
-      expect(restored[1].amount).toBe(2n);
-      expect(typeof restored[0].amount).toBe('bigint');
+      expect(restored[0].amount.equals(1)).toBe(true);
+      expect(restored[1].amount.equals(2)).toBe(true);
+      expect(restored[0].amount).toBeInstanceOf(Amount);
     });
 
-    test('restores bigint amounts from raw localStorage string (serializeProofs blob)', () => {
+    test('restores Amount objects from raw localStorage string (serializeProofs blob)', () => {
       // serializeProofs returns string[], JSON.stringify wraps it as a JSON array of strings
       const raw = JSON.stringify(serializeProofs(proofs));
       // pass the raw string directly — no JSON.parse needed
       const restored = deserializeProofs(raw);
-      expect(restored[0].amount).toBe(1n);
-      expect(restored[1].amount).toBe(2n);
+      expect(restored[0].amount.equals(1)).toBe(true);
+      expect(restored[1].amount.equals(2)).toBe(true);
     });
 
-    test('restores bigint amounts from JSON.parse of localStorage (string[])', () => {
+    test('restores Amount objects from JSON.parse of localStorage (string[])', () => {
       const json = JSON.stringify(serializeProofs(proofs));
       // JSON.parse gives string[], deserializeProofs accepts that too
       const restored = deserializeProofs(JSON.parse(json));
-      expect(restored[0].amount).toBe(1n);
-      expect(restored[1].amount).toBe(2n);
+      expect(restored[0].amount.equals(1)).toBe(true);
+      expect(restored[1].amount.equals(2)).toBe(true);
     });
 
     test('round-trips all proof fields', () => {
@@ -923,10 +923,10 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
     });
 
     test('handles amounts above MAX_SAFE_INTEGER without precision loss', () => {
-      const large = 2n ** 53n + 1n;
+      const large = Amount.from(2n ** 53n + 1n);
       const p: Proof[] = [{ id: '009a1f293253e41e', amount: large, secret: 'abc', C: '02abc' }];
       const restored = deserializeProofs(serializeProofs(p));
-      expect(restored[0].amount).toBe(large);
+      expect(restored[0].amount.equals(large)).toBe(true);
     });
 
     test('handles empty string[] input', () => {
@@ -949,25 +949,25 @@ describe('serializeProofs / deserializeProofs / normalizeProofAmounts', () => {
       // Simulates: deserializeProofs(JSON.parse(localStorage.getItem('proofs')))
       // where localStorage held a plain JSON array of objects from v3
       const restored = deserializeProofs(legacyObjects);
-      expect(restored[0].amount).toBe(1n);
-      expect(restored[1].amount).toBe(2n);
+      expect(restored[0].amount.equals(1)).toBe(true);
+      expect(restored[1].amount.equals(2)).toBe(true);
       expect(restored[0].id).toBe('009a1f293253e41e');
       expect(restored[0].secret).toBe('abc');
     });
   });
 
   describe('normalizeProofAmounts', () => {
-    test('converts number amounts to bigint', () => {
+    test('converts number amounts to Amount', () => {
       const raw = [{ id: '009a1f293253e41e', amount: 4, secret: 'abc', C: '02abc' }];
       const normalized = normalizeProofAmounts(raw);
-      expect(normalized[0].amount).toBe(4n);
-      expect(typeof normalized[0].amount).toBe('bigint');
+      expect(normalized[0].amount.equals(4)).toBe(true);
+      expect(normalized[0].amount).toBeInstanceOf(Amount);
     });
 
     test('accepts string amounts', () => {
       const raw = [{ id: '009a1f293253e41e', amount: '8', secret: 'abc', C: '02abc' }];
       const normalized = normalizeProofAmounts(raw);
-      expect(normalized[0].amount).toBe(8n);
+      expect(normalized[0].amount.equals(8)).toBe(true);
     });
   });
 });
@@ -1004,9 +1004,9 @@ describe('getKeysetAmounts', () => {
 describe('sortProofsById', () => {
   test('sorts proofs by keyset id lexicographically', () => {
     const proofs: Proof[] = [
-      { id: 'ccc', amount: 1n, secret: 'a', C: '02a' },
-      { id: 'aaa', amount: 2n, secret: 'b', C: '02b' },
-      { id: 'bbb', amount: 4n, secret: 'c', C: '02c' },
+      { id: 'ccc', amount: Amount.from(1), secret: 'a', C: '02a' },
+      { id: 'aaa', amount: Amount.from(2), secret: 'b', C: '02b' },
+      { id: 'bbb', amount: Amount.from(4), secret: 'c', C: '02c' },
     ];
     const sorted = sortProofsById(proofs);
     expect(sorted.map((p) => p.id)).toStrictEqual(['aaa', 'bbb', 'ccc']);
@@ -1014,8 +1014,8 @@ describe('sortProofsById', () => {
 
   test('does not mutate the original array', () => {
     const proofs: Proof[] = [
-      { id: 'bbb', amount: 1n, secret: 'a', C: '02a' },
-      { id: 'aaa', amount: 2n, secret: 'b', C: '02b' },
+      { id: 'bbb', amount: Amount.from(1), secret: 'a', C: '02a' },
+      { id: 'aaa', amount: Amount.from(2), secret: 'b', C: '02b' },
     ];
     sortProofsById(proofs);
     expect(proofs[0].id).toBe('bbb');
@@ -1026,7 +1026,7 @@ describe('getEncodedToken edge cases', () => {
   test('throws for proofs with non-hex keyset IDs', () => {
     const token: Token = {
       mint: 'http://localhost:3338',
-      proofs: [{ id: 'not+hex!', amount: 1n, secret: 'abc', C: '02abc' }],
+      proofs: [{ id: 'not+hex!', amount: Amount.from(1), secret: 'abc', C: '02abc' }],
       unit: 'sat',
     };
     expect(() => utils.getEncodedToken(token)).toThrow(/legacy keyset ID/);
@@ -1055,7 +1055,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     // Encode a token using the full v2 ID — internally it gets truncated to 16 chars
     const token: Token = {
       mint: 'http://localhost:3338',
-      proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
       unit: 'sat',
     };
     const encoded = utils.getEncodedToken(token);
@@ -1067,7 +1067,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
   test('throws when v2 short ID has no keysets to map to', () => {
     const token: Token = {
       mint: 'http://localhost:3338',
-      proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
       unit: 'sat',
     };
     const encoded = utils.getEncodedToken(token);
@@ -1079,7 +1079,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
   test('throws when v2 short ID matches no known keyset', () => {
     const token: Token = {
       mint: 'http://localhost:3338',
-      proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
       unit: 'sat',
     };
     const encoded = utils.getEncodedToken(token);
@@ -1092,7 +1092,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
   test('throws when v2 short ID is ambiguous', () => {
     const token: Token = {
       mint: 'http://localhost:3338',
-      proofs: [{ id: fullV2Id, amount: 1n, secret: 'abc', C: '02' + '00'.repeat(32) }],
+      proofs: [{ id: fullV2Id, amount: Amount.from(1), secret: 'abc', C: '02' + '00'.repeat(32) }],
       unit: 'sat',
     };
     const encoded = utils.getEncodedToken(token);

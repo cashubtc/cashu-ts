@@ -801,8 +801,9 @@ class Wallet {
     const indices = mergedBlindingData.map((_, i) => i);
     if (!isP2PKSigAll(inputs)) {
       indices.sort((a, b) => {
-        const aa = Amount.from(mergedBlindingData[a].blindedMessage.amount);
-        return aa.compareTo(mergedBlindingData[b].blindedMessage.amount);
+        return mergedBlindingData[a].blindedMessage.amount.compareTo(
+          mergedBlindingData[b].blindedMessage.amount,
+        );
       });
     }
     const keepVector: boolean[] = [
@@ -1537,7 +1538,7 @@ class Wallet {
       const matchingSig = signatureMap[outputData[i].blindedMessage.B_];
       if (matchingSig) {
         lastCounterWithSignature = start + i;
-        outputData[i].blindedMessage.amount = matchingSig.amount.toBigInt();
+        outputData[i].blindedMessage.amount = matchingSig.amount;
         restoredProofs.push(outputData[i].toProof(matchingSig, keyset));
       }
     }

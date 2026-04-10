@@ -260,7 +260,7 @@ function templateFromToken(token: Token): TokenV4Template {
         i: hexToBytes(id),
         p: idMap[id].map(
           (p: Proof): V4ProofTemplate => ({
-            a: p.amount,
+            a: p.amount.toBigInt(),
             s: p.secret,
             c: hexToBytes(p.C),
             ...(p.dleq && {
@@ -294,7 +294,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
       proofs.push({
         secret: p.s,
         C: bytesToHex(p.c),
-        amount: Amount.from(p.a).toBigInt(),
+        amount: Amount.from(p.a),
         id: bytesToHex(t.i),
         ...(p.d && {
           dleq: {
@@ -374,7 +374,7 @@ function handleTokens(token: string): Token {
     const entry = parsedV3Token.token[0];
     const proofs = entry.proofs.map((p) => ({
       ...p,
-      amount: Amount.from(p.amount as AmountLike).toBigInt(),
+      amount: Amount.from(p.amount as AmountLike),
     }));
     const tokenObj: Token = {
       mint: entry.mint,
@@ -527,7 +527,7 @@ export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount {
  *     const proofs = normalizeProofAmounts(db.query('SELECT * FROM proofs'));
  */
 export function normalizeProofAmounts(raw: ProofLike[]): Proof[] {
-  return raw.map((p) => ({ ...p, amount: Amount.from(p.amount).toBigInt() }));
+  return raw.map((p) => ({ ...p, amount: Amount.from(p.amount) }));
 }
 
 /**
@@ -664,7 +664,7 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
     r: hexToNumber(proof.dleq.r ?? '00'),
   } as DLEQ;
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    throw new Error(`Undefined key for amount ${proof.amount} in keyset ${keyset.id}`);
+    throw new Error(`Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`);
   }
   const key = keyset.keys[proof.amount.toString()];
   return verifyDLEQProof_reblind(

@@ -1410,7 +1410,7 @@ export type PrivKey = Uint8Array | string;
 // @public
 export type Proof = {
     id: string;
-    amount: bigint;
+    amount: Amount;
     secret: string;
     C: string;
     dleq?: SerializedDLEQ;
@@ -1622,7 +1622,7 @@ export type SendResponse = {
 
 // @public
 export type SerializedBlindedMessage = {
-    amount: bigint;
+    amount: Amount;
     B_: string;
     id: string;
 };

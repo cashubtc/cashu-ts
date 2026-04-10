@@ -39,7 +39,7 @@ describe('sendOffline witness normalization', () => {
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: plainSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         witness: JSON.stringify({ signatures: ['deadbeef'] }),
@@ -59,7 +59,7 @@ describe('sendOffline witness normalization', () => {
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: p2pkSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         witness: witnessStr,
@@ -79,7 +79,7 @@ describe('sendOffline witness normalization', () => {
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: p2pkSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         witness: witnessObj,
@@ -98,7 +98,7 @@ describe('sendOffline witness normalization', () => {
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: plainSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -117,7 +117,7 @@ describe('sendOffline witness normalization', () => {
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: unknownKindSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         witness: witnessStr,
@@ -137,14 +137,14 @@ describe('sendOffline witness normalization', () => {
     const proofs: Proof[] = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: plainSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         witness: JSON.stringify({ signatures: ['deadbeef'] }),
       },
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: p2pkSecret,
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         witness: witnessStr,
@@ -166,7 +166,7 @@ describe('send', () => {
   const proofs = [
     {
       id: '00bd033559de27d0',
-      amount: 1n,
+      amount: Amount.from(1),
       secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
       C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
     },
@@ -192,7 +192,7 @@ describe('send', () => {
 
     expect(result.keep).toHaveLength(0);
     expect(result.send).toHaveLength(1);
-    expect(result.send[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
   });
@@ -206,7 +206,7 @@ describe('send', () => {
       const result = await wallet.send(amount, proofs);
       expect(result.keep).toHaveLength(0);
       expect(result.send).toHaveLength(1);
-      expect(result.send[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+      expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     }
   });
 
@@ -235,18 +235,18 @@ describe('send', () => {
     const result = await wallet.send(1, [
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ]);
 
     expect(result.send).toHaveLength(1);
-    expect(result.send[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
     expect(result.keep).toHaveLength(1);
-    expect(result.keep[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.keep[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
   });
@@ -277,7 +277,7 @@ describe('send', () => {
       [
         {
           id: '00bd033559de27d0',
-          amount: 2n,
+          amount: Amount.from(2),
           secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
@@ -319,7 +319,7 @@ describe('send', () => {
     const overpayProofs = [
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -327,11 +327,11 @@ describe('send', () => {
     const result = await wallet.send(1, overpayProofs);
 
     expect(result.send).toHaveLength(1);
-    expect(result.send[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
     expect(result.keep).toHaveLength(1);
-    expect(result.keep[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.keep[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.keep[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.keep[0].secret)).toBe(true);
   });
@@ -370,13 +370,13 @@ describe('send', () => {
     const overpayProofs = [
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -395,10 +395,10 @@ describe('send', () => {
     );
 
     expect(result.send).toHaveLength(4);
-    expect(result.send[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[1]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[2]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[3]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[1]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[2]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[3]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
     expect(result.keep).toHaveLength(0);
@@ -439,13 +439,13 @@ describe('send', () => {
     const overpayProofs = [
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 2n,
+        amount: Amount.from(2),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -461,13 +461,13 @@ describe('send', () => {
     );
 
     expect(result.send).toHaveLength(3);
-    expect(result.send[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[1]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[2]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[1]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[2]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
     expect(result.keep).toHaveLength(1);
-    expect(result.keep[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.keep[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('test send not enough funds', async () => {
@@ -503,7 +503,7 @@ describe('send', () => {
       wallet.send(1, [
         {
           id: '00bd033559de27d0',
-          amount: 2n,
+          amount: Amount.from(2),
           secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
           C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
         },
@@ -557,20 +557,20 @@ describe('send', () => {
     const overpayProofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
     ];
     const result = await wallet.send(3, overpayProofs, {
       includeFees: true,
-      proofsWeHave: [{ secret: '123', C: '123', amount: 64n, id: 'id' } as Proof],
+      proofsWeHave: [{ secret: '123', C: '123', amount: Amount.from(64), id: 'id' } as Proof],
     });
 
     // Swap 8, get 7 back (after 1*600ppk = 1 sat fee).
@@ -580,15 +580,15 @@ describe('send', () => {
     // Total change = [1, 1] because proofs are optimized to target (3)
     // Total keep = [1, 1, 1]
     expect(result.send).toHaveLength(3);
-    expect(result.send[0]).toMatchObject({ amount: 2n, id: '00bd033559de27d0' });
-    expect(result.send[1]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[2]).toMatchObject({ amount: 2n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
+    expect(result.send[1]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[2]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
     expect(result.keep).toHaveLength(3);
-    expect(result.keep[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.keep[0]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.keep[1]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.keep[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.keep[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.keep[1]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
   test('test send preference with fees included', async () => {
@@ -633,13 +633,13 @@ describe('send', () => {
     const overpayProofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -653,14 +653,14 @@ describe('send', () => {
     // Total change = [2] because proofs are not optimized
     // Total keep = [2, 1]
     expect(result.send).toHaveLength(3);
-    expect(result.send[0]).toMatchObject({ amount: 2n, id: '00bd033559de27d0' });
-    expect(result.send[1]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
-    expect(result.send[2]).toMatchObject({ amount: 2n, id: '00bd033559de27d0' });
+    expect(result.send[0]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
+    expect(result.send[1]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(result.send[2]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
     expect(result.keep).toHaveLength(2);
-    expect(result.keep[0]).toMatchObject({ amount: 2n, id: '00bd033559de27d0' });
-    expect(result.keep[1]).toMatchObject({ amount: 1n, id: '00bd033559de27d0' });
+    expect(result.keep[0]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
+    expect(result.keep[1]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
   test('send with deterministic keep/send auto-offsets counters and fees', async () => {
     server.use(
@@ -693,13 +693,13 @@ describe('send', () => {
     const overpayProofs = [
       {
         id: '00bd033559de27d0',
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: '00bd033559de27d0',
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -732,13 +732,13 @@ describe('send', () => {
     const proofs = [
       {
         id: keysetId,
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -861,13 +861,13 @@ describe('send', () => {
     const proofs = [
       {
         id: keysetId,
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -899,13 +899,13 @@ describe('send', () => {
     const proofs = [
       {
         id: keysetId,
-        amount: 1n,
+        amount: Amount.from(1),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
       {
         id: keysetId,
-        amount: 8n,
+        amount: Amount.from(8),
         secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
       },
@@ -971,7 +971,7 @@ describe('deterministic', () => {
         [
           {
             id: '00bd033559de27d0',
-            amount: 2n,
+            amount: Amount.from(2),
             secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
             C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
           },
