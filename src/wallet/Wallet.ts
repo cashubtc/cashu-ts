@@ -696,6 +696,44 @@ class Wallet {
   }
 
   /**
+   * Helper to properly format OutputTypes for logs.
+   */
+  private stringifyOutputTypeForLog(ot: OutputType): string {
+    switch (ot.type) {
+      case 'custom':
+        return JSON.stringify({
+          type: 'custom',
+          outputs: ot.data.length,
+          amounts: ot.data.map((d) => d.blindedMessage.amount.toString()),
+        });
+      case 'factory':
+        return JSON.stringify({
+          type: 'factory',
+          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+        });
+      case 'deterministic':
+        return JSON.stringify({
+          type: 'deterministic',
+          counter: ot.counter,
+          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+        });
+      case 'p2pk':
+        return JSON.stringify({
+          type: 'p2pk',
+          options: ot.options,
+          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+        });
+      case 'random':
+        return JSON.stringify({
+          type: 'random',
+          denominations: (ot.denominations ?? []).map((d) => Amount.from(d).toString()),
+        });
+      default:
+        return 'Unknown';
+    }
+  }
+
+  /**
    * Generates blinded messages based on the specified output type.
    *
    * @param amount The total amount for outputs.
@@ -956,7 +994,10 @@ class Wallet {
     if (autoCounters.used) {
       this.safeCallback(onCountersReserved, autoCounters.used, { op: 'receive' });
     }
-    this._logger.debug('receive counter', { counter: autoCounters.used, receiveOT });
+    this._logger.debug('receive counter', {
+      counter: autoCounters.used,
+      receiveOT: this.stringifyOutputTypeForLog(receiveOT),
+    });
 
     // Create outputs and execute swap
     const outputs = this.createOutputData(this.preparedTotal(receiveOT), keyset, receiveOT);
@@ -1144,8 +1185,8 @@ class Wallet {
       true, // Include fees to cover swap fee
     );
     // this._logger.debug('PROOFS SELECTED', {
-    // 	unselectedProofs: unselectedProofs.map(p=>p.amount),
-    // 	selectedProofs: selectedProofs.map(p=>p.amount),
+    // 	unselectedProofs: unselectedProofs.map(p=>p.amount.toString()),
+    // 	selectedProofs: selectedProofs.map(p=>p.amount.toString()),
     // });
     if (selectedProofs.length === 0) {
       throw new Error('Not enough funds available to send');
@@ -1181,7 +1222,11 @@ class Wallet {
     if (autoCounters.used) {
       this.safeCallback(onCountersReserved, autoCounters.used, { op: 'send' });
     }
-    this._logger.debug('send counters', { counter: autoCounters.used, sendOT, keepOT });
+    this._logger.debug('send counters', {
+      counter: autoCounters.used,
+      sendOT: this.stringifyOutputTypeForLog(sendOT),
+      keepOT: this.stringifyOutputTypeForLog(keepOT),
+    });
 
     // Create the output data
     const sendOutputs = this.createOutputData(sendAmount, keyset, sendOT);
@@ -1271,9 +1316,9 @@ class Wallet {
       }
     });
     this._logger.debug('SEND COMPLETED', {
-      unselectedProofs: unselectedProofs.map((p) => p.amount),
-      keepProofs: keepProofs.map((p) => p.amount),
-      sendProofs: sendProofs.map((p) => p.amount),
+      unselectedProofs: unselectedProofs.map((p) => p.amount.toString()),
+      keepProofs: keepProofs.map((p) => p.amount.toString()),
+      sendProofs: sendProofs.map((p) => p.amount.toString()),
     });
     return {
       keep: [...keepProofs, ...unselectedProofs],
@@ -1902,7 +1947,10 @@ class Wallet {
     if (autoCounters.used) {
       this.safeCallback(onCountersReserved, autoCounters.used, { op: 'mintProofs' });
     }
-    this._logger.debug('mint counter', { counter: autoCounters.used, mintOT });
+    this._logger.debug('mint counter', {
+      counter: autoCounters.used,
+      mintOT: this.stringifyOutputTypeForLog(mintOT),
+    });
 
     // Create outputs and mint payload
     const outputs = this.createOutputData(mintAmount, keyset, mintOT);
@@ -1963,7 +2011,7 @@ class Wallet {
 
     const keyset = this.getKeyset(keysetId);
     this._logger.debug('MINT COMPLETED', {
-      amounts: outputData.map((o) => o.blindedMessage.amount),
+      amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
     // Verify each signature amount matches the requested amount
     for (let i = 0; i < signatures.length; i++) {
@@ -1985,8 +2033,6 @@ class Wallet {
    *
    * - Any quote without a pubkey is considered unlocked. Pass `pubkey` for locked quotes.
    * - Check all quotes are in the PAID state. If any quote is unpaid, the entire batch with fail.
-   * - `BatchMintPreview` contains `bigint` values. Use `JSONInt.stringify` to serialize (not
-   *   `JSON.stringify`).
    *
    * @param method Payment method identifier (e.g., 'bolt11', 'bolt12').
    * @param entries Array of per-quote parameters: `{ amount, quote }`.
@@ -2488,7 +2534,10 @@ class Wallet {
       if (autoCounters.used) {
         this.safeCallback(onCountersReserved, autoCounters.used, { op: 'meltProofs' });
       }
-      this._logger.debug('melt counter', { counter: autoCounters.used, meltOT });
+      this._logger.debug('melt counter', {
+        counter: autoCounters.used,
+        meltOT: this.stringifyOutputTypeForLog(meltOT),
+      });
       // Generate the blank outputs (no fees as we are receiving change)
       // Remember, zero amount + zero denomination passes splitAmount validation
       outputData = this.createOutputData(0, keyset, meltOT);

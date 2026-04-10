@@ -582,7 +582,7 @@ describe('mint api', () => {
     const proofs = await wallet.mintProofsBolt11(63, quote.quote);
     // console.log(
     // 	'proofs',
-    // 	proofs.map((p) => p.amount),
+    // 	proofs.map((p) => p.amount.toString()),
     // );
     await new Promise<ProofState>((res) => {
       wallet.on.proofStateUpdates(
@@ -916,11 +916,11 @@ describe('Keep Vector and Reordering', () => {
     const { send, keep } = await wallet.send(32, testProofs, {}, customConfig);
     // console.log(
     // 	'send',
-    // 	send.map((p) => p.amount),
+    // 	send.map((p) => p.amount.toString()),
     // );
     // console.log(
     // 	'keep',
-    // 	keep.map((p) => p.amount),
+    // 	keep.map((p) => p.amount.toString()),
     // );
     send.forEach((p, i) => expect(p.amount.equals(expectedSend[i])).toBeTruthy());
     keep.forEach((p, i) => expect(p.amount.equals(testKeepAmounts[i])).toBeTruthy());

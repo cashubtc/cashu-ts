@@ -14,7 +14,7 @@ import {
   AmountLike,
 } from '../../src';
 
-import { Bytes } from '../../src/utils';
+import { Bytes, sumProofs } from '../../src/utils';
 import { hexToBytes } from '@noble/curves/utils.js';
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -159,7 +159,7 @@ describe('requestTokens', () => {
     const proofs = await wallet.completeBatchMint(batchPreview);
 
     expect(batchCalls).toBe(1);
-    const totalAmount = Amount.sum(proofs.map((p) => p.amount));
+    const totalAmount = sumProofs(proofs);
     expect(totalAmount.equals(8)).toBe(true);
     expect(proofs.every((p) => p.id === '00bd033559de27d0')).toBe(true);
 
@@ -233,7 +233,7 @@ describe('requestTokens', () => {
 
     // Complete the batch to verify full round-trip
     const proofs = await wallet.completeBatchMint(batchPreview);
-    const totalAmount = Amount.sum(proofs.map((p) => p.amount));
+    const totalAmount = sumProofs(proofs);
     expect(totalAmount.equals(5)).toBe(true);
   });
 
@@ -281,7 +281,7 @@ describe('requestTokens', () => {
     expect(batchPreview.payload.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
-    expect(Amount.sum(proofs.map((p) => p.amount)).equals(5)).toBe(true);
+    expect(sumProofs(proofs).equals(5)).toBe(true);
     expect(capturedBody).not.toHaveProperty('signatures');
   });
 
@@ -319,7 +319,7 @@ describe('requestTokens', () => {
     expect(batchPreview.payload.signatures).toBeUndefined();
 
     const proofs = await wallet.completeBatchMint(batchPreview);
-    expect(Amount.sum(proofs.map((p) => p.amount)).equals(5)).toBe(true);
+    expect(sumProofs(proofs).equals(5)).toBe(true);
     expect(capturedBody).not.toHaveProperty('signatures');
   });
 

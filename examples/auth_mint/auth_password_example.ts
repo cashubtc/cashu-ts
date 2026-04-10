@@ -73,7 +73,7 @@ async function main() {
   const proofs = await wallet.mintProofsBolt11(100, request);
   console.log(
     '\nMinted 100 sats.',
-    proofs.map((p) => p.amount),
+    proofs.map((p) => p.amount.toString()),
   );
   console.log(`\nMinted BATs in pool: ${auth.exportPool().length}`);
 
@@ -85,7 +85,7 @@ async function main() {
   const response = await wallet.receive(encoded);
   console.log(
     '\nReceived 10 sats.',
-    response.map((p) => p.amount),
+    response.map((p) => p.amount.toString()),
   );
   console.log(`\nMinted BATs in pool: ${auth.exportPool().length}`);
 
