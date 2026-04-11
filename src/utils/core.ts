@@ -201,12 +201,13 @@ function convertToShortKeysetId(proofs: Proof[]) {
  * Encodes a {@link Token} as a cashu token string.
  */
 export function getEncodedToken(token: Token, opts?: { removeDleq?: boolean }): string {
-  if (hasNonHexId(token.proofs)) {
+  const proofs = normalizeProofAmounts(token.proofs);
+  if (hasNonHexId(proofs)) {
     throw new Error(
       'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
     );
   }
-  return getEncodedTokenV4(token, opts?.removeDleq);
+  return getEncodedTokenV4({ ...token, proofs }, opts?.removeDleq);
 }
 
 /**
@@ -680,7 +681,8 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
  */
 export function getEncodedTokenBinary(token: Token): Uint8Array {
   const utf8Encoder = new TextEncoder();
-  const template = templateFromToken(token);
+  const proofs = normalizeProofAmounts(token.proofs);
+  const template = templateFromToken({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);
   const prefix = utf8Encoder.encode('craw');
   const version = utf8Encoder.encode('B');

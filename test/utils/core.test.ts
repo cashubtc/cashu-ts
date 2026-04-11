@@ -510,6 +510,26 @@ describe('test v4 encoding', () => {
     const decoded = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
     expect(decoded.proofs[0].amount.equals(largeAmount)).toBe(true);
   });
+  test('getEncodedToken accepts JSON-parsed tokens and rehydrates proof amounts', () => {
+    const token = {
+      mint: 'http://localhost:3338',
+      proofs: [
+        {
+          secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+          C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+          id: '00ad268c4d1f5826',
+          amount: Amount.from(2n ** 53n + 1n),
+        },
+      ],
+      unit: 'sat',
+    };
+    const parsedToken = JSON.parse(JSON.stringify(token)) as Token;
+
+    const encoded = utils.getEncodedToken(parsedToken);
+    const decoded = utils.getDecodedToken(encoded, ['009a1f293253e41e']);
+
+    expect(decoded.proofs[0].amount.equals(token.proofs[0].amount)).toBe(true);
+  });
   test('getEncodedToken does not mutate input token proof IDs', () => {
     const token = {
       mint: 'https://testnut.cashu.space',
@@ -663,6 +683,15 @@ describe('test raw tokens', () => {
   test('token to bytes', () => {
     const bytes = utils.getEncodedTokenBinary(token);
     const decodedToken = utils.getDecodedTokenBinary(bytes);
+    expect(decodedToken).toEqual(token);
+  });
+
+  test('getEncodedTokenBinary accepts JSON-parsed tokens and rehydrates proof amounts', () => {
+    const parsedToken = JSON.parse(JSON.stringify(token)) as Token;
+
+    const bytes = utils.getEncodedTokenBinary(parsedToken);
+    const decodedToken = utils.getDecodedTokenBinary(bytes);
+
     expect(decodedToken).toEqual(token);
   });
 });
