@@ -25,10 +25,10 @@ await wallet.loadMint();
 
 const nut19 = wallet.getMintInfo().isSupported(19);
 if (!nut19.supported) {
-	console.log('This mint does not advertise NUT-19 cached endpoints');
+  console.log('This mint does not advertise NUT-19 cached endpoints');
 } else {
-	console.log('TTL (ms):', nut19.params.ttl);
-	console.log('Cached endpoints:', nut19.params.cached_endpoints);
+  console.log('TTL (ms):', nut19.params.ttl);
+  console.log('Cached endpoints:', nut19.params.cached_endpoints);
 }
 ```
 
@@ -38,7 +38,7 @@ if (!nut19.supported) {
 import { Wallet, setGlobalRequestOptions } from '@cashu/cashu-ts';
 
 setGlobalRequestOptions({
-	requestTimeout: 5_000,
+  requestTimeout: 5_000,
 });
 
 const wallet = new Wallet('http://localhost:3338');
@@ -66,22 +66,22 @@ import { Wallet, setGlobalRequestOptions } from '@cashu/cashu-ts';
 const ac = new AbortController();
 
 setGlobalRequestOptions({
-	signal: ac.signal,
+  signal: ac.signal,
 });
 
 const wallet = new Wallet('http://localhost:3338');
 await wallet.loadMint();
 
 try {
-	const pending = wallet.checkProofsStates([{ secret: 'my-proof-secret' }]);
+  const pending = wallet.checkProofsStates([{ secret: 'my-proof-secret' }]);
 
-	cancelButton.onclick = () => {
-		ac.abort();
-	};
+  cancelButton.onclick = () => {
+    ac.abort();
+  };
 
-	await pending;
+  await pending;
 } finally {
-	setGlobalRequestOptions({});
+  setGlobalRequestOptions({});
 }
 ```
 
@@ -95,12 +95,16 @@ operations that create blinded outputs.
 ### Mint
 
 ```ts
-const mintPreview = await wallet.prepareMint('bolt11', 64, quoteId, undefined, {
-	type: 'deterministic',
-	counter: 0,
+const mintQuote = await wallet.checkMintQuoteBolt11(quoteId);
+
+const mintPreview = await wallet.prepareMint('bolt11', 64, mintQuote, undefined, {
+  type: 'deterministic',
+  counter: 0,
 });
 
-await saveMintPreview(mintPreview); // your save function
+// Persist an app-defined snapshot here.
+// Do not call JSON.stringify(mintPreview) directly; preview objects contain
+// Amount, bigint, Uint8Array, and class instances that need explicit rehydration.
 const proofs = await wallet.completeMint(mintPreview);
 ```
 
@@ -108,10 +112,12 @@ const proofs = await wallet.completeMint(mintPreview);
 
 ```ts
 const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
-	includeFees: true,
+  includeFees: true,
 });
 
-await saveMeltPreview(meltPreview); // your save function
+// Persist an app-defined serialized snapshot here.
+// Do not call JSON.stringify(meltPreview) directly; preview objects contain
+// Amount, bigint, Uint8Array, and class instances that need explicit rehydration.
 const result = await wallet.completeMelt(meltPreview);
 ```
 
