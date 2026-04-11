@@ -81,6 +81,21 @@ describe('selectProofsRGLI, focused unit tests', () => {
     expect(res.send.length).toBeGreaterThan(0);
   });
 
+  test('accepts JSON-parsed ProofLike[] and rehydrates proof amounts', () => {
+    const proofs = JSON.parse(
+      JSON.stringify([
+        { id: 'A', amount: Amount.from(4), secret: 's1', C: 'C1' },
+        { id: 'A', amount: Amount.from(4), secret: 's2', C: 'C2' },
+      ]),
+    ) as Proof[];
+    const kc = keychainStub({ A: 0 });
+
+    const res = selectProofsRGLI(proofs, 6, kc, false, false);
+
+    expect(res.send.length).toBeGreaterThan(0);
+    expect(res.send.every((p) => p.amount instanceof Amount)).toBe(true);
+  });
+
   test('no feasible solution, amount exceeds total after fees, returns keep all and empty send', () => {
     const proofs: Proof[] = [
       { id: 'A', amount: Amount.from(2), secret: 's1', C: 'C1' },
@@ -138,11 +153,11 @@ describe('selectProofsRGLI, focused unit tests', () => {
 
     // Use only even amounts so an odd exact target is impossible.
     // total = 2 + 4 + 6 + 8 = 20; target = 7 (feasible range, but exact impossible)
-    const proofs: Proof[] = [
-      { id: 'Z', amount: Amount.from(2), secret: 's1', C: 'C1' },
-      { id: 'Z', amount: Amount.from(4), secret: 's2', C: 'C2' },
-      { id: 'Z', amount: Amount.from(6), secret: 's3', C: 'C3' },
-      { id: 'Z', amount: Amount.from(8), secret: 's4', C: 'C4' },
+    const proofs = [
+      { id: 'Z', amount: 2, secret: 's1', C: 'C1' },
+      { id: 'Z', amount: 4, secret: 's2', C: 'C2' },
+      { id: 'Z', amount: 6, secret: 's3', C: 'C3' },
+      { id: 'Z', amount: 8, secret: 's4', C: 'C4' },
     ];
     const kc = {
       getKeyset: () => ({ fee: 0 }),

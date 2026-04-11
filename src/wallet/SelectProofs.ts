@@ -1,13 +1,14 @@
 // Minimal types to avoid importing the whole wallet, keeps this module independent
 import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER, measureTime } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
-import type { Proof } from '../model/types/proof';
+import type { Proof, ProofLike } from '../model/types/proof';
+import { normalizeProofAmounts } from '../utils';
 
 import { type KeyChain } from './KeyChain';
 import { type SendResponse } from './types';
 
 export type SelectProofs = (
-  proofs: Proof[],
+  proofs: ProofLike[],
   amountToSelect: AmountLike,
   keyChain: KeyChain,
   includeFees?: boolean,
@@ -16,13 +17,14 @@ export type SelectProofs = (
 ) => SendResponse;
 
 export function selectProofsRGLI(
-  proofs: Proof[],
+  proofs: ProofLike[],
   amountToSelect: AmountLike,
   keyChain: KeyChain,
   includeFees: boolean = false,
   exactMatch: boolean = false,
   _logger: Logger = NULL_LOGGER,
 ): SendResponse {
+  const normalizedProofs = normalizeProofAmounts(proofs);
   const targetAmount = Amount.from(amountToSelect);
   const targetAmountNumber = targetAmount.toNumber();
 
@@ -123,7 +125,7 @@ export function selectProofsRGLI(
    */
   let totalAmount = 0;
   let totalFeePPK = 0;
-  const proofWithFees = proofs.map((p) => {
+  const proofWithFees = normalizedProofs.map((p) => {
     // Guard: this algorithm uses number arithmetic throughout. Amounts above MAX_SAFE_INTEGER
     // (e.g. high-value proofs in msat-denomination mints) require a custom SelectProofs impl.
     if (p.amount.greaterThan(Number.MAX_SAFE_INTEGER)) {
@@ -182,7 +184,7 @@ export function selectProofsRGLI(
   // Validate using precomputed totals
   const totalNetSum = sumExFees(totalAmount, totalFeePPK);
   if (targetAmount.isZero() || targetAmountNumber > totalNetSum) {
-    return { keep: proofs, send: [] };
+    return { keep: normalizedProofs, send: [] };
   }
 
   // Max acceptable amount for non-exact matches
@@ -323,9 +325,9 @@ export function selectProofsRGLI(
   if (bestSubset && bestDelta < Infinity) {
     const bestProofs = bestSubset.map((obj) => obj.proof);
     const bestSubsetSet = new Set(bestProofs);
-    const keep = proofs.filter((p) => !bestSubsetSet.has(p));
+    const keep = normalizedProofs.filter((p) => !bestSubsetSet.has(p));
     _logger.info(`Proof selection took ${timer.elapsed()}ms`);
     return { keep, send: bestProofs };
   }
-  return { keep: proofs, send: [] };
+  return { keep: normalizedProofs, send: [] };
 }
