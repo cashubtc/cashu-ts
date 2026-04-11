@@ -71,6 +71,13 @@ function encodeRaw(obj: unknown): string {
   return `sigallA${b64}`;
 }
 
+function decodeRawJson(input: string): string {
+  const base64url = input.slice('sigallA'.length);
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return atob(padded);
+}
+
 describe('SigAll — computeDigests', () => {
   test('produces hex strings of correct length', () => {
     const digests = SigAll.computeDigests([dummyProof], [dummyBlindedMessage], 'dummyquote');
@@ -184,6 +191,39 @@ describe('SigAll — serializePackage / deserializePackage', () => {
     };
     const parsed = SigAll.deserializePackage(SigAll.serializePackage(pkg));
     expect(parsed.outputs[0].amount.equals(largeAmount)).toBeTruthy();
+  });
+
+  test('deserializePackage accepts numeric output amounts', () => {
+    const parsed = SigAll.deserializePackage(
+      encodeRaw({
+        version: 'sigallA',
+        type: 'swap',
+        inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+        outputs: [{ amount: 32, id: 'bm1', B_: 'dummyB' }],
+        digests: SigAll.computeDigests(
+          [dummyProof],
+          [{ amount: Amount.from(32), id: 'bm1', B_: 'dummyB' }],
+        ),
+      }),
+    );
+
+    expect(parsed.outputs[0].amount.equals(Amount.from(32))).toBeTruthy();
+  });
+
+  test('serializePackage emits unquoted integer amounts', () => {
+    const largeAmount = Amount.from(9007199254740993n);
+    const largeBm: SerializedBlindedMessage = { amount: largeAmount, id: 'bm-large', B_: 'dummyB' };
+    const pkg: SigAllSigningPackage = {
+      version: 'sigallA',
+      type: 'swap',
+      inputs: [{ secret: 'testsecret', C: '02' + '1'.repeat(64) }],
+      outputs: [largeBm],
+      digests: SigAll.computeDigests([dummyProof], [largeBm]),
+    };
+
+    const json = decodeRawJson(SigAll.serializePackage(pkg));
+    expect(json).toContain('"amount":9007199254740993');
+    expect(json).not.toContain('"amount":"9007199254740993"');
   });
 
   test('serialization is deterministic', () => {
@@ -322,7 +362,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           digests: { current: 'a'.repeat(64) },
         }),
       ),
-    ).toThrow('amount must be a string');
+    ).toThrow('amount must be a number or bigint');
   });
 
   test('throws on invalid output shape — missing B_', () => {
@@ -332,7 +372,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           version: 'sigallA',
           type: 'swap',
           inputs: [],
-          outputs: [{ amount: '1', id: 'id1' }],
+          outputs: [{ amount: 1, id: 'id1' }],
           digests: { current: 'a'.repeat(64) },
         }),
       ),
@@ -346,7 +386,7 @@ describe('SigAll — serializePackage / deserializePackage', () => {
           version: 'sigallA',
           type: 'swap',
           inputs: [],
-          outputs: [{ amount: '1', B_: 'x' }],
+          outputs: [{ amount: 1, B_: 'x' }],
           digests: { current: 'a'.repeat(64) },
         }),
       ),
