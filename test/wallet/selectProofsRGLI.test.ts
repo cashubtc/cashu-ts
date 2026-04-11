@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.resetModules(); // clean up any module mocks from the timeout test
+  vi.resetModules();
 });
 
 describe('selectProofsRGLI, focused unit tests', () => {
@@ -140,16 +140,12 @@ describe('selectProofsRGLI, focused unit tests', () => {
     expect(res.keep.map((p) => p.amount.toNumber())).toEqual([6]);
   });
 
-  test('timeout in exact match throws on time budget exceeded, using module mock and dynamic import', async () => {
-    vi.mock('../../src/logger', async () => {
-      const actual = await vi.importActual<typeof import('../../src/logger')>('../../src/logger');
-      return {
-        ...actual,
-        measureTime: () => ({ elapsed: () => 10_000 }), // always over budget
-      };
+  test('timeout in exact match throws on time budget exceeded', () => {
+    let now = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => {
+      now += 10_000;
+      return now;
     });
-
-    const { selectProofsRGLI: timed } = await import('../../src/wallet/SelectProofs');
 
     // Use only even amounts so an odd exact target is impossible.
     // total = 2 + 4 + 6 + 8 = 20; target = 7 (feasible range, but exact impossible)
@@ -164,7 +160,7 @@ describe('selectProofsRGLI, focused unit tests', () => {
       getKeysets: () => [{ id: 'Z', fee: 0 }],
     } as any;
 
-    expect(() => timed(proofs as any, 7, kc, false, true)).toThrow(/took too long/i);
+    expect(() => selectProofsRGLI(proofs as any, 7, kc, false, true)).toThrow(/took too long/i);
   });
 
   test('throws if keyset fee lookup fails (feeForProof error path)', () => {
