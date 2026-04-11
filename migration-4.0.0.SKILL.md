@@ -82,7 +82,7 @@ Default migration posture:
 - integer-preserving transport or persistence: prefer `JSONInt.parse` / `JSONInt.stringify`
 - UI formatting: `Amount` or sign + `Amount`
 
-If you round-trip an `Amount` through plain JSON at a leaf field, rehydrate it with `Amount.fromJSON(...)`. Do not flatten everything back to `number` unless the user explicitly chose that strategy in Step 0b.
+If you round-trip an `Amount` through plain JSON at a leaf field, rehydrate it with `Amount.from(...)`. Do not flatten everything back to `number` unless the user explicitly chose that strategy in Step 0b.
 
 ### Choose number conversion deliberately
 

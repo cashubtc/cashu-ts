@@ -19,7 +19,6 @@ export class Amount {
     equals(other: AmountLike): boolean;
     floorPercent(numerator: number, denominator?: number): Amount;
     static from(input: AmountLike): Amount;
-    static fromJSON(input: AmountJson): Amount;
     // (undocumented)
     greaterThan(other: AmountLike): boolean;
     // (undocumented)
@@ -60,9 +59,6 @@ export class Amount {
 export class AmountError extends Error {
     constructor(message: string);
 }
-
-// @public
-export type AmountJson = number | string;
 
 // @public
 export type AmountLike = number | bigint | string | Amount;

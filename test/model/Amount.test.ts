@@ -20,25 +20,6 @@ describe('Amount.from validation', () => {
   });
 });
 
-describe('Amount.fromJSON validation', () => {
-  it('inits with number amounts', () => {
-    expect(() => Amount.fromJSON(1).equals(1)).toBeTruthy();
-  });
-
-  it('inits with string amounts', () => {
-    expect(() => Amount.fromJSON('1').equals(1)).toBeTruthy();
-  });
-
-  it('rejects negative number amounts', () => {
-    expect(() => Amount.fromJSON(-1)).toThrow('Amount must be >= 0');
-  });
-
-  it('rejects invalid decimal strings', () => {
-    expect(() => Amount.fromJSON('-1')).toThrow('Invalid amount string');
-    expect(() => Amount.fromJSON('01')).toThrow('Invalid amount string');
-  });
-});
-
 describe('Amount conversions', () => {
   it('constructs one and serializes safely', () => {
     const one = Amount.one();

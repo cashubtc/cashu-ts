@@ -36,7 +36,7 @@ Both strategies are valid. The sections below show the mechanical changes requir
 - `AmountLike` is a boundary type: `number | bigint | string | Amount`.
 - Normalize external input with `Amount.from(...)`, then keep `Amount` in domain logic.
 - Plain JSON is acceptable for minimal migrations because `Amount.toJSON()` emits a decimal string.
-- If you round-trip an `Amount` through plain JSON, rehydrate it with `Amount.fromJSON(...)`.
+- If you round-trip an `Amount` through plain JSON, rehydrate it with `Amount.from(...)`.
 - Prefer `JSONInt.stringify` / `JSONInt.parse` for persisted or transported integer-bearing payloads when you want numeric/bigint fidelity after parse.
 - `toNumber()` is safe-or-throw; `toNumberUnsafe()` is explicitly lossy.
 - For display, prefer string-safe formatting and avoid eager `.toNumber()`.
@@ -121,7 +121,7 @@ JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":"1000"}' (not '{
 
 // Rehydrate a JSON leaf value back to Amount
 const parsed = JSON.parse('{"amount":"1000"}');
-const amount = Amount.fromJSON(parsed.amount);
+const amount = Amount.from(parsed.amount);
 ```
 
 ---

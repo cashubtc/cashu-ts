@@ -9,10 +9,6 @@ export class AmountError extends Error {
  * All types that can be converted to an {@link Amount} value object.
  */
 export type AmountLike = number | bigint | string | Amount;
-/**
- * JSON native types that can be converted to an {@link Amount} value object.
- */
-export type AmountJson = number | string;
 
 /**
  * Immutable, non-negative integer amount value object.
@@ -24,7 +20,6 @@ export type AmountJson = number | string;
  *     Amount.from('21'); // string
  *     Amount.from(21); // number
  *     Amount.from(21n); // bigint
- *     Amount.fromJSON('21'); // accepts string | number
  *     Amount.zero();
  *     Amount.one();
  */
@@ -83,20 +78,6 @@ export class Amount {
     // Unknown type
     throw new AmountError('Unsupported amount input type');
   }
-
-  /**
-   * Parse a JSON-serialized amount into an `Amount`.
-   *
-   * @remarks
-   * Unlike `Amount.from()`, this only accepts JSON-safe serialized amount values: `number` for safe
-   * integers, or `string` for larger integer values.
-   * @throws If input is negative, or if a `number` input exceeds the safe integer limit, or if
-   *   input is not a finite integer.
-   */
-  static fromJSON(input: AmountJson): Amount {
-    return Amount.from(input);
-  }
-
   static zero(): Amount {
     return new Amount(0n);
   }
