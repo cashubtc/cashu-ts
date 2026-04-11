@@ -514,7 +514,7 @@ export function sanitizeUrl(url: string): string {
 /**
  * Sums the `amount` field of the given proofs.
  */
-export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount {
+export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount {
   return Amount.sum(proofs.map((proof) => proof.amount));
 }
 

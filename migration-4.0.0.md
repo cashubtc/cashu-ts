@@ -2,7 +2,7 @@
 
 ⚠️ Upgrading to version 4.0.0 will come with breaking changes! Please follow the migration guide for a smooth transition to the new version.
 
-**TIP**: If you use a coding agent, you can point them to `migration.4.0.0.SKILL.md`.
+**TIP**: If you use a coding agent, you can point them to `migration-4.0.0.SKILL.md`.
 
 ---
 
@@ -23,7 +23,7 @@ Many v4 APIs that previously returned or accepted `number` now use `Amount`. Thi
 Before you start updating call sites, decide how deeply you want to adopt `Amount`:
 
 **Option A — Adopt `Amount` natively (recommended for new or large-amount apps)**
-Keep `Amount` flowing through your own functions and types. Convert to `number` only at boundaries that truly require a JavaScript number. For display, prefer string-safe formatting where possible: for integer-unit currencies like SAT, avoid eager `.toNumber()` and use runtime-appropriate bigint/string formatting; for decimal or minor-unit currencies, use formatting helpers that preserve precision instead of eagerly calling `.toNumber()`.
+Keep `Amount` flowing through your own functions and types. Use `Amount` helpers for arithmetic, and convert to `number` only at boundaries that truly require a JavaScript number. For display, prefer string-safe formatting where possible: for integer-unit currencies like SAT, avoid eager `.toNumber()` and use runtime-appropriate bigint/string formatting; for decimal or minor-unit currencies, use formatting helpers that preserve precision instead of eagerly calling `.toNumber()`.
 
 **Option B — Convert at the boundary (simplest for existing number-typed codebases)**
 Call `.toNumber()` immediately on every `Amount` the library returns, then leave all your internal types as `number`. Safe as long as your amounts stay within `Number.MAX_SAFE_INTEGER`.
@@ -35,8 +35,9 @@ Both strategies are valid. The sections below show the mechanical changes requir
 - `Amount` is for non-negative integer magnitudes only. Model sign separately.
 - `AmountLike` is a boundary type: `number | bigint | string | Amount`.
 - Normalize external input with `Amount.from(...)`, then keep `Amount` in domain logic.
+- Plain JSON is acceptable for minimal migrations because `Amount.toJSON()` emits a decimal string.
 - If you round-trip an `Amount` through plain JSON, rehydrate it with `Amount.fromJSON(...)`.
-- Prefer `JSONInt.stringify` / `JSONInt.parse` for persisted or transported integer-bearing payloads.
+- Prefer `JSONInt.stringify` / `JSONInt.parse` for persisted or transported integer-bearing payloads when you want numeric/bigint fidelity after parse.
 - `toNumber()` is safe-or-throw; `toNumberUnsafe()` is explicitly lossy.
 - For display, prefer string-safe formatting and avoid eager `.toNumber()`.
 
@@ -413,6 +414,8 @@ Three helpers cover the common patterns for persisting and restoring proofs:
 | `deserializeProofs(json)`    | Restore `string \| string[] \| ProofLike[]` back to `Proof[]`, with `amount` normalized to `Amount`. Pass a raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings (e.g. NutZap tags), or a `ProofLike[]` for already-parsed objects. |
 | `normalizeProofAmounts(raw)` | Lower-level building block: convert `ProofLike[]` to `Proof[]` by normalizing `amount` to `Amount`. Called internally by `deserializeProofs`; use directly when you already have typed `ProofLike[]` and want to skip string-detection.                                     |
 
+Migration rule: treat wallet/mint/API/JSON proofs as `ProofLike[]` until normalized. Normalize before app-level arithmetic, encoding, or storage-model conversion.
+
 **Tip**: Core wallet flows now accept `ProofLike[]` directly. If you already have deserialized proof objects from JSON or storage, you can usually pass them straight into wallet APIs such as `wallet.receive(...)`, `wallet.send(...)`, `wallet.sendOffline(...)`, `wallet.prepareSwapToSend(...)`, `wallet.meltProofs...(...)`, and `wallet.signP2PKProofs(...)` without calling `normalizeProofAmounts(...)` yourself first. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
 
 ```ts
@@ -644,7 +647,7 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 
 - `Wallet` constructor preload options `keys`, `keysets`, and `mintInfo`; use `loadMintFromCache()` after construction.
 - Deprecated wallet method alias: `wallet.swap`; use `send`.
-- `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`.
+- `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`. Ensure you are looking at the Cashu-TS `Keyset` domain model: raw API `MintKeyset` / `MintKeys` DTOs may still expose the old field names.
 - `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
 - Deprecated utility helpers and overloads in `src/utils/core`: `bytesToNumber`, `verifyKeysetId`, the positional `deriveKeysetId(...)` signature, and the `getDecodedToken(..., HasKeysetId[])` overload; use `Bytes.toBigInt`, `Keyset.verifyKeysetId(...)`, the options-based `deriveKeysetId(...)`, and `string[]` keyset IDs.

@@ -1739,7 +1739,7 @@ export type SubscribeOpts = {
 export type SubscriptionCanceller = () => void;
 
 // @public
-export function sumProofs(proofs: Array<Pick<Proof, 'amount'>>): Amount;
+export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
 
 // @public
 export type SwapMethod = {

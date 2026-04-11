@@ -1,6 +1,6 @@
 ---
 name: cashu-ts-migrate-v3-to-v4
-description: This skill should be used when an agent needs to "upgrade cashu-ts from v3 to v4" in a codebase. Provides a step-by-step guide to fix every breaking change introduced in v4.
+description: Use this skill to "upgrade cashu-ts from v3 to v4" in a JS/TS codebase. Provides a step-by-step guide to fix every breaking change introduced in v4.
 version: 1.0.0
 ---
 
@@ -25,7 +25,7 @@ Flag any `require(...)` hits — v4 is **ESM-only** (Step 1).
 
 ## Step 0b — Confirm `Amount` strategy
 
-v4 introduces an `Amount` value object (bigint-backed, immutable) wherever the library previously returned or accepted a plain `number`. This is intentional: it supports amounts above `Number.MAX_SAFE_INTEGER` (e.g. millisatoshi accumulations) without silent precision loss.
+v4 introduces an immutable, bigint-backed `Amount` value object wherever the library previously returned or accepted a plain `number`. This avoids silent precision loss above `Number.MAX_SAFE_INTEGER` (for example, large millisatoshi totals).
 
 `Amount` is immutable, bigint-backed, and non-negative. It provides:
 
@@ -39,13 +39,13 @@ v4 introduces an `Amount` value object (bigint-backed, immutable) wherever the l
 
 > v4 returns `Amount` objects from several APIs (see Step 3). Do you want the app to:
 >
-> a) **Adopt `Amount` natively** — keep `Amount` flowing through your own functions and types; call `.toNumber()` only at genuine display/float-math boundaries. Best for apps that may handle large amounts.
+> a) **Adopt `Amount` natively** — keep `Amount` flowing through your own functions and types; use `Amount` helpers for arithmetic and call `.toNumber()` only at genuine number-only boundaries. Best for apps that may handle large amounts.
 >
 > b) **Convert back to `number` at the boundary** — call `.toNumber()` immediately on every `Amount` the library returns, preserving your existing `number`-typed code. Fine if your amounts will always be within safe-integer range.
 
-Record the user's choice. It affects how you handle every `Amount` hit in Steps 3–5:
+Record the user's choice. It affects every `Amount` hit in Steps 3–5:
 
-- Choice **a**: propagate `Amount` / `AmountLike` through the app's own functions and types; use `.toNumber()` only for float arithmetic (fee percentages etc.). For display, prefer string-safe formatting; for integer units (SAT, JPY), avoid eager `.toNumber()` and use runtime-appropriate bigint/string formatting rather than assuming `Intl.NumberFormat` bigint support.
+- Choice **a**: propagate `Amount` / `AmountLike` through the app's own functions and types; use `Amount` helpers for arithmetic and call `.toNumber()` only at genuine number-only boundaries. For display, prefer string-safe formatting; for integer units (SAT, JPY), avoid eager `.toNumber()` and use runtime-appropriate bigint/string formatting rather than assuming `Intl.NumberFormat` bigint support.
 - Choice **b**: apply `.toNumber()` at each library call-site and leave all internal types as `number`.
 
 ---
@@ -58,21 +58,13 @@ Apply these rules throughout the migration:
 
 - `Amount` represents a **non-negative integer magnitude**
 - `Amount.from(...)` accepts `AmountLike`: `number | bigint | string | Amount`
-- string input must be a **non-negative decimal integer**
-- negative strings like `"-42"` are invalid and will throw
+- string input must be a non-negative decimal integer
 
-Do **not** use `Amount` itself to represent signed debit/credit values.
+Model sign separately; do not use `Amount` itself for signed debit/credit values.
 
 ### `AmountLike` is magnitude-only
 
-`AmountLike` is:
-
-- `number | bigint | string | Amount`
-
-It is a flexible input type for magnitudes. It is **not** a signed amount type.
-If the app has incoming/outgoing or plus/minus semantics, model sign separately.
-
-`AmountLike` is primarily a boundary type. Use it when accepting integer input from JSON, storage, user input, or external APIs, then normalize back to `Amount` for domain logic.
+`AmountLike` is `number | bigint | string | Amount`. It is a magnitude boundary type, not a signed amount type. Use it for integer input from JSON, storage, user input, or external APIs, then normalize back to `Amount` for domain logic.
 
 eg:
 
@@ -81,30 +73,29 @@ const someinteger: AmountLike = ...; // boundary variable
 const amount = Amount.from(someinteger); // bigint backed VO
 ```
 
-### Keep `Amount` in memory; use `JSONInt` at JSON boundaries
+### Keep `Amount` in memory; choose JSON handling deliberately
 
 Default migration posture:
 
 - domain logic: `Amount`
-- persistence / transport JSON: `JSONInt.parse` / `JSONInt.stringify`
+- minimal migrations / app storage: plain JSON is acceptable because `Amount.toJSON()` emits a decimal string
+- integer-preserving transport or persistence: prefer `JSONInt.parse` / `JSONInt.stringify`
 - UI formatting: `Amount` or sign + `Amount`
 
-If you round-trip an `Amount` through plain JSON at a leaf field, rehydrate it with `Amount.fromJSON(...)`.
-
-Do not flatten everything back to `number` unless the user explicitly chose that strategy in Step 0b.
+If you round-trip an `Amount` through plain JSON at a leaf field, rehydrate it with `Amount.fromJSON(...)`. Do not flatten everything back to `number` unless the user explicitly chose that strategy in Step 0b.
 
 ### Choose number conversion deliberately
 
 - `toNumber()` = safe or throw
 - `toNumberUnsafe()` = accept precision loss
 
-Use `toNumber()` for protocol or persistence boundaries that must not lie. Use `toNumberUnsafe()` only where lossy output is explicitly acceptable.
+Use `toNumber()` for boundaries that must not lie. Use `toNumberUnsafe()` only where lossy output is explicitly acceptable.
 
 ### Agent guardrails
 
 - Never call `Amount.from()` on a signed string
 - Never assume `AmountLike` accepts negative values
-- Never use plain `JSON.stringify` / `JSON.parse` for bigint-bearing persisted state if `JSONInt` is available
+- Prefer `JSONInt.stringify` / `JSONInt.parse` for integer-bearing payloads when you want numeric/bigint fidelity after parse
 - Prefer bigint/string-safe formatting over eager `.toNumber()` for display
 
 ---
@@ -135,7 +126,7 @@ Actions:
 - Change proof literal amounts: `amount: 1000` → `amount: Amount.from(1000)`
 - Change accumulators: `reduce((sum, p) => sum + p.amount, 0)` → `reduce((sum, p) => sum.add(p.amount), Amount.zero())` or for proofs, use `sumProofs()`.
 - Wrap for display or comparisons: `proof.amount.toString()`, `proof.amount.equals(1000)`
-- `ProofLike` is a new exported type: `Omit<Proof, 'amount'> & { amount: AmountLike }` — a proof where `amount` is not yet normalized to `Amount`.
+- `ProofLike` is `Omit<Proof, 'amount'> & { amount: AmountLike }` — a proof whose `amount` is not yet normalized to `Amount`.
 - Use `serializeProofs`/`deserializeProofs` for proof serialization. `serializeProofs` returns `string[]` (one JSON string per proof). `deserializeProofs` accepts `string | string[] | ProofLike[]` — pass the raw JSON string directly (no `JSON.parse` needed), a `string[]` for individual proof strings, or a `ProofLike[]` for already-parsed objects:
 
 ```ts
@@ -153,15 +144,17 @@ const proofs = deserializeProofs(event.tags.filter((t) => t[0] === 'proof').map(
 const proofs = deserializeProofs(db.query('SELECT * FROM proofs'));
 ```
 
-`normalizeProofAmounts(raw: ProofLike[])` is the lower-level building block that `deserializeProofs` uses internally. Call it directly when you already have typed `ProofLike[]` and want to normalize `amount` to `Amount` without the string-detection logic.
+`normalizeProofAmounts(raw: ProofLike[])` is the lower-level helper behind `deserializeProofs`. Use it when you already have typed `ProofLike[]` and just need to normalize `amount` to `Amount`.
 
-Core wallet flows now accept `ProofLike[]` directly. If deserialized proofs are only being passed into wallet APIs such as `send`, `sendOffline`, `receive`, `prepareSwapToSend`, `meltProofs...`, or `signP2PKProofs`, you can often skip manual normalization and pass the array straight in. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
+Migration rule: treat wallet/mint/API/JSON proofs as `ProofLike[]` until normalized. Normalize before app-level arithmetic, encoding, or storage-model conversion.
+
+Core wallet flows now accept `ProofLike[]` directly. If those proofs are only being passed into wallet APIs such as `send`, `sendOffline`, `receive`, `prepareSwapToSend`, `meltProofs...`, or `signP2PKProofs`, you can often skip manual normalization. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
 
 ---
 
 ## Step 3 — `Amount` value object (was `number`)
 
-Many methods now return `Amount` instead of `number`. See the full table in `migration-4.0.0.md`.
+Many methods now return `Amount` instead of `number`. See `migration-4.0.0.md` for the full table.
 
 Key affected symbols:
 `sumProofs`, `getTokenMetadata().amount`, `OutputData.sumOutputAmounts`,
@@ -176,7 +169,7 @@ const fee: number = wallet.getFeesForProofs(proofs).toNumber();
 const total = sendAmt + fee;
 ```
 
-**Choice a** — propagate `Amount` through your own code; apply `.toNumber()` only at display and float-math boundaries:
+**Choice a** — propagate `Amount` through your own code; use `Amount` helpers for arithmetic and call `.toNumber()` only at genuine number-only boundaries:
 
 ```ts
 const fee: Amount = wallet.getFeesForProofs(proofs);
@@ -192,8 +185,7 @@ If adopting Amount natively, see **Step 9** for Finance Helpers that replace com
 
 Search: `preview\.amount\b`, `preview\.fees\b`
 
-If the preview came directly from the wallet, these fields are already `Amount`.
-If you persisted and later reloaded the preview, rehydrate before arithmetic. Only wrap the operand you call the method on: methods like `.subtract(...)` already accept `AmountLike` for the argument.
+If the preview came directly from the wallet, these fields are already `Amount`. If you persisted and later reloaded the preview, rehydrate before arithmetic. Only wrap the operand you call the method on: methods like `.subtract(...)` already accept `AmountLike` for the argument.
 
 ```ts
 // Before
@@ -208,9 +200,7 @@ const net = Amount.from(preview.amount).subtract(preview.fees);
 
 Search: `MintPreview`, `prepareMint`
 
-`preview.quote` is now the full quote object. If you only have a quote ID string, wrap it as
-`{ quote: string }` for manually constructed preview values.
-Access the ID via `preview.quote.quote`. Update any manually constructed `MintPreview` values:
+`preview.quote` is now a quote object. If you only have a quote ID string, wrap it as `{ quote: string }` and access the ID via `preview.quote.quote`:
 
 ```ts
 // Before
@@ -348,7 +338,7 @@ await wallet.loadMintFromCache(cache);
 
 ---
 
-## Step 12 — Deprecated `Keyset` getters
+## Step 12 — Deprecated `Keyset` class getters
 
 Search: `\.active\b`, `\.input_fee_ppk\b`, `\.final_expiry\b`
 
@@ -357,6 +347,8 @@ Search: `\.active\b`, `\.input_fee_ppk\b`, `\.final_expiry\b`
 | `keyset.active`        | `keyset.isActive` |
 | `keyset.input_fee_ppk` | `keyset.fee`      |
 | `keyset.final_expiry`  | `keyset.expiry`   |
+
+Note: Ensure the app is referring to a Cashu-TS `Keyset` domain model. Some apps may be using the raw API `MintKeyset` / `MintKeys` DTOs, which have the same "old" fields!
 
 ---
 
@@ -479,6 +471,7 @@ const factory: OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => 
 ## Step 18 — Type-check and test
 
 ```bash
+# Usually, but check your app:
 npx tsc --noEmit
 npm test
 ```
