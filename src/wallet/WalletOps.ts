@@ -10,7 +10,6 @@ import {
 } from '../model/types';
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
-import { normalizeProofAmounts } from '../utils';
 
 import {
   type OutputType,
@@ -313,10 +312,7 @@ export class SendBuilder {
     if (this.offlineExact) {
       // Sign if needed
       if (this.config.privkey) {
-        this.proofs = this.wallet.signP2PKProofs(
-          normalizeProofAmounts(this.proofs),
-          this.config.privkey,
-        );
+        this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
       }
       return this.wallet.sendOffline(this.amount, this.proofs, {
         includeFees: this.config.includeFees,
@@ -329,10 +325,7 @@ export class SendBuilder {
     if (this.offlineClose) {
       // Sign if needed
       if (this.config.privkey) {
-        this.proofs = this.wallet.signP2PKProofs(
-          normalizeProofAmounts(this.proofs),
-          this.config.privkey,
-        );
+        this.proofs = this.wallet.signP2PKProofs(this.proofs, this.config.privkey);
       }
       return this.wallet.sendOffline(this.amount, this.proofs, {
         includeFees: this.config.includeFees,

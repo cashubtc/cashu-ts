@@ -115,8 +115,9 @@ const n = meltQuote.amount;
 const sats = meltQuote.fee_reserve.add(meltQuote.amount).toNumber();
 const n = meltQuote.amount.toNumber(); // throws if value > Number.MAX_SAFE_INTEGER
 
-// Safe JSON serialisation: Amount.toJSON() emits a decimal string
-JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":"1000"}'
+// Amount.toJSON() always emits a decimal string (previously number | string).
+// This means JSON.stringify produces a quoted string, not a bare number:
+JSON.stringify({ amount: meltQuote.amount }); // → '{"amount":"1000"}' (not '{"amount":1000}')
 
 // Rehydrate a JSON leaf value back to Amount
 const parsed = JSON.parse('{"amount":"1000"}');

@@ -78,7 +78,7 @@ const amount = Amount.from(someinteger); // bigint backed VO
 Default migration posture:
 
 - domain logic: `Amount`
-- minimal migrations / app storage: plain JSON is acceptable because `Amount.toJSON()` emits a decimal string
+- minimal migrations / app storage: plain JSON is acceptable because `Amount.toJSON()` always emits a decimal string (previously it returned `number` for safe integers, now always `string`)
 - integer-preserving transport or persistence: prefer `JSONInt.parse` / `JSONInt.stringify`
 - UI formatting: `Amount` or sign + `Amount`
 

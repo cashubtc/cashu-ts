@@ -1051,7 +1051,6 @@ class Wallet {
     outputConfig?: OutputConfig,
   ): Promise<SendResponse> {
     const sendAmount = this.parseAmount(amount, 'send');
-    const normalizedProofs = this.normalizeInputProofs(proofs);
     const { keysetId, includeFees = false } = config || {};
     // Fallback to policy defaults if no outputConfig
     outputConfig = outputConfig ?? {
@@ -1086,7 +1085,7 @@ class Wallet {
       }
 
       // Proceed with offline exact-match attempt
-      const { keep, send } = this.sendOffline(sendAmount, normalizedProofs, {
+      const { keep, send } = this.sendOffline(sendAmount, proofs, {
         includeFees,
         exactMatch: true,
         requireDleq: false, // safety
@@ -1103,7 +1102,7 @@ class Wallet {
     }
 
     // Prepare and complete the send
-    const txn = await this.prepareSwapToSend(sendAmount, normalizedProofs, config, outputConfig);
+    const txn = await this.prepareSwapToSend(sendAmount, proofs, config, outputConfig);
     return await this.completeSwap(txn, config?.privkey);
   }
 
@@ -2400,8 +2399,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<TQuote>> {
-    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
-    const meltTxn = await this.prepareMelt(method, meltQuote, normalizedProofs, config, outputType);
+    const meltTxn = await this.prepareMelt(method, meltQuote, proofsToSend, config, outputType);
     return this.completeMelt<TQuote>(meltTxn, config?.privkey);
   }
 
@@ -2423,14 +2421,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
-    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
-    const meltTxn = await this.prepareMelt(
-      'bolt11',
-      meltQuote,
-      normalizedProofs,
-      config,
-      outputType,
-    );
+    const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
     return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey);
   }
 
@@ -2452,14 +2443,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
-    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
-    const meltTxn = await this.prepareMelt(
-      'bolt12',
-      meltQuote,
-      normalizedProofs,
-      config,
-      outputType,
-    );
+    const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
     return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
   }
 
