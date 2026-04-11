@@ -201,6 +201,7 @@ function convertToShortKeysetId(proofs: Proof[]) {
  * Encodes a {@link Token} as a cashu token string.
  */
 export function getEncodedToken(token: Token, opts?: { removeDleq?: boolean }): string {
+  // Normalize amounts for untyped (JS) callers who may pass JSON.parse'd tokens directly.
   const proofs = normalizeProofAmounts(token.proofs);
   if (hasNonHexId(proofs)) {
     throw new Error(
@@ -681,6 +682,7 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
  */
 export function getEncodedTokenBinary(token: Token): Uint8Array {
   const utf8Encoder = new TextEncoder();
+  // Normalize amounts for untyped (JS) callers who may pass JSON.parse'd tokens directly.
   const proofs = normalizeProofAmounts(token.proofs);
   const template = templateFromToken({ ...token, proofs });
   const binaryTemplate = encodeCBOR(template);

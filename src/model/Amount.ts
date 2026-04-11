@@ -78,6 +78,7 @@ export class Amount {
     // Unknown type
     throw new AmountError('Unsupported amount input type');
   }
+
   static zero(): Amount {
     return new Amount(0n);
   }

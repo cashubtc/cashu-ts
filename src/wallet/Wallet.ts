@@ -271,10 +271,6 @@ class Wallet {
     }
   }
 
-  private normalizeInputProofs(proofs: ProofLike[]): Proof[] {
-    return normalizeProofAmounts(proofs);
-  }
-
   /**
    * Load mint information, keysets, and keys.
    *
@@ -902,7 +898,7 @@ class Wallet {
     // Extract proofs — either directly or by decoding the token
     let proofs: Proof[];
     if (Array.isArray(token)) {
-      proofs = this.normalizeInputProofs(token);
+      proofs = normalizeProofAmounts(token);
     } else {
       const decodedToken: Token = typeof token === 'string' ? this.decodeToken(token) : token;
       const tokenMintUrl = sanitizeUrl(decodedToken.mint);
@@ -915,7 +911,7 @@ class Wallet {
         wallet: this._unit,
       });
       // Token object may come from JSON.parse/localStorage and need runtime rehydration.
-      proofs = this.normalizeInputProofs(decodedToken.proofs);
+      proofs = normalizeProofAmounts(decodedToken.proofs);
     }
 
     // Validate all proof keyset IDs use this wallet's unit
@@ -996,7 +992,7 @@ class Wallet {
    */
   sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse {
     const sendAmount = this.parseAmount(amount, 'sendOffline');
-    let normalizedProofs = this.normalizeInputProofs(proofs);
+    let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
       // Only use proofs that have a DLEQ
@@ -1136,7 +1132,7 @@ class Wallet {
     outputConfig?: OutputConfig,
   ): Promise<SwapPreview> {
     const sendAmountTarget = this.parseAmount(amount, 'prepareSwapToSend');
-    const normalizedProofs = this.normalizeInputProofs(proofs);
+    const normalizedProofs = normalizeProofAmounts(proofs);
     const { keysetId, includeFees = false, onCountersReserved } = config || {};
 
     // Fallback to policy defaults if no outputConfig
@@ -1358,7 +1354,7 @@ class Wallet {
     outputData?: OutputDataLike[],
     quoteId?: string,
   ): Proof[] {
-    const normalizedProofs = this.normalizeInputProofs(proofs);
+    const normalizedProofs = normalizeProofAmounts(proofs);
     // Normal case, sign everything as usual
     if (!isP2PKSigAll(normalizedProofs)) {
       return cryptoSignP2PKProofs(normalizedProofs, privkey, this._logger);
@@ -2472,7 +2468,7 @@ class Wallet {
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
     this.validateMeltQuote(meltQuote);
-    const normalizedProofs = this.normalizeInputProofs(proofsToSend);
+    const normalizedProofs = normalizeProofAmounts(proofsToSend);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved } = config || {};
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset

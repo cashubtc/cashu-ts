@@ -444,9 +444,10 @@ function stringify(
   const serialize = (holder: Record<string, unknown>, key: string): string | undefined => {
     let val: unknown = holder[key];
 
-    // Amount VO: emit as an unquoted integer (like u64), not a quoted string.
-    // JSON.stringify uses Amount.toJSON() → string (safe for app storage).
-    // JSONInt.stringify uses toBigInt() → unquoted integer (correct for wire format).
+    // Amount VO: bypass toJSON() and emit as raw bigint → unquoted integer on the wire.
+    // This is intentional: the Cashu protocol requires unquoted numeric tokens for amounts,
+    // so JSONInt must emit e.g. 1000 not "1000". Plain JSON.stringify uses Amount.toJSON()
+    // which returns a quoted string — correct for app-level storage but not for wire format.
     if (val instanceof Amount) {
       val = val.toBigInt();
     } else if (isToJSONCapable(val)) {
