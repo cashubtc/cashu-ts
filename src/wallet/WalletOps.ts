@@ -8,7 +8,7 @@ import {
   type MintQuoteBolt12Response,
   type MintQuoteBolt11Response,
 } from '../model/types';
-import type { Proof, ProofLike } from '../model/types/proof';
+import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import { normalizeProofAmounts } from '../utils';
 
@@ -241,7 +241,7 @@ export class SendBuilder {
    * Has no effect if denominations (custom split) was specified.
    * @param p Proofs currently held by the wallet, used to hit denomination targets.
    */
-  proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
+  proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>) {
     this.config.proofsWeHave = p;
     return this;
   }
@@ -470,7 +470,7 @@ export class ReceiveBuilder {
    * Has no effect if denominations (custom split) was specified.
    * @param p Proofs currently held by the wallet, used to hit denomination targets.
    */
-  proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
+  proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>) {
     this.config.proofsWeHave = p;
     return this;
   }
@@ -635,7 +635,7 @@ export class MintBuilder<
    * Has no effect if denominations (custom split) was specified.
    * @param p Proofs currently held by the wallet, used to hit denomination targets.
    */
-  proofsWeHave(p: Array<Pick<Proof, 'amount'>>) {
+  proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>) {
     this.config.proofsWeHave = p;
     return this;
   }

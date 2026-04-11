@@ -832,7 +832,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>>;
     privkey(k: string): MintBuilder<M, true>;
-    proofsWeHave(p: Array<Pick<Proof, 'amount'>>): this;
+    proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
 }
 
@@ -1008,7 +1008,7 @@ export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>
 export type MintProofsConfig = {
     keysetId?: string;
     privkey?: string | string[];
-    proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+    proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -1489,7 +1489,7 @@ export class ReceiveBuilder {
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
-    proofsWeHave(p: Array<Pick<Proof, 'amount'>>): this;
+    proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     requireDleq(on?: boolean): this;
     run(): Promise<Proof[]>;
 }
@@ -1499,7 +1499,7 @@ export type ReceiveConfig = {
     keysetId?: string;
     privkey?: string | string[];
     requireDleq?: boolean;
-    proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+    proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
 
@@ -1592,7 +1592,7 @@ export class SendBuilder {
     onCountersReserved(cb: OnCountersReserved): this;
     prepare(): Promise<SwapPreview>;
     privkey(k: string | string[]): this;
-    proofsWeHave(p: Array<Pick<Proof, 'amount'>>): this;
+    proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(): Promise<SendResponse>;
 }
 
@@ -1601,7 +1601,7 @@ export type SendConfig = {
     keysetId?: string;
     privkey?: string | string[];
     includeFees?: boolean;
-    proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+    proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
     onCountersReserved?: OnCountersReserved;
 };
 

@@ -1,7 +1,7 @@
 import { type P2PKOptions } from '../../crypto';
 import { type AmountLike } from '../../model/Amount';
 import { type OutputDataFactory, type OutputDataLike } from '../../model/OutputData';
-import type { Proof } from '../../model/types/proof';
+import type { ProofLike } from '../../model/types/proof';
 import { type OperationCounters } from '../CounterSource';
 
 export type SecretsPolicy = 'auto' | 'deterministic' | 'random';
@@ -111,7 +111,7 @@ export type SendConfig = {
   keysetId?: string;
   privkey?: string | string[];
   includeFees?: boolean;
-  proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+  proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
 };
 
@@ -131,7 +131,7 @@ export type ReceiveConfig = {
   keysetId?: string;
   privkey?: string | string[];
   requireDleq?: boolean;
-  proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+  proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
 };
 
@@ -141,7 +141,7 @@ export type ReceiveConfig = {
 export type MintProofsConfig = {
   keysetId?: string;
   privkey?: string | string[];
-  proofsWeHave?: Array<Pick<Proof, 'amount'>>;
+  proofsWeHave?: Array<Pick<ProofLike, 'amount'>>;
   onCountersReserved?: OnCountersReserved;
 };
 

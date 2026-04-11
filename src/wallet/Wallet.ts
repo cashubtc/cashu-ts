@@ -627,9 +627,10 @@ class Wallet {
     keyset: Keyset,
     outputType: OutputType,
     includeFees: boolean = false,
-    proofsWeHave: Array<Pick<Proof, 'amount'>> = [],
+    proofsWeHave: Array<Pick<ProofLike, 'amount'>> = [],
   ): OutputType {
     let newAmount = this.parseAmount(amount, 'configureOutputs', true);
+    const normalizedProofsWeHave = proofsWeHave.map((p) => ({ amount: Amount.from(p.amount) }));
 
     // Custom outputs don't have automatic optimizations or fee inclusion)
     if (outputType.type === 'custom') {
@@ -655,9 +656,9 @@ class Wallet {
 
     // If no denominations, but proofsWeHave was provided - optimize
     // to get around _denominationTarget proofs of each denomination.
-    if (denominations.length === 0 && proofsWeHave.length > 0) {
+    if (denominations.length === 0 && normalizedProofsWeHave.length > 0) {
       denominations = getKeepAmounts(
-        proofsWeHave,
+        normalizedProofsWeHave,
         newAmount,
         keyset.keys,
         this._denominationTarget,
@@ -913,7 +914,8 @@ class Wallet {
         token: decodedToken.unit,
         wallet: this._unit,
       });
-      ({ proofs } = decodedToken);
+      // Token object may come from JSON.parse/localStorage and need runtime rehydration.
+      proofs = this.normalizeInputProofs(decodedToken.proofs);
     }
 
     // Validate all proof keyset IDs use this wallet's unit
