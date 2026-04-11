@@ -95,12 +95,16 @@ operations that create blinded outputs.
 ### Mint
 
 ```ts
-const mintPreview = await wallet.prepareMint('bolt11', 64, quoteId, undefined, {
+const mintQuote = await wallet.checkMintQuoteBolt11(quoteId);
+
+const mintPreview = await wallet.prepareMint('bolt11', 64, mintQuote, undefined, {
   type: 'deterministic',
   counter: 0,
 });
 
-await saveMintPreview(mintPreview); // your save function
+// Persist an app-defined snapshot here.
+// Do not call JSON.stringify(mintPreview) directly; preview objects contain
+// Amount, bigint, Uint8Array, and class instances that need explicit rehydration.
 const proofs = await wallet.completeMint(mintPreview);
 ```
 
@@ -111,7 +115,9 @@ const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, 
   includeFees: true,
 });
 
-await saveMeltPreview(meltPreview); // your save function
+// Persist an app-defined serialized snapshot here.
+// Do not call JSON.stringify(meltPreview) directly; preview objects contain
+// Amount, bigint, Uint8Array, and class instances that need explicit rehydration.
 const result = await wallet.completeMelt(meltPreview);
 ```
 

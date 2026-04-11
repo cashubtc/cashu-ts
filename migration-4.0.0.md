@@ -271,9 +271,9 @@ const mySelector: SelectProofs = (proofs, amountToSelect: AmountLike, ...) => { 
 `prepareMint()` previously stored only the quote ID string in `MintPreview.quote`. It now stores the full quote object passed into `prepareMint()`, giving consumers access to informational fields (`expiry`, `request`, `amount`, `unit`) needed for NUT-19 retry flows.
 
 ```ts
-// Before — quote was a plain string
-const preview = await wallet.prepareMint('bolt11', 1000, quoteResponse);
-preview.quote; // string (quote ID only)
+// Before — quote was stored on the preview as a plain string
+const previewV3: MintPreview = { ..., quote: 'q123' };
+previewV3.quote; // string (quote ID only)
 
 // After — quote is the full TQuote object when a quote object is passed
 const preview = await wallet.prepareMint('bolt11', 1000, quoteResponse);
@@ -298,6 +298,13 @@ const preview: MintPreview = { ..., quote: 'q123' };
 // After — pass the full quote object returned by createMintQuoteBolt11/12
 const preview: MintPreview = { ..., quote: mintQuoteResponse };
 ```
+
+Also note that preview objects are not intended for direct `JSON.stringify(...)`.
+`MintPreview`, `MeltPreview`, `BatchMintPreview`, and `SwapPreview` contain values such as
+`Amount`, `bigint`, `Uint8Array`, and class instances that need explicit rehydration. If you
+persist previews for replay-safe recovery, serialize them into an app-defined snapshot format and
+explicitly rehydrate them before passing them back to `completeMint()`, `completeMelt()`, or
+`completeSwap()`.
 
 ---
 

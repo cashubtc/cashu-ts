@@ -39,12 +39,13 @@ if (mintQuoteChecked.state !== MintQuoteState.PAID) {
   throw new Error('Mint quote is not paid yet');
 }
 
-const preview = await wallet.prepareMint('bolt11', 64, mintQuote.quote, undefined, {
+const preview = await wallet.prepareMint('bolt11', 64, mintQuoteChecked, undefined, {
   type: 'deterministic',
   counter: 0,
 });
 
-// Persist `preview` here if you want to retry safely later.
+// Persist an app-defined snapshot here if you want to retry safely later.
+// Do not call JSON.stringify(preview) directly; preview objects contain non-JSON-safe values.
 const proofs = await wallet.completeMint(preview);
 ```
 

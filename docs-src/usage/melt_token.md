@@ -45,7 +45,8 @@ const { send: proofsToSend } = await wallet.send(amountToSend, proofs, {
 
 const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
 
-await saveMeltPreview(meltPreview);
+// Persist an app-defined snapshot here.
+// Do not call JSON.stringify(meltPreview) directly; preview objects contain non-JSON-safe values.
 const meltResponse = await wallet.completeMelt(meltPreview);
 ```
 
