@@ -9,6 +9,8 @@ on:
 
 jobs:
   build:
+    # Run only when manually triggered, or for a non-prerelease release from main.
+    if: ${{ github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && github.event.release.target_commitish == 'main') }}
     runs-on: ubuntu-latest
 
     steps:
