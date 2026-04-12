@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Create P2PK**
+# <a href="/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Create P2PK**
 
 # Create a P2PK locked token and receive it
 

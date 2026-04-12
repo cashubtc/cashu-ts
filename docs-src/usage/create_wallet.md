@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Create Wallet**
+# <a href="/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Create Wallet**
 
 # Create a wallet
 

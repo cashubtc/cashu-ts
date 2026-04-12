@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Wallet Operations**
+# <a href="/">Documents</a> › **Wallet Operations**
 
 # WalletOps – Transaction Builder Usage Recipes
 

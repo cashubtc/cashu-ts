@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Melt**
+# <a href="/">Documents</a> › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Melt**
 
 # Melt
 

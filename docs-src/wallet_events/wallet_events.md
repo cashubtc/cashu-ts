@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Wallet Events**
+# <a href="/">Documents</a> › **Wallet Events**
 
 # WalletEvents – Event Subscriptions
 

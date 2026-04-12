@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Melt Token**
+# <a href="/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Melt Token**
 
 # Melt tokens
 

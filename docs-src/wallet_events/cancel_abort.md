@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Wallet Events](../wallet_events/wallet_events.md) › **Cancel and Abort**
+# <a href="/">Documents</a> › [Wallet Events](../wallet_events/wallet_events.md) › **Cancel and Abort**
 
 # Cancel and Abort
 

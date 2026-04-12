@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Versions and Releases**
+# <a href="/">Documents</a> › **Versions and Releases**
 
 # Versions & Releases
 

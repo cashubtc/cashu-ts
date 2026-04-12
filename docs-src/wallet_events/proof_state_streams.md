@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Wallet Events](../wallet_events/wallet_events.md) › **Proof State Streams**
+# <a href="/">Documents</a> › [Wallet Events](../wallet_events/wallet_events.md) › **Proof State Streams**
 
 # Proof state streams
 

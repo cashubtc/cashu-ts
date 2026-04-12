@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Logging**
+# <a href="/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Logging**
 
 # Logging
 

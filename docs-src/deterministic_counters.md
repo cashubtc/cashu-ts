@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Deterministic Counters**
+# <a href="/">Documents</a> › **Deterministic Counters**
 
 # Deterministic counters (persist, inspect, bump)
 

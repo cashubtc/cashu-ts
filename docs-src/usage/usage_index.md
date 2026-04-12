@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Usage Examples**
+# <a href="/">Documents</a> › **Usage Examples**
 
 # Usage Examples
 

@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> > **Contribution Guide**
+# <a href="/">Documents</a> > **Contribution Guide**
 
 # Contribution Guide
 

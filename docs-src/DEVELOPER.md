@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Developer Guide**
+# <a href="/">Documents</a> › **Developer Guide**
 
 # Developer Guide
 

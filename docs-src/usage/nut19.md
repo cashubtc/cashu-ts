@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **NUT-19 Cached Responses**
+# <a href="/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **NUT-19 Cached Responses**
 
 # NUT-19 Cached Responses
 
