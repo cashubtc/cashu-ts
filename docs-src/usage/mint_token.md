@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Mint Token**
+
 # Mint tokens
 
 ## 1) One-step BOLT11 mint

@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Get Token**
+
 # Getting token data
 
 ## Pre-wallet: `getTokenMetadata`

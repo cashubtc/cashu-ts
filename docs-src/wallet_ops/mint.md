@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Mint**
+
 # Mint
 
 ## 1) Default BOLT11 mint (policy outputs)

@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Wallet Events](../wallet_events/wallet_events.md) › **Proof State Streams**
+
 # Proof state streams
 
 ## Async iterator with buffer control:

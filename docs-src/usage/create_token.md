@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Create Token**
+
 # Create a token and receive it
 
 ```typescript

@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Usage Examples](../usage/usage_index.md) › **Bolt12**
+
 #### BOLT12 (Reusable Offers)
 
 BOLT12 enables reusable Lightning offers that can be paid multiple times, unlike BOLT11 invoices which are single-use. Key differences:

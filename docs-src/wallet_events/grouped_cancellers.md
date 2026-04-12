@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Wallet Events](../wallet_events/wallet_events.md) › **Grouped Cancellers**
+
 # Grouped cancellers
 
 ```ts

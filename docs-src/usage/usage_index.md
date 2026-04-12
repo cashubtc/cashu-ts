@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › **Usage Examples**
+
 # Usage Examples
 
 This section collects the shortest paths through the library for common wallet tasks. Use it as an

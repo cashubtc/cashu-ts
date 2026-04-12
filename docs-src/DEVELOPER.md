@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › **Developer Guide**
+
 # Developer Guide
 
 This document is a quick reference for maintainers and frequent contributors. It complements [the contributor guide](./CONTRIBUTING.md) (which is contributor-facing) and contains deeper, actionable instructions for setting up, testing, and developing the project.

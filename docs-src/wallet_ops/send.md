@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Send**
+
 # Wallet Operations: Send
 
 ## 1) Smallest possible send (policy defaults)

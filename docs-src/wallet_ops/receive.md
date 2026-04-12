@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Receive**
+
 # Receive
 
 `wallet.ops.receive(...)` accepts an encoded token string, a decoded `Token`, or raw `Proof[]`.

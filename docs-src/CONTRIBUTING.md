@@ -1,3 +1,5 @@
+# <a href="/cashu-ts/">Documents</a> > **Contribution Guide**
+
 # Contribution Guide
 
 This file is contributor-facing: quick setup, current hook behavior, and a short PR checklist. For detailed developer instructions (environment, release process, CI parity, and troubleshooting) see [the developer guide](./DEVELOPER.md).
