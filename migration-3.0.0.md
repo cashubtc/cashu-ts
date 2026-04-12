@@ -161,6 +161,27 @@ The following wallet methods are affected:
 - `wallet.getKeySets()` -> `wallet.keyChain.getKeysets()`
 - `wallet.getAllKeys()` -> `wallet.keyChain.getAllKeys()`
 
+### `getDecodedToken` signature update
+
+`getDecodedToken` now prefers a `string[]` of full keyset IDs as its second argument.
+The older signature that accepted keyset-like objects is deprecated.
+
+This matters for keysets v2 support: when decoding outside a wallet instance, pass the full list of keyset IDs the token might reference, for example from `wallet.keyChain.getAllKeysetIds()`.
+
+```ts
+// before
+const token = getDecodedToken(tokenString);
+
+// after
+const token = getDecodedToken(tokenString, wallet.keyChain.getAllKeysetIds());
+```
+
+If you already have a wallet for the token's mint and unit, prefer `wallet.decodeToken(tokenString)`.
+
+For pre-wallet init, you can use the new `getTokenMetadata` function to inspect a token string and find out which mint and unit the token belongs to.
+
+NOTE: Although still optional, the second parameter of `getDecodedToken` is REQUIRED if you wish to support keysets v2.
+
 ### on[Mint|Melt|Proof]\* events
 
 Wallet no longer manages subscription events itself. Instead, these are delegated to the `WalletEvents` class, accessed via `wallet.on`.
