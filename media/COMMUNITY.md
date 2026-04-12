@@ -1,4 +1,4 @@
-# <a href="/">Documents</a> › **Community Contribution Philosophy**
+[Documents](../index.html) › **Community Contribution Philosophy**
 
 # Community Contribution Philosophy
 
