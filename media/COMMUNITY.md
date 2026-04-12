@@ -1,4 +1,4 @@
-# <a href="/cashu-ts/">Documents</a> › **Community Contribution Philosophy**
+# <a href="/">Documents</a> › **Community Contribution Philosophy**
 
 # Community Contribution Philosophy
 
