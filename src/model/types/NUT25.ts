@@ -6,47 +6,47 @@ import { type MeltQuoteBolt11Response } from './NUT23';
  * Payload that needs to be sent to the mint when requesting a mint.
  */
 export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
-	/**
-	 * Optional. Amount to be minted.
-	 */
-	amount?: number;
-	/**
-	 * Optional. Description for the invoice.
-	 */
-	description?: string;
+  /**
+   * Optional. Amount to be minted.
+   */
+  amount?: number;
+  /**
+   * Optional. Description for the invoice.
+   */
+  description?: string;
 };
 
 /**
  * Response from the mint after requesting a BOLT12 mint quote.
  */
 export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
-	/**
-	 * Amount requested for mint quote.
-	 */
-	amount?: number;
-	/**
-	 * Timestamp of when the quote expires.
-	 *
-	 * @remarks
-	 * TODO v4: widen to `number | null` to match the spec and runtime normalization.
-	 */
-	expiry: number;
-	/**
-	 * Public key the quote is locked to.
-	 *
-	 * @remarks
-	 * Required for bolt12.
-	 */
-	pubkey: string;
-	/**
-	 * The amount that has been paid to the mint via the bolt12 offer. The difference between this and
-	 * `amount_issued` can be minted.
-	 */
-	amount_paid: number;
-	/**
-	 * The amount of ecash that has been issued for the given mint quote.
-	 */
-	amount_issued: number;
+  /**
+   * Amount requested for mint quote.
+   */
+  amount?: number;
+  /**
+   * Timestamp of when the quote expires.
+   *
+   * @remarks
+   * TODO v4: widen to `number | null` to match the spec and runtime normalization.
+   */
+  expiry: number;
+  /**
+   * Public key the quote is locked to.
+   *
+   * @remarks
+   * Required for bolt12.
+   */
+  pubkey: string;
+  /**
+   * The amount that has been paid to the mint via the bolt12 offer. The difference between this and
+   * `amount_issued` can be minted.
+   */
+  amount_paid: number;
+  /**
+   * The amount of ecash that has been issued for the given mint quote.
+   */
+  amount_issued: number;
 };
 
 /**
@@ -57,11 +57,11 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
  * - Amountless: amountless invoices.
  */
 export type MeltQuoteBolt12Request = MeltQuoteBaseRequest & {
-	options?: {
-		amountless?: {
-			amount_msat: number;
-		};
-	};
+  options?: {
+    amountless?: {
+      amount_msat: number;
+    };
+  };
 };
 
 /**

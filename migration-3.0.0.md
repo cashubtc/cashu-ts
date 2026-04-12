@@ -78,27 +78,27 @@ Example:
 ```ts
 // before
 const { keep, send } = await wallet.send(amount, proofs, {
-	includeFees: true,
-	pubkey: bytesToHex(pubKeyBob),
+  includeFees: true,
+  pubkey: bytesToHex(pubKeyBob),
 });
 
 // after (using fluent builder)
 const { keep, send } = await wallet.ops
-	.send(amount, proofs)
-	.asP2PK({ pubkey: bytesToHex(pubKeyBob) })
-	.includeFees(true)
-	.run();
+  .send(amount, proofs)
+  .asP2PK({ pubkey: bytesToHex(pubKeyBob) })
+  .includeFees(true)
+  .run();
 
 // or using the forth param directly
 const customConfig: OutputConfig = {
-	send: { type: 'p2pk', options: { pubkey: bytesToHex(pubKeyBob) } },
-	keep: { type: 'deterministic', counter: 0 }, // optional keep shaping
+  send: { type: 'p2pk', options: { pubkey: bytesToHex(pubKeyBob) } },
+  keep: { type: 'deterministic', counter: 0 }, // optional keep shaping
 };
 const { keep, send } = await wallet.send(
-	amount,
-	proofs,
-	{ includeFees: true },
-	customConfig, // forth param
+  amount,
+  proofs,
+  { includeFees: true },
+  customConfig, // forth param
 );
 ```
 
@@ -119,12 +119,12 @@ For example, if your custom factory is typed to MintKeys, declare it as `OutputD
 ```ts
 // Factory typed to MintKeys
 const customFactory: OutputDataFactory<MintKeys> = (amount, keyset) => {
-	return OutputData.createRandomData(amount, keyset)[0];
+  return OutputData.createRandomData(amount, keyset)[0];
 };
 
 // Factory typed to default (HasKeysetKeys: { id, keys })
 const customFactory: OutputDataFactory = (amount, keysetKeys) => {
-	return OutputData.createRandomData(amount, keysetKeys)[0];
+  return OutputData.createRandomData(amount, keysetKeys)[0];
 };
 ```
 

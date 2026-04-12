@@ -15,7 +15,7 @@ const mintQuote = await wallet.createMintQuoteBolt11(64);
 // pay the invoice here before you continue...
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state === MintQuoteState.PAID) {
-	const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
+  const proofs = await wallet.mintProofsBolt11(64, mintQuote.quote);
 }
 // store proofs in your app ..
 ```
@@ -36,12 +36,12 @@ const mintQuote = await wallet.createMintQuoteBolt11(64);
 
 const mintQuoteChecked = await wallet.checkMintQuoteBolt11(mintQuote.quote);
 if (mintQuoteChecked.state !== MintQuoteState.PAID) {
-	throw new Error('Mint quote is not paid yet');
+  throw new Error('Mint quote is not paid yet');
 }
 
 const preview = await wallet.prepareMint('bolt11', 64, mintQuote.quote, undefined, {
-	type: 'deterministic',
-	counter: 0,
+  type: 'deterministic',
+  counter: 0,
 });
 
 // Persist `preview` here if you want to retry safely later.
@@ -62,19 +62,19 @@ const privkey = randomBytes(32);
 const pubkey = bytesToHex(secp256k1.getPublicKey(privkey, true));
 
 const mintQuote = await wallet.createMintQuoteBolt12(pubkey, {
-	amount: 64,
-	description: 'Top up wallet',
+  amount: 64,
+  description: 'Top up wallet',
 });
 
 // pay the BOLT12 offer here, then re-check the quote...
 const updatedQuote = await wallet.checkMintQuoteBolt12(mintQuote.quote);
 const availableAmount = updatedQuote.amount_paid - updatedQuote.amount_issued;
 if (availableAmount <= 0) {
-	throw new Error('No paid amount available to mint');
+  throw new Error('No paid amount available to mint');
 }
 
 const preview = await wallet.prepareMint('bolt12', availableAmount, updatedQuote, {
-	privkey: bytesToHex(privkey),
+  privkey: bytesToHex(privkey),
 });
 const proofs = await wallet.completeMint(preview);
 ```

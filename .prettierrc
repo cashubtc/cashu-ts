@@ -1,9 +1,10 @@
 {
-	"useTabs": true,
-	"singleQuote": true,
-	"printWidth": 100,
-	"plugins": ["prettier-plugin-jsdoc"],
-	"tsdoc": true,
-	"jsdocCommentLineStrategy": "multiline",
-	"jsdocDescriptionWithDot": true
+  "useTabs": false,
+  "singleQuote": true,
+  "printWidth": 100,
+  "trailingComma": "all",
+  "plugins": ["prettier-plugin-jsdoc"],
+  "tsdoc": true,
+  "jsdocCommentLineStrategy": "multiline",
+  "jsdocDescriptionWithDot": true
 }

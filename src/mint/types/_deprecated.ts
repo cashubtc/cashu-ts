@@ -1,8 +1,8 @@
 import {
-	type MintQuoteBolt11Response,
-	type MintQuoteBolt12Response,
-	type MeltQuoteBolt11Response,
-	type MeltQuoteBolt12Response,
+  type MintQuoteBolt11Response,
+  type MintQuoteBolt12Response,
+  type MeltQuoteBolt11Response,
+  type MeltQuoteBolt12Response,
 } from '../../model/types';
 
 /**

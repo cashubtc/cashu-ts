@@ -17,10 +17,10 @@ const { quote, change } = await wallet.ops.meltBolt11(meltQuote, myProofs).run()
 ```ts
 // given a bolt12 meltQuote...
 const { quote, change } = await wallet.ops
-	.meltBolt12(meltQuote, myProofs)
-	.asDeterministic() // counter=0 => auto-reserve
-	.onCountersReserved((info) => console.log('Reserved', info))
-	.run();
+  .meltBolt12(meltQuote, myProofs)
+  .asDeterministic() // counter=0 => auto-reserve
+  .onCountersReserved((info) => console.log('Reserved', info))
+  .run();
 ```
 
 - Supports async completion with NUT-08 blanks.

@@ -1,36 +1,38 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
-import { type SerializedBlindedSignature } from './types/index';
-import { type DLEQ } from '../crypto';
 import { bytesToHex } from '@noble/hashes/utils.js';
+
+import { type DLEQ } from '../crypto';
 import { numberToHexPadded64 } from '../utils';
 
+import { type SerializedBlindedSignature } from './types/index';
+
 class BlindedSignature {
-	id: string;
-	amount: number;
-	C_: WeierstrassPoint<bigint>;
-	dleq?: DLEQ;
+  id: string;
+  amount: number;
+  C_: WeierstrassPoint<bigint>;
+  dleq?: DLEQ;
 
-	constructor(id: string, amount: number, C_: WeierstrassPoint<bigint>, dleq?: DLEQ) {
-		this.id = id;
-		this.amount = amount;
-		this.C_ = C_;
-		this.dleq = dleq;
-	}
+  constructor(id: string, amount: number, C_: WeierstrassPoint<bigint>, dleq?: DLEQ) {
+    this.id = id;
+    this.amount = amount;
+    this.C_ = C_;
+    this.dleq = dleq;
+  }
 
-	getSerializedBlindedSignature(): SerializedBlindedSignature {
-		return {
-			id: this.id,
-			amount: this.amount,
-			C_: this.C_.toHex(true),
-			...(this.dleq && {
-				dleq: {
-					s: bytesToHex(this.dleq.s),
-					e: bytesToHex(this.dleq.e),
-					r: numberToHexPadded64(this.dleq.r ?? BigInt(0)),
-				},
-			}),
-		};
-	}
+  getSerializedBlindedSignature(): SerializedBlindedSignature {
+    return {
+      id: this.id,
+      amount: this.amount,
+      C_: this.C_.toHex(true),
+      ...(this.dleq && {
+        dleq: {
+          s: bytesToHex(this.dleq.s),
+          e: bytesToHex(this.dleq.e),
+          r: numberToHexPadded64(this.dleq.r ?? BigInt(0)),
+        },
+      }),
+    };
+  }
 }
 
 export { BlindedSignature };

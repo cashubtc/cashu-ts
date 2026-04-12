@@ -19,10 +19,10 @@ const { keep, send } = await wallet.completeSwap(preview);
 
 ```ts
 const { keep, send } = await wallet.ops
-	.send(15, myProofs)
-	.asDeterministic(0, [4, 4]) // counter=0 => auto-reserve; split must include 2x 4's
-	.keepAsRandom() // change proofs must have random secrets
-	.run();
+  .send(15, myProofs)
+  .asDeterministic(0, [4, 4]) // counter=0 => auto-reserve; split must include 2x 4's
+  .keepAsRandom() // change proofs must have random secrets
+  .run();
 ```
 
 > **Note**
@@ -32,31 +32,31 @@ const { keep, send } = await wallet.ops
 
 ```ts
 const { keep, send } = await wallet.ops
-	.send(10, myProofs)
-	.asP2PK({ pubkey, locktime: 1712345678 })
-	.includeFees(true) // sender covers receiver’s future spend fee
-	.run();
+  .send(10, myProofs)
+  .asP2PK({ pubkey, locktime: 1712345678 })
+  .includeFees(true) // sender covers receiver’s future spend fee
+  .run();
 ```
 
 ## 4) Use a factory for custom OutputData
 
 ```ts
 const { keep, send } = await wallet.ops
-	.send(20, myProofs)
-	.asFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
-	.keepAsDeterministic() // deterministic change, auto-reserve
-	.keyset('0123456')
-	.onCountersReserved((info) => {
-		console.log('Reserved counters', info);
-	})
-	.run();
+  .send(20, myProofs)
+  .asFactory(makeOutputData, [4, 8, 8]) // makeOutputData: OutputDataFactory
+  .keepAsDeterministic() // deterministic change, auto-reserve
+  .keyset('0123456')
+  .onCountersReserved((info) => {
+    console.log('Reserved counters', info);
+  })
+  .run();
 ```
 
 ## 5) Fully custom OutputData (prebuilt)
 
 ```ts
 const mySendData: OutputData[] = [
-	/* amounts must sum to 15 */
+  /* amounts must sum to 15 */
 ];
 
 const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).run();
@@ -68,19 +68,19 @@ const { keep, send } = await wallet.ops.send(15, myProofs).asCustom(mySendData).
 
 ```ts
 const { keep, send } = await wallet.ops
-	.send(7, myProofs)
-	.offlineExactOnly(/* requireDleq? */ false)
-	.includeFees(true) // optional; applied to the offline selection rules
-	.run();
+  .send(7, myProofs)
+  .offlineExactOnly(/* requireDleq? */ false)
+  .includeFees(true) // optional; applied to the offline selection rules
+  .run();
 ```
 
 **Close match allowed (overspend permitted by wallet RGLI):**
 
 ```ts
 const { keep, send } = await wallet.ops
-	.send(7, myProofs)
-	.offlineCloseMatch(/* requireDleq? */ true) // only proofs with valid DLEQ
-	.run();
+  .send(7, myProofs)
+  .offlineCloseMatch(/* requireDleq? */ true) // only proofs with valid DLEQ
+  .run();
 ```
 
 > **Important**

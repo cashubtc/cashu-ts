@@ -18,26 +18,26 @@ export { Wallet } from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {
-	type MintMethod,
-	type MintQuoteFor,
-	SendBuilder,
-	ReceiveBuilder,
-	MintBuilder,
-	MeltBuilder,
-	WalletOps,
+  type MintMethod,
+  type MintQuoteFor,
+  SendBuilder,
+  ReceiveBuilder,
+  MintBuilder,
+  MeltBuilder,
+  WalletOps,
 } from './wallet/WalletOps';
 
 // AUTH module
 export {
-	OIDCAuth,
-	AuthManager,
-	createAuthWallet,
-	type AuthProvider,
-	type AuthManagerOptions,
-	type TokenResponse,
-	type DeviceStartResponse,
-	type OIDCConfig,
-	type OIDCAuthOptions,
+  OIDCAuth,
+  AuthManager,
+  createAuthWallet,
+  type AuthProvider,
+  type AuthManagerOptions,
+  type TokenResponse,
+  type DeviceStartResponse,
+  type OIDCConfig,
+  type OIDCAuthOptions,
 } from './auth';
 
 // Wallet/Mint types used in the public API surface
@@ -77,12 +77,12 @@ export * from './utils/core';
 export { PaymentRequest } from './model/PaymentRequest';
 export { PaymentRequestTransportType } from './wallet/types';
 export type {
-	PaymentRequestPayload,
-	PaymentRequestTransport,
-	RawPaymentRequest,
-	RawTransport,
-	NUT10Option,
-	RawNUT10Option,
+  PaymentRequestPayload,
+  PaymentRequestTransport,
+  RawPaymentRequest,
+  RawTransport,
+  NUT10Option,
+  RawNUT10Option,
 } from './wallet/types';
 
 // Logging & errors
@@ -97,8 +97,8 @@ export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
 export type { RequestFn, RequestArgs, RequestOptions } from './transport';
 export {
-	SigAll,
-	type SigAllApi,
-	type SigAllDigests,
-	type SigAllSigningPackage,
+  SigAll,
+  type SigAllApi,
+  type SigAllDigests,
+  type SigAllSigningPackage,
 } from './model/SigAll';

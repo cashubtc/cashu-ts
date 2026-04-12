@@ -1,330 +1,331 @@
 import {
-	type GetInfoResponse,
-	type MPPMethod,
-	type SwapMethod,
-	type WebSocketSupport,
-	type Nut19Policy,
-} from './types';
-import {
-	normalizeAmountToLegacyNumber,
-	normalizeSafeIntegerMetadata,
+  normalizeAmountToLegacyNumber,
+  normalizeSafeIntegerMetadata,
 } from '../utils/normalizeNumbers';
+
+import {
+  type GetInfoResponse,
+  type MPPMethod,
+  type SwapMethod,
+  type WebSocketSupport,
+  type Nut19Policy,
+} from './types';
 
 type Method = 'GET' | 'POST';
 type Endpoint = { method: Method; path: string };
 
 type ProtectedIndex = {
-	exact: Record<Method, Set<string>>;
-	prefix: Record<Method, string[]>;
+  exact: Record<Method, Set<string>>;
+  prefix: Record<Method, string[]>;
 };
 
 export class MintInfo {
-	// Full mint info response
-	private readonly _mintInfo: GetInfoResponse;
-	// NUT-22, Blind-auth protected endpoints
-	private readonly _protected22?: ProtectedIndex;
-	// NUT-21, Clear-auth protected endpoints
-	private readonly _protected21?: ProtectedIndex;
+  // Full mint info response
+  private readonly _mintInfo: GetInfoResponse;
+  // NUT-22, Blind-auth protected endpoints
+  private readonly _protected22?: ProtectedIndex;
+  // NUT-21, Clear-auth protected endpoints
+  private readonly _protected21?: ProtectedIndex;
 
-	constructor(info: GetInfoResponse) {
-		this._mintInfo = MintInfo.normalizeInfo(info); // TODO v4
+  constructor(info: GetInfoResponse) {
+    this._mintInfo = MintInfo.normalizeInfo(info); // TODO v4
 
-		const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints);
-		this._protected22 = this.buildIndex(pe22);
+    const pe22 = this.toEndpoints(this._mintInfo?.nuts?.[22]?.protected_endpoints);
+    this._protected22 = this.buildIndex(pe22);
 
-		const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints);
-		this._protected21 = this.buildIndex(pe21);
-	}
+    const pe21 = this.toEndpoints(this._mintInfo?.nuts?.[21]?.protected_endpoints);
+    this._protected21 = this.buildIndex(pe21);
+  }
 
-	// TODO v4 - remove this normalization (GetInfoResponse will change)
-	// and we can just normalize min/max_amount to Amount in checkMintMelt()
-	private static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
-		return {
-			...info,
-			nuts: {
-				...info.nuts,
-				...(info.nuts['4']
-					? { '4': MintInfo.normalizeMethodLimits(info.nuts['4'], 'nuts.4.methods') }
-					: {}),
-				...(info.nuts['5']
-					? { '5': MintInfo.normalizeMethodLimits(info.nuts['5'], 'nuts.5.methods') }
-					: {}),
-				...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
-				...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22']) } : {}),
-			},
-		};
-	}
+  // TODO v4 - remove this normalization (GetInfoResponse will change)
+  // and we can just normalize min/max_amount to Amount in checkMintMelt()
+  private static normalizeInfo(info: GetInfoResponse): GetInfoResponse {
+    return {
+      ...info,
+      nuts: {
+        ...info.nuts,
+        ...(info.nuts['4']
+          ? { '4': MintInfo.normalizeMethodLimits(info.nuts['4'], 'nuts.4.methods') }
+          : {}),
+        ...(info.nuts['5']
+          ? { '5': MintInfo.normalizeMethodLimits(info.nuts['5'], 'nuts.5.methods') }
+          : {}),
+        ...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
+        ...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22']) } : {}),
+      },
+    };
+  }
 
-	private static normalizeMethodLimits<
-		TNut extends {
-			methods: Array<{ min_amount?: number; max_amount?: number }>;
-		},
-	>(nut: TNut, context: string): TNut {
-		return {
-			...nut,
-			methods: nut.methods.map((method) => ({
-				...method,
-				min_amount: normalizeAmountToLegacyNumber(
-					method.min_amount,
-					`${context}.min_amount`,
-					undefined,
-				),
-				max_amount: normalizeAmountToLegacyNumber(
-					method.max_amount,
-					`${context}.max_amount`,
-					undefined,
-				),
-			})),
-		};
-	}
+  private static normalizeMethodLimits<
+    TNut extends {
+      methods: Array<{ min_amount?: number; max_amount?: number }>;
+    },
+  >(nut: TNut, context: string): TNut {
+    return {
+      ...nut,
+      methods: nut.methods.map((method) => ({
+        ...method,
+        min_amount: normalizeAmountToLegacyNumber(
+          method.min_amount,
+          `${context}.min_amount`,
+          undefined,
+        ),
+        max_amount: normalizeAmountToLegacyNumber(
+          method.max_amount,
+          `${context}.max_amount`,
+          undefined,
+        ),
+      })),
+    };
+  }
 
-	private static normalizeNut19(
-		nut19: GetInfoResponse['nuts']['19'],
-	): GetInfoResponse['nuts']['19'] {
-		if (!nut19) return nut19;
+  private static normalizeNut19(
+    nut19: GetInfoResponse['nuts']['19'],
+  ): GetInfoResponse['nuts']['19'] {
+    if (!nut19) return nut19;
 
-		return {
-			...nut19,
-			ttl: normalizeSafeIntegerMetadata(nut19.ttl, 'nuts.19.ttl', null),
-		};
-	}
+    return {
+      ...nut19,
+      ttl: normalizeSafeIntegerMetadata(nut19.ttl, 'nuts.19.ttl', null),
+    };
+  }
 
-	private static normalizeNut22(
-		nut22: GetInfoResponse['nuts']['22'],
-	): GetInfoResponse['nuts']['22'] {
-		if (!nut22) return nut22;
+  private static normalizeNut22(
+    nut22: GetInfoResponse['nuts']['22'],
+  ): GetInfoResponse['nuts']['22'] {
+    if (!nut22) return nut22;
 
-		return {
-			...nut22,
-			bat_max_mint: normalizeSafeIntegerMetadata(nut22.bat_max_mint, 'nuts.22.bat_max_mint'),
-		};
-	}
+    return {
+      ...nut22,
+      bat_max_mint: normalizeSafeIntegerMetadata(nut22.bat_max_mint, 'nuts.22.bat_max_mint'),
+    };
+  }
 
-	isSupported(num: 4 | 5): { disabled: boolean; params: SwapMethod[] };
-	isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
-	isSupported(num: 17): { supported: boolean; params?: WebSocketSupport[] };
-	isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
-	isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
-	isSupported(num: number) {
-		switch (num) {
-			case 4:
-			case 5: {
-				return this.checkMintMelt(num);
-			}
-			case 7:
-			case 8:
-			case 9:
-			case 10:
-			case 11:
-			case 12:
-			case 14:
-			case 20: {
-				return this.checkGenericNut(num);
-			}
-			case 17: {
-				return this.checkNut17();
-			}
-			case 15: {
-				return this.checkNut15();
-			}
-			case 19: {
-				return this.checkNut19();
-			}
-			default: {
-				throw new Error('nut is not supported by cashu-ts');
-			}
-		}
-	}
+  isSupported(num: 4 | 5): { disabled: boolean; params: SwapMethod[] };
+  isSupported(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20): { supported: boolean };
+  isSupported(num: 17): { supported: boolean; params?: WebSocketSupport[] };
+  isSupported(num: 15): { supported: boolean; params?: MPPMethod[] };
+  isSupported(num: 19): { supported: boolean; params?: Nut19Policy };
+  isSupported(num: number) {
+    switch (num) {
+      case 4:
+      case 5: {
+        return this.checkMintMelt(num);
+      }
+      case 7:
+      case 8:
+      case 9:
+      case 10:
+      case 11:
+      case 12:
+      case 14:
+      case 20: {
+        return this.checkGenericNut(num);
+      }
+      case 17: {
+        return this.checkNut17();
+      }
+      case 15: {
+        return this.checkNut15();
+      }
+      case 19: {
+        return this.checkNut19();
+      }
+      default: {
+        throw new Error('nut is not supported by cashu-ts');
+      }
+    }
+  }
 
-	requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean {
-		return this.matchesProtected(this._protected22, method, path);
-	}
+  requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean {
+    return this.matchesProtected(this._protected22, method, path);
+  }
 
-	requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean {
-		return this.matchesProtected(this._protected21, method, path);
-	}
+  requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean {
+    return this.matchesProtected(this._protected21, method, path);
+  }
 
-	private matchesProtected(idx: ProtectedIndex | undefined, method: Method, path: string): boolean {
-		if (!idx) return false;
+  private matchesProtected(idx: ProtectedIndex | undefined, method: Method, path: string): boolean {
+    if (!idx) return false;
 
-		// Runtime guard for method
-		const exact = idx.exact[method];
-		const prefix = idx.prefix[method];
-		if (!exact || !prefix) return false;
+    // Runtime guard for method
+    const exact = idx.exact[method];
+    const prefix = idx.prefix[method];
+    if (!exact || !prefix) return false;
 
-		// Exact match first
-		if (idx.exact[method].has(path)) return true;
+    // Exact match first
+    if (idx.exact[method].has(path)) return true;
 
-		// Prefix match fallback
-		for (const p of idx.prefix[method]) {
-			if (path.startsWith(p)) return true;
-		}
+    // Prefix match fallback
+    for (const p of idx.prefix[method]) {
+      if (path.startsWith(p)) return true;
+    }
 
-		return false;
-	}
+    return false;
+  }
 
-	private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
-		return this._mintInfo.nuts[num]?.supported ? { supported: true } : { supported: false };
-	}
+  private checkGenericNut(num: 7 | 8 | 9 | 10 | 11 | 12 | 14 | 20) {
+    return this._mintInfo.nuts[num]?.supported ? { supported: true } : { supported: false };
+  }
 
-	private checkMintMelt(num: 4 | 5) {
-		const mintMeltInfo = this._mintInfo.nuts[num];
-		if (mintMeltInfo && mintMeltInfo.methods.length > 0 && !mintMeltInfo.disabled) {
-			return { disabled: false, params: mintMeltInfo.methods };
-		}
-		return { disabled: true, params: mintMeltInfo?.methods ?? [] };
-	}
+  private checkMintMelt(num: 4 | 5) {
+    const mintMeltInfo = this._mintInfo.nuts[num];
+    if (mintMeltInfo && mintMeltInfo.methods.length > 0 && !mintMeltInfo.disabled) {
+      return { disabled: false, params: mintMeltInfo.methods };
+    }
+    return { disabled: true, params: mintMeltInfo?.methods ?? [] };
+  }
 
-	private checkNut17() {
-		if (this._mintInfo.nuts[17] && this._mintInfo.nuts[17].supported.length > 0) {
-			return { supported: true, params: this._mintInfo.nuts[17].supported };
-		}
-		return { supported: false };
-	}
+  private checkNut17() {
+    if (this._mintInfo.nuts[17] && this._mintInfo.nuts[17].supported.length > 0) {
+      return { supported: true, params: this._mintInfo.nuts[17].supported };
+    }
+    return { supported: false };
+  }
 
-	private checkNut15() {
-		if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
-			return { supported: true, params: this._mintInfo.nuts[15].methods };
-		}
-		return { supported: false };
-	}
+  private checkNut15() {
+    if (this._mintInfo.nuts[15] && this._mintInfo.nuts[15].methods.length > 0) {
+      return { supported: true, params: this._mintInfo.nuts[15].methods };
+    }
+    return { supported: false };
+  }
 
-	private checkNut19() {
-		const rawPolicy = this._mintInfo.nuts?.[19];
-		if (rawPolicy && (rawPolicy?.cached_endpoints?.length || 0) > 0) {
-			const ttlSeconds = normalizeSafeIntegerMetadata(rawPolicy.ttl, 'nuts.19.ttl', null);
-			return {
-				supported: true,
-				params: {
-					// map null to infinity, if not null map seconds to milliseconds.
-					// this way ttl is always a number
-					ttl: ttlSeconds === null ? Infinity : Math.max(ttlSeconds, 0) * 1000,
-					cached_endpoints: rawPolicy.cached_endpoints,
-				} as Nut19Policy,
-			};
-		}
-		return { supported: false };
-	}
+  private checkNut19() {
+    const rawPolicy = this._mintInfo.nuts?.[19];
+    if (rawPolicy && (rawPolicy?.cached_endpoints?.length || 0) > 0) {
+      const ttlSeconds = normalizeSafeIntegerMetadata(rawPolicy.ttl, 'nuts.19.ttl', null);
+      return {
+        supported: true,
+        params: {
+          // map null to infinity, if not null map seconds to milliseconds.
+          // this way ttl is always a number
+          ttl: ttlSeconds === null ? Infinity : Math.max(ttlSeconds, 0) * 1000,
+          cached_endpoints: rawPolicy.cached_endpoints,
+        } as Nut19Policy,
+      };
+    }
+    return { supported: false };
+  }
 
-	// ---------- private helpers ----------
+  // ---------- private helpers ----------
 
-	private toEndpoints(maybe: unknown): Endpoint[] {
-		if (!Array.isArray(maybe)) return [];
-		const out: Endpoint[] = [];
-		for (const e of maybe) {
-			if (e && typeof e === 'object') {
-				const rec = e as Record<string, unknown>;
-				const mm = rec.method;
-				const pp = rec.path;
-				if (typeof mm === 'string' && typeof pp === 'string') {
-					const method = mm.toUpperCase();
-					if (method === 'GET' || method === 'POST') {
-						out.push({ method, path: pp });
-					}
-				}
-			}
-		}
-		return out;
-	}
+  private toEndpoints(maybe: unknown): Endpoint[] {
+    if (!Array.isArray(maybe)) return [];
+    const out: Endpoint[] = [];
+    for (const e of maybe) {
+      if (e && typeof e === 'object') {
+        const rec = e as Record<string, unknown>;
+        const mm = rec.method;
+        const pp = rec.path;
+        if (typeof mm === 'string' && typeof pp === 'string') {
+          const method = mm.toUpperCase();
+          if (method === 'GET' || method === 'POST') {
+            out.push({ method, path: pp });
+          }
+        }
+      }
+    }
+    return out;
+  }
 
-	private buildIndex(endpoints?: Endpoint[]): ProtectedIndex | undefined {
-		if (!endpoints?.length) return undefined;
+  private buildIndex(endpoints?: Endpoint[]): ProtectedIndex | undefined {
+    if (!endpoints?.length) return undefined;
 
-		const exact: ProtectedIndex['exact'] = { GET: new Set(), POST: new Set() };
-		const prefix: ProtectedIndex['prefix'] = { GET: [], POST: [] };
+    const exact: ProtectedIndex['exact'] = { GET: new Set(), POST: new Set() };
+    const prefix: ProtectedIndex['prefix'] = { GET: [], POST: [] };
 
-		for (const e of endpoints) {
-			let p = e.path;
+    for (const e of endpoints) {
+      let p = e.path;
 
-			// Handle deprecated regex formatting (backwards compat)
-			// TODO: remove once mints support revised glob wildcard
-			// See: https://github.com/cashubtc/nuts/pull/334
-			if (p.startsWith('^')) p = p.slice(1);
-			if (p.endsWith('$')) p = p.slice(0, -1);
+      // Handle deprecated regex formatting (backwards compat)
+      // TODO: remove once mints support revised glob wildcard
+      // See: https://github.com/cashubtc/nuts/pull/334
+      if (p.startsWith('^')) p = p.slice(1);
+      if (p.endsWith('$')) p = p.slice(0, -1);
 
-			// Deprecated regex prefix formatting (backwards compat)
-			if (p.endsWith('.*')) {
-				prefix[e.method].push(p.slice(0, -2));
-				continue;
-			}
+      // Deprecated regex prefix formatting (backwards compat)
+      if (p.endsWith('.*')) {
+        prefix[e.method].push(p.slice(0, -2));
+        continue;
+      }
 
-			// Glob style prefix match
-			if (p.endsWith('*')) {
-				prefix[e.method].push(p.slice(0, -1));
-				continue;
-			}
+      // Glob style prefix match
+      if (p.endsWith('*')) {
+        prefix[e.method].push(p.slice(0, -1));
+        continue;
+      }
 
-			// Exact match
-			exact[e.method].add(p);
-		}
+      // Exact match
+      exact[e.method].add(p);
+    }
 
-		// Optional: longer prefixes first for faster early exits
-		prefix.GET.sort((a, b) => b.length - a.length);
-		prefix.POST.sort((a, b) => b.length - a.length);
+    // Optional: longer prefixes first for faster early exits
+    prefix.GET.sort((a, b) => b.length - a.length);
+    prefix.POST.sort((a, b) => b.length - a.length);
 
-		return { exact, prefix };
-	}
+    return { exact, prefix };
+  }
 
-	// ---------- getters ----------
+  // ---------- getters ----------
 
-	get cache(): GetInfoResponse {
-		return this._mintInfo;
-	}
-	get contact() {
-		return this._mintInfo.contact;
-	}
-	get description() {
-		return this._mintInfo.description;
-	}
-	get description_long() {
-		return this._mintInfo.description_long;
-	}
-	get name() {
-		return this._mintInfo.name;
-	}
-	get pubkey() {
-		return this._mintInfo.pubkey;
-	}
-	get nuts() {
-		return this._mintInfo.nuts;
-	}
-	get version() {
-		return this._mintInfo.version;
-	}
-	get motd() {
-		return this._mintInfo.motd;
-	}
+  get cache(): GetInfoResponse {
+    return this._mintInfo;
+  }
+  get contact() {
+    return this._mintInfo.contact;
+  }
+  get description() {
+    return this._mintInfo.description;
+  }
+  get description_long() {
+    return this._mintInfo.description_long;
+  }
+  get name() {
+    return this._mintInfo.name;
+  }
+  get pubkey() {
+    return this._mintInfo.pubkey;
+  }
+  get nuts() {
+    return this._mintInfo.nuts;
+  }
+  get version() {
+    return this._mintInfo.version;
+  }
+  get motd() {
+    return this._mintInfo.motd;
+  }
 
-	/**
-	 * @deprecated Use supportsNut04Description(method, unit)
-	 */
-	get supportsBolt12Description(): boolean {
-		return this.supportsNut04Description('bolt12');
-	}
+  /**
+   * @deprecated Use supportsNut04Description(method, unit)
+   */
+  get supportsBolt12Description(): boolean {
+    return this.supportsNut04Description('bolt12');
+  }
 
-	/**
-	 * Checks if the mint supports creating invoices/offers with a description for the specified
-	 * payment method.
-	 *
-	 * @param method - The payment method to check ('bolt11' or 'bolt12')
-	 * @returns True if the mint supports description for the method, false otherwise.
-	 */
-	supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean {
-		return this._mintInfo.nuts[4]?.methods.some(
-			(met) =>
-				met.method === method &&
-				(unit ? met.unit === unit : true) &&
-				(met.options?.description === true || met.description === true),
-		);
-	}
+  /**
+   * Checks if the mint supports creating invoices/offers with a description for the specified
+   * payment method.
+   *
+   * @param method - The payment method to check ('bolt11' or 'bolt12')
+   * @returns True if the mint supports description for the method, false otherwise.
+   */
+  supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean {
+    return this._mintInfo.nuts[4]?.methods.some(
+      (met) =>
+        met.method === method &&
+        (unit ? met.unit === unit : true) &&
+        (met.options?.description === true || met.description === true),
+    );
+  }
 
-	supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
-		const meltMethods = this._mintInfo?.nuts?.[5]?.methods ?? [];
+  supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
+    const meltMethods = this._mintInfo?.nuts?.[5]?.methods ?? [];
 
-		if (!Array.isArray(meltMethods)) return false;
+    if (!Array.isArray(meltMethods)) return false;
 
-		return meltMethods.some(
-			(met) => met.method === method && met.unit === unit && met.options?.amountless === true,
-		);
-	}
+    return meltMethods.some(
+      (met) => met.method === method && met.unit === unit && met.options?.amountless === true,
+    );
+  }
 }

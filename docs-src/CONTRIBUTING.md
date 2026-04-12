@@ -79,7 +79,7 @@ When adding new features that are subject to change, use the `@experimental` tag
  * @experimental This API is subject to change.
  */
 export function myNewFeature(): void {
-	// ...
+  // ...
 }
 ```
 
@@ -94,7 +94,7 @@ Use `// TODO:` comments to mark areas needing future attention, such as deprecat
 ```typescript
 // TODO: Remove this deprecated method in v4.0
 export function oldMethod(): void {
-	// ...
+  // ...
 }
 ```
 

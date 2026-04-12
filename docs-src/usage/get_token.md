@@ -10,12 +10,12 @@ Use `getTokenMetadata` to inspect a token string **before** creating a wallet â€
 import { getTokenMetadata } from '@cashu/cashu-ts';
 
 try {
-	const meta = getTokenMetadata(tokenString);
-	console.log(meta.mint); // "https://mint.example.com"
-	console.log(meta.unit); // "sat"
-	console.log(meta.amount.toNumber()); // e.g. 64  (amount is Amount, not number)
+  const meta = getTokenMetadata(tokenString);
+  console.log(meta.mint); // "https://mint.example.com"
+  console.log(meta.unit); // "sat"
+  console.log(meta.amount.toNumber()); // e.g. 64  (amount is Amount, not number)
 } catch (_) {
-	console.log('Invalid token');
+  console.log('Invalid token');
 }
 ```
 

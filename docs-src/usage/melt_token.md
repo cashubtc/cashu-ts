@@ -20,7 +20,7 @@ const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 // melt, we must include the mint and/or lightning fees to ensure there are
 // sufficient funds to cover the invoice.
 const { keep: proofsToKeep, send: proofsToSend } = await wallet.send(amountToSend, proofs, {
-	includeFees: true,
+  includeFees: true,
 });
 const meltResponse = await wallet.meltProofs(meltQuote, proofsToSend);
 // store proofsToKeep and meltResponse.change in your app ..
@@ -40,11 +40,11 @@ await wallet.loadMint();
 const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
 const amountToSend = meltQuote.amount + meltQuote.fee_reserve;
 const { send: proofsToSend } = await wallet.send(amountToSend, proofs, {
-	includeFees: true,
+  includeFees: true,
 });
 
 const meltPreview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
-	includeFees: true,
+  includeFees: true,
 });
 
 await saveMeltPreview(meltPreview);

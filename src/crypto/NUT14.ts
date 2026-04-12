@@ -1,16 +1,18 @@
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { type HTLCWitness, type Proof } from '../model/types';
+
 import { type Logger, NULL_LOGGER } from '../logger';
-import { type P2PKVerificationResult, verifyP2PKSpendingConditions } from './NUT11';
+import { type HTLCWitness, type Proof } from '../model/types';
+
 import {
-	assertSecretKind,
-	createSecret,
-	type Secret,
-	getDataField,
-	parseSecret,
-	getSecretKind,
+  assertSecretKind,
+  createSecret,
+  type Secret,
+  getDataField,
+  parseSecret,
+  getSecretKind,
 } from './NUT10';
+import { type P2PKVerificationResult, verifyP2PKSpendingConditions } from './NUT11';
 
 // ------------------------------
 // NUT-14 Secrets
@@ -25,7 +27,7 @@ import {
  * @param tags - Optional. Additional P2PK tags.
  */
 export function createHTLCsecret(hash: string, tags?: string[][]): string {
-	return createSecret('HTLC', hash, tags);
+  return createSecret('HTLC', hash, tags);
 }
 
 /**
@@ -36,7 +38,7 @@ export function createHTLCsecret(hash: string, tags?: string[][]): string {
  * @throws If the JSON is invalid or NUT-10 secret is malformed.
  */
 export function parseHTLCSecret(secret: string | Secret): Secret {
-	return assertSecretKind('HTLC', secret);
+  return assertSecretKind('HTLC', secret);
 }
 
 // ------------------------------
@@ -51,14 +53,14 @@ export function parseHTLCSecret(secret: string | Secret): Secret {
  * @throws If the preimage supplied is not a 64-char hex string.
  */
 export function createHTLCHash(preimage?: string): { hash: string; preimage: string } {
-	const hasPreimage = preimage !== undefined;
-	if (hasPreimage && !/^[0-9a-f]{64}$/i.test(preimage)) {
-		throw new Error('Preimage must be a 64 character hexadecimal string (32 bytes).');
-	}
-	// Create hash
-	const piBytes = hasPreimage ? hexToBytes(preimage) : randomBytes(32);
-	const hash = bytesToHex(sha256(piBytes));
-	return { hash, preimage: bytesToHex(piBytes) };
+  const hasPreimage = preimage !== undefined;
+  if (hasPreimage && !/^[0-9a-f]{64}$/i.test(preimage)) {
+    throw new Error('Preimage must be a 64 character hexadecimal string (32 bytes).');
+  }
+  // Create hash
+  const piBytes = hasPreimage ? hexToBytes(preimage) : randomBytes(32);
+  const hash = bytesToHex(sha256(piBytes));
+  return { hash, preimage: bytesToHex(piBytes) };
 }
 
 /**
@@ -69,8 +71,8 @@ export function createHTLCHash(preimage?: string): { hash: string; preimage: str
  * @returns True if preimage calculates the same hash, False otherwise.
  */
 export function verifyHTLCHash(preimage: string, hash: string): boolean {
-	const { hash: valid } = createHTLCHash(preimage);
-	return hash === valid;
+  const { hash: valid } = createHTLCHash(preimage);
+  return hash === valid;
 }
 
 /**
@@ -94,42 +96,42 @@ export function verifyHTLCHash(preimage: string, hash: string): boolean {
  * @throws If verification is impossible.
  */
 export function verifyHTLCSpendingConditions(
-	proof: Proof,
-	logger: Logger = NULL_LOGGER,
-	message?: string,
+  proof: Proof,
+  logger: Logger = NULL_LOGGER,
+  message?: string,
 ): P2PKVerificationResult {
-	// Init
-	let result: P2PKVerificationResult;
-	message = message ?? proof.secret; // default message is proof secret
+  // Init
+  let result: P2PKVerificationResult;
+  message = message ?? proof.secret; // default message is proof secret
 
-	// Check P2PK locking conditions are satisfied first
-	// We are only interested in 'MAIN' pathway spends on HTLC proofs
-	const secret = parseSecret(proof.secret); // no assert
-	const p2pkResult = verifyP2PKSpendingConditions(proof, logger, message);
-	if (p2pkResult.path != 'MAIN' || getSecretKind(secret) !== 'HTLC') {
-		return p2pkResult; // not an hashlock spend
-	}
+  // Check P2PK locking conditions are satisfied first
+  // We are only interested in 'MAIN' pathway spends on HTLC proofs
+  const secret = parseSecret(proof.secret); // no assert
+  const p2pkResult = verifyP2PKSpendingConditions(proof, logger, message);
+  if (p2pkResult.path != 'MAIN' || getSecretKind(secret) !== 'HTLC') {
+    return p2pkResult; // not an hashlock spend
+  }
 
-	// Ensure proof has a preimage
-	const preimage = getHTLCWitnessPreimage(proof.witness);
-	if (!preimage) {
-		result = { ...p2pkResult, success: false, path: 'FAILED' };
-		logger.debug('Hashlock spend failed, no preimage found', { result });
-		return result;
-	}
+  // Ensure proof has a preimage
+  const preimage = getHTLCWitnessPreimage(proof.witness);
+  if (!preimage) {
+    result = { ...p2pkResult, success: false, path: 'FAILED' };
+    logger.debug('Hashlock spend failed, no preimage found', { result });
+    return result;
+  }
 
-	// Check preimage and hash correspond if main pathway was used
-	const hash = getDataField(secret);
-	if (verifyHTLCHash(preimage, hash)) {
-		result = p2pkResult;
-		logger.debug('Spending condition satisfied via hashlock (receiver) pathway', { result });
-		return result; // success, MAIN pathway
-	}
+  // Check preimage and hash correspond if main pathway was used
+  const hash = getDataField(secret);
+  if (verifyHTLCHash(preimage, hash)) {
+    result = p2pkResult;
+    logger.debug('Spending condition satisfied via hashlock (receiver) pathway', { result });
+    return result; // success, MAIN pathway
+  }
 
-	// Still here? Bad news...
-	result = { ...p2pkResult, success: false, path: 'FAILED' };
-	logger.debug('Hashlock spend failed, wrong preimage for hash', { result });
-	return result; // failed, wrong preimage
+  // Still here? Bad news...
+  result = { ...p2pkResult, success: false, path: 'FAILED' };
+  logger.debug('Hashlock spend failed, wrong preimage for hash', { result });
+  return result; // failed, wrong preimage
 }
 
 /**
@@ -142,11 +144,11 @@ export function verifyHTLCSpendingConditions(
  * @throws If verification is impossible.
  */
 export function isHTLCSpendAuthorised(
-	proof: Proof,
-	logger: Logger = NULL_LOGGER,
-	message?: string,
+  proof: Proof,
+  logger: Logger = NULL_LOGGER,
+  message?: string,
 ): boolean {
-	return verifyHTLCSpendingConditions(proof, logger, message).success;
+  return verifyHTLCSpendingConditions(proof, logger, message).success;
 }
 
 /**
@@ -156,15 +158,15 @@ export function isHTLCSpendAuthorised(
  * @returns Preimage if present.
  */
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined {
-	if (!witness) return undefined;
-	let parsed: Partial<HTLCWitness>;
-	try {
-		parsed = typeof witness === 'string' ? (JSON.parse(witness) as Partial<HTLCWitness>) : witness;
-	} catch (e) {
-		console.error('Failed to parse HTLC witness string:', e);
-		return undefined;
-	}
-	// Check preimage is a non-empty string
-	const preimage = parsed.preimage;
-	return typeof preimage === 'string' && preimage.length > 0 ? preimage : undefined;
+  if (!witness) return undefined;
+  let parsed: Partial<HTLCWitness>;
+  try {
+    parsed = typeof witness === 'string' ? (JSON.parse(witness) as Partial<HTLCWitness>) : witness;
+  } catch (e) {
+    console.error('Failed to parse HTLC witness string:', e);
+    return undefined;
+  }
+  // Check preimage is a non-empty string
+  const preimage = parsed.preimage;
+  return typeof preimage === 'string' && preimage.length > 0 ? preimage : undefined;
 }

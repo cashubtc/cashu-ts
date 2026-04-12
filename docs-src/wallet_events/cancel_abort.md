@@ -8,7 +8,7 @@ The simplest way to cancel a subscription is to call its cancel handle.
 
 ```ts
 const cancelSub = wallet.on.countersReserved(({ keysetId, next }) => {
-	void saveNextToDb(keysetId, next).catch(console.error);
+  void saveNextToDb(keysetId, next).catch(console.error);
 });
 
 // later
@@ -23,10 +23,10 @@ const ac = new AbortController();
 
 // Setup subscriptions to use abort signal
 wallet.on.countersReserved(
-	({ keysetId, next }) => {
-		void saveNextToDb(keysetId, next).catch(console.error);
-	},
-	{ signal: ac.signal }, // abort controller
+  ({ keysetId, next }) => {
+    void saveNextToDb(keysetId, next).catch(console.error);
+  },
+  { signal: ac.signal }, // abort controller
 );
 
 // when done... trigger the abort signal
@@ -41,12 +41,12 @@ The `once*` helpers are always cancelled automatically after resolution or rejec
 
 ```ts
 try {
-	const paid = await wallet.on.onceMintPaid(quoteId, {
-		signal: ac.signal,
-		timeoutMs: 60_000,
-	});
-	console.log('Paid', paid.amount);
+  const paid = await wallet.on.onceMintPaid(quoteId, {
+    signal: ac.signal,
+    timeoutMs: 60_000,
+  });
+  console.log('Paid', paid.amount);
 } catch (e) {
-	console.warn('Not paid in time or aborted', e);
+  console.warn('Not paid in time or aborted', e);
 }
 ```

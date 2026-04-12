@@ -1,22 +1,22 @@
-import { type MintQuoteBolt11Response, MintQuoteState } from '../model/types';
 import type { Logger } from '../logger';
+import { type MintQuoteBolt11Response, MintQuoteState } from '../model/types';
 
 export type MintQuoteResponsePaidDeprecated = {
-	paid?: boolean;
+  paid?: boolean;
 };
 
 export function handleMintQuoteResponseDeprecated(
-	response: MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated,
-	logger: Logger,
+  response: MintQuoteBolt11Response & MintQuoteResponsePaidDeprecated,
+  logger: Logger,
 ): MintQuoteBolt11Response {
-	// if the response has a "paid" flag, we monkey patch it to the state enum
-	if (!response.state) {
-		logger.warn(
-			"Field 'state' not found in Mint quote response. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)",
-		);
-		if (typeof response.paid === 'boolean') {
-			response.state = response.paid ? MintQuoteState.PAID : MintQuoteState.UNPAID;
-		}
-	}
-	return response;
+  // if the response has a "paid" flag, we monkey patch it to the state enum
+  if (!response.state) {
+    logger.warn(
+      "Field 'state' not found in Mint quote response. Update NUT-04 of mint: https://github.com/cashubtc/nuts/pull/141)",
+    );
+    if (typeof response.paid === 'boolean') {
+      response.state = response.paid ? MintQuoteState.PAID : MintQuoteState.UNPAID;
+    }
+  }
+  return response;
 }

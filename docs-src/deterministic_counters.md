@@ -20,10 +20,10 @@ These methods will throw if the CounterSource does not support them.
 ```ts
 // 1) Seed once at app start if you have previously saved "next" per keyset
 const wallet = new Wallet(mintUrl, {
-	unit: 'sat',
-	bip39seed,
-	keysetId: preferredKeysetId, // e.g. '0111111'
-	counterInit: loadCountersFromDb(), // e.g. { '0111111': 128 }
+  unit: 'sat',
+  bip39seed,
+  keysetId: preferredKeysetId, // e.g. '0111111'
+  counterInit: loadCountersFromDb(), // e.g. { '0111111': 128 }
 });
 await wallet.loadMint();
 
@@ -32,8 +32,8 @@ await wallet.counters.advanceToAtLeast('0111111', 128);
 
 // 2) Subscribe once, persist future reservations
 wallet.on.countersReserved(({ keysetId, start, count, next }) => {
-	// next is start + count (i.e: next available)
-	saveNextToDb(keysetId, next); // do an atomic upsert per keysetId
+  // next is start + count (i.e: next available)
+  saveNextToDb(keysetId, next); // do an atomic upsert per keysetId
 });
 
 // 3) Inspect current state, what will be reserved next
@@ -42,9 +42,9 @@ const nextCounter = await wallet.counters.peekNext('0111111'); // 128
 // 4) After a restore or cross device sync, bump the cursor forward
 const { lastCounterWithSignature } = await wallet.batchRestore();
 if (lastCounterWithSignature != null) {
-	const next = lastCounterWithSignature + 1; // e.g. 137
-	await wallet.counters.advanceToAtLeast('0111111', next);
-	await saveNextToDb('0111111', next);
+  const next = lastCounterWithSignature + 1; // e.g. 137
+  await wallet.counters.advanceToAtLeast('0111111', next);
+  await saveNextToDb('0111111', next);
 }
 
 // 5) Parallel keysets without mutation

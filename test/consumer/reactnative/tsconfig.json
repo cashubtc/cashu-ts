@@ -1,12 +1,12 @@
 {
-	"extends": "@tsconfig/react-native/tsconfig.json",
-	"compilerOptions": {
-		"strict": true,
-		"skipLibCheck": true,
-		"noEmit": true,
-		"types": ["react-native"],
-		"module": "esnext",
-		"moduleResolution": "bundler"
-	},
-	"include": ["**/*.ts"]
+  "extends": "@tsconfig/react-native/tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["react-native"],
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "include": ["**/*.ts"]
 }
