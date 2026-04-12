@@ -1,5 +1,3 @@
-[Documents](../index.html) › **Versions and Releases**
-
 # Versions & Releases
 
 This project uses **Semantic Versioning** and a simplified branching model.

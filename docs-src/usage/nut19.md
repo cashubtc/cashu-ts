@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **NUT-19 Cached Responses**
-
 # NUT-19 Cached Responses
 
 Cashu-TS reads NUT-19 support from the mint's `/v1/info` response and automatically retries requests to cached endpoints when the mint advertises them.

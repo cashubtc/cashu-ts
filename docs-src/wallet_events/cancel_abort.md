@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Wallet Events](../wallet_events/wallet_events.md) › **Cancel and Abort**
-
 # Cancel and Abort
 
 Subscriptions should be cancelled when no longer needed to avoid leaks and keep your app tidy.

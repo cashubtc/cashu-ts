@@ -15,6 +15,7 @@ export default tseslint.config(
       'scripts/**',
       'test/**',
       'coverage/**',
+      'docs/**',
       '.jest/**',
       'jest.config.ts',
       'lib/**',

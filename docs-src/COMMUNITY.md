@@ -1,5 +1,3 @@
-[Documents](../index.html) › **Community Contribution Philosophy**
-
 # Community Contribution Philosophy
 
 We welcome new contributors.

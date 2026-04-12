@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Wallet Events](../wallet_events/wallet_events.md) › **Grouped Cancellers**
-
 # Grouped cancellers
 
 ```ts

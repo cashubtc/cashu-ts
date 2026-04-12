@@ -51,6 +51,7 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 We provide comprehensive examples categorized by use case:
 
 - **[Basic Guide](./docs-src/usage/usage_index.md)**: Getting Started, and basic token operations.
+- **[Create Wallet](./docs-src/usage/create_wallet.md)**: Initialize a wallet from a mint URL or cached mint state.
 - **[WalletOps](./docs-src/wallet_ops/wallet_ops.md)**: Translation Builder Usage Recipes.
 - **[WalletEvents](./docs-src/wallet_events/wallet_events.md)**: Event Subscriptions
 - **[Deterministic Counters](./docs-src/deterministic_counters.md)**: Deterministic counters (persist, inspect, bump).

@@ -1,5 +1,3 @@
-[Documents](../index.html) › **Roadmap**
-
 This document outlines the current and planned features for the project, tracked as **NUTs** (Notation, Utilization, and Terminology). Each NUT represents a specific feature or improvement, with links to detailed specifications.
 
 ### How to Use This Document

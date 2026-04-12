@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Get Token**
-
 # Getting token data
 
 ## Pre-wallet: `getTokenMetadata`

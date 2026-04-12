@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Wallet Operations](../wallet_ops/wallet_ops.md) › **Melt**
-
 # Melt
 
 ## 1) Basic BOLT11 melt

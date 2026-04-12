@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Create Wallet**
-
 # Create a wallet
 
 There are a number of ways to instantiate a wallet, depending on your needs.

@@ -1,5 +1,3 @@
-[Documents](../index.html) › [Usage Examples](../usage/usage_index.md) › **Melt Token**
-
 # Melt tokens
 
 ## 1) One-step BOLT11 melt

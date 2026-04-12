@@ -1,5 +1,3 @@
-[Documents](../index.html) › **Wallet Events**
-
 # WalletEvents – Event Subscriptions
 
 `wallet.on` exposes event subscriptions for counters, quotes, melts, and proof states. Each method returns a canceller function. You can bind an `AbortSignal`, set a timeout, or group cancellers and dispose them together.
