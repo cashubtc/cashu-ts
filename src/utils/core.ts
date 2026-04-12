@@ -438,7 +438,7 @@ export function getDecodedToken(
   // remove prefixes
   const tokenStr = removePrefix(tokenString);
   const token: Token = handleTokens(tokenStr);
-  token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
+  if (keysetIds) token.proofs = mapShortKeysetIds(token.proofs, keysetIds);
   return token;
 }
 
