@@ -1013,8 +1013,8 @@ class Wallet {
     this.failIf(sumProofs(proofs) < sendAmount, 'Not enough funds available to send');
 
     const { keep, send } = this.selectProofsToSend(proofs, sendAmount, includeFees, exactMatch);
-    // Ensure witnesses are serialized, strip DLEQ if not required
-    const sendPrepared = this._prepareInputsForMint(send, requireDleq);
+    // Ensure witnesses are serialized, strip DLEQ if not required, keep p2pk_e
+    const sendPrepared = this._prepareInputsForMint(send, requireDleq, true);
     return { keep, send: sendPrepared };
   }
 
@@ -1441,16 +1441,22 @@ class Wallet {
    * Returns an array of new proof objects - does not mutate the originals.
    * @param proofs The proofs to prepare.
    * @param keepDleq Optional boolean to keep DLEQ (default: false, strips for privacy).
+   * @param keepP2pkE Optional boolean to keep NUT-28 "E" (default: false, strips for privacy).
    * @returns Prepared proofs for mint payload.
    */
-  private _prepareInputsForMint(proofs: Proof[], keepDleq: boolean = false): Proof[] {
+  private _prepareInputsForMint(
+    proofs: Proof[],
+    keepDleq: boolean = false,
+    keepP2pkE: boolean = false,
+  ): Proof[] {
     return proofs.map((p) => {
       const witness =
         p.witness && typeof p.witness !== 'string' ? JSON.stringify(p.witness) : p.witness;
       const { dleq, p2pk_e, ...rest } = p; // isolate dleq and p2pk_e
-      void p2pk_e; // intentionally unused (linter)
-      // New proof object
-      return keepDleq && dleq ? { ...rest, dleq, witness } : { ...rest, witness };
+      let newProof: Proof = { ...rest, witness }; // add back normalized witness
+      if (keepP2pkE && p2pk_e) newProof = { ...newProof, p2pk_e };
+      if (keepDleq && dleq) newProof = { ...newProof, dleq };
+      return newProof;
     });
   }
 

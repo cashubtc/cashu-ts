@@ -2185,6 +2185,60 @@ describe('send', () => {
     const expectedNext2 = expectedNext1 + sendLen2 + keepLen2;
     expect(await wallet.counters.peekNext(keysetId)).toBe(expectedNext2);
   });
+  test('preserves p2pk_e on offline send proofs', async () => {
+    const p2pkSecret = JSON.stringify([
+      'P2PK',
+      {
+        nonce: 'abc123',
+        data: '02' + 'aa'.repeat(32),
+        tags: [],
+      },
+    ]);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: 1,
+        secret: p2pkSecret,
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        p2pk_e: '02' + 'bb'.repeat(32),
+      },
+    ];
+
+    const { send } = wallet.sendOffline(1, proofs);
+    expect(send).toHaveLength(1);
+    expect(send[0].p2pk_e).toBe(proofs[0].p2pk_e);
+  });
+  test('preserves p2pk_e when exact-match send avoids swap', async () => {
+    const p2pkSecret = JSON.stringify([
+      'P2PK',
+      {
+        nonce: 'abc123',
+        data: '02' + 'aa'.repeat(32),
+        tags: [],
+      },
+    ]);
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const exactMatchProofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: 1,
+        secret: p2pkSecret,
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+        p2pk_e: '02' + 'cc'.repeat(32),
+      },
+    ];
+
+    const result = await wallet.send(1, exactMatchProofs);
+
+    expect(result.keep).toHaveLength(0);
+    expect(result.send).toHaveLength(1);
+    expect(result.send[0].p2pk_e).toBe(exactMatchProofs[0].p2pk_e);
+  });
 });
 
 describe('deterministic', () => {
