@@ -1875,6 +1875,7 @@ export class Wallet {
         denominationTarget?: number;
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
+        requireSigDleq?: boolean;
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{

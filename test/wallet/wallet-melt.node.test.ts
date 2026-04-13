@@ -15,9 +15,13 @@ import {
 } from '../../src';
 
 import { randomBytes } from '@noble/hashes/utils.js';
-import { useTestServer, mint, mintUrl, unit, invoice, logger } from './_setup';
+import { useTestServer, mint, mintUrl, unit, invoice, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();
+const mintInfoRespWithNut12 = {
+  ...mintInfoResp,
+  nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
+};
 
 describe('melt proofs', () => {
   test('test melt proofs base case', async () => {
@@ -101,7 +105,7 @@ describe('melt proofs', () => {
         });
       }),
     );
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const meltQuote: MeltQuoteBolt11Response = {
@@ -133,6 +137,62 @@ describe('melt proofs', () => {
     expect(response.quote.state).toBe(MeltQuoteState.PAID);
     expect(response.quote.payment_preimage).toBe('preimage');
     expect(response.change).toHaveLength(0);
+  });
+
+  test('rejects missing DLEQ on melt change when mint advertises NUT-12', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)),
+      http.post(mintUrl + '/v1/melt/bolt11', () =>
+        HttpResponse.json({
+          quote: 'test_melt_quote',
+          amount: 10,
+          unit: 'sat',
+          fee_reserve: 3,
+          state: MeltQuoteState.PAID,
+          expiry: 1234567890,
+          payment_preimage: 'preimage',
+          request: 'bolt11request',
+          change: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+    };
+    const proofsToSend: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(8),
+        secret: 'secret1',
+        C: 'C1',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(5),
+        secret: 'secret2',
+        C: 'C2',
+      },
+    ];
+
+    await expect(wallet.meltProofsBolt11(meltQuote, proofsToSend)).rejects.toThrow(
+      'Mint supports NUT-12, but returned a signature without DLEQ proof',
+    );
   });
 
   test('test melt proofs accepts deserialized ProofLike[] input', async () => {

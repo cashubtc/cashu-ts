@@ -19,6 +19,10 @@ import { hexToBytes } from '@noble/curves/utils.js';
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();
+const mintInfoRespWithNut12 = {
+  ...mintInfoResp,
+  nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
+};
 
 describe('requestTokens', () => {
   test('test requestTokens', async () => {
@@ -92,6 +96,38 @@ describe('requestTokens', () => {
     expect(mintCalls).toBe(1);
     expect(proofs).toHaveLength(1);
     expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+  });
+
+  test('completeMint rejects missing DLEQ when mint advertises NUT-12', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)),
+      http.post(mintUrl + '/v1/mint/bolt11', () =>
+        HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+            },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+
+    const preview = await wallet.prepareMint('bolt11', 1, {
+      quote: 'quote-dleq-required',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      state: MintQuoteState.UNPAID,
+      expiry: null,
+    });
+
+    await expect(wallet.completeMint(preview)).rejects.toThrow(
+      'Mint supports NUT-12, but returned a signature without DLEQ proof',
+    );
   });
 
   test('prepareBatchMint consolidates outputs and completeBatchMint sends batch request', async () => {
@@ -235,6 +271,42 @@ describe('requestTokens', () => {
     const proofs = await wallet.completeBatchMint(batchPreview);
     const totalAmount = sumProofs(proofs);
     expect(totalAmount.equals(5)).toBe(true);
+  });
+
+  test('completeBatchMint rejects missing DLEQ when mint advertises NUT-12', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)),
+      http.post(mintUrl + '/v1/mint/bolt11/batch', async ({ request }) => {
+        const body = (await request.json()) as { outputs: Array<{ amount: unknown }> };
+        return HttpResponse.json({
+          signatures: body.outputs.map((o) => ({
+            id: '00bd033559de27d0',
+            amount: o.amount,
+            C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+          })),
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+
+    const batchPreview = await wallet.prepareBatchMint('bolt11', [
+      {
+        amount: 1,
+        quote: {
+          quote: 'quote-a',
+          request: 'lnbc...',
+          amount: Amount.from(1),
+          unit: 'sat',
+          state: MintQuoteState.UNPAID,
+          expiry: null,
+        },
+      },
+    ]);
+
+    await expect(wallet.completeBatchMint(batchPreview)).rejects.toThrow(
+      'Mint supports NUT-12, but returned a signature without DLEQ proof',
+    );
   });
 
   test('prepareBatchMint omits signatures when all quotes are unlocked', async () => {

@@ -13,9 +13,13 @@ import {
 import { Bytes } from '../../src/utils';
 import { hexToBytes } from '@noble/curves/utils.js';
 
-import { useTestServer, mint, mintUrl, unit, logger } from './_setup';
+import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
 const server = useTestServer();
+const mintInfoRespWithNut12 = {
+  ...mintInfoResp,
+  nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
+};
 
 function expectNUT10SecretDataToEqual(p: Array<Proof>, s: string) {
   p.forEach((p) => {
@@ -40,7 +44,7 @@ const p2pkSecret = JSON.stringify([
 
 describe('sendOffline witness normalization', () => {
   test('strips witness from plain (non-NUT-10) secret', async () => {
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const proofs: Proof[] = [
@@ -59,7 +63,7 @@ describe('sendOffline witness normalization', () => {
   });
 
   test('preserves witness on NUT-10 P2PK secret', async () => {
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
@@ -79,7 +83,7 @@ describe('sendOffline witness normalization', () => {
   });
 
   test('serializes object witness on NUT-10 secret to JSON string', async () => {
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const witnessObj = { signatures: ['cafebabe'] };
@@ -99,7 +103,7 @@ describe('sendOffline witness normalization', () => {
   });
 
   test('no-change when proof has no witness', async () => {
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const proofs: Proof[] = [
@@ -117,7 +121,7 @@ describe('sendOffline witness normalization', () => {
   });
 
   test('preserves witness on NUT-10 unknown secret kind', async () => {
-    const wallet = new Wallet(mint, { unit });
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
     await wallet.loadMint();
 
     const witnessStr = JSON.stringify({ signatures: ['cafebabe'] });
@@ -241,6 +245,42 @@ describe('send', () => {
     expect(result.send[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(/[0-9a-f]{64}/.test(result.send[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(result.send[0].secret)).toBe(true);
+  });
+
+  test('rejects missing DLEQ on swap when mint advertises NUT-12', async () => {
+    const swapProofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(2),
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      },
+    ];
+    server.use(
+      http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)),
+      http.post(mintUrl + '/v1/swap', () =>
+        HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d423',
+            },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+
+    await expect(wallet.send(1, swapProofs)).rejects.toThrow(
+      'Mint supports NUT-12, but returned a signature without DLEQ proof',
+    );
   });
 
   test('test send accepts AmountLike values', async () => {

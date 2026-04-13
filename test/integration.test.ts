@@ -152,6 +152,17 @@ describe('mint api', () => {
     // expect that the sum of all tokens.proofs.amount is equal to the requested amount
     expect(sumProofs(proofs).equals(1337)).toBeTruthy();
   });
+  test('mint tokens with requireSigDleq', async () => {
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+    const request = await wallet.createMintQuoteBolt11(1337);
+    await untilMintQuotePaid(wallet, request);
+    expect(request).toBeDefined();
+    expect(request.request).toContain('lnbc1337');
+    const proofs = await wallet.mintProofsBolt11(1337, request.quote);
+    expect(proofs).toBeDefined();
+    expect(sumProofs(proofs).equals(1337)).toBeTruthy();
+  });
   test('invoice with description', async () => {
     const wallet = new Wallet(mintUrl, { unit });
     await wallet.loadMint();
@@ -184,7 +195,9 @@ describe('mint api', () => {
     // get the quote from the mint
     const quote_ = await wallet.checkMeltQuoteBolt11(meltQuote.quote);
     expect(quote_).toBeDefined();
-    const sendResponse = await wallet.send(fee.add(2000), proofs, { includeFees: true });
+    const sendResponse = await wallet.send(fee.add(meltQuote.amount), proofs, {
+      includeFees: true,
+    });
     const response = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
     expect(response).toBeDefined();
     // expect that we have not received the fee back, since it was external
@@ -198,6 +211,38 @@ describe('mint api', () => {
       expect(state.witness).toBeNull();
     });
     // expect none of the sendResponse.keep to be spent
+    const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
+    expect(keepProofsStates).toBeDefined();
+    keepProofsStates.forEach((state) => {
+      expect(state.state).toBe(CheckStateEnum.UNSPENT);
+      expect(state.witness).toBeNull();
+    });
+  });
+  test('pay external invoice with requireSigDleq', async () => {
+    const invoice =
+      'lnbc15u1p3xnhl2pp5jptserfk3zk4qy42tlucycrfwxhydvlemu9pqr93tuzlv9cc7g3sdqsvfhkcap3xyhx7un8cqzpgxqzjcsp5f8c52y2stc300gl6s4xswtjpc37hrnnr3c9wvtgjfuvqmpm35evq9qyyssqy4lgd8tj637qcjp05rdpxxykjenthxftej7a2zzmwrmrl70fyj9hvj0rewhzj7jfyuwkwcg9g2jpwtk3wkjtwnkdks84hsnu8xps5vsq4gj5hs';
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+    const request = await wallet.createMintQuoteBolt11(3000);
+    await untilMintQuotePaid(wallet, request);
+    const proofs = await wallet.mintProofsBolt11(3000, request.quote);
+    const meltQuote = await wallet.createMeltQuoteBolt11(invoice);
+    const fee = meltQuote.fee_reserve;
+    expect(fee.greaterThan(0)).toBeTruthy();
+    const quote_ = await wallet.checkMeltQuoteBolt11(meltQuote.quote);
+    expect(quote_).toBeDefined();
+    const sendResponse = await wallet.send(fee.add(meltQuote.amount), proofs, {
+      includeFees: true,
+    });
+    const response = await wallet.meltProofsBolt11(meltQuote, sendResponse.send);
+    expect(response).toBeDefined();
+    expect(sumProofs(response.change).lessThan(fee)).toBeTruthy();
+    const sentProofsStates = await wallet.checkProofsStates(sendResponse.send);
+    expect(sentProofsStates).toBeDefined();
+    sentProofsStates.forEach((state) => {
+      expect(state.state).toBe(CheckStateEnum.SPENT);
+      expect(state.witness).toBeNull();
+    });
     const keepProofsStates = await wallet.checkProofsStates(sendResponse.keep);
     expect(keepProofsStates).toBeDefined();
     keepProofsStates.forEach((state) => {
@@ -232,6 +277,21 @@ describe('mint api', () => {
     expect(sendResponse.send.length).toBe(2); // 2,8
     // The 32 would have been selected (fee: 1 sat), leaving 4,64 unspent
     // We expect: 16, 4, 1 change + 4,64 unspent = 5 proofs (total 89)
+    expect(sendResponse.keep.length).toBe(5);
+    expect(sumProofs(sendResponse.send).equals(10)).toBeTruthy();
+    expect(sumProofs(sendResponse.keep).equals(89)).toBeTruthy();
+  });
+  test('test send tokens with change with requireSigDleq', async () => {
+    const wallet = new Wallet(mintUrl, { unit, requireSigDleq: true });
+    await wallet.loadMint();
+    const request = await wallet.createMintQuoteBolt11(100);
+    await untilMintQuotePaid(wallet, request);
+    const proofs = await wallet.mintProofsBolt11(100, request.quote);
+    const sendResponse = await wallet.send(10, proofs, { includeFees: false });
+    expect(sendResponse).toBeDefined();
+    expect(sendResponse.send).toBeDefined();
+    expect(sendResponse.keep).toBeDefined();
+    expect(sendResponse.send.length).toBe(2);
     expect(sendResponse.keep.length).toBe(5);
     expect(sumProofs(sendResponse.send).equals(10)).toBeTruthy();
     expect(sumProofs(sendResponse.keep).equals(89)).toBeTruthy();

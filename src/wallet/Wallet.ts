@@ -150,6 +150,7 @@ class Wallet {
   private _boundKeysetId: string = PENDING_KEYSET_ID;
   private _selectProofs: SelectProofs;
   private _outputDataCreator: OutputDataCreator;
+  private _requireSigDleq = false;
   private _logger: Logger;
 
   /**
@@ -185,6 +186,9 @@ class Wallet {
    *   maintained implementation is the default Noble Curves based behavior exposed by
    *   `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, and
    *   compatibility and maintenance are the integrator's responsibility.
+   * @param options.requireSigDleq Fail mint/swap/melt responses when the mint advertises NUT-12
+   *   support but omits DLEQ proofs on returned blinded signatures. This is a fail-fast consistency
+   *   check, not protection against a malicious mint already consuming inputs or payments.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -200,6 +204,7 @@ class Wallet {
       denominationTarget?: number;
       selectProofs?: SelectProofs; // optional override
       outputDataCreator?: OutputDataCreator;
+      requireSigDleq?: boolean;
       logger?: Logger;
     },
   ) {
@@ -233,6 +238,7 @@ class Wallet {
     this.counters = new WalletCounters(this._counterSource);
     this._keyChain = new KeyChain(this.mint, this._unit);
     this._denominationTarget = options?.denominationTarget ?? this._denominationTarget;
+    this._requireSigDleq = options?.requireSigDleq ?? this._requireSigDleq;
   }
 
   // Convenience wrappers for "log and throw"
@@ -576,6 +582,7 @@ class Wallet {
       bip39seed: this._seed,
       secretsPolicy: this._secretsPolicy,
       outputDataCreator: this._outputDataCreator,
+      requireSigDleq: this._requireSigDleq,
       logger: this._logger,
       counterSource: opts?.counterSource ?? this._counterSource,
     });
@@ -1271,22 +1278,16 @@ class Wallet {
       sendOutputs,
     );
 
-    // Execute swap
+    // Execute swap and validate result
     const { signatures } = await this.mint.swap(swapTransaction.payload);
     this.failIf(
-      signatures.length < swapTransaction.outputData.length,
+      signatures.length !== swapTransaction.outputData.length,
       `Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}`,
     );
+    this.validateReturnedSignatures(signatures, swapTransaction.outputData);
 
     // Construct proofs
     const keyset = this.getKeyset(swapPreview.keysetId);
-    // Verify each signature amount matches the requested amount
-    for (let i = 0; i < swapTransaction.outputData.length; i++) {
-      this.failIf(
-        !signatures[i].amount.equals(swapTransaction.outputData[i].blindedMessage.amount),
-        `Mint returned signature with wrong amount: expected ${swapTransaction.outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}`,
-      );
-    }
     const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
     const reorderedProofs = Array(swapProofs.length);
     const reorderedKeepVector = Array(swapTransaction.keepVector.length);
@@ -1782,6 +1783,29 @@ class Wallet {
   // Section: Mint Proofs
   // -----------------------------------------------------------------
 
+  private validateReturnedSignatures(
+    signatures: SerializedBlindedSignature[],
+    outputData: OutputDataLike[],
+    options?: { checkAmounts?: boolean },
+  ): void {
+    // With DLEQ we can verify the returned blinded signature is paired to the original B_.
+    // Without DLEQ, equal-denomination reordering is a protocol trust assumption.
+    const requiresDleq =
+      this._requireSigDleq && (this._mintInfo?.isSupported(12).supported ?? false);
+    const checkAmounts = options?.checkAmounts ?? true;
+
+    for (let i = 0; i < signatures.length; i++) {
+      this.failIf(
+        checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
+        `Mint returned signature with wrong amount: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}`,
+      );
+      this.failIf(
+        requiresDleq && !signatures[i].dleq,
+        'Mint supports NUT-12, but returned a signature without DLEQ proof',
+      );
+    }
+  }
+
   /**
    * @internal
    */
@@ -2009,18 +2033,12 @@ class Wallet {
       signatures.length !== outputData.length,
       `Mint returned ${signatures.length} signatures, expected ${outputData.length}`,
     );
+    this.validateReturnedSignatures(signatures, outputData);
 
     const keyset = this.getKeyset(keysetId);
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    // Verify each signature amount matches the requested amount
-    for (let i = 0; i < signatures.length; i++) {
-      this.failIf(
-        !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
-        `Mint returned signature with wrong amount: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}`,
-      );
-    }
     return outputData.map((d, i) => d.toProof(signatures[i], keyset));
   }
 
@@ -2180,18 +2198,13 @@ class Wallet {
       sigs.length !== outputData.length,
       `Mint returned ${sigs.length} signatures, expected ${outputData.length}`,
     );
+    this.validateReturnedSignatures(sigs, outputData);
 
     const keyset = this.getKeyset(keysetId);
     this._logger.debug('BATCH MINT COMPLETED', {
       quotes: payload.quotes.length,
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
     });
-    for (let i = 0; i < sigs.length; i++) {
-      this.failIf(
-        !sigs[i].amount.equals(outputData[i].blindedMessage.amount),
-        `Mint returned signature with wrong amount: expected ${outputData[i].blindedMessage.amount.toString()}, got ${sigs[i].amount.toString()}`,
-      );
-    }
     return outputData.map((d, i) => d.toProof(sigs[i], keyset));
   }
 
@@ -2596,18 +2609,23 @@ class Wallet {
       ...(preferAsync ? { prefer_async: true } : {}),
     };
 
+    // Execute melt and validate result
     const meltResponse: MeltQuoteBaseResponse = await this.mint.melt<TQuote>(
       meltPreview.method,
       meltPayload,
     );
+    if (meltResponse.change) {
+      // Change may not use all outputs (shorter is ok)
+      this.failIf(
+        meltResponse.change.length > meltPreview.outputData.length,
+        `Mint returned ${meltResponse.change.length} signatures, but only ${meltPreview.outputData.length} blanks were provided`,
+      );
+      this.validateReturnedSignatures(meltResponse.change, meltPreview.outputData, {
+        checkAmounts: false, // change outputs are blank
+      });
+    }
 
-    // Check for too many blind signatures before mapping
-    this.failIf(
-      (meltResponse.change?.length ?? 0) > meltPreview.outputData.length,
-      `Mint returned ${meltResponse.change?.length ?? 0} signatures, but only ${meltPreview.outputData.length} blanks were provided`,
-    );
-
-    // Construct change (shorter ok)
+    // Construct change
     const change =
       meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
 
