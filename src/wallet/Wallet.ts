@@ -22,7 +22,7 @@ import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
-import { defaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
+import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
 import type {
   GetInfoResponse,
   MeltRequest,
@@ -181,7 +181,10 @@ class Wallet {
    *   counterSource is also provided.
    * @param options.denominationTarget Target proofs per denomination, default 3.
    * @param options.selectProofs Custom proof selection function.
-   * @param options.outputDataCreator Custom OutputDataCreator implementation.
+   * @param options.outputDataCreator Custom OutputDataCreator implementation. The canonical and
+   *   maintained implementation is the default Noble Curves based behavior exposed by
+   *   `OutputData.create*()`. Custom creators are an escape hatch for runtime-specific needs, and
+   *   compatibility and maintenance are the integrator's responsibility.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -204,7 +207,7 @@ class Wallet {
     this.on = new WalletEvents(this);
     this._logger = options?.logger ?? NULL_LOGGER; // init early (seed can throw)
     this._selectProofs = options?.selectProofs ?? selectProofsRGLI; // vital
-    this._outputDataCreator = options?.outputDataCreator ?? defaultOutputDataCreator;
+    this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
     this.mint =
       typeof mint === 'string'
         ? new Mint(mint, { authProvider: options?.authProvider, logger: this._logger })

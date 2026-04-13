@@ -1218,7 +1218,7 @@ export class OutputData implements OutputDataLike {
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
 }
 
-// @public (undocumented)
+// @public
 export interface OutputDataCreator {
     // (undocumented)
     createDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputDataLike[];

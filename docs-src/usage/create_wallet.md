@@ -31,8 +31,14 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 Pass `outputDataCreator` when you need to replace the default output generation logic, for
 example to use a platform specific implementation for deterministic secrets.
 
-`OutputDataCreator` is the injectable strategy interface used by `Wallet`. The supported default
+`OutputDataCreator` is the injectable strategy interface used by `Wallet`. The canonical default
 creation surface remains `OutputData.create*()`, so custom creators can delegate back to it for the standard random and P2PK behavior.
+
+> [!IMPORTANT]
+> The only officially supported and maintained `OutputDataCreator` is the default Noble Curves based
+> implementation exposed by `OutputData.create*()`. Custom creators are an escape hatch for
+> runtime-specific needs, but their compatibility and maintenance are the integrator's
+> responsibility.
 
 ```typescript
 import { OutputData, type OutputDataCreator, Wallet } from '@cashu/cashu-ts';
