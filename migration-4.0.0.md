@@ -625,6 +625,7 @@ const meta = getTokenMetadata(tokenString);
 // meta.mint, meta.unit, meta.amount (Amount), meta.incompleteProofs
 
 // After — Step 2: build and load the wallet
+// Validate meta.mint before any network call, especially in server-side code.
 const wallet = new Wallet(meta.mint, { unit: meta.unit });
 await wallet.loadMint(); // or wallet.loadMintFromCache(mintInfo, keyChainCache)
 
@@ -634,11 +635,11 @@ const token = wallet.decodeToken(tokenString); // Token with complete Proof[]
 
 ### When to use each API
 
-| API                         | When to use                                                                              |
-| --------------------------- | ---------------------------------------------------------------------------------------- |
-| `getTokenMetadata(str)`     | Before a wallet exists — get mint URL, unit, and amount to decide which wallet to create |
-| `wallet.decodeToken(str)`   | After wallet is loaded — get the complete `Token` with full `Proof[]`                    |
-| `getDecodedToken(str, ids)` | Advanced: you manage your own keyset cache and decode outside a wallet instance          |
+| API                         | When to use                                                                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `getTokenMetadata(str)`     | Before a wallet exists — get mint URL, unit, and amount to decide which wallet to create. Treat the mint URL as untrusted until validated |
+| `wallet.decodeToken(str)`   | After wallet is loaded — get the complete `Token` with full `Proof[]`                                                                     |
+| `getDecodedToken(str, ids)` | Advanced: you manage your own keyset cache and decode outside a wallet instance                                                           |
 
 ### If you only need amount / mint / unit
 

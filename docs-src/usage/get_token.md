@@ -6,6 +6,8 @@
 
 Use `getTokenMetadata` to inspect a token string **before** creating a wallet — for example, to find out which mint and unit the token belongs to.
 
+> ⚠️ Treat tokens as untrusted input. Validate `mint` against your own trusted-mint policy before creating a `Wallet` or calling `loadMint()`, especially in server-side code.
+
 ```typescript
 import { getTokenMetadata } from '@cashu/cashu-ts';
 
@@ -29,6 +31,7 @@ Once you have a wallet loaded for the correct mint and unit, call `wallet.decode
 import { Wallet } from '@cashu/cashu-ts';
 
 const meta = getTokenMetadata(tokenString);
+// Validate meta.mint before any network call, especially in server-side code.
 const wallet = new Wallet(meta.mint, { unit: meta.unit });
 await wallet.loadMint();
 
@@ -48,4 +51,4 @@ import { getDecodedToken } from '@cashu/cashu-ts';
 const token = getDecodedToken(tokenString, myKeyChain.getAllKeysetIds());
 ```
 
-> ⚠️ Do **not** pass `[]` as the second argument. It will throw if the token contains v2 short keyset IDs.
+> ⚠️ Will throw if the token contains v2 short keyset IDs that do not match a full keyset ID.

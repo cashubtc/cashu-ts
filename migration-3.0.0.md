@@ -180,6 +180,8 @@ If you already have a wallet for the token's mint and unit, prefer `wallet.decod
 
 For pre-wallet init, you can use the new `getTokenMetadata` function to inspect a token string and find out which mint and unit the token belongs to.
 
+Treat the extracted `mint` as untrusted input. Validate it against your own trusted-mint policy before creating a `Wallet` or calling `loadMint()`, especially in server-side code.
+
 NOTE: Although still optional, the second parameter of `getDecodedToken` is REQUIRED if you wish to support keysets v2.
 
 ### on[Mint|Melt|Proof]\* events
