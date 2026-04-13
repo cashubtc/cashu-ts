@@ -9,8 +9,8 @@ import type { HasKeysetKeys } from './types';
  *
  * @remarks
  * The canonical and maintained implementation is the Noble Curves based default exposed through
- * `OutputData.create*()` and adapted by {@link DefaultOutputDataCreator}. This interface provides an
- * escape hatch for runtime-specific needs, but compatibility and maintenance outside the default
+ * `OutputData.create*()` and adapted by DefaultOutputDataCreator. This interface provides an escape
+ * hatch for runtime-specific needs, but compatibility and maintenance outside the default
  * implementation are the integrator's responsibility.
  */
 export interface OutputDataCreator {
