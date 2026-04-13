@@ -1,4 +1,5 @@
 import { type P2PKOptions } from '../crypto';
+import { splitAmount } from '../utils';
 
 import { type AmountLike } from './Amount';
 import { OutputData, type OutputDataLike } from './OutputData';
@@ -45,6 +46,8 @@ export interface OutputDataCreator {
 /**
  * Thin adapter exposing the canonical `OutputData.create*()` implementation via
  * {@link OutputDataCreator}.
+ *
+ * @internal
  */
 export class DefaultOutputDataCreator implements OutputDataCreator {
   createP2PKData(
@@ -53,7 +56,8 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[] {
-    return OutputData.createP2PKData(p2pk, amount, keyset, customSplit);
+    const amounts = splitAmount(amount, keyset.keys, customSplit);
+    return amounts.map((a) => this.createSingleP2PKData(p2pk, a, keyset.id));
   }
 
   createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputDataLike {
@@ -65,7 +69,8 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[] {
-    return OutputData.createRandomData(amount, keyset, customSplit);
+    const amounts = splitAmount(amount, keyset.keys, customSplit);
+    return amounts.map((a) => this.createSingleRandomData(a, keyset.id));
   }
 
   createSingleRandomData(amount: AmountLike, keysetId: string): OutputDataLike {
@@ -79,7 +84,10 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[] {
-    return OutputData.createDeterministicData(amount, seed, counter, keyset, customSplit);
+    const amounts = splitAmount(amount, keyset.keys, customSplit);
+    return amounts.map((a, i) =>
+      this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
+    );
   }
 
   /**
