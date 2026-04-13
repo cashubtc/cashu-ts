@@ -57,7 +57,7 @@ This callout is important — please don't skip it when moving between major bra
 
 - Node: >=22.4.0
 - Recommended tools: `npm` (node package manager), `git`, optional `nvm`/`volta` for Node version management.
-- Optional: Playwright browsers for integration tests (`npm run test:prepare`).
+- Optional: Playwright browsers for browser-based tests (`npm run test:prepare`).
 
 ## Hooks internals
 
@@ -144,6 +144,8 @@ npm run test:consumer
 ```
 
 **Note**: the consumer smoke tests are run in CI but are not part of the git hooks; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
+
+CI uses `npm run test:prepare:ci`, which installs Chromium without `--with-deps` to avoid slow apt package downloads on Ubuntu runners. Local setup should keep using `npm run test:prepare`.
 
 The `test:consumer` aggregator runs the following scripts (you can run them individually):
 
@@ -265,6 +267,8 @@ npm run test:prepare
 # then run the integration tests
 npm run test-integration
 ```
+
+In CI, prefer `npm run test:prepare:ci` unless you explicitly need Playwright to install system packages too.
 
 If tests are flaky locally, run with increased verbosity or use `--run --inspect` / `--watch` where supported.
 
