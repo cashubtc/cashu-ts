@@ -1,11 +1,12 @@
-# <a href="/">Documents</a> › **Roadmap**
+# Roadmap
 
 This document outlines the current and planned features for the project, tracked as **NUTs** (Notation, Utilization, and Terminology). Each NUT represents a specific feature or improvement, with links to detailed specifications.
 
 ### How to Use This Document
 
 - **Completed NUTs**: Marked with a `[x]` and are fully implemented.
-- **Pending NUTs**: Marked with a ⬜ and are planned or in progress.
+- **Pending NUTs**: Marked with a `[ ]` and are planned or in progress.
+- **Unplanned NUTs**: Marked with a `[!]` are out of scope.
 - Click on a NUT link to view its detailed specification.
 
 This roadmap will be updated as new features are proposed or completed. Contributions and feedback are welcome!
@@ -29,8 +30,8 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [x] [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md) | Offline ecash signature validation |
 - [x] [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) | Deterministic Secrets |
 - [x] [NUT-14](https://github.com/cashubtc/nuts/blob/main/14.md) | Hashed Timelock Contracts (HTLCs) |
-- [ ] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md) | Partial multi-path payments |
-- [ ] [NUT-16](https://github.com/cashubtc/nuts/blob/main/16.md) | Animated QR codes |
+- [!] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md) | Partial multi-path payments |
+- [!] [NUT-16](https://github.com/cashubtc/nuts/blob/main/16.md) | Animated QR codes |
 - [x] [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) | WebSockets |
 - [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) | Payment Requests |
 - [x] [NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md) | Cached Responses |
@@ -38,5 +39,9 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [x] [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) | Clear Authentication |
 - [x] [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) | Blind Authentication |
 - [x] [NUT-23](https://github.com/cashubtc/nuts/blob/main/23.md) | BOLT11 |
-- [ ] [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) | HTTP 402 Payment Required |
+- [!] [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) | HTTP 402 Payment Required |
 - [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md) | BOLT12 |
+- [x] [NUT-26](https://github.com/cashubtc/nuts/blob/main/26.md) | Bech32m Encoding |
+- [ ] [NUT-27](https://github.com/cashubtc/nuts/blob/main/27.md) | Nostr Mint Backup |
+- [x] [NUT-28](https://github.com/cashubtc/nuts/blob/main/28.md) | Pay-to-Blinded-Key (P2BK) |
+- [x] [NUT-29](https://github.com/cashubtc/nuts/blob/main/29.md) | Batched Minting |

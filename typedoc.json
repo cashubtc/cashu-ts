@@ -6,6 +6,12 @@
   "includeVersion": true,
   "readme": "README.md",
   "projectDocuments": [
+    "COMMUNITY.md",
+    "CONTRIBUTING.md",
+    "DEVELOPER.md",
+    "ROADMAP.md",
+    "migration-3.0.0.md",
+    "migration-4.0.0.md",
     "docs-src/usage/usage_index.md",
     "docs-src/usage/mint_token.md",
     "docs-src/usage/melt_token.md",
@@ -28,10 +34,7 @@
     "docs-src/wallet_events/cancel_abort.md",
     "docs-src/wallet_events/proof_state_streams.md",
     "docs-src/wallet_events/grouped_cancellers.md",
-    "docs-src/versions_releases.md",
-    "docs-src/DEVELOPER.md",
-    "docs-src/CONTRIBUTING.md",
-    "docs-src/ROADMAP.md"
+    "docs-src/versions_releases.md"
   ],
   "exclude": ["**/*.test.ts", "node_modules"],
   "externalPattern": ["node_modules/**"],

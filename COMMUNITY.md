@@ -1,5 +1,3 @@
-# <a href="/">Documents</a> › **Community Contribution Philosophy**
-
 # Community Contribution Philosophy
 
 We welcome new contributors.
