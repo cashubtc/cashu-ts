@@ -1920,10 +1920,10 @@ export class Wallet {
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getKeyset(id?: string): Keyset;
     getMintInfo(): MintInfo;
-    groupProofsByState(proofs: Proof[]): Promise<{
-        unspent: Proof[];
-        pending: Proof[];
-        spent: Proof[];
+    groupProofsByState<T extends ProofLike = Proof>(proofs: T[]): Promise<{
+        unspent: T[];
+        pending: T[];
+        spent: T[];
     }>;
     get keyChain(): KeyChain;
     get keysetId(): string;
@@ -1955,7 +1955,7 @@ export class Wallet {
         proofs: Proof[];
         lastCounterWithSignature?: number;
     }>;
-    selectProofsToSend(proofs: Proof[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
+    selectProofsToSend(proofs: ProofLike[], amountToSend: AmountLike, includeFees?: boolean, exactMatch?: boolean): SendResponse;
     send(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SendResponse>;
     sendOffline(amount: AmountLike, proofs: ProofLike[], config?: SendOfflineConfig): SendResponse;
     signP2PKProofs(proofs: ProofLike[], privkey: string | string[], outputData?: OutputDataLike[], quoteId?: string): Proof[];

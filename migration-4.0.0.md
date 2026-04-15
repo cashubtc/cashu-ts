@@ -426,6 +426,8 @@ Migration rule: treat wallet/mint/API/JSON proofs as `ProofLike[]` until normali
 
 **Tip**: Core wallet flows now accept `ProofLike[]` directly. If you already have deserialized proof objects from JSON or storage, you can usually pass them straight into wallet APIs such as `wallet.receive(...)`, `wallet.send(...)`, `wallet.sendOffline(...)`, `wallet.prepareSwapToSend(...)`, `wallet.meltProofs...(...)`, and `wallet.signP2PKProofs(...)` without calling `normalizeProofAmounts(...)` yourself first. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
 
+`wallet.selectProofsToSend()` and `wallet.groupProofsByState()` also accept `ProofLike[]`, so proofs loaded from storage (with `amount: number`) can be passed directly without conversion. `groupProofsByState` preserves the input type in its output — pass `MyProof[]` in, get `MyProof[]` back.
+
 ```ts
 import { serializeProofs, deserializeProofs } from '@cashu/cashu-ts';
 
@@ -894,5 +896,21 @@ const adjusted = estInvAmount.scaledBy(tokenAmount, neededAmount).subtract(1);
 const bounded = fee.clamp(MIN_FEE, tokenAmount);
 if (msats.inRange(data.minSendable, data.maxSendable)) { ... }
 ```
+
+---
+
+## New: `createEphemeralCounterSource` factory
+
+v4 adds a public factory for the built-in in-memory `CounterSource`:
+
+```ts
+import { createEphemeralCounterSource } from '@cashu/cashu-ts';
+
+const counters = createEphemeralCounterSource(loadCountersFromDb());
+```
+
+Previously, consumers who needed a shared `CounterSource` across multiple wallet instances had to either deep-import the internal `EphemeralCounterSource` class or reimplement the interface. The factory provides the same capability without exposing the concrete class.
+
+This is useful when your app creates multiple short-lived wallet instances for the same seed — passing a shared `counterSource` prevents concurrent operations from reserving overlapping counter ranges. See the [deterministic counters guide](./docs-src/deterministic_counters.md) for the full pattern.
 
 ---

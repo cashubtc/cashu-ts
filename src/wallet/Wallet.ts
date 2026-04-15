@@ -1325,7 +1325,8 @@ class Wallet {
    * @remarks
    * Uses an adapted Randomized Greedy with Local Improvement (RGLI) algorithm, which has a time
    * complexity O(n log n) and space complexity O(n).
-   * @param proofs Array of Proof objects available to select from.
+   * @param proofs Array of proofs available to select from. Accepts {@link ProofLike} so proofs
+   *   loaded from storage (with `amount: number`) work without manual conversion.
    * @param amountToSend The target amount to send.
    * @param includeFees Optional boolean to include fees; Default: false.
    * @param exactMatch Optional boolean to require exact match; Default: false.
@@ -1334,7 +1335,7 @@ class Wallet {
    * @see https://crypto.ethz.ch/publications/files/Przyda02.pdf
    */
   selectProofsToSend(
-    proofs: Proof[],
+    proofs: ProofLike[],
     amountToSend: AmountLike,
     includeFees = false,
     exactMatch = false,
@@ -2681,17 +2682,20 @@ class Wallet {
   /**
    * Groups proofs by their corresponding state, preserving order within each group.
    *
-   * @param proofs (only the `secret` field is required)
+   * @remarks
+   * Returns the same type you supply, eg: pass `MyProof[]` in, get `MyProof[]` back.
+   * @param proofs Accepts {@link ProofLike} so proofs from storage work without conversion. Only the
+   *   `secret` field is used for the state check; amounts are passed through as-is.
    * @returns An object with arrays of proofs grouped by CheckStateEnum state.
    */
-  async groupProofsByState(
-    proofs: Proof[],
-  ): Promise<{ unspent: Proof[]; pending: Proof[]; spent: Proof[] }> {
+  async groupProofsByState<T extends ProofLike = Proof>(
+    proofs: T[],
+  ): Promise<{ unspent: T[]; pending: T[]; spent: T[] }> {
     const states: ProofState[] = await this.checkProofsStates(proofs);
     const result = {
-      unspent: [] as Proof[],
-      pending: [] as Proof[],
-      spent: [] as Proof[],
+      unspent: [] as T[],
+      pending: [] as T[],
+      spent: [] as T[],
     };
     for (let i = 0; i < states.length; i++) {
       const proof = proofs[i];

@@ -150,6 +150,8 @@ Migration rule: treat wallet/mint/API/JSON proofs as `ProofLike[]` until normali
 
 Core wallet flows now accept `ProofLike[]` directly. If those proofs are only being passed into wallet APIs such as `send`, `sendOffline`, `receive`, `prepareSwapToSend`, `meltProofs...`, or `signP2PKProofs`, you can often skip manual normalization. The same applies to `WalletOps` / builder entry points such as `wallet.ops.send(...)`, `wallet.ops.receive(...)`, and `wallet.ops.meltBolt11(...)`.
 
+`wallet.selectProofsToSend()` and `wallet.groupProofsByState()` also accept `ProofLike[]`. Proofs from storage with `amount: number` can be passed directly. `groupProofsByState` is generic — it preserves the input type in its output.
+
 ---
 
 ## Step 3 — `Amount` value object (was `number`)
@@ -468,7 +470,25 @@ const factory: OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => 
 
 ---
 
-## Step 18 — Type-check and test
+## Step 18 — Shared `CounterSource` (optional improvement)
+
+Search: `counterInit`, manual counter increment/persist patterns.
+
+If the app creates multiple wallet instances for the same seed with independent `counterInit` snapshots, consider using `createEphemeralCounterSource()` (new in v4) to share a single counter source:
+
+```ts
+import { createEphemeralCounterSource } from '@cashu/cashu-ts';
+
+const counterSource = createEphemeralCounterSource(loadCountersFromDb());
+const wallet = new Wallet(mintUrl, { unit, bip39seed, counterSource });
+wallet.on.countersReserved(({ keysetId, next }) => saveNextToDb(keysetId, next));
+```
+
+This is not a breaking change — existing `counterInit` usage continues to work. The factory is a DX improvement for apps that need shared counter allocation across wallet instances.
+
+---
+
+## Step 19 — Type-check and test
 
 ```bash
 # Usually, but check your app:
