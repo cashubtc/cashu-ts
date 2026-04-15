@@ -106,3 +106,20 @@ export class EphemeralCounterSource implements CounterSource {
     return Promise.resolve(Object.fromEntries(this.next.entries()));
   }
 }
+
+/**
+ * Create a shared in-memory {@link CounterSource}.
+ *
+ * Use this when multiple {@link Wallet} instances share the same seed and must allocate
+ * deterministic outputs without overlapping counter ranges. Pass the returned source to each wallet
+ * via the `counterSource` option.
+ *
+ * The source is memory-only — counters do not survive page reloads. Subscribe to
+ * {@link WalletEvents.countersReserved | wallet.on.countersReserved} to persist counter state to
+ * your own storage.
+ *
+ * @param initial - Optional seed values (`{ [keysetId]: nextCounter }`).
+ */
+export function createEphemeralCounterSource(initial?: Record<string, number>): CounterSource {
+  return new EphemeralCounterSource(initial);
+}

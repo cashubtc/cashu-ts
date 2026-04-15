@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { EphemeralCounterSource, type CounterRange } from '../../src/wallet';
+import {
+  EphemeralCounterSource,
+  type CounterRange,
+  createEphemeralCounterSource,
+} from '../../src/wallet';
 
 describe('EphemeralCounterSource', () => {
   it('constructor seeds initial next values', async () => {
     const src = new EphemeralCounterSource({ a: 5, b: 2 });
     const snap = await src.snapshot();
+    expect(snap).toEqual({ a: 5, b: 2 });
+  });
+
+  it('factory seeds initial next values', async () => {
+    const src = createEphemeralCounterSource({ a: 5, b: 2 });
+    const snap = await src.snapshot!(); // definitely implemented
     expect(snap).toEqual({ a: 5, b: 2 });
   });
 

@@ -230,6 +230,9 @@ export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: U
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
 
 // @public
+export function createEphemeralCounterSource(initial?: Record<string, number>): CounterSource;
+
+// @public
 export function createHTLCHash(preimage?: string): {
     hash: string;
     preimage: string;
