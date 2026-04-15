@@ -72,3 +72,64 @@ await wB.counters.snapshot(); // { '0111111': 137, '0122222': 10, '0133333': 456
 > **Note** The wallet does not await your callback.
 > If saveNextToDb (or similar) is async, handle errors to avoid unhandled rejections
 > For more on lifecycle management, see [WalletEvents](./wallet_events/wallet_events.md)
+
+---
+
+## Shared CounterSource across wallet instances
+
+By default each `new Wallet(...)` creates its own internal counter source. If your app creates multiple wallet instances for the same seed (e.g. short-lived wallets per operation), each instance gets an independent copy seeded from `counterInit` — and concurrent operations can reserve **overlapping counter ranges**, causing "outputs have already been signed" errors.
+
+Use `createEphemeralCounterSource()` to create a single shared source and pass it to every wallet via the `counterSource` option:
+
+```ts
+import { Wallet, createEphemeralCounterSource } from '@cashu/cashu-ts';
+
+// Create once at app start, seeded from your persisted counters
+const counters = createEphemeralCounterSource(loadCountersFromDb());
+
+// Every wallet instance shares the same source — no overlapping reservations
+const walletA = new Wallet(mintA, { unit: 'sat', bip39seed, counterSource: counters });
+const walletB = new Wallet(mintB, { unit: 'sat', bip39seed, counterSource: counters });
+```
+
+### Persisting counter state
+
+The ephemeral source is memory-only — counters do not survive page reloads. Use `wallet.on.countersReserved` to persist after every operation:
+
+```ts
+function wireCounterPersistence(wallet: Wallet) {
+  wallet.on.countersReserved(({ keysetId, next }) => {
+    saveNextToDb(keysetId, next);
+  });
+}
+
+wireCounterPersistence(walletA);
+wireCounterPersistence(walletB);
+```
+
+Because the source is shared, the global event on any wallet instance reflects the true cursor — there is no need for per-operation `onCountersReserved` callbacks in your builder chains.
+
+### counterSource vs counterInit
+
+| Option          | When to use                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `counterInit`   | Single wallet instance, or you don't need cross-wallet coordination. Seeds a wallet-local ephemeral source.               |
+| `counterSource` | Multiple wallet instances for the same seed, or you need persistence/custom storage. Takes precedence over `counterInit`. |
+
+### Custom CounterSource implementations
+
+`createEphemeralCounterSource` returns the built-in in-memory implementation. For durable storage you can implement `CounterSource` directly:
+
+```ts
+import type { CounterSource, CounterRange } from '@cashu/cashu-ts';
+
+class IndexedDbCounterSource implements CounterSource {
+  async reserve(keysetId: string, n: number): Promise<CounterRange> {
+    // atomic read-and-increment in your DB
+  }
+  async advanceToAtLeast(keysetId: string, minNext: number): Promise<void> {
+    // conditional update: SET next = max(next, minNext)
+  }
+  // Optional: snapshot(), setNext()
+}
+```
