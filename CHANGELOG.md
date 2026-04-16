@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.1.0](https://github.com/cashubtc/cashu-ts/compare/v4.0.0...v4.1.0) (2026-04-16)
+
+
+### Features
+
+* add createEphemeralCounterSource function ([#630](https://github.com/cashubtc/cashu-ts/issues/630)) ([12fe7b1](https://github.com/cashubtc/cashu-ts/commit/12fe7b10928a2c3a4dd6a6ce66a1fa0a65a7b297))
+* widen selectProofsToSend and groupProofsByState to accept ProofLike[] ([#631](https://github.com/cashubtc/cashu-ts/issues/631)) ([87b4be4](https://github.com/cashubtc/cashu-ts/commit/87b4be46a5d1f90c788f58b7b458c08d33eed8f4))
+
+
+### Bug Fixes
+
+* typedocs were not running on release-please. Now just v4. releases without hyphen ([#626](https://github.com/cashubtc/cashu-ts/issues/626)) ([a3cbb49](https://github.com/cashubtc/cashu-ts/commit/a3cbb49251681e82419cbc98d7db5031422db485))
+
 ## [4.0.0](https://github.com/cashubtc/cashu-ts/compare/v3.6.1...v4.0.0) (2026-04-14)
 
 
