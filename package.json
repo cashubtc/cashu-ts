@@ -64,7 +64,7 @@
     "cashu"
   ],
   "author": "gandlaf21",
-  "license": "MIT",
+  "license": "MIT OR Apache-2.0",
   "devDependencies": {
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
