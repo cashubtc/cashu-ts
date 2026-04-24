@@ -1,4 +1,4 @@
-import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
+import type { MeltQuoteBaseResponse, MeltQuoteOnchainResponse, Proof } from '../../model/types';
 
 /**
  * Response after paying a Lightning invoice.
@@ -15,6 +15,16 @@ export type MeltProofsResponse<
    * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
    */
   change: Proof[];
+};
+
+/**
+ * Response after melting proofs via an onchain transaction.
+ *
+ * @remarks
+ * No `change` field — NUT-08 does not apply to onchain melts.
+ */
+export type MeltProofsOnchainResponse = {
+  quote: MeltQuoteOnchainResponse;
 };
 
 /**

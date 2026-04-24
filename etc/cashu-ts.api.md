@@ -768,6 +768,11 @@ export type MeltProofsConfig = {
 };
 
 // @public
+export type MeltProofsOnchainResponse = {
+    quote: MeltQuoteOnchainResponse;
+};
+
+// @public
 export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> = {
     quote: TQuote;
     change: Proof[];
@@ -852,12 +857,14 @@ export class Mint {
     }): Promise<TRes>;
     checkMeltQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quote: string, options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
     connectWebSocket(): Promise<void>;
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         customRequest?: RequestFn;
@@ -865,12 +872,17 @@ export class Mint {
     }): Promise<TRes>;
     createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
+    // Warning: (ae-forgotten-export) The symbol "MeltQuoteOnchainRequest" needs to be exported by the entry point index.d.ts
+    createMeltQuoteOnchain(meltQuotePayload: MeltQuoteOnchainRequest, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse[]>;
     createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
     createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
+    // Warning: (ae-forgotten-export) The symbol "MintQuoteOnchainRequest" needs to be exported by the entry point index.d.ts
+    // Warning: (ae-forgotten-export) The symbol "MintQuoteOnchainResponse" needs to be exported by the entry point index.d.ts
+    createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
     disconnectWebSocket(): void;
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
@@ -887,6 +899,9 @@ export class Mint {
     meltBolt12(meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
     }): Promise<MeltQuoteBolt12Response>;
+    meltOnchain(meltPayload: MeltRequest, options?: {
+        customRequest?: RequestFn;
+    }): Promise<MeltQuoteOnchainResponse>;
     mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
@@ -899,6 +914,7 @@ export class Mint {
     mintBatchBolt12(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
@@ -910,7 +926,7 @@ export class Mint {
 }
 
 // @public
-export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
+export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' | 'onchain' ? false : true> {
     constructor(wallet: Wallet, method: M, amount: AmountLike, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
@@ -919,7 +935,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>>;
+    prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : M extends 'bolt12' ? MintPreview<MintQuoteBolt12Response> : MintPreview<MintQuoteOnchainResponse>>;
     privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
@@ -1074,7 +1090,7 @@ export type MintKeyset = {
 };
 
 // @public (undocumented)
-export type MintMethod = 'bolt11' | 'bolt12';
+export type MintMethod = 'bolt11' | 'bolt12' | 'onchain';
 
 // @public
 export class MintOperationError extends HttpResponseError {
@@ -1144,7 +1160,7 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 };
 
 // @public (undocumented)
-export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : MintQuoteBolt12Response;
+export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : M extends 'bolt12' ? MintQuoteBolt12Response : MintQuoteOnchainResponse;
 
 // @public (undocumented)
 export const MintQuoteState: {
@@ -1876,6 +1892,7 @@ export type SwapMethod = {
     options?: {
         description?: boolean;
         amountless?: boolean;
+        confirmations?: number;
     };
 };
 
@@ -2000,11 +2017,13 @@ export class Wallet {
     }): Promise<TRes>;
     checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse>;
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
@@ -2018,6 +2037,7 @@ export class Wallet {
     }): Promise<TRes>;
     createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(address: string, amount: AmountLike): Promise<MeltQuoteOnchainResponse[]>;
     createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
@@ -2026,6 +2046,7 @@ export class Wallet {
         amount?: AmountLike;
         description?: string;
     }): Promise<MintQuoteBolt12Response>;
+    createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
@@ -2048,10 +2069,14 @@ export class Wallet {
     meltProofs<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<TQuote>>;
     meltProofsBolt11(meltQuote: MeltQuoteBolt11Response, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
+    meltProofsOnchain(meltQuote: MeltQuoteOnchainResponse, proofsToSend: ProofLike[], config?: MeltProofsConfig): Promise<MeltProofsOnchainResponse>;
     readonly mint: Mint;
     mintProofs<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
+        keysetId?: string;
+    }, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsOnchain(amount: AmountLike, quote: MintQuoteOnchainResponse, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
@@ -2138,10 +2163,16 @@ export class WalletOps {
     meltBolt11(quote: MeltQuoteBolt11Response, proofs: ProofLike[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
     meltBolt12(quote: MeltQuoteBolt12Response, proofs: ProofLike[]): MeltBuilder<MeltQuoteBolt11Response>;
+    // Warning: (ae-forgotten-export) The symbol "MeltOnchainBuilder" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    meltOnchain(quote: MeltQuoteOnchainResponse, proofs: ProofLike[]): MeltOnchainBuilder;
     // (undocumented)
     mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
     // (undocumented)
     mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
+    // (undocumented)
+    mintOnchain(amount: AmountLike, quote: MintQuoteFor<'onchain'>): MintBuilder<"onchain", false>;
     // (undocumented)
     receive(token: Token | string | ProofLike[]): ReceiveBuilder;
     // (undocumented)
@@ -2184,6 +2215,10 @@ export class WSConnection {
     // (undocumented)
     readonly url: URL;
 }
+
+// Warnings were encountered during analysis:
+//
+// lib/types/index.d.ts:1587:10 - (ae-forgotten-export) The symbol "MeltQuoteOnchainResponse" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -106,6 +106,7 @@ export type SwapMethod = {
   options?: {
     description?: boolean;
     amountless?: boolean;
+    confirmations?: number;
   };
 };
 

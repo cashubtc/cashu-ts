@@ -31,10 +31,12 @@ import type {
   MeltQuoteBolt11Request,
   MeltQuoteBolt11Response,
   MeltQuoteBolt12Response,
+  MeltQuoteOnchainResponse,
   MintRequest,
   MintQuoteBaseResponse,
   MintQuoteBolt11Response,
   MintQuoteBolt12Response,
+  MintQuoteOnchainResponse,
   MintQuoteBolt11Request,
   MintQuoteBolt12Request,
   SwapRequest,
@@ -78,6 +80,7 @@ import {
   type MeltProofsConfig,
   type SwapTransaction,
   type MeltProofsResponse,
+  type MeltProofsOnchainResponse,
   type SendResponse,
   type RestoreConfig,
   type SecretsPolicy,
@@ -1755,6 +1758,18 @@ class Wallet {
     return this.mint.createMintQuoteBolt12(mintQuotePayload);
   }
 
+  /**
+   * Requests an onchain mint quote from the mint. Response returns a Bitcoin address for the
+   * requested unit.
+   *
+   * @param pubkey Public key to lock the quote to. Required for onchain minting.
+   * @returns The mint will return a mint quote with a Bitcoin address for minting tokens.
+   */
+  async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
+    const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
+    return { ...res, unit: res.unit || this._unit };
+  }
+
   // -----------------------------------------------------------------
   // Section: Check Mint Quote
   // -----------------------------------------------------------------
@@ -1805,6 +1820,16 @@ class Wallet {
    */
   async checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response> {
     return this.mint.checkMintQuoteBolt12(quote);
+  }
+
+  /**
+   * Gets an existing onchain mint quote from the mint.
+   *
+   * @param quote Quote ID.
+   * @returns The latest mint quote for the given quote ID.
+   */
+  async checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse> {
+    return this.mint.checkMintQuoteOnchain(quote);
   }
 
   // -----------------------------------------------------------------
@@ -1951,6 +1976,37 @@ class Wallet {
   ): Promise<Proof[]> {
     const preview = await this.prepareMint(
       'bolt12',
+      amount,
+      quote,
+      { ...config, privkey },
+      outputType,
+    );
+    return this.completeMint(preview);
+  }
+
+  /**
+   * Mints proofs using an onchain quote.
+   *
+   * @remarks
+   * Convenience helper for the onchain flow. Pubkey is always required for onchain mint quotes, so
+   * `privkey` is always needed. Internally uses `prepareMint('onchain',…)` followed by
+   * `completeMint()`.
+   * @param amount Amount to mint.
+   * @param quote Onchain mint quote.
+   * @param privkey Private key matching the pubkey the quote is locked to.
+   * @param config Optional parameters (e.g. keysetId).
+   * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
+   * @returns Minted proofs.
+   */
+  async mintProofsOnchain(
+    amount: AmountLike,
+    quote: MintQuoteOnchainResponse,
+    privkey: string,
+    config?: { keysetId?: string },
+    outputType?: OutputType,
+  ): Promise<Proof[]> {
+    const preview = await this.prepareMint(
+      'onchain',
       amount,
       quote,
       { ...config, privkey },
@@ -2356,6 +2412,27 @@ class Wallet {
   }
 
   /**
+   * Requests onchain melt quotes from the mint. Returns an array of quotes with different
+   * fee/confirmation tiers.
+   *
+   * @param address Bitcoin address to send to.
+   * @param amount Amount to melt.
+   * @returns Array of melt quotes with different fee tiers.
+   */
+  async createMeltQuoteOnchain(
+    address: string,
+    amount: AmountLike,
+  ): Promise<MeltQuoteOnchainResponse[]> {
+    const normalizedAmount = this.parseAmount(amount, 'createMeltQuoteOnchain').toBigInt();
+    const quotes = await this.mint.createMeltQuoteOnchain({
+      unit: this._unit,
+      request: address,
+      amount: normalizedAmount,
+    });
+    return quotes.map((q) => ({ ...q, unit: q.unit || this._unit }));
+  }
+
+  /**
    * Requests a multi path melt quote from the mint.
    *
    * @remarks
@@ -2441,6 +2518,16 @@ class Wallet {
     return this.mint.checkMeltQuoteBolt12(quote);
   }
 
+  /**
+   * Returns an existing onchain melt quote from the mint.
+   *
+   * @param quote ID of the melt quote.
+   * @returns The mint will return an existing melt quote.
+   */
+  async checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse> {
+    return this.mint.checkMeltQuoteOnchain(quote);
+  }
+
   // -----------------------------------------------------------------
   // Section: Melt Proofs
   // -----------------------------------------------------------------
@@ -2514,6 +2601,50 @@ class Wallet {
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
     const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
     return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
+  }
+
+  /**
+   * Melt proofs via an onchain Bitcoin transaction.
+   *
+   * @remarks
+   * NUT-08 fee change does not apply to onchain melts. No blank outputs are created and no change
+   * proofs are returned. ProofsToSend must cover at least `quote.amount + quote.fee`. This function
+   * does not perform coin selection!
+   * @param meltQuote The onchain melt quote.
+   * @param proofsToSend Proofs to melt.
+   * @param config Optional parameters (e.g. privkey for P2PK proofs, keysetId).
+   * @returns MeltProofsOnchainResponse with the final quote state.
+   */
+  async meltProofsOnchain(
+    meltQuote: MeltQuoteOnchainResponse,
+    proofsToSend: ProofLike[],
+    config?: MeltProofsConfig,
+  ): Promise<MeltProofsOnchainResponse> {
+    this.validateMeltQuote(meltQuote);
+    const normalizedProofs = normalizeProofAmounts(proofsToSend);
+    const sendAmount = sumProofs(normalizedProofs);
+    const totalRequired = meltQuote.amount.add(meltQuote.fee);
+
+    this.failIf(sendAmount.lessThan(totalRequired), 'Not enough proofs to cover amount + fee', {
+      sendAmount: sendAmount.toString(),
+      totalRequired: totalRequired.toString(),
+    });
+
+    let inputs = this._prepareInputsForMint(normalizedProofs);
+
+    if (config?.privkey) {
+      inputs = this.signP2PKProofs(inputs, config.privkey, [], meltQuote.quote);
+    }
+
+    const meltPayload: MeltRequest = {
+      quote: meltQuote.quote,
+      inputs,
+      // No outputs — NUT-08 does not apply to onchain melts
+    };
+
+    const meltResponse = await this.mint.melt('onchain', meltPayload);
+    const mergedQuote = { ...meltQuote, ...meltResponse } as MeltQuoteOnchainResponse;
+    return { quote: mergedQuote };
   }
 
   /**
