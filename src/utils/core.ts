@@ -520,10 +520,10 @@ export function normalizeUrl(url: string): string {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(`Invalid mint URL scheme: ${parsed.protocol}`);
   }
-  if (parsed.search) {
+  if (parsed.search || parsed.href.includes('?')) {
     throw new Error('Mint URL must not contain query parameters');
   }
-  if (parsed.hash) {
+  if (parsed.hash || parsed.href.includes('#')) {
     throw new Error('Mint URL must not contain a fragment');
   }
   return parsed.href.replace(/\/+$/, '');

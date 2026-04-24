@@ -1161,8 +1161,18 @@ describe('normalizeUrl', () => {
       'Mint URL must not contain query parameters',
     );
   });
+  test('rejects trailing ? with no query value', () => {
+    expect(() => normalizeUrl('https://mint.example.com/path?')).toThrow(
+      'Mint URL must not contain query parameters',
+    );
+  });
   test('rejects fragment', () => {
     expect(() => normalizeUrl('https://mint.example.com#section')).toThrow(
+      'Mint URL must not contain a fragment',
+    );
+  });
+  test('rejects trailing # with no fragment value', () => {
+    expect(() => normalizeUrl('https://mint.example.com/path#')).toThrow(
       'Mint URL must not contain a fragment',
     );
   });
