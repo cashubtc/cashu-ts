@@ -26,6 +26,8 @@ wallet2.loadMintFromCache(mintInfoCache, keychainCache);
 // wallet2 is now ready to use
 ```
 
+> ⚠️ **Server-side usage:** If you construct a `Wallet` (or `Mint`) using a URL from untrusted input (e.g. a received token), validate the mint URL against your own trusted-mint allowlist **before** passing it in. The library validates URL structure but cannot know which mints your application trusts.
+
 ## Custom output generation
 
 Pass `outputDataCreator` when you need to replace the default output generation logic, for

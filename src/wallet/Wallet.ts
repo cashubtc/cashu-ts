@@ -49,7 +49,7 @@ import {
   hasValidDleq,
   invoiceHasAmountInHRP,
   normalizeProofAmounts,
-  sanitizeUrl,
+  normalizeUrl,
   splitAmount,
   sumProofs,
   ABSOLUTE_MAX_BATCH_SIZE,
@@ -921,7 +921,7 @@ class Wallet {
       proofs = normalizeProofAmounts(token);
     } else {
       const decodedToken: Token = typeof token === 'string' ? this.decodeToken(token) : token;
-      const tokenMintUrl = sanitizeUrl(decodedToken.mint);
+      const tokenMintUrl = normalizeUrl(decodedToken.mint);
       this.failIf(tokenMintUrl !== this.mint.mintUrl, 'Token belongs to a different mint', {
         token: tokenMintUrl,
         wallet: this.mint.mintUrl,

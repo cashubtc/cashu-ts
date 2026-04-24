@@ -21,7 +21,7 @@ type ReqArgs = {
 };
 
 const mintUrl = 'https://localhost:3338';
-const fakeWsUrl = 'wss://mint.example/cashu/v1/ws?token=abc';
+const fakeWsUrl = 'wss://mint.example/cashu/v1/ws';
 
 const makeRequest = <T>(payload: T): RequestFn => {
   return (async (options: ReqArgs): Promise<T> => {
@@ -736,7 +736,7 @@ describe('Mint normalization', () => {
   it('connectWebSocket builds the expected URL and disconnectWebSocket closes the connection', async () => {
     injectWebSocketImpl(WebSocket);
     const server = new Server(fakeWsUrl, { mock: false });
-    const mint = new Mint('https://mint.example/cashu?token=abc');
+    const mint = new Mint('https://mint.example/cashu');
     let serverSocket!: Client;
 
     try {

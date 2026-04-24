@@ -46,7 +46,7 @@ import {
   normalizeMintKeys,
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
-  sanitizeUrl,
+  normalizeUrl,
 } from '../utils';
 
 import type {
@@ -88,7 +88,7 @@ class Mint {
       logger?: Logger;
     },
   ) {
-    this._mintUrl = sanitizeUrl(mintUrl);
+    this._mintUrl = normalizeUrl(mintUrl);
     this._request = options?.customRequest ?? request;
     this._authProvider = options?.authProvider;
     this._logger = options?.logger ?? NULL_LOGGER;
@@ -839,7 +839,6 @@ class Mint {
       if (mintUrl.pathname.endsWith('/')) mintUrl.pathname += wsSegment;
       else mintUrl.pathname += '/' + wsSegment;
 
-      // preserve query params if any, and avoid manual string building
       mintUrl.protocol = mintUrl.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = mintUrl.toString();
 

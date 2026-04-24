@@ -28,6 +28,7 @@ import {
   deserializeProofs,
   normalizeProofAmounts,
   sortProofsById,
+  normalizeUrl,
 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
@@ -1128,5 +1129,44 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     // Two full IDs that share the same 16-char prefix
     const ambiguous = fullV2Id + 'aa';
     expect(() => utils.getDecodedToken(encoded, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
+  });
+});
+
+describe('normalizeUrl', () => {
+  test('strips trailing slash', () => {
+    expect(normalizeUrl('https://mint.example.com/')).toBe('https://mint.example.com');
+  });
+  test('strips multiple trailing slashes', () => {
+    expect(normalizeUrl('https://mint.example.com///')).toBe('https://mint.example.com');
+  });
+  test('preserves path', () => {
+    expect(normalizeUrl('https://mint.example.com/v1/mint')).toBe(
+      'https://mint.example.com/v1/mint',
+    );
+  });
+  test('throws on malformed URL', () => {
+    expect(() => normalizeUrl('not-a-url')).toThrow('Invalid mint URL: not-a-url');
+  });
+  test('throws on non-http scheme', () => {
+    expect(() => normalizeUrl('ftp://mint.example.com')).toThrow('Invalid mint URL scheme: ftp:');
+  });
+  test('accepts http', () => {
+    expect(normalizeUrl('http://localhost:3338')).toBe('http://localhost:3338');
+  });
+  test('accepts .onion', () => {
+    expect(normalizeUrl('http://abc123.onion/path')).toBe('http://abc123.onion/path');
+  });
+  test('rejects query parameters', () => {
+    expect(() => normalizeUrl('https://mint.example.com?token=abc')).toThrow(
+      'Mint URL must not contain query parameters',
+    );
+  });
+  test('rejects fragment', () => {
+    expect(() => normalizeUrl('https://mint.example.com#section')).toThrow(
+      'Mint URL must not contain a fragment',
+    );
+  });
+  test('lowercases hostname', () => {
+    expect(normalizeUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
   });
 });

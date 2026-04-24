@@ -505,12 +505,28 @@ export function joinUrls(...parts: string[]): string {
 }
 
 /**
- * Strips a trailing slash from a URL.
+ * Parses and normalizes a mint URL: validates the scheme (http/https only), rejects query
+ * parameters and fragments, and strips any trailing slashes.
  *
  * @internal
  */
-export function sanitizeUrl(url: string): string {
-  return url.replace(/\/$/, '');
+export function normalizeUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid mint URL: ${url}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid mint URL scheme: ${parsed.protocol}`);
+  }
+  if (parsed.search) {
+    throw new Error('Mint URL must not contain query parameters');
+  }
+  if (parsed.hash) {
+    throw new Error('Mint URL must not contain a fragment');
+  }
+  return parsed.href.replace(/\/+$/, '');
 }
 
 /**
