@@ -1,7 +1,7 @@
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
-import type { DecodedTLVPaymentRequest, Nut10SpendingCondition } from '../utils/tlv';
+import type { DecodedTLVPaymentRequest } from '../utils/tlv';
 import type {
   RawPaymentRequest,
   RawTransport,
@@ -96,7 +96,7 @@ export class PaymentRequest {
               kind: this.nut10.kind,
               data: this.nut10.data,
               tags: this.nut10.tags,
-            } as Nut10SpendingCondition,
+            },
           ]
         : undefined,
     };

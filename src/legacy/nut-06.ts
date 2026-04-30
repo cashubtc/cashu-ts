@@ -15,7 +15,7 @@ export function handleMintInfoContactFieldDeprecated(data: GetInfoResponse, logg
         logger.warn(
           `Mint returned deprecated 'contact' field: Update NUT-06: https://github.com/cashubtc/nuts/pull/117`,
         );
-        return { method: contact[0], info: contact[1] } as MintContactInfo;
+        return { method: contact[0], info: contact[1] };
       }
       return contact;
     });

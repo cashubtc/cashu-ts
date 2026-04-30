@@ -12,10 +12,8 @@ import type {
   Keys,
   MintKeys,
   Proof,
-  SerializedDLEQ,
   Token,
   TokenV4Template,
-  V4DLEQTemplate,
   V4InnerToken,
   V4ProofTemplate,
   HasKeysetKeys,
@@ -365,7 +363,7 @@ function templateFromToken(token: Token): TokenV4Template {
                 e: hexToBytes(p.dleq.e),
                 s: hexToBytes(p.dleq.s),
                 r: hexToBytes(p.dleq.r ?? '00'),
-              } as V4DLEQTemplate,
+              },
             }),
             ...(p.p2pk_e && {
               pe: hexToBytes(p.p2pk_e),
@@ -399,7 +397,7 @@ function tokenFromTemplate(template: TokenV4Template): Token {
             r: bytesToHex(p.d.r),
             s: bytesToHex(p.d.s),
             e: bytesToHex(p.d.e),
-          } as SerializedDLEQ,
+          },
         }),
         ...(p.pe && {
           p2pk_e: bytesToHex(p.pe),

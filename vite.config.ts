@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
+import { playwright } from '@vitest/browser-playwright';
 import { configDefaults } from 'vitest/config';
 import { createRequire } from 'node:module';
 
@@ -126,7 +127,7 @@ export default defineConfig(({ command }) => {
             name: 'browser',
             globals: true,
             browser: {
-              provider: 'playwright',
+              provider: playwright(),
               enabled: true,
               headless: true,
               instances: [{ browser: 'chromium' }],

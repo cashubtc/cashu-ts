@@ -8,7 +8,7 @@ import { parseWitnessData } from '../crypto/NUT11';
 import { Bytes, encodeUint8toBase64Url } from '../utils';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
-import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
+import type { Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 
 /**
  * @experimental
@@ -301,7 +301,7 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
     witness: {
       ...(witnessData ?? {}),
       signatures: [...existingSignatures, ...pkg.witness.signatures],
-    } as P2PKWitness,
+    },
   };
 
   return [updatedFirst, ...rest];

@@ -348,13 +348,13 @@ export class WSConnection {
         this.addSubListener(subId, callback);
       },
       errorCallback,
-      rpcId as Exclude<RpcSubId, null>,
+      rpcId,
     );
 
     try {
       this.sendRequest('subscribe', { ...params, subId });
     } catch (e) {
-      this.removeRpcListener(rpcId as Exclude<RpcSubId, null>);
+      this.removeRpcListener(rpcId);
       throw e;
     }
 
@@ -388,13 +388,13 @@ export class WSConnection {
         this._logger.info('Unsubscribed {subId}', { subId });
       },
       errorCallback || ((e: Error) => this._logger.error('Unsubscribe failed', { e })),
-      id as Exclude<RpcSubId, null>,
+      id,
     );
 
     try {
       this.sendRpcMessage('unsubscribe', { subId }, id);
     } catch (e) {
-      this.removeRpcListener(id as Exclude<RpcSubId, null>);
+      this.removeRpcListener(id);
       throw e;
     }
   }

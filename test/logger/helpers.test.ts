@@ -86,10 +86,10 @@ describe('safeCallback', () => {
     expect(meta.error).toBeInstanceOf(Error);
     expect((meta.error as Error).message).toBe('boom');
 
-    // The cb identity depends on the test runner (vi.fn() => "spy").
-    // Just assert it's a string (and optionally allow a small set).
+    // The cb identity depends on the test runner.
+    // Just assert it's a non-empty string.
     expect(typeof meta.cb).toBe('string');
-    expect(['anonymous', 'spy', ''].includes(meta.cb)).toBe(true);
+    expect(meta.cb.length).toBeGreaterThan(0);
   });
 
   test('logs a warning including the callback name when available', () => {

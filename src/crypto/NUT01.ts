@@ -43,7 +43,7 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
   return mintKeys;
 }
 
-export function getPubKeyFromPrivKey(privKey: Uint8Array) {
+export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   return secp256k1.getPublicKey(privKey, true);
 }
 

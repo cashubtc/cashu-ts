@@ -21,7 +21,6 @@ import {
   type Proof,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
-  type SerializedDLEQ,
 } from './types';
 
 // TODO(v4): Consider removing the generic and fixing `keyset` to `HasKeysetKeys`.
@@ -163,7 +162,7 @@ export class OutputData implements OutputDataLike<HasKeysetKeys> {
           s: bytesToHex(dleq.s),
           e: bytesToHex(dleq.e),
           r: numberToHexPadded64(dleq.r ?? BigInt(0)),
-        } as SerializedDLEQ,
+        },
       }),
     } as Proof;
 
