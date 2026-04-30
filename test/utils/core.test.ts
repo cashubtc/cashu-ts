@@ -1176,6 +1176,25 @@ describe('normalizeUrl', () => {
       'Mint URL must not contain a fragment',
     );
   });
+  test('rejects credentials', () => {
+    expect(() => normalizeUrl('https://user:pass@mint.example.com')).toThrow(
+      'Mint URL must not contain credentials',
+    );
+    expect(() => normalizeUrl('https://user@mint.example.com')).toThrow(
+      'Mint URL must not contain credentials',
+    );
+  });
+  test('rejects percent-encoded path characters', () => {
+    expect(() => normalizeUrl('https://mint.example.com/path%3Ftoken=abc')).toThrow(
+      'Mint URL path must not contain percent-encoded characters',
+    );
+    expect(() => normalizeUrl('https://mint.example.com/path%23fragment')).toThrow(
+      'Mint URL path must not contain percent-encoded characters',
+    );
+    expect(() => normalizeUrl('https://mint.example.com/path%2Fadmin')).toThrow(
+      'Mint URL path must not contain percent-encoded characters',
+    );
+  });
   test('lowercases hostname', () => {
     expect(normalizeUrl('https://Mint.Example.COM')).toBe('https://mint.example.com');
   });

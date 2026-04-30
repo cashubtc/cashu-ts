@@ -505,8 +505,8 @@ export function joinUrls(...parts: string[]): string {
 }
 
 /**
- * Parses and normalizes a mint URL: validates the scheme (http/https only), rejects query
- * parameters and fragments, and strips any trailing slashes.
+ * Parses and normalizes a mint URL: validates the scheme (http/https only), rejects credentials,
+ * query parameters, fragments, and encoded path delimiters, and strips any trailing slashes.
  *
  * @internal
  */
@@ -520,11 +520,17 @@ export function normalizeUrl(url: string): string {
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error(`Invalid mint URL scheme: ${parsed.protocol}`);
   }
+  if (parsed.username || parsed.password) {
+    throw new Error('Mint URL must not contain credentials');
+  }
   if (parsed.search || parsed.href.includes('?')) {
     throw new Error('Mint URL must not contain query parameters');
   }
   if (parsed.hash || parsed.href.includes('#')) {
     throw new Error('Mint URL must not contain a fragment');
+  }
+  if (/%[0-9a-f]{2}/i.test(parsed.pathname)) {
+    throw new Error('Mint URL path must not contain percent-encoded characters');
   }
   return parsed.href.replace(/\/+$/, '');
 }
