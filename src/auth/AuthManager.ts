@@ -422,7 +422,7 @@ export class AuthManager implements AuthProvider {
       endpoint: joinUrls(this.mintUrl, '/v1/auth/blind/mint'),
       method: 'POST',
       headers,
-      requestBody: payload as unknown as Record<string, unknown>,
+      requestBody: payload,
     });
     if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
       throw new Error('AuthManager: bad BAT mint response');

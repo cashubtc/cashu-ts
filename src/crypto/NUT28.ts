@@ -10,7 +10,7 @@ import { pointFromHex } from './core';
 /**
  * BIP340-style domain separation tag (DST) for P2BK.
  */
-export const P2BK_DST = utf8ToBytes('Cashu_P2BK_v1');
+export const P2BK_DST: Uint8Array<ArrayBufferLike> = utf8ToBytes('Cashu_P2BK_v1');
 
 /**
  * Blind a sequence of public keys using ECDH derived tweaks, one tweak per slot.

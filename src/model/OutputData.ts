@@ -22,7 +22,6 @@ import {
   type Proof,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
-  type SerializedDLEQ,
 } from './types';
 
 /**
@@ -137,7 +136,7 @@ export class OutputData implements OutputDataLike {
           s: bytesToHex(dleq.s),
           e: bytesToHex(dleq.e),
           r: numberToHexPadded64(dleq.r ?? BigInt(0)),
-        } as SerializedDLEQ,
+        },
       }),
     };
 

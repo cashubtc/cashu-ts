@@ -527,7 +527,7 @@ class Wallet {
       start: range.start,
       count: range.count,
       next: range.start + range.count,
-    } as OperationCounters;
+    };
     this.on._emitCountersReserved(used);
     return { outputTypes: patched, used };
   }

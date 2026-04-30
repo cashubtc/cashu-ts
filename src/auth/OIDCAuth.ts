@@ -385,7 +385,7 @@ export class OIDCAuth {
         this.logger.warn('OIDCAuth: bad JSON (loose)', { err });
       }
       this.logger.debug('OIDCAuth Response', { json });
-      return (json ?? {}) as T | TokenResponse;
+      return json ?? {};
     } catch (err) {
       this.logger.error('OIDCAuth: postFormLoose network error', { err });
       return { error: 'network_error', error_description: String(err) };

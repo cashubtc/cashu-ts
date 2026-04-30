@@ -9,7 +9,7 @@ import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
 import { Amount } from './Amount';
-import type { P2PKWitness, Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
+import type { Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 
 /**
  * @experimental
@@ -307,7 +307,7 @@ function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
     witness: {
       ...(witnessData ?? {}),
       signatures: [...existingSignatures, ...pkg.witness.signatures],
-    } as P2PKWitness,
+    },
   };
 
   return [updatedFirst, ...rest];

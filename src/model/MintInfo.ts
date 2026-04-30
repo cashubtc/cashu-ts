@@ -235,7 +235,7 @@ export class MintInfo {
           // this way ttl is always a number
           ttl: ttlSeconds === null ? Infinity : Math.max(ttlSeconds, 0) * 1000,
           cached_endpoints: rawPolicy.cached_endpoints,
-        } as Nut19Policy,
+        },
       };
     }
     return { supported: false };

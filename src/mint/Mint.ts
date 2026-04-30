@@ -962,7 +962,7 @@ class Mint {
   private normalizeMeltQuoteRequestOptions(
     payload: MeltQuoteBolt11Request | MeltQuoteBolt12Request,
   ): Record<string, unknown> {
-    if (!payload.options) return payload as Record<string, unknown>;
+    if (!payload.options) return payload;
     const opts: Record<string, unknown> = { ...payload.options };
     if (payload.options.amountless) {
       opts.amountless = {
