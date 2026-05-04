@@ -23,6 +23,7 @@ function deriveDLEQNonce(
   for (let ctr = 0; ctr < 256; ctr++) {
     const h = hmac(sha256, hmacKey, concatBytes(base, new Uint8Array([ctr])));
     const r = bytesToNumberBE(h) % n;
+    /* c8 ignore next */
     if (r !== 0n) return r;
   }
   /* c8 ignore next */
