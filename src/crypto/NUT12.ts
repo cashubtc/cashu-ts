@@ -25,6 +25,7 @@ function deriveDLEQNonce(
     const r = bytesToNumberBE(h) % n;
     if (r !== 0n) return r;
   }
+  /* c8 ignore next */
   throw new Error('DLEQ nonce derivation failed');
 }
 
