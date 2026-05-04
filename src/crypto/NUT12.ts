@@ -10,6 +10,7 @@ import { Bytes } from '../utils';
 import { type DLEQ, hash_e, hashToCurve } from './core';
 
 const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
+const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
 function deriveDLEQNonce(
   a: Uint8Array,
@@ -19,10 +20,12 @@ function deriveDLEQNonce(
 ): bigint {
   const hmacKey = sha256(a);
   const base = concatBytes(DST_R, A.toBytes(false), B_.toBytes(false), C_.toBytes(false));
-  const n = secp256k1.Point.CURVE().n;
   for (let ctr = 0; ctr < 256; ctr++) {
     const h = hmac(sha256, hmacKey, concatBytes(base, new Uint8Array([ctr])));
-    const r = bytesToNumberBE(h) % n;
+    const x = bytesToNumberBE(h);
+    // Reduce modulo curve order. Single subtraction suffices since HMAC output
+    // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
+    const r = x >= SECP256K1_N ? x - SECP256K1_N : x;
     /* c8 ignore next */
     if (r !== 0n) return r;
   }
