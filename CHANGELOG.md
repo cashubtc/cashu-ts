@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.2.0](https://github.com/cashubtc/cashu-ts/compare/v4.1.0...v4.2.0) (2026-05-05)
+
+
+### Features
+
+* replace sanitizeUrl with normalizeUrl for mint URL validation ([#632](https://github.com/cashubtc/cashu-ts/issues/632)) ([4f02d8b](https://github.com/cashubtc/cashu-ts/commit/4f02d8b06ed736f760250d6d769ad1d713e496a0))
+
+
+### Bug Fixes
+
+* gate User-Agent override outside browser-like runtimes ([cfbb09f](https://github.com/cashubtc/cashu-ts/commit/cfbb09fe82adc4d0ef34f9f5307269d4d3cb321e))
+* harden mint URL normalization ([#637](https://github.com/cashubtc/cashu-ts/issues/637)) ([c72caa5](https://github.com/cashubtc/cashu-ts/commit/c72caa54d4d3dfab060b856dbc24acbee6a26730))
+* only set User-Agent override in non-browserlike runtimes ([#640](https://github.com/cashubtc/cashu-ts/issues/640)) ([cfbb09f](https://github.com/cashubtc/cashu-ts/commit/cfbb09fe82adc4d0ef34f9f5307269d4d3cb321e))
+
 ## [4.1.0](https://github.com/cashubtc/cashu-ts/compare/v4.0.0...v4.1.0) (2026-04-16)
 
 
