@@ -58,6 +58,18 @@ export function buildRequestHeaders(
   };
 }
 
+/**
+ * Returns `err.message` when `err` is an Error, otherwise `fallback`.
+ *
+ * @remarks
+ * Real fetch implementations always reject with an Error subclass, but `err` is typed `unknown`
+ * inside `catch`, so the fallback protects against pathological polyfills.
+ * @internal
+ */
+export function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
+
 export type RequestArgs = {
   endpoint: string;
   requestBody?: Record<string, unknown>;
@@ -292,16 +304,12 @@ async function _request(options: RequestOptions): Promise<unknown> {
     } else {
       const combinedController = new AbortController();
       const forwardAbort = () => combinedController.abort();
-      if (callerSignal.aborted || timeoutController.signal.aborted) {
-        forwardAbort();
-      } else {
-        callerSignal.addEventListener('abort', forwardAbort, { once: true });
-        timeoutController.signal.addEventListener('abort', forwardAbort, { once: true });
-        cleanupAbortListeners = () => {
-          callerSignal.removeEventListener('abort', forwardAbort);
-          timeoutController.signal.removeEventListener('abort', forwardAbort);
-        };
-      }
+      callerSignal.addEventListener('abort', forwardAbort, { once: true });
+      timeoutController.signal.addEventListener('abort', forwardAbort, { once: true });
+      cleanupAbortListeners = () => {
+        callerSignal.removeEventListener('abort', forwardAbort);
+        timeoutController.signal.removeEventListener('abort', forwardAbort);
+      };
       signal = combinedController.signal;
     }
   }
@@ -326,14 +334,14 @@ async function _request(options: RequestOptions): Promise<unknown> {
       throw new NetworkError(`Request timed out after ${requestTimeout}ms`);
     }
     if (callerAborted) {
-      throw new CallerAbortError(err instanceof Error ? err.message : 'Request aborted by caller');
+      throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
     }
     if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
       throw new NetworkError(err.message);
     }
     // A fetch() promise only rejects when the request fails,
     // for example, because of a badly-formed request URL or a network error.
-    throw new NetworkError(err instanceof Error ? err.message : 'Network request failed');
+    throw new NetworkError(errorMessage(err, 'Network request failed'));
   } finally {
     clearTimeout(timeoutId);
     cleanupAbortListeners?.();

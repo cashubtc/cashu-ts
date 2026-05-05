@@ -4,7 +4,7 @@ import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../../src';
 import request, { setRequestLogger } from '../../src/transport';
-import { buildRequestHeaders, detectBrowserLike } from '../../src/transport/request';
+import { buildRequestHeaders, detectBrowserLike, errorMessage } from '../../src/transport/request';
 import { MINTCACHE } from '../consts';
 import { Nut19Policy } from '../../src';
 import { NULL_LOGGER, type Logger } from '../../src/logger';
@@ -128,6 +128,17 @@ describe('requests', () => {
     await expect(promise).rejects.toThrow('Minting is disabled');
   });
 
+  test('maps empty error response body to bad response', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+        return new HttpResponse('', { status: 400 });
+      }),
+    );
+
+    const wallet = new Wallet(mintUrl);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('bad response');
+  });
   describe('NUT-19 Cache retry logic', () => {
     afterEach(() => {
       vi.restoreAllMocks();
@@ -821,5 +832,18 @@ describe('buildRequestHeaders', () => {
     expect(buildRequestHeaders(undefined, undefined, true).Accept).toBe(
       'application/json, text/plain, */*',
     );
+  });
+});
+
+describe('errorMessage', () => {
+  test('returns err.message when err is an Error', () => {
+    expect(errorMessage(new Error('boom'), 'fallback')).toBe('boom');
+  });
+
+  test('returns fallback when err is not an Error (string, null, undefined, plain object)', () => {
+    expect(errorMessage('not an error', 'fallback')).toBe('fallback');
+    expect(errorMessage(null, 'fallback')).toBe('fallback');
+    expect(errorMessage(undefined, 'fallback')).toBe('fallback');
+    expect(errorMessage({ message: 'looks like an error' }, 'fallback')).toBe('fallback');
   });
 });
