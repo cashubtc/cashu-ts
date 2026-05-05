@@ -15,6 +15,7 @@ import {
   parseRetryAfter,
   detectBrowserLike,
   buildRequestHeaders,
+  errorMessage,
 } from '../../src/transport/request';
 import { MINTCACHE } from '../consts';
 import { Nut19Policy } from '../../src';
@@ -183,6 +184,18 @@ describe('requests', { timeout: 7500 }, () => {
     const wallet = new Wallet(mintUrl);
     wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
     await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('primitive failure');
+  });
+
+  test('maps empty error response body to bad response', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/melt/quote/bolt11/test', () => {
+        return new HttpResponse('', { status: 400 });
+      }),
+    );
+
+    const wallet = new Wallet(mintUrl);
+    wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+    await expect(wallet.checkMeltQuoteBolt11('test')).rejects.toThrow('bad response');
   });
 
   test('maps empty success response body to bad response', async () => {
@@ -1057,6 +1070,19 @@ describe('buildRequestHeaders', () => {
     expect(buildRequestHeaders(undefined, undefined, true).Accept).toBe(
       'application/json, text/plain, */*',
     );
+  });
+});
+
+describe('errorMessage', () => {
+  test('returns err.message when err is an Error', () => {
+    expect(errorMessage(new Error('boom'), 'fallback')).toBe('boom');
+  });
+
+  test('returns fallback when err is not an Error (string, null, undefined, plain object)', () => {
+    expect(errorMessage('not an error', 'fallback')).toBe('fallback');
+    expect(errorMessage(null, 'fallback')).toBe('fallback');
+    expect(errorMessage(undefined, 'fallback')).toBe('fallback');
+    expect(errorMessage({ message: 'looks like an error' }, 'fallback')).toBe('fallback');
   });
 });
 
