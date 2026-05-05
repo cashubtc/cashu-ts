@@ -4,7 +4,7 @@ import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../../src';
 import request, { setRequestLogger } from '../../src/transport';
-import { detectBrowserLike } from '../../src/transport/request';
+import { buildRequestHeaders, detectBrowserLike } from '../../src/transport/request';
 import { MINTCACHE } from '../consts';
 import { Nut19Policy } from '../../src';
 import { NULL_LOGGER, type Logger } from '../../src/logger';
@@ -793,5 +793,33 @@ describe('detectBrowserLike', () => {
   test('false: WorkerGlobalScope present but self is not an instance of it', () => {
     class WorkerGlobalScope {}
     expect(detectBrowserLike({ self: {}, WorkerGlobalScope })).toBe(false);
+  });
+});
+
+describe('buildRequestHeaders', () => {
+  test('non-browser runtimes get the Mozilla/5.0 User-Agent override', () => {
+    expect(buildRequestHeaders(undefined, undefined, false)['User-Agent']).toBe('Mozilla/5.0');
+  });
+
+  test('browser-like runtimes omit the User-Agent override', () => {
+    expect(buildRequestHeaders(undefined, undefined, true)['User-Agent']).toBeUndefined();
+  });
+
+  test('caller-supplied User-Agent always wins', () => {
+    expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, false)['User-Agent']).toBe('X');
+    expect(buildRequestHeaders(undefined, { 'User-Agent': 'X' }, true)['User-Agent']).toBe('X');
+  });
+
+  test('Content-Type is added only when body is present', () => {
+    expect(buildRequestHeaders('{"x":1}', undefined, false)['Content-Type']).toBe(
+      'application/json',
+    );
+    expect(buildRequestHeaders(undefined, undefined, false)['Content-Type']).toBeUndefined();
+  });
+
+  test('Accept is always present', () => {
+    expect(buildRequestHeaders(undefined, undefined, true).Accept).toBe(
+      'application/json, text/plain, */*',
+    );
   });
 });
