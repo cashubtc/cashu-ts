@@ -36,11 +36,7 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           MAJOR_VERSION=$(echo $VERSION | cut -d. -f1)
-          if [ "$MAJOR_VERSION" = "3" ]; then
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          else
-            echo "tag=v${MAJOR_VERSION}-lts" >> $GITHUB_OUTPUT
-          fi
+          echo "tag=v${MAJOR_VERSION}-lts" >> $GITHUB_OUTPUT
 
       - name: Publish to npm (skip if already published)
         run: |
