@@ -6,6 +6,10 @@ import { JSONInt } from '../utils/JSONInt';
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
+// Detect runtime at module load. Browser bundlers may polyfill `process`, but rarely
+// include `process.versions.node`, so the nested check stays browser-safe.
+const IS_NODE = typeof process !== 'undefined' && process.versions?.node != null;
+
 export type RequestArgs = {
   endpoint: string;
   requestBody?: Record<string, unknown>;
@@ -223,9 +227,10 @@ async function _request(options: RequestOptions): Promise<unknown> {
   const headers: Record<string, string> = {
     Accept: 'application/json, text/plain, */*',
     ...(body ? { 'Content-Type': 'application/json' } : undefined),
-    // Generic User-Agent to avoid fingerprinting. In browsers this is a forbidden header (silently ignored).
-    // In Node.js this overrides the default `undici` identifier that would leak the runtime.
-    'User-Agent': 'Mozilla/5.0',
+    // Node-only: override the default `undici` identifier that would leak the runtime.
+    // Skipped in browsers because Firefox/WebKit can promote it to a CORS preflight even
+    // though the Fetch spec lists it as a forbidden header.
+    ...(IS_NODE ? { 'User-Agent': 'Mozilla/5.0' } : undefined),
     ...requestHeaders,
   };
   const callerSignal = options.signal ?? undefined;
