@@ -31,7 +31,7 @@ jobs:
         run: npm run compile
 
       - name: Prepare Tests
-        run: npm run test:prepare:ci
+        run: npm run test:prepare
 
       - name: Run Tests
         run: npm test

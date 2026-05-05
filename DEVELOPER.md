@@ -21,8 +21,8 @@ npm run test:prepare
 ### Branching model update
 
 This repository no longer uses a separate development branch. All development now happens directly against main.
-The project will continue to support the last prior major release on a version branch. At the time of this change
-main tracks v4, while the v3 linage exists on `v3-dev`.
+
+The project will continue to support the last prior major release on a version branch. At the time of this change main tracks v4, while the v3 linage exists on `v3-dev`.
 
 If you are backporting fixes to the v3 line, please open pull requests against the `v3-dev` branch instead.
 
@@ -112,56 +112,39 @@ Caution: `api:update` can modify generated files (e.g. API reports). Inspect and
 
 ### Local validation workflow (recommended)
 
-Many maintainers prefer to run the relevant checks locally before pushing. A common, reliable workflow:
-
-1. Start a local mint (for integration tests). We have make targets for both CDK's mintd, and Nutshell:
+Run the checks that match the risk of your change before pushing. As a baseline:
 
 ```bash
-# from the repo root
+npm run check-lint
+npm run check-format
+npm test
+```
+
+For public API changes, also run:
+
+```bash
+npm run api:update
+```
+
+For mint, wallet, transport, or event changes, run the Node integration tests against a fresh local mint:
+
+```bash
 DEV=1 make cdk-stable-up
-# or DEV=1 make nutshell-stable-up
-```
-
-1. Run the full PR tasks (lint, format, api:update, tests):
-
-```bash
-npm run prtasks
-```
-
-1. Run the integration tests against the local mint:
-
-```bash
 npm run test-integration
-```
-
-3a. (Optional but recommended) Run the consumer smoke tests used by CI:
-
-```bash
-# runs all consumer smoke tests (bundler, iife, nodenext, reactnative)
-npm run test:consumer
-```
-
-**Note**: the consumer smoke tests are run in CI but are not part of the git hooks; running `npm run test:consumer` locally before pushing helps reproduce CI behavior.
-
-CI uses `npm run test:prepare:ci`, which installs Chromium without `--with-deps` to avoid slow apt package downloads on Ubuntu runners. Local setup should keep using `npm run test:prepare`.
-
-The `test:consumer` aggregator runs the following scripts (you can run them individually):
-
-- `npm run test:bundler` — smoke test using the bundler consumer
-- `npm run test:iife` — smoke test for IIFE (standalone) build
-- `npm run test:nodenext` — smoke test for Node ESM consumers
-- `npm run test:reactnative` — smoke test for React Native consumer
-
-Run the individual script if you want to isolate failures or speed up debugging.
-
-1. When finished, stop the local mint:
-
-```bash
 DEV=1 make cdk-stable-down
-# or DEV=1 make nutshell-stable-down
 ```
 
-This pattern gives fast, reproducible results and avoids surprises in CI.
+For browser-facing integration changes, use the local browser wrapper. It starts a fresh mint for each browser because LN invoices must be unique per run:
+
+```bash
+npm run test-integration:browser:local:cdk
+# or a single browser:
+npm run test-integration:browser:local:cdk -- firefox
+```
+
+Consumer smoke tests are also run in CI. Run `npm run test:consumer` when packaging, exports, browser bundles, or consumer compatibility are involved.
+
+`npm run prtasks` is available when you want the heavier all-in local sweep. It runs lint, format, `api:update`, tests, and `git status`.
 
 ## Integration mints (Makefile & CI)
 
@@ -197,7 +180,7 @@ CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
 - CI workflows call the same Makefile targets (for example `make cdk-stable-up` / `make nutshell-stable-up`) so the runtime behavior in CI matches local usage.
 - CI will also run the latest release candidate if one exist of cdk and nutshell. Once the release has been cut, the RC branch will pause until new RC's have been published.
 - Renovate is configured to update pinned image tags in the Makefile (the canonical source of truth). The Renovate regex intentionally matches semver-like tags (no `latest`) so PRs will update numeric tags.
-- Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs `npm run test-integration`.
+- Workflows start containers on the same runner and then run the shared composite action which waits for readiness and runs `npm run test-integration` or the browser integration equivalent.
 
 #### Practical checklist before running integration tests locally
 
@@ -206,6 +189,8 @@ CDK_IMAGE=cashubtc/mintd:0.13.4 CDK_NAME=my-local-mint DEV=1 make cdk-up
 3. Start the mint(s): `DEV=1 make cdk-stable-up` (and/or `DEV=1 make nutshell-stable-up`, `DEV=1 make cdk-rc-up`, `DEV=1 make nutshell-rc-up`)
 4. Run the integration tests: `npm run test-integration`
 5. When finished, tear down: `DEV=1 make cdk-stable-down` / `DEV=1 make nutshell-stable-down`
+
+For browser integration tests, prefer `npm run test-integration:browser:local:cdk` or `npm run test-integration:browser:local:nutshell`; those commands handle fresh mint setup and teardown per browser.
 
 ## API Extractor workflow
 
@@ -262,11 +247,20 @@ npx vitest --run --filter <pattern>
 
 ```bash
 npm run test:prepare
-# then run the integration tests
 npm run test-integration
 ```
 
-In CI, prefer `npm run test:prepare:ci` unless you explicitly need Playwright to install system packages too.
+Browser integration tests can be run against an already-running fresh mint:
+
+```bash
+npm run test-integration:browser:firefox
+```
+
+For local full-browser runs, prefer the wrapper:
+
+```bash
+npm run test-integration:browser:local:cdk
+```
 
 If tests are flaky locally, run with increased verbosity or use `--run --inspect` / `--watch` where supported.
 

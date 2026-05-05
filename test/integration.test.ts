@@ -18,7 +18,6 @@
 // - Nutshell:
 // docker rm -f -v nutshell
 
-import dns from 'node:dns';
 import { vi, test, describe, expect } from 'vitest';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import {
@@ -31,7 +30,6 @@ import {
   type ProofState,
   type Token,
   MintOperationError,
-  injectWebSocketImpl,
   OutputData,
   OutputDataFactory,
   OutputConfig,
@@ -46,15 +44,11 @@ import {
   NetworkError,
   AmountLike,
 } from '../src';
-import ws from 'ws';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-dns.setDefaultResultOrder('ipv4first');
 
-const mintUrl = 'http://localhost:3338';
+const mintUrl = 'http://127.0.0.1:3338';
 const unit = 'sat';
-
-injectWebSocketImpl(ws as unknown as typeof WebSocket);
 
 // Set timeouts for this test suite file
 vi.setConfig({
@@ -580,23 +574,30 @@ describe('mint api', () => {
     await wallet.loadMint();
     const mintQuote = await wallet.createMintQuoteBolt11(21);
     const callback = vi.fn();
-    const res = await new Promise(async (res, rej) => {
-      const unsub = await wallet.on.mintQuoteUpdates(
-        [mintQuote.quote],
-        (p) => {
-          if (p.state === MintQuoteState.PAID) {
-            callback();
-            res(1);
-            unsub();
-          }
-        },
-        (e) => {
-          console.log(e);
-          unsub();
-          rej(e);
-        },
-      );
+    const ac = new AbortController();
+    let resolvePaid!: (value: number) => void;
+    let rejectPaid!: (reason: unknown) => void;
+    const paid = new Promise<number>((res, rej) => {
+      resolvePaid = res;
+      rejectPaid = rej;
     });
+    const cancelSub = await wallet.on.mintQuoteUpdates(
+      [mintQuote.quote],
+      (p) => {
+        if (p.state === MintQuoteState.PAID) {
+          callback();
+          resolvePaid(1);
+          ac.abort();
+        }
+      },
+      (e) => {
+        console.log(e);
+        rejectPaid(e);
+        ac.abort();
+      },
+      { signal: ac.signal },
+    );
+    const res = await paid.finally(cancelSub);
     mint.disconnectWebSocket();
     expect(res).toBe(1);
     expect(callback).toHaveBeenCalled();
@@ -607,26 +608,33 @@ describe('mint api', () => {
     await wallet.loadMint();
     const mintQuote1 = await wallet.createMintQuoteBolt11(21);
     const mintQuote2 = await wallet.createMintQuoteBolt11(22);
-    const res = await new Promise(async (res, rej) => {
-      let quotesPaid = 0;
-      const unsub = await wallet.on.mintQuoteUpdates(
-        [mintQuote1.quote, mintQuote2.quote],
-        (update) => {
-          if (update.state == MintQuoteState.PAID) {
-            quotesPaid++;
-          }
-          if (quotesPaid === 2) {
-            unsub();
-            res(1);
-          }
-        },
-        (e) => {
-          console.log(e);
-          unsub();
-          rej(e);
-        },
-      );
+    const ac = new AbortController();
+    let resolvePaid!: (value: number) => void;
+    let rejectPaid!: (reason: unknown) => void;
+    let quotesPaid = 0;
+    const paid = new Promise<number>((res, rej) => {
+      resolvePaid = res;
+      rejectPaid = rej;
     });
+    const cancelSub = await wallet.on.mintQuoteUpdates(
+      [mintQuote1.quote, mintQuote2.quote],
+      (update) => {
+        if (update.state == MintQuoteState.PAID) {
+          quotesPaid++;
+        }
+        if (quotesPaid === 2) {
+          resolvePaid(1);
+          ac.abort();
+        }
+      },
+      (e) => {
+        console.log(e);
+        rejectPaid(e);
+        ac.abort();
+      },
+      { signal: ac.signal },
+    );
+    const res = await paid.finally(cancelSub);
     mint.disconnectWebSocket();
     expect(res).toBe(1);
     expect(mint.webSocketConnection?.activeSubscriptions.length).toBe(0);
@@ -637,30 +645,33 @@ describe('mint api', () => {
     await wallet.loadMint();
     const quote = await wallet.createMintQuoteBolt11(63);
     await new Promise((res, rej) => {
-      wallet.on.mintQuotePaid(quote.quote, res, rej);
+      void wallet.on.mintQuotePaid(quote.quote, res, rej).catch(rej);
     });
     const proofs = await wallet.mintProofsBolt11(63, quote.quote);
     // console.log(
     // 	'proofs',
     // 	proofs.map((p) => p.amount.toString()),
     // );
-    await new Promise<ProofState>((res) => {
-      wallet.on.proofStateUpdates(
-        proofs,
-        (p) => {
-          // console.log(p);
-          if (p.state === CheckStateEnum.SPENT) {
-            res(p);
-          }
-        },
-        (e) => {
-          console.log(e);
-        },
-      );
+    await new Promise<ProofState>((res, rej) => {
+      void wallet.on
+        .proofStateUpdates(
+          proofs,
+          (p) => {
+            // console.log(p);
+            if (p.state === CheckStateEnum.SPENT) {
+              res(p);
+            }
+          },
+          (e) => {
+            console.log(e);
+            rej(e);
+          },
+        )
+        .catch(rej);
       // Wallet will try to avoid a swap if possible, so
       // let's give it a keysetID to force one.
       const keysetId = wallet.keyChain.getCheapestKeyset().id;
-      wallet.send(21, proofs, { keysetId }); // fire and forget
+      void wallet.send(21, proofs, { keysetId }).catch(rej); // fire and forget
     });
     mint.disconnectWebSocket();
   }, 10000);
@@ -1032,7 +1043,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
 
     // mock fetch for the mint operation
     let fetchCallCount = 0;
-    const ogFetch = global.fetch;
+    const ogFetch = globalThis.fetch;
     const mockFetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       if (typeof url === 'string' && url.includes('/v1/mint/bolt11') && init?.method === 'POST') {
         if (fetchCallCount++ <= 1) {
@@ -1041,7 +1052,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
       }
       return ogFetch(url, init);
     });
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     try {
       // mint with NUT-19 cache retry - should handle network failure
@@ -1051,7 +1062,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
       expect(fetchCallCount).toBe(3); // 1 + 2 retries
     } finally {
       // restore original fetch
-      global.fetch = ogFetch;
+      globalThis.fetch = ogFetch;
     }
   });
 
@@ -1073,12 +1084,12 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
 
     // mock fetch to always fail
     let fetchCallCount = 0;
-    const ogFetch = global.fetch;
+    const ogFetch = globalThis.fetch;
     const mockFetch = vi.fn(async () => {
       fetchCallCount++;
       throw new NetworkError('gm');
     });
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     try {
       // should eventually give up due to TTL
@@ -1086,7 +1097,7 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
       expect(fetchCallCount).toBeGreaterThan(1);
       expect(fetchCallCount).toBeLessThan(15);
     } finally {
-      global.fetch = ogFetch;
+      globalThis.fetch = ogFetch;
     }
   }, 30500); // cdk mint has 30s ttl by default
 
@@ -1099,18 +1110,18 @@ describe('CDK Mint NUT-19 Cache Tests', () => {
     await wallet.loadMint();
 
     let fetchCallCount = 0;
-    const ogFetch = global.fetch;
+    const ogFetch = globalThis.fetch;
     const mockFetch = vi.fn(async () => {
       fetchCallCount++;
       throw new NetworkError('gm');
     });
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch;
 
     try {
       await expect(wallet.mint.getKeys()).rejects.toThrow(NetworkError);
       expect(fetchCallCount).toBe(1); // single request, without retries
     } finally {
-      global.fetch = ogFetch;
+      globalThis.fetch = ogFetch;
     }
   });
 });

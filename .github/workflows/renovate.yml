@@ -23,7 +23,7 @@ jobs:
         run: npm ci
 
       - name: Install Test dependencies
-        run: npm run test:prepare:ci
+        run: npm run test:prepare
 
       - name: Update Makefile Docker versions
         id: update

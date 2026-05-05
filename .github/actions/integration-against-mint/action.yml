@@ -9,6 +9,22 @@ inputs:
     description: 'Upload integration coverage to Codecov'
     required: false
     default: 'false'
+  test_command:
+    description: 'Command used to run the integration tests'
+    required: false
+    default: 'npm run test-integration'
+  prepare_playwright:
+    description: 'Install Playwright browsers before running tests'
+    required: false
+    default: 'false'
+  prepare_playwright_command:
+    description: 'Command used to install Playwright browsers before running tests'
+    required: false
+    default: 'npm run test:prepare'
+  coverage_name:
+    description: 'Codecov coverage upload name'
+    required: false
+    default: 'integration-cdk-stable'
 
 runs:
   using: 'composite'
@@ -38,6 +54,12 @@ runs:
         done
         echo "Mint responded to host HTTP at $host_url"
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+        cache: npm
+
     - name: Install dependencies
       shell: bash
       run: npm ci
@@ -46,9 +68,14 @@ runs:
       shell: bash
       run: npm run compile
 
+    - name: Prepare Playwright
+      if: ${{ inputs.prepare_playwright == 'true' }}
+      shell: bash
+      run: ${{ inputs.prepare_playwright_command }}
+
     - name: Run integration tests
       shell: bash
-      run: npm run test-integration
+      run: ${{ inputs.test_command }}
 
     - name: Upload integration coverage to Codecov
       if: ${{ inputs.upload_coverage == 'true' }}
@@ -56,7 +83,7 @@ runs:
       with:
         token: ${{ env.CODECOV_TOKEN }}
         flags: integration
-        name: integration-cdk-stable
+        name: ${{ inputs.coverage_name }}
 
     - name: Dump mint logs on failure
       if: ${{ failure() }}

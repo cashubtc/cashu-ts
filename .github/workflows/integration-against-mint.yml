@@ -13,6 +13,27 @@ jobs:
   cdk-integration-tests:
     runs-on: ubuntu-24.04
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: node
+            test_command: npm run test-integration
+            prepare_playwright: 'false'
+            prepare_playwright_command: ''
+          - runtime: chromium
+            test_command: npm run test-integration:browser:chromium
+            prepare_playwright: 'true'
+            prepare_playwright_command: npm run test:prepare:ci:chromium
+          - runtime: firefox
+            test_command: npm run test-integration:browser:firefox
+            prepare_playwright: 'true'
+            prepare_playwright_command: npm run test:prepare:ci:firefox
+          - runtime: webkit
+            test_command: npm run test-integration:browser:webkit
+            prepare_playwright: 'true'
+            prepare_playwright_command: npm run test:prepare:ci:webkit
+
     steps:
       - uses: actions/checkout@v4
 
@@ -56,7 +77,11 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           container_name: ${{ steps.start_stable.outputs.name }}
-          upload_coverage: 'true'
+          test_command: ${{ matrix.test_command }}
+          prepare_playwright: ${{ matrix.prepare_playwright }}
+          prepare_playwright_command: ${{ matrix.prepare_playwright_command }}
+          upload_coverage: ${{ matrix.runtime == 'node' && 'true' || 'false' }}
+          coverage_name: integration-cdk-stable-${{ matrix.runtime }}
 
       - name: Stop CDK stable
         run: |
@@ -84,6 +109,9 @@ jobs:
         uses: ./.github/actions/integration-against-mint
         with:
           container_name: ${{ steps.start_rc.outputs.name }}
+          test_command: ${{ matrix.test_command }}
+          prepare_playwright: ${{ matrix.prepare_playwright }}
+          prepare_playwright_command: ${{ matrix.prepare_playwright_command }}
 
       - name: Stop CDK RC
         if: steps.versions.outputs.run_rc == 'true'
@@ -93,6 +121,27 @@ jobs:
 
   nutshell-integration-tests:
     runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: node
+            test_command: npm run test-integration
+            prepare_playwright: 'false'
+            prepare_playwright_command: ''
+          - runtime: chromium
+            test_command: npm run test-integration:browser:chromium
+            prepare_playwright: 'true'
+            prepare_playwright_command: npm run test:prepare:ci:chromium
+          - runtime: firefox
+            test_command: npm run test-integration:browser:firefox
+            prepare_playwright: 'true'
+            prepare_playwright_command: npm run test:prepare:ci:firefox
+          - runtime: webkit
+            test_command: npm run test-integration:browser:webkit
+            prepare_playwright: 'true'
+            prepare_playwright_command: npm run test:prepare:ci:webkit
 
     steps:
       - uses: actions/checkout@v4
@@ -135,6 +184,9 @@ jobs:
         uses: ./.github/actions/integration-against-mint
         with:
           container_name: ${{ steps.start_stable.outputs.name }}
+          test_command: ${{ matrix.test_command }}
+          prepare_playwright: ${{ matrix.prepare_playwright }}
+          prepare_playwright_command: ${{ matrix.prepare_playwright_command }}
 
       - name: Stop Nutshell stable
         run: |
@@ -162,6 +214,9 @@ jobs:
         uses: ./.github/actions/integration-against-mint
         with:
           container_name: ${{ steps.start_rc.outputs.name }}
+          test_command: ${{ matrix.test_command }}
+          prepare_playwright: ${{ matrix.prepare_playwright }}
+          prepare_playwright_command: ${{ matrix.prepare_playwright_command }}
 
       - name: Stop Nutshell RC
         if: steps.versions.outputs.run_rc == 'true'

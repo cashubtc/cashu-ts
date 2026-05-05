@@ -26,6 +26,6 @@ jobs:
         run: npm ci
       - name: Prepare Playwright (for iife test)
         if: ${{ matrix['test-type'] == 'iife' }}
-        run: npm run test:prepare:ci # Installs Chromium only; avoid apt deps on CI
+        run: npm run test:prepare:ci:chromium
       - name: Run ${{ matrix['test-type'] }} Test
         run: npm run test:${{ matrix['test-type'] }}

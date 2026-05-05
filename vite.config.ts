@@ -7,6 +7,7 @@ import { configDefaults } from 'vitest/config';
 import { createRequire } from 'node:module';
 
 type BuildFormat = 'es' | 'iife';
+type BrowserName = 'chromium' | 'firefox' | 'webkit';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -14,6 +15,7 @@ const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 const pkg = require('./package.json') as { dependencies?: Record<string, string> };
 const deps = Object.keys(pkg.dependencies || {});
+const integrationBrowser = resolveIntegrationBrowser();
 
 function resolveFormat(command: 'build' | 'serve'): BuildFormat {
   if (command !== 'build') return 'es';
@@ -31,6 +33,14 @@ function isDependencyImport(id: string) {
 function makeExternal(format: BuildFormat) {
   if (format === 'iife') return [];
   return (id: string) => isDependencyImport(id);
+}
+
+function resolveIntegrationBrowser(): BrowserName {
+  const browser = process.env.INTEGRATION_BROWSER;
+  if (browser === undefined || browser === 'chromium') return 'chromium';
+  if (browser === 'firefox' || browser === 'webkit') return browser;
+
+  throw new Error(`Unsupported INTEGRATION_BROWSER "${browser}"`);
 }
 
 const sourceCoverage = {
@@ -117,7 +127,11 @@ export default defineConfig(({ command }) => {
               },
               enabled: true,
               headless: true,
-              instances: [{ browser: 'chromium' }],
+              instances: [
+                { browser: 'chromium' },
+                { browser: 'firefox', coverage: { enabled: false } },
+                { browser: 'webkit', coverage: { enabled: false } },
+              ],
               screenshotFailures: false,
             },
             include: ['test/**/*.test.ts'],
@@ -134,6 +148,28 @@ export default defineConfig(({ command }) => {
             name: 'integration',
             globals: true,
             environment: 'node',
+            include: ['test/integration.test.ts'],
+            exclude: [...configDefaults.exclude],
+          },
+        },
+        {
+          test: {
+            name: 'integration-browser',
+            globals: true,
+            browser: {
+              provider: playwright(),
+              api: {
+                host: '127.0.0.1',
+              },
+              enabled: true,
+              headless: true,
+              instances: [
+                integrationBrowser === 'chromium'
+                  ? { browser: integrationBrowser }
+                  : { browser: integrationBrowser, coverage: { enabled: false } },
+              ],
+              screenshotFailures: false,
+            },
             include: ['test/integration.test.ts'],
             exclude: [...configDefaults.exclude],
           },
