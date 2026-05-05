@@ -13,6 +13,8 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 /**
  * Subset of globalThis used by {@link detectBrowserLike}; loosened for unit tests.
+ *
+ * @internal
  */
 export type GlobalLike = {
   window?: { document?: unknown };
@@ -23,6 +25,8 @@ export type GlobalLike = {
 /**
  * True in browser main thread + any Worker scope (classic/module/shared/service via
  * `WorkerGlobalScope`).
+ *
+ * @internal
  */
 export function detectBrowserLike(g: GlobalLike): boolean {
   if (g.window !== undefined && g.window.document !== undefined) return true;
@@ -34,6 +38,30 @@ export function detectBrowserLike(g: GlobalLike): boolean {
 }
 
 const IS_BROWSER_LIKE = detectBrowserLike(globalThis);
+
+/**
+ * Builds the outgoing request headers.
+ *
+ * @remarks
+ * Overrides the default User-Agent in non-browser runtimes (Node, Deno, Bun, React Native) where
+ * native HTTP stacks otherwise leak fingerprintable identifiers (undici, NSURLSession, OkHttp).
+ * Skipped in browsers + workers because Firefox/WebKit can promote it to a CORS preflight even
+ * though the Fetch spec lists it as a forbidden header. Caller-supplied `requestHeaders` always
+ * wins.
+ * @internal
+ */
+export function buildRequestHeaders(
+  body: string | undefined,
+  requestHeaders: Record<string, string> | undefined,
+  isBrowserLike: boolean = IS_BROWSER_LIKE,
+): Record<string, string> {
+  return {
+    Accept: 'application/json, text/plain, */*',
+    ...(body ? { 'Content-Type': 'application/json' } : undefined),
+    ...(isBrowserLike ? undefined : { 'User-Agent': 'Mozilla/5.0' }),
+    ...requestHeaders,
+  };
+}
 
 export type RequestArgs = {
   endpoint: string;
@@ -323,17 +351,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
   void logger;
 
   const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
-  const headers: Record<string, string> = {
-    Accept: 'application/json, text/plain, */*',
-    ...(body ? { 'Content-Type': 'application/json' } : undefined),
-    // Override the default User-Agent in non-browser runtimes (Node, Deno, Bun, React
-    // Native) where native HTTP stacks otherwise leak fingerprintable identifiers
-    // (undici, NSURLSession, OkHttp). Skipped in browsers + workers because Firefox/
-    // WebKit can promote it to a CORS preflight even though the Fetch spec lists it as
-    // a forbidden header.
-    ...(IS_BROWSER_LIKE ? undefined : { 'User-Agent': 'Mozilla/5.0' }),
-    ...requestHeaders,
-  };
+  const headers = buildRequestHeaders(body, requestHeaders);
   const callerSignal = options.signal ?? undefined;
   if (callerSignal?.aborted) {
     throw new CallerAbortError('Request aborted by caller');
