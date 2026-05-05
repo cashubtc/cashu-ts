@@ -1,0 +1,666 @@
+<!DOCTYPE html><html class="default" lang="en" data-base="../"><head><meta charset="utf-8"/><meta http-equiv="x-ua-compatible" content="IE=edge"/><title>migration-4.0.0 | Cashu-TS - v4.2.0</title><meta name="description" content="Documentation for Cashu-TS"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="../assets/style.css"/><link rel="stylesheet" href="../assets/highlight.css"/><link rel="stylesheet" href="../assets/custom.css"/><script defer src="../assets/main.js"></script><script async src="../assets/icons.js" id="tsd-icons-script"></script><script async src="../assets/search.js" id="tsd-search-script"></script><script async src="../assets/navigation.js" id="tsd-nav-script"></script><script async src="../assets/hierarchy.js" id="tsd-hierarchy-script"></script></head><body><script>document.documentElement.dataset.theme = localStorage.getItem("tsd-theme") || "os";document.body.style.display="none";setTimeout(() => window.app?app.showPage():document.body.style.removeProperty("display"),500)</script><header class="tsd-page-toolbar"><div class="tsd-toolbar-contents container"><a href="../index.html" class="title">Cashu-TS - v4.2.0</a><div id="tsd-toolbar-links"></div><button id="tsd-search-trigger" class="tsd-widget" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-search"></use></svg></button><dialog id="tsd-search" aria-label="Search"><input role="combobox" id="tsd-search-input" aria-controls="tsd-search-results" aria-autocomplete="list" aria-expanded="true" autocapitalize="off" autocomplete="off" placeholder="Search the docs" maxLength="100"/><ul role="listbox" id="tsd-search-results"></ul><div id="tsd-search-status" aria-live="polite" aria-atomic="true"><div>Preparing search index...</div></div></dialog><a href="#" class="tsd-widget menu" id="tsd-toolbar-menu-trigger" data-toggle="menu" aria-label="Menu"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-menu"></use></svg></a></div></header><div class="container container-main"><div class="col-content"><div class="tsd-page-title"><ul class="tsd-breadcrumb" aria-label="Breadcrumb"><li><a href="" aria-current="page">migration-4.0.0</a></li></ul></div><div class="tsd-panel tsd-typography"><h1 id="version-400-migration-guide" class="tsd-anchor-link">Version 4.0.0 Migration guide<a href="#version-400-migration-guide" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h1>
+<p>⚠️ Upgrading to version 4.0.0 will come with breaking changes! Please follow the migration guide for a smooth transition to the new version.</p>
+<p><strong>TIP</strong>: If you use a coding agent, you can point them to <code>migration-4.0.0.SKILL.md</code>.</p>
+<hr>
+<h2 id="the-value-object--what-changed-and-what-it-means-for-your-app" class="tsd-anchor-link">The <code>Amount</code> value object — what changed and what it means for your app<a href="#the-value-object--what-changed-and-what-it-means-for-your-app" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Many v4 APIs that previously returned or accepted <code>number</code> now use <code>Amount</code>. This avoids silent precision loss above <code>Number.MAX_SAFE_INTEGER</code>, which matters for millisatoshi or other high-volume integer accounting.</p>
+<p><code>Amount</code> is immutable, bigint-backed, and non-negative. It provides:</p>
+<ul>
+<li><strong>Arithmetic</strong>: <code>.add()</code>, <code>.subtract()</code>, <code>.multiplyBy()</code>, <code>.divideBy()</code></li>
+<li><strong>Comparison</strong>: <code>.lessThan()</code>, <code>.greaterThan()</code>, <code>.equals()</code>, etc.</li>
+<li><strong>Conversion</strong>: <code>.toNumber()</code> (throws above <code>MAX_SAFE_INTEGER</code>), <code>.toBigInt()</code>, <code>.toString()</code>, <code>.toJSON()</code></li>
+<li><strong>Finance</strong>: <code>.scaledBy()</code>, <code>.ceilPercent()</code>, <code>.floorPercent()</code>, <code>.clamp()</code>, <code>.inRange()</code></li>
+<li><strong>Construction</strong>: <code>Amount.from(x)</code> accepts <code>number</code>, <code>bigint</code>, <code>string</code>, or another <code>Amount</code></li>
+</ul>
+<h3 id="choosing-your-migration-strategy" class="tsd-anchor-link">Choosing your migration strategy<a href="#choosing-your-migration-strategy" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Before you start updating call sites, decide how deeply you want to adopt <code>Amount</code>:</p>
+<p><strong>Option A — Adopt <code>Amount</code> natively (recommended for new or large-amount apps)</strong>
+Keep <code>Amount</code> flowing through your own functions and types. Use <code>Amount</code> helpers for arithmetic, and convert to <code>number</code> only at boundaries that truly require a JavaScript number. For display, prefer string-safe formatting where possible: for integer-unit currencies like SAT, avoid eager <code>.toNumber()</code> and use runtime-appropriate bigint/string formatting; for decimal or minor-unit currencies, use formatting helpers that preserve precision instead of eagerly calling <code>.toNumber()</code>.</p>
+<p><strong>Option B — Convert at the boundary (simplest for existing number-typed codebases)</strong>
+Call <code>.toNumber()</code> immediately on every <code>Amount</code> the library returns, then leave all your internal types as <code>number</code>. Safe as long as your amounts stay within <code>Number.MAX_SAFE_INTEGER</code>.</p>
+<p>Both strategies are valid. The sections below show the mechanical changes required; the key question is whether you propagate <code>Amount</code> inward or flatten it at the edge.</p>
+<h3 id="practical-rules" class="tsd-anchor-link">Practical <code>Amount</code> rules<a href="#practical-rules" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul>
+<li><code>Amount</code> is for non-negative integer magnitudes only. Model sign separately.</li>
+<li><code>AmountLike</code> is a boundary type: <code>number | bigint | string | Amount</code>.</li>
+<li>Normalize external input with <code>Amount.from(...)</code>, then keep <code>Amount</code> in domain logic.</li>
+<li>Plain JSON is acceptable for minimal migrations because <code>Amount.toJSON()</code> emits a decimal string.</li>
+<li>If you round-trip an <code>Amount</code> through plain JSON, rehydrate it with <code>Amount.from(...)</code>.</li>
+<li>Prefer <code>JSONInt.stringify</code> / <code>JSONInt.parse</code> for persisted or transported integer-bearing payloads when you want numeric/bigint fidelity after parse.</li>
+<li><code>toNumber()</code> is safe-or-throw; <code>toNumberUnsafe()</code> is explicitly lossy.</li>
+<li>For display, prefer string-safe formatting and avoid eager <code>.toNumber()</code>.</li>
+</ul>
+<pre><code class="ts"><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">raw</span><span class="hl-1">: </span><span class="hl-8">AmountLike</span><span class="hl-1"> = </span><span class="hl-0">getExternalAmount</span><span class="hl-1">();</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">amount</span><span class="hl-1"> = </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">raw</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="esm-only-package" class="tsd-anchor-link">ESM-only package<a href="#esm-only-package" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>cashu-ts v4 ships <strong>only ES modules</strong>. The CommonJS build (<code>lib/cashu-ts.cjs</code>) has been removed.</p>
+<p>Our core dependencies (<code>@noble/curves</code>, <code>@noble/hashes</code>, <code>@scure/bip32</code>) are ESM-only.
+Maintaining a dual CJS build required bundling those deps into the CJS output, increasing
+complexity and risk of module-duplication bugs.</p>
+<ul>
+<li><code>package.json</code> no longer has a <code>&quot;require&quot;</code> condition in <code>exports</code> or a <code>&quot;main&quot;</code> field pointing to a <code>.cjs</code> file.</li>
+<li><code>npm run compile</code> produces only the ESM bundle (<code>lib/cashu-ts.es.js</code>).</li>
+<li>The IIFE standalone browser build is unchanged.</li>
+</ul>
+<h3 id="migration" class="tsd-anchor-link">Migration<a href="#migration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Current setup</th>
+<th>Migration</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>require('@cashu/cashu-ts')</code></td>
+<td>Convert to ESM <code>import</code> or dynamic <code>import()</code></td>
+</tr>
+<tr>
+<td>Bundler configured for CJS output</td>
+<td>Update bundler config to output ESM</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="js"><span class="hl-5">// Before (CJS)</span><br/><span class="hl-6">const</span><span class="hl-1"> { </span><span class="hl-7">Wallet</span><span class="hl-1"> } = </span><span class="hl-0">require</span><span class="hl-1">(</span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After (ESM)</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">Wallet</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If you must keep a CJS entry point, use a dynamic import wrapper:</p>
+<pre><code class="js"><span class="hl-5">// CJS compatibility using an IIFE</span><br/><span class="hl-1">(</span><span class="hl-6">async</span><span class="hl-1"> () </span><span class="hl-6">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-6">const</span><span class="hl-1"> { </span><span class="hl-7">Wallet</span><span class="hl-1"> } = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-6">import</span><span class="hl-1">(</span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">);</span><br/><span class="hl-1">  </span><span class="hl-5">// ...</span><br/><span class="hl-1">})();</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="amount-fields-on-mint-responses-now-return-objects" class="tsd-anchor-link">Amount fields on mint responses now return <code>Amount</code> objects<a href="#amount-fields-on-mint-responses-now-return-objects" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Previously typed as <code>number</code>, the following fields now return an <code>Amount</code> value object (imported from <code>@cashu/cashu-ts</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Field(s)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MintQuoteBolt11Response</code></td>
+<td><code>amount</code></td>
+</tr>
+<tr>
+<td><code>MintQuoteBolt12Response</code></td>
+<td><code>amount</code>, <code>amount_paid</code>, <code>amount_issued</code></td>
+</tr>
+<tr>
+<td><code>MeltQuoteBaseResponse</code></td>
+<td><code>amount</code></td>
+</tr>
+<tr>
+<td><code>MeltQuoteBolt11Response</code></td>
+<td><code>fee_reserve</code></td>
+</tr>
+<tr>
+<td><code>MeltQuoteBolt12Response</code></td>
+<td><code>fee_reserve</code></td>
+</tr>
+<tr>
+<td><code>SerializedBlindedSignature</code></td>
+<td><code>amount</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>SwapMethod.min_amount</code> / <code>max_amount</code> (from <code>GetInfoResponse</code>) are now typed as <code>AmountLike</code> (<code>number | string | bigint | Amount</code>).</p>
+<p><code>expiry</code> fields on <code>MintQuoteBolt11Response</code> and <code>MintQuoteBolt12Response</code> now allow <code>null</code> (spec-compliant) in addition to <code>number</code>.</p>
+<h3 id="migration-1" class="tsd-anchor-link">Migration<a href="#migration-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">sats</span><span class="hl-1"> = </span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">fee_reserve</span><span class="hl-1"> + </span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1"> = </span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">sats</span><span class="hl-1"> = </span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">fee_reserve</span><span class="hl-1">.</span><span class="hl-0">add</span><span class="hl-1">(</span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">).</span><span class="hl-0">toNumber</span><span class="hl-1">();</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1"> = </span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">(); </span><span class="hl-5">// throws if value &gt; Number.MAX_SAFE_INTEGER</span><br/><br/><span class="hl-5">// Amount.toJSON() always emits a decimal string (previously number | string).</span><br/><span class="hl-5">// This means JSON.stringify produces a quoted string, not a bare number:</span><br/><span class="hl-7">JSON</span><span class="hl-1">.</span><span class="hl-0">stringify</span><span class="hl-1">({ </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1"> }); </span><span class="hl-5">// → &#39;{&quot;amount&quot;:&quot;1000&quot;}&#39; (not &#39;{&quot;amount&quot;:1000}&#39;)</span><br/><br/><span class="hl-5">// Rehydrate a JSON leaf value back to Amount</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">parsed</span><span class="hl-1"> = </span><span class="hl-7">JSON</span><span class="hl-1">.</span><span class="hl-0">parse</span><span class="hl-1">(</span><span class="hl-2">&#39;{&quot;amount&quot;:&quot;1000&quot;}&#39;</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">amount</span><span class="hl-1"> = </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">parsed</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="is-now" class="tsd-anchor-link"><code>SerializedBlindedMessage.amount</code> is now <code>Amount</code><a href="#is-now" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p><code>SerializedBlindedMessage</code> is the outbound wire type sent to the mint. Its <code>amount</code> field is now typed as <code>Amount</code> (previously <code>number</code>), consistent with the rest of the v4 amount model.</p>
+<p>This type is not typically constructed directly by application code; it is produced internally by <code>BlindedMessage.getSerializedBlindedMessage()</code>. If you build <code>SerializedBlindedMessage</code> objects manually, update the <code>amount</code> field:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">output</span><span class="hl-1">: </span><span class="hl-8">SerializedBlindedMessage</span><span class="hl-1"> = { </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-9">1000</span><span class="hl-1">, </span><span class="hl-4">id:</span><span class="hl-1"> </span><span class="hl-4">keysetId</span><span class="hl-1">, </span><span class="hl-4">B_:</span><span class="hl-1"> </span><span class="hl-4">hex</span><span class="hl-1"> };</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">output</span><span class="hl-1">: </span><span class="hl-8">SerializedBlindedMessage</span><span class="hl-1"> = { </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-9">1000</span><span class="hl-1">), </span><span class="hl-4">id:</span><span class="hl-1"> </span><span class="hl-4">keysetId</span><span class="hl-1">, </span><span class="hl-4">B_:</span><span class="hl-1"> </span><span class="hl-4">hex</span><span class="hl-1"> };</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="removed" class="tsd-anchor-link">Removed<a href="#removed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<ul>
+<li>2024 backwards-compat shims: deprecated <code>paid</code> boolean on melt responses, deprecated array-of-arrays <code>contact</code> field normalisation, deprecated NUT-04/05/06 response shapes</li>
+</ul>
+<hr>
+<h2 id="and-now-return" class="tsd-anchor-link"><code>sumProofs()</code> and <code>TokenMetadata.amount</code> now return <code>Amount</code><a href="#and-now-return" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p><code>sumProofs()</code> (utility function) and the <code>amount</code> field on <code>TokenMetadata</code> (returned by <code>getTokenMetadata()</code>) previously returned <code>number</code>; both now return an <code>Amount</code> value object.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-0">sumProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">m</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-0">getTokenMetadata</span><span class="hl-1">(</span><span class="hl-4">token</span><span class="hl-1">).</span><span class="hl-4">amount</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-0">sumProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">total</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">(); </span><span class="hl-5">// throws if value &gt; Number.MAX_SAFE_INTEGER</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">m</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-0">getTokenMetadata</span><span class="hl-1">(</span><span class="hl-4">token</span><span class="hl-1">).</span><span class="hl-4">amount</span><span class="hl-1">;</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="now-returns" class="tsd-anchor-link"><code>OutputData.sumOutputAmounts()</code> now returns <code>Amount</code><a href="#now-returns" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Previously returned <code>number</code>; now returns an <code>Amount</code> value object to be consistent with the rest of the v4 API.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">OutputData</span><span class="hl-1">.</span><span class="hl-0">sumOutputAmounts</span><span class="hl-1">(</span><span class="hl-4">outputs</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-4">OutputData</span><span class="hl-1">.</span><span class="hl-0">sumOutputAmounts</span><span class="hl-1">(</span><span class="hl-4">outputs</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">total</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">(); </span><span class="hl-5">// throws if value &gt; Number.MAX_SAFE_INTEGER</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="and-are-now" class="tsd-anchor-link"><code>SwapPreview.amount</code> and <code>SwapPreview.fees</code> are now <code>Amount</code><a href="#and-are-now" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Both fields on the <code>SwapPreview</code> type (returned by <code>prepareSwapToSend()</code> / <code>prepareSwapToReceive()</code>) are typed as <code>Amount</code>.</p>
+<p>If you persist or deserialize previews yourself, rehydrate before calling <code>Amount</code> methods. In arithmetic expressions, you only need to rehydrate the operand you are invoking the method on: methods like <code>.subtract(...)</code> already accept <code>AmountLike</code> for the argument.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">net</span><span class="hl-1"> = </span><span class="hl-4">preview</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1"> - </span><span class="hl-4">preview</span><span class="hl-1">.</span><span class="hl-4">fees</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After — if the preview came from JSON/storage</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">net</span><span class="hl-1"> = </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">preview</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">).</span><span class="hl-0">subtract</span><span class="hl-1">(</span><span class="hl-4">preview</span><span class="hl-1">.</span><span class="hl-4">fees</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">net</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">();</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="now-returns-1" class="tsd-anchor-link"><code>PaymentRequest.amount</code> now returns <code>Amount</code><a href="#now-returns-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The <code>amount</code> field on <code>PaymentRequest</code> (and the result of <code>decodePaymentRequest()</code>) previously returned <code>number | undefined</code>; it now returns <code>Amount | undefined</code>.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">sats</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> | </span><span class="hl-8">undefined</span><span class="hl-1"> = </span><span class="hl-4">request</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">sats</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> | </span><span class="hl-8">undefined</span><span class="hl-1"> = </span><span class="hl-4">request</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">?.</span><span class="hl-0">toNumber</span><span class="hl-1">();</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="utility-functions-and--now-return" class="tsd-anchor-link">Utility functions <code>splitAmount</code> and <code>getKeysetAmounts</code> now return <code>Amount[]</code><a href="#utility-functions-and--now-return" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>These public functions in <code>@cashu/cashu-ts</code> previously returned <code>number[]</code>; they now return <code>Amount[]</code>.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">chunks</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1">[] = </span><span class="hl-0">splitAmount</span><span class="hl-1">(</span><span class="hl-9">1000</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">denominations</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1">[] = </span><span class="hl-0">getKeysetAmounts</span><span class="hl-1">(</span><span class="hl-4">keyset</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">chunks</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1">[] = </span><span class="hl-0">splitAmount</span><span class="hl-1">(</span><span class="hl-9">1000</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">denominations</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1">[] = </span><span class="hl-0">getKeysetAmounts</span><span class="hl-1">(</span><span class="hl-4">keyset</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// Convert to numbers where needed</span><br/><span class="hl-4">chunks</span><span class="hl-1">.</span><span class="hl-0">map</span><span class="hl-1">((</span><span class="hl-4">a</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> </span><span class="hl-4">a</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">());</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="and-generic-removed--parameter-widened" class="tsd-anchor-link"><code>OutputDataFactory</code> and <code>OutputDataLike</code>: generic removed, <code>amount</code> parameter widened<a href="#and-generic-removed--parameter-widened" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Both types previously carried a <code>TKeyset extends HasKeysetKeys</code> generic parameter and the <code>amount</code> argument on <code>OutputDataFactory</code> was typed as <code>number</code>. Both changes are now applied:</p>
+<ul>
+<li>The <code>&lt;TKeyset&gt;</code> generic has been removed; the keyset parameter is fixed to <code>HasKeysetKeys</code>.</li>
+<li>The <code>amount</code> argument on <code>OutputDataFactory</code> is now <code>AmountLike</code> (was <code>number</code>).</li>
+</ul>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-0">factory</span><span class="hl-1">: </span><span class="hl-8">OutputDataFactory</span><span class="hl-1">&lt;</span><span class="hl-8">MyKeyset</span><span class="hl-1">&gt; = (</span><span class="hl-4">amount</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">: </span><span class="hl-8">MyKeyset</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> { ... };</span><br/><span class="hl-6">class</span><span class="hl-1"> </span><span class="hl-8">MyOutput</span><span class="hl-1"> </span><span class="hl-6">implements</span><span class="hl-1"> </span><span class="hl-8">OutputDataLike</span><span class="hl-1">&lt;</span><span class="hl-8">MyKeyset</span><span class="hl-1">&gt; { ... }</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">Amount</span><span class="hl-1">, </span><span class="hl-3">type</span><span class="hl-1"> </span><span class="hl-4">AmountLike</span><span class="hl-1">, </span><span class="hl-3">type</span><span class="hl-1"> </span><span class="hl-4">HasKeysetKeys</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-0">factory</span><span class="hl-1">: </span><span class="hl-8">OutputDataFactory</span><span class="hl-1"> = (</span><span class="hl-4">amount</span><span class="hl-1">: </span><span class="hl-8">AmountLike</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">: </span><span class="hl-8">HasKeysetKeys</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> {</span><br/><span class="hl-1">    </span><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">a</span><span class="hl-1"> = </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">amount</span><span class="hl-1">);</span><br/><span class="hl-1">    </span><span class="hl-5">// ...</span><br/><span class="hl-1">};</span><br/><span class="hl-6">class</span><span class="hl-1"> </span><span class="hl-8">MyOutput</span><span class="hl-1"> </span><span class="hl-6">implements</span><span class="hl-1"> </span><span class="hl-8">OutputDataLike</span><span class="hl-1"> { ... }</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="type-parameter-is-now" class="tsd-anchor-link"><code>SelectProofs</code> type: <code>amountToSelect</code> parameter is now <code>AmountLike</code><a href="#type-parameter-is-now" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>If you implement a custom <code>SelectProofs</code> function or hold a reference typed as <code>SelectProofs</code>, update the <code>amountToSelect</code> parameter from <code>number</code> to <code>AmountLike</code>.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-0">mySelector</span><span class="hl-1">: </span><span class="hl-8">SelectProofs</span><span class="hl-1"> = (</span><span class="hl-4">proofs</span><span class="hl-1">, </span><span class="hl-4">amountToSelect</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1">, ...) </span><span class="hl-6">=&gt;</span><span class="hl-1"> { ... };</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-3">type</span><span class="hl-1"> </span><span class="hl-4">AmountLike</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-0">mySelector</span><span class="hl-1">: </span><span class="hl-8">SelectProofs</span><span class="hl-1"> = (</span><span class="hl-4">proofs</span><span class="hl-1">, </span><span class="hl-4">amountToSelect</span><span class="hl-1">: </span><span class="hl-8">AmountLike</span><span class="hl-1">, ...) </span><span class="hl-6">=&gt;</span><span class="hl-1"> { ... };</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="is-now-the-full-quote-object" class="tsd-anchor-link"><code>MintPreview.quote</code> is now the full quote object<a href="#is-now-the-full-quote-object" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p><code>prepareMint()</code> previously stored only the quote ID string in <code>MintPreview.quote</code>. It now stores the full quote object passed into <code>prepareMint()</code>, giving consumers access to informational fields (<code>expiry</code>, <code>request</code>, <code>amount</code>, <code>unit</code>) needed for NUT-19 retry flows.</p>
+<pre><code class="ts"><span class="hl-5">// Before — quote was stored on the preview as a plain string</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">previewV3</span><span class="hl-1">: </span><span class="hl-8">MintPreview</span><span class="hl-1"> = { ..., </span><span class="hl-4">quote:</span><span class="hl-1"> </span><span class="hl-2">&#39;q123&#39;</span><span class="hl-1"> };</span><br/><span class="hl-4">previewV3</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">; </span><span class="hl-5">// string (quote ID only)</span><br/><br/><span class="hl-5">// After — quote is the full TQuote object when a quote object is passed</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">preview</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">prepareMint</span><span class="hl-1">(</span><span class="hl-2">&#39;bolt11&#39;</span><span class="hl-1">, </span><span class="hl-9">1000</span><span class="hl-1">, </span><span class="hl-4">quoteResponse</span><span class="hl-1">);</span><br/><span class="hl-4">preview</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">.</span><span class="hl-4">expiry</span><span class="hl-1">; </span><span class="hl-5">// number | null — accessible now</span><br/><span class="hl-4">preview</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">.</span><span class="hl-4">request</span><span class="hl-1">; </span><span class="hl-5">// string — Lightning invoice</span><br/><br/><span class="hl-5">// prepareMint() now expects a quote object, not a string ID</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">preview2</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">prepareMint</span><span class="hl-1">(</span><span class="hl-2">&#39;bolt11&#39;</span><span class="hl-1">, </span><span class="hl-9">1000</span><span class="hl-1">, { </span><span class="hl-4">quote:</span><span class="hl-1"> </span><span class="hl-2">&#39;q123&#39;</span><span class="hl-1"> });</span><br/><span class="hl-4">preview2</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">; </span><span class="hl-5">// { quote: &#39;q123&#39; }</span>
+</code><button type="button">Copy</button></pre>
+
+<p>The type is <code>MintPreview&lt;TQuote&gt;</code> where <code>TQuote extends { quote: string }</code> (defaults to <code>MintQuoteBaseResponse</code>).</p>
+<p>If you only have a bolt11 quote ID string, use <code>mintProofsBolt11(amount, quoteId)</code> rather than <code>prepareMint()</code>.</p>
+<p>If you construct a <code>MintPreview</code> manually (e.g., after deserialization), update the <code>quote</code> field from a bare string to an object:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">preview</span><span class="hl-1">: </span><span class="hl-8">MintPreview</span><span class="hl-1"> = { ..., </span><span class="hl-4">quote:</span><span class="hl-1"> </span><span class="hl-2">&#39;q123&#39;</span><span class="hl-1"> };</span><br/><br/><span class="hl-5">// After — pass the full quote object returned by createMintQuoteBolt11/12</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">preview</span><span class="hl-1">: </span><span class="hl-8">MintPreview</span><span class="hl-1"> = { ..., </span><span class="hl-4">quote:</span><span class="hl-1"> </span><span class="hl-4">mintQuoteResponse</span><span class="hl-1"> };</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Also note that preview objects are not intended for direct <code>JSON.stringify(...)</code>.
+<code>MintPreview</code>, <code>MeltPreview</code>, <code>BatchMintPreview</code>, and <code>SwapPreview</code> contain values such as
+<code>Amount</code>, <code>bigint</code>, <code>Uint8Array</code>, and class instances that need explicit rehydration. If you
+persist previews for replay-safe recovery, serialize them into an app-defined snapshot format and
+explicitly rehydrate them before passing them back to <code>completeMint()</code>, <code>completeMelt()</code>, or
+<code>completeSwap()</code>.</p>
+<hr>
+<h2 id="is-now-1" class="tsd-anchor-link"><code>Proof.amount</code> is now <code>Amount</code><a href="#is-now-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The <code>amount</code> field on the <code>Proof</code> type has changed from <code>number</code> to <code>Amount</code>. This affects any code that constructs, stores, or compares proof amounts.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proof</span><span class="hl-1">: </span><span class="hl-8">Proof</span><span class="hl-1"> = { </span><span class="hl-4">id</span><span class="hl-1">, </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-9">1000</span><span class="hl-1">, </span><span class="hl-4">C</span><span class="hl-1">, </span><span class="hl-4">secret</span><span class="hl-1"> };</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1"> = </span><span class="hl-4">proofs</span><span class="hl-1">.</span><span class="hl-0">reduce</span><span class="hl-1">((</span><span class="hl-4">sum</span><span class="hl-1">, </span><span class="hl-4">p</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> </span><span class="hl-4">sum</span><span class="hl-1"> + </span><span class="hl-4">p</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">, </span><span class="hl-9">0</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proof</span><span class="hl-1">: </span><span class="hl-8">Proof</span><span class="hl-1"> = { </span><span class="hl-4">id</span><span class="hl-1">, </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-9">1000</span><span class="hl-1">), </span><span class="hl-4">C</span><span class="hl-1">, </span><span class="hl-4">secret</span><span class="hl-1"> };</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-4">proofs</span><span class="hl-1">.</span><span class="hl-0">reduce</span><span class="hl-1">((</span><span class="hl-4">sum</span><span class="hl-1">, </span><span class="hl-4">p</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> </span><span class="hl-4">sum</span><span class="hl-1">.</span><span class="hl-0">add</span><span class="hl-1">(</span><span class="hl-4">p</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">), </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">zero</span><span class="hl-1">());</span><br/><span class="hl-5">// or more simply</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-0">sumProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// Convert or compare explicitly when needed</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">display</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">();</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">isExact</span><span class="hl-1"> = </span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1">.</span><span class="hl-0">equals</span><span class="hl-1">(</span><span class="hl-9">1000</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If you persist proofs to JSON or a database, see the <a href="#proof-serialization">Proof serialization</a> section below for the helper functions provided.</p>
+<hr>
+<h2 id="and-now-return-1" class="tsd-anchor-link"><code>Wallet.getFeesForProofs()</code> and <code>Wallet.getFeesForKeyset()</code> now return <code>Amount</code><a href="#and-now-return-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Both methods previously returned <code>number</code>; they now return <code>Amount</code> value objects, consistent with other fee and amount fields in the v4 API.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">fee</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">getFeesForProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1"> = </span><span class="hl-4">sendAmount</span><span class="hl-1"> + </span><span class="hl-4">fee</span><span class="hl-1">;</span><br/><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">ksFee</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">getFeesForKeyset</span><span class="hl-1">(</span><span class="hl-9">3</span><span class="hl-1">, </span><span class="hl-4">keysetId</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">fee</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">getFeesForProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">total</span><span class="hl-1"> = </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">sendAmount</span><span class="hl-1">).</span><span class="hl-0">add</span><span class="hl-1">(</span><span class="hl-4">fee</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1">: </span><span class="hl-8">number</span><span class="hl-1"> = </span><span class="hl-4">fee</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">();</span><br/><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">ksFee</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1"> = </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">getFeesForKeyset</span><span class="hl-1">(</span><span class="hl-9">3</span><span class="hl-1">, </span><span class="hl-4">keysetId</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="and-are-no-longer-public-top-level-utils" class="tsd-anchor-link"><code>MessageQueue</code> and <code>MessageNode</code> are no longer public top-level utils<a href="#and-are-no-longer-public-top-level-utils" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p><code>MessageQueue</code> and <code>MessageNode</code> are no longer exported from <code>@cashu/cashu-ts</code> utils. <code>MessageNode</code> is no longer part of the public API, and <code>MessageQueue</code> should be treated as internal rather than migrated as a supported import.</p>
+<p>If you were importing these classes directly:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">MessageQueue</span><span class="hl-1">, </span><span class="hl-4">MessageNode</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-5">// Use supported WSConnection APIs instead of importing queue internals directly</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="internal-utility-functions-removed-or-restricted" class="tsd-anchor-link">Internal utility functions removed or restricted<a href="#internal-utility-functions-removed-or-restricted" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Several functions that were intended for internal use have been removed from the public API.</p>
+<h3 id="removed-entirely-dead-code" class="tsd-anchor-link">Removed entirely (dead code)<a href="#removed-entirely-dead-code" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>checkResponse</code></td>
+<td>Superseded by the <code>HttpResponseError</code> transport refactor in 2023. Had no callers.</td>
+</tr>
+<tr>
+<td><code>deepEqual</code></td>
+<td>Generic deep-equality helper. Had no callers inside or outside the library.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="made-private-no-longer-exported" class="tsd-anchor-link">Made private (no longer exported)<a href="#made-private-no-longer-exported" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mergeUInt8Arrays</code></td>
+<td>Internal byte-buffer helper.</td>
+</tr>
+<tr>
+<td><code>hasNonHexId</code></td>
+<td>Internal guard used inside token encoding.</td>
+</tr>
+<tr>
+<td><code>getKeepAmounts</code></td>
+<td>Internal wallet coin-selection algorithm. Removed from <code>utils</code>.</td>
+</tr>
+<tr>
+<td><code>getEncodedTokenV4</code></td>
+<td>Use <code>getEncodedToken</code> instead.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="marked" class="tsd-anchor-link">Marked <code>@internal</code><a href="#marked" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The following are still exported but are excluded from the trimmed type definitions and not part of the supported public API. Remove any external dependencies on them.</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>isValidHex</code></td>
+<td>Internal helper.</td>
+</tr>
+<tr>
+<td><code>hexToNumber</code></td>
+<td>Crypto scalar helper (hex → bigint).</td>
+</tr>
+<tr>
+<td><code>numberToHexPadded64</code></td>
+<td>Crypto scalar helper (bigint → 64-char hex).</td>
+</tr>
+<tr>
+<td><code>isObj</code></td>
+<td>HTTP response type guard.</td>
+</tr>
+<tr>
+<td><code>joinUrls</code></td>
+<td>Mint URL path builder.</td>
+</tr>
+<tr>
+<td><code>sanitizeUrl</code></td>
+<td>Renamed to <code>normalizeUrl</code> (internal).</td>
+</tr>
+<tr>
+<td><code>invoiceHasAmountInHRP</code></td>
+<td>BOLT-11 HRP amount detector.</td>
+</tr>
+<tr>
+<td><code>bigIntStringify</code></td>
+<td><code>JSON.stringify</code> replacer for <code>bigint</code> values.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="no-longer-exported" class="tsd-anchor-link"><code>handleTokens</code> no longer exported<a href="#no-longer-exported" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>handleTokens</code> should always have been an internal function, but was exported. If you used this function, prefer <code>getTokenMetadata</code> before a wallet exists, then <code>wallet.decodeToken(...)</code> after the wallet is loaded. Use <code>getDecodedToken(str, keysetIds)</code> only in advanced flows where you already manage keyset IDs yourself.</p>
+<hr>
+<h2 id="proof-serialization" class="tsd-anchor-link">Proof serialization<a href="#proof-serialization" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p><code>ProofLike</code> is a new exported type: a proof-shaped object whose <code>amount</code> has not yet been normalized to <code>Amount</code> (i.e. <code>Omit&lt;Proof, 'amount'&gt; &amp; { amount: AmountLike }</code>). Use it to model proofs from external storage where <code>amount</code> may be a <code>number</code>, <code>string</code>, <code>bigint</code>, or <code>Amount</code>.</p>
+<p>Three helpers cover the common patterns for persisting and restoring proofs:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Use case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serializeProofs(proofs)</code></td>
+<td>Serialize <code>Proof | Proof[]</code> to <code>string[]</code> (one JSON string per proof) without precision loss.</td>
+</tr>
+<tr>
+<td><code>deserializeProofs(json)</code></td>
+<td>Restore <code>string | string[] | ProofLike[]</code> back to <code>Proof[]</code>, with <code>amount</code> normalized to <code>Amount</code>. Pass a raw JSON string directly (no <code>JSON.parse</code> needed), a <code>string[]</code> for individual proof strings (e.g. NutZap tags), or a <code>ProofLike[]</code> for already-parsed objects.</td>
+</tr>
+<tr>
+<td><code>normalizeProofAmounts(raw)</code></td>
+<td>Lower-level building block: convert <code>ProofLike[]</code> to <code>Proof[]</code> by normalizing <code>amount</code> to <code>Amount</code>. Called internally by <code>deserializeProofs</code>; use directly when you already have typed <code>ProofLike[]</code> and want to skip string-detection.</td>
+</tr>
+</tbody>
+</table>
+<p>Migration rule: treat wallet/mint/API/JSON proofs as <code>ProofLike[]</code> until normalized. Normalize before app-level arithmetic, encoding, or storage-model conversion.</p>
+<p><strong>Tip</strong>: Core wallet flows now accept <code>ProofLike[]</code> directly. If you already have deserialized proof objects from JSON or storage, you can usually pass them straight into wallet APIs such as <code>wallet.receive(...)</code>, <code>wallet.send(...)</code>, <code>wallet.sendOffline(...)</code>, <code>wallet.prepareSwapToSend(...)</code>, <code>wallet.meltProofs...(...)</code>, and <code>wallet.signP2PKProofs(...)</code> without calling <code>normalizeProofAmounts(...)</code> yourself first. The same applies to <code>WalletOps</code> / builder entry points such as <code>wallet.ops.send(...)</code>, <code>wallet.ops.receive(...)</code>, and <code>wallet.ops.meltBolt11(...)</code>.</p>
+<p><code>wallet.selectProofsToSend()</code> and <code>wallet.groupProofsByState()</code> also accept <code>ProofLike[]</code>, so proofs loaded from storage (with <code>amount: number</code>) can be passed directly without conversion. <code>groupProofsByState</code> preserves the input type in its output — pass <code>MyProof[]</code> in, get <code>MyProof[]</code> back.</p>
+<pre><code class="ts"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">serializeProofs</span><span class="hl-1">, </span><span class="hl-4">deserializeProofs</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// localStorage — serializeProofs returns string[], so wrap with JSON.stringify for storage.</span><br/><span class="hl-4">localStorage</span><span class="hl-1">.</span><span class="hl-0">setItem</span><span class="hl-1">(</span><span class="hl-2">&#39;proofs&#39;</span><span class="hl-1">, </span><span class="hl-7">JSON</span><span class="hl-1">.</span><span class="hl-0">stringify</span><span class="hl-1">(</span><span class="hl-0">serializeProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">)));</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofs</span><span class="hl-1"> = </span><span class="hl-0">deserializeProofs</span><span class="hl-1">(</span><span class="hl-4">localStorage</span><span class="hl-1">.</span><span class="hl-0">getItem</span><span class="hl-1">(</span><span class="hl-2">&#39;proofs&#39;</span><span class="hl-1">) ?? </span><span class="hl-2">&#39;[]&#39;</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// NutZap proof tags — one proof string per tag</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofTags</span><span class="hl-1"> = </span><span class="hl-0">serializeProofs</span><span class="hl-1">(</span><span class="hl-4">proofs</span><span class="hl-1">).</span><span class="hl-0">map</span><span class="hl-1">((</span><span class="hl-4">s</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> [</span><span class="hl-2">&#39;proof&#39;</span><span class="hl-1">, </span><span class="hl-4">s</span><span class="hl-1">]);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofs</span><span class="hl-1"> = </span><span class="hl-0">deserializeProofs</span><span class="hl-1">(</span><span class="hl-4">event</span><span class="hl-1">.</span><span class="hl-4">tags</span><span class="hl-1">.</span><span class="hl-0">filter</span><span class="hl-1">((</span><span class="hl-4">t</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> </span><span class="hl-4">t</span><span class="hl-1">[</span><span class="hl-9">0</span><span class="hl-1">] === </span><span class="hl-2">&#39;proof&#39;</span><span class="hl-1">).</span><span class="hl-0">map</span><span class="hl-1">((</span><span class="hl-4">t</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> </span><span class="hl-4">t</span><span class="hl-1">[</span><span class="hl-9">1</span><span class="hl-1">]));</span><br/><br/><span class="hl-5">// Already-parsed objects (e.g. from a database query) — also accepted directly</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofs</span><span class="hl-1"> = </span><span class="hl-0">deserializeProofs</span><span class="hl-1">(</span><span class="hl-4">db</span><span class="hl-1">.</span><span class="hl-0">query</span><span class="hl-1">(</span><span class="hl-2">&#39;SELECT * FROM proofs&#39;</span><span class="hl-1">));</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Use <code>getEncodedToken</code> when you need a full cashu token string (mint URL + unit metadata). Use <code>serializeProofs</code> when you only need to store or transmit raw proof arrays.</p>
+<hr>
+<h2 id="crypto-primitive-renames" class="tsd-anchor-link">Crypto primitive renames<a href="#crypto-primitive-renames" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The following low-level exports from <code>@cashu/cashu-ts</code> (re-exported from the crypto layer) have been renamed for clarity. The old names no longer exist.</p>
+<table>
+<thead>
+<tr>
+<th>Old name</th>
+<th>New name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RawProof</code></td>
+<td><code>UnblindedSignature</code></td>
+</tr>
+<tr>
+<td><code>constructProofFromPromise</code></td>
+<td><code>constructUnblindedSignature</code></td>
+</tr>
+<tr>
+<td><code>createRandomBlindedMessage</code></td>
+<td><code>createRandomRawBlindedMessage</code></td>
+</tr>
+<tr>
+<td><code>verifyProof</code></td>
+<td><code>verifyUnblindedSignature</code></td>
+</tr>
+</tbody>
+</table>
+<p>These are low-level primitives not typically used by application code. If you use them directly, update your imports:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-3">import</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-4">RawProof</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">constructProofFromPromise</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">createRandomBlindedMessage</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">verifyProof</span><span class="hl-1">,</span><br/><span class="hl-1">} </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-3">import</span><span class="hl-1"> {</span><br/><span class="hl-1">  </span><span class="hl-4">UnblindedSignature</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">constructUnblindedSignature</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">createRandomRawBlindedMessage</span><span class="hl-1">,</span><br/><span class="hl-1">  </span><span class="hl-4">verifyUnblindedSignature</span><span class="hl-1">,</span><br/><span class="hl-1">} </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="removed-crypto-primitives" class="tsd-anchor-link">Removed crypto primitives<a href="#removed-crypto-primitives" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The following exports have been removed with no replacement — they were dead code not used outside the library:</p>
+<table>
+<thead>
+<tr>
+<th>Removed</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SerializedProof</code></td>
+<td>Hex-serialised proof type; use <code>Proof</code> directly</td>
+</tr>
+<tr>
+<td><code>serializeProof()</code></td>
+<td>Use <code>Proof</code> values directly — no serialisation step is needed</td>
+</tr>
+<tr>
+<td><code>deserializeProof()</code></td>
+<td>Use <code>Proof</code> values directly — no deserialisation step is needed</td>
+</tr>
+<tr>
+<td><code>BlindedMessage</code></td>
+<td>Was a deprecated alias for <code>RawBlindedMessage</code>; use the latter</td>
+</tr>
+</tbody>
+</table>
+<h3 id="field-removed" class="tsd-anchor-link"><code>BlindSignature.amount</code> field removed<a href="#field-removed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>BlindSignature</code> (the post-blinding crypto primitive) had an <code>amount</code> field that was never used in any cryptographic computation. It has been removed. The type is now:</p>
+<pre><code class="ts"><span class="hl-6">type</span><span class="hl-1"> </span><span class="hl-8">BlindSignature</span><span class="hl-1"> = { </span><span class="hl-4">C_</span><span class="hl-1">: </span><span class="hl-8">WeierstrassPoint</span><span class="hl-1">&lt;</span><span class="hl-8">bigint</span><span class="hl-1">&gt;; </span><span class="hl-4">id</span><span class="hl-1">: </span><span class="hl-8">string</span><span class="hl-1"> };</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="-parameter-removed" class="tsd-anchor-link"><code>createBlindSignature</code> — <code>amount</code> parameter removed<a href="#-parameter-removed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The <code>amount</code> parameter has been dropped from <code>createBlindSignature</code>. Amount is determined at the <code>OutputData</code> layer, not the crypto layer.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-0">createBlindSignature</span><span class="hl-1">(</span><span class="hl-7">B_</span><span class="hl-1">, </span><span class="hl-4">privateKey</span><span class="hl-1">, </span><span class="hl-4">amount</span><span class="hl-1">, </span><span class="hl-4">id</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-0">createBlindSignature</span><span class="hl-1">(</span><span class="hl-7">B_</span><span class="hl-1">, </span><span class="hl-4">privateKey</span><span class="hl-1">, </span><span class="hl-4">id</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="keychain-and-keychaincache-multi-unit-support-and-api-cleanup" class="tsd-anchor-link">KeyChain and KeyChainCache: multi-unit support and API cleanup<a href="#keychain-and-keychaincache-multi-unit-support-and-api-cleanup" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<h3 id="-field-removed--field-added" class="tsd-anchor-link"><code>KeyChainCache</code> — <code>unit</code> field removed, <code>savedAt</code> field added<a href="#-field-removed--field-added" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The <code>unit</code> field has been removed from <code>KeyChainCache</code>. The cache now contains keysets for <strong>all</strong> units at the mint. Use an explicit <code>unit</code> argument when restoring from cache.</p>
+<p>The new <code>savedAt?: number</code> field (unix ms) is set automatically when the cache is created. Use it to implement TTL / staleness checks in your app.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">type</span><span class="hl-1"> </span><span class="hl-8">KeyChainCache</span><span class="hl-1"> = { </span><span class="hl-4">keysets</span><span class="hl-1">: </span><span class="hl-8">KeysetCache</span><span class="hl-1">[]; </span><span class="hl-4">unit</span><span class="hl-1">: </span><span class="hl-8">string</span><span class="hl-1">; </span><span class="hl-4">mintUrl</span><span class="hl-1">: </span><span class="hl-8">string</span><span class="hl-1"> };</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">type</span><span class="hl-1"> </span><span class="hl-8">KeyChainCache</span><span class="hl-1"> = { </span><span class="hl-4">keysets</span><span class="hl-1">: </span><span class="hl-8">KeysetCache</span><span class="hl-1">[]; </span><span class="hl-4">mintUrl</span><span class="hl-1">: </span><span class="hl-8">string</span><span class="hl-1">; </span><span class="hl-4">savedAt</span><span class="hl-1">?: </span><span class="hl-8">number</span><span class="hl-1"> };</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="-explicit-parameter" class="tsd-anchor-link"><code>KeyChain.fromCache</code> — explicit <code>unit</code> parameter<a href="#-explicit-parameter" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">chain</span><span class="hl-1"> = </span><span class="hl-4">KeyChain</span><span class="hl-1">.</span><span class="hl-0">fromCache</span><span class="hl-1">(</span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-4">cache</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After — unit is now the second argument</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">chain</span><span class="hl-1"> = </span><span class="hl-4">KeyChain</span><span class="hl-1">.</span><span class="hl-0">fromCache</span><span class="hl-1">(</span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-2">&#39;sat&#39;</span><span class="hl-1">, </span><span class="hl-4">cache</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="-parameter-removed-1" class="tsd-anchor-link"><code>KeyChain.mintToCacheDTO</code> — <code>unit</code> parameter removed<a href="#-parameter-removed-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The first argument (<code>unit</code>) has been dropped. The cache is now mint-wide (all units).</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">cache</span><span class="hl-1"> = </span><span class="hl-4">KeyChain</span><span class="hl-1">.</span><span class="hl-0">mintToCacheDTO</span><span class="hl-1">(</span><span class="hl-4">unit</span><span class="hl-1">, </span><span class="hl-4">mintUrl</span><span class="hl-1">, </span><span class="hl-4">keysets</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">cache</span><span class="hl-1"> = </span><span class="hl-4">KeyChain</span><span class="hl-1">.</span><span class="hl-0">mintToCacheDTO</span><span class="hl-1">(</span><span class="hl-4">mintUrl</span><span class="hl-1">, </span><span class="hl-4">keysets</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="constructor-and--removed" class="tsd-anchor-link"><code>KeyChain</code> constructor — <code>cachedKeysets</code> and <code>cachedKeys</code> removed<a href="#constructor-and--removed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The optional <code>cachedKeysets</code> and <code>cachedKeys</code> constructor parameters have been removed. Use <code>mintToCacheDTO</code> + <code>fromCache</code> instead:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">chain</span><span class="hl-1"> = </span><span class="hl-6">new</span><span class="hl-1"> </span><span class="hl-0">KeyChain</span><span class="hl-1">(</span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-4">unit</span><span class="hl-1">, </span><span class="hl-4">keysets</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">cache</span><span class="hl-1"> = </span><span class="hl-4">KeyChain</span><span class="hl-1">.</span><span class="hl-0">mintToCacheDTO</span><span class="hl-1">(</span><span class="hl-4">mintUrl</span><span class="hl-1">, </span><span class="hl-4">keysets</span><span class="hl-1">, </span><span class="hl-4">keys</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">chain</span><span class="hl-1"> = </span><span class="hl-4">KeyChain</span><span class="hl-1">.</span><span class="hl-0">fromCache</span><span class="hl-1">(</span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-4">unit</span><span class="hl-1">, </span><span class="hl-4">cache</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="-removed" class="tsd-anchor-link"><code>KeyChain.getCache()</code> — removed<a href="#-removed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The v3-deprecated <code>getCache()</code> method has been removed. Use the <code>cache</code> getter instead.</p>
+<h3 id="now-contains-all-units" class="tsd-anchor-link"><code>KeyChainCache</code> now contains all units<a href="#now-contains-all-units" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Previously, <code>cache.keysets</code> only contained keysets for the wallet's unit. It now contains keysets for every unit the mint exposes. If you read <code>cache.keysets</code> directly and assumed single-unit contents, filter by <code>unit</code> yourself.</p>
+<hr>
+<h2 id="removed-1" class="tsd-anchor-link"><code>getEncodedTokenV3</code> removed<a href="#removed-1" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>V3 token encoding (<code>cashuA…</code>) is no longer supported. <code>getEncodedTokenV3</code> has been removed and the <code>version</code> option on <code>getEncodedToken</code> has been removed entirely. V3 token <strong>decoding</strong> is unaffected — <code>getDecodedToken</code> still handles <code>cashuA</code> tokens.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">getEncodedTokenV3</span><span class="hl-1">, </span><span class="hl-4">getEncodedToken</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-0">getEncodedTokenV3</span><span class="hl-1">(</span><span class="hl-4">token</span><span class="hl-1">);</span><br/><span class="hl-0">getEncodedToken</span><span class="hl-1">(</span><span class="hl-4">token</span><span class="hl-1">, { </span><span class="hl-4">version:</span><span class="hl-1"> </span><span class="hl-9">3</span><span class="hl-1"> });</span><br/><br/><span class="hl-5">// After — encoding proofs with legacy base64 keyset IDs throws:</span><br/><span class="hl-5">// &quot;Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.&quot;</span><br/><span class="hl-0">getEncodedToken</span><span class="hl-1">({ </span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-4">proofs:</span><span class="hl-1"> </span><span class="hl-4">proofsWithBase64KeysetIds</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+<p>To resolve this, swap the proofs at the mint. <code>wallet.receive()</code> now accepts proof arrays directly, including deserialized/stored <code>ProofLike[]</code>, so no token string is needed:</p>
+<pre><code class="ts"><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">freshProofs</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">receive</span><span class="hl-1">(</span><span class="hl-4">legacyProofs</span><span class="hl-1">);</span><br/><span class="hl-0">getEncodedToken</span><span class="hl-1">({ </span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-4">proofs:</span><span class="hl-1"> </span><span class="hl-4">freshProofs</span><span class="hl-1"> }); </span><span class="hl-5">// encodes as cashuB (v4)</span>
+</code><button type="button">Copy</button></pre>
+
+<p>If you have a stored <code>cashuA</code> string, you can pass that instead — v3 decoding still works:</p>
+<pre><code class="ts"><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">freshProofs</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">receive</span><span class="hl-1">(</span><span class="hl-2">&#39;cashuAeyJ0b2tlbi...&#39;</span><span class="hl-1">);</span><br/><span class="hl-0">getEncodedToken</span><span class="hl-1">({ </span><span class="hl-4">mint</span><span class="hl-1">, </span><span class="hl-4">proofs:</span><span class="hl-1"> </span><span class="hl-4">freshProofs</span><span class="hl-1"> }); </span><span class="hl-5">// encodes as cashuB (v4)</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="now-requires" class="tsd-anchor-link"><code>getDecodedToken</code> now requires <code>keysetIds</code><a href="#now-requires" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>Prefer <code>getTokenMetadata</code> + <code>wallet.decodeToken()</code></p>
+<p><code>getDecodedToken</code> now requires a second argument: <code>keysetIds: readonly string[]</code>. This array is used to resolve v2 short keyset IDs to their full hex counterparts.</p>
+<p><strong>Passing an empty array is unsafe</strong> — it throws the moment a token contains a v2 short keyset ID.</p>
+<h3 id="recommended-migration" class="tsd-anchor-link">Recommended migration<a href="#recommended-migration" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Instead of calling <code>getDecodedToken</code> directly, use the two-step pattern:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">getDecodedToken</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">token</span><span class="hl-1"> = </span><span class="hl-0">getDecodedToken</span><span class="hl-1">(</span><span class="hl-4">tokenString</span><span class="hl-1">); </span><span class="hl-5">// TS error in v4 — second arg required</span><br/><br/><span class="hl-5">// After — Step 1: metadata before the wallet exists</span><br/><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">getTokenMetadata</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">meta</span><span class="hl-1"> = </span><span class="hl-0">getTokenMetadata</span><span class="hl-1">(</span><span class="hl-4">tokenString</span><span class="hl-1">);</span><br/><span class="hl-5">// meta.mint, meta.unit, meta.amount (Amount), meta.incompleteProofs</span><br/><br/><span class="hl-5">// After — Step 2: build and load the wallet</span><br/><span class="hl-5">// Validate meta.mint before any network call, especially in server-side code.</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">wallet</span><span class="hl-1"> = </span><span class="hl-6">new</span><span class="hl-1"> </span><span class="hl-0">Wallet</span><span class="hl-1">(</span><span class="hl-4">meta</span><span class="hl-1">.</span><span class="hl-4">mint</span><span class="hl-1">, { </span><span class="hl-4">unit:</span><span class="hl-1"> </span><span class="hl-4">meta</span><span class="hl-1">.</span><span class="hl-4">unit</span><span class="hl-1"> });</span><br/><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">loadMint</span><span class="hl-1">(); </span><span class="hl-5">// or wallet.loadMintFromCache(mintInfo, keyChainCache)</span><br/><br/><span class="hl-5">// After — Step 3: fully hydrate the token</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">token</span><span class="hl-1"> = </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">decodeToken</span><span class="hl-1">(</span><span class="hl-4">tokenString</span><span class="hl-1">); </span><span class="hl-5">// Token with complete Proof[]</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="when-to-use-each-api" class="tsd-anchor-link">When to use each API<a href="#when-to-use-each-api" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getTokenMetadata(str)</code></td>
+<td>Before a wallet exists — get mint URL, unit, and amount to decide which wallet to create. Treat the mint URL as untrusted until validated</td>
+</tr>
+<tr>
+<td><code>wallet.decodeToken(str)</code></td>
+<td>After wallet is loaded — get the complete <code>Token</code> with full <code>Proof[]</code></td>
+</tr>
+<tr>
+<td><code>getDecodedToken(str, ids)</code></td>
+<td>Advanced: you manage your own keyset cache and decode outside a wallet instance</td>
+</tr>
+</tbody>
+</table>
+<h3 id="if-you-only-need-amount-mint--unit" class="tsd-anchor-link">If you only need amount / mint / unit<a href="#if-you-only-need-amount-mint--unit" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<pre><code class="ts"><span class="hl-6">const</span><span class="hl-1"> { </span><span class="hl-7">mint</span><span class="hl-1">, </span><span class="hl-7">unit</span><span class="hl-1">, </span><span class="hl-7">amount</span><span class="hl-1"> } = </span><span class="hl-0">getTokenMetadata</span><span class="hl-1">(</span><span class="hl-4">tokenString</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">sats</span><span class="hl-1"> = </span><span class="hl-4">amount</span><span class="hl-1">.</span><span class="hl-0">toNumber</span><span class="hl-1">(); </span><span class="hl-5">// amount is Amount, not number</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="deprecated-v3-apis-now-removed" class="tsd-anchor-link">Deprecated v3 APIs now removed<a href="#deprecated-v3-apis-now-removed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>These APIs were already deprecated in v3. In v4 they have been removed:</p>
+<ul>
+<li><code>Wallet</code> constructor preload options <code>keys</code>, <code>keysets</code>, and <code>mintInfo</code>; use <code>loadMintFromCache()</code> after construction.</li>
+<li>Deprecated wallet method alias: <code>wallet.swap</code>; use <code>send</code>.</li>
+<li><code>Keyset</code> getter aliases <code>active</code>, <code>input_fee_ppk</code>, and <code>final_expiry</code>; use <code>isActive</code>, <code>fee</code>, and <code>expiry</code>. Ensure you are looking at the Cashu-TS <code>Keyset</code> domain model: raw API <code>MintKeyset</code> / <code>MintKeys</code> DTOs may still expose the old field names.</li>
+<li><code>preferAsync</code> on melt option objects; set <code>prefer_async: true</code> in the melt payload or call <code>completeMelt(preview, privkey, true)</code>.</li>
+<li><code>MeltBlanks</code>, <code>wallet.on.meltBlanksCreated(cb)</code>, and <code>onChangeOutputsCreated</code>; use <code>prepareMelt()</code> / <code>completeMelt()</code> with <code>MeltPreview</code>.</li>
+<li>Deprecated utility helpers and overloads in <code>src/utils/core</code>: <code>bytesToNumber</code>, <code>verifyKeysetId</code>, the positional <code>deriveKeysetId(...)</code> signature, and the <code>getDecodedToken(..., HasKeysetId[])</code> overload; use <code>Bytes.toBigInt</code>, <code>Keyset.verifyKeysetId(...)</code>, the options-based <code>deriveKeysetId(...)</code>, and <code>string[]</code> keyset IDs.</li>
+<li>Deprecated convenience aliases removed elsewhere in the API: <code>MintInfo.supportsBolt12Description</code> and <code>WSConnection.closeSubscription()</code>; use <code>supportsNut04Description('bolt12')</code> and <code>cancelSubscription()</code> instead.</li>
+<li>Deprecated crypto/type aliases removed in the v4 cleanup, including <code>BlindedMessage</code>; use the non-deprecated names such as <code>RawBlindedMessage</code>.</li>
+</ul>
+<hr>
+<h2 id="nut-11-p2pk-api-changes" class="tsd-anchor-link">NUT-11 / P2PK API changes<a href="#nut-11-p2pk-api-changes" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>v4 trims the public NUT-11 surface and moves callers toward two supported entry points:</p>
+<ul>
+<li><code>getP2PKExpectedWitnessPubkeys(secret)</code> if you only need to know which pubkeys can currently sign</li>
+<li><code>verifyP2PKSpendingConditions(proof, logger?, message?)</code> if you need the full lock/refund evaluation result</li>
+</ul>
+<h3 id="removed-deprecated-aliases" class="tsd-anchor-link">Removed deprecated aliases<a href="#removed-deprecated-aliases" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>These older exports are gone in v4:</p>
+<ul>
+<li><code>parseP2PKSecret(Uint8Array)</code> overload</li>
+<li><code>WellKnownSecret</code></li>
+<li><code>signP2PKSecret</code></li>
+<li><code>verifyP2PKSecretSignature</code></li>
+<li><code>getP2PKExpectedKWitnessPubkeys</code></li>
+<li><code>verifyP2PKSig</code></li>
+</ul>
+<p>Use these instead:</p>
+<ul>
+<li><code>parseP2PKSecret(string | Secret)</code></li>
+<li><code>SecretKind</code></li>
+<li><code>schnorrSignMessage(...)</code></li>
+<li><code>schnorrVerifyMessage(...)</code></li>
+<li><code>getP2PKExpectedWitnessPubkeys(...)</code></li>
+<li><code>isP2PKSpendAuthorised(...)</code> or <code>verifyP2PKSpendingConditions(...)</code></li>
+</ul>
+<h3 id="removed-low-level-nut-11-getters" class="tsd-anchor-link">Removed low-level NUT-11 getters<a href="#removed-low-level-nut-11-getters" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>These helpers are no longer public:</p>
+<ul>
+<li><code>getP2PKWitnessPubkeys</code></li>
+<li><code>getP2PKWitnessRefundkeys</code></li>
+<li><code>getP2PKLocktime</code></li>
+<li><code>getP2PKLockState</code></li>
+<li><code>getP2PKNSigs</code></li>
+<li><code>getP2PKNSigsRefund</code></li>
+</ul>
+<p>If your code previously called those helpers and stitched the result together manually, migrate to <code>verifyP2PKSpendingConditions()</code> and read the returned metadata instead.</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">lockState</span><span class="hl-1"> = </span><span class="hl-0">getP2PKLockState</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">secret</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">locktime</span><span class="hl-1"> = </span><span class="hl-0">getP2PKLocktime</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">secret</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">mainKeys</span><span class="hl-1"> = </span><span class="hl-0">getP2PKWitnessPubkeys</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">secret</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">refundKeys</span><span class="hl-1"> = </span><span class="hl-0">getP2PKWitnessRefundkeys</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">secret</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">required</span><span class="hl-1"> = </span><span class="hl-0">getP2PKNSigs</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">secret</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">refundRequired</span><span class="hl-1"> = </span><span class="hl-0">getP2PKNSigsRefund</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">.</span><span class="hl-4">secret</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">result</span><span class="hl-1"> = </span><span class="hl-0">verifyP2PKSpendingConditions</span><span class="hl-1">(</span><span class="hl-4">proof</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> { </span><span class="hl-7">lockState</span><span class="hl-1">, </span><span class="hl-7">locktime</span><span class="hl-1"> } = </span><span class="hl-4">result</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">mainKeys</span><span class="hl-1"> = </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">main</span><span class="hl-1">.</span><span class="hl-4">pubkeys</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">refundKeys</span><span class="hl-1"> = </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">refund</span><span class="hl-1">.</span><span class="hl-4">pubkeys</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">required</span><span class="hl-1"> = </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">main</span><span class="hl-1">.</span><span class="hl-4">requiredSigners</span><span class="hl-1">;</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">refundRequired</span><span class="hl-1"> = </span><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">refund</span><span class="hl-1">.</span><span class="hl-4">requiredSigners</span><span class="hl-1">;</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="shape-changed" class="tsd-anchor-link"><code>P2PKVerificationResult</code> shape changed<a href="#shape-changed" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>verifyP2PKSpendingConditions()</code> still returns a detailed result object, but signer metadata is now grouped by path:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">requiredSigners</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">eligibleSigners</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">receivedSigners</span><span class="hl-1">;</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">locktime</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">main</span><span class="hl-1">.</span><span class="hl-4">requiredSigners</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">main</span><span class="hl-1">.</span><span class="hl-4">pubkeys</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">main</span><span class="hl-1">.</span><span class="hl-4">receivedSigners</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">refund</span><span class="hl-1">.</span><span class="hl-4">requiredSigners</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">refund</span><span class="hl-1">.</span><span class="hl-4">pubkeys</span><span class="hl-1">;</span><br/><span class="hl-4">result</span><span class="hl-1">.</span><span class="hl-4">refund</span><span class="hl-1">.</span><span class="hl-4">receivedSigners</span><span class="hl-1">;</span>
+</code><button type="button">Copy</button></pre>
+
+<p>This makes the result unambiguous when both main and refund paths exist.</p>
+<h3 id="now-follows-the-same-pubkey-identity-rules-as-nut-11" class="tsd-anchor-link"><code>P2PKBuilder</code> now follows the same pubkey identity rules as NUT-11<a href="#now-follows-the-same-pubkey-identity-rules-as-nut-11" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p><code>P2PKBuilder.addLockPubkey()</code> and <code>addRefundPubkey()</code> now normalize and deduplicate keys by x-only pubkey identity. In practice, that means <code>02...</code> and <code>03...</code> encodings of the same x-only key are treated as the same signer, and the first one added wins.</p>
+<p>If your code relied on storing both encodings as distinct entries, update those expectations:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-6">new</span><span class="hl-1"> </span><span class="hl-0">P2PKBuilder</span><span class="hl-1">().</span><span class="hl-0">addRefundPubkey</span><span class="hl-1">([</span><span class="hl-2">&#39;03&#39;</span><span class="hl-1"> + </span><span class="hl-4">xOnly</span><span class="hl-1">, </span><span class="hl-2">&#39;02&#39;</span><span class="hl-1"> + </span><span class="hl-4">xOnly</span><span class="hl-1">]).</span><span class="hl-0">toOptions</span><span class="hl-1">().</span><span class="hl-4">refundKeys</span><span class="hl-1">;</span><br/><span class="hl-5">// =&gt; [&#39;03&#39; + xOnly, &#39;02&#39; + xOnly]</span><br/><br/><span class="hl-5">// After</span><br/><span class="hl-6">new</span><span class="hl-1"> </span><span class="hl-0">P2PKBuilder</span><span class="hl-1">().</span><span class="hl-0">addRefundPubkey</span><span class="hl-1">([</span><span class="hl-2">&#39;03&#39;</span><span class="hl-1"> + </span><span class="hl-4">xOnly</span><span class="hl-1">, </span><span class="hl-2">&#39;02&#39;</span><span class="hl-1"> + </span><span class="hl-4">xOnly</span><span class="hl-1">]).</span><span class="hl-0">toOptions</span><span class="hl-1">().</span><span class="hl-4">refundKeys</span><span class="hl-1">;</span><br/><span class="hl-5">// =&gt; [&#39;03&#39; + xOnly]</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="and-now-throw-for-invalid-input" class="tsd-anchor-link"><code>P2PKBuilder.requireLockSignatures()</code> and <code>requireRefundSignatures()</code> now throw for invalid input<a href="#and-now-throw-for-invalid-input" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>Previously these methods silently clamped the value to at least 1 and truncated non-integers. They now throw if the argument is not a positive integer (<code>n &lt; 1</code> or non-integer).</p>
+<pre><code class="ts"><span class="hl-5">// Before — invalid values were silently clamped</span><br/><span class="hl-4">builder</span><span class="hl-1">.</span><span class="hl-0">requireLockSignatures</span><span class="hl-1">(</span><span class="hl-9">0</span><span class="hl-1">); </span><span class="hl-5">// stored as 1 (clamped)</span><br/><span class="hl-4">builder</span><span class="hl-1">.</span><span class="hl-0">requireLockSignatures</span><span class="hl-1">(</span><span class="hl-9">1.7</span><span class="hl-1">); </span><span class="hl-5">// stored as 1 (truncated)</span><br/><br/><span class="hl-5">// After — throws immediately</span><br/><span class="hl-4">builder</span><span class="hl-1">.</span><span class="hl-0">requireLockSignatures</span><span class="hl-1">(</span><span class="hl-9">0</span><span class="hl-1">); </span><span class="hl-5">// throws: &#39;requiredSignatures must be a positive integer&#39;</span><br/><span class="hl-4">builder</span><span class="hl-1">.</span><span class="hl-0">requireLockSignatures</span><span class="hl-1">(</span><span class="hl-9">1.7</span><span class="hl-1">); </span><span class="hl-5">// throws: &#39;requiredSignatures must be a positive integer&#39;</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Ensure any value passed to these methods is a positive integer, or guard it beforehand:</p>
+<pre><code class="ts"><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">n</span><span class="hl-1"> = </span><span class="hl-4">Math</span><span class="hl-1">.</span><span class="hl-0">max</span><span class="hl-1">(</span><span class="hl-9">1</span><span class="hl-1">, </span><span class="hl-4">Math</span><span class="hl-1">.</span><span class="hl-0">trunc</span><span class="hl-1">(</span><span class="hl-4">rawValue</span><span class="hl-1">));</span><br/><span class="hl-4">builder</span><span class="hl-1">.</span><span class="hl-0">requireLockSignatures</span><span class="hl-1">(</span><span class="hl-4">n</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="generic-mintmelt-quote-and-proof-methods" class="tsd-anchor-link">Generic mint/melt quote and proof methods<a href="#generic-mintmelt-quote-and-proof-methods" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>The v3-deprecated wallet method aliases (<code>createMintQuote</code>, <code>checkMintQuote</code>, <code>mintProofs</code>, <code>createMeltQuote</code>, <code>checkMeltQuote</code>, <code>meltProofs</code>) were removed. v4 also adds new generic methods that accept a <code>method</code> string as the first parameter, primarily to support custom payment methods (e.g., BACS, SWIFT) without requiring first-class library support.</p>
+<h3 id="new-generic-methods-on" class="tsd-anchor-link">New generic methods on <code>Wallet</code><a href="#new-generic-methods-on" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>createMintQuote(method, payload, options?)</code></td>
+<td>Create a mint quote for any payment method</td>
+</tr>
+<tr>
+<td><code>checkMintQuote(method, quote, options?)</code></td>
+<td>Check a mint quote for any payment method</td>
+</tr>
+<tr>
+<td><code>mintProofs(method, amount, quote, config?, outputType?)</code></td>
+<td>Mint proofs for any payment method</td>
+</tr>
+<tr>
+<td><code>createMeltQuote(method, payload, options?)</code></td>
+<td>Create a melt quote for any payment method</td>
+</tr>
+<tr>
+<td><code>checkMeltQuote(method, quote, options?)</code></td>
+<td>Check a melt quote for any payment method</td>
+</tr>
+<tr>
+<td><code>meltProofs(method, meltQuote, proofsToSend, config?, outputType?)</code></td>
+<td>Melt proofs for any payment method</td>
+</tr>
+</tbody>
+</table>
+<h3 id="new-generic-methods-on-low-level-http" class="tsd-anchor-link">New generic methods on <code>Mint</code> (low-level HTTP)<a href="#new-generic-methods-on-low-level-http" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>createMintQuote(method, payload, options?)</code></td>
+<td>POST <code>/v1/mint/quote/{method}</code></td>
+</tr>
+<tr>
+<td><code>checkMintQuote(method, quote, options?)</code></td>
+<td>GET <code>/v1/mint/quote/{method}/{quote}</code></td>
+</tr>
+<tr>
+<td><code>createMeltQuote(method, payload, options?)</code></td>
+<td>POST <code>/v1/melt/quote/{method}</code></td>
+</tr>
+<tr>
+<td><code>checkMeltQuote(method, quote, options?)</code></td>
+<td>GET <code>/v1/melt/quote/{method}/{quote}</code></td>
+</tr>
+</tbody>
+</table>
+<p>The existing bolt11/bolt12 convenience methods (<code>createMintQuoteBolt11</code>, <code>meltProofsBolt11</code>, etc.) remain the recommended APIs for built-in methods. Use the generics when you need custom methods or intentionally want the lower-level method-oriented flow.</p>
+<h3 id="and-options-signature-change" class="tsd-anchor-link"><code>Mint.mint()</code> and <code>Mint.melt()</code> options signature change<a href="#and-options-signature-change" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>The <code>options</code> parameter on <code>Mint.mint()</code> and <code>Mint.melt()</code> has been extended with an optional <code>normalize</code> callback. If you spread the options object or type it explicitly, update accordingly:</p>
+<pre><code class="ts"><span class="hl-5">// Before</span><br/><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">mint</span><span class="hl-1">.</span><span class="hl-0">mint</span><span class="hl-1">(</span><span class="hl-2">&#39;bolt11&#39;</span><span class="hl-1">, </span><span class="hl-4">payload</span><span class="hl-1">, { </span><span class="hl-4">customRequest:</span><span class="hl-1"> </span><span class="hl-4">myFetch</span><span class="hl-1"> });</span><br/><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">mint</span><span class="hl-1">.</span><span class="hl-0">melt</span><span class="hl-1">(</span><span class="hl-2">&#39;bolt11&#39;</span><span class="hl-1">, </span><span class="hl-4">payload</span><span class="hl-1">, { </span><span class="hl-4">customRequest:</span><span class="hl-1"> </span><span class="hl-4">myFetch</span><span class="hl-1"> });</span><br/><br/><span class="hl-5">// After — unchanged for basic usage, but the options type now includes `normalize`</span><br/><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">mint</span><span class="hl-1">.</span><span class="hl-0">mint</span><span class="hl-1">(</span><span class="hl-2">&#39;bolt11&#39;</span><span class="hl-1">, </span><span class="hl-4">payload</span><span class="hl-1">, { </span><span class="hl-4">customRequest:</span><span class="hl-1"> </span><span class="hl-4">myFetch</span><span class="hl-1"> });</span><br/><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">mint</span><span class="hl-1">.</span><span class="hl-0">melt</span><span class="hl-1">(</span><span class="hl-2">&#39;bolt11&#39;</span><span class="hl-1">, </span><span class="hl-4">payload</span><span class="hl-1">, { </span><span class="hl-4">customRequest:</span><span class="hl-1"> </span><span class="hl-4">myFetch</span><span class="hl-1"> });</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="migration-for-v3-deprecated-aliases" class="tsd-anchor-link">Migration for v3 deprecated aliases<a href="#migration-for-v3-deprecated-aliases" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>If you were still using the v3 deprecated aliases, update to the bolt11-specific methods or the new generics:</p>
+<pre><code class="ts"><span class="hl-5">// Before (v3 deprecated aliases — these were bolt11 only)</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">quote</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">createMintQuote</span><span class="hl-1">(</span><span class="hl-9">64</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">checked</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">checkMintQuote</span><span class="hl-1">(</span><span class="hl-4">quote</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofs</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">mintProofs</span><span class="hl-1">(</span><span class="hl-9">64</span><span class="hl-1">, </span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">meltQuote</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">createMeltQuote</span><span class="hl-1">(</span><span class="hl-4">invoice</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">meltChecked</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">checkMeltQuote</span><span class="hl-1">(</span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">result</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">meltProofs</span><span class="hl-1">(</span><span class="hl-4">meltQuote</span><span class="hl-1">, </span><span class="hl-4">proofsToSend</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After — option A: use the bolt11-specific methods (recommended for bolt11)</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">quote</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">createMintQuoteBolt11</span><span class="hl-1">(</span><span class="hl-9">64</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">checked</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">checkMintQuoteBolt11</span><span class="hl-1">(</span><span class="hl-4">quote</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofs</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">mintProofsBolt11</span><span class="hl-1">(</span><span class="hl-9">64</span><span class="hl-1">, </span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">meltQuote</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">createMeltQuoteBolt11</span><span class="hl-1">(</span><span class="hl-4">invoice</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">meltChecked</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">checkMeltQuoteBolt11</span><span class="hl-1">(</span><span class="hl-4">meltQuote</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">result</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">meltProofsBolt11</span><span class="hl-1">(</span><span class="hl-4">meltQuote</span><span class="hl-1">, </span><span class="hl-4">proofsToSend</span><span class="hl-1">);</span><br/><br/><span class="hl-5">// After — option B: use the new generics (for custom payment methods)</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">quote</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">createMintQuote</span><span class="hl-1">(</span><span class="hl-2">&#39;bacs&#39;</span><span class="hl-1">, { </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-9">5000</span><span class="hl-6">n</span><span class="hl-1">, ... });</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">checked</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">checkMintQuote</span><span class="hl-1">(</span><span class="hl-2">&#39;bacs&#39;</span><span class="hl-1">, </span><span class="hl-4">quote</span><span class="hl-1">.</span><span class="hl-4">quote</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">proofs</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">mintProofs</span><span class="hl-1">(</span><span class="hl-2">&#39;bacs&#39;</span><span class="hl-1">, </span><span class="hl-9">5000</span><span class="hl-1">, </span><span class="hl-4">quote</span><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<h3 id="normalize-callback" class="tsd-anchor-link">Normalize callback<a href="#normalize-callback" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h3>
+<p>All generic methods accept an optional <code>normalize</code> callback for coercing method-specific response fields (e.g., converting wire numbers to <code>Amount</code> objects). The callback receives the raw wire data after base normalization has already been applied:</p>
+<pre><code class="ts"><span class="hl-6">type</span><span class="hl-1"> </span><span class="hl-8">BacsQuoteRes</span><span class="hl-1"> = </span><span class="hl-8">MintQuoteBaseResponse</span><span class="hl-1"> &amp; { </span><span class="hl-4">amount</span><span class="hl-1">: </span><span class="hl-8">Amount</span><span class="hl-1">; </span><span class="hl-4">reference</span><span class="hl-1">: </span><span class="hl-8">string</span><span class="hl-1"> };</span><br/><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">quote</span><span class="hl-1"> = </span><span class="hl-3">await</span><span class="hl-1"> </span><span class="hl-4">wallet</span><span class="hl-1">.</span><span class="hl-0">createMintQuote</span><span class="hl-1">&lt;</span><span class="hl-8">BacsQuoteRes</span><span class="hl-1">&gt;(</span><br/><span class="hl-1">  </span><span class="hl-2">&#39;bacs&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  {</span><br/><span class="hl-1">    </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-9">5000</span><span class="hl-6">n</span><span class="hl-1">,</span><br/><span class="hl-1">    </span><span class="hl-4">sort_code:</span><span class="hl-1"> </span><span class="hl-2">&#39;12-34-56&#39;</span><span class="hl-1">,</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">  {</span><br/><span class="hl-1">    </span><span class="hl-0">normalize</span><span class="hl-4">:</span><span class="hl-1"> (</span><span class="hl-4">raw</span><span class="hl-1">) </span><span class="hl-6">=&gt;</span><span class="hl-1"> ({</span><br/><span class="hl-1">      ...(</span><span class="hl-4">raw</span><span class="hl-1"> </span><span class="hl-3">as</span><span class="hl-1"> </span><span class="hl-8">BacsQuoteRes</span><span class="hl-1">),</span><br/><span class="hl-1">      </span><span class="hl-4">amount:</span><span class="hl-1"> </span><span class="hl-4">Amount</span><span class="hl-1">.</span><span class="hl-0">from</span><span class="hl-1">(</span><span class="hl-4">raw</span><span class="hl-1">.</span><span class="hl-4">amount</span><span class="hl-1"> </span><span class="hl-3">as</span><span class="hl-1"> </span><span class="hl-8">AmountLike</span><span class="hl-1">),</span><br/><span class="hl-1">    }),</span><br/><span class="hl-1">  },</span><br/><span class="hl-1">);</span>
+</code><button type="button">Copy</button></pre>
+
+<p>For melt quotes, base fields (<code>amount</code>, <code>expiry</code>, <code>change</code>) are always normalized automatically. For bolt11/bolt12, <code>fee_reserve</code> and <code>request</code> are also normalized. The <code>normalize</code> callback runs last, after all built-in normalization.</p>
+<hr>
+<h2 id="finance-helpers-going-further-with" class="tsd-anchor-link">Finance Helpers — going further with <code>Amount</code><a href="#finance-helpers-going-further-with" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>If you adopt <code>Amount</code> natively, it has methods to replace common float-based patterns with exact integer arithmetic:</p>
+<ul>
+<li><code>ceilPercent(numerator, denominator = 100)</code> for rounded-up percentages</li>
+<li><code>floorPercent(numerator, denominator = 100)</code> for conservative lower bounds</li>
+<li><code>scaledBy(numerator, denominator)</code> for proportional rescaling</li>
+<li><code>clamp(min, max)</code> for bounding into a closed range</li>
+<li><code>inRange(min, max)</code> for inclusive range checks</li>
+</ul>
+<pre><code class="ts"><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">fee</span><span class="hl-1"> = </span><span class="hl-4">amount</span><span class="hl-1">.</span><span class="hl-0">ceilPercent</span><span class="hl-1">(</span><span class="hl-9">2</span><span class="hl-1">).</span><span class="hl-0">clamp</span><span class="hl-1">(</span><span class="hl-9">2</span><span class="hl-1">, </span><span class="hl-4">amount</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">maxSpend</span><span class="hl-1"> = </span><span class="hl-4">amount</span><span class="hl-1">.</span><span class="hl-0">floorPercent</span><span class="hl-1">(</span><span class="hl-9">98</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">adjusted</span><span class="hl-1"> = </span><span class="hl-4">estInvAmount</span><span class="hl-1">.</span><span class="hl-0">scaledBy</span><span class="hl-1">(</span><span class="hl-4">tokenAmount</span><span class="hl-1">, </span><span class="hl-4">neededAmount</span><span class="hl-1">).</span><span class="hl-0">subtract</span><span class="hl-1">(</span><span class="hl-9">1</span><span class="hl-1">);</span><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">bounded</span><span class="hl-1"> = </span><span class="hl-4">fee</span><span class="hl-1">.</span><span class="hl-0">clamp</span><span class="hl-1">(</span><span class="hl-7">MIN_FEE</span><span class="hl-1">, </span><span class="hl-4">tokenAmount</span><span class="hl-1">);</span><br/><span class="hl-3">if</span><span class="hl-1"> (</span><span class="hl-4">msats</span><span class="hl-1">.</span><span class="hl-0">inRange</span><span class="hl-1">(</span><span class="hl-4">data</span><span class="hl-1">.</span><span class="hl-4">minSendable</span><span class="hl-1">, </span><span class="hl-4">data</span><span class="hl-1">.</span><span class="hl-4">maxSendable</span><span class="hl-1">)) { ... }</span>
+</code><button type="button">Copy</button></pre>
+
+<hr>
+<h2 id="new-factory" class="tsd-anchor-link">New: <code>createEphemeralCounterSource</code> factory<a href="#new-factory" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
+<p>v4 adds a public factory for the built-in in-memory <code>CounterSource</code>:</p>
+<pre><code class="ts"><span class="hl-3">import</span><span class="hl-1"> { </span><span class="hl-4">createEphemeralCounterSource</span><span class="hl-1"> } </span><span class="hl-3">from</span><span class="hl-1"> </span><span class="hl-2">&#39;@cashu/cashu-ts&#39;</span><span class="hl-1">;</span><br/><br/><span class="hl-6">const</span><span class="hl-1"> </span><span class="hl-7">counters</span><span class="hl-1"> = </span><span class="hl-0">createEphemeralCounterSource</span><span class="hl-1">(</span><span class="hl-0">loadCountersFromDb</span><span class="hl-1">());</span>
+</code><button type="button">Copy</button></pre>
+
+<p>Previously, consumers who needed a shared <code>CounterSource</code> across multiple wallet instances had to either deep-import the internal <code>EphemeralCounterSource</code> class or reimplement the interface. The factory provides the same capability without exposing the concrete class.</p>
+<p>This is useful when your app creates multiple short-lived wallet instances for the same seed — passing a shared <code>counterSource</code> prevents concurrent operations from reserving overlapping counter ranges. See the <a href="docs-src_deterministic_counters.html">deterministic counters guide</a> for the full pattern.</p>
+<hr>
+</div></div><div class="col-sidebar"><div class="page-menu"><div class="tsd-navigation settings"><details class="tsd-accordion"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg><h3>Settings</h3></summary><div class="tsd-accordion-details"><div class="tsd-filter-visibility"><span class="settings-label">Member Visibility</span><ul id="tsd-filter-options"><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-protected" name="protected"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Protected</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-inherited" name="inherited" checked/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>Inherited</span></label></li><li class="tsd-filter-item"><label class="tsd-filter-input"><input type="checkbox" id="tsd-filter-external" name="external"/><svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><rect class="tsd-checkbox-background" width="30" height="30" x="1" y="1" rx="6" fill="none"></rect><path class="tsd-checkbox-checkmark" d="M8.35422 16.8214L13.2143 21.75L24.6458 10.25" stroke="none" stroke-width="3.5" stroke-linejoin="round" fill="none"></path></svg><span>External</span></label></li></ul></div><div class="tsd-theme-toggle"><label class="settings-label" for="tsd-theme">Theme</label><select id="tsd-theme"><option value="os">OS</option><option value="light">Light</option><option value="dark">Dark</option></select></div></div></details></div><details open class="tsd-accordion tsd-page-navigation"><summary class="tsd-accordion-summary"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="../assets/icons.svg#icon-chevronDown"></use></svg><h3>On This Page</h3></summary><div class="tsd-accordion-details"><a href="#version-400-migration-guide"><span>Version 4.0.0 <wbr/>Migration guide</span></a><ul><li><a href="#the-value-object--what-changed-and-what-it-means-for-your-app"><span>The  value object — what changed and what it means for your app</span></a></li><li><ul><li><a href="#choosing-your-migration-strategy"><span>Choosing your migration strategy</span></a></li><li><a href="#practical-rules"><span>Practical  rules</span></a></li></ul></li><li><a href="#esm-only-package"><span>ESM-<wbr/>only package</span></a></li><li><ul><li><a href="#migration"><span>Migration</span></a></li></ul></li><li><a href="#amount-fields-on-mint-responses-now-return-objects"><span>Amount fields on mint responses now return  objects</span></a></li><li><ul><li><a href="#migration-1"><span>Migration</span></a></li></ul></li><li><a href="#is-now"><span> is now </span></a></li><li><ul><li><a href="#removed"><span>Removed</span></a></li></ul></li><li><a href="#and-now-return"><span> and  now return </span></a></li><li><a href="#now-returns"><span> now returns </span></a></li><li><a href="#and-are-now"><span> and  are now </span></a></li><li><a href="#now-returns-1"><span> now returns </span></a></li><li><a href="#utility-functions-and--now-return"><span>Utility functions  and  now return </span></a></li><li><a href="#and-generic-removed--parameter-widened"><span> and : generic removed,  parameter widened</span></a></li><li><a href="#type-parameter-is-now"><span> type:  parameter is now </span></a></li><li><a href="#is-now-the-full-quote-object"><span> is now the full quote object</span></a></li><li><a href="#is-now-1"><span> is now </span></a></li><li><a href="#and-now-return-1"><span> and  now return </span></a></li><li><a href="#and-are-no-longer-public-top-level-utils"><span> and  are no longer public top-<wbr/>level utils</span></a></li><li><a href="#internal-utility-functions-removed-or-restricted"><span>Internal utility functions removed or restricted</span></a></li><li><ul><li><a href="#removed-entirely-dead-code"><span>Removed entirely (dead code)</span></a></li><li><a href="#made-private-no-longer-exported"><span>Made private (no longer exported)</span></a></li><li><a href="#marked"><span>Marked </span></a></li><li><a href="#no-longer-exported"><span> no longer exported</span></a></li></ul></li><li><a href="#proof-serialization"><span>Proof serialization</span></a></li><li><a href="#crypto-primitive-renames"><span>Crypto primitive renames</span></a></li><li><ul><li><a href="#removed-crypto-primitives"><span>Removed crypto primitives</span></a></li><li><a href="#field-removed"><span> field removed</span></a></li><li><a href="#-parameter-removed"><span> —  parameter removed</span></a></li></ul></li><li><a href="#keychain-and-keychaincache-multi-unit-support-and-api-cleanup"><span>Key<wbr/>Chain and <wbr/>Key<wbr/>Chain<wbr/>Cache: multi-<wbr/>unit support and <wbr/>API cleanup</span></a></li><li><ul><li><a href="#-field-removed--field-added"><span> —  field removed,  field added</span></a></li><li><a href="#-explicit-parameter"><span> — explicit  parameter</span></a></li><li><a href="#-parameter-removed-1"><span> —  parameter removed</span></a></li><li><a href="#constructor-and--removed"><span> constructor —  and  removed</span></a></li><li><a href="#-removed"><span> — removed</span></a></li><li><a href="#now-contains-all-units"><span> now contains all units</span></a></li></ul></li><li><a href="#removed-1"><span> removed</span></a></li><li><a href="#now-requires"><span> now requires </span></a></li><li><ul><li><a href="#recommended-migration"><span>Recommended migration</span></a></li><li><a href="#when-to-use-each-api"><span>When to use each <wbr/>API</span></a></li><li><a href="#if-you-only-need-amount-mint--unit"><span>If you only need amount / mint / unit</span></a></li></ul></li><li><a href="#deprecated-v3-apis-now-removed"><span>Deprecated v3 <wbr/>AP<wbr/>Is now removed</span></a></li><li><a href="#nut-11-p2pk-api-changes"><span>NUT-<wbr/>11 / <wbr/>P2<wbr/>PK <wbr/>API changes</span></a></li><li><ul><li><a href="#removed-deprecated-aliases"><span>Removed deprecated aliases</span></a></li><li><a href="#removed-low-level-nut-11-getters"><span>Removed low-<wbr/>level <wbr/>NUT-<wbr/>11 getters</span></a></li><li><a href="#shape-changed"><span> shape changed</span></a></li><li><a href="#now-follows-the-same-pubkey-identity-rules-as-nut-11"><span> now follows the same pubkey identity rules as <wbr/>NUT-<wbr/>11</span></a></li><li><a href="#and-now-throw-for-invalid-input"><span> and  now throw for invalid input</span></a></li></ul></li><li><a href="#generic-mintmelt-quote-and-proof-methods"><span>Generic mint/melt quote and proof methods</span></a></li><li><ul><li><a href="#new-generic-methods-on"><span>New generic methods on </span></a></li><li><a href="#new-generic-methods-on-low-level-http"><span>New generic methods on  (low-<wbr/>level <wbr/>HTTP)</span></a></li><li><a href="#and-options-signature-change"><span> and  options signature change</span></a></li><li><a href="#migration-for-v3-deprecated-aliases"><span>Migration for v3 deprecated aliases</span></a></li><li><a href="#normalize-callback"><span>Normalize callback</span></a></li></ul></li><li><a href="#finance-helpers-going-further-with"><span>Finance <wbr/>Helpers — going further with </span></a></li><li><a href="#new-factory"><span>New:  factory</span></a></li></ul></div></details></div><div class="site-menu"><nav class="tsd-navigation"><a href="../modules.html">Cashu-TS - v4.2.0</a><ul class="tsd-small-nested-navigation" id="tsd-nav-container"><li>Loading...</li></ul></nav></div></div></div><footer></footer><div class="overlay"></div></body></html>
