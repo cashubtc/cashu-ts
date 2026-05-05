@@ -11,7 +11,7 @@ import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
 import { setGlobalRequestOptions } from '../../src';
 import request, { setRequestLogger } from '../../src/transport';
-import { parseRetryAfter } from '../../src/transport/request';
+import { parseRetryAfter, detectBrowserLike } from '../../src/transport/request';
 import { MINTCACHE } from '../consts';
 import { Nut19Policy } from '../../src';
 import { NULL_LOGGER, type Logger } from '../../src/logger';
@@ -982,6 +982,49 @@ describe('parseRetryAfter', () => {
 
   test('returns undefined for garbage string', () => {
     expect(parseRetryAfter('not-a-date-or-number')).toBeUndefined();
+  });
+});
+
+describe('detectBrowserLike', () => {
+  test('true: browser main thread (window + document)', () => {
+    expect(detectBrowserLike({ window: { document: {} } })).toBe(true);
+  });
+
+  test('true: classic worker (self instanceof WorkerGlobalScope)', () => {
+    class WorkerGlobalScope {}
+    const self = new WorkerGlobalScope();
+    expect(detectBrowserLike({ self, WorkerGlobalScope })).toBe(true);
+  });
+
+  test('true: module worker (no importScripts, but WorkerGlobalScope present)', () => {
+    // Module workers omit importScripts; the WorkerGlobalScope check still catches them.
+    class WorkerGlobalScope {}
+    const self = new WorkerGlobalScope();
+    expect(detectBrowserLike({ self, WorkerGlobalScope })).toBe(true);
+  });
+
+  test('true: service worker (subclass of WorkerGlobalScope)', () => {
+    class WorkerGlobalScope {}
+    class ServiceWorkerGlobalScope extends WorkerGlobalScope {}
+    const self = new ServiceWorkerGlobalScope();
+    expect(detectBrowserLike({ self, WorkerGlobalScope })).toBe(true);
+  });
+
+  test('false: Node-like (no window, no WorkerGlobalScope)', () => {
+    expect(detectBrowserLike({})).toBe(false);
+  });
+
+  test('false: self present but WorkerGlobalScope undefined (RN/Bun shape)', () => {
+    expect(detectBrowserLike({ self: {} })).toBe(false);
+  });
+
+  test('false: window present but document undefined (partial polyfill)', () => {
+    expect(detectBrowserLike({ window: {} })).toBe(false);
+  });
+
+  test('false: WorkerGlobalScope present but self is not an instance of it', () => {
+    class WorkerGlobalScope {}
+    expect(detectBrowserLike({ self: {}, WorkerGlobalScope })).toBe(false);
   });
 });
 
