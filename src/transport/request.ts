@@ -6,9 +6,29 @@ import { JSONInt } from '../utils/JSONInt';
 // Generic request function type so callers can do requestInstance<T>(...)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
-// Detect runtime at module load. Browser bundlers may polyfill `process`, but rarely
-// include `process.versions.node`, so the nested check stays browser-safe.
-const IS_NODE = typeof process !== 'undefined' && process.versions?.node != null;
+/**
+ * Subset of globalThis used by {@link detectBrowserLike}; loosened for unit tests.
+ */
+export type GlobalLike = {
+  window?: { document?: unknown };
+  self?: unknown;
+  WorkerGlobalScope?: { new (): unknown };
+};
+
+/**
+ * True in browser main thread + any Worker scope (classic/module/shared/service via
+ * `WorkerGlobalScope`).
+ */
+export function detectBrowserLike(g: GlobalLike): boolean {
+  if (g.window !== undefined && g.window.document !== undefined) return true;
+  return (
+    g.WorkerGlobalScope !== undefined &&
+    g.self !== undefined &&
+    g.self instanceof g.WorkerGlobalScope
+  );
+}
+
+const IS_BROWSER_LIKE = detectBrowserLike(globalThis);
 
 export type RequestArgs = {
   endpoint: string;
@@ -227,10 +247,12 @@ async function _request(options: RequestOptions): Promise<unknown> {
   const headers: Record<string, string> = {
     Accept: 'application/json, text/plain, */*',
     ...(body ? { 'Content-Type': 'application/json' } : undefined),
-    // Node-only: override the default `undici` identifier that would leak the runtime.
-    // Skipped in browsers because Firefox/WebKit can promote it to a CORS preflight even
-    // though the Fetch spec lists it as a forbidden header.
-    ...(IS_NODE ? { 'User-Agent': 'Mozilla/5.0' } : undefined),
+    // Override the default User-Agent in non-browser runtimes (Node, Deno, Bun, React
+    // Native) where native HTTP stacks otherwise leak fingerprintable identifiers
+    // (undici, NSURLSession, OkHttp). Skipped in browsers + workers because Firefox/
+    // WebKit can promote it to a CORS preflight even though the Fetch spec lists it as
+    // a forbidden header.
+    ...(IS_BROWSER_LIKE ? undefined : { 'User-Agent': 'Mozilla/5.0' }),
     ...requestHeaders,
   };
   const callerSignal = options.signal ?? undefined;
