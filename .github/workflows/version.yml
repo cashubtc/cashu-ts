@@ -24,7 +24,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '24.x'
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
 
@@ -45,8 +45,6 @@ jobs:
           fi
 
       - name: Publish to npm (skip if already published)
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -59,7 +57,7 @@ jobs:
           if npm view "${PKG}@${VERSION}" version >/dev/null 2>&1; then
             echo "Already published ${PKG}@${VERSION}, skipping npm publish"
           else
-            npm publish --provenance --tag "${{ steps.npm-tag.outputs.tag }}"
+            npm publish --tag "${{ steps.npm-tag.outputs.tag }}"
           fi
 
       - run: npm run compile:standalone
