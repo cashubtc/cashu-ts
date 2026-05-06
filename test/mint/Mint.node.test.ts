@@ -7,6 +7,7 @@ import {
   WSConnection,
   injectWebSocketImpl,
   RateLimitError,
+  Amount,
 } from '../../src';
 import type { AuthProvider, Logger, RequestFn } from '../../src';
 import { HttpResponse, http } from 'msw';
@@ -648,7 +649,7 @@ describe('Mint normalization', () => {
 
     const response = await mint.mintBatchBolt11({
       quotes: ['q1', 'q2'],
-      quote_amounts: [1n, 2n] as any,
+      quote_amounts: [Amount.from(1), Amount.from(2)] as any,
       outputs: [],
     });
 
@@ -669,7 +670,7 @@ describe('Mint normalization', () => {
 
     const response = await mint.mintBatchBolt12({
       quotes: ['q1'],
-      quote_amounts: [4n] as any,
+      quote_amounts: [Amount.from(4)] as any,
       outputs: [],
     });
 
@@ -693,7 +694,11 @@ describe('Mint normalization', () => {
     });
 
     await expect(
-      mint.mintBatch('bolt11', { quotes: ['q1'], quote_amounts: [1n] as any, outputs: [] }),
+      mint.mintBatch('bolt11', {
+        quotes: ['q1'],
+        quote_amounts: [Amount.from(1)] as any,
+        outputs: [],
+      }),
     ).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
       data: { not_signatures: true },
@@ -709,7 +714,11 @@ describe('Mint normalization', () => {
     });
 
     await expect(
-      mint.mintBatch('bolt11', { quotes: ['q1'], quote_amounts: [1n] as any, outputs: [] }),
+      mint.mintBatch('bolt11', {
+        quotes: ['q1'],
+        quote_amounts: [Amount.from(1)] as any,
+        outputs: [],
+      }),
     ).rejects.toThrow('Invalid response from mint');
     expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
       data: { signatures: {} },

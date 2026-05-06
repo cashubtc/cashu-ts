@@ -129,7 +129,7 @@ export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'qu
 // @public
 export type BatchMintRequest = {
     quotes: string[];
-    quote_amounts: bigint[];
+    quote_amounts: Amount[];
     outputs: SerializedBlindedMessage[];
     signatures?: Array<string | null>;
 };
