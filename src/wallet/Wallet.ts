@@ -2117,9 +2117,7 @@ class Wallet {
 
     // Parse amounts and determine keyset
     const keyset = this.getKeyset(keysetId);
-    const amounts = entries.map((e) =>
-      this.parseAmount(e.amount, `prepareBatchMint: ${method}`).toBigInt(),
-    );
+    const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
     const totalAmount = Amount.sum(amounts);
 
     // Shape consolidated outputs over the total amount
