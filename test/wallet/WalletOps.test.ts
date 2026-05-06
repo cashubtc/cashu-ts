@@ -6,6 +6,7 @@ import type {
   Proof,
   MintQuoteBolt11Response,
   MintQuoteBolt12Response,
+  MintQuoteOnchainResponse,
   MeltQuoteBaseResponse,
   MeltQuoteBolt11Response,
   MeltQuoteBolt12Response,
@@ -81,7 +82,7 @@ type ValidateMintQuoteFn = (quote: MintQuoteBolt11Response) => void;
 type PrepareMintFn = (
   method: string,
   amount: AmountLike,
-  quote: MintQuoteBolt11Response | MintQuoteBolt12Response,
+  quote: MintQuoteBolt11Response | MintQuoteBolt12Response | MintQuoteOnchainResponse,
   config?: MintProofsConfig,
   outputType?: OutputType,
 ) => Promise<MintPreview>;
@@ -206,6 +207,17 @@ const mint12: MintQuoteBolt12Response = {
   amount: Amount.from(7),
   unit: 'sat',
   expiry: 0,
+  pubkey: '0200000',
+  amount_paid: Amount.from(0),
+  amount_issued: Amount.from(0),
+};
+
+const mintOnchain: MintQuoteOnchainResponse = {
+  quote: 'mq-onchain',
+  request: 'bc1qdeposit',
+  amount: Amount.from(8),
+  unit: 'sat',
+  expiry: null,
   pubkey: '0200000',
   amount_paid: Amount.from(0),
   amount_issued: Amount.from(0),
@@ -711,6 +723,67 @@ describe('WalletOps builders', () => {
 
       const [, , , cfg] = wallet.prepareMint.mock.calls[0];
       expect(cfg).toMatchObject({ privkey: 'new' });
+    });
+
+    it('onchain requires privkey at compile time', () => {
+      if (false as boolean) {
+        // @ts-expect-error run should not be callable before privkey
+        ops.mintOnchain(8, mintOnchain).run();
+        // @ts-expect-error prepare should not be callable before privkey
+        ops.mintOnchain(8, mintOnchain).prepare();
+      }
+
+      void ops.mintOnchain(8, mintOnchain).privkey('k').run();
+      void ops.mintOnchain(8, mintOnchain).privkey('k').prepare();
+    });
+
+    it('onchain throws at runtime without privkey for JS consumers', async () => {
+      const builder = ops.mintOnchain(8, mintOnchain) as unknown as {
+        prepare(): Promise<unknown>;
+        run(): Promise<unknown>;
+      };
+
+      await expect(builder.run()).rejects.toThrow(/privkey is required/i);
+      await expect(builder.prepare()).rejects.toThrow(/privkey is required/i);
+      expect(wallet.prepareMint).not.toHaveBeenCalled();
+    });
+
+    it('onchain prepare forwards config and outputType', async () => {
+      const cb = vi.fn();
+      await ops
+        .mintOnchain(8, mintOnchain)
+        .asDeterministic(0, [8])
+        .keyset('kid')
+        .onCountersReserved(cb)
+        .privkey('sk')
+        .prepare();
+
+      expect(wallet.prepareMint).toHaveBeenCalledTimes(1);
+      const [method, amount, q, cfg, ot] = wallet.prepareMint.mock.calls[0];
+
+      expect(method).toBe('onchain');
+      expect(Amount.from(amount).equals(8)).toBeTruthy();
+      expect(q).toBe(mintOnchain);
+      expect(cfg).toMatchObject({ keysetId: 'kid', privkey: 'sk' });
+      expect(typeof cfg!.onCountersReserved).toBe('function');
+      expect(ot).toEqual({ type: 'deterministic', counter: 0, denominations: [8] });
+    });
+
+    it('onchain run uses wallet.prepareMint and wallet.completeMint', async () => {
+      const preview: MintPreview = {
+        method: 'onchain',
+        payload: { quote: mintOnchain.quote, outputs: [] },
+        outputData: [],
+        keysetId: '123',
+        quote: mintOnchain,
+      };
+      wallet.prepareMint.mockResolvedValueOnce(preview);
+
+      await ops.mintOnchain(8, mintOnchain).privkey('sk').run();
+
+      expect(wallet.prepareMint).toHaveBeenCalledTimes(1);
+      expect(wallet.completeMint).toHaveBeenCalledTimes(1);
+      expect(wallet.completeMint).toHaveBeenCalledWith(preview);
     });
 
     it('bolt11 locked quote without privkey throws at runtime', async () => {
