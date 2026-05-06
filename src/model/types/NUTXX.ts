@@ -47,16 +47,8 @@ export type MeltQuoteOnchainRequest = MeltQuoteBaseRequest & {
 
 /**
  * Response from the mint after requesting an onchain melt quote.
- *
- * @remarks
- * Extends MeltQuoteBaseResponse for compatibility with existing generics. The inherited `change?`
- * is never populated for onchain melts (NUT-08 does not apply).
  */
-export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
-  /**
-   * Bitcoin address or destination.
-   */
-  request: string;
+export type MeltQuoteOnchainFeeOption = {
   /**
    * Absolute fee for the onchain transaction. Not a fee reserve.
    */
@@ -65,8 +57,30 @@ export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
    * Estimated number of blocks for confirmation.
    */
   estimated_blocks: number;
+};
+
+/**
+ * Response from the mint after requesting an onchain melt quote.
+ *
+ * @remarks
+ * Extends MeltQuoteBaseResponse for compatibility with existing generics. The inherited `change?`
+ * contains NUT-08 change signatures when the mint returns onchain melt change.
+ */
+export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
+  /**
+   * Bitcoin address or destination.
+   */
+  request: string;
+  /**
+   * Available fee and confirmation estimates for this quote.
+   */
+  fee_options: MeltQuoteOnchainFeeOption[];
+  /**
+   * The selected fee option once the quote has been executed.
+   */
+  selected_estimated_blocks: number | null;
   /**
    * Outpoint (txid:vout) once the transaction has been broadcast.
    */
-  outpoint?: string;
+  outpoint: string | null;
 };

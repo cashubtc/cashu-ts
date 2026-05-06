@@ -153,3 +153,12 @@ export type MeltProofsConfig = {
   privkey?: string | string[];
   onCountersReserved?: OnCountersReserved;
 };
+
+export type PrepareMeltConfig = MeltProofsConfig & {
+  nut08Change?: boolean;
+};
+
+export type CompleteMeltOptions = {
+  preferAsync?: boolean;
+  extraPayload?: Record<string, unknown>;
+};

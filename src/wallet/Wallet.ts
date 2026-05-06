@@ -78,9 +78,10 @@ import {
   type ReceiveConfig,
   type MintProofsConfig,
   type MeltProofsConfig,
+  type PrepareMeltConfig,
+  type CompleteMeltOptions,
   type SwapTransaction,
   type MeltProofsResponse,
-  type MeltProofsOnchainResponse,
   type SendResponse,
   type RestoreConfig,
   type SecretsPolicy,
@@ -529,7 +530,7 @@ class Wallet {
     });
 
     // Fire event after successful reservation (wallet does not await handlers)
-    const used = {
+    const used: OperationCounters = {
       keysetId,
       start: range.start,
       count: range.count,
@@ -1672,7 +1673,7 @@ class Wallet {
     amount: AmountLike,
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
-    const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11').toBigInt();
+    const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11');
     // Check if mint supports description for bolt11
     if (description) {
       const mintInfo = this.getMintInfo();
@@ -1704,7 +1705,7 @@ class Wallet {
     pubkey: string,
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
-    const mintAmount = this.parseAmount(amount, 'createLockedMintQuote').toBigInt();
+    const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
     const { supported } = this.getMintInfo().isSupported(20);
     this.failIf(!supported, 'Mint does not support NUT-20');
     const mintQuotePayload: MintQuoteBolt11Request = {
@@ -1745,7 +1746,7 @@ class Wallet {
 
     const amount =
       options?.amount !== undefined
-        ? this.parseAmount(options.amount, 'createMintQuoteBolt12').toBigInt()
+        ? this.parseAmount(options.amount, 'createMintQuoteBolt12')
         : undefined;
 
     const mintQuotePayload: MintQuoteBolt12Request = {
@@ -1989,8 +1990,8 @@ class Wallet {
    *
    * @remarks
    * Convenience helper for the onchain flow. Pubkey is always required for onchain mint quotes, so
-   * `privkey` is always needed. Internally uses `prepareMint('onchain',…)` followed by
-   * `completeMint()`.
+   * `privkey` is always needed. Use `prepareMint()` directly when you need the generic method based
+   * API or want to persist a replay-safe preview before completion.
    * @param amount Amount to mint.
    * @param quote Onchain mint quote.
    * @param privkey Private key matching the pubkey the quote is locked to.
@@ -2345,9 +2346,7 @@ class Wallet {
     amountMsat?: AmountLike,
   ): Promise<MeltQuoteBolt11Response> {
     const normalizedAmountMsat =
-      amountMsat !== undefined
-        ? this.parseAmount(amountMsat, 'createMeltQuoteBolt11').toBigInt()
-        : undefined;
+      amountMsat !== undefined ? this.parseAmount(amountMsat, 'createMeltQuoteBolt11') : undefined;
 
     if (amountMsat !== undefined) {
       this.failIf(
@@ -2395,9 +2394,7 @@ class Wallet {
     amountMsat?: AmountLike,
   ): Promise<MeltQuoteBolt12Response> {
     const normalizedAmountMsat =
-      amountMsat !== undefined
-        ? this.parseAmount(amountMsat, 'createMeltQuoteBolt12').toBigInt()
-        : undefined;
+      amountMsat !== undefined ? this.parseAmount(amountMsat, 'createMeltQuoteBolt12') : undefined;
     return this.mint.createMeltQuoteBolt12({
       unit: this._unit,
       request: offer,
@@ -2412,24 +2409,23 @@ class Wallet {
   }
 
   /**
-   * Requests onchain melt quotes from the mint. Returns an array of quotes with different
-   * fee/confirmation tiers.
+   * Requests an onchain melt quote from the mint.
    *
    * @param address Bitcoin address to send to.
    * @param amount Amount to melt.
-   * @returns Array of melt quotes with different fee tiers.
+   * @returns Melt quote with fee options.
    */
   async createMeltQuoteOnchain(
     address: string,
     amount: AmountLike,
-  ): Promise<MeltQuoteOnchainResponse[]> {
-    const normalizedAmount = this.parseAmount(amount, 'createMeltQuoteOnchain').toBigInt();
-    const quotes = await this.mint.createMeltQuoteOnchain({
+  ): Promise<MeltQuoteOnchainResponse> {
+    const normalizedAmount = this.parseAmount(amount, 'createMeltQuoteOnchain');
+    const quote = await this.mint.createMeltQuoteOnchain({
       unit: this._unit,
       request: address,
       amount: normalizedAmount,
     });
-    return quotes.map((q) => ({ ...q, unit: q.unit || this._unit }));
+    return { ...quote, unit: quote.unit || this._unit };
   }
 
   /**
@@ -2450,7 +2446,7 @@ class Wallet {
     const normalizedMillisatPartialAmount = this.parseAmount(
       millisatPartialAmount,
       'createMultiPathMeltQuote',
-    ).toBigInt();
+    );
     const { supported, params } = this.getMintInfo().isSupported(15);
     this.failIf(!supported, 'Mint does not support NUT-15');
     this.failIf(
@@ -2607,44 +2603,45 @@ class Wallet {
    * Melt proofs via an onchain Bitcoin transaction.
    *
    * @remarks
-   * NUT-08 fee change does not apply to onchain melts. No blank outputs are created and no change
-   * proofs are returned. ProofsToSend must cover at least `quote.amount + quote.fee`. This function
-   * does not perform coin selection!
+   * ProofsToSend must cover `quote.amount + selected fee + input fee`. Any additional amount is
+   * offered as NUT-08 change. This function does not perform coin selection!
    * @param meltQuote The onchain melt quote.
    * @param proofsToSend Proofs to melt.
+   * @param estimatedBlocks Selected `estimated_blocks` value from `meltQuote.fee_options`.
    * @param config Optional parameters (e.g. privkey for P2PK proofs, keysetId).
-   * @returns MeltProofsOnchainResponse with the final quote state.
+   * @returns MeltProofsResponse with the final quote state and any returned NUT-08 change proofs.
    */
   async meltProofsOnchain(
     meltQuote: MeltQuoteOnchainResponse,
     proofsToSend: ProofLike[],
+    estimatedBlocks: number,
     config?: MeltProofsConfig,
-  ): Promise<MeltProofsOnchainResponse> {
+  ): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
     this.validateMeltQuote(meltQuote);
+    // Validate fee_option selection
+    const feeOption = meltQuote.fee_options.find((o) => o.estimated_blocks === estimatedBlocks);
+    this.failIfNullish(feeOption, 'estimatedBlocks must match an onchain melt quote fee option', {
+      estimatedBlocks,
+      feeOptions: meltQuote.fee_options.map((o) => o.estimated_blocks),
+    });
+    // Ensure we have enough proofs
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
+    const inputFee = this.getFeesForProofs(normalizedProofs);
     const sendAmount = sumProofs(normalizedProofs);
-    const totalRequired = meltQuote.amount.add(meltQuote.fee);
-
+    const totalRequired = meltQuote.amount.add(feeOption.fee).add(inputFee);
     this.failIf(sendAmount.lessThan(totalRequired), 'Not enough proofs to cover amount + fee', {
       sendAmount: sendAmount.toString(),
       totalRequired: totalRequired.toString(),
+      amount: meltQuote.amount.toString(),
+      fee: feeOption.fee.toString(),
+      inputFee: inputFee.toString(),
     });
-
-    let inputs = this._prepareInputsForMint(normalizedProofs);
-
-    if (config?.privkey) {
-      inputs = this.signP2PKProofs(inputs, config.privkey, [], meltQuote.quote);
-    }
-
-    const meltPayload: MeltRequest = {
-      quote: meltQuote.quote,
-      inputs,
-      // No outputs — NUT-08 does not apply to onchain melts
-    };
-
-    const meltResponse = await this.mint.melt('onchain', meltPayload);
-    const mergedQuote = { ...meltQuote, ...meltResponse } as MeltQuoteOnchainResponse;
-    return { quote: mergedQuote };
+    // Perform melt
+    const meltTxn = await this.prepareMelt('onchain', meltQuote, normalizedProofs, config);
+    const response = await this.completeMelt<MeltQuoteOnchainResponse>(meltTxn, config?.privkey, {
+      extraPayload: { estimated_blocks: estimatedBlocks },
+    });
+    return response;
   }
 
   /**
@@ -2652,8 +2649,8 @@ class Wallet {
    *
    * @remarks
    * Allows you to preview fees for a melt, get concrete outputs for P2PK SIG_ALL melts, and do any
-   * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for
-   * Lightning fee return and returns a MeltPreview, which you can melt using completeMelt.
+   * pre-melt tasks (such as marking proofs in-flight etc). Creates NUT-08 blanks (1-sat) for melt
+   * change and returns a MeltPreview, which you can melt using completeMelt.
    * @param method Payment method of the quote.
    * @param meltQuote The melt quote. Only `quote` (ID) and `amount` are required — a full
    *   `MeltQuoteBolt11Response` works, but `{ quote: string, amount: Amount }` is sufficient.
@@ -2668,20 +2665,21 @@ class Wallet {
     method: string,
     meltQuote: TQuote,
     proofsToSend: ProofLike[],
-    config?: MeltProofsConfig,
+    config?: PrepareMeltConfig,
     outputType?: OutputType,
   ): Promise<MeltPreview<TQuote>> {
     this.validateMeltQuote(meltQuote);
-    const normalizedProofs = normalizeProofAmounts(proofsToSend);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
-    const { keysetId, onCountersReserved } = config || {};
+    const { keysetId, onCountersReserved, nut08Change = true } = config || {};
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    const normalizedProofs = normalizeProofAmounts(proofsToSend);
     const sendAmount = sumProofs(normalizedProofs);
+    let outputData: OutputDataLike[] = [];
 
     // feeReserve is the overage above the invoice/offer amount.
     // In the common case where selected proofs = amount + fee_reserve,
     // this equals the quote’s fee_reserve. If you overshoot more,
-    // the extra also becomes NUT-08 lightning fee change.
+    // the extra also becomes NUT-08 change, if melt method allows.
     this.failIf(
       sendAmount.lessThan(meltQuote.amount),
       'Not enough proofs to cover amount + fee reserve',
@@ -2691,19 +2689,20 @@ class Wallet {
       },
     );
     const feeReserve = sendAmount.subtract(meltQuote.amount);
-    let outputData: OutputDataLike[] = [];
 
+    // Custom OT is definitive (no extra NUT-08 blanks)
     if (outputType.type === 'custom') {
       outputData = outputType.data;
     }
-    // Create NUT-08 blanks for return of Lightning fee change
+
+    // Create NUT-08 blanks for return of melt change (if supported)
     // Note: zero amount + zero denomination passes splitAmount validation
-    else if (feeReserve.greaterThan(0)) {
+    else if (nut08Change && feeReserve.greaterThan(0)) {
       let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
       if (count < 0) count = 0; // Prevents: -Infinity
       const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
       this._logger.debug('Creating NUT-08 blanks for fee reserve', {
-        feeReserve,
+        feeReserve: feeReserve,
         denominations,
       });
 
@@ -2744,15 +2743,31 @@ class Wallet {
    * proofs before melting. If the payment is pending or unpaid, the change array will be empty.
    * @param meltPreview The preview from prepareMelt().
    * @param privkey The private key(s) for signing.
-   * @param preferAsync Optional override to request NUT-06 asynchronous melt.
+   * @param options Optional override to request NUT-06 asynchronous melt or method-specific fields.
    * @returns Updated MeltProofsResponse.
    * @throws If melt fails or signatures don't match output count.
    */
   async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
     meltPreview: MeltPreview<TQuote>,
     privkey?: string | string[],
+    options?: CompleteMeltOptions,
+  ): Promise<MeltProofsResponse<TQuote>>;
+  /**
+   * @deprecated Pass `{ preferAsync: true }` as the third param, instead of `true`.
+   */
+  async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
+    meltPreview: MeltPreview<TQuote>,
+    privkey?: string | string[],
     preferAsync?: boolean,
+  ): Promise<MeltProofsResponse<TQuote>>;
+  async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
+    meltPreview: MeltPreview<TQuote>,
+    privkey?: string | string[],
+    options?: boolean | CompleteMeltOptions,
   ): Promise<MeltProofsResponse<TQuote>> {
+    const completeOptions: CompleteMeltOptions =
+      typeof options === 'boolean' ? { preferAsync: options } : (options ?? {});
+
     // Extract vars from MeltPreview
     let inputs = meltPreview.inputs;
     const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
@@ -2771,7 +2786,8 @@ class Wallet {
       quote,
       inputs,
       outputs,
-      ...(preferAsync ? { prefer_async: true } : {}),
+      ...(completeOptions.preferAsync ? { prefer_async: true } : {}),
+      ...completeOptions.extraPayload,
     };
 
     // Execute melt and validate result
@@ -2783,7 +2799,7 @@ class Wallet {
     // Create any change Proofs
     const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
 
-    if (preferAsync) {
+    if (completeOptions.preferAsync) {
       this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
     } else {
       this._logger.debug('MELT COMPLETED', {

@@ -23,7 +23,6 @@ import {
   type OnCountersReserved,
   type MeltProofsConfig,
   type MeltProofsResponse,
-  type MeltProofsOnchainResponse,
   type MeltPreview,
   type MintPreview,
 } from './types';
@@ -898,19 +897,25 @@ export class MeltBuilder<
  * Builder for melting proofs via an onchain Bitcoin transaction.
  *
  * @remarks
- * NUT-08 fee change does not apply (no blank outputs, no change proofs).
+ * Any overage above the selected quote amount and fee option is offered as NUT-08 change.
  * @example
  *
  * ```typescript
- * // Basic onchain melt
+ * // Basic onchain melt (1 fee option)
  * const result = await wallet.ops.meltOnchain(quote, proofs).privkey('sk').run();
  *
- * // with custom keyset ID
- * await wallet.ops.meltOnchain(quote, proofs).keyset('01abc...').privkey('sk').run();
+ * // with custom keyset ID and selected fee option
+ * await wallet.ops
+ *   .meltOnchain(quote, proofs)
+ *   .keyset('01abc...')
+ *   .privkey('sk')
+ *   .estimatedBlocks(1)
+ *   .run();
  * ```
  */
 export class MeltOnchainBuilder {
   private config: MeltProofsConfig = {};
+  private selectedEstimatedBlocks?: number;
 
   constructor(
     private wallet: Wallet,
@@ -939,11 +944,37 @@ export class MeltOnchainBuilder {
   }
 
   /**
+   * Select a fee option by its estimated block target.
+   *
+   * @param blocks `estimated_blocks` value from the quote's fee_options.
+   */
+  estimatedBlocks(blocks: number) {
+    this.selectedEstimatedBlocks = blocks;
+    return this;
+  }
+
+  /**
    * Execute the onchain melt against the quote.
    *
-   * @returns The melt result: `{ quote }`. No change — NUT-08 does not apply.
+   * @returns The melt result with quote and any returned NUT-08 change proofs.
    */
-  async run(): Promise<MeltProofsOnchainResponse> {
-    return this.wallet.meltProofsOnchain(this.quote, this.proofs, this.config);
+  async run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
+    // Ensure fee_option is selected if there is only one
+    if (this.selectedEstimatedBlocks === undefined && this.quote.fee_options.length === 1) {
+      this.selectedEstimatedBlocks = this.quote.fee_options[0].estimated_blocks;
+    }
+
+    if (this.selectedEstimatedBlocks === undefined) {
+      throw new Error(
+        'estimatedBlocks is required when an onchain melt quote has multiple fee options',
+      );
+    }
+
+    return this.wallet.meltProofsOnchain(
+      this.quote,
+      this.proofs,
+      this.selectedEstimatedBlocks,
+      this.config,
+    );
   }
 }

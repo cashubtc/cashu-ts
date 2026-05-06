@@ -610,48 +610,26 @@ class Mint {
   }
 
   /**
-   * Requests onchain melt quotes from the mint. Returns an array of quotes with different
-   * fee/confirmation tiers.
+   * Requests an onchain melt quote from the mint.
    *
    * @remarks
-   * Standalone method — does NOT use the generic `createMeltQuote` because the endpoint returns an
-   * **array** of quotes rather than a single object.
+   * Thin wrapper around createMeltQuote('onchain', ...).
    * @param meltQuotePayload Payload containing the Bitcoin address, amount, and unit.
    * @param customRequest Optional override for the request function.
-   * @returns Array of melt quotes with different fee tiers.
+   * @returns Melt quote with fee options.
    */
   async createMeltQuoteOnchain(
     meltQuotePayload: MeltQuoteOnchainRequest,
     customRequest?: RequestFn,
-  ): Promise<MeltQuoteOnchainResponse[]> {
-    failIf(
-      !this.isValidMethodString('onchain'),
-      'Invalid melt quote method: onchain',
-      this._logger,
+  ): Promise<MeltQuoteOnchainResponse> {
+    return this.createMeltQuote<MeltQuoteOnchainResponse>(
+      'onchain',
+      {
+        ...meltQuotePayload,
+        amount: Amount.from(meltQuotePayload.amount).toBigInt(),
+      },
+      { customRequest },
     );
-    const body = {
-      ...meltQuotePayload,
-      amount: Amount.from(meltQuotePayload.amount).toBigInt(),
-    };
-    const response = await this.requestWithAuth<MeltQuoteOnchainResponse[]>(
-      'POST',
-      '/v1/melt/quote/onchain',
-      { requestBody: body },
-      customRequest,
-    );
-    if (!Array.isArray(response)) {
-      this._logger.error('Invalid response from mint...', {
-        response,
-        op: 'createMeltQuoteOnchain',
-      });
-      throw new Error('Invalid response from mint: expected array');
-    }
-    return response.map((item) => {
-      const data: Record<string, unknown> = { ...item };
-      this.normalizeMeltBaseFields(data, 'onchain melt quote');
-      this.normalizeMeltOnchainFields(data);
-      return data as MeltQuoteOnchainResponse;
-    });
   }
 
   // -----------------------------------------------------------------
@@ -1100,7 +1078,7 @@ class Mint {
   private normalizeMeltQuoteRequestOptions(
     payload: MeltQuoteBolt11Request | MeltQuoteBolt12Request,
   ): Record<string, unknown> {
-    if (!payload.options) return payload;
+    if (!payload.options) return { ...payload };
     const opts: Record<string, unknown> = { ...payload.options };
     if (payload.options.amountless) {
       opts.amountless = {
@@ -1280,7 +1258,44 @@ class Mint {
    * Mutates `data` in place, normalizing onchain-specific melt fields.
    */
   private normalizeMeltOnchainFields(data: Record<string, unknown>): void {
-    data.fee = Amount.from(data.fee as Amount);
+    if (!Array.isArray(data.fee_options) || data.fee_options.length === 0) {
+      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+      throw new Error('Invalid response from mint');
+    }
+
+    const seenEstimatedBlocks = new Set<number>();
+    data.fee_options = data.fee_options.map((raw) => {
+      if (!isObj(raw)) {
+        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+        throw new Error('Invalid response from mint');
+      }
+      const option = raw as Record<string, unknown>;
+      const estimatedBlocks = option.estimated_blocks;
+      if (typeof estimatedBlocks !== 'number' || !Number.isSafeInteger(estimatedBlocks)) {
+        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+        throw new Error('Invalid response from mint');
+      }
+      if (seenEstimatedBlocks.has(estimatedBlocks)) {
+        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+        throw new Error('Invalid response from mint');
+      }
+      seenEstimatedBlocks.add(estimatedBlocks);
+      return {
+        ...option,
+        fee: Amount.from(option.fee as Amount),
+        estimated_blocks: estimatedBlocks,
+      };
+    });
+
+    if (
+      typeof data.request !== 'string' ||
+      (data.selected_estimated_blocks !== null &&
+        !Number.isSafeInteger(data.selected_estimated_blocks)) ||
+      (data.outpoint !== null && typeof data.outpoint !== 'string')
+    ) {
+      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+      throw new Error('Invalid response from mint');
+    }
   }
 }
 

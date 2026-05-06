@@ -6,7 +6,9 @@ import {
   type Proof,
   type MeltQuoteBolt11Response,
   type MeltQuoteBaseResponse,
+  type MeltQuoteOnchainResponse,
   type MintQuoteBaseResponse,
+  type MintQuoteOnchainResponse,
   MeltQuoteState,
   MintQuoteState,
   MintQuoteBolt11Response,
@@ -23,6 +25,10 @@ const mintInfoRespWithNut12 = {
   ...mintInfoResp,
   nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
 };
+
+function normalizeProofsForTest(proofs: Parameters<Wallet['signP2PKProofs']>[0]): Proof[] {
+  return proofs.map((proof) => ({ ...proof, amount: Amount.from(proof.amount) }));
+}
 
 describe('requestTokens', () => {
   test('test requestTokens', async () => {
@@ -895,6 +901,90 @@ describe('generic mint/melt methods', () => {
       const quote = await wallet.checkMintQuote('bacs', { quote: 'bacs-quote-2' });
       expect(quote.quote).toBe('bacs-quote-2');
     });
+
+    test('createMintQuoteOnchain returns normalized onchain quote', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/mint/quote/onchain', async ({ request }) => {
+          const body = (await request.json()) as { unit: string; pubkey: string };
+          expect(body).toEqual({
+            unit: 'sat',
+            pubkey: '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+          });
+          return HttpResponse.json({
+            quote: 'onchain-mint-1',
+            request: 'bc1qdeposit',
+            unit: body.unit,
+            pubkey: body.pubkey,
+            state: MintQuoteState.UNPAID,
+            expiry: null,
+            amount_paid: 5,
+            amount_issued: 3,
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote = await wallet.createMintQuoteOnchain(
+        '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+      );
+
+      expect(quote.quote).toBe('onchain-mint-1');
+      expect(quote.amount_paid).toEqual(Amount.from(5));
+      expect(quote.amount_issued).toEqual(Amount.from(3));
+    });
+
+    test('checkMintQuoteOnchain returns normalized onchain quote', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/mint/quote/onchain/onchain-mint-check', () =>
+          HttpResponse.json({
+            quote: 'onchain-mint-check',
+            request: 'bc1qdeposit',
+            unit: 'sat',
+            pubkey: '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+            state: MintQuoteState.PAID,
+            expiry: null,
+            amount_paid: 5,
+            amount_issued: 4,
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote = await wallet.checkMintQuoteOnchain('onchain-mint-check');
+
+      expect(quote.quote).toBe('onchain-mint-check');
+      expect(quote.amount_paid).toEqual(Amount.from(5));
+      expect(quote.amount_issued).toEqual(Amount.from(4));
+    });
+
+    test('checkMeltQuoteOnchain returns normalized onchain melt quote', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/melt/quote/onchain/onchain-melt-check', () =>
+          HttpResponse.json({
+            quote: 'onchain-melt-check',
+            request: 'bc1qrecipient',
+            amount: 10,
+            unit: 'sat',
+            fee_options: [{ fee: 2, estimated_blocks: 6 }],
+            selected_estimated_blocks: 6,
+            state: MeltQuoteState.PAID,
+            expiry: 3600,
+            outpoint: 'txid:0',
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote = await wallet.checkMeltQuoteOnchain('onchain-melt-check');
+
+      expect(quote.quote).toBe('onchain-melt-check');
+      expect(quote.amount).toEqual(Amount.from(10));
+      expect(quote.fee_options[0].fee).toEqual(Amount.from(2));
+      expect(quote.selected_estimated_blocks).toBe(6);
+    });
   });
 
   describe('wallet.mintProofs', () => {
@@ -933,6 +1023,51 @@ describe('generic mint/melt methods', () => {
           unit: 'usd',
         }),
       ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
+    });
+
+    test('mintProofsOnchain signs and mints onchain proofs', async () => {
+      const privkey = 'd56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
+      const pubkey = '026f596046564942b7e879ec9c2b2be5bd5072679237eb4e5033eb4b924535d756';
+      server.use(
+        http.post(mintUrl + '/v1/mint/onchain', async ({ request }) => {
+          const body = (await request.json()) as {
+            quote: string;
+            outputs: Array<{ amount: number }>;
+            signature?: string;
+          };
+          expect(body.quote).toBe('onchain-mint-paid');
+          expect(body.outputs).toHaveLength(1);
+          expect(body.outputs[0].amount).toBe(1);
+          expect(body.signature).toEqual(expect.any(String));
+          return HttpResponse.json({
+            signatures: [
+              {
+                id: '00bd033559de27d0',
+                amount: 1,
+                C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+              },
+            ],
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote: MintQuoteOnchainResponse = {
+        quote: 'onchain-mint-paid',
+        request: 'bc1qdeposit',
+        unit: 'sat',
+        pubkey,
+        state: MintQuoteState.PAID,
+        expiry: null,
+        amount_paid: Amount.from(1),
+        amount_issued: Amount.from(0),
+      };
+
+      const proofs = await wallet.mintProofsOnchain(1, quote, privkey);
+
+      expect(proofs).toHaveLength(1);
+      expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     });
   });
 
@@ -1078,6 +1213,42 @@ describe('generic mint/melt methods', () => {
       const quote = await wallet.checkMeltQuote('bacs', { quote: 'bacs-melt-2' });
       expect(quote.quote).toBe('bacs-melt-2');
     });
+
+    test('createMeltQuoteOnchain returns a single quote with normalized fee options', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/melt/quote/onchain', async ({ request }) => {
+          const body = (await request.json()) as { request: string; unit: string; amount: number };
+          expect(body).toEqual({
+            request: 'bc1qrecipient',
+            unit: 'sat',
+            amount: 10,
+          });
+          return HttpResponse.json({
+            quote: 'onchain-melt-1',
+            request: body.request,
+            amount: body.amount,
+            unit: body.unit,
+            fee_options: [
+              { fee: 5, estimated_blocks: 1 },
+              { fee: 2, estimated_blocks: 6 },
+            ],
+            selected_estimated_blocks: null,
+            state: MeltQuoteState.UNPAID,
+            expiry: 3600,
+            outpoint: null,
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote = await wallet.createMeltQuoteOnchain('bc1qrecipient', 10);
+
+      expect(quote.quote).toBe('onchain-melt-1');
+      expect(quote.amount).toEqual(Amount.from(10));
+      expect(quote.fee_options[0].fee).toEqual(Amount.from(5));
+      expect(quote.fee_options[1]).toMatchObject({ estimated_blocks: 6 });
+    });
   });
 
   describe('wallet.meltProofs', () => {
@@ -1135,6 +1306,178 @@ describe('generic mint/melt methods', () => {
           [{ id: '00bd033559de27d0', amount: Amount.from(10), secret: 'secret1', C: 'C1' }],
         ),
       ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
+    });
+
+    test('meltProofsOnchain sends selected estimated_blocks with NUT-08 outputs', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/melt/onchain', async ({ request }) => {
+          const body = (await request.json()) as {
+            quote: string;
+            estimated_blocks: number;
+            inputs: Proof[];
+            outputs?: unknown;
+          };
+          expect(body.quote).toBe('onchain-melt-1');
+          expect(body.estimated_blocks).toBe(6);
+          expect(body.inputs).toHaveLength(2);
+          expect(body.outputs).toEqual(expect.any(Array));
+          return HttpResponse.json({
+            quote: 'onchain-melt-1',
+            request: 'bc1qrecipient',
+            amount: 10,
+            unit: 'sat',
+            fee_options: [
+              { fee: 5, estimated_blocks: 1 },
+              { fee: 2, estimated_blocks: 6 },
+            ],
+            selected_estimated_blocks: 6,
+            state: MeltQuoteState.PAID,
+            expiry: 3600,
+            outpoint: 'txid:0',
+            change: [
+              {
+                id: '00bd033559de27d0',
+                amount: 1,
+                C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+              },
+            ],
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const meltQuote: MeltQuoteOnchainResponse = {
+        quote: 'onchain-melt-1',
+        request: 'bc1qrecipient',
+        amount: Amount.from(10),
+        unit: 'sat',
+        fee_options: [
+          { fee: Amount.from(5), estimated_blocks: 1 },
+          { fee: Amount.from(2), estimated_blocks: 6 },
+        ],
+        selected_estimated_blocks: null,
+        state: MeltQuoteState.UNPAID,
+        expiry: 3600,
+        outpoint: null,
+      };
+      const proofsToSend: Proof[] = [
+        { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+        { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
+      ];
+
+      const response = await wallet.meltProofsOnchain(meltQuote, proofsToSend, 6);
+
+      expect(response.quote.state).toBe(MeltQuoteState.PAID);
+      expect(response.quote.selected_estimated_blocks).toBe(6);
+      expect(response.quote.outpoint).toBe('txid:0');
+      expect(response.change).toHaveLength(1);
+      expect(response.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    });
+
+    test('meltProofsOnchain rejects unknown estimated_blocks option', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+      const meltQuote: MeltQuoteOnchainResponse = {
+        quote: 'onchain-melt-unknown-fee',
+        request: 'bc1qrecipient',
+        amount: Amount.from(10),
+        unit: 'sat',
+        fee_options: [{ fee: Amount.from(2), estimated_blocks: 6 }],
+        selected_estimated_blocks: null,
+        state: MeltQuoteState.UNPAID,
+        expiry: 3600,
+        outpoint: null,
+      };
+      const proofsToSend: Proof[] = [
+        { id: '00bd033559de27d0', amount: Amount.from(12), secret: 'secret1', C: 'C1' },
+      ];
+
+      await expect(wallet.meltProofsOnchain(meltQuote, proofsToSend, 1)).rejects.toThrow(
+        'estimatedBlocks must match an onchain melt quote fee option',
+      );
+    });
+
+    test('meltProofsOnchain rejects proofs below amount, selected fee, and input fee', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+      const meltQuote: MeltQuoteOnchainResponse = {
+        quote: 'onchain-melt-underfunded',
+        request: 'bc1qrecipient',
+        amount: Amount.from(10),
+        unit: 'sat',
+        fee_options: [{ fee: Amount.from(2), estimated_blocks: 6 }],
+        selected_estimated_blocks: null,
+        state: MeltQuoteState.UNPAID,
+        expiry: 3600,
+        outpoint: null,
+      };
+      const proofsToSend: Proof[] = [
+        { id: '00bd033559de27d0', amount: Amount.from(11), secret: 'secret1', C: 'C1' },
+      ];
+
+      await expect(wallet.meltProofsOnchain(meltQuote, proofsToSend, 6)).rejects.toThrow(
+        'Not enough proofs to cover amount + fee',
+      );
+    });
+
+    test('meltProofsOnchain signs SIG_ALL proofs with outputs and quote id', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/melt/onchain', async ({ request }) => {
+          const body = (await request.json()) as {
+            quote: string;
+            estimated_blocks: number;
+            outputs?: unknown;
+          };
+          expect(body.outputs).toEqual(expect.any(Array));
+          return HttpResponse.json({
+            quote: body.quote,
+            request: 'bc1qrecipient',
+            amount: 10,
+            unit: 'sat',
+            fee_options: [{ fee: 2, estimated_blocks: body.estimated_blocks }],
+            selected_estimated_blocks: body.estimated_blocks,
+            state: MeltQuoteState.PENDING,
+            expiry: 3600,
+            outpoint: 'txid:0',
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+      const signSpy = vi.spyOn(wallet, 'signP2PKProofs');
+      signSpy.mockImplementation((proofs) => normalizeProofsForTest(proofs));
+
+      const sigAllSecret =
+        '["P2PK",{"nonce":"aa","data":"02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51","tags":[["sigflag","SIG_ALL"]]}]';
+      const meltQuote: MeltQuoteOnchainResponse = {
+        quote: 'onchain-melt-sigall',
+        request: 'bc1qrecipient',
+        amount: Amount.from(10),
+        unit: 'sat',
+        fee_options: [{ fee: Amount.from(2), estimated_blocks: 6 }],
+        selected_estimated_blocks: null,
+        state: MeltQuoteState.UNPAID,
+        expiry: 3600,
+        outpoint: null,
+      };
+      const proofsToSend: Proof[] = [
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(12),
+          secret: sigAllSecret,
+          C: 'C1',
+        },
+      ];
+
+      await wallet.meltProofsOnchain(meltQuote, proofsToSend, 6, { privkey: 'privkey' });
+
+      expect(signSpy).toHaveBeenCalledWith(
+        expect.any(Array),
+        'privkey',
+        expect.any(Array),
+        'onchain-melt-sigall',
+      );
     });
   });
 
