@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.2.1](https://github.com/cashubtc/cashu-ts/compare/v4.2.0...v4.2.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* **batch minting:** type BatchMintRequest.quote_amounts was incorrect - now Amount[] ([#646](https://github.com/cashubtc/cashu-ts/issues/646)) ([c8a181c](https://github.com/cashubtc/cashu-ts/commit/c8a181ca67607a7d7906ff4a3072f561c82e9daa))
+
 ## [4.2.0](https://github.com/cashubtc/cashu-ts/compare/v4.1.0...v4.2.0) (2026-05-05)
 
 
