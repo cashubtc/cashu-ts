@@ -10,6 +10,7 @@ import type {
   MeltQuoteBaseResponse,
   MeltQuoteBolt11Response,
   MeltQuoteBolt12Response,
+  MeltQuoteOnchainResponse,
 } from '../../src/model/types';
 import type { OutputData, OutputDataLike } from '../../src/model/OutputData';
 import type {
@@ -109,6 +110,13 @@ type CompleteMeltFn = (
   preferAsync?: boolean,
 ) => Promise<{ change: Proof[] }>;
 
+type MeltProofsOnchainFn = (
+  quote: MeltQuoteOnchainResponse,
+  proofs: Proof[],
+  estimatedBlocks: number,
+  config?: MeltProofsConfig,
+) => Promise<{ quote: MeltQuoteOnchainResponse; change: Proof[] }>;
+
 // ---- Mock wallet ------------------------------------------------------------
 
 class MockWallet {
@@ -165,6 +173,10 @@ class MockWallet {
     quote: q,
   }));
   completeMelt: Mock<CompleteMeltFn> = vi.fn<CompleteMeltFn>(async () => ({ change: [] }));
+  meltProofsOnchain: Mock<MeltProofsOnchainFn> = vi.fn<MeltProofsOnchainFn>(async (q) => ({
+    quote: q,
+    change: [],
+  }));
 }
 
 // ---- Fixtures ---------------------------------------------------------------
@@ -210,6 +222,33 @@ const mint12: MintQuoteBolt12Response = {
   pubkey: '0200000',
   amount_paid: Amount.from(0),
   amount_issued: Amount.from(0),
+};
+
+const meltOnchainSingle: MeltQuoteOnchainResponse = {
+  quote: 'mq-onchain-melt-1',
+  amount: Amount.from(10),
+  state: 'UNPAID' as any,
+  expiry: 0,
+  request: 'bc1qrecipient',
+  unit: 'sat',
+  fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+  selected_estimated_blocks: null,
+  outpoint: null,
+};
+
+const meltOnchainMulti: MeltQuoteOnchainResponse = {
+  quote: 'mq-onchain-melt-2',
+  amount: Amount.from(10),
+  state: 'UNPAID' as any,
+  expiry: 0,
+  request: 'bc1qrecipient',
+  unit: 'sat',
+  fee_options: [
+    { fee_reserve: Amount.from(5), estimated_blocks: 1 },
+    { fee_reserve: Amount.from(2), estimated_blocks: 6 },
+  ],
+  selected_estimated_blocks: null,
+  outpoint: null,
 };
 
 const mintOnchain: MintQuoteOnchainResponse = {
@@ -932,6 +971,64 @@ describe('WalletOps builders', () => {
       const [, , , cfg] = wallet.prepareMelt.mock.calls[0];
       expect(cfg).toBeDefined();
       expect(typeof (cfg as MeltProofsConfig).onCountersReserved).toBe('function');
+    });
+  });
+
+  // --------------------------- MeltOnchainBuilder ----------------------------
+
+  describe('MeltOnchainBuilder', () => {
+    it('auto-selects the only fee option when no estimatedBlocks is set', async () => {
+      await ops.meltOnchain(meltOnchainSingle, proofs).privkey('sk').run();
+
+      expect(wallet.meltProofsOnchain).toHaveBeenCalledTimes(1);
+      const [q, ps, blocks, cfg] = wallet.meltProofsOnchain.mock.calls[0];
+      expect(q).toBe(meltOnchainSingle);
+      expect(ps).toBe(proofs);
+      expect(blocks).toBe(6); // single option estimated_blocks
+      expect(cfg).toMatchObject({ privkey: 'sk' });
+    });
+
+    it('uses the explicitly selected estimatedBlocks when multiple options exist', async () => {
+      await ops
+        .meltOnchain(meltOnchainMulti, proofs)
+        .keyset('kid')
+        .privkey('sk')
+        .estimatedBlocks(1)
+        .run();
+
+      expect(wallet.meltProofsOnchain).toHaveBeenCalledTimes(1);
+      const [q, ps, blocks, cfg] = wallet.meltProofsOnchain.mock.calls[0];
+      expect(q).toBe(meltOnchainMulti);
+      expect(ps).toBe(proofs);
+      expect(blocks).toBe(1);
+      expect(cfg).toMatchObject({ keysetId: 'kid', privkey: 'sk' });
+    });
+
+    it('throws when multiple fee options exist and no estimatedBlocks is selected', async () => {
+      await expect(ops.meltOnchain(meltOnchainMulti, proofs).privkey('sk').run()).rejects.toThrow(
+        /estimatedBlocks is required/i,
+      );
+      expect(wallet.meltProofsOnchain).not.toHaveBeenCalled();
+    });
+
+    it('accepts a string[] privkey', async () => {
+      await ops.meltOnchain(meltOnchainSingle, proofs).privkey(['k1', 'k2']).run();
+
+      const [, , , cfg] = wallet.meltProofsOnchain.mock.calls[0];
+      expect(cfg).toMatchObject({ privkey: ['k1', 'k2'] });
+    });
+
+    it('passes through the meltProofsOnchain return value', async () => {
+      const change = [{ amount: Amount.one(), id: '00bd033559de27d0', secret: 's', C: 'C' }];
+      wallet.meltProofsOnchain.mockResolvedValueOnce({
+        quote: { ...meltOnchainSingle, state: 'PAID' as any },
+        change,
+      });
+
+      const result = await ops.meltOnchain(meltOnchainSingle, proofs).privkey('sk').run();
+
+      expect(result.quote.state).toBe('PAID');
+      expect(result.change).toBe(change);
     });
   });
 });
