@@ -2628,12 +2628,12 @@ class Wallet {
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
     const inputFee = this.getFeesForProofs(normalizedProofs);
     const sendAmount = sumProofs(normalizedProofs);
-    const totalRequired = meltQuote.amount.add(feeOption.fee).add(inputFee);
+    const totalRequired = meltQuote.amount.add(feeOption.fee_reserve).add(inputFee);
     this.failIf(sendAmount.lessThan(totalRequired), 'Not enough proofs to cover amount + fee', {
       sendAmount: sendAmount.toString(),
       totalRequired: totalRequired.toString(),
       amount: meltQuote.amount.toString(),
-      fee: feeOption.fee.toString(),
+      fee_reserve: feeOption.fee_reserve.toString(),
       inputFee: inputFee.toString(),
     });
     // Perform melt

@@ -967,7 +967,7 @@ describe('generic mint/melt methods', () => {
             request: 'bc1qrecipient',
             amount: 10,
             unit: 'sat',
-            fee_options: [{ fee: 2, estimated_blocks: 6 }],
+            fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
             selected_estimated_blocks: 6,
             state: MeltQuoteState.PAID,
             expiry: 3600,
@@ -982,7 +982,7 @@ describe('generic mint/melt methods', () => {
 
       expect(quote.quote).toBe('onchain-melt-check');
       expect(quote.amount).toEqual(Amount.from(10));
-      expect(quote.fee_options[0].fee).toEqual(Amount.from(2));
+      expect(quote.fee_options[0].fee_reserve).toEqual(Amount.from(2));
       expect(quote.selected_estimated_blocks).toBe(6);
     });
   });
@@ -1058,7 +1058,6 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qdeposit',
         unit: 'sat',
         pubkey,
-        state: MintQuoteState.PAID,
         expiry: null,
         amount_paid: Amount.from(1),
         amount_issued: Amount.from(0),
@@ -1229,8 +1228,8 @@ describe('generic mint/melt methods', () => {
             amount: body.amount,
             unit: body.unit,
             fee_options: [
-              { fee: 5, estimated_blocks: 1 },
-              { fee: 2, estimated_blocks: 6 },
+              { fee_reserve: 5, estimated_blocks: 1 },
+              { fee_reserve: 2, estimated_blocks: 6 },
             ],
             selected_estimated_blocks: null,
             state: MeltQuoteState.UNPAID,
@@ -1246,7 +1245,7 @@ describe('generic mint/melt methods', () => {
 
       expect(quote.quote).toBe('onchain-melt-1');
       expect(quote.amount).toEqual(Amount.from(10));
-      expect(quote.fee_options[0].fee).toEqual(Amount.from(5));
+      expect(quote.fee_options[0].fee_reserve).toEqual(Amount.from(5));
       expect(quote.fee_options[1]).toMatchObject({ estimated_blocks: 6 });
     });
   });
@@ -1327,8 +1326,8 @@ describe('generic mint/melt methods', () => {
             amount: 10,
             unit: 'sat',
             fee_options: [
-              { fee: 5, estimated_blocks: 1 },
-              { fee: 2, estimated_blocks: 6 },
+              { fee_reserve: 5, estimated_blocks: 1 },
+              { fee_reserve: 2, estimated_blocks: 6 },
             ],
             selected_estimated_blocks: 6,
             state: MeltQuoteState.PAID,
@@ -1353,8 +1352,8 @@ describe('generic mint/melt methods', () => {
         amount: Amount.from(10),
         unit: 'sat',
         fee_options: [
-          { fee: Amount.from(5), estimated_blocks: 1 },
-          { fee: Amount.from(2), estimated_blocks: 6 },
+          { fee_reserve: Amount.from(5), estimated_blocks: 1 },
+          { fee_reserve: Amount.from(2), estimated_blocks: 6 },
         ],
         selected_estimated_blocks: null,
         state: MeltQuoteState.UNPAID,
@@ -1383,7 +1382,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee: Amount.from(2), estimated_blocks: 6 }],
+        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_estimated_blocks: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
@@ -1406,7 +1405,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee: Amount.from(2), estimated_blocks: 6 }],
+        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_estimated_blocks: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
@@ -1435,7 +1434,7 @@ describe('generic mint/melt methods', () => {
             request: 'bc1qrecipient',
             amount: 10,
             unit: 'sat',
-            fee_options: [{ fee: 2, estimated_blocks: body.estimated_blocks }],
+            fee_options: [{ fee_reserve: 2, estimated_blocks: body.estimated_blocks }],
             selected_estimated_blocks: body.estimated_blocks,
             state: MeltQuoteState.PENDING,
             expiry: 3600,
@@ -1455,7 +1454,7 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee: Amount.from(2), estimated_blocks: 6 }],
+        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
         selected_estimated_blocks: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,

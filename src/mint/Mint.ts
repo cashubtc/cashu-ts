@@ -1282,7 +1282,7 @@ class Mint {
       seenEstimatedBlocks.add(estimatedBlocks);
       return {
         ...option,
-        fee: Amount.from(option.fee as Amount),
+        fee_reserve: Amount.from(option.fee_reserve as Amount),
         estimated_blocks: estimatedBlocks,
       };
     });

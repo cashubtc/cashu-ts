@@ -860,7 +860,7 @@ describe('async melt preference body', () => {
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
     const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);
-    const res = await wallet.completeMelt(meltTxn, undefined, true);
+    const res = await wallet.completeMelt(meltTxn, undefined, { preferAsync: true });
 
     expect(res.quote.quote).toBe(meltQuote.quote);
     expect(res.change).toHaveLength(0);

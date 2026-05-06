@@ -50,9 +50,9 @@ export type MeltQuoteOnchainRequest = MeltQuoteBaseRequest & {
  */
 export type MeltQuoteOnchainFeeOption = {
   /**
-   * Absolute fee for the onchain transaction. Not a fee reserve.
+   * Fee reserve for the onchain transaction.
    */
-  fee: Amount;
+  fee_reserve: Amount;
   /**
    * Estimated number of blocks for confirmation.
    */

@@ -837,7 +837,7 @@ export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
 
 // @public
 export type MeltQuoteOnchainFeeOption = {
-    fee: Amount;
+    fee_reserve: Amount;
     estimated_blocks: number;
 };
 
