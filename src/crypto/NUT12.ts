@@ -18,10 +18,9 @@ function deriveDLEQNonce(
   B_: WeierstrassPoint<bigint>,
   C_: WeierstrassPoint<bigint>,
 ): bigint {
-  const hmacKey = sha256(a);
   const base = concatBytes(DST_R, A.toBytes(false), B_.toBytes(false), C_.toBytes(false));
   for (let ctr = 0; ctr < 256; ctr++) {
-    const h = hmac(sha256, hmacKey, concatBytes(base, new Uint8Array([ctr])));
+    const h = hmac(sha256, a, concatBytes(base, new Uint8Array([ctr])));
     const x = bytesToNumberBE(h);
     // Reduce modulo curve order. Single subtraction suffices since HMAC output
     // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.

@@ -77,10 +77,10 @@ describe('deterministic nonce derivation — spec test vectors', () => {
     const B_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
     const proof = createDLEQProof(B_, a);
     expect(bytesToHex(proof.e)).toBe(
-      'be53688e1952a916726cf4f031584404c6a79b32ccf0b58f3db9a46794abc1dc',
+      '2a16ffee280aff3c429045607f9b8e0bf8b35910c44c1b20b9dfaf01b263d7b3',
     );
     expect(bytesToHex(proof.s)).toBe(
-      '1d6ecdf7ca128c90f65bd64e1f894fad985be8af6b350fece5ca4e9e259a54ad',
+      '9df27731238334718d120d4f74611a7c668233f988e687ac3fb188f0a34a2dab',
     );
   });
 
