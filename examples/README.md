@@ -25,13 +25,15 @@ Run `make print-mint-images` to see which versions are pinned. The auth demos ha
 
 ## Examples
 
-| File                      | Mint required                          | Description                                                                                                                                        |
-| ------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `simpleWallet_example.ts` | `DEV=1 make nutshell-up` (or `cdk-up`) | End-to-end BOLT11 mint, send, receive, and melt against a fake-wallet LN backend.                                                                  |
-| `bolt12Wallet_example.ts` | `DEV=1 make cdk-up`                    | Reusable BOLT12 offer flow: mint via BOLT11, pay the offer, mint again from accumulated payments. CDK's fakewallet handles both BOLT11 and BOLT12. |
-| `auth_mint/`              | Keycloak + CDK mint via docker         | OAuth2 / OIDC blind-auth (NUT-21 / NUT-22) demos. See `auth_mint/Makefile` (`make up`, `make demo-device`, `make down`).                           |
-| `paymentApi_example.js`   | —                                      | Code snippet for receiving locked ecash inside a Firebase Cloud Function. Not runnable standalone.                                                 |
+| File                      | Mint required                          | Description                                                                                                                                                                                                                                       |
+| ------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `simpleWallet_example.ts` | `DEV=1 make nutshell-up` (or `cdk-up`) | End-to-end BOLT11 mint, send, receive, and melt against a fake-wallet LN backend.                                                                                                                                                                 |
+| `bolt12Wallet_example.ts` | `DEV=1 make cdk-up`                    | Reusable BOLT12 offer flow: mint via BOLT11, pay the offer, mint again from accumulated payments. CDK's fakewallet handles both BOLT11 and BOLT12.                                                                                                |
+| `onchain_example.ts`      | none (uses public test mint)           | Onchain (NUT-XX) mint and melt against `https://onchain.cashudevkit.org` on Mutinynet. **Interactive** — pauses while you fund the printed address from the Mutinynet faucet, then continues automatically once the mint detects 2 confirmations. |
+| `auth_mint/`              | Keycloak + CDK mint via docker         | OAuth2 / OIDC blind-auth (NUT-21 / NUT-22) demos. See `auth_mint/Makefile` (`make up`, `make demo-device`, `make down`).                                                                                                                          |
+| `paymentApi_example.js`   | —                                      | Code snippet for receiving locked ecash inside a Firebase Cloud Function. Not runnable standalone.                                                                                                                                                |
 
 ## Notes
 
 - `dns.setDefaultResultOrder('ipv4first')` is set in each example to avoid Node's IPv6-first DNS resolution stalling on `localhost` (see Node issue #40537).
+- The onchain demo needs Mutinynet sats — log in to https://faucet.mutinynet.com/ via GitHub to claim some.
