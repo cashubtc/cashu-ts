@@ -1818,6 +1818,7 @@ class Wallet {
     this.failIf(
       'expiry' in quote &&
         typeof quote.expiry === 'number' &&
+        quote.expiry > 0 && // some mints (e.g. CDK) emit 0 for "no expiry"; spec says null
         quote.expiry < Math.floor(Date.now() / 1000),
       `Mint quote ${quote.quote} has expired`,
     );

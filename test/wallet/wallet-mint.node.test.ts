@@ -98,6 +98,39 @@ describe('requestTokens', () => {
     expect(proofs[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
   });
 
+  test('prepareMint accepts expiry: 0 as "no expiry" (CDK quirk)', async () => {
+    // Spec says expiry is <int|null> with null meaning "no expiry". CDK emits 0
+    // for the same meaning. Treat 0 as null rather than "expired in 1970".
+    server.use(
+      http.post(mintUrl + '/v1/mint/bolt11', () =>
+        HttpResponse.json({
+          signatures: [
+            {
+              id: '00bd033559de27d0',
+              amount: 1,
+              C_: '0361a2725cfd88f60ded718378e8049a4a6cee32e214a9870b44c3ffea2dc9e625',
+            },
+          ],
+        }),
+      ),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const quote = {
+      quote: 'no-expiry-quote',
+      request: 'lnbc...',
+      amount: Amount.from(1),
+      unit: 'sat',
+      state: MintQuoteState.PAID,
+      expiry: 0,
+    } as unknown as MintQuoteBolt11Response;
+
+    const preview = await wallet.prepareMint('bolt11', 1, quote);
+    const proofs = await wallet.completeMint(preview);
+    expect(proofs).toHaveLength(1);
+  });
+
   test('completeMint rejects missing DLEQ when mint advertises NUT-12', async () => {
     server.use(
       http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithNut12)),
