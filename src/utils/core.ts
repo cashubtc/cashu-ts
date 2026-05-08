@@ -494,6 +494,28 @@ export function isObj(v: unknown): v is object {
 }
 
 /**
+ * In-place: set listed keys to `null` if currently `undefined`. Used when normalizing mint
+ * responses where the spec defines a nullable wire field but the mint omits it (Postel-style).
+ * Pairs with TS types declared as `T | null`.
+ *
+ * @internal
+ */
+export function nullIfUndefined(o: Record<string, unknown>, ...keys: string[]): void {
+  for (const k of keys) if (o[k] === undefined) o[k] = null;
+}
+
+/**
+ * In-place: set listed keys to `undefined` if currently `null`. Used when normalizing mint
+ * responses where the spec defines a nullable wire field but the cashu-ts type uses `T?`
+ * (undefined-flavored) rather than `T | null`.
+ *
+ * @internal
+ */
+export function undefinedIfNull(o: Record<string, unknown>, ...keys: string[]): void {
+  for (const k of keys) if (o[k] === null) o[k] = undefined;
+}
+
+/**
  * Joins URL path segments, stripping leading/trailing slashes from each part.
  *
  * @internal
