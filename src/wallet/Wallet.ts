@@ -1445,6 +1445,24 @@ class Wallet {
   }
 
   /**
+   * Largest spendable amount from a proof set after subtracting the per-proof input fees the mint
+   * charges and optionally a melt quote's `fee_reserve`.
+   *
+   * @remarks
+   * Single step of a "melt all" iteration: fetch a melt quote, call this with the quote's
+   * `fee_reserve` to get the largest amount that fits, then re-quote for that amount (since
+   * `fee_reserve` may shrink with the smaller amount). Repeat until the result stabilises.
+   * @param proofs Proofs the caller intends to spend.
+   * @param feeReserve Optional. `fee_reserve` from a related melt quote (default: 0)
+   * @returns The largest spendable amount, or zero if fees exceed the available total.
+   */
+  maxSpendableAfterFees(proofs: ProofLike[], feeReserve: AmountLike = 0): Amount {
+    const total = sumProofs(proofs);
+    const overhead = this.getFeesForProofs(proofs).add(feeReserve);
+    return overhead.greaterThanOrEqual(total) ? Amount.zero() : total.subtract(overhead);
+  }
+
+  /**
    * Prepares inputs for a mint operation.
    *
    * @remarks
