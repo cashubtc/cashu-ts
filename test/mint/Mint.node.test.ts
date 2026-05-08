@@ -706,6 +706,39 @@ describe('Mint normalization', () => {
       expect(response.outpoint).toBe('txid:0');
     });
 
+    it('treats absent selected_estimated_blocks and outpoint as null', async () => {
+      // CDK omits nullable fields when they have no value; we accept that as null.
+      const { selected_estimated_blocks: _s, outpoint: _o, ...withoutNullables } = baseOnchainQuote;
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...withoutNullables,
+          fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+        }),
+      });
+      const response = await mint.checkMeltQuoteOnchain('q1');
+      expect(response.selected_estimated_blocks).toBeNull();
+      expect(response.outpoint).toBeNull();
+    });
+
+    it('does not police mint spec compliance for fee_options entries', async () => {
+      // We trust per-option fields that aren't load-bearing for the wallet
+      // (uniqueness, integer-safety of estimated_blocks). Mint-conformance
+      // checking is the mint's job; we just need to be able to use the response.
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseOnchainQuote,
+          fee_options: [
+            { fee_reserve: 5, estimated_blocks: 6 },
+            { fee_reserve: 2, estimated_blocks: 6 }, // duplicate — spec violation, we still accept
+          ],
+        }),
+      });
+      const response = await mint.checkMeltQuoteOnchain('q1');
+      expect(response.fee_options).toHaveLength(2);
+      expect(response.fee_options[0].fee_reserve.toBigInt()).toBe(5n);
+      expect(response.fee_options[1].fee_reserve.toBigInt()).toBe(2n);
+    });
+
     it('throws when fee_options is not an array', async () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
@@ -724,74 +757,6 @@ describe('Mint normalization', () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({ ...baseOnchainQuote, fee_options: [] }),
-        logger,
-      });
-
-      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
-      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
-        op: 'onchain melt quote',
-      });
-    });
-
-    it('throws when a fee option entry is not an object', async () => {
-      const logger = createLogger();
-      const mint = new Mint(mintUrl, {
-        customRequest: makeRequest({ ...baseOnchainQuote, fee_options: ['bad'] }),
-        logger,
-      });
-
-      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
-      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
-        op: 'onchain melt quote',
-      });
-    });
-
-    it('throws when estimated_blocks is not a number', async () => {
-      const logger = createLogger();
-      const mint = new Mint(mintUrl, {
-        customRequest: makeRequest({
-          ...baseOnchainQuote,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 'soon' }],
-        }),
-        logger,
-      });
-
-      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
-      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
-        op: 'onchain melt quote',
-      });
-    });
-
-    it('throws when estimated_blocks is not a safe integer', async () => {
-      const logger = createLogger();
-      const mint = new Mint(mintUrl, {
-        customRequest: makeRequest({
-          ...baseOnchainQuote,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 1.5 }],
-        }),
-        logger,
-      });
-
-      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
-      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
-        data: expect.objectContaining({ quote: 'q1' }),
-        op: 'onchain melt quote',
-      });
-    });
-
-    it('throws when fee_options contain duplicate estimated_blocks', async () => {
-      const logger = createLogger();
-      const mint = new Mint(mintUrl, {
-        customRequest: makeRequest({
-          ...baseOnchainQuote,
-          fee_options: [
-            { fee_reserve: 5, estimated_blocks: 6 },
-            { fee_reserve: 2, estimated_blocks: 6 },
-          ],
-        }),
         logger,
       });
 

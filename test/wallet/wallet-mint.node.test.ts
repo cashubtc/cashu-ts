@@ -1248,6 +1248,32 @@ describe('generic mint/melt methods', () => {
       expect(quote.fee_options[0].fee_reserve).toEqual(Amount.from(5));
       expect(quote.fee_options[1]).toMatchObject({ estimated_blocks: 6 });
     });
+
+    test('createMeltQuoteOnchain accepts response with omitted nullable fields', async () => {
+      // CDK and other mints commonly omit nullable fields when they have no value,
+      // rather than emitting explicit null. The spec uses `<X | null>` ambiguously,
+      // so cashu-ts treats absent as null on the wire (Postel-style).
+      server.use(
+        http.post(mintUrl + '/v1/melt/quote/onchain', () =>
+          HttpResponse.json({
+            quote: 'onchain-melt-omitted',
+            request: 'bc1qrecipient',
+            amount: 10,
+            unit: 'sat',
+            fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+            state: MeltQuoteState.UNPAID,
+            expiry: 3600,
+            // selected_estimated_blocks and outpoint omitted entirely
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote = await wallet.createMeltQuoteOnchain('bc1qrecipient', 10);
+      expect(quote.selected_estimated_blocks).toBeNull();
+      expect(quote.outpoint).toBeNull();
+    });
   });
 
   describe('wallet.meltProofs', () => {

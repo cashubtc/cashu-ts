@@ -1262,31 +1262,15 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
       throw new Error('Invalid response from mint');
     }
-
-    const seenEstimatedBlocks = new Set<number>();
     data.fee_options = data.fee_options.map((raw) => {
-      if (!isObj(raw)) {
-        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-        throw new Error('Invalid response from mint');
-      }
-      const option = raw as Record<string, unknown>;
-      const estimatedBlocks = option.estimated_blocks;
-      if (typeof estimatedBlocks !== 'number' || !Number.isSafeInteger(estimatedBlocks)) {
-        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-        throw new Error('Invalid response from mint');
-      }
-      if (seenEstimatedBlocks.has(estimatedBlocks)) {
-        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
-        throw new Error('Invalid response from mint');
-      }
-      seenEstimatedBlocks.add(estimatedBlocks);
+      const opt = raw as Record<string, unknown>;
       return {
-        ...option,
-        fee_reserve: Amount.from(option.fee_reserve as Amount),
-        estimated_blocks: estimatedBlocks,
+        ...opt,
+        fee_reserve: Amount.from(opt.fee_reserve as AmountLike),
+        estimated_blocks: opt.estimated_blocks as number,
       };
     });
-
+    nullIfUndefined(data, 'selected_estimated_blocks', 'outpoint');
     if (
       typeof data.request !== 'string' ||
       (data.selected_estimated_blocks !== null &&
