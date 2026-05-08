@@ -48,7 +48,13 @@ const runOnchainExample = async () => {
   console.log(`\n💰 Send sats to this Bitcoin address:`);
   console.log(`\n     ${mintQuote.request}\n`);
   console.log(`📏 Mint accepts: min ${minMint} sats, max ${maxMint} sats per payment.`);
-  console.log(`   Payments below the minimum will NOT be credited.\n`);
+  console.log(`   Payments below the minimum will NOT be credited.`);
+  // Spec says expiry is `<int|null>`; CDK emits 0 to mean "no expiry"
+  if (!mintQuote.expiry) {
+    console.log(`   Quote has no expiry — fund whenever.\n`);
+  } else {
+    console.log(`   Quote expires at ${new Date(mintQuote.expiry * 1000).toLocaleString()}.\n`);
+  }
   console.log(`👉 Use the Mutinynet faucet: ${FAUCET_URL}`);
   console.log(`   Paste the address above, claim sats, and wait for 2 confirmations.\n`);
 
@@ -216,7 +222,6 @@ const waitUntilCredited = async (wallet: Wallet, quoteId: string) => {
     const paidStr = quote.amount_paid.toString();
     if (paidStr !== lastPaid) {
       endDots();
-      console.log(`   amount_paid: ${paidStr}`);
       lastPaid = paidStr;
     }
     if (quote.amount_paid.greaterThan(quote.amount_issued)) {
