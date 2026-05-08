@@ -6,7 +6,7 @@ import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 dns.setDefaultResultOrder('ipv4first');
 
 // Configuration
-const MINT_URL = 'http://localhost:8085';
+const MINT_URL = 'http://localhost:3338';
 const INITIAL_MINT_AMOUNT = 5000;
 const PAYMENT_AMOUNT = 1000;
 const PAYMENT_CYCLES = 1;
