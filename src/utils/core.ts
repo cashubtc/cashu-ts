@@ -505,17 +505,6 @@ export function nullIfUndefined(o: Record<string, unknown>, ...keys: string[]): 
 }
 
 /**
- * In-place: set listed keys to `undefined` if currently `null`. Used when normalizing mint
- * responses where the spec defines a nullable wire field but the cashu-ts type uses `T?`
- * (undefined-flavored) rather than `T | null`.
- *
- * @internal
- */
-export function undefinedIfNull(o: Record<string, unknown>, ...keys: string[]): void {
-  for (const k of keys) if (o[k] === null) o[k] = undefined;
-}
-
-/**
  * Joins URL path segments, stripping leading/trailing slashes from each part.
  *
  * @internal

@@ -1046,7 +1046,7 @@ export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
 
 // @public
 export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
-    amount?: Amount;
+    amount: Amount | null;
     expiry: number | null;
     pubkey: string;
     amount_paid: Amount;
@@ -1764,8 +1764,8 @@ export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
 export type SwapMethod = {
     method: string;
     unit: string;
-    min_amount: AmountLike;
-    max_amount: AmountLike;
+    min_amount: AmountLike | null;
+    max_amount: AmountLike | null;
     description?: boolean;
     options?: {
         description?: boolean;

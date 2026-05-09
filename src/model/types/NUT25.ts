@@ -23,9 +23,9 @@ export type MintQuoteBolt12Request = MintQuoteBaseRequest & {
  */
 export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
   /**
-   * Amount requested for mint quote. `undefined` for amountless offers.
+   * Amount requested for mint quote. `null` for amountless offers (per NUT-25).
    */
-  amount?: Amount;
+  amount: Amount | null;
   /**
    * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
    */

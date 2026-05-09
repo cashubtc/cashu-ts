@@ -90,13 +90,18 @@ export type MintContactInfo = {
 };
 
 /**
- * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}
+ * Ecash to other MoE swap method, displayed in @type {GetInfoResponse}.
+ *
+ * @remarks
+ * `min_amount` and `max_amount` are `<int|null>` per NUT-04/05/25/XX — null when the mint
+ * advertises no lower/upper bound. Consumers should use null-safe checks (`?? 0`, `!= null`,
+ * truthy) before passing to `Amount.from(...)`.
  */
 export type SwapMethod = {
   method: string;
   unit: string;
-  min_amount: AmountLike;
-  max_amount: AmountLike;
+  min_amount: AmountLike | null;
+  max_amount: AmountLike | null;
   description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783
   options?: {
     description?: boolean;

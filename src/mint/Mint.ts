@@ -47,7 +47,7 @@ import {
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
   normalizeUrl,
-  undefinedIfNull,
+  nullIfUndefined,
 } from '../utils';
 
 import type {
@@ -1047,11 +1047,11 @@ class Mint {
    * Mutates `data` in place, normalizing bolt12 mint-quote fields.
    */
   private normalizeMintQuoteBolt12Fields(data: Record<string, unknown>): void {
-    // Per NUT-25, `amount` is <int|null> — null for amountless offers. CDK
-    // emits explicit null; the wallet's TS type is `Amount?`, so collapse
-    // null to undefined and then coerce numeric values to Amount.
-    undefinedIfNull(data, 'amount');
-    data.amount = data.amount === undefined ? undefined : Amount.from(data.amount as Amount);
+    // Per NUT-25, `amount` is <int|null> — null for amountless offers. Mints that
+    // omit the field altogether get coerced to null (Postel-style); numeric
+    // values are coerced to Amount.
+    nullIfUndefined(data, 'amount');
+    data.amount = data.amount === null ? null : Amount.from(data.amount as Amount);
     data.expiry = normalizeSafeIntegerMetadata(
       data.expiry as number,
       'mintQuoteBolt12.expiry',

@@ -1,4 +1,5 @@
 import { type Logger, NULL_LOGGER } from '../logger';
+import { nullIfUndefined } from '../utils/core';
 import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
@@ -43,11 +44,38 @@ export class MintInfo {
       ...info,
       nuts: {
         ...info.nuts,
+        ...(info.nuts['4']
+          ? {
+              '4': {
+                ...info.nuts['4'],
+                methods: MintInfo.normalizeSwapMethods(info.nuts['4'].methods),
+              },
+            }
+          : {}),
+        ...(info.nuts['5']
+          ? {
+              '5': {
+                ...info.nuts['5'],
+                methods: MintInfo.normalizeSwapMethods(info.nuts['5'].methods),
+              },
+            }
+          : {}),
         ...(info.nuts['19'] ? { '19': MintInfo.normalizeNut19(info.nuts['19']) } : {}),
         ...(info.nuts['22'] ? { '22': MintInfo.normalizeNut22(info.nuts['22'], logger) } : {}),
         ...(info.nuts['29'] ? { '29': MintInfo.normalizeNut29(info.nuts['29'], logger) } : {}),
       },
     };
+  }
+
+  // Per NUT-04/05/25/XX, `min_amount` and `max_amount` are `<int|null>`. Mints that omit
+  // them entirely (older Nutshell, etc.) leave the field as `undefined`; coerce to null
+  // so the runtime value matches the `AmountLike | null` type.
+  private static normalizeSwapMethods(methods: SwapMethod[]): SwapMethod[] {
+    return methods.map((m) => {
+      const next = { ...m } as Record<string, unknown>;
+      nullIfUndefined(next, 'min_amount', 'max_amount');
+      return next as SwapMethod;
+    });
   }
 
   private static normalizeNut19(
