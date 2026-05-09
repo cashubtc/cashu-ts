@@ -52,6 +52,7 @@ import {
   normalizeUrl,
   splitAmount,
   sumProofs,
+  verifyDleqIfPresent,
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
@@ -950,13 +951,14 @@ class Wallet {
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
     this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
 
-    // Check DLEQs if needed
-    if (requireDleq) {
-      for (const p of proofs) {
-        const ks = this._keyChain.getKeyset(p.id);
-        if (!hasValidDleq(p, ks)) {
-          this.fail('Token contains proofs with invalid or missing DLEQ');
-        }
+    // NUT-12: wallets MUST verify any DLEQ on a received proof. `requireDleq: true`
+    // upgrades that to "DLEQ must also be present" via the stricter `hasValidDleq`.
+    for (const p of proofs) {
+      const ks = this._keyChain.getKeyset(p.id);
+      if (requireDleq) {
+        this.failIf(!hasValidDleq(p, ks), 'Token contains proofs with invalid or missing DLEQ');
+      } else {
+        this.failIf(!verifyDleqIfPresent(p, ks), 'Token contains a proof with an invalid DLEQ');
       }
     }
 
