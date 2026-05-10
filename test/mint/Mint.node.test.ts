@@ -369,7 +369,7 @@ describe('Mint normalization', () => {
     expect(response.expiry).toBeNull();
   });
 
-  it('createMintQuoteBolt12 omits undefined amount and normalizes paid and issued amounts', async () => {
+  it('createMintQuoteBolt12 coerces omitted amount to null and normalizes paid and issued amounts', async () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/quote/bolt12');
       expect(options.method).toBe('POST');
@@ -391,15 +391,15 @@ describe('Mint normalization', () => {
       description: 'offer',
     });
 
-    expect(response.amount).toBeUndefined();
+    expect(response.amount).toBeNull();
     expect(response.amount_paid.toBigInt()).toBe(5n);
     expect(response.amount_issued.toBigInt()).toBe(4n);
   });
 
-  it('createMintQuoteBolt12 treats explicit null amount as no-amount (CDK quirk)', async () => {
+  it('createMintQuoteBolt12 preserves explicit null amount (NUT-25 amountless)', async () => {
     // Per NUT-25 the amount is <int|null>; CDK emits explicit `null` for
-    // amountless offers. Without this, `Amount.from(null)` throws on the
-    // wallet side and the BOLT12 amountless flow is broken.
+    // amountless offers. The wallet type is `Amount | null`, so null passes
+    // through unchanged (no Amount.from(null) coercion).
     const requestSpy = vi.fn(async () => ({
       quote: 'q1',
       request: 'lno1...',
@@ -414,7 +414,7 @@ describe('Mint normalization', () => {
 
     const response = await mint.createMintQuoteBolt12({ unit: 'sat', pubkey: '02abcd' });
 
-    expect(response.amount).toBeUndefined();
+    expect(response.amount).toBeNull();
     expect(response.amount_paid.toBigInt()).toBe(0n);
     expect(response.amount_issued.toBigInt()).toBe(0n);
   });

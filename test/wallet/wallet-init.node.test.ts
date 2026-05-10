@@ -312,9 +312,9 @@ describe('test info', () => {
     expect(info.isSupported(5)).toEqual({
       disabled: false,
       params: [
-        { method: 'bolt11', unit: 'sat' },
-        { method: 'bolt11', unit: 'usd' },
-        { method: 'bolt11', unit: 'eur' },
+        { method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null },
+        { method: 'bolt11', unit: 'usd', min_amount: null, max_amount: null },
+        { method: 'bolt11', unit: 'eur', min_amount: null, max_amount: null },
       ],
     });
     expect(info.isSupported(17)).toEqual({
@@ -338,13 +338,17 @@ describe('test info', () => {
       ],
     });
     expect(info).toEqual(new MintInfo(mintInfoResp));
-    expect(info.cache).toEqual(mintInfoResp);
+    // info.cache exposes the *normalized* response, not the raw wire payload —
+    // compare to MintInfo.normalizeInfo() so the assertion stays honest as
+    // normalization (e.g. nullIfUndefined on min/max_amount) evolves.
+    const normalized = MintInfo.normalizeInfo(mintInfoResp);
+    expect(info.cache).toEqual(normalized);
     expect(info.contact).toEqual(mintInfoResp.contact);
     expect(info.description).toEqual(mintInfoResp.description);
     expect(info.description_long).toEqual(mintInfoResp.description_long);
     expect(info.name).toEqual(mintInfoResp.name);
     expect(info.pubkey).toEqual(mintInfoResp.pubkey);
-    expect(info.nuts).toEqual(mintInfoResp.nuts);
+    expect(info.nuts).toEqual(normalized.nuts);
     expect(info.version).toEqual(mintInfoResp.version);
     expect(info.motd).toEqual(mintInfoResp.motd);
     expect(info.supportsNut04Description('bolt12', 'sat')).toBeFalsy();
