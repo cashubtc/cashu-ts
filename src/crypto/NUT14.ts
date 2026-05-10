@@ -2,6 +2,7 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
+import { CTSError } from '../model/Errors';
 import { type HTLCWitness, type Proof } from '../model/types';
 
 import {
@@ -55,7 +56,7 @@ export function parseHTLCSecret(secret: string | Secret): Secret {
 export function createHTLCHash(preimage?: string): { hash: string; preimage: string } {
   const hasPreimage = preimage !== undefined;
   if (hasPreimage && !/^[0-9a-f]{64}$/i.test(preimage)) {
-    throw new Error('Preimage must be a 64 character hexadecimal string (32 bytes).');
+    throw new CTSError('Preimage must be a 64 character hexadecimal string (32 bytes).');
   }
   // Create hash
   const piBytes = hasPreimage ? hexToBytes(preimage) : randomBytes(32);

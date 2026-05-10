@@ -1,5 +1,7 @@
 import { bytesToHex, randomBytes } from '@noble/curves/utils.js';
 
+import { CTSError } from '../model/Errors';
+
 export type SecretKind = 'P2PK' | 'HTLC' | (string & {}); // union with any string
 
 export interface SecretData {
@@ -49,7 +51,7 @@ export function parseSecret(secret: string | Secret): Secret {
       parsed = secret; // Pass through
     }
   } catch {
-    throw new Error("Can't parse secret");
+    throw new CTSError("Can't parse secret");
   }
 
   // Validate NUT-10 shape
@@ -61,16 +63,16 @@ export function parseSecret(secret: string | Secret): Secret {
     parsed[0].trim().length === 0 ||
     parsed[1] === null
   ) {
-    throw new Error('Invalid NUT-10 secret');
+    throw new CTSError('Invalid NUT-10 secret');
   }
   const [kind, data] = parsed as [SecretKind, Record<string, unknown>];
   if (typeof data.nonce !== 'string' || typeof data.data !== 'string') {
-    throw new Error('Invalid NUT-10 secret nonce / data');
+    throw new CTSError('Invalid NUT-10 secret nonce / data');
   }
   if (data.tags) {
     // Check data.tags is an array
     if (!Array.isArray(data.tags)) {
-      throw new Error('Invalid NUT-10 secret tags');
+      throw new CTSError('Invalid NUT-10 secret tags');
     }
     // Check individual tags are non-empty arrays of strings
     const invalid = data.tags.some(
@@ -78,7 +80,7 @@ export function parseSecret(secret: string | Secret): Secret {
         !Array.isArray(t) || t.length === 0 || t.some((tt) => typeof tt !== 'string' || !tt.length),
     );
     if (invalid) {
-      throw new Error('Invalid NUT-10 tag(s)');
+      throw new CTSError('Invalid NUT-10 tag(s)');
     }
   }
 
@@ -112,7 +114,7 @@ export function assertSecretKind(
   const parsed = parseSecret(secret);
   const actual = parsed[0];
   if (!kinds.includes(actual)) {
-    throw new Error(`Invalid secret kind: ${actual} Allowed: ${kinds.join(', ')}`);
+    throw new CTSError(`Invalid secret kind: ${actual} Allowed: ${kinds.join(', ')}`);
   }
   return parsed;
 }

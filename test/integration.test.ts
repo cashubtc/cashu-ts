@@ -43,6 +43,7 @@ import {
   HasKeysetKeys,
   NetworkError,
   AmountLike,
+  CTSError,
 } from '../src';
 import { hexToBytes, bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -761,7 +762,10 @@ describe('dleq', () => {
     });
     expect(() => {
       wallet.sendOffline(4, proofs, { requireDleq: true });
-    }).toThrow(new Error('Not enough funds available to send'));
+    }).toThrow(CTSError);
+    expect(() => {
+      wallet.sendOffline(4, proofs, { requireDleq: true });
+    }).toThrow('Not enough funds available to send');
   });
   test('receive with invalid dleq', async () => {
     const wallet = new Wallet(mintUrl);
@@ -786,7 +790,8 @@ describe('dleq', () => {
       unit: wallet.unit,
     } as Token;
     const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
-    expect(exc).toEqual(new Error('Token contains proofs with invalid or missing DLEQ'));
+    expect(exc).toBeInstanceOf(CTSError);
+    expect(exc).toMatchObject({ message: 'Token contains proofs with invalid or missing DLEQ' });
   });
 });
 describe('Custom Outputs', () => {

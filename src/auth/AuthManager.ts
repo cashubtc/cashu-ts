@@ -1,5 +1,6 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { Amount } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData } from '../model/OutputData';
 import type {
@@ -258,7 +259,7 @@ export class AuthManager implements AuthProvider {
     return this.withLock(async () => {
       await this.ensure(1);
       if (this.pool.length === 0) {
-        throw new Error('AuthManager: no BATs available and minting failed');
+        throw new CTSError('AuthManager: no BATs available and minting failed');
       }
       // Pop one BAT and serialize without DLEQ for the header. Per NUT-22, wallets
       // SHOULD delete BAT even on error, so no need to track it in-flight.
@@ -378,7 +379,7 @@ export class AuthManager implements AuthProvider {
    * Gets the BAT minting limit: lower of manager limit and Mint’s NUT-22 limit.
    */
   private getBatMaxMint(): number {
-    if (!this.info) throw new Error('AuthManager: mint info not loaded');
+    if (!this.info) throw new CTSError('AuthManager: mint info not loaded');
     const n22 = this.info.nuts['22'];
     const mintMax = normalizeSafeIntegerMetadata(
       n22?.bat_max_mint,
@@ -389,7 +390,7 @@ export class AuthManager implements AuthProvider {
   }
 
   private getActiveKeys(): Keyset {
-    if (!this.keychain) throw new Error('AuthManager: keyset not loaded for active keyset');
+    if (!this.keychain) throw new CTSError('AuthManager: keyset not loaded for active keyset');
     return this.keychain.getCheapestKeyset();
   }
 
@@ -397,7 +398,7 @@ export class AuthManager implements AuthProvider {
    * Mint a batch of BATs using the current CAT if the endpoint is protected by NUT-21.
    */
   private async topUp(n: number): Promise<void> {
-    if (!this.info) throw new Error('AuthManager: mint info not loaded');
+    if (!this.info) throw new CTSError('AuthManager: mint info not loaded');
 
     // Check NUT-21 protection of the BAT mint endpoint
     const needsCAT = this.info.requiresClearAuthToken('POST', '/v1/auth/blind/mint');
@@ -405,7 +406,7 @@ export class AuthManager implements AuthProvider {
     if (needsCAT) {
       cat = await this.ensureCAT();
       if (!cat) {
-        throw new Error(
+        throw new CTSError(
           'AuthManager: Clear-auth token required for /v1/auth/blind/mint but not available. Authenticate with the mint to obtain a CAT first.',
         );
       }
@@ -425,7 +426,7 @@ export class AuthManager implements AuthProvider {
       requestBody: payload,
     });
     if (!Array.isArray(res?.signatures) || res.signatures.length !== outputs.length) {
-      throw new Error('AuthManager: bad BAT mint response');
+      throw new CTSError('AuthManager: bad BAT mint response');
     }
     // Normalize signature amounts (raw JSON has numbers, not Amount objects)
     const signatures = res.signatures.map((sig) => ({
@@ -436,7 +437,7 @@ export class AuthManager implements AuthProvider {
     const proofs = outputs.map((d, i) => d.toProof(signatures[i], keys));
     for (const p of proofs) {
       if (!hasValidDleq(p, keys)) {
-        throw new Error('AuthManager: mint returned BAT with invalid DLEQ');
+        throw new CTSError('AuthManager: mint returned BAT with invalid DLEQ');
       }
     }
     // Add BAT proofs to pool

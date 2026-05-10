@@ -1,7 +1,10 @@
-export class AmountError extends Error {
+import { CTSError } from './Errors';
+
+export class AmountError extends CTSError {
   constructor(message: string) {
     super(message);
     this.name = 'AmountError';
+    Object.setPrototypeOf(this, AmountError.prototype);
   }
 }
 

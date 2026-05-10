@@ -3,6 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { HDKey } from '@scure/bip32';
 
+import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
 import { type UnblindedSignature, createRandomSecretKey, hashToCurve } from './core';
@@ -84,7 +85,7 @@ export function createNewMintKeys(
       if (k) {
         privKeys[index] = k;
       } else {
-        throw new Error(`Could not derive Private key from: ${DERIVATION_PATH}/${counter}`);
+        throw new CTSError(`Could not derive Private key from: ${DERIVATION_PATH}/${counter}`);
       }
     } else {
       privKeys[index] = createRandomSecretKey();

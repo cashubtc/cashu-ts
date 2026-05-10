@@ -4,12 +4,14 @@ import { randomBytes, bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
+import { CTSError } from '../model/Errors';
+import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
+
 /**
  * Private key type - can be hex string or Uint8Array.
  */
 export type PrivKey = Uint8Array | string;
 export type DigestInput = Uint8Array | string; // hex string or bytes
-import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 export type BlindSignature = {
   C_: WeierstrassPoint<bigint>;
   id: string;
@@ -48,7 +50,7 @@ export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint> {
       counter[0]++;
     }
   }
-  throw new Error('No valid point found');
+  throw new CTSError('No valid point found');
 }
 
 export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array {
@@ -116,7 +118,7 @@ export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage 
   if (r === undefined) {
     r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey());
   } else if (r === 0n) {
-    throw new Error('Blinding factor r must be non-zero');
+    throw new CTSError('Blinding factor r must be non-zero');
   }
   const rG = secp256k1.Point.BASE.multiply(r);
   const B_ = Y.add(rG);
@@ -239,7 +241,7 @@ export function findSigningKey(pubkey: string, privkeys: string | string[]): str
     const derived = bytesToHex(secp256k1.getPublicKey(hexToBytes(key), true));
     if (derived.toLowerCase() === pubkey.toLowerCase()) return key;
   }
-  throw new Error(`No private key matches quote pubkey ${pubkey}`);
+  throw new CTSError(`No private key matches quote pubkey ${pubkey}`);
 }
 
 /**

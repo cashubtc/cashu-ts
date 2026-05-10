@@ -20,6 +20,7 @@ import {
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
@@ -1099,7 +1100,7 @@ class Wallet {
         if (outputConfig.keep && !isPlainRandom(outputConfig.keep))
           reasons.push('non-default keep output type');
 
-        throw new Error(`Options require a swap: ${reasons.join(', ')}`);
+        throw new CTSError(`Options require a swap: ${reasons.join(', ')}`);
       }
 
       // Proceed with offline exact-match attempt
@@ -1186,7 +1187,7 @@ class Wallet {
     // 	selectedProofs: selectedProofs.map(p=>p.amount.toString()),
     // });
     if (selectedProofs.length === 0) {
-      throw new Error('Not enough funds available to send');
+      throw new CTSError('Not enough funds available to send');
     }
 
     // Calculate our expected change from the swap (and sanity check!)

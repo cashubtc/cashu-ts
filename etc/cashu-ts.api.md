@@ -56,7 +56,7 @@ export class Amount {
 }
 
 // @public (undocumented)
-export class AmountError extends Error {
+export class AmountError extends CTSError {
     constructor(message: string);
 }
 
@@ -260,6 +260,15 @@ export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
 
 // @public
 export function createSecret(kind: SecretKind, data: string, tags?: string[][]): string;
+
+// @public
+export class CTSError extends Error {
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
+    // (undocumented)
+    readonly cause?: unknown;
+}
 
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
@@ -509,7 +518,7 @@ export type HTLCWitness = {
 };
 
 // @public
-export class HttpResponseError extends Error {
+export class HttpResponseError extends CTSError {
     constructor(message: string, status: number);
     // (undocumented)
     status: number;
@@ -1085,7 +1094,7 @@ export type MPPMethod = {
 };
 
 // @public
-export class NetworkError extends Error {
+export class NetworkError extends CTSError {
     constructor(message: string);
 }
 

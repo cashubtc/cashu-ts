@@ -1,4 +1,5 @@
 import { Mint } from '../mint';
+import { CTSError } from '../model/Errors';
 import type {
   MintKeyset,
   MintKeys,
@@ -26,7 +27,7 @@ export class KeyChain {
 
   private assertInitialized(): void {
     if (Object.keys(this.keysets).length === 0) {
-      throw new Error('KeyChain not initialized');
+      throw new CTSError('KeyChain not initialized');
     }
   }
 
@@ -194,7 +195,7 @@ export class KeyChain {
   getKeyset(id?: string): Keyset {
     const keyset = id ? this.keysets[id] : this.getCheapestKeyset();
     if (!keyset) {
-      throw new Error(`Keyset '${id}' not found`);
+      throw new CTSError(`Keyset '${id}' not found`);
     }
     return keyset;
   }
@@ -209,13 +210,13 @@ export class KeyChain {
    */
   getCheapestKeyset(): Keyset {
     if (Object.keys(this.keysets).length === 0) {
-      throw new Error('KeyChain not initialized');
+      throw new CTSError('KeyChain not initialized');
     }
     const activeKeysets = Object.values(this.keysets).filter(
       (k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
     );
     if (activeKeysets.length === 0) {
-      throw new Error(`No active keyset found for unit: ${this.unit}`);
+      throw new CTSError(`No active keyset found for unit: ${this.unit}`);
     }
     return activeKeysets.sort((a, b) => a.fee - b.fee)[0];
   }
@@ -231,7 +232,7 @@ export class KeyChain {
     // Check keyset exists
     const existing = this.keysets[id];
     if (!existing) {
-      throw new Error(`Keyset '${id}' not found`);
+      throw new CTSError(`Keyset '${id}' not found`);
     }
 
     // Already usable
@@ -250,14 +251,14 @@ export class KeyChain {
       const res = await this.mint.getKeys(id);
       const mk = res.keysets.find((k) => k.id === id);
       if (!mk || !mk.keys || Object.keys(mk.keys).length === 0) {
-        throw new Error(`Mint returned no keys for keyset '${id}'`);
+        throw new CTSError(`Mint returned no keys for keyset '${id}'`);
       }
 
       // Rebuild from existing meta plus fetched keys
       const meta = existing.toMintKeyset();
       const rebuilt = Keyset.fromMintApi(meta, mk);
       if (!rebuilt.verify()) {
-        throw new Error(`Keyset verification failed for ID ${id}`);
+        throw new CTSError(`Keyset verification failed for ID ${id}`);
       }
 
       // Replace keyset with rebuilt one
@@ -284,7 +285,7 @@ export class KeyChain {
     this.assertInitialized();
     const unitKeysets = Object.values(this.keysets).filter((k) => k.unit === this.unit);
     if (unitKeysets.length === 0) {
-      throw new Error(`No keysets found for unit: ${this.unit}`);
+      throw new CTSError(`No keysets found for unit: ${this.unit}`);
     }
     return unitKeysets;
   }

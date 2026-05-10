@@ -1,4 +1,5 @@
 import { Amount } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 
 /**
  * BigInt-safe JSON parser/stringifier.
@@ -290,7 +291,7 @@ class Parser {
         case 'string':
           return token;
         case 'error':
-          throw new Error('BigInt is not available in this runtime');
+          throw new CTSError('BigInt is not available in this runtime');
       }
     }
 
@@ -386,7 +387,7 @@ function parse(source: string, reviver?: ReviverFn, options?: ParseOptions): unk
   const strict = options?.strict === true;
   const fallbackTo = options?.fallbackTo ?? 'number';
   if (fallbackTo !== 'number' && fallbackTo !== 'string' && fallbackTo !== 'error') {
-    throw new Error(
+    throw new CTSError(
       `Incorrect value for fallbackTo option, must be "number", "string", "error" or undefined but passed ${String(options?.fallbackTo)}`,
     );
   }
@@ -399,7 +400,7 @@ function parse(source: string, reviver?: ReviverFn, options?: ParseOptions): unk
 function quoteString(value: string): string {
   const quoted = JSON.stringify(value);
   if (typeof quoted !== 'string') {
-    throw new Error('Failed to stringify string value');
+    throw new CTSError('Failed to stringify string value');
   }
   return quoted;
 }
@@ -436,7 +437,7 @@ function stringify(
   }
 
   if (replacer && typeof replacer !== 'function' && !Array.isArray(replacer)) {
-    throw new Error('stringify: replacer must be a function or array');
+    throw new CTSError('stringify: replacer must be a function or array');
   }
 
   const propertyList = Array.isArray(replacer) ? replacer.map((k) => String(k)) : undefined;

@@ -2,6 +2,7 @@ import { randomBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
+import { CTSError } from '../model/Errors';
 import { type GetInfoResponse } from '../model/types';
 import { Bytes, encodeUint8toBase64Url } from '../utils';
 
@@ -54,7 +55,7 @@ export class OIDCAuth {
   static fromMintInfo(info: { nuts: GetInfoResponse['nuts'] }, opts?: OIDCAuthOptions): OIDCAuth {
     const n21 = info?.nuts?.['21'];
     if (!n21?.openid_discovery) {
-      throw new Error('OIDCAuth: mint does not advertise NUT-21 openid_discovery');
+      throw new CTSError('OIDCAuth: mint does not advertise NUT-21 openid_discovery');
     }
     const clientId = opts?.clientId ?? n21.client_id ?? 'cashu-client';
     return new OIDCAuth(n21.openid_discovery, { ...opts, clientId });
@@ -99,11 +100,11 @@ export class OIDCAuth {
       this.logger.warn('OIDCAuth: bad discovery JSON', { err });
     }
     if (!res.ok || !json) {
-      throw new Error('OIDCAuth: invalid discovery document');
+      throw new CTSError('OIDCAuth: invalid discovery document');
     }
     const cfg = json as OIDCConfig;
     if (typeof cfg.token_endpoint !== 'string' || cfg.token_endpoint.length === 0) {
-      throw new Error('OIDCAuth: invalid discovery document, missing token_endpoint');
+      throw new CTSError('OIDCAuth: invalid discovery document, missing token_endpoint');
     }
     this.config = cfg;
     return cfg;
@@ -153,7 +154,7 @@ export class OIDCAuth {
     if (input.state) params.set('state', input.state);
 
     if (!cfg.authorization_endpoint) {
-      throw new Error('OIDCAuth: discovery lacks authorization_endpoint');
+      throw new CTSError('OIDCAuth: discovery lacks authorization_endpoint');
     }
     return `${cfg.authorization_endpoint}?${params.toString()}`;
   }
@@ -180,7 +181,7 @@ export class OIDCAuth {
   async deviceStart(): Promise<DeviceStartResponse> {
     const cfg = await this.loadConfig();
     const ep = cfg.device_authorization_endpoint;
-    if (!ep) throw new Error('OIDCAuth: provider lacks device_authorization_endpoint');
+    if (!ep) throw new CTSError('OIDCAuth: provider lacks device_authorization_endpoint');
 
     const form = this.toForm({ client_id: this.clientId, scope: this.scope });
     return this.postFormStrict<DeviceStartResponse>(ep, form);
@@ -209,7 +210,7 @@ export class OIDCAuth {
         continue;
       }
       const msg = res.error_description || err || 'device authorization failed';
-      throw new Error(`OIDCAuth: ${msg}`);
+      throw new CTSError(`OIDCAuth: ${msg}`);
     }
   }
 
@@ -235,7 +236,7 @@ export class OIDCAuth {
       const cfg = await this.loadConfig();
       let delay = Math.max(1, interval);
       while (true) {
-        if (aborted) throw new Error('OIDCAuth: device polling cancelled');
+        if (aborted) throw new CTSError('OIDCAuth: device polling cancelled');
         await this.sleep(delay * 1000);
         const form = this.toForm({
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
@@ -254,7 +255,7 @@ export class OIDCAuth {
           continue;
         }
         const msg = res.error_description || err || 'device authorization failed';
-        throw new Error(`OIDCAuth: ${msg}`);
+        throw new CTSError(`OIDCAuth: ${msg}`);
       }
     };
 
@@ -304,7 +305,7 @@ export class OIDCAuth {
   private handleTokens(t: TokenResponse): void {
     if (!t.access_token) {
       const msg = t.error_description || t.error || 'token response missing access_token';
-      throw new Error(`OIDCAuth: ${msg}`);
+      throw new CTSError(`OIDCAuth: ${msg}`);
     }
     // Schedule on microtask queue so we never block the caller and we avoid sync throws leaking.
     queueMicrotask(() =>
@@ -352,7 +353,7 @@ export class OIDCAuth {
       if (!res.ok) {
         const err = (json ?? {}) as TokenResponse;
         const msg = err.error_description || err.error || `HTTP ${res.status}`;
-        throw new Error(`OIDCAuth: ${msg}`);
+        throw new CTSError(`OIDCAuth: ${msg}`);
       }
       this.logger.debug('OIDCAuth Response', { json });
       return (json ?? {}) as TSuccess;

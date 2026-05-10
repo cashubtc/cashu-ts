@@ -1,4 +1,5 @@
 import { dedupeP2PKPubkeys, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
+import { CTSError } from '../model/Errors';
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 
 function toUnixSeconds(input: Date | number): number {
@@ -37,14 +38,14 @@ export class P2PKBuilder {
 
   requireLockSignatures(n: number) {
     if (!Number.isInteger(n) || n < 1)
-      throw new Error(`requiredSignatures (n_sigs) must be a positive integer, got ${n}`);
+      throw new CTSError(`requiredSignatures (n_sigs) must be a positive integer, got ${n}`);
     this.nSigs = n;
     return this;
   }
 
   requireRefundSignatures(n: number) {
     if (!Number.isInteger(n) || n < 1)
-      throw new Error(
+      throw new CTSError(
         `requiredRefundSignatures (n_sigs_refund) must be a positive integer, got ${n}`,
       );
     this.nSigsRefund = n;
@@ -85,7 +86,7 @@ export class P2PKBuilder {
     const locks = this.lockKeys;
     const refunds = this.refundKeys;
 
-    if (locks.length === 0) throw new Error('At least one lock pubkey is required');
+    if (locks.length === 0) throw new CTSError('At least one lock pubkey is required');
 
     const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
 

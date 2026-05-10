@@ -5,6 +5,7 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
+import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
 import { type DLEQ, hash_e, hashToCurve } from './core';
@@ -29,7 +30,7 @@ function deriveDLEQNonce(
     if (r !== 0n) return r;
   }
   /* c8 ignore next */
-  throw new Error('DLEQ nonce derivation failed');
+  throw new CTSError('DLEQ nonce derivation failed');
 }
 
 export const verifyDLEQProof = (
@@ -56,7 +57,8 @@ export const verifyDLEQProof_reblind = (
   C: WeierstrassPoint<bigint>, // unblinded e-cash signature point
   A: WeierstrassPoint<bigint>, // mint public key point
 ) => {
-  if (dleq.r === undefined) throw new Error('verifyDLEQProof_reblind: Undefined blinding factor');
+  if (dleq.r === undefined)
+    throw new CTSError('verifyDLEQProof_reblind: Undefined blinding factor');
   const Y = hashToCurve(secret);
   const C_ = C.add(A.multiply(dleq.r)); // Re-blind the e-cash signature
   const bG = secp256k1.Point.BASE.multiply(dleq.r);

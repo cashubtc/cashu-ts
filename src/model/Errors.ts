@@ -1,7 +1,28 @@
 /**
+ * Base error for errors raised by cashu-ts itself.
+ */
+export class CTSError extends Error {
+  readonly cause?: unknown;
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'CTSError';
+    if (options && 'cause' in options) {
+      Object.defineProperty(this, 'cause', {
+        configurable: true,
+        enumerable: false,
+        value: options.cause,
+        writable: true,
+      });
+    }
+    Object.setPrototypeOf(this, CTSError.prototype);
+  }
+}
+
+/**
  * This error is thrown when a HTTP response is not 2XX nor a protocol error.
  */
-export class HttpResponseError extends Error {
+export class HttpResponseError extends CTSError {
   status: number;
   constructor(message: string, status: number) {
     super(message);
@@ -14,7 +35,7 @@ export class HttpResponseError extends Error {
 /**
  * This error is thrown when a network request fails.
  */
-export class NetworkError extends Error {
+export class NetworkError extends CTSError {
   constructor(message: string) {
     super(message);
     this.name = 'NetworkError';

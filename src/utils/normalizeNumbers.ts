@@ -1,4 +1,5 @@
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import type { MintKeys, MintKeyset } from '../model/types';
 
 /**
@@ -23,12 +24,12 @@ export function normalizeSafeIntegerMetadata<TFallback extends number | null | u
     if (arguments.length >= 3) {
       return fallback as TFallback;
     }
-    throw new Error(`Invalid ${context}: missing value`);
+    throw new CTSError(`Invalid ${context}: missing value`);
   }
   try {
     return Amount.from(value).toNumber();
   } catch (e) {
-    throw new Error(`Invalid ${context}: ${(e as Error).message}`);
+    throw new CTSError(`Invalid ${context}: ${(e as Error).message}`);
   }
 }
 

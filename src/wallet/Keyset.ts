@@ -1,5 +1,6 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 
+import { CTSError } from '../model/Errors';
 import { type MintKeyset, type MintKeys } from '../model/types';
 import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
 import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
@@ -154,17 +155,17 @@ export class Keyset {
     // Sanity checks
     if (nKeys) {
       if (nKeys.id !== nMeta.id) {
-        throw new Error(`Mismatched keyset ids: meta=${nMeta.id}, keys=${nKeys.id}`);
+        throw new CTSError(`Mismatched keyset ids: meta=${nMeta.id}, keys=${nKeys.id}`);
       }
       if (nKeys.unit !== nMeta.unit) {
-        throw new Error(`Mismatched keyset units: meta=${nMeta.unit}, keys=${nKeys.unit}`);
+        throw new CTSError(`Mismatched keyset units: meta=${nMeta.unit}, keys=${nKeys.unit}`);
       }
       if (
         nKeys.final_expiry !== undefined &&
         nMeta.final_expiry !== undefined &&
         nKeys.final_expiry !== nMeta.final_expiry
       ) {
-        throw new Error(`Mismatched keyset expiry for id=${nMeta.id}`);
+        throw new CTSError(`Mismatched keyset expiry for id=${nMeta.id}`);
       }
       // All good
       ks.keys = nKeys.keys;

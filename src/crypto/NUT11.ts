@@ -2,6 +2,7 @@ import { schnorr } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
 import { type Logger, NULL_LOGGER } from '../logger';
+import { CTSError } from '../model/Errors';
 import { type OutputDataLike } from '../model/OutputData';
 import { type HTLCWitness, type P2PKWitness, type Proof } from '../model/types';
 
@@ -175,7 +176,7 @@ function normalizePubkey(pk: string): string {
   const hex = pk.toLowerCase();
   if (hex.length === 66 && (hex.startsWith('02') || hex.startsWith('03'))) return hex;
   if (hex.length === 64) return `02${hex}`;
-  throw new Error(
+  throw new CTSError(
     `Invalid pubkey, expected 33 byte compressed or 32 byte x only, got length ${hex.length}`,
   );
 }
@@ -217,11 +218,11 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   const pubkeys = dedupeP2PKPubkeys(Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]);
   const refundKeys = dedupeP2PKPubkeys(p2pk.refundKeys ?? []);
   if (pubkeys.length === 0) {
-    throw new Error('P2PK requires at least one pubkey');
+    throw new CTSError('P2PK requires at least one pubkey');
   }
   const totalKeys = pubkeys.length + refundKeys.length;
   if (totalKeys > 10) {
-    throw new Error(`Too many pubkeys, ${totalKeys} provided, maximum allowed is 10 in total`);
+    throw new CTSError(`Too many pubkeys, ${totalKeys} provided, maximum allowed is 10 in total`);
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
@@ -399,7 +400,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
   const pubkey = bytesToHex(schnorr.getPublicKey(privKeyBytes)); // x-only
   const witnesses = getP2PKExpectedWitnessPubkeys(secret);
   if (!witnesses.length || !witnesses.some((w) => w.includes(pubkey))) {
-    throw new Error(`Signature not required from [02|03]${pubkey}`);
+    throw new CTSError(`Signature not required from [02|03]${pubkey}`);
   }
 
   // Check if the public key has already signed
@@ -409,7 +410,7 @@ export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: strin
   });
 
   if (alreadySigned) {
-    throw new Error(`Proof already signed by [02|03]${pubkey}`);
+    throw new CTSError(`Proof already signed by [02|03]${pubkey}`);
   }
 
   // Add new signature
@@ -436,7 +437,7 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
   }
   // Check if message is needed
   if (isP2PKSigAll([proof]) && !message) {
-    throw new Error('Cannot verify a SIG_ALL proof without the message to sign');
+    throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
   }
   message = message ?? proof.secret; // default message is secret
 
@@ -484,7 +485,7 @@ export function verifyP2PKSpendingConditions(
   // Check if message is needed
   if (isP2PKSigAll([proof]) && !message) {
     logger.error('Cannot verify a SIG_ALL proof without the message to sign');
-    throw new Error('Cannot verify a SIG_ALL proof without the message to sign');
+    throw new CTSError('Cannot verify a SIG_ALL proof without the message to sign');
   }
 
   // Parse once — all tag reads below use the pre-parsed Secret (no re-parsing)
@@ -614,20 +615,20 @@ export function maybeDeriveP2BKPrivateKeys(privateKey: string | string[], proof:
  * @internal
  */
 export function assertSigAllInputs(inputs: Proof[]): void {
-  if (inputs.length === 0) throw new Error('No proofs');
+  if (inputs.length === 0) throw new CTSError('No proofs');
   // Check first proof
   const first = parseP2PKSecret(inputs[0].secret);
-  if (getP2PKSigFlag(first) !== 'SIG_ALL') throw new Error('First proof is not SIG_ALL');
+  if (getP2PKSigFlag(first) !== 'SIG_ALL') throw new CTSError('First proof is not SIG_ALL');
   const data0 = first[1].data;
   const tags0 = JSON.stringify(first[1].tags ?? []);
   // Compare remaining proofs
   for (let i = 1; i < inputs.length; i++) {
     const si = parseP2PKSecret(inputs[i].secret);
-    if (si[0] !== first[0]) throw new Error(`Proof #${i + 1} is not ${first[0]}`);
-    if (getP2PKSigFlag(si) !== 'SIG_ALL') throw new Error(`Proof #${i + 1} is not SIG_ALL`);
-    if (si[1].data !== data0) throw new Error('SIG_ALL inputs must share identical Secret.data');
+    if (si[0] !== first[0]) throw new CTSError(`Proof #${i + 1} is not ${first[0]}`);
+    if (getP2PKSigFlag(si) !== 'SIG_ALL') throw new CTSError(`Proof #${i + 1} is not SIG_ALL`);
+    if (si[1].data !== data0) throw new CTSError('SIG_ALL inputs must share identical Secret.data');
     if (JSON.stringify(si[1].tags ?? []) !== tags0)
-      throw new Error('SIG_ALL inputs must share identical Secret.tags');
+      throw new CTSError('SIG_ALL inputs must share identical Secret.tags');
   }
 }
 
@@ -692,7 +693,7 @@ function assertNoDuplicateP2PKTags(tags: string[][]): void {
     const key = tag[0];
     if (!P2PK_KNOWN_TAG_KEYS.has(key)) continue;
     if (seen.has(key)) {
-      throw new Error(`Duplicate P2PK tag "${key}"`);
+      throw new CTSError(`Duplicate P2PK tag "${key}"`);
     }
     seen.add(key);
   }
@@ -700,13 +701,13 @@ function assertNoDuplicateP2PKTags(tags: string[][]): void {
 
 function assertSigFlag(flag: string): asserts flag is SigFlag {
   if (!VALID_SIG_FLAGS.has(flag as SigFlag)) {
-    throw new Error(`Invalid sigflag "${flag}": must be "SIG_INPUTS" or "SIG_ALL"`);
+    throw new CTSError(`Invalid sigflag "${flag}": must be "SIG_INPUTS" or "SIG_ALL"`);
   }
 }
 
 function assertPositiveInteger(value: number, field: string): number {
   if (!Number.isInteger(value) || value < 1) {
-    throw new Error(`${field} must be a positive integer, got ${value}`);
+    throw new CTSError(`${field} must be a positive integer, got ${value}`);
   }
   return value;
 }
@@ -731,7 +732,7 @@ function assertSpendingConditionRules(params: {
   if (nSigs !== undefined) {
     assertPositiveInteger(nSigs, 'requiredSignatures (n_sigs)');
     if (nSigs > mainKeyCount) {
-      throw new Error(
+      throw new CTSError(
         `requiredSignatures (n_sigs) (${nSigs}) exceeds available pubkeys (${mainKeyCount})`,
       );
     }
@@ -740,17 +741,17 @@ function assertSpendingConditionRules(params: {
   if (nSigsRefund !== undefined) {
     assertPositiveInteger(nSigsRefund, 'requiredRefundSignatures (n_sigs_refund)');
     if (refundKeyCount === 0) {
-      throw new Error('requiredRefundSignatures (n_sigs_refund) requires refund keys');
+      throw new CTSError('requiredRefundSignatures (n_sigs_refund) requires refund keys');
     }
     if (nSigsRefund > refundKeyCount) {
-      throw new Error(
+      throw new CTSError(
         `requiredRefundSignatures (n_sigs_refund) (${nSigsRefund}) exceeds available refund keys (${refundKeyCount})`,
       );
     }
   }
 
   if (refundKeyCount > 0 && !hasLocktime) {
-    throw new Error('refund keys require a locktime');
+    throw new CTSError('refund keys require a locktime');
   }
 }
 
@@ -759,7 +760,7 @@ function getP2PKWitnessPubkeys(secret: Secret): string[] {
   const pubkeys = getTag(secret, 'pubkeys') ?? [];
   const keys = (data ? [data, ...pubkeys] : pubkeys).map((key) => normalizePubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
-    throw new Error('Duplicate main pubkeys are not allowed');
+    throw new CTSError('Duplicate main pubkeys are not allowed');
   }
   return keys;
 }
@@ -767,7 +768,7 @@ function getP2PKWitnessPubkeys(secret: Secret): string[] {
 function getP2PKWitnessRefundkeys(secret: Secret): string[] {
   const keys = (getTag(secret, 'refund') ?? []).map((key) => normalizePubkey(key));
   if (dedupeP2PKPubkeys(keys).length !== keys.length) {
-    throw new Error('Duplicate refund pubkeys are not allowed');
+    throw new CTSError('Duplicate refund pubkeys are not allowed');
   }
   return keys;
 }

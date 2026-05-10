@@ -9,6 +9,7 @@ import { Bytes, JSONInt, encodeUint8toBase64Url } from '../utils';
 import type { MeltPreview, SwapPreview } from '../wallet/types';
 
 import { Amount } from './Amount';
+import { CTSError } from './Errors';
 import type { Proof, MeltQuoteBaseResponse, SerializedBlindedMessage } from './types';
 
 /**
@@ -110,7 +111,7 @@ function deserializePackage(
   options?: { validateDigest?: boolean },
 ): SigAllSigningPackage {
   if (!input.startsWith(SIGALL_PREFIX)) {
-    throw new Error(`Invalid signing package: must start with "${SIGALL_PREFIX}"`);
+    throw new CTSError(`Invalid signing package: must start with "${SIGALL_PREFIX}"`);
   }
 
   const base64url = input.slice(SIGALL_PREFIX.length);
@@ -119,7 +120,7 @@ function deserializePackage(
   try {
     json = Bytes.toString(Bytes.fromBase64(base64url));
   } catch (e) {
-    throw new Error(
+    throw new CTSError(
       `Failed to parse signing package: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
@@ -129,57 +130,57 @@ function deserializePackage(
   try {
     data = JSONInt.parse(json);
   } catch (e) {
-    throw new Error(
+    throw new CTSError(
       `Failed to parse signing package JSON: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 
   if (!data || typeof data !== 'object') {
-    throw new Error('Signing package must be a JSON object');
+    throw new CTSError('Signing package must be a JSON object');
   }
 
   const pkg = data as SigAllSigningPackage;
 
   const version = pkg.version as string;
   if (version !== SIGALL_PREFIX) {
-    throw new Error(`Invalid signing package version: ${version}`);
+    throw new CTSError(`Invalid signing package version: ${version}`);
   }
 
   const type = pkg.type as string;
   if (type !== 'swap' && type !== 'melt') {
-    throw new Error(`Invalid signing package type: ${type}`);
+    throw new CTSError(`Invalid signing package type: ${type}`);
   }
 
   if (!Array.isArray(pkg.inputs)) {
-    throw new Error('Signing package inputs must be an array');
+    throw new CTSError('Signing package inputs must be an array');
   }
 
   for (let i = 0; i < pkg.inputs.length; i++) {
     const inp = pkg.inputs[i] as Record<string, unknown>;
 
-    if (!inp || typeof inp !== 'object') throw new Error(`Invalid input at index ${i}`);
+    if (!inp || typeof inp !== 'object') throw new CTSError(`Invalid input at index ${i}`);
 
-    if (typeof inp.secret !== 'string') throw new Error(`Input ${i}: secret must be string`);
+    if (typeof inp.secret !== 'string') throw new CTSError(`Input ${i}: secret must be string`);
 
-    if (typeof inp.C !== 'string') throw new Error(`Input ${i}: C must be string`);
+    if (typeof inp.C !== 'string') throw new CTSError(`Input ${i}: C must be string`);
   }
 
   if (!Array.isArray(pkg.outputs)) {
-    throw new Error('Signing package outputs must be an array');
+    throw new CTSError('Signing package outputs must be an array');
   }
 
   for (let i = 0; i < pkg.outputs.length; i++) {
     const output = pkg.outputs[i] as Record<string, unknown>;
 
-    if (!output || typeof output !== 'object') throw new Error(`Invalid output at index ${i}`);
+    if (!output || typeof output !== 'object') throw new CTSError(`Invalid output at index ${i}`);
 
     if (typeof output.amount !== 'number' && typeof output.amount !== 'bigint') {
-      throw new Error(`Output ${i}: amount must be a number or bigint`);
+      throw new CTSError(`Output ${i}: amount must be a number or bigint`);
     }
 
-    if (!output.B_ || typeof output.B_ !== 'string') throw new Error(`Output ${i}: B_ invalid`);
+    if (!output.B_ || typeof output.B_ !== 'string') throw new CTSError(`Output ${i}: B_ invalid`);
 
-    if (!output.id || typeof output.id !== 'string') throw new Error(`Output ${i}: id invalid`);
+    if (!output.id || typeof output.id !== 'string') throw new CTSError(`Output ${i}: id invalid`);
 
     // Rehydrate SerializedBlindedMessage.amount
     output.amount = Amount.from(output.amount);
@@ -187,17 +188,17 @@ function deserializePackage(
 
   const digests = pkg.digests as Record<string, string> | undefined;
   if (!digests || typeof digests.current !== 'string' || digests.current.length === 0) {
-    throw new Error('Signing package digests.current is required');
+    throw new CTSError('Signing package digests.current is required');
   }
 
   // Optional digest validation
   if (options?.validateDigest) {
     const recomputed = computeDigests(pkg.inputs, pkg.outputs, pkg.quote);
     if (recomputed.current !== digests.current) {
-      throw new Error('Digest validation failed: current digest mismatch');
+      throw new CTSError('Digest validation failed: current digest mismatch');
     }
     if (digests.legacy && recomputed.legacy !== digests.legacy) {
-      throw new Error('Digest validation failed: legacy digest mismatch');
+      throw new CTSError('Digest validation failed: legacy digest mismatch');
     }
   }
 
@@ -208,7 +209,7 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
   const newSigs: string[] = [];
 
   if (!pkg.digests?.current) {
-    throw new Error('digests.current is required to sign package');
+    throw new CTSError('digests.current is required to sign package');
   }
 
   // Sign precomputed digests
@@ -219,7 +220,7 @@ function signPackage(pkg: SigAllSigningPackage, privkey: string): SigAllSigningP
 
   // validate that signing actually produced signatures
   if (newSigs.length === 0) {
-    throw new Error('No signatures produced during signing');
+    throw new CTSError('No signatures produced during signing');
   }
 
   return {
@@ -264,7 +265,7 @@ function buildSigningPackage(
   const expected = computeMessageDigest(msg, true);
 
   if (digests.current !== expected) {
-    throw new Error(
+    throw new CTSError(
       'SIG_ALL digest computation mismatch - current digest does not match expected value',
     );
   }
@@ -294,7 +295,7 @@ function mergeMeltPackage<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'>>(
 
 function mergeSignatures(proofs: Proof[], pkg: SigAllSigningPackage): Proof[] {
   if (!pkg.witness?.signatures.length) {
-    throw new Error('No signatures to merge');
+    throw new CTSError('No signatures to merge');
   }
 
   if (proofs.length === 0) return proofs;

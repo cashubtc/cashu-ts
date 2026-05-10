@@ -1,5 +1,6 @@
 import { type Logger, NULL_LOGGER, safeCallback } from '../logger';
 import {
+  CTSError,
   HttpResponseError,
   NetworkError,
   MintOperationError,
@@ -481,7 +482,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
   try {
     const responseText = await response.text();
     if (!responseText) {
-      throw new Error('Empty response body');
+      throw new CTSError('Empty response body');
     }
     return JSONInt.parse(responseText);
   } catch (err) {
