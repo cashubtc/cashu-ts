@@ -1,6 +1,7 @@
 // Minimal types to avoid importing the whole wallet, keeps this module independent
 import { fail, failIf, failIfNullish, type Logger, NULL_LOGGER, measureTime } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import type { Proof, ProofLike } from '../model/types/proof';
 import { normalizeProofAmounts } from '../utils';
 
@@ -55,10 +56,12 @@ export function selectProofsRGLI(
     try {
       return keyChain.getKeyset(proof.id).fee;
     } catch (e) {
-      fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, _logger, {
+      const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
+      _logger.error(message, {
         error: e,
         keychain: keyChain.getKeysets(),
       });
+      throw new CTSError(message, { cause: e });
     }
   };
   // Calculate net amount after fees

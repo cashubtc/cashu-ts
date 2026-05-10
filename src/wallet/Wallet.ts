@@ -283,7 +283,9 @@ class Wallet {
       }
       return parsed;
     } catch (e) {
-      this.fail((e as Error).message, { op, amount });
+      const message = e instanceof Error ? e.message : String(e);
+      this._logger.error(message, { op, amount });
+      throw new CTSError(message, { cause: e });
     }
   }
 
@@ -1423,10 +1425,12 @@ class Wallet {
       // We must NOT fallback to wallet's keyset
       return this._keyChain.getKeyset(proof.id).fee;
     } catch (e) {
-      this.fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, {
+      const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
+      this._logger.error(message, {
         e,
         keychain: this._keyChain.getKeysets(),
       });
+      throw new CTSError(message, { cause: e });
     }
   }
 
@@ -1443,7 +1447,9 @@ class Wallet {
       const feePPK = this._keyChain.getKeyset(keysetId).fee;
       return Amount.from(Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0)));
     } catch (e) {
-      this.fail(`No keyset found with ID ${keysetId}`, { e });
+      const message = `No keyset found with ID ${keysetId}`;
+      this._logger.error(message, { e });
+      throw new CTSError(message, { cause: e });
     }
   }
 

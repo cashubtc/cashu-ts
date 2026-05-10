@@ -206,7 +206,10 @@ describe('requests', { timeout: 7500 }, () => {
       }),
     );
 
-    await expect(request({ endpoint })).rejects.toThrow(new HttpResponseError('bad response', 200));
+    const thrown = await request({ endpoint }).catch((e) => e);
+    expect(thrown).toBeInstanceOf(HttpResponseError);
+    expect(thrown).toMatchObject({ message: 'bad response', status: 200 });
+    expect(thrown.cause).toMatchObject({ message: 'Empty response body' });
   });
 
   test('maps malformed success JSON to bad response and logs parsing failure', async () => {
@@ -228,7 +231,10 @@ describe('requests', { timeout: 7500 }, () => {
 
     setRequestLogger(logger);
     try {
-      await expect(request({ endpoint })).rejects.toThrow('bad response');
+      const thrown = await request({ endpoint }).catch((e) => e);
+      expect(thrown).toBeInstanceOf(HttpResponseError);
+      expect(thrown).toMatchObject({ message: 'bad response' });
+      expect(thrown.cause).toBeInstanceOf(Error);
       expect(logger.error).toHaveBeenCalledWith(
         'Failed to parse HTTP response',
         expect.objectContaining({ err: expect.any(Error) }),
@@ -240,14 +246,17 @@ describe('requests', { timeout: 7500 }, () => {
 
   test('maps AbortError fetch failures to NetworkError without timeout policy', async () => {
     const endpoint = mintUrl + '/v1/keys';
+    const abortError = new Error('aborted by runtime');
+    abortError.name = 'AbortError';
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
-      const abortError = new Error('aborted by runtime');
-      abortError.name = 'AbortError';
       throw abortError;
     });
 
     try {
-      await expect(request({ endpoint })).rejects.toThrow('aborted by runtime');
+      const thrown = await request({ endpoint }).catch((e) => e);
+      expect(thrown).toBeInstanceOf(NetworkError);
+      expect(thrown).toMatchObject({ message: 'aborted by runtime' });
+      expect(thrown.cause).toBe(abortError);
     } finally {
       fetchMock.mockRestore();
     }
@@ -255,17 +264,21 @@ describe('requests', { timeout: 7500 }, () => {
 
   test('falls back to bad response when reading error body throws', async () => {
     const endpoint = mintUrl + '/v1/keys';
+    const bodyReadError = new Error('body read failed');
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
       status: 503,
       headers: new Headers(),
       text: vi.fn(async () => {
-        throw new Error('body read failed');
+        throw bodyReadError;
       }),
     } as unknown as Response);
 
     try {
-      await expect(request({ endpoint })).rejects.toThrow('bad response');
+      const thrown = await request({ endpoint }).catch((e) => e);
+      expect(thrown).toBeInstanceOf(HttpResponseError);
+      expect(thrown).toMatchObject({ message: 'bad response', status: 503 });
+      expect(thrown.cause).toBe(bodyReadError);
     } finally {
       fetchMock.mockRestore();
     }

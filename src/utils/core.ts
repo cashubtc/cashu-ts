@@ -526,8 +526,8 @@ export function normalizeUrl(url: string): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
-  } catch {
-    throw new CTSError(`Invalid mint URL: ${url}`);
+  } catch (e) {
+    throw new CTSError(`Invalid mint URL: ${url}`, { cause: e });
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new CTSError(`Invalid mint URL scheme: ${parsed.protocol}`);

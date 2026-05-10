@@ -50,8 +50,8 @@ export function parseSecret(secret: string | Secret): Secret {
     } else {
       parsed = secret; // Pass through
     }
-  } catch {
-    throw new CTSError("Can't parse secret");
+  } catch (e) {
+    throw new CTSError("Can't parse secret", { cause: e });
   }
 
   // Validate NUT-10 shape

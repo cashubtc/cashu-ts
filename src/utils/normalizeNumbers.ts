@@ -29,7 +29,8 @@ export function normalizeSafeIntegerMetadata<TFallback extends number | null | u
   try {
     return Amount.from(value).toNumber();
   } catch (e) {
-    throw new CTSError(`Invalid ${context}: ${(e as Error).message}`);
+    const message = e instanceof Error ? e.message : String(e);
+    throw new CTSError(`Invalid ${context}: ${message}`, { cause: e });
   }
 }
 

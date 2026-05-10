@@ -519,7 +519,9 @@ export type HTLCWitness = {
 
 // @public
 export class HttpResponseError extends CTSError {
-    constructor(message: string, status: number);
+    constructor(message: string, status: number, options?: {
+        cause?: unknown;
+    });
     // (undocumented)
     status: number;
 }
@@ -1095,7 +1097,9 @@ export type MPPMethod = {
 
 // @public
 export class NetworkError extends CTSError {
-    constructor(message: string);
+    constructor(message: string, options?: {
+        cause?: unknown;
+    });
 }
 
 // @public

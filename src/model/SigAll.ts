@@ -122,6 +122,7 @@ function deserializePackage(
   } catch (e) {
     throw new CTSError(
       `Failed to parse signing package: ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
     );
   }
 
@@ -132,6 +133,7 @@ function deserializePackage(
   } catch (e) {
     throw new CTSError(
       `Failed to parse signing package JSON: ${e instanceof Error ? e.message : String(e)}`,
+      { cause: e },
     );
   }
 

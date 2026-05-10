@@ -864,7 +864,7 @@ class Mint {
         // silence
       }
       this.ws = undefined;
-      throw new CTSError('Failed to connect to WebSocket...');
+      throw new CTSError('Failed to connect to WebSocket...', { cause: e });
     }
   }
 

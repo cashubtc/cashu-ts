@@ -7,7 +7,7 @@ export class CTSError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
     super(message);
     this.name = 'CTSError';
-    if (options && 'cause' in options) {
+    if (options?.cause !== undefined) {
       Object.defineProperty(this, 'cause', {
         configurable: true,
         enumerable: false,
@@ -24,8 +24,8 @@ export class CTSError extends Error {
  */
 export class HttpResponseError extends CTSError {
   status: number;
-  constructor(message: string, status: number) {
-    super(message);
+  constructor(message: string, status: number, options?: { cause?: unknown }) {
+    super(message, options);
     this.status = status;
     this.name = 'HttpResponseError';
     Object.setPrototypeOf(this, HttpResponseError.prototype);
@@ -36,8 +36,8 @@ export class HttpResponseError extends CTSError {
  * This error is thrown when a network request fails.
  */
 export class NetworkError extends CTSError {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.name = 'NetworkError';
     Object.setPrototypeOf(this, NetworkError.prototype);
   }

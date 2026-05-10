@@ -94,13 +94,15 @@ export class OIDCAuth {
     });
     const text = await res.text();
     let json: unknown;
+    let parseError: unknown;
     try {
       json = text ? JSON.parse(text) : undefined;
     } catch (err) {
+      parseError = err;
       this.logger.warn('OIDCAuth: bad discovery JSON', { err });
     }
     if (!res.ok || !json) {
-      throw new CTSError('OIDCAuth: invalid discovery document');
+      throw new CTSError('OIDCAuth: invalid discovery document', { cause: parseError });
     }
     const cfg = json as OIDCConfig;
     if (typeof cfg.token_endpoint !== 'string' || cfg.token_endpoint.length === 0) {
@@ -345,15 +347,17 @@ export class OIDCAuth {
       });
       const text = await res.text();
       let json: unknown;
+      let parseError: unknown;
       try {
         json = text ? JSON.parse(text) : undefined;
       } catch (err) {
+        parseError = err;
         this.logger.warn('OIDCAuth: bad JSON (strict)', { err });
       }
       if (!res.ok) {
         const err = (json ?? {}) as TokenResponse;
         const msg = err.error_description || err.error || `HTTP ${res.status}`;
-        throw new CTSError(`OIDCAuth: ${msg}`);
+        throw new CTSError(`OIDCAuth: ${msg}`, { cause: parseError });
       }
       this.logger.debug('OIDCAuth Response', { json });
       return (json ?? {}) as TSuccess;

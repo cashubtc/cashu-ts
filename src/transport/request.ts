@@ -411,17 +411,17 @@ async function _request(options: RequestOptions): Promise<unknown> {
     const timedOut = !!timeoutController?.signal.aborted;
     const callerAborted = !!callerSignal?.aborted;
     if (timedOut) {
-      throw new NetworkError(`Request timed out after ${requestTimeout}ms`);
+      throw new NetworkError(`Request timed out after ${requestTimeout}ms`, { cause: err });
     }
     if (callerAborted) {
       throw new CallerAbortError(errorMessage(err, 'Request aborted by caller'));
     }
     if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
-      throw new NetworkError(err.message);
+      throw new NetworkError(err.message, { cause: err });
     }
     // A fetch() promise only rejects when the request fails,
     // for example, because of a badly-formed request URL or a network error.
-    throw new NetworkError(errorMessage(err, 'Network request failed'));
+    throw new NetworkError(errorMessage(err, 'Network request failed'), { cause: err });
   } finally {
     clearTimeout(timeoutId);
     cleanupAbortListeners?.();
@@ -449,9 +449,11 @@ async function _request(options: RequestOptions): Promise<unknown> {
 
   if (!response.ok) {
     let errorData: ApiError;
+    let errorDataCause: unknown;
     try {
       errorData = parseErrorBody(await response.text());
-    } catch {
+    } catch (err) {
+      errorDataCause = err;
       errorData = { error: 'bad response' };
     }
 
@@ -476,7 +478,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
       errorMessage = errorData.detail;
     }
 
-    throw new HttpResponseError(errorMessage, response.status);
+    throw new HttpResponseError(errorMessage, response.status, { cause: errorDataCause });
   }
 
   try {
@@ -487,7 +489,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
     return JSONInt.parse(responseText);
   } catch (err) {
     requestLogger.error('Failed to parse HTTP response', { err });
-    throw new HttpResponseError('bad response', response.status);
+    throw new HttpResponseError('bad response', response.status, { cause: err });
   }
 }
 
