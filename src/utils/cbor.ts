@@ -1,3 +1,4 @@
+import { CTSError } from '../model/Errors';
 /*
  * Lightweight CBOR encoder/decoder (purpose and limitations)
  *
@@ -95,7 +96,7 @@ function encodeItem(value: unknown, buffer: number[]) {
   ) {
     encodeObject(value as Record<string, unknown>, buffer);
   } else {
-    throw new Error('Unsupported type');
+    throw new CTSError('Unsupported type');
   }
 }
 
@@ -155,7 +156,7 @@ function encodeUnsignedBigInt(majorType: number, value: bigint, buffer: number[]
       lo & 0xff,
     );
   } else {
-    throw new Error('BigInt value out of uint64 range');
+    throw new CTSError('BigInt value out of uint64 range');
   }
 }
 
@@ -224,7 +225,7 @@ function encodeByteString(value: Uint8Array, buffer: number[]) {
       length & 0xff,
     );
   } else {
-    throw new Error('Byte string too long to encode');
+    throw new CTSError('Byte string too long to encode');
   }
 
   for (let i = 0; i < value.length; i++) {
@@ -251,7 +252,7 @@ function encodeString(value: string, buffer: number[]) {
       length & 0xff,
     );
   } else {
-    throw new Error('String too long to encode');
+    throw new CTSError('String too long to encode');
   }
 
   for (let i = 0; i < utf8.length; i++) {
@@ -268,7 +269,7 @@ function encodeArray(value: unknown[], buffer: number[]) {
   } else if (length < 65536) {
     buffer.push(0x99, (length >>> 8) & 0xff, length & 0xff);
   } else {
-    throw new Error('Unsupported array length');
+    throw new CTSError('Unsupported array length');
   }
 
   for (const item of value) {
@@ -282,7 +283,7 @@ function encodeObject(value: Record<string, unknown>, buffer: number[]) {
 
   // Guardrail: we only support map lengths up to 2^32-1 (same as encodeUnsigned max)
   if (length >= 4294967296) {
-    throw new Error('Object has too many keys to encode');
+    throw new CTSError('Object has too many keys to encode');
   }
 
   // Write initial byte for major type 5 (map) and additional info based on length
@@ -315,7 +316,7 @@ export function decodeCBOR(data: Uint8Array): ResultValue {
 
 function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
   if (offset >= view.byteLength) {
-    throw new Error('Unexpected end of data');
+    throw new CTSError('Unexpected end of data');
   }
   const initialByte = view.getUint8(offset++);
   const majorType = initialByte >> 5;
@@ -337,13 +338,13 @@ function decodeItem(view: DataView, offset: number): DecodeResult<ResultValue> {
     case 7:
       return decodeSimpleAndFloat(view, offset, additionalInfo);
     default:
-      throw new Error(`Unsupported major type: ${majorType}`);
+      throw new CTSError(`Unsupported major type: ${majorType}`);
   }
 }
 
 function ensureAvailable(view: DataView, offset: number, needed: number) {
   if (offset + needed > view.byteLength) {
-    throw new Error('Unexpected end of data');
+    throw new CTSError('Unexpected end of data');
   }
 }
 
@@ -380,7 +381,7 @@ function decodeLength(
     }
     return { value, offset };
   }
-  throw new Error(`Unsupported length: ${additionalInfo}`);
+  throw new CTSError(`Unsupported length: ${additionalInfo}`);
 }
 
 function decodeUnsigned(
@@ -416,7 +417,7 @@ function decodeByteString(
   const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
   const len = Number(length);
   if (newOffset + len > view.byteLength) {
-    throw new Error('Byte string length exceeds data length');
+    throw new CTSError('Byte string length exceeds data length');
   }
   const value = new Uint8Array(view.buffer, view.byteOffset + newOffset, len);
   return { value, offset: newOffset + len };
@@ -430,7 +431,7 @@ function decodeString(
   const { value: length, offset: newOffset } = decodeLength(view, offset, additionalInfo);
   const len = Number(length);
   if (newOffset + len > view.byteLength) {
-    throw new Error('String length exceeds data length');
+    throw new CTSError('String length exceeds data length');
   }
   const bytes = new Uint8Array(view.buffer, view.byteOffset + newOffset, len);
   const value = new TextDecoder().decode(bytes);
@@ -466,7 +467,7 @@ function decodeMap(
   for (let i = 0; i < len; i++) {
     const keyResult = decodeItem(view, currentOffset);
     if (!isResultKeyType(keyResult.value)) {
-      throw new Error('Invalid key type');
+      throw new CTSError('Invalid key type');
     }
     const valueResult = decodeItem(view, keyResult.offset);
     map[String(keyResult.value)] = valueResult.value;
@@ -504,7 +505,7 @@ function decodeSimpleAndFloat(
       case 23:
         return { value: undefined, offset };
       default:
-        throw new Error(`Unknown simple value: ${additionalInfo}`);
+        throw new CTSError(`Unknown simple value: ${additionalInfo}`);
     }
   }
   if (additionalInfo === 24) {
@@ -529,5 +530,5 @@ function decodeSimpleAndFloat(
     offset += 8;
     return { value, offset };
   }
-  throw new Error(`Unknown simple or float value: ${additionalInfo}`);
+  throw new CTSError(`Unknown simple or float value: ${additionalInfo}`);
 }

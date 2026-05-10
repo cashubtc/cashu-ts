@@ -1,4 +1,5 @@
 import { type Logger, NULL_LOGGER } from '../logger';
+import { CTSError } from '../model/Errors';
 import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
 
 import { getWebSocketImpl } from './ws';
@@ -111,7 +112,7 @@ export class WSConnection {
       const fail = (e: unknown) => {
         this.connectionPromise = undefined;
         cleanupSocket();
-        const err = e instanceof Error ? e : new Error(String(e));
+        const err = e instanceof Error ? e : new CTSError(String(e), { cause: e });
         this.failPendingRpc(err);
         settle(() => reject(err));
       };
@@ -124,7 +125,7 @@ export class WSConnection {
       }
 
       timer = setTimeout(() => {
-        fail(new Error(`WebSocket connect timeout after ${timeoutMs}ms`));
+        fail(new CTSError(`WebSocket connect timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
       this.ws.onopen = () => {
@@ -134,7 +135,7 @@ export class WSConnection {
 
       this.ws.onerror = (ev) => {
         if (!opened) {
-          fail(new Error('Failed to open WebSocket'));
+          fail(new CTSError('Failed to open WebSocket'));
           return;
         }
         this._logger.error('WebSocket error after open', { ev });
@@ -153,7 +154,7 @@ export class WSConnection {
 
         if (!opened) {
           const reason = e?.reason ? `, ${e.reason}` : '';
-          fail(new Error(`WebSocket closed before open (code ${e?.code ?? 0}${reason})`));
+          fail(new CTSError(`WebSocket closed before open (code ${e?.code ?? 0}${reason})`));
           return;
         }
 
@@ -167,7 +168,7 @@ export class WSConnection {
 
         const abnormal = !wasClean || (code !== 1000 && code !== 1001);
         if (abnormal) {
-          this.failPendingRpc(new Error(`WebSocket closed (code ${code}${reason})`));
+          this.failPendingRpc(new CTSError(`WebSocket closed (code ${code}${reason})`));
         } else {
           this.rpcListeners = {};
         }
@@ -187,7 +188,7 @@ export class WSConnection {
         return;
       }
       this._logger.error('Attempted sendRequest, but socket was not open');
-      throw new Error('Socket not open');
+      throw new CTSError('Socket not open');
     }
 
     const id = this.rpcId;
@@ -230,7 +231,7 @@ export class WSConnection {
     id: number,
   ): void {
     if (this.ws?.readyState !== this._WS.OPEN) {
-      throw new Error('Socket not open');
+      throw new CTSError('Socket not open');
     }
 
     const message = JSON.stringify({ jsonrpc: '2.0', method, params, id });
@@ -251,7 +252,7 @@ export class WSConnection {
       this.ws = undefined;
       this.stopMessageHandling();
 
-      const err = e instanceof Error ? e : new Error(String(e));
+      const err = e instanceof Error ? e : new CTSError(String(e), { cause: e });
       this.failPendingRpc(err);
       throw err;
     }
@@ -309,7 +310,7 @@ export class WSConnection {
         }
       } else if ('error' in parsed && parsed.id != undefined) {
         if (this.rpcListeners[parsed.id]) {
-          this.rpcListeners[parsed.id].errorCallback(new Error(parsed.error.message));
+          this.rpcListeners[parsed.id].errorCallback(new CTSError(parsed.error.message));
           this.removeRpcListener(parsed.id);
         }
       } else if ('method' in parsed) {
@@ -345,7 +346,7 @@ export class WSConnection {
   ): string {
     if (this.ws?.readyState !== this._WS.OPEN) {
       this._logger.error('Attempted createSubscription, but socket was not open');
-      throw new Error('Socket is not open');
+      throw new CTSError('Socket is not open');
     }
 
     const subId = (Math.random() + 1).toString(36).substring(7);

@@ -1,5 +1,6 @@
 import { hashToCurve } from '../crypto';
 import { safeCallback } from '../logger';
+import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
 import type {
   Proof,
@@ -16,8 +17,6 @@ export type SubscriptionCanceller = () => void;
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
 export type SubscribeOpts = { signal?: AbortSignal };
-
-type ErrorWithCause = Error & { cause?: unknown };
 
 function safeStringify(obj: unknown): string {
   const seen = new WeakSet<object>();
@@ -37,9 +36,7 @@ function safeStringify(obj: unknown): string {
 function normalizeError(err: unknown): Error {
   if (err instanceof Error) return err;
   const message = typeof err === 'string' ? err : safeStringify(err);
-  const e: ErrorWithCause = new Error(message);
-  e.cause = err;
-  return e;
+  return new CTSError(message, { cause: err });
 }
 
 function makeAbortError(): Error {
@@ -133,7 +130,7 @@ export class WalletEvents {
 
       // Start a timeout if requested.
       if (opts?.timeoutMs && opts.timeoutMs > 0) {
-        to = setTimeout(() => cleanup(new Error(timeoutMsg)), opts.timeoutMs);
+        to = setTimeout(() => cleanup(new CTSError(timeoutMsg)), opts.timeoutMs);
       }
 
       // Subscribe to the actual event. Canceller returned is saved to cancelP.
@@ -209,7 +206,7 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     await this.wallet.mint.connectWebSocket();
     const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new Error('Failed to establish WebSocket connection.');
+    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
     const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, cb, err);
@@ -257,7 +254,7 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     await this.wallet.mint.connectWebSocket();
     const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new Error('Failed to establish WebSocket connection.');
+    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
     const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, cb, err);
@@ -305,7 +302,7 @@ export class WalletEvents {
   ): Promise<SubscriptionCanceller> {
     await this.wallet.mint.connectWebSocket();
     const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new Error('Failed to establish WebSocket connection.');
+    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const enc = new TextEncoder();
     const proofMap: Record<string, Proof> = {};
@@ -434,12 +431,12 @@ export class WalletEvents {
 
       if (opts?.timeoutMs && opts.timeoutMs > 0) {
         to = setTimeout(
-          () => cleanup(new Error('Timeout waiting for any mint paid')),
+          () => cleanup(new CTSError('Timeout waiting for any mint paid')),
           opts.timeoutMs,
         );
       }
 
-      if (unique.length === 0) return cleanup(new Error('No quote ids provided'));
+      if (unique.length === 0) return cleanup(new CTSError('No quote ids provided'));
 
       for (const quoteId of unique) {
         const c = this.mintQuotePaid(
@@ -463,7 +460,7 @@ export class WalletEvents {
             }
 
             if (fullyRegistered && cancels.size === 0) {
-              cleanup(lastError ?? new Error('No subscriptions remaining'));
+              cleanup(lastError ?? new CTSError('No subscriptions remaining'));
             }
           },
         );
@@ -485,7 +482,7 @@ export class WalletEvents {
           }
 
           if (fullyRegistered && cancels.size === 0) {
-            cleanup(lastError ?? new Error('No subscriptions remaining'));
+            cleanup(lastError ?? new CTSError('No subscriptions remaining'));
           }
         });
       }

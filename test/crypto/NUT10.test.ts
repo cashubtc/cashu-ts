@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { getTagInt, hasTag, parseHTLCSecret, parseSecret } from '../../src/crypto';
-import { Amount, Proof } from '../../src';
+import { Amount, CTSError, Proof } from '../../src';
 
 const proof: Proof = {
   amount: Amount.from(2),
@@ -23,6 +23,12 @@ describe('NUT10 module core functions', () => {
     expect(() => {
       parseHTLCSecret(secretStr);
     }).toThrow("Can't parse secret");
+    try {
+      parseHTLCSecret(secretStr);
+    } catch (e) {
+      expect(e).toBeInstanceOf(CTSError);
+      expect((e as CTSError).cause).toBeInstanceOf(SyntaxError);
+    }
   });
 
   test('parseSecret throws for invalid NUT-10 secret (bad kind)', () => {

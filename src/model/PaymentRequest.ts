@@ -11,6 +11,7 @@ import type {
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
+import { CTSError } from './Errors';
 
 export class PaymentRequest {
   public amount?: Amount;
@@ -170,11 +171,11 @@ export class PaymentRequest {
 
     // Version A: CBOR encoding (creqA...)
     if (!encodedRequest.startsWith('creq')) {
-      throw new Error('unsupported pr: invalid prefix');
+      throw new CTSError('unsupported pr: invalid prefix');
     }
     const version = encodedRequest[4];
     if (version !== 'A') {
-      throw new Error('unsupported pr version');
+      throw new CTSError('unsupported pr version');
     }
     const encodedData = encodedRequest.slice(5);
     const data = encodeBase64toUint8(encodedData);

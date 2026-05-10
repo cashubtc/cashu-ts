@@ -1,3 +1,4 @@
+import { CTSError } from '../model/Errors';
 type Base64Encoding = 'base64';
 
 interface BufferLike {
@@ -20,18 +21,18 @@ export class Bytes {
       return new Uint8Array(0);
     }
     if (hex.length < 2 || hex.length & 1) {
-      throw new Error('Invalid hex string: odd length.');
+      throw new CTSError('Invalid hex string: odd length.');
     }
     if (hex.startsWith('0x') || hex.startsWith('0X')) {
       hex = hex.slice(2);
     }
     const match = hex.match(/^[0-9a-fA-F]*$/);
     if (!match) {
-      throw new Error('Invalid hex string: contains non-hex characters');
+      throw new CTSError('Invalid hex string: contains non-hex characters');
     }
     const matches = hex.match(/.{1,2}/g);
     if (!matches) {
-      throw new Error('Invalid hex string');
+      throw new CTSError('Invalid hex string');
     }
     return new Uint8Array(matches.map((byte) => parseInt(byte, 16)));
   }

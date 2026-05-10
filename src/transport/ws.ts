@@ -1,3 +1,4 @@
+import { CTSError } from '../model/Errors';
 let _WS: typeof WebSocket | undefined;
 
 if (typeof WebSocket !== 'undefined') {
@@ -13,7 +14,7 @@ export function injectWebSocketImpl(ws: typeof WebSocket) {
  */
 export function getWebSocketImpl() {
   if (_WS === undefined) {
-    throw new Error('WebSocket implementation not initialized');
+    throw new CTSError('WebSocket implementation not initialized');
   }
   return _WS;
 }

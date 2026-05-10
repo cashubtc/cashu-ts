@@ -1,3 +1,5 @@
+import { CTSError } from '../model/Errors';
+
 import type { CounterSource } from './CounterSource';
 
 /**
@@ -32,7 +34,7 @@ export class WalletCounters {
       await this.src.setNext(keysetId, next);
       return;
     }
-    throw new Error('CounterSource does not support setNext()');
+    throw new CTSError('CounterSource does not support setNext()');
   }
   /**
    * Returns the current "next" per keyset (what will be reserved next).
@@ -44,6 +46,6 @@ export class WalletCounters {
     if (typeof this.src.snapshot === 'function') {
       return await this.src.snapshot();
     }
-    throw new Error('CounterSource does not support snapshot()');
+    throw new CTSError('CounterSource does not support snapshot()');
   }
 }

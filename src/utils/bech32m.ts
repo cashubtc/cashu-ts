@@ -1,5 +1,7 @@
 import { bech32m } from '@scure/base';
 
+import { CTSError } from '../model/Errors';
+
 type Bech32mString = `${string}1${string}`;
 
 const LIMIT_LENGTH = 1023;
@@ -14,7 +16,7 @@ const LIMIT_LENGTH = 1023;
 function assertBech32mFormat(str: string): asserts str is Bech32mString {
   const separatorIndex = str.lastIndexOf('1');
   if (separatorIndex < 1 || separatorIndex === str.length - 1) {
-    throw new Error('Invalid bech32m string: missing or misplaced separator');
+    throw new CTSError('Invalid bech32m string: missing or misplaced separator');
   }
 }
 

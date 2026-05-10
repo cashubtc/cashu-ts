@@ -3,6 +3,7 @@ import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { HDKey } from '@scure/bip32';
 
+import { CTSError } from '../model/Errors';
 import { Bytes, isBase64String } from '../utils';
 
 import { getKeysetIdInt } from './core';
@@ -27,7 +28,7 @@ export const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number
   } else if (isValidHex && keysetId.startsWith('01')) {
     return derive(seed, keysetId, counter, DerivationType.SECRET);
   }
-  throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
+  throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
 };
 
 export const deriveBlindingFactor = (
@@ -45,7 +46,7 @@ export const deriveBlindingFactor = (
   } else if (isValidHex && keysetId.startsWith('01')) {
     return derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR);
   }
-  throw new Error(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
+  throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
 };
 
 const derive = (
@@ -76,7 +77,7 @@ const derive = (
     // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
     const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
     if (reduced === 0n) {
-      throw new Error('Derived invalid blinding scalar r == 0');
+      throw new CTSError('Derived invalid blinding scalar r == 0');
     }
     return numberToBytesBE(reduced, 32); // preserves 32-byte width
   }
@@ -95,7 +96,7 @@ const derive_deprecated = (
   const derivationPath = `${STANDARD_DERIVATION_PATH}/${keysetIdInt}'/${counter}'/${secretOrBlinding}`;
   const derived = hdkey.derive(derivationPath);
   if (derived.privateKey === null) {
-    throw new Error('Could not derive private key');
+    throw new CTSError('Could not derive private key');
   }
   return derived.privateKey;
 };

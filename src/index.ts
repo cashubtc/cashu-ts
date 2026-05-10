@@ -88,6 +88,7 @@ export type {
 // Logging & errors
 export { type LogLevel, ConsoleLogger, type Logger } from './logger';
 export {
+  CTSError,
   MintOperationError,
   NetworkError,
   HttpResponseError,

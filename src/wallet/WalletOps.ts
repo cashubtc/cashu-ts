@@ -1,5 +1,6 @@
 import { type P2PKOptions } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { type OutputDataLike, type OutputDataFactory } from '../model/OutputData';
 import {
   type MeltQuoteBolt11Response,
@@ -303,7 +304,7 @@ export class SendBuilder {
     // If an offline mode is requested, forbid custom OutputTypes,
     // because offline uses existing proofs and cannot honour new outputs.
     if ((this.offlineExact || this.offlineClose) && (this.sendOT || this.keepOT)) {
-      throw new Error(
+      throw new CTSError(
         'Offline selection cannot be combined with custom output types. Remove send/keep output configuration, or use an online swap.',
       );
     }
@@ -663,7 +664,7 @@ export class MintBuilder<
       this.wallet.validateMintQuote(quote);
       // Enforce privkey when the quote is locked
       if (quote.pubkey && !this.config.privkey) {
-        throw new Error('privkey is required for locked BOLT11 mint quotes');
+        throw new CTSError('privkey is required for locked BOLT11 mint quotes');
       }
       return this.wallet.prepareMint(
         this.method,
@@ -682,7 +683,7 @@ export class MintBuilder<
     const bolt12 = this.quote as MintQuoteBolt12Response;
     this.wallet.validateMintQuote(bolt12);
     if (!this.config.privkey) {
-      throw new Error('privkey is required for BOLT12 mint quotes');
+      throw new CTSError('privkey is required for BOLT12 mint quotes');
     }
     return this.wallet.prepareMint(
       this.method,

@@ -20,6 +20,7 @@ import {
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
@@ -282,7 +283,9 @@ class Wallet {
       }
       return parsed;
     } catch (e) {
-      this.fail((e as Error).message, { op, amount });
+      const message = e instanceof Error ? e.message : String(e);
+      this._logger.error(message, { op, amount });
+      throw new CTSError(message, { cause: e });
     }
   }
 
@@ -1099,7 +1102,7 @@ class Wallet {
         if (outputConfig.keep && !isPlainRandom(outputConfig.keep))
           reasons.push('non-default keep output type');
 
-        throw new Error(`Options require a swap: ${reasons.join(', ')}`);
+        throw new CTSError(`Options require a swap: ${reasons.join(', ')}`);
       }
 
       // Proceed with offline exact-match attempt
@@ -1186,7 +1189,7 @@ class Wallet {
     // 	selectedProofs: selectedProofs.map(p=>p.amount.toString()),
     // });
     if (selectedProofs.length === 0) {
-      throw new Error('Not enough funds available to send');
+      throw new CTSError('Not enough funds available to send');
     }
 
     // Calculate our expected change from the swap (and sanity check!)
@@ -1422,10 +1425,12 @@ class Wallet {
       // We must NOT fallback to wallet's keyset
       return this._keyChain.getKeyset(proof.id).fee;
     } catch (e) {
-      this.fail(`Could not get fee. No keyset found for keyset id: ${proof.id}`, {
+      const message = `Could not get fee. No keyset found for keyset id: ${proof.id}`;
+      this._logger.error(message, {
         e,
         keychain: this._keyChain.getKeysets(),
       });
+      throw new CTSError(message, { cause: e });
     }
   }
 
@@ -1442,7 +1447,9 @@ class Wallet {
       const feePPK = this._keyChain.getKeyset(keysetId).fee;
       return Amount.from(Math.floor(Math.max((nInputs * feePPK + 999) / 1000, 0)));
     } catch (e) {
-      this.fail(`No keyset found with ID ${keysetId}`, { e });
+      const message = `No keyset found with ID ${keysetId}`;
+      this._logger.error(message, { e });
+      throw new CTSError(message, { cause: e });
     }
   }
 

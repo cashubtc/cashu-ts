@@ -3,6 +3,7 @@ import { nullIfUndefined } from '../utils/core';
 import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
+import { CTSError } from './Errors';
 import {
   type GetInfoResponse,
   type MPPMethod,
@@ -194,7 +195,7 @@ export class MintInfo {
         return this.checkNut29();
       }
       default: {
-        throw new Error('nut is not supported by cashu-ts');
+        throw new CTSError('nut is not supported by cashu-ts');
       }
     }
   }

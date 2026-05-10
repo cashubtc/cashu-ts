@@ -1,3 +1,4 @@
+import { CTSError } from '../model/Errors';
 /**
  * Usable counters in range is [start, start+count-1]
  *
@@ -79,7 +80,7 @@ export class EphemeralCounterSource implements CounterSource {
   }
 
   async reserve(keysetId: string, n: number): Promise<CounterRange> {
-    if (n < 0) throw new Error('reserve called with negative count');
+    if (n < 0) throw new CTSError('reserve called with negative count');
     return this.withLock(keysetId, () => {
       const cur = this.next.get(keysetId) ?? 0;
       if (n === 0) return { start: cur, count: 0 }; // report current, do not move
@@ -97,7 +98,7 @@ export class EphemeralCounterSource implements CounterSource {
 
   async setNext(keysetId: string, next: number): Promise<void> {
     await this.withLock(keysetId, () => {
-      if (next < 0) throw new Error('setNext: negative next not allowed');
+      if (next < 0) throw new CTSError('setNext: negative next not allowed');
       this.next.set(keysetId, next);
     });
   }

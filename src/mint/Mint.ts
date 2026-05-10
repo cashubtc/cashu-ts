@@ -9,6 +9,7 @@ import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import {
   type MintQuoteBaseResponse,
@@ -130,7 +131,7 @@ class Mint {
   async oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth> {
     const n21 = (await this.getLazyMintInfo()).nuts['21'];
     if (!n21?.openid_discovery) {
-      throw new Error('Mint: no NUT-21 openid_discovery');
+      throw new CTSError('Mint: no NUT-21 openid_discovery');
     }
     return new OIDCAuth(n21.openid_discovery, {
       ...opts,
@@ -195,7 +196,7 @@ class Mint {
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: 'swap' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
 
@@ -402,7 +403,7 @@ class Mint {
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: `mint.${method}` });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return options?.normalize ? options.normalize(data) : data;
@@ -477,7 +478,7 @@ class Mint {
 
     if (!isObj(data) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: `mintBatch.${method}` });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
     data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return options?.normalize ? options.normalize(data) : data;
@@ -729,7 +730,7 @@ class Mint {
 
     if (!isObj(data) || !Array.isArray(data?.states)) {
       this._logger.error('Invalid response from mint...', { data, op: 'check' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
 
     // Per NUT-07, ProofState.witness is `<str | null>`. Some mints may omit the
@@ -772,7 +773,7 @@ class Mint {
 
     if (!isObj(data) || !Array.isArray(data.keysets)) {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeys' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
 
     return {
@@ -795,7 +796,7 @@ class Mint {
     });
     if (!isObj(data) || !Array.isArray(data.keysets)) {
       this._logger.error('Invalid response from mint...', { data, op: 'getKeySets' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
     return {
       ...data,
@@ -824,7 +825,7 @@ class Mint {
 
     if (!isObj(data) || !Array.isArray(data?.outputs) || !Array.isArray(data?.signatures)) {
       this._logger.error('Invalid response from mint...', { data, op: 'restore' });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
 
     data.outputs = this.normalizeMessageAmounts(data.outputs);
@@ -863,7 +864,7 @@ class Mint {
         // silence
       }
       this.ws = undefined;
-      throw new Error('Failed to connect to WebSocket...');
+      throw new CTSError('Failed to connect to WebSocket...', { cause: e });
     }
   }
 
@@ -1110,7 +1111,7 @@ class Mint {
       !Object.values(MeltQuoteState).includes(data.state as MeltQuoteState)
     ) {
       this._logger.error('Invalid response from mint...', { data, op });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
   }
 
@@ -1121,7 +1122,7 @@ class Mint {
     data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
     if (typeof data.request !== 'string' || !(data.fee_reserve instanceof Amount)) {
       this._logger.error('Invalid response from mint...', { data, op });
-      throw new Error('Invalid response from mint');
+      throw new CTSError('Invalid response from mint');
     }
     // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
     // until the invoice is paid; coerce undefined → null so consumers can

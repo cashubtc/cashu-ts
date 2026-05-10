@@ -1,3 +1,5 @@
+import { CTSError } from '../model/Errors';
+
 import { type Logger } from './Logger';
 import { NULL_LOGGER } from './NullLogger';
 
@@ -15,7 +17,7 @@ export function fail(
   context?: Record<string, unknown>,
 ): never {
   logger.error(message, context);
-  throw new Error(message);
+  throw new CTSError(message);
 }
 
 /**

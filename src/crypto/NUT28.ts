@@ -3,6 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
+import { CTSError } from '../model/Errors';
 import { Bytes, hexToNumber, numberToHexPadded64 } from '../utils';
 
 import { pointFromHex } from './core';
@@ -39,7 +40,7 @@ export function deriveP2BKBlindedPubkeys(
     const P = pointFromHex(pubkey);
     const r = deriveP2BKBlindingTweakFromECDH(P, e, i);
     const P_ = P.add(secp256k1.Point.BASE.multiply(r));
-    if (P_.equals(secp256k1.Point.ZERO)) throw new Error('Blinded key at infinity');
+    if (P_.equals(secp256k1.Point.ZERO)) throw new CTSError('Blinded key at infinity');
     return P_.toHex(true);
   });
   return { blinded, Ehex: bytesToHex(E) };
@@ -110,20 +111,20 @@ export function deriveP2BKSecretKey(
   const n = secp256k1.Point.CURVE().n;
   const p = typeof privkey === 'string' ? hexToNumber(privkey) : privkey;
   const r = typeof rBlind === 'string' ? hexToNumber(rBlind) : rBlind;
-  if (p <= 0n || p >= n) throw new Error('Invalid private key');
-  if (r <= 0n || r >= n) throw new Error('Invalid scalar r');
+  if (p <= 0n || p >= n) throw new CTSError('Invalid private key');
+  if (r <= 0n || r >= n) throw new CTSError('Invalid scalar r');
   // If caller didn't provide P = p·G, compute it in compressed form (33 bytes)
   naturalPub = naturalPub ?? secp256k1.Point.BASE.multiply(p).toBytes(true);
-  if (naturalPub.length !== 33) throw new Error('naturalPub must be 33 bytes');
+  if (naturalPub.length !== 33) throw new CTSError('naturalPub must be 33 bytes');
   // Calculate both sk candidates for constant time (add/subtract is cheap)
   const skStd: bigint = (p + r) % n;
   const skNeg: bigint = (n - p + r) % n;
   // Return skStd if no blinded pubkey was provided to verify against
   if (!blindPubkey) {
-    if (skStd === 0n) throw new Error('Derived secret key is zero');
+    if (skStd === 0n) throw new CTSError('Derived secret key is zero');
     return numberToHexPadded64(skStd);
   }
-  if (blindPubkey.length !== 33) throw new Error('blindPubkey must be 33 bytes');
+  if (blindPubkey.length !== 33) throw new CTSError('blindPubkey must be 33 bytes');
   // Decode P′, compute R and unblind
   const P_ = secp256k1.Point.fromHex(bytesToHex(blindPubkey)); // valid point
   const R = secp256k1.Point.BASE.multiply(r); // R = r·G
@@ -139,7 +140,7 @@ export function deriveP2BKSecretKey(
   const yP = P.toBytes(true)[0] & 1;
   const yNaturalPub = naturalPub[0] & 1;
   const out = yP === yNaturalPub ? skStd : skNeg;
-  if (out === 0n) throw new Error('Derived secret key is zero');
+  if (out === 0n) throw new CTSError('Derived secret key is zero');
   return numberToHexPadded64(out);
 }
 
@@ -182,7 +183,7 @@ function deriveP2BKBlindingTweakFromECDH(
     // Very unlikely to get here!
     r = Bytes.toBigInt(sha256(Bytes.concat(P2BK_DST, Zx, iByte, new Uint8Array([0xff]))));
     if (r === 0n || r >= secp256k1.Point.CURVE().n) {
-      throw new Error('P2BK: tweak derivation failed');
+      throw new CTSError('P2BK: tweak derivation failed');
     }
   }
   return r;

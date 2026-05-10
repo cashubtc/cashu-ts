@@ -17,6 +17,7 @@ import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
+import { CTSError } from './Errors';
 import {
   type HasKeysetKeys,
   type Proof,
@@ -73,9 +74,9 @@ export const RESERVED_P2PK_TAGS = new Set([
  * @throws If not a string, or is a reserved string.
  */
 export function assertValidTagKey(key: string) {
-  if (!key || typeof key !== 'string') throw new Error('tag key must be a non empty string');
+  if (!key || typeof key !== 'string') throw new CTSError('tag key must be a non empty string');
   if (RESERVED_P2PK_TAGS.has(key)) {
-    throw new Error(`additionalTags must not use reserved key "${key}"`);
+    throw new CTSError(`additionalTags must not use reserved key "${key}"`);
   }
 }
 
@@ -105,7 +106,7 @@ export class OutputData implements OutputDataLike {
 
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
     if (sig == undefined) {
-      throw new Error(
+      throw new CTSError(
         'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
       );
     }
@@ -125,7 +126,7 @@ export class OutputData implements OutputDataLike {
       const B_ = pointFromHex(this.blindedMessage.B_);
       const C_ = pointFromHex(sig.C_);
       if (!verifyDLEQProof(dleq, B_, C_, A)) {
-        throw new Error('DLEQ verification failed on mint response');
+        throw new CTSError('DLEQ verification failed on mint response');
       }
     }
 
@@ -244,7 +245,9 @@ export class OutputData implements OutputDataLike {
     // Same semantics as Nutshell python: len(str)
     const charCount = [...parsed].length;
     if (charCount > MAX_SECRET_LENGTH) {
-      throw new Error(`Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`);
+      throw new CTSError(
+        `Secret too long (${charCount} characters), maximum is ${MAX_SECRET_LENGTH}`,
+      );
     }
 
     // blind the message

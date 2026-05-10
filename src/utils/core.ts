@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
+import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
 import type {
   TokenMetadata,
@@ -56,12 +57,14 @@ export function splitAmount(
     const positive = normalizedSplit.filter((amt) => !amt.isZero());
     const totalPositive = Amount.sum(positive);
     if (totalPositive.greaterThan(remainingValue)) {
-      throw new Error(
+      throw new CTSError(
         `Split is greater than total amount: ${totalPositive.toString()} > ${remainingValue.toString()}`,
       );
     }
     if (positive.some((amt) => !hasCorrespondingKey(amt, keyset))) {
-      throw new Error('Provided amount preferences do not match the amounts of the mint keyset.');
+      throw new CTSError(
+        'Provided amount preferences do not match the amounts of the mint keyset.',
+      );
     }
 
     // if caller supplied an exact custom split, preserve their order
@@ -79,7 +82,7 @@ export function splitAmount(
   // Denomination fill for the remaining value
   const sortedKeyAmounts = getKeysetAmountsAsAmount(keyset, 'desc');
   if (sortedKeyAmounts.length === 0) {
-    throw new Error('Cannot split amount, keyset is inactive or contains no keys');
+    throw new CTSError('Cannot split amount, keyset is inactive or contains no keys');
   }
   for (const amtAsAmount of sortedKeyAmounts) {
     if (amtAsAmount.isZero()) continue;
@@ -92,7 +95,7 @@ export function splitAmount(
     if (remainingValue.isZero()) break;
   }
   if (!remainingValue.isZero()) {
-    throw new Error(`Unable to split remaining amount: ${remainingValue.toString()}`);
+    throw new CTSError(`Unable to split remaining amount: ${remainingValue.toString()}`);
   }
 
   // Only sort when we performed a fill and it was requested
@@ -136,7 +139,7 @@ export function hasCorrespondingKey(amount: AmountLike, keyset: Keys): boolean {
 function toAmount(amount: AmountLike, op: string, allowZero = false): Amount {
   const parsed = Amount.from(amount);
   if (!allowZero && parsed.isZero()) {
-    throw new Error(`Amount must be positive: ${parsed.toString()}, op: ${op}`);
+    throw new CTSError(`Amount must be positive: ${parsed.toString()}, op: ${op}`);
   }
   return parsed;
 }
@@ -202,7 +205,7 @@ export function getEncodedToken(token: Token, opts?: { removeDleq?: boolean }): 
   // Normalize amounts for untyped (JS) callers who may pass JSON.parse'd tokens directly.
   const proofs = normalizeProofAmounts(token.proofs);
   if (hasNonHexId(proofs)) {
-    throw new Error(
+    throw new CTSError(
       'Proofs contain a legacy keyset ID and cannot be encoded. Swap them at the mint first.',
     );
   }
@@ -222,12 +225,12 @@ function getEncodedTokenV4(token: Token, removeDleq?: boolean): string {
   // Make sure each DLEQ has its blinding factor
   proofs.forEach((p) => {
     if (p.dleq && p.dleq.r == undefined) {
-      throw new Error('Missing blinding factor in included DLEQ proof');
+      throw new CTSError('Missing blinding factor in included DLEQ proof');
     }
   });
   const nonHex = hasNonHexId(proofs);
   if (nonHex) {
-    throw new Error('can not encode to v4 token if proofs contain non-hex keyset id');
+    throw new CTSError('can not encode to v4 token if proofs contain non-hex keyset id');
   }
   // Map keyset IDs to short IDs
   proofs = convertToShortKeysetId(proofs);
@@ -369,7 +372,7 @@ function handleTokens(token: string): Token {
   if (version === 'A') {
     const parsedV3Token = encodeBase64ToJson<DeprecatedToken>(encodedToken);
     if (parsedV3Token.token.length > 1) {
-      throw new Error('Multi entry token are not supported');
+      throw new CTSError('Multi entry token are not supported');
     }
     const entry = parsedV3Token.token[0];
     const proofs = entry.proofs.map((p) => ({
@@ -390,7 +393,7 @@ function handleTokens(token: string): Token {
     const tokenData = decodeCBOR(uInt8Token) as TokenV4Template;
     return tokenFromTemplate(tokenData);
   }
-  throw new Error('Token version is not supported');
+  throw new CTSError('Token version is not supported');
 }
 
 export type DeriveKeysetIdOptions = {
@@ -443,7 +446,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
     }
     case 1: {
       if (!unit) {
-        throw new Error('Cannot compute keyset ID version 01: unit is required.');
+        throw new CTSError('Cannot compute keyset ID version 01: unit is required.');
       }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
@@ -462,7 +465,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       return '01' + hashHex;
     }
     default:
-      throw new Error(`Unrecognized keyset ID version: ${versionByte}`);
+      throw new CTSError(`Unrecognized keyset ID version: ${versionByte}`);
   }
 }
 
@@ -523,23 +526,23 @@ export function normalizeUrl(url: string): string {
   let parsed: URL;
   try {
     parsed = new URL(url);
-  } catch {
-    throw new Error(`Invalid mint URL: ${url}`);
+  } catch (e) {
+    throw new CTSError(`Invalid mint URL: ${url}`, { cause: e });
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`Invalid mint URL scheme: ${parsed.protocol}`);
+    throw new CTSError(`Invalid mint URL scheme: ${parsed.protocol}`);
   }
   if (parsed.username || parsed.password) {
-    throw new Error('Mint URL must not contain credentials');
+    throw new CTSError('Mint URL must not contain credentials');
   }
   if (parsed.search || parsed.href.includes('?')) {
-    throw new Error('Mint URL must not contain query parameters');
+    throw new CTSError('Mint URL must not contain query parameters');
   }
   if (parsed.hash || parsed.href.includes('#')) {
-    throw new Error('Mint URL must not contain a fragment');
+    throw new CTSError('Mint URL must not contain a fragment');
   }
   if (/%[0-9a-f]{2}/i.test(parsed.pathname)) {
-    throw new Error('Mint URL path must not contain percent-encoded characters');
+    throw new CTSError('Mint URL path must not contain percent-encoded characters');
   }
   return parsed.href.replace(/\/+$/, '');
 }
@@ -656,23 +659,25 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
       newProofs.push(proof);
     } else if (idBytes[0] === 0x01) {
       if (!uniqueIds.length) {
-        throw new Error('A short keyset ID v2 was encountered, but got no keysets to map it to.');
+        throw new CTSError(
+          'A short keyset ID v2 was encountered, but got no keysets to map it to.',
+        );
       }
       // Look for a match: prefix(keyset ID) == short ID
       const shortId = proof.id.toLowerCase();
       const matches = uniqueIds.filter((id) => shortId === id.slice(0, shortId.length));
       if (matches.length > 1) {
-        throw new Error(`Short keyset ID ${proof.id} is ambiguous.`);
+        throw new CTSError(`Short keyset ID ${proof.id} is ambiguous.`);
       }
       if (matches.length === 0) {
-        throw new Error(
+        throw new CTSError(
           `Couldn't map short keyset ID ${proof.id} to any known keysets of the current Mint`,
         );
       }
       proof.id = matches[0];
       newProofs.push(proof);
     } else {
-      throw new Error(`Unknown keyset ID version: ${idBytes[0]}`);
+      throw new CTSError(`Unknown keyset ID version: ${idBytes[0]}`);
     }
   }
 
@@ -692,7 +697,9 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
     return false;
   }
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    throw new Error(`Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`);
+    throw new CTSError(
+      `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
+    );
   }
   const key = keyset.keys[proof.amount.toString()];
   try {
@@ -756,7 +763,7 @@ export function getDecodedTokenBinary(bytes: Uint8Array): Token {
   const prefix = utfDecoder.decode(bytes.slice(0, 4));
   const version = utfDecoder.decode(new Uint8Array([bytes[4]]));
   if (prefix !== 'craw' || version !== 'B') {
-    throw new Error('not a valid binary token');
+    throw new CTSError('not a valid binary token');
   }
   const binaryToken = bytes.slice(5);
   const decoded = decodeCBOR(binaryToken) as TokenV4Template;

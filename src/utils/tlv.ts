@@ -1,5 +1,6 @@
 import { bech32 } from '@scure/base';
 
+import { CTSError } from '../model/Errors';
 import { PaymentRequestTransportType } from '../wallet/types/payment-requests';
 import type { PaymentRequestTransport } from '../wallet/types/payment-requests';
 
@@ -173,7 +174,7 @@ function decodeAllParts(data: Uint8Array): TLVPart[] {
  */
 function decodeNextPart(data: Uint8Array): TLVPart {
   if (data.length < 3) {
-    throw new Error('TLV data too short: need at least 3 bytes for tag and length');
+    throw new CTSError('TLV data too short: need at least 3 bytes for tag and length');
   }
 
   const dataView = new DataView(data.buffer, data.byteOffset, data.byteLength);
@@ -181,7 +182,7 @@ function decodeNextPart(data: Uint8Array): TLVPart {
   const length = dataView.getUint16(1, false); // big-endian
 
   if (data.length < 3 + length) {
-    throw new Error(`TLV data too short: expected ${3 + length} bytes, got ${data.length}`);
+    throw new CTSError(`TLV data too short: expected ${3 + length} bytes, got ${data.length}`);
   }
 
   const value = data.subarray(3, 3 + length);
@@ -194,14 +195,14 @@ function parseString(value: Uint8Array): string {
 
 function parseU64(value: Uint8Array): bigint {
   if (value.length !== 8) {
-    throw new Error(`Invalid u64: expected 8 bytes, got ${value.length}`);
+    throw new CTSError(`Invalid u64: expected 8 bytes, got ${value.length}`);
   }
   return new DataView(value.buffer, value.byteOffset, value.byteLength).getBigUint64(0, false);
 }
 
 function parseU8(value: Uint8Array): number {
   if (value.length !== 1) {
-    throw new Error(`Invalid u8: expected 1 byte, got ${value.length}`);
+    throw new CTSError(`Invalid u8: expected 1 byte, got ${value.length}`);
   }
   return value[0];
 }
@@ -213,7 +214,7 @@ function transportKindToType(kind: number): PaymentRequestTransportType {
     case TRANSPORT_KIND_HTTP_POST:
       return 'post' as PaymentRequestTransportType;
     default:
-      throw new Error(`Unsupported transport kind: ${kind}`);
+      throw new CTSError(`Unsupported transport kind: ${kind}`);
   }
 }
 
@@ -224,7 +225,7 @@ function nut10KindToType(kind: number): string {
     case NUT10_KIND_HTLC:
       return 'HTLC';
     default:
-      throw new Error(`Unsupported NUT-10 kind: ${kind}`);
+      throw new CTSError(`Unsupported NUT-10 kind: ${kind}`);
   }
 }
 
@@ -253,10 +254,10 @@ function parseTransport(value: Uint8Array): PaymentRequestTransport {
   }
 
   if (kind === undefined) {
-    throw new Error('Transport missing required kind field');
+    throw new CTSError('Transport missing required kind field');
   }
   if (targetBytes === undefined) {
-    throw new Error('Transport missing required target field');
+    throw new CTSError('Transport missing required target field');
   }
 
   // Parse target based on kind
@@ -313,10 +314,10 @@ function parseNut10(value: Uint8Array): Nut10SpendingCondition {
   }
 
   if (kindNum === undefined) {
-    throw new Error('NUT-10 spending condition missing required kind field');
+    throw new CTSError('NUT-10 spending condition missing required kind field');
   }
   if (data === undefined) {
-    throw new Error('NUT-10 spending condition missing required data field');
+    throw new CTSError('NUT-10 spending condition missing required data field');
   }
 
   // Return undefined for tags if empty
@@ -353,7 +354,7 @@ function parseTagTuple(value: Uint8Array): string[] {
     offset += 1;
 
     if (value.length - offset < length) {
-      throw new Error(
+      throw new CTSError(
         `Tag tuple data too short: expected ${length} bytes, got ${value.length - offset}`,
       );
     }
@@ -443,7 +444,7 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
 function encodeTLVPart(tag: number, value: Uint8Array): Uint8Array {
   const length = value.length;
   if (length > 0xffff) {
-    throw new Error(`TLV value too long: ${length} bytes (max 65535)`);
+    throw new CTSError(`TLV value too long: ${length} bytes (max 65535)`);
   }
 
   const result = new Uint8Array(3 + length);
@@ -478,7 +479,7 @@ function transportTypeToKind(type: PaymentRequestTransportType): number {
     case PaymentRequestTransportType.POST:
       return TRANSPORT_KIND_HTTP_POST;
     default:
-      throw new Error(`Unsupported transport type: ${type as string}`);
+      throw new CTSError(`Unsupported transport type: ${type as string}`);
   }
 }
 
@@ -489,7 +490,7 @@ function nut10TypeToKind(type: string): number {
     case 'HTLC':
       return NUT10_KIND_HTLC;
     default:
-      throw new Error(`Unsupported NUT-10 type: ${type}`);
+      throw new CTSError(`Unsupported NUT-10 type: ${type}`);
   }
 }
 
@@ -591,7 +592,7 @@ function encodeTagTuple(tuple: string[]): Uint8Array {
   for (const str of tuple) {
     const encoded = encoder.encode(str);
     if (encoded.length > 255) {
-      throw new Error(`Tag tuple string too long: ${str} (max 255 bytes)`);
+      throw new CTSError(`Tag tuple string too long: ${str} (max 255 bytes)`);
     }
     // 1-byte length prefix + string bytes
     const part = new Uint8Array(1 + encoded.length);
@@ -622,7 +623,7 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
   // Decode bech32m
   const decoded = bech32.decode(nprofile as `${string}1${string}`, 1024);
   if (decoded.prefix !== 'nprofile') {
-    throw new Error(`Invalid nprofile: expected prefix 'nprofile', got '${decoded.prefix}'`);
+    throw new CTSError(`Invalid nprofile: expected prefix 'nprofile', got '${decoded.prefix}'`);
   }
 
   const tlvData = bech32.fromWords(decoded.words);
@@ -635,7 +636,7 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
 
   while (offset < data.length) {
     if (offset + 2 > data.length) {
-      throw new Error('Nprofile TLV data too short');
+      throw new CTSError('Nprofile TLV data too short');
     }
 
     const tag = data[offset];
@@ -643,7 +644,7 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
     offset += 2;
 
     if (offset + length > data.length) {
-      throw new Error(`Nprofile TLV value too short: expected ${length} bytes`);
+      throw new CTSError(`Nprofile TLV value too short: expected ${length} bytes`);
     }
 
     const value = data.subarray(offset, offset + length);
@@ -652,7 +653,7 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
     if (tag === 0x00) {
       // Pubkey
       if (value.length !== 32) {
-        throw new Error(`Invalid pubkey length: expected 32 bytes, got ${value.length}`);
+        throw new CTSError(`Invalid pubkey length: expected 32 bytes, got ${value.length}`);
       }
       pubkey = value;
     } else if (tag === 0x01) {
@@ -663,7 +664,7 @@ export function decodeNprofile(nprofile: string): { pubkey: Uint8Array; relays: 
   }
 
   if (!pubkey) {
-    throw new Error('Nprofile missing required pubkey');
+    throw new CTSError('Nprofile missing required pubkey');
   }
 
   return { pubkey, relays };
@@ -696,7 +697,7 @@ export function encodeNprofile(pubkey: Uint8Array, relays: string[]): string {
  */
 function encodePubkeyRelaysTLV(pubkey: Uint8Array, relays: string[]): Uint8Array {
   if (pubkey.length !== 32) {
-    throw new Error(`Invalid pubkey: expected 32 bytes, got ${pubkey.length}`);
+    throw new CTSError(`Invalid pubkey: expected 32 bytes, got ${pubkey.length}`);
   }
 
   const encoder = new TextEncoder();
@@ -705,7 +706,7 @@ function encodePubkeyRelaysTLV(pubkey: Uint8Array, relays: string[]): Uint8Array
   // Validate relay lengths fit in 1 byte
   for (let i = 0; i < encodedRelays.length; i++) {
     if (encodedRelays[i].length > 255) {
-      throw new Error(`Relay URL too long: ${relays[i]} (max 255 bytes)`);
+      throw new CTSError(`Relay URL too long: ${relays[i]} (max 255 bytes)`);
     }
   }
 

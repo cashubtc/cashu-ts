@@ -1,6 +1,6 @@
 import { HttpResponse, http } from 'msw';
 import { test, describe, expect } from 'vitest';
-import { Wallet, Amount, type Proof } from '../../src';
+import { Wallet, Amount, CTSError, type Proof } from '../../src';
 import { mint, unit, mintUrl, useTestServer } from './_setup';
 
 const server = useTestServer();
@@ -79,5 +79,43 @@ describe('wallet.maxSpendableAfterFees', () => {
 
     // 100 - 10 (feeReserve) - 3 (inputFee) = 87
     expect(result.equals(87)).toBe(true);
+  });
+
+  test('throws with cause when a proof keyset fee lookup fails', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const call = () =>
+      wallet.maxSpendableAfterFees([
+        {
+          id: '00missingkeyset',
+          amount: Amount.from(1),
+          secret: 'secret',
+          C: 'C',
+        },
+      ]);
+
+    expect(call).toThrow(/Could not get fee\. No keyset found for keyset id: 00missingkeyset/);
+    try {
+      call();
+    } catch (e) {
+      expect(e).toBeInstanceOf(CTSError);
+      expect((e as CTSError).cause).toBeInstanceOf(Error);
+    }
+  });
+
+  test('throws with cause when a keyset fee lookup fails', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const call = () => wallet.getFeesForKeyset(1, '00missingkeyset');
+
+    expect(call).toThrow(/No keyset found with ID 00missingkeyset/);
+    try {
+      call();
+    } catch (e) {
+      expect(e).toBeInstanceOf(CTSError);
+      expect((e as CTSError).cause).toBeInstanceOf(Error);
+    }
   });
 });
