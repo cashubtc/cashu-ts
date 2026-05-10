@@ -29,6 +29,7 @@ import {
   normalizeProofAmounts,
   sortProofsById,
   normalizeUrl,
+  verifyDleqIfPresent,
 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
@@ -654,6 +655,46 @@ describe('test zero-knowledge utilities', () => {
       keys: { [2]: pubkey.toHex(true) },
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
+  });
+
+  describe('verifyDleqIfPresent', () => {
+    const keyset = {
+      id: '00',
+      unit: 'sat',
+      keys: { [1]: pubkey.toHex(true) },
+    };
+
+    test('returns true when no DLEQ is present', () => {
+      const { dleq, ...proofNoDleq } = serializedProof;
+      void dleq;
+      expect(verifyDleqIfPresent(proofNoDleq, keyset)).toBe(true);
+    });
+
+    test('returns true for a valid DLEQ', () => {
+      expect(verifyDleqIfPresent(serializedProof, keyset)).toBe(true);
+    });
+
+    test('returns false for a tampered DLEQ', () => {
+      const tampered: Proof = {
+        ...serializedProof,
+        dleq: {
+          ...serializedProof.dleq!,
+          e: '00'.repeat(32),
+        },
+      };
+      expect(verifyDleqIfPresent(tampered, keyset)).toBe(false);
+    });
+
+    test('throws if DLEQ is present but no matching keyset key', () => {
+      const wrongKeyset = {
+        id: '00',
+        unit: 'sat',
+        keys: { [2]: pubkey.toHex(true) },
+      };
+      expect(() => verifyDleqIfPresent(serializedProof, wrongKeyset)).toThrow(
+        /Undefined key for amount/,
+      );
+    });
   });
 });
 

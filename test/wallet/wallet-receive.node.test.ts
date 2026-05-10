@@ -548,6 +548,32 @@ describe('receive', () => {
     );
   });
 
+  test('test receive verifies DLEQ when present even without requireDleq (NUT-12 MUST)', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const decoded = wallet.decodeToken(token3sat);
+    const tampered = {
+      ...decoded,
+      proofs: decoded.proofs.map((p, i) =>
+        i === 0
+          ? {
+              ...p,
+              dleq: {
+                e: '00'.repeat(32),
+                s: '00'.repeat(32),
+                r: '00'.repeat(32),
+              },
+            }
+          : p,
+      ),
+    };
+
+    await expect(wallet.receive(tampered)).rejects.toThrow(
+      'Token contains a proof with an invalid DLEQ',
+    );
+  });
+
   test('test receive proofsWeHave optimization', async () => {
     server.use(
       http.post(mintUrl + '/v1/swap', async () => {

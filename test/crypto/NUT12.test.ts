@@ -175,6 +175,13 @@ describe('OutputData.toProof DLEQ verification', () => {
     expect(() => od.toProof(sig, keyset)).toThrow('DLEQ verification failed');
   });
 
+  test('toProof throws on undefined signature', () => {
+    const { keyset, od } = mintSetup();
+    expect(() => od.toProof(undefined as never, keyset)).toThrow(
+      'Mint response is missing a signature for one of the outputs',
+    );
+  });
+
   test('toProof preserves p2pk_e from OutputData instance', () => {
     const { blindSig, keyset, od } = mintSetup();
     const p2pkE = secp256k1.getPublicKey(secp256k1.utils.randomSecretKey(), true);

@@ -104,6 +104,11 @@ export class OutputData implements OutputDataLike {
   }
 
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
+    if (sig == undefined) {
+      throw new Error(
+        'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
+      );
+    }
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
       dleq = {

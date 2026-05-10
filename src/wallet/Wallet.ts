@@ -52,6 +52,7 @@ import {
   normalizeUrl,
   splitAmount,
   sumProofs,
+  verifyDleqIfPresent,
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
@@ -950,13 +951,14 @@ class Wallet {
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
     this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
 
-    // Check DLEQs if needed
-    if (requireDleq) {
-      for (const p of proofs) {
-        const ks = this._keyChain.getKeyset(p.id);
-        if (!hasValidDleq(p, ks)) {
-          this.fail('Token contains proofs with invalid or missing DLEQ');
-        }
+    // NUT-12: wallets MUST verify any DLEQ on a received proof. `requireDleq: true`
+    // upgrades that to "DLEQ must also be present" via the stricter `hasValidDleq`.
+    for (const p of proofs) {
+      const ks = this._keyChain.getKeyset(p.id);
+      if (requireDleq) {
+        this.failIf(!hasValidDleq(p, ks), 'Token contains proofs with invalid or missing DLEQ');
+      } else {
+        this.failIf(!verifyDleqIfPresent(p, ks), 'Token contains a proof with an invalid DLEQ');
       }
     }
 
@@ -1282,7 +1284,7 @@ class Wallet {
     const { signatures } = await this.mint.swap(swapTransaction.payload);
     this.failIf(
       signatures.length !== swapTransaction.outputData.length,
-      `Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}`,
+      `Mint returned ${signatures.length} signatures, expected ${swapTransaction.outputData.length}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
     this.validateReturnedSignatures(signatures, swapTransaction.outputData);
 
@@ -1815,12 +1817,16 @@ class Wallet {
 
     for (let i = 0; i < signatures.length; i++) {
       this.failIf(
+        signatures[i] == undefined,
+        `Mint response is missing a signature at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+      );
+      this.failIf(
         checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
-        `Mint returned signature with wrong amount: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}`,
+        `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.failIf(
         requiresDleq && !signatures[i].dleq,
-        'Mint supports NUT-12, but returned a signature without DLEQ proof',
+        `Mint supports NUT-12, but returned a signature without DLEQ proof at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
     }
   }
@@ -2051,7 +2057,7 @@ class Wallet {
     const { signatures } = await this.mint.mint(method, payload);
     this.failIf(
       signatures.length !== outputData.length,
-      `Mint returned ${signatures.length} signatures, expected ${outputData.length}`,
+      `Mint returned ${signatures.length} signatures, expected ${outputData.length}. The mint quote may already be marked issued; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
     this.validateReturnedSignatures(signatures, outputData);
 
@@ -2214,7 +2220,7 @@ class Wallet {
     const { signatures: sigs } = await this.mint.mintBatch(method, payload);
     this.failIf(
       sigs.length !== outputData.length,
-      `Mint returned ${sigs.length} signatures, expected ${outputData.length}`,
+      `Mint returned ${sigs.length} signatures, expected ${outputData.length}. The mint quote may already be marked issued; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
     this.validateReturnedSignatures(sigs, outputData);
 
@@ -2636,7 +2642,7 @@ class Wallet {
       // Change may not use all outputs (shorter is ok)
       this.failIf(
         meltResponse.change.length > meltPreview.outputData.length,
-        `Mint returned ${meltResponse.change.length} signatures, but only ${meltPreview.outputData.length} blanks were provided`,
+        `Mint returned ${meltResponse.change.length} signatures, but only ${meltPreview.outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.validateReturnedSignatures(meltResponse.change, meltPreview.outputData, {
         checkAmounts: false, // change outputs are blank

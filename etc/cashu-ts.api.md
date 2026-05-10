@@ -1842,6 +1842,9 @@ export type UnblindedSignature = {
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
+// @public
+export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean;
+
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
 

@@ -699,24 +699,50 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
  * @throws Throws if the proof amount does not match any key in the provided keyset.
  */
 export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
-  if (proof.dleq == undefined) {
+  if (proof?.dleq == undefined) {
     return false;
   }
-  const dleq = {
-    e: hexToBytes(proof.dleq.e),
-    s: hexToBytes(proof.dleq.s),
-    r: hexToNumber(proof.dleq.r ?? '00'),
-  } as DLEQ;
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
     throw new Error(`Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`);
   }
   const key = keyset.keys[proof.amount.toString()];
-  return verifyDLEQProof_reblind(
-    new TextEncoder().encode(proof.secret),
-    dleq,
-    pointFromHex(proof.C),
-    pointFromHex(key),
-  );
+  try {
+    const dleq = {
+      e: hexToBytes(proof.dleq.e),
+      s: hexToBytes(proof.dleq.s),
+      r: hexToNumber(proof.dleq.r ?? '00'),
+    } as DLEQ;
+    return verifyDLEQProof_reblind(
+      new TextEncoder().encode(proof.secret),
+      dleq,
+      pointFromHex(proof.C),
+      pointFromHex(key),
+    );
+  } catch {
+    // Malformed DLEQ payload (out-of-range scalar, bad point encoding, etc.) — treat as invalid.
+    return false;
+  }
+}
+
+/**
+ * NUT-12: verifies the DLEQ proof on a Proof when one is included.
+ *
+ * @remarks
+ * Distinct from {@link hasValidDleq}: if the proof carries no DLEQ this returns true (nothing to
+ * verify), satisfying the spec "MUST verify-if-present" rule. Use {@link hasValidDleq} when you want
+ * a stricter "must be present and valid" check.
+ * @param proof The proof subject to verification.
+ * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
+ * @returns True if no DLEQ is present, or if the present DLEQ verifies; false if the present DLEQ
+ *   fails to verify.
+ * @throws Throws if a DLEQ is present and the proof amount does not match any key in the provided
+ *   keyset.
+ */
+export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
+  if (proof?.dleq == undefined) {
+    return true;
+  }
+  return hasValidDleq(proof, keyset);
 }
 
 /**
