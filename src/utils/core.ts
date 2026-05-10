@@ -699,7 +699,7 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
  * @throws Throws if the proof amount does not match any key in the provided keyset.
  */
 export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
-  if (proof.dleq == undefined) {
+  if (proof?.dleq == undefined) {
     return false;
   }
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
@@ -739,7 +739,7 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
  *   keyset.
  */
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
-  if (proof.dleq == undefined) {
+  if (proof?.dleq == undefined) {
     return true;
   }
   return hasValidDleq(proof, keyset);
