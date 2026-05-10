@@ -1188,6 +1188,31 @@ describe('generic mint/melt methods', () => {
       expect(quote.request).toBe('lnbc100...');
     });
 
+    test('bolt11 melt quote with omitted payment_preimage is coerced to null', async () => {
+      server.use(
+        http.post(mintUrl + '/v1/melt/quote/bolt11', () =>
+          HttpResponse.json({
+            quote: 'bolt11-melt-no-preimage',
+            amount: 100,
+            unit: 'sat',
+            fee_reserve: 5,
+            state: MeltQuoteState.UNPAID,
+            expiry: 3600,
+            request: 'lnbc100...',
+            // payment_preimage omitted — spec says `<str | null>`; mints often omit pre-payment
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit });
+      await wallet.loadMint();
+
+      const quote = await wallet.createMeltQuote<MeltQuoteBolt11Response>('bolt11', {
+        request: 'lnbc100...',
+      });
+
+      expect(quote.payment_preimage).toBeNull();
+    });
+
     test('custom normalize runs after base normalization', async () => {
       server.use(
         http.post(mintUrl + '/v1/melt/quote/swift', () =>

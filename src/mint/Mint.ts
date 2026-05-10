@@ -8,7 +8,7 @@
 import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
-import { Amount } from '../model/Amount';
+import { Amount, type AmountLike } from '../model/Amount';
 import { MintInfo } from '../model/MintInfo';
 import {
   type MintQuoteBaseResponse,
@@ -732,6 +732,13 @@ class Mint {
       throw new Error('Invalid response from mint');
     }
 
+    // Per NUT-07, ProofState.witness is `<str | null>`. Some mints may omit the
+    // field instead of sending null; coerce undefined → null so consumers
+    // can rely on `state.witness === null` checks.
+    for (const state of data.states) {
+      nullIfUndefined(state, 'witness');
+    }
+
     return data;
   }
 
@@ -1035,7 +1042,7 @@ class Mint {
    * Mutates `data` in place, normalizing bolt11 mint-quote fields.
    */
   private normalizeMintQuoteBolt11Fields(data: Record<string, unknown>): void {
-    data.amount = Amount.from(data.amount as Amount);
+    data.amount = Amount.from(data.amount as AmountLike);
     data.expiry = normalizeSafeIntegerMetadata(
       data.expiry as number,
       'mintQuoteBolt11.expiry',
@@ -1057,8 +1064,8 @@ class Mint {
       'mintQuoteBolt12.expiry',
       null,
     );
-    data.amount_paid = Amount.from(data.amount_paid as Amount);
-    data.amount_issued = Amount.from(data.amount_issued as Amount);
+    data.amount_paid = Amount.from(data.amount_paid as AmountLike);
+    data.amount_issued = Amount.from(data.amount_issued as AmountLike);
   }
 
   /**
@@ -1084,7 +1091,7 @@ class Mint {
    * Mutates `data` in place, normalizing protocol-mandatory melt base fields.
    */
   private normalizeMeltBaseFields(data: Record<string, unknown>, op: string): void {
-    data.amount = Amount.from(data.amount as Amount);
+    data.amount = Amount.from(data.amount as AmountLike);
     data.expiry = normalizeSafeIntegerMetadata(
       data.expiry as number,
       'meltQuote.expiry',
@@ -1111,11 +1118,15 @@ class Mint {
    * Mutates `data` in place, normalizing bolt11/bolt12-specific melt fields.
    */
   private normalizeMeltBoltFields(data: Record<string, unknown>, op: string): void {
-    data.fee_reserve = Amount.from(data.fee_reserve as Amount);
+    data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
     if (typeof data.request !== 'string' || !(data.fee_reserve instanceof Amount)) {
       this._logger.error('Invalid response from mint...', { data, op });
       throw new Error('Invalid response from mint');
     }
+    // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
+    // until the invoice is paid; coerce undefined → null so consumers can
+    // rely on `payment_preimage === null` checks.
+    nullIfUndefined(data, 'payment_preimage');
   }
 }
 

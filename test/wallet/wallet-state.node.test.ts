@@ -37,6 +37,27 @@ describe('checkProofsStates', () => {
       expect(r.witness).toEqual('witness-asd');
     });
   });
+
+  test('checkProofsStates with omitted witness coerces undefined → null', async () => {
+    server.use(
+      http.post(mintUrl + '/v1/checkstate', () => {
+        return HttpResponse.json({
+          states: [
+            {
+              Y: '02d5dd71f59d917da3f73defe997928e9459e9d67d8bdb771e4989c2b5f50b2fff',
+              state: 'UNSPENT',
+              // witness omitted — spec says `<str | null>`
+            },
+          ],
+        });
+      }),
+    );
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const result = await wallet.checkProofsStates(proofs);
+    expect(result[0].witness).toBeNull();
+  });
 });
 
 describe('groupProofsByState', () => {
