@@ -1,5 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
 import {
   createBlindSignature,
@@ -68,6 +68,64 @@ describe('test DLEQ scheme', () => {
     // Wallet(Carol)
     const isValid = verifyDLEQProof_reblind(blindMessage.secret, dleqProof, proof.C, mintPubKey);
     expect(isValid).toBe(true);
+  });
+});
+
+describe('deterministic nonce derivation — spec test vectors', () => {
+  test('reproduces exact (e, s) for known (a, B_)', () => {
+    const a = hexToBytes('0000000000000000000000000000000000000000000000000000000000000002');
+    const B_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
+    const proof = createDLEQProof(B_, a);
+    expect(bytesToHex(proof.e)).toBe(
+      '2a16ffee280aff3c429045607f9b8e0bf8b35910c44c1b20b9dfaf01b263d7b3',
+    );
+    expect(bytesToHex(proof.s)).toBe(
+      '9df27731238334718d120d4f74611a7c668233f988e687ac3fb188f0a34a2dab',
+    );
+  });
+
+  test('proof verifies for known vector', () => {
+    const a = hexToBytes('0000000000000000000000000000000000000000000000000000000000000002');
+    const B_ = pointFromHex('02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2');
+    const A = pointFromHex('02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5');
+    const C_ = pointFromHex('0244eccfc7a348274458bb38044c7f3c389b3c2086c7ec18b5812d2877ab937787');
+    const proof = createDLEQProof(B_, a);
+    expect(verifyDLEQProof(proof, B_, C_, A)).toBe(true);
+  });
+});
+
+describe('deterministic nonce derivation', () => {
+  test('same key + same B_ always produces identical (e, s)', () => {
+    const mintPrivKey = secp256k1.utils.randomSecretKey();
+    const blindMsg = createRandomRawBlindedMessage();
+
+    const proof1 = createDLEQProof(blindMsg.B_, mintPrivKey);
+    const proof2 = createDLEQProof(blindMsg.B_, mintPrivKey);
+
+    expect(bytesToHex(proof1.e)).toBe(bytesToHex(proof2.e));
+    expect(bytesToHex(proof1.s)).toBe(bytesToHex(proof2.s));
+  });
+
+  test('different B_ produces different (e, s)', () => {
+    const mintPrivKey = secp256k1.utils.randomSecretKey();
+    const blindMsg1 = createRandomRawBlindedMessage();
+    const blindMsg2 = createRandomRawBlindedMessage();
+
+    const proof1 = createDLEQProof(blindMsg1.B_, mintPrivKey);
+    const proof2 = createDLEQProof(blindMsg2.B_, mintPrivKey);
+
+    expect(bytesToHex(proof1.e)).not.toBe(bytesToHex(proof2.e));
+  });
+
+  test('different key produces different (e, s) for same B_', () => {
+    const key1 = secp256k1.utils.randomSecretKey();
+    const key2 = secp256k1.utils.randomSecretKey();
+    const blindMsg = createRandomRawBlindedMessage();
+
+    const proof1 = createDLEQProof(blindMsg.B_, key1);
+    const proof2 = createDLEQProof(blindMsg.B_, key2);
+
+    expect(bytesToHex(proof1.e)).not.toBe(bytesToHex(proof2.e));
   });
 });
 

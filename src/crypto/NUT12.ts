@@ -1,10 +1,36 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
+import { hmac } from '@noble/hashes/hmac.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { Bytes } from '../utils';
 
-import { type DLEQ, hash_e, hashToCurve, createRandomSecretKey } from './core';
+import { type DLEQ, hash_e, hashToCurve } from './core';
+
+const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
+const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
+
+function deriveDLEQNonce(
+  a: Uint8Array,
+  A: WeierstrassPoint<bigint>,
+  B_: WeierstrassPoint<bigint>,
+  C_: WeierstrassPoint<bigint>,
+): bigint {
+  const base = concatBytes(DST_R, A.toBytes(false), B_.toBytes(false), C_.toBytes(false));
+  for (let ctr = 0; ctr < 256; ctr++) {
+    const h = hmac(sha256, a, concatBytes(base, new Uint8Array([ctr])));
+    const x = bytesToNumberBE(h);
+    // Reduce modulo curve order. Single subtraction suffices since HMAC output
+    // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
+    const r = x >= SECP256K1_N ? x - SECP256K1_N : x;
+    /* c8 ignore next */
+    if (r !== 0n) return r;
+  }
+  /* c8 ignore next */
+  throw new Error('DLEQ nonce derivation failed');
+}
 
 export const verifyDLEQProof = (
   dleq: DLEQ,
@@ -44,12 +70,12 @@ export const verifyDLEQProof_reblind = (
  * https://en.wikipedia.org/wiki/Timing_attack for information about timing attacks.
  */
 export const createDLEQProof = (B_: WeierstrassPoint<bigint>, a: Uint8Array): DLEQ => {
-  const r = secp256k1.Point.Fn.fromBytes(createRandomSecretKey()); // r <- random (Uint8Array)
+  const scalar_a = secp256k1.Point.Fn.fromBytes(a);
+  const A = secp256k1.Point.BASE.multiply(scalar_a); // A  = aG
+  const C_ = B_.multiply(scalar_a); // C_ = aB_
+  const r = deriveDLEQNonce(a, A, B_, C_);
   const R_1 = secp256k1.Point.BASE.multiply(r); // R1 = rG
   const R_2 = B_.multiply(r); // R2 = rB_
-  const scalar_a = secp256k1.Point.Fn.fromBytes(a);
-  const C_ = B_.multiply(scalar_a); // C_ = aB_
-  const A = secp256k1.Point.BASE.multiply(scalar_a); // A = aG
   const e = hash_e([R_1, R_2, A, C_]); // e = hash(R1, R2, A, C_)
   const scalar_e = secp256k1.Point.Fn.fromBytes(e);
   // Use field operations for constant-time addition and multiplication
