@@ -47,6 +47,7 @@ import {
   normalizeMintKeyset,
   normalizeSafeIntegerMetadata,
   normalizeUrl,
+  nullIfUndefined,
   undefinedIfNull,
 } from '../utils';
 
@@ -732,6 +733,13 @@ class Mint {
       throw new Error('Invalid response from mint');
     }
 
+    // Per NUT-07, ProofState.witness is `<str | null>`. Some mints may omit the
+    // field instead of sending null; coerce undefined → null so consumers
+    // can rely on `state.witness === null` checks.
+    for (const state of data.states) {
+      nullIfUndefined(state, 'witness');
+    }
+
     return data;
   }
 
@@ -1116,6 +1124,10 @@ class Mint {
       this._logger.error('Invalid response from mint...', { data, op });
       throw new Error('Invalid response from mint');
     }
+    // Per NUT-23, payment_preimage is `<str | null>`. Some mints may omit it
+    // until the invoice is paid; coerce undefined → null so consumers can
+    // rely on `payment_preimage === null` checks.
+    nullIfUndefined(data, 'payment_preimage');
   }
 }
 
