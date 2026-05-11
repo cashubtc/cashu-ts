@@ -292,6 +292,7 @@ class Mint {
    * @param mintQuotePayload Payload containing unit and required pubkey.
    * @param customRequest Optional override for the request function.
    * @returns A mint quote containing a Bitcoin address for minting tokens.
+   * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async createMintQuoteOnchain(
     mintQuotePayload: MintQuoteOnchainRequest,
@@ -373,6 +374,7 @@ class Mint {
    * @param quote Quote ID.
    * @param customRequest Optional override for the request function.
    * @returns Updated quote with current payment and issuance amounts.
+   * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async checkMintQuoteOnchain(
     quote: string,
@@ -419,6 +421,7 @@ class Mint {
    * @param mintPayload Payload containing the quote ID and outputs.
    * @param customRequest Optional override for the request function.
    * @returns Serialized blinded signatures.
+   * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
     return this.mint('onchain', mintPayload, { customRequest });
@@ -617,6 +620,7 @@ class Mint {
    * @param meltQuotePayload Payload containing the Bitcoin address, amount, and unit.
    * @param customRequest Optional override for the request function.
    * @returns Melt quote with fee options.
+   * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async createMeltQuoteOnchain(
     meltQuotePayload: MeltQuoteOnchainRequest,
@@ -704,6 +708,7 @@ class Mint {
    * @param quote Quote ID.
    * @param customRequest Optional override for the request function.
    * @returns Updated melt quote with current state.
+   * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async checkMeltQuoteOnchain(
     quote: string,
@@ -805,6 +810,7 @@ class Mint {
    * @param meltPayload The melt payload containing inputs (no outputs).
    * @param options.customRequest Optional override for the request function.
    * @returns The melt response.
+   * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async meltOnchain(
     meltPayload: MeltRequest,

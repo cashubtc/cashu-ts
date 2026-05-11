@@ -2209,13 +2209,11 @@ export class WalletOps {
     meltBolt11(quote: MeltQuoteBolt11Response, proofs: ProofLike[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
     meltBolt12(quote: MeltQuoteBolt12Response, proofs: ProofLike[]): MeltBuilder<MeltQuoteBolt11Response>;
-    // (undocumented)
     meltOnchain(quote: MeltQuoteOnchainResponse, proofs: ProofLike[]): MeltOnchainBuilder;
     // (undocumented)
     mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
     // (undocumented)
     mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
-    // (undocumented)
     mintOnchain(amount: AmountLike, quote: MintQuoteFor<'onchain'>): MintBuilder<"onchain", false>;
     // (undocumented)
     receive(token: Token | string | ProofLike[]): ReceiveBuilder;
