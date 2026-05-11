@@ -1870,6 +1870,32 @@ class Wallet {
     }
   }
 
+  private validateMintQuoteAvailableAmount(
+    method: string,
+    quote: Pick<MintQuoteBaseResponse, 'quote'>,
+    requestedAmount: Amount,
+  ): void {
+    if (method !== 'bolt12' && method !== 'onchain') {
+      return;
+    }
+    if (!('amount_paid' in quote) || !('amount_issued' in quote)) {
+      return;
+    }
+    const amountPaid = Amount.from(quote.amount_paid as AmountLike);
+    const amountIssued = Amount.from(quote.amount_issued as AmountLike);
+    const availableAmount = amountPaid.subtract(amountIssued);
+    this.failIf(
+      requestedAmount.greaterThan(availableAmount),
+      `Mint quote ${quote.quote} has only ${availableAmount.toString()} available to mint; requested ${requestedAmount.toString()}`,
+      {
+        method,
+        amount_paid: amountPaid.toString(),
+        amount_issued: amountIssued.toString(),
+        requestedAmount: requestedAmount.toString(),
+      },
+    );
+  }
+
   /**
    * @internal
    */
@@ -2047,6 +2073,7 @@ class Wallet {
     );
     this.validateMintQuote(quote);
     const requestedAmount = this.parseAmount(amount, `prepareMint: ${method}`);
+    this.validateMintQuoteAvailableAmount(method, quote, requestedAmount);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { privkey, keysetId, proofsWeHave, onCountersReserved } = config ?? {};
 

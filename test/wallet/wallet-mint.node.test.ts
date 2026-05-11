@@ -8,6 +8,7 @@ import {
   type MeltQuoteBaseResponse,
   type MeltQuoteOnchainResponse,
   type MintQuoteBaseResponse,
+  type MintQuoteBolt12Response,
   type MintQuoteOnchainResponse,
   MeltQuoteState,
   MintQuoteState,
@@ -1023,6 +1024,65 @@ describe('generic mint/melt methods', () => {
           unit: 'usd',
         }),
       ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
+    });
+
+    test('prepareMint rejects bolt12 amounts above paid minus issued amount', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote: MintQuoteBolt12Response = {
+        quote: 'bolt12-partial',
+        request: 'lno1...',
+        unit: 'sat',
+        amount: Amount.from(5),
+        pubkey: '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+        state: MintQuoteState.PAID,
+        expiry: null,
+        amount_paid: Amount.from(5),
+        amount_issued: Amount.from(3),
+      };
+
+      await expect(
+        wallet.prepareMint('bolt12', 3, quote, {
+          privkey: '01'.repeat(32),
+        }),
+      ).rejects.toThrow('Mint quote bolt12-partial has only 2 available to mint; requested 3');
+    });
+
+    test('prepareMint keeps string-only quote support without available amount fields', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const preview = await wallet.prepareMint(
+        'bolt12',
+        3,
+        { quote: 'stored-bolt12' },
+        {
+          privkey: '01'.repeat(32),
+        },
+      );
+
+      expect(preview.method).toBe('bolt12');
+      expect(preview.payload.quote).toBe('stored-bolt12');
+    });
+
+    test('mintProofsOnchain rejects amounts above paid minus issued amount', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const quote: MintQuoteOnchainResponse = {
+        quote: 'onchain-partial',
+        request: 'bc1qdeposit',
+        unit: 'sat',
+        pubkey: '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+        expiry: null,
+        amount_paid: Amount.from(5),
+        amount_issued: Amount.from(3),
+      };
+
+      await expect(wallet.mintProofsOnchain(3, quote, '01'.repeat(32))).rejects.toThrow(
+        'Mint quote onchain-partial has only 2 available to mint; requested 3',
+      );
     });
 
     test('mintProofsOnchain signs and mints onchain proofs', async () => {
