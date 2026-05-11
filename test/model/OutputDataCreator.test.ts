@@ -9,6 +9,16 @@ import type { OutputDataFactory, OutputDataLike } from '../../src/model/OutputDa
 import type { HasKeysetKeys, SerializedBlindedSignature, Proof } from '../../src/model/types';
 
 describe('DefaultOutputDataCreator', () => {
+  test('delegates single deterministic output creation to OutputData', () => {
+    const creator = new DefaultOutputDataCreator();
+    const seed = new Uint8Array([1]);
+    const keysetId = '012e23479a0029432eaad0d2040c09be53bab592d5cbf1d55e0dd26c9495951b30';
+
+    expect(creator.createSingleDeterministicData(1, seed, 7, keysetId)).toEqual(
+      OutputData.createSingleDeterministicData(1, seed, 7, keysetId),
+    );
+  });
+
   test('delegates deterministic batch creation to subclassed single-output override', () => {
     const calls: Array<{ amount: string; counter: number; keysetId: string }> = [];
     const keyset: HasKeysetKeys = {
