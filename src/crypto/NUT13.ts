@@ -70,6 +70,10 @@ export function deriveSecretAndBlindingFactor(
   return derive(counter);
 }
 
+// ------------------------------
+// Internal helpers
+// ------------------------------
+
 /**
  * Creates a deterministic deriver function for a seed/keyset pair.
  *
@@ -91,10 +95,6 @@ export function createSecretAndBlindingFactorDeriver(
       return (counter: number) => deriveHmacSecretAndBlindingFactor(seed, keysetId, counter);
   }
 }
-
-// ------------------------------
-// Internal helpers
-// ------------------------------
 
 function getDerivationKind(keysetId: string): DerivationKind {
   const isValidHex = /^[a-fA-F0-9]+$/.test(keysetId);
