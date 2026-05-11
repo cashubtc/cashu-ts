@@ -1536,8 +1536,8 @@ class Wallet {
    *
    * @param [gapLimit=300] The amount of empty counters that should be returned before restoring
    *   ends (defaults to 300). Default is `300`
-   * @param [batchSize=100] The amount of proofs that should be restored at a time (defaults to
-   *   100). Default is `100`
+   * @param [batchSize=300] The amount of proofs that should be restored at a time (defaults to
+   *   300). Default is `300`
    * @param [counter=0] The counter that should be used as a starting point (defaults to 0). Default
    *   is `0`
    * @param [keysetId] Which keysetId to use for the restoration. If none is passed the instance's
@@ -1545,7 +1545,7 @@ class Wallet {
    */
   async batchRestore(
     gapLimit = 300,
-    batchSize = 100,
+    batchSize = 300,
     counter = 0,
     keysetId?: string,
   ): Promise<{ proofs: Proof[]; lastCounterWithSignature?: number }> {

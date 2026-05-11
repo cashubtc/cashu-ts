@@ -2,10 +2,10 @@ import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
   blindMessage,
+  createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
-  deriveBlindingFactor,
   deriveP2BKBlindedPubkeys,
-  deriveSecret,
+  deriveSecretAndBlindingFactor,
   normalizeP2PKOptions,
   pointFromHex,
   verifyDLEQProof,
@@ -288,8 +288,11 @@ export class OutputData implements OutputDataLike {
     customSplit?: AmountLike[],
   ): OutputData[] {
     const amounts = splitAmount(amount, keyset.keys, customSplit);
+    // Create a "deriver" up front for this batch of outputs
+    // This ensures the HDKey is only created once for legacy BIP-32 keysets
+    const derive = createSecretAndBlindingFactorDeriver(seed, keyset.id);
     return amounts.map((a, i) =>
-      this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
+      createSingleDeterministicDataFromBytes(a, keyset.id, derive(counter + i)),
     );
   }
 
@@ -303,18 +306,10 @@ export class OutputData implements OutputDataLike {
     counter: number,
     keysetId: string,
   ): OutputData {
-    const amountValue = Amount.from(amount);
-    const secretBytes = deriveSecret(seed, keysetId, counter);
-    const secretBytesAsHex = bytesToHex(secretBytes);
-    const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-    // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
-    // for BIP32-style retry logic (caller increments counter and retries).
-    const deterministicR = Bytes.toBigInt(deriveBlindingFactor(seed, keysetId, counter));
-    const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
-    return new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
-      r,
-      utf8SecretBytes,
+    return createSingleDeterministicDataFromBytes(
+      amount,
+      keysetId,
+      deriveSecretAndBlindingFactor(seed, keysetId, counter),
     );
   }
 
@@ -327,4 +322,26 @@ export class OutputData implements OutputDataLike {
   static sumOutputAmounts(outputs: OutputDataLike[]): Amount {
     return Amount.sum(outputs.map((output) => output.blindedMessage.amount));
   }
+}
+
+/**
+ * Derives OutputData from specified derived bytes.
+ */
+function createSingleDeterministicDataFromBytes(
+  amount: AmountLike,
+  keysetId: string,
+  derived: { blindingFactor: Uint8Array; secret: Uint8Array },
+): OutputData {
+  const amountValue = Amount.from(amount);
+  const secretBytesAsHex = bytesToHex(derived.secret);
+  const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
+  // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
+  // for BIP32-style retry logic (caller increments counter and retries).
+  const deterministicR = Bytes.toBigInt(derived.blindingFactor);
+  const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
+  return new OutputData(
+    new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+    r,
+    utf8SecretBytes,
+  );
 }

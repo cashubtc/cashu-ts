@@ -84,6 +84,14 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[] {
+    if (
+      this.createSingleDeterministicData ===
+      DefaultOutputDataCreator.prototype.createSingleDeterministicData
+    ) {
+      // Preserve subclasses that customize only the single-output hook.
+      // The default hook can use the optimized batch path.
+      return OutputData.createDeterministicData(amount, seed, counter, keyset, customSplit);
+    }
     const amounts = splitAmount(amount, keyset.keys, customSplit);
     return amounts.map((a, i) =>
       this.createSingleDeterministicData(a, seed, counter + i, keyset.id),

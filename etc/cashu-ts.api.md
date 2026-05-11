@@ -273,7 +273,7 @@ export class CTSError extends Error {
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
@@ -300,8 +300,14 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[]): string[];
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
+
+// @public
+export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): {
+    blindingFactor: Uint8Array;
+    secret: Uint8Array;
+};
 
 // @public (undocumented)
 export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): RawMintKeys;
