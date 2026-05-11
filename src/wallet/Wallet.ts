@@ -81,6 +81,7 @@ import {
   type SendResponse,
   type RestoreConfig,
   type SecretsPolicy,
+  type SerializedMeltChangeData,
   type SwapPreview,
   type MintPreview,
   type BatchMintPreview,
@@ -2622,7 +2623,6 @@ class Wallet {
     let inputs = meltPreview.inputs;
     const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
     const quote = meltPreview.quote.quote;
-    const keyset = this.getKeyset(meltPreview.keysetId);
 
     // Sign proofs if needed
     if (privkey) {
@@ -2645,20 +2645,13 @@ class Wallet {
       meltPreview.method,
       meltPayload,
     );
-    if (meltResponse.change) {
-      // Change may not use all outputs (shorter is ok)
-      this.failIf(
-        meltResponse.change.length > meltPreview.outputData.length,
-        `Mint returned ${meltResponse.change.length} signatures, but only ${meltPreview.outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
-      );
-      this.validateReturnedSignatures(meltResponse.change, meltPreview.outputData, {
-        checkAmounts: false, // change outputs are blank
-      });
-    }
 
-    // Construct change
-    const change =
-      meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
+    // Create any change Proofs
+    const change = this.hydrateMeltChange(
+      meltPreview.keysetId,
+      meltPreview.outputData,
+      meltResponse.change ?? [],
+    );
 
     if (preferAsync) {
       this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
@@ -2671,6 +2664,75 @@ class Wallet {
     // Merge preview quote with response to protect against incomplete response.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
     return { quote: mergedQuote, change };
+  }
+
+  /**
+   * Constructs melt change proofs from a melt response and prepared change data.
+   *
+   * @remarks
+   * This is useful for NUT-06 asynchronous melts. Call `completeMelt(preview, privkey, true)` to
+   * request async processing, keep the original preview, then pass the later paid quote response
+   * from `checkMeltQuote*()` or `wallet.on.onceMeltPaid()` here to hydrate any returned NUT-08
+   * change signatures into spendable proofs.
+   * @param keysetId Keyset ID used to prepare the outputs.
+   * @param outputData Outputs from prepareMelt(), or deserialized persisted output data.
+   * @param change The response containing optional `change` signatures.
+   * @returns Spendable change proofs.
+   * @throws If signatures don't match output count or cannot be verified.
+   */
+  hydrateMeltChange(
+    keysetId: string,
+    outputData: OutputDataLike[],
+    change: SerializedBlindedSignature[],
+  ): Proof[] {
+    const keyset = this.getKeyset(keysetId);
+    // Change may not use all outputs (shorter is ok)
+    this.failIf(
+      change.length > outputData.length,
+      `Mint returned ${change.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+    );
+    this.validateReturnedSignatures(change, outputData, {
+      checkAmounts: false, // change outputs are blank
+    });
+    return change.map((s, i) => outputData[i].toProof(s, keyset));
+  }
+
+  /**
+   * Produces a JSON-safe envelope of the change-recovery data from a melt preview.
+   *
+   * @remarks
+   * Use this alongside `completeMelt(preview, privkey, true)` (NUT-06 async melt) to persist the
+   * prepared change outputs across the pending window. When the quote is later paid, call
+   * `importMeltChangeData(blob)` and pass its result to `hydrateMeltChange` along with the `change`
+   * signatures from the paid quote response.
+   * @param preview The MeltPreview returned by `prepareMelt()`.
+   * @returns A JSON-safe `{ keysetId, outputData }` envelope.
+   */
+  exportMeltChangeData(preview: MeltPreview): SerializedMeltChangeData {
+    return {
+      keysetId: preview.keysetId,
+      outputData: preview.outputData.map((o) => OutputData.serialize(o)),
+    };
+  }
+
+  /**
+   * Reconstructs concrete `OutputData` from a persisted melt change-data envelope, ready to pass to
+   * `hydrateMeltChange` once the paid quote response is available.
+   *
+   * @param blob The envelope produced by `exportMeltChangeData`.
+   * @returns The keyset id and reconstructed output data.
+   * @throws {@link CTSError} If the keyset is unknown to this wallet, or any output entry is
+   *   malformed.
+   */
+  importMeltChangeData(blob: SerializedMeltChangeData): {
+    keysetId: string;
+    outputData: OutputData[];
+  } {
+    this.getKeyset(blob.keysetId);
+    return {
+      keysetId: blob.keysetId,
+      outputData: blob.outputData.map((s) => OutputData.deserialize(s)),
+    };
   }
 
   // -----------------------------------------------------------------

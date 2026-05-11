@@ -661,6 +661,69 @@ describe('melt proofs', () => {
 });
 
 describe('async melt preference body', () => {
+  test('hydrates async melt change from a later paid quote response', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'q-async-hydrate',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+      request: invoice,
+      state: MeltQuoteState.PENDING,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+    };
+    const proofsToSend: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(8),
+        secret: 'secret1',
+        C: 'C1',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(5),
+        secret: 'secret2',
+        C: 'C2',
+      },
+    ];
+    const preview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
+    // Simulate storing the change metadata
+    const storedChangeData = JSON.stringify(wallet.exportMeltChangeData(preview));
+
+    const paidQuote: MeltQuoteBolt11Response = {
+      ...meltQuote,
+      state: MeltQuoteState.PAID,
+      payment_preimage: 'preimage',
+      change: [
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(1),
+          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+        },
+        {
+          id: '00bd033559de27d0',
+          amount: Amount.from(2),
+          C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+        },
+      ],
+    };
+    // Simulate restoring the change metadata
+    const restored = wallet.importMeltChangeData(JSON.parse(storedChangeData));
+    const change = wallet.hydrateMeltChange(
+      restored.keysetId,
+      restored.outputData,
+      paidQuote.change ?? [],
+    );
+    expect(change).toHaveLength(2);
+    expect(change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+    expect(change[1]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
+    expect(/[0-9a-f]{64}/.test(change[0].C)).toBe(true);
+    expect(/[0-9a-f]{64}/.test(change[0].secret)).toBe(true);
+  });
+
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
     const meltQuote = {
       quote: 'q-async-1b',

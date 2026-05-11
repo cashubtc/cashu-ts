@@ -1231,10 +1231,12 @@ export class OutputData implements OutputDataLike {
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
+    static deserialize(serialized: SerializedOutputData): OutputData;
     // (undocumented)
     ephemeralE?: string;
     // (undocumented)
     secret: Uint8Array;
+    static serialize(output: OutputDataLike): SerializedOutputData;
     static sumOutputAmounts(outputs: OutputDataLike[]): Amount;
     // (undocumented)
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
@@ -1682,9 +1684,27 @@ export type SerializedDLEQ = {
     r?: string;
 };
 
+// @public
+export type SerializedMeltChangeData = {
+    keysetId: string;
+    outputData: SerializedOutputData[];
+};
+
 // @public (undocumented)
 export type SerializedMintKeys = {
     [k: string]: string;
+};
+
+// @public
+export type SerializedOutputData = {
+    blindedMessage: {
+        amount: string;
+        B_: string;
+        id: string;
+    };
+    blindingFactor: string;
+    secret: string;
+    ephemeralE?: string;
 };
 
 // @public (undocumented)
@@ -1941,6 +1961,7 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
+    exportMeltChangeData(preview: MeltPreview): SerializedMeltChangeData;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getKeyset(id?: string): Keyset;
@@ -1950,6 +1971,11 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
+    hydrateMeltChange(keysetId: string, outputData: OutputDataLike[], change: SerializedBlindedSignature[]): Proof[];
+    importMeltChangeData(blob: SerializedMeltChangeData): {
+        keysetId: string;
+        outputData: OutputData[];
+    };
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;

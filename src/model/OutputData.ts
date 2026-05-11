@@ -54,6 +54,27 @@ export interface OutputDataLike {
 export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
 /**
+ * JSON-safe representation of an {@link OutputData} entry.
+ */
+export type SerializedOutputData = {
+  /**
+   * Storage shape: `amount` is a decimal string, not an {@link Amount} instance like the wire-shape
+   * {@link SerializedBlindedMessage}.
+   */
+  blindedMessage: {
+    amount: string;
+    B_: string;
+    id: string;
+  };
+  /**
+   * Decimal-encoded bigint.
+   */
+  blindingFactor: string;
+  secret: string;
+  ephemeralE?: string;
+};
+
+/**
  * Core P2PK tags that must not be settable in additional tags.
  *
  * @internal
@@ -321,6 +342,52 @@ export class OutputData implements OutputDataLike {
    */
   static sumOutputAmounts(outputs: OutputDataLike[]): Amount {
     return Amount.sum(outputs.map((output) => output.blindedMessage.amount));
+  }
+
+  /**
+   * Converts output data to a JSON-safe representation.
+   *
+   * @remarks
+   * This is useful when persisting melt change outputs for later hydration.
+   */
+  static serialize(output: OutputDataLike): SerializedOutputData {
+    return {
+      blindedMessage: {
+        amount: output.blindedMessage.amount.toString(),
+        B_: output.blindedMessage.B_,
+        id: output.blindedMessage.id,
+      },
+      blindingFactor: output.blindingFactor.toString(),
+      secret: bytesToHex(output.secret),
+      ...(output.ephemeralE && { ephemeralE: output.ephemeralE }),
+    };
+  }
+
+  /**
+   * Reconstructs concrete {@link OutputData} from its JSON-safe representation.
+   *
+   * @throws {@link CTSError} If any field fails validation (non-canonical blindingFactor, malformed
+   *   hex secret/ephemeralE, or an Amount that cannot be parsed).
+   */
+  static deserialize(serialized: SerializedOutputData): OutputData {
+    try {
+      if (!/^(0|[1-9]\d*)$/.test(serialized.blindingFactor)) {
+        throw new Error('blindingFactor must be a canonical decimal integer');
+      }
+      return new OutputData(
+        {
+          amount: Amount.from(serialized.blindedMessage.amount),
+          B_: serialized.blindedMessage.B_,
+          id: serialized.blindedMessage.id,
+        },
+        BigInt(serialized.blindingFactor),
+        hexToBytes(serialized.secret),
+        serialized.ephemeralE,
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new CTSError(`Invalid SerializedOutputData: ${message}`, { cause: e });
+    }
   }
 }
 
