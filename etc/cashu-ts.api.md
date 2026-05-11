@@ -4,7 +4,6 @@
 
 ```ts
 
-import { HDKey } from '@scure/bip32';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -274,7 +273,7 @@ export class CTSError extends Error {
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
@@ -301,11 +300,11 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[]): string[];
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
-// @public (undocumented)
-export const derviveBip32SecretAndBlindingFactor: (hdKey: HDKey, keysetId: string, counter: number) => {
+// @public
+export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): {
     blindingFactor: Uint8Array;
     secret: Uint8Array;
 };
@@ -1227,7 +1226,7 @@ export class OutputData implements OutputDataLike {
     // (undocumented)
     static createRandomData(amount: AmountLike, keyset: HasKeysetKeys, customSplit?: AmountLike[]): OutputData[];
     // (undocumented)
-    static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string, masterKey?: HDKey): OutputData;
+    static createSingleDeterministicData(amount: AmountLike, seed: Uint8Array, counter: number, keysetId: string): OutputData;
     // (undocumented)
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)

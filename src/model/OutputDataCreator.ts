@@ -84,6 +84,16 @@ export class DefaultOutputDataCreator implements OutputDataCreator {
     keyset: HasKeysetKeys,
     customSplit?: AmountLike[],
   ): OutputDataLike[] {
+    if (
+      this.createSingleDeterministicData ===
+      DefaultOutputDataCreator.prototype.createSingleDeterministicData
+    ) {
+      // createSingleDeterministicData has not been overridden by a subclass.
+      // so we can use the optimized default version
+      return OutputData.createDeterministicData(amount, seed, counter, keyset, customSplit);
+    }
+
+    // Iterate the current subclassed version
     const amounts = splitAmount(amount, keyset.keys, customSplit);
     return amounts.map((a, i) =>
       this.createSingleDeterministicData(a, seed, counter + i, keyset.id),

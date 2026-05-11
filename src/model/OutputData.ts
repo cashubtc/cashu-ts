@@ -1,21 +1,19 @@
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
-import { HDKey } from '@scure/bip32';
 
 import {
   blindMessage,
+  createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
-  deriveBlindingFactor,
   deriveP2BKBlindedPubkeys,
-  deriveSecret,
+  deriveSecretAndBlindingFactor,
   normalizeP2PKOptions,
   pointFromHex,
   verifyDLEQProof,
   type DLEQ,
   type BlindSignature,
   type P2PKOptions,
-  derviveBip32SecretAndBlindingFactor,
 } from '../crypto';
-import { Bytes, isBase64String, numberToHexPadded64, splitAmount } from '../utils';
+import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
 
 import { Amount, type AmountLike } from './Amount';
 import { BlindedMessage } from './BlindedMessage';
@@ -290,14 +288,11 @@ export class OutputData implements OutputDataLike {
     customSplit?: AmountLike[],
   ): OutputData[] {
     const amounts = splitAmount(amount, keyset.keys, customSplit);
-    if (isBase64String(keyset.id)) {
-      const masterKey = HDKey.fromMasterSeed(seed);
-      return amounts.map((a, i) =>
-        this.createSingleDeterministicData(a, seed, counter + i, keyset.id, masterKey),
-      );
-    }
+    // Create a "deriver" up front for this batch of outputs
+    // This ensures the HDKey is only created once for legacy BIP-32 keysets
+    const derive = createSecretAndBlindingFactorDeriver(seed, keyset.id);
     return amounts.map((a, i) =>
-      this.createSingleDeterministicData(a, seed, counter + i, keyset.id),
+      createSingleDeterministicDataFromBytes(a, keyset.id, derive(counter + i)),
     );
   }
 
@@ -310,31 +305,11 @@ export class OutputData implements OutputDataLike {
     seed: Uint8Array,
     counter: number,
     keysetId: string,
-    masterKey?: HDKey,
   ): OutputData {
-    let secretBytes: Uint8Array | undefined = undefined;
-    let blindingFactorBytes: Uint8Array | undefined = undefined;
-    if (isBase64String(keysetId)) {
-      const hdKey = masterKey ?? HDKey.fromMasterSeed(seed);
-      const derivationResult = derviveBip32SecretAndBlindingFactor(hdKey, keysetId, counter);
-      secretBytes = derivationResult.secret;
-      blindingFactorBytes = derivationResult.blindingFactor;
-    } else {
-      secretBytes = deriveSecret(seed, keysetId, counter);
-      blindingFactorBytes = deriveBlindingFactor(seed, keysetId, counter);
-      //
-    }
-    const amountValue = Amount.from(amount);
-    const secretBytesAsHex = bytesToHex(secretBytes);
-    const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
-    // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
-    // for BIP32-style retry logic (caller increments counter and retries).
-    const deterministicR = Bytes.toBigInt(blindingFactorBytes);
-    const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
-    return new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
-      r,
-      utf8SecretBytes,
+    return createSingleDeterministicDataFromBytes(
+      amount,
+      keysetId,
+      deriveSecretAndBlindingFactor(seed, keysetId, counter),
     );
   }
 
@@ -347,4 +322,26 @@ export class OutputData implements OutputDataLike {
   static sumOutputAmounts(outputs: OutputDataLike[]): Amount {
     return Amount.sum(outputs.map((output) => output.blindedMessage.amount));
   }
+}
+
+/**
+ * Derives OutputData from specified derived bytes.
+ */
+function createSingleDeterministicDataFromBytes(
+  amount: AmountLike,
+  keysetId: string,
+  derived: { blindingFactor: Uint8Array; secret: Uint8Array },
+): OutputData {
+  const amountValue = Amount.from(amount);
+  const secretBytesAsHex = bytesToHex(derived.secret);
+  const utf8SecretBytes = new TextEncoder().encode(secretBytesAsHex);
+  // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
+  // for BIP32-style retry logic (caller increments counter and retries).
+  const deterministicR = Bytes.toBigInt(derived.blindingFactor);
+  const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
+  return new OutputData(
+    new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+    r,
+    utf8SecretBytes,
+  );
 }
