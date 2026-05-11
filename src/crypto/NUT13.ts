@@ -133,12 +133,12 @@ function deriveHmacSecretAndBlindingFactor(
   counter: number,
 ): DerivedSecretAndBlindingFactor {
   return {
-    secret: derive(seed, keysetId, counter, DerivationType.SECRET),
-    blindingFactor: derive(seed, keysetId, counter, DerivationType.BLINDING_FACTOR),
+    secret: deriveHmac(seed, keysetId, counter, DerivationType.SECRET),
+    blindingFactor: deriveHmac(seed, keysetId, counter, DerivationType.BLINDING_FACTOR),
   };
 }
 
-function derive(
+function deriveHmac(
   seed: Uint8Array,
   keysetId: string,
   counter: number,
