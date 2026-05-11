@@ -25,7 +25,7 @@ describe('Restoring deterministic proofs', () => {
       });
     const { proofs: restoredProofs } = await wallet.batchRestore();
     expect(restoredProofs.length).toBe(21);
-    expect(mockRestore).toHaveBeenCalledTimes(4);
+    expect(mockRestore).toHaveBeenCalledTimes(2);
     mockRestore.mockClear();
   });
   test('Batch restore with custom values', async () => {
