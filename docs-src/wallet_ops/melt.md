@@ -53,7 +53,7 @@ import { OutputData, type SerializedOutputData } from '@cashu/cashu-ts';
 
 const preview = await wallet.ops.meltBolt11(meltQuote, myProofs).asDeterministic().prepare();
 const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
-await wallet.completeMelt(preview, undefined, true); // preferAsync = true
+await wallet.completeMelt(preview, undefined, { preferAsync: true });
 
 // ... later, once the quote is paid ...
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
