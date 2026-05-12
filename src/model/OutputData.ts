@@ -1,6 +1,7 @@
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
+  asSecpPoint,
   blindMessage,
   createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
@@ -8,6 +9,7 @@ import {
   deriveSecretAndBlindingFactor,
   normalizeP2PKOptions,
   pointFromHex,
+  pointFromHexAuto,
   verifyDLEQProof,
   type DLEQ,
   type BlindSignature,
@@ -142,12 +144,15 @@ export class OutputData implements OutputDataLike {
     const sigAmountKey = sig.amount.toString();
     const A = pointFromHex(keyset.keys[sigAmountKey]);
 
-    // NUT-12: Verify DLEQ proof if present
+    // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ; v3 (BLS)
+    // proofs skip this and rely on pairing-based verification at swap/melt time.
     if (dleq) {
-      const B_ = pointFromHex(this.blindedMessage.B_);
-      const C_ = pointFromHex(sig.C_);
-      if (!verifyDLEQProof(dleq, B_, C_, A)) {
-        throw new CTSError('DLEQ verification failed on mint response');
+      const bAuto = pointFromHexAuto(this.blindedMessage.B_);
+      if (bAuto.kind === 'secp') {
+        const C_ = pointFromHex(sig.C_);
+        if (!verifyDLEQProof(dleq, bAuto.pt, C_, A)) {
+          throw new CTSError('DLEQ verification failed on mint response');
+        }
       }
     }
 
@@ -277,7 +282,7 @@ export class OutputData implements OutputDataLike {
 
     // create OutputData
     return new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+      new BlindedMessage(amountValue, asSecpPoint(B_), keysetId).getSerializedBlindedMessage(),
       r,
       secretBytes,
       Ehex,
@@ -295,7 +300,7 @@ export class OutputData implements OutputDataLike {
     const secretBytes = new TextEncoder().encode(randomHex);
     const { r, B_ } = blindMessage(secretBytes);
     return new OutputData(
-      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+      new BlindedMessage(amountValue, asSecpPoint(B_), keysetId).getSerializedBlindedMessage(),
       r,
       secretBytes,
     );
@@ -424,7 +429,7 @@ function createSingleDeterministicDataFromBytes(
   const deterministicR = Bytes.toBigInt(derived.blindingFactor);
   const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
   return new OutputData(
-    new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
+    new BlindedMessage(amountValue, asSecpPoint(B_), keysetId).getSerializedBlindedMessage(),
     r,
     utf8SecretBytes,
   );
