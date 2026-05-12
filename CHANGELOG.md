@@ -1,5 +1,24 @@
 # Changelog
 
+## [4.3.0](https://github.com/cashubtc/cashu-ts/compare/v4.2.1...v4.3.0) (2026-05-12)
+
+
+### Features
+
+* **errors:** add CTSError base class ([#657](https://github.com/cashubtc/cashu-ts/issues/657)) ([a42527e](https://github.com/cashubtc/cashu-ts/commit/a42527e65766531ee4b96990c033c45cfa27b11a))
+* **nut12:** deterministic DLEQ nonce derivation ([#638](https://github.com/cashubtc/cashu-ts/issues/638)) ([441b3cf](https://github.com/cashubtc/cashu-ts/commit/441b3cf851c988c8d898061454ffe98d98b9a296))
+* **types:** align nullable wire fields with spec (T | null) ([#655](https://github.com/cashubtc/cashu-ts/issues/655)) ([16f533b](https://github.com/cashubtc/cashu-ts/commit/16f533b09b63bfab324501d8704a8e3396724d0c))
+* **wallet:** add maxSpendableAfterFees primitive ([#654](https://github.com/cashubtc/cashu-ts/issues/654)) ([f9d3205](https://github.com/cashubtc/cashu-ts/commit/f9d3205c61ddca3ba17848df042af8bb609789d4))
+* **wallet:** improve async melt change handling ([#659](https://github.com/cashubtc/cashu-ts/issues/659)) ([0119bde](https://github.com/cashubtc/cashu-ts/commit/0119bde2eea1d71482291c1f426c7d8469b459e4))
+
+
+### Bug Fixes
+
+* **mint:** coerce omitted payment_preimage and witness to null ([#653](https://github.com/cashubtc/cashu-ts/issues/653)) ([0f0dc04](https://github.com/cashubtc/cashu-ts/commit/0f0dc04f14698406cbb11f5619ad0d04c36d3413))
+* **mint:** treat null amount on BOLT12 mint quote as no-amount ([#649](https://github.com/cashubtc/cashu-ts/issues/649)) ([067b38d](https://github.com/cashubtc/cashu-ts/commit/067b38d530d2a43f62b1c2b8ea7308976d6a0c6e))
+* **wallet:** treat expiry: 0 as no-expiry in validateMintQuote ([#648](https://github.com/cashubtc/cashu-ts/issues/648)) ([e35c053](https://github.com/cashubtc/cashu-ts/commit/e35c05350dee1ca551e76daeb5d466317a5ca860))
+* **wallet:** verify DLEQ on received proofs even without requireDleq (NUT-12) ([#656](https://github.com/cashubtc/cashu-ts/issues/656)) ([dc04293](https://github.com/cashubtc/cashu-ts/commit/dc042934fb90b2360a5c21dea1a620756a44efc3))
+
 ## [4.2.1](https://github.com/cashubtc/cashu-ts/compare/v4.2.0...v4.2.1) (2026-05-06)
 
 
