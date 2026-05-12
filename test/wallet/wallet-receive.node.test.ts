@@ -206,7 +206,7 @@ describe('receive', () => {
         return HttpResponse.json({
           signatures: [
             {
-              id: 'z32vUtKgNCm1',
+              id: '00bd033559de27d0', // wallet's active keyset, matching the swap outputs
               amount: 1,
               C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
             },
@@ -221,7 +221,7 @@ describe('receive', () => {
     const proofs = await wallet.receive(decodedInput);
 
     expect(proofs).toHaveLength(1);
-    expect(proofs).toMatchObject([{ amount: Amount.from(1), id: 'z32vUtKgNCm1' }]);
+    expect(proofs).toMatchObject([{ amount: Amount.from(1), id: '00bd033559de27d0' }]);
     expect(/[0-9a-f]{64}/.test(proofs[0].C)).toBe(true);
     expect(/[0-9a-f]{64}/.test(proofs[0].secret)).toBe(true);
   });

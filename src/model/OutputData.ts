@@ -54,6 +54,27 @@ export interface OutputDataLike {
 export type OutputDataFactory = (amount: AmountLike, keys: HasKeysetKeys) => OutputDataLike;
 
 /**
+ * JSON-safe representation of an {@link OutputData} entry.
+ */
+export type SerializedOutputData = {
+  /**
+   * Storage shape: `amount` is a decimal string, not an {@link Amount} instance like the wire-shape
+   * {@link SerializedBlindedMessage}.
+   */
+  blindedMessage: {
+    amount: string;
+    B_: string;
+    id: string;
+  };
+  /**
+   * Decimal-encoded bigint.
+   */
+  blindingFactor: string;
+  secret: string;
+  ephemeralE?: string;
+};
+
+/**
  * Core P2PK tags that must not be settable in additional tags.
  *
  * @internal
@@ -321,6 +342,69 @@ export class OutputData implements OutputDataLike {
    */
   static sumOutputAmounts(outputs: OutputDataLike[]): Amount {
     return Amount.sum(outputs.map((output) => output.blindedMessage.amount));
+  }
+
+  /**
+   * Converts output data to a JSON-safe representation.
+   *
+   * @remarks
+   * Pair with {@link OutputData.deserialize} to persist prepared melt change outputs (e.g. across a
+   * NUT-06 async melt's pending window) and reconstruct spendable change proofs via
+   * `wallet.createMeltChangeProofs` once the quote is paid.
+   * @example
+   *
+   * ```ts
+   * // Save while async melt is pending:
+   * const preview = await wallet.prepareMelt('bolt11', meltQuote, proofs);
+   * const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
+   * await wallet.completeMelt(preview, undefined, true); // prefer_async
+   *
+   * // ... time passes, quote pays ...
+   * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
+   *   OutputData.deserialize(s),
+   * );
+   * const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
+   * ```
+   */
+  static serialize(output: OutputDataLike): SerializedOutputData {
+    return {
+      blindedMessage: {
+        amount: output.blindedMessage.amount.toString(),
+        B_: output.blindedMessage.B_,
+        id: output.blindedMessage.id,
+      },
+      blindingFactor: output.blindingFactor.toString(),
+      secret: bytesToHex(output.secret),
+      ...(output.ephemeralE && { ephemeralE: output.ephemeralE }),
+    };
+  }
+
+  /**
+   * Reconstructs concrete {@link OutputData} from its JSON-safe representation.
+   *
+   * @throws {@link CTSError} If any field fails validation (non-canonical blindingFactor, malformed
+   *   hex secret/ephemeralE, or an Amount that cannot be parsed).
+   * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
+   */
+  static deserialize(serialized: SerializedOutputData): OutputData {
+    try {
+      if (!/^(0|[1-9]\d*)$/.test(serialized.blindingFactor)) {
+        throw new Error('blindingFactor must be a canonical decimal integer');
+      }
+      return new OutputData(
+        {
+          amount: Amount.from(serialized.blindedMessage.amount),
+          B_: serialized.blindedMessage.B_,
+          id: serialized.blindedMessage.id,
+        },
+        BigInt(serialized.blindingFactor),
+        hexToBytes(serialized.secret),
+        serialized.ephemeralE,
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new CTSError(`Invalid SerializedOutputData: ${message}`, { cause: e });
+    }
   }
 }
 

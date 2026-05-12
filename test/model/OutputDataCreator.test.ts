@@ -69,6 +69,52 @@ describe('OutputData helpers', () => {
     expect(isOutputDataFactory([])).toBe(false);
   });
 
+  test('serializes and deserializes output data', () => {
+    const output = OutputData.createSingleRandomData(21, '009a1f293253e41e');
+    const serialized = OutputData.serialize(output);
+    const deserialized = OutputData.deserialize(serialized);
+
+    expect(serialized.blindingFactor).toMatch(/^(0|[1-9]\d*)$/);
+    expect(OutputData.serialize(deserialized)).toEqual(serialized);
+  });
+
+  test('rejects invalid serialized blinding factors', () => {
+    const serialized = OutputData.serialize(
+      OutputData.createSingleRandomData(21, '009a1f293253e41e'),
+    );
+
+    expect(() => OutputData.deserialize({ ...serialized, blindingFactor: '0x01' })).toThrow(
+      /Invalid SerializedOutputData: .*blindingFactor/,
+    );
+  });
+
+  test('rejects malformed serialized secret hex', () => {
+    const serialized = OutputData.serialize(
+      OutputData.createSingleRandomData(21, '009a1f293253e41e'),
+    );
+
+    expect(() => OutputData.deserialize({ ...serialized, secret: 'zz' })).toThrow(
+      /Invalid SerializedOutputData:/,
+    );
+  });
+
+  test('preserves ephemeral P2PK blinding data when serializing output data', () => {
+    const privkey = Bytes.fromHex('01'.repeat(32));
+    const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
+    const output = OutputData.createSingleP2PKData(
+      {
+        pubkey,
+        blindKeys: true,
+      },
+      1,
+      '009a1f293253e41e',
+    );
+
+    const deserialized = OutputData.deserialize(OutputData.serialize(output));
+
+    expect(deserialized.ephemeralE).toBe(output.ephemeralE);
+  });
+
   test('keeps blinded HTLC lock keys in pubkeys tags', () => {
     const privkey = Bytes.fromHex('01'.repeat(32));
     const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));

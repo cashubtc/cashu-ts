@@ -1828,6 +1828,10 @@ class Wallet {
         `Mint response is missing a signature at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.failIf(
+        signatures[i].id !== outputData[i].blindedMessage.id,
+        `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+      );
+      this.failIf(
         checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
@@ -2622,7 +2626,6 @@ class Wallet {
     let inputs = meltPreview.inputs;
     const outputs = meltPreview.outputData.map((d) => d.blindedMessage);
     const quote = meltPreview.quote.quote;
-    const keyset = this.getKeyset(meltPreview.keysetId);
 
     // Sign proofs if needed
     if (privkey) {
@@ -2645,20 +2648,9 @@ class Wallet {
       meltPreview.method,
       meltPayload,
     );
-    if (meltResponse.change) {
-      // Change may not use all outputs (shorter is ok)
-      this.failIf(
-        meltResponse.change.length > meltPreview.outputData.length,
-        `Mint returned ${meltResponse.change.length} signatures, but only ${meltPreview.outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
-      );
-      this.validateReturnedSignatures(meltResponse.change, meltPreview.outputData, {
-        checkAmounts: false, // change outputs are blank
-      });
-    }
 
-    // Construct change
-    const change =
-      meltResponse.change?.map((s, i) => meltPreview.outputData[i].toProof(s, keyset)) ?? [];
+    // Create any change Proofs
+    const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
 
     if (preferAsync) {
       this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
@@ -2671,6 +2663,46 @@ class Wallet {
     // Merge preview quote with response to protect against incomplete response.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
     return { quote: mergedQuote, change };
+  }
+
+  /**
+   * Constructs melt change proofs from prepared OutputData and mint returned Change Signatures.
+   *
+   * @remarks
+   * Called internally by `completeMelt`; also useful for NUT-06 async melts and any other path that
+   * defers change construction (crash recovery, process hand-off). Keyset lookup is per-signature
+   * so multi-keyset responses (e.g. a permissive CDK mint) work transparently.
+   * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
+   * @param changeSigs The optional `change` signatures from the melt response or paid quote.
+   * @returns Spendable change proofs (possibly empty).
+   * @throws {@link CTSError} If signature count exceeds output count, any signature's keyset id
+   *   does not match its paired output, or signatures cannot be verified.
+   * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
+   */
+  createMeltChangeProofs(
+    outputData: OutputDataLike[],
+    changeSigs: SerializedBlindedSignature[],
+  ): Proof[] {
+    // Change may not use all outputs (shorter is ok)
+    this.failIf(
+      changeSigs.length > outputData.length,
+      `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+    );
+    this.validateReturnedSignatures(changeSigs, outputData, {
+      checkAmounts: false, // change outputs are blank
+    });
+    return changeSigs.map((s, i) => {
+      let keyset: Keyset;
+      try {
+        keyset = this.getKeyset(s.id);
+      } catch (e) {
+        throw new CTSError(
+          `Cannot reconstruct melt change: keyset ${s.id} is not loaded in this wallet (may be inactive after rotation). If the wallet is seeded, try restoring (NUT-09) to recover.`,
+          { cause: e },
+        );
+      }
+      return outputData[i].toProof(s, keyset);
+    });
   }
 
   // -----------------------------------------------------------------

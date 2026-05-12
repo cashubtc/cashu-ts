@@ -1231,10 +1231,12 @@ export class OutputData implements OutputDataLike {
     static createSingleP2PKData(p2pk: P2PKOptions, amount: AmountLike, keysetId: string): OutputData;
     // (undocumented)
     static createSingleRandomData(amount: AmountLike, keysetId: string): OutputData;
+    static deserialize(serialized: SerializedOutputData): OutputData;
     // (undocumented)
     ephemeralE?: string;
     // (undocumented)
     secret: Uint8Array;
+    static serialize(output: OutputDataLike): SerializedOutputData;
     static sumOutputAmounts(outputs: OutputDataLike[]): Amount;
     // (undocumented)
     toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys): Proof;
@@ -1687,6 +1689,18 @@ export type SerializedMintKeys = {
     [k: string]: string;
 };
 
+// @public
+export type SerializedOutputData = {
+    blindedMessage: {
+        amount: string;
+        B_: string;
+        id: string;
+    };
+    blindingFactor: string;
+    secret: string;
+    ephemeralE?: string;
+};
+
 // @public (undocumented)
 export function serializeMintKeys(mintKeys: RawMintKeys): SerializedMintKeys;
 
@@ -1925,6 +1939,7 @@ export class Wallet {
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;
     createLockedMintQuote(amount: AmountLike, pubkey: string, description?: string): Promise<MintQuoteBolt11Response>;
+    createMeltChangeProofs(outputData: OutputDataLike[], changeSigs: SerializedBlindedSignature[]): Proof[];
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;

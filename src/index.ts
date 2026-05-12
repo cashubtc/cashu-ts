@@ -98,7 +98,7 @@ export {
 // Low-level helpers/types that appear in public surfaces
 export { Amount, AmountError, type AmountLike } from './model/Amount';
 export { OutputData } from './model/OutputData';
-export type { OutputDataLike, OutputDataFactory } from './model/OutputData';
+export type { OutputDataLike, OutputDataFactory, SerializedOutputData } from './model/OutputData';
 export type { OutputDataCreator } from './model/OutputDataCreator';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
