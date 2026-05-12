@@ -2662,11 +2662,12 @@ class Wallet {
   }
 
   /**
-   * Constructs melt change proofs from a melt response's change signatures and the prepared output
-   * data. Called internally by `completeMelt`; also exposed for NUT-06 async melts and any other
-   * path that defers change construction (crash recovery, process hand-off).
+   * Constructs melt change proofs from prepared OutputData and mint returned Change Signatures.
    *
-   * @param outputData Outputs from `prepareMelt()`, or deserialised persisted output data.
+   * @remarks
+   * Called internally by `completeMelt`; also useful for NUT-06 async melts and any other path that
+   * defers change construction (crash recovery, process hand-off).
+   * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).
    * @throws {@link CTSError} If signature count exceeds output count, output data mixes keysets, or
