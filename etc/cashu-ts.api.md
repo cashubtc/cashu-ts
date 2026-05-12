@@ -1684,12 +1684,6 @@ export type SerializedDLEQ = {
     r?: string;
 };
 
-// @public
-export type SerializedMeltChangeData = {
-    keysetId: string;
-    outputData: SerializedOutputData[];
-};
-
 // @public (undocumented)
 export type SerializedMintKeys = {
     [k: string]: string;
@@ -1961,7 +1955,6 @@ export class Wallet {
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
-    exportMeltChangeData(preview: MeltPreview): SerializedMeltChangeData;
     getFeesForKeyset(nInputs: number, keysetId: string): Amount;
     getFeesForProofs(proofs: Array<Pick<Proof, 'id'>>): Amount;
     getKeyset(id?: string): Keyset;
@@ -1971,11 +1964,7 @@ export class Wallet {
         pending: T[];
         spent: T[];
     }>;
-    hydrateMeltChange(keysetId: string, outputData: OutputDataLike[], change: SerializedBlindedSignature[]): Proof[];
-    importMeltChangeData(blob: SerializedMeltChangeData): {
-        keysetId: string;
-        outputData: OutputData[];
-    };
+    hydrateMeltChange(outputData: OutputDataLike[], change: SerializedBlindedSignature[]): Proof[];
     get keyChain(): KeyChain;
     get keysetId(): string;
     loadMint(forceRefresh?: boolean): Promise<void>;

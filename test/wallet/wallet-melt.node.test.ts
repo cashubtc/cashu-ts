@@ -8,6 +8,7 @@ import {
   type MeltQuoteBolt11Response,
   MeltQuoteState,
   OutputData,
+  type SerializedOutputData,
   MeltQuoteBolt12Response,
   AuthProvider,
   OutputType,
@@ -690,8 +691,8 @@ describe('async melt preference body', () => {
       },
     ];
     const preview = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
-    // Simulate storing the change metadata
-    const storedChangeData = JSON.stringify(wallet.exportMeltChangeData(preview));
+    // Simulate storing the prepared output data while the melt is pending
+    const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
 
     const paidQuote: MeltQuoteBolt11Response = {
       ...meltQuote,
@@ -710,13 +711,11 @@ describe('async melt preference body', () => {
         },
       ],
     };
-    // Simulate restoring the change metadata
-    const restored = wallet.importMeltChangeData(JSON.parse(storedChangeData));
-    const change = wallet.hydrateMeltChange(
-      restored.keysetId,
-      restored.outputData,
-      paidQuote.change ?? [],
+    // Restore and hydrate change once the quote pays
+    const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
+      OutputData.deserialize(s),
     );
+    const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
     expect(change).toHaveLength(2);
     expect(change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(change[1]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });

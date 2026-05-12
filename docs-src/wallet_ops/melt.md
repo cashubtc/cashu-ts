@@ -42,6 +42,37 @@ const { quote, change } = await wallet.completeMelt(preview);
 - `run()` is equivalent to `const preview = await prepare(); await wallet.completeMelt(preview)`.
 - This pairs well with NUT-19 cached-response retries on mints that advertise the melt endpoint.
 
+## 4) Async melt with later change recovery (NUT-06 `prefer_async`)
+
+For mints that support NUT-06 asynchronous melts, the melt response can return before the
+Lightning payment completes — meaning the response will not yet carry NUT-08 change
+signatures. To reclaim that change later, persist the prepared output data while the melt
+is pending, then hydrate change proofs from the eventual paid quote response.
+
+```ts
+import { OutputData, type SerializedOutputData } from '@cashu/cashu-ts';
+
+// 1. Prepare the melt and persist the change-output data alongside the pending quote.
+const preview = await wallet.prepareMelt('bolt11', meltQuote, myProofs);
+const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
+await wallet.completeMelt(preview, undefined, true); // preferAsync = true
+
+// 2. ... time passes ... use checkMeltQuote*() or wallet.on.onceMeltPaid() to learn the
+//    quote is paid. The paid response carries the change signatures.
+
+// 3. Restore the output data and reconstruct spendable change proofs.
+const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
+  OutputData.deserialize(s),
+);
+const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
+```
+
+- `OutputData.serialize` / `OutputData.deserialize` are the JSON-safe round-trip primitives
+  (decimal-encoded bigints, hex-encoded bytes; preserves `ephemeralE` for P2BK).
+- `wallet.hydrateMeltChange` runs the same validation as the synchronous path and is also
+  callable directly if you've persisted output data outside the helpers above (crash
+  recovery, process hand-off, etc.).
+
 ## Custom payment methods
 
 For custom payment methods (e.g., BACS, SWIFT), use the generic wallet methods directly:

@@ -1,5 +1,5 @@
 import { type Amount } from '../../model/Amount';
-import { type OutputDataLike, type SerializedOutputData } from '../../model/OutputData';
+import { type OutputDataLike } from '../../model/OutputData';
 import {
   type MeltQuoteBaseResponse,
   type MintQuoteBaseResponse,
@@ -92,16 +92,6 @@ export interface MeltPreview<
    */
   quote: TQuote;
 }
-
-/**
- * JSON-safe envelope for the change-recovery data produced by `prepareMelt`. Persist this across an
- * async melt's pending window, then pass it to `wallet.importMeltChangeData` +
- * `wallet.hydrateMeltChange` once the quote is paid.
- */
-export type SerializedMeltChangeData = {
-  keysetId: string;
-  outputData: SerializedOutputData[];
-};
 
 /**
  * Includes all data required to swap inputs for outputs and construct proofs from them.
