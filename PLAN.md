@@ -56,14 +56,14 @@ Nutshell deterministic test vector (`secret = "test_message"`, `r = 3`, `a = 2`)
 - [x] Gate DLEQ verify (`OutputData.ts:146-151`) on `B_.kind === 'secp'`
 - [x] Existing test suite passes unchanged (4179 tests pass)
 
-## Phase 3 — NUT01 / NUT13 / deriveKeysetId
+## Phase 3 — NUT01 / NUT13 / deriveKeysetId ✓
 
-- [ ] `src/crypto/NUT01.ts`: parse G2 keyset keys when id starts with `02`; BLS path in `verifyUnblindedSignature`
-- [ ] `src/crypto/NUT13.ts`: `getDerivationKind` `02` → `HMAC_SHA256`; reduce blinding factor mod `BLS_FR_ORDER` for v3
-- [ ] `src/utils/core.ts:deriveKeysetId`: `versionByte=2` branch with v3 preimage format
-- [ ] `src/utils/core.ts:hasValidDleq`: short-circuit true for v3 proofs
-- [ ] Fixture test: v3 keyset id derivation matches Nutshell `derive_keyset_id_v3`
-- [ ] NUT13 test: v3 derivation produces in-range scalar
+- [x] `src/crypto/NUT01.ts`: parse G2 keyset keys when id starts with `02`; BLS path in `verifyUnblindedSignature`
+- [x] `src/crypto/NUT13.ts`: `getDerivationKind` `02` → `HMAC_SHA256`; reduce blinding factor mod `BLS_FR_ORDER` for v3
+- [x] `src/utils/core.ts:deriveKeysetId`: `versionByte=2` branch with v3 preimage format
+- [x] `src/utils/core.ts:hasValidDleq`: short-circuit true for v3 proofs
+- [x] Fixture test: v3 keyset id derivation matches Nutshell `derive_keyset_id_v3`
+- [x] NUT13 test: v3 derivation produces in-range scalar
 
 ## Phase 4 — Integration
 
@@ -82,3 +82,4 @@ Nutshell deterministic test vector (`secret = "test_message"`, `r = 3`, `a = 2`)
 - **2026-05-12** Phase 1 done. Noble v2.2.0 G2 BASE matches Nutshell `_G2_HEX` byte-for-byte; Fr.ORDER matches locked constant. Deterministic test vector (`secret="test_message"`, r=3, a=2) reproduces `B_`, `C_`, `C` exactly via `bls12_381.G1.hashToCurve(msg,{DST})` + `multiply` + `Fr.inv`. Pairing API: `bls12_381.pairing(g1,g2)` and `pairingBatch([{g1,g2},…])` returning `Fp12`; compare via `fields.Fp12.eql`. Batch verify implemented as `e(-Σr·C, G2) · Π e(Σr·Y, K2) == 1` so we only call `pairingBatch` once.
 - **Gotcha** noble's bls12-381 subpath import requires `.js` suffix (`@noble/curves/bls12-381.js`), not bare `bls12-381`. Mirror this in any new imports.
 - **2026-05-12** Phase 2 done. `BlindedMessage`/`BlindedSignature` classes are not exported from `src/index.ts` and only constructed inside `OutputData`, so widening their point fields to `CurvePoint` was self-contained. `pointFromHexAuto` sniffs by hex length (66/96); lengths are disjoint across supported curves. DLEQ block in `toProof` now bails when `bAuto.kind !== 'secp'` rather than throwing — v3 mints already omit DLEQ, so this is purely defensive.
+- **2026-05-12** Phase 3 done. v3 keyset id derivation reuses the v1 preimage format verbatim (only the prefix changes), so the existing `case 1` block was folded into `case 1: case 2:`. v3 keyset id fixtures verified against Nutshell's `derive_keyset_id_v3` via a Python one-liner: `{1:G2,2:G2}|unit:sat` → `02ce4c47…`. `hasValidDleq` now short-circuits true for `proof.id.startsWith('02')` (treats absent-DLEQ as acceptable because pairing covers it). NUT13 `BLINDING_FACTOR` reduction: secp keeps the single-subtract optimization; v3 uses `x % BLS_FR_ORDER` because Fr is only ~2^255 and the HMAC can exceed it more than once. `verifyUnblindedSignature` is now a union over `UnblindedSignature | UnblindedSignatureBls`; both `.C` branches type-check without casts because TS narrows by `proof.id` prefix is not enough — eslint flagged the casts and removing them works because both point types satisfy `.equals(...)` structurally.

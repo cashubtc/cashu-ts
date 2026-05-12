@@ -435,6 +435,25 @@ describe('test keyset derivation', () => {
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR2_KEYS)).toBe(true);
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR3_KEYS)).toBe(true);
   });
+  // v3 keyset id derivation — matches Nutshell `derive_keyset_id_v3` (G2 pubkeys, prefix 02).
+  test('derives v3 keyset id (BLS, unit only)', () => {
+    const G2_HEX =
+      '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8';
+    const keysetId = utils.deriveKeysetId(
+      { 1: G2_HEX, 2: G2_HEX },
+      { versionByte: 2, unit: 'sat' },
+    );
+    expect(keysetId).toBe('02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d');
+  });
+  test('derives v3 keyset id with input_fee_ppk and final_expiry', () => {
+    const G2_HEX =
+      '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8';
+    const keysetId = utils.deriveKeysetId(
+      { 1: G2_HEX, 2: G2_HEX, 4: G2_HEX, 8: G2_HEX },
+      { versionByte: 2, unit: 'sat', input_fee_ppk: 100, expiry: 2000000000 },
+    );
+    expect(keysetId).toBe('02b532391cadf8c5d98bf0ff05b85e3cfb76a8175d71822140df3396c20cf40588');
+  });
 });
 
 describe('test v4 encoding', () => {
@@ -655,6 +674,16 @@ describe('test zero-knowledge utilities', () => {
       keys: { [2]: pubkey.toHex(true) },
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
+  });
+  test('v3 proof short-circuits to true even without dleq', () => {
+    // v3 (BLS) keysets do not carry DLEQ; pairing verification at swap/melt is the equivalent.
+    const v3Proof: Proof = {
+      ...serializedProof,
+      id: '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d',
+      dleq: undefined,
+    };
+    const keyset = { id: v3Proof.id, unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
+    expect(hasValidDleq(v3Proof, keyset)).toBe(true);
   });
 
   describe('verifyDleqIfPresent', () => {

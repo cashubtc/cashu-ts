@@ -6,6 +6,7 @@ import { HDKey } from '@scure/bip32';
 import { CTSError } from '../model/Errors';
 import { Bytes, isBase64String } from '../utils';
 
+import { BLS_FR_ORDER } from './bls';
 import { getKeysetIdInt } from './core';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
@@ -104,7 +105,7 @@ function getDerivationKind(keysetId: string): DerivationKind {
   if (isValidHex && keysetId.startsWith('00')) {
     return DerivationKind.DEPRECATED_BIP32;
   }
-  if (isValidHex && keysetId.startsWith('01')) {
+  if (isValidHex && (keysetId.startsWith('01') || keysetId.startsWith('02'))) {
     return DerivationKind.HMAC_SHA256;
   }
   throw new CTSError(`Unrecognized keyset ID version ${keysetId.slice(0, 2)}`);
@@ -162,9 +163,13 @@ function deriveHmac(
 
   if (secretOrBlinding === DerivationType.BLINDING_FACTOR) {
     const x = Bytes.toBigInt(hmacDigest);
-    // Reduce modulo curve order. Single subtraction suffices since HMAC output
-    // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
-    const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
+    // Reduce modulo curve order. SECP256K1_N is ~2^256 so a single subtraction suffices;
+    // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
+    const reduced = keysetId.startsWith('02')
+      ? x % BLS_FR_ORDER
+      : x >= SECP256K1_N
+        ? x - SECP256K1_N
+        : x;
     /* c8 ignore next */
     if (reduced === 0n) {
       throw new CTSError('Derived invalid blinding scalar r == 0');
