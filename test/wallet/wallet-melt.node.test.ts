@@ -9,6 +9,7 @@ import {
   MeltQuoteState,
   OutputData,
   type SerializedOutputData,
+  type SerializedBlindedSignature,
   MeltQuoteBolt12Response,
   AuthProvider,
   OutputType,
@@ -723,14 +724,20 @@ describe('async melt preference body', () => {
     expect(/[0-9a-f]{64}/.test(change[0].secret)).toBe(true);
   });
 
-  test('createMeltChangeProofs rejects outputData with mixed keyset ids', async () => {
+  test('createMeltChangeProofs rejects signature/output keyset id mismatch', async () => {
     const wallet = new Wallet(mint, { unit, logger });
     await wallet.loadMint();
 
-    const o1 = OutputData.createSingleRandomData(0, '00bd033559de27d0');
-    const o2 = OutputData.createSingleRandomData(0, '009a1f293253e41e');
+    const output = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const mismatchedSig: SerializedBlindedSignature = {
+      id: '009a1f293253e41e', // different keyset id from the output
+      amount: Amount.from(1),
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
 
-    expect(() => wallet.createMeltChangeProofs([o1, o2], [])).toThrow(/Mixed keyset ids/);
+    expect(() => wallet.createMeltChangeProofs([output], [mismatchedSig])).toThrow(
+      /signature keyset id at index 0 does not match output/i,
+    );
   });
 
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {

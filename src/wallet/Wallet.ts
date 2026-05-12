@@ -1828,6 +1828,10 @@ class Wallet {
         `Mint response is missing a signature at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.failIf(
+        signatures[i].id !== outputData[i].blindedMessage.id,
+        `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}.`,
+      );
+      this.failIf(
         checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
@@ -2666,12 +2670,13 @@ class Wallet {
    *
    * @remarks
    * Called internally by `completeMelt`; also useful for NUT-06 async melts and any other path that
-   * defers change construction (crash recovery, process hand-off).
+   * defers change construction (crash recovery, process hand-off). Keyset lookup is per-signature
+   * so multi-keyset responses (e.g. a permissive CDK mint) work transparently.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted OutputData.
    * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).
-   * @throws {@link CTSError} If signature count exceeds output count, output data mixes keysets, or
-   *   signatures cannot be verified.
+   * @throws {@link CTSError} If signature count exceeds output count, any signature's keyset id
+   *   does not match its paired output, or signatures cannot be verified.
    * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
    */
   createMeltChangeProofs(
@@ -2683,17 +2688,10 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    if (outputData.length === 0) return [];
-    const keysetId = outputData[0].blindedMessage.id;
-    this.failIf(
-      outputData.some((o) => o.blindedMessage.id !== keysetId),
-      'Mixed keyset ids in melt outputData; expected all outputs to share a single keyset',
-    );
-    const keyset = this.getKeyset(keysetId);
     this.validateReturnedSignatures(changeSigs, outputData, {
       checkAmounts: false, // change outputs are blank
     });
-    return changeSigs.map((s, i) => outputData[i].toProof(s, keyset));
+    return changeSigs.map((s, i) => outputData[i].toProof(s, this.getKeyset(s.id)));
   }
 
   // -----------------------------------------------------------------

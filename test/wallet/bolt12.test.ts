@@ -516,15 +516,15 @@ describe('Wallet (BOLT12) – wrappers', () => {
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
-        blindedMessage: { amount: 16n, B_: 'B1' },
+        blindedMessage: { amount: 16n, B_: 'B1', id: '009a1f293253e41e' },
         toProof: () => ({ amount: 16, secret: 'secret1', C: 'C1' }),
       },
       {
-        blindedMessage: { amount: 4n, B_: 'B2' },
+        blindedMessage: { amount: 4n, B_: 'B2', id: '009a1f293253e41e' },
         toProof: () => ({ amount: 4, secret: 'secret2', C: 'C2' }),
       },
       {
-        blindedMessage: { amount: 1n, B_: 'B3' },
+        blindedMessage: { amount: 1n, B_: 'B3', id: '009a1f293253e41e' },
         toProof: () => ({ amount: 1, secret: 'secret3', C: 'C3' }),
       },
     ]);
@@ -576,15 +576,15 @@ describe('Wallet (BOLT12) – wrappers', () => {
     vi.spyOn(wallet.keyChain, 'getKeyset').mockReturnValue(ks as any);
     vi.spyOn(wallet as any, 'createOutputData').mockReturnValue([
       {
-        blindedMessage: { amount: 16n, B_: 'B1' },
+        blindedMessage: { amount: 16n, B_: 'B1', id: '009a1f293253e41e' },
         toProof: () => ({ amount: 16, secret: 'secret1', C: 'C1' }),
       },
       {
-        blindedMessage: { amount: 4n, B_: 'B2' },
+        blindedMessage: { amount: 4n, B_: 'B2', id: '009a1f293253e41e' },
         toProof: () => ({ amount: 4, secret: 'secret2', C: 'C2' }),
       },
       {
-        blindedMessage: { amount: 1n, B_: 'B3' },
+        blindedMessage: { amount: 1n, B_: 'B3', id: '009a1f293253e41e' },
         toProof: () => ({ amount: 1, secret: 'secret3', C: 'C3' }),
       },
     ]);
