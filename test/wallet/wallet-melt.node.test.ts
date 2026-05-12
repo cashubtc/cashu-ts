@@ -715,7 +715,7 @@ describe('async melt preference body', () => {
     const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
       OutputData.deserialize(s),
     );
-    const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
+    const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
     expect(change).toHaveLength(2);
     expect(change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
     expect(change[1]).toMatchObject({ amount: Amount.from(2), id: '00bd033559de27d0' });
@@ -723,14 +723,14 @@ describe('async melt preference body', () => {
     expect(/[0-9a-f]{64}/.test(change[0].secret)).toBe(true);
   });
 
-  test('hydrateMeltChange rejects outputData with mixed keyset ids', async () => {
+  test('createMeltChangeProofs rejects outputData with mixed keyset ids', async () => {
     const wallet = new Wallet(mint, { unit, logger });
     await wallet.loadMint();
 
     const o1 = OutputData.createSingleRandomData(0, '00bd033559de27d0');
     const o2 = OutputData.createSingleRandomData(0, '009a1f293253e41e');
 
-    expect(() => wallet.hydrateMeltChange([o1, o2], [])).toThrow(/Mixed keyset ids/);
+    expect(() => wallet.createMeltChangeProofs([o1, o2], [])).toThrow(/Mixed keyset ids/);
   });
 
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {

@@ -2646,7 +2646,7 @@ class Wallet {
     );
 
     // Create any change Proofs
-    const change = this.hydrateMeltChange(meltPreview.outputData, meltResponse.change ?? []);
+    const change = this.createMeltChangeProofs(meltPreview.outputData, meltResponse.change ?? []);
 
     if (preferAsync) {
       this._logger.debug('ASYNC MELT REQUESTED', meltResponse);
@@ -2662,22 +2662,25 @@ class Wallet {
   }
 
   /**
-   * Constructs melt change proofs from a melt response and prepared output data. Called internally
-   * by `completeMelt`; also exposed for NUT-06 async melts and any other path that defers change
-   * construction (crash recovery, process hand-off).
+   * Constructs melt change proofs from a melt response's change signatures and the prepared output
+   * data. Called internally by `completeMelt`; also exposed for NUT-06 async melts and any other
+   * path that defers change construction (crash recovery, process hand-off).
    *
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted output data.
-   * @param change The optional `change` signatures from the melt response or paid quote.
+   * @param changeSigs The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).
    * @throws {@link CTSError} If signature count exceeds output count, output data mixes keysets, or
    *   signatures cannot be verified.
    * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
    */
-  hydrateMeltChange(outputData: OutputDataLike[], change: SerializedBlindedSignature[]): Proof[] {
+  createMeltChangeProofs(
+    outputData: OutputDataLike[],
+    changeSigs: SerializedBlindedSignature[],
+  ): Proof[] {
     // Change may not use all outputs (shorter is ok)
     this.failIf(
-      change.length > outputData.length,
-      `Mint returned ${change.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+      changeSigs.length > outputData.length,
+      `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
     if (outputData.length === 0) return [];
     const keysetId = outputData[0].blindedMessage.id;
@@ -2686,10 +2689,10 @@ class Wallet {
       'Mixed keyset ids in melt outputData; expected all outputs to share a single keyset',
     );
     const keyset = this.getKeyset(keysetId);
-    this.validateReturnedSignatures(change, outputData, {
+    this.validateReturnedSignatures(changeSigs, outputData, {
       checkAmounts: false, // change outputs are blank
     });
-    return change.map((s, i) => outputData[i].toProof(s, keyset));
+    return changeSigs.map((s, i) => outputData[i].toProof(s, keyset));
   }
 
   // -----------------------------------------------------------------

@@ -350,7 +350,7 @@ export class OutputData implements OutputDataLike {
    * @remarks
    * Pair with {@link OutputData.deserialize} to persist prepared melt change outputs (e.g. across a
    * NUT-06 async melt's pending window) and reconstruct spendable change proofs via
-   * `wallet.hydrateMeltChange` once the quote is paid.
+   * `wallet.createMeltChangeProofs` once the quote is paid.
    * @example
    *
    * ```ts
@@ -363,7 +363,7 @@ export class OutputData implements OutputDataLike {
    * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
    *   OutputData.deserialize(s),
    * );
-   * const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
+   * const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
    * ```
    */
   static serialize(output: OutputDataLike): SerializedOutputData {

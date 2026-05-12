@@ -73,12 +73,12 @@ await wallet.completeMelt(preview, undefined, true); // preferAsync = true
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
   OutputData.deserialize(s),
 );
-const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
+const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
 ```
 
 - `OutputData.serialize` / `OutputData.deserialize` are the JSON-safe round-trip primitives
   (decimal-encoded bigints, hex-encoded bytes; preserves `ephemeralE` for P2BK).
-- `wallet.hydrateMeltChange` runs the same validation as the synchronous path and is also
+- `wallet.createMeltChangeProofs` runs the same validation as the synchronous path and is also
   callable directly if you've persisted output data outside the helpers above (crash recovery,
   process hand-off, etc.).
 - For the same pattern using the WalletOps builder (`.prepare()`), see

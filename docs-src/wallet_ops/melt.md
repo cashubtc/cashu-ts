@@ -45,7 +45,7 @@ const { quote, change } = await wallet.completeMelt(preview);
 ## 4) Async melt with later change recovery (NUT-06 `prefer_async`)
 
 For mints that support NUT-06 async melts, `.prepare()` pairs with `OutputData.serialize` to
-persist the change-output blanks while the payment is in flight, and `wallet.hydrateMeltChange`
+persist the change-output blanks while the payment is in flight, and `wallet.createMeltChangeProofs`
 reconstructs change proofs once the quote is paid.
 
 ```ts
@@ -59,7 +59,7 @@ await wallet.completeMelt(preview, undefined, true); // preferAsync = true
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
   OutputData.deserialize(s),
 );
-const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
+const change = wallet.createMeltChangeProofs(restored, paidQuote.change ?? []);
 ```
 
 - See [Melt Token § 3 — Async melt with later change recovery](../usage/melt_token.md) for the
