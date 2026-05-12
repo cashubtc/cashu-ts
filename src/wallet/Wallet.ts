@@ -2697,7 +2697,7 @@ class Wallet {
         keyset = this.getKeyset(s.id);
       } catch (e) {
         throw new CTSError(
-          `Cannot reconstruct melt change: keyset ${s.id} is not loaded in this wallet (it may have been pruned after rotation). The mint has already paid the invoice and signed the change; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+          `Cannot reconstruct melt change: keyset ${s.id} is not loaded in this wallet (may be inactive after rotation). If the wallet is seeded, try restoring (NUT-09) to recover.`,
           { cause: e },
         );
       }
