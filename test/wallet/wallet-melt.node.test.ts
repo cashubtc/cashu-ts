@@ -740,6 +740,23 @@ describe('async melt preference body', () => {
     );
   });
 
+  test('createMeltChangeProofs surfaces NUT-09 recovery hint when keyset is unknown', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const unknownKeysetId = 'aaaaaaaaaaaaaaaa'; // not loaded by the test mint
+    const output = OutputData.createSingleRandomData(0, unknownKeysetId);
+    const sig: SerializedBlindedSignature = {
+      id: unknownKeysetId, // matches the output, so pair check passes
+      amount: Amount.from(1),
+      C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+    };
+
+    expect(() => wallet.createMeltChangeProofs([output], [sig])).toThrow(
+      /is not loaded in this wallet.*restoring \(NUT-09\)/is,
+    );
+  });
+
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
     const meltQuote = {
       quote: 'q-async-1b',

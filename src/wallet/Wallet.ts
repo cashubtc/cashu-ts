@@ -2691,7 +2691,18 @@ class Wallet {
     this.validateReturnedSignatures(changeSigs, outputData, {
       checkAmounts: false, // change outputs are blank
     });
-    return changeSigs.map((s, i) => outputData[i].toProof(s, this.getKeyset(s.id)));
+    return changeSigs.map((s, i) => {
+      let keyset: Keyset;
+      try {
+        keyset = this.getKeyset(s.id);
+      } catch (e) {
+        throw new CTSError(
+          `Cannot reconstruct melt change: keyset ${s.id} is not loaded in this wallet (it may have been pruned after rotation). The mint has already paid the invoice and signed the change; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+          { cause: e },
+        );
+      }
+      return outputData[i].toProof(s, keyset);
+    });
   }
 
   // -----------------------------------------------------------------
