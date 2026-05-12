@@ -47,14 +47,14 @@ Nutshell deterministic test vector (`secret = "test_message"`, `r = 3`, `a = 2`)
 - [x] `batchVerifyUnblindedSignatureBls(items): boolean` (single multi-pairing via `pairingBatch`)
 - [x] Test file `test/crypto/bls.test.ts` — 17 tests, all pass; full suite (1392) still green
 
-## Phase 2 — Tagged-union Point + model widening
+## Phase 2 — Tagged-union Point + model widening ✓
 
-- [ ] Define `CurvePoint` + helpers (`pointFromHexAuto`, `pointToHex`) in `src/crypto/core.ts`
-- [ ] Widen `src/model/BlindedMessage.ts:B_`
-- [ ] Widen `src/model/BlindedSignature.ts:C_`
-- [ ] Widen `src/model/OutputData.ts:C` and call sites
-- [ ] Gate DLEQ verify (`OutputData.ts:146-151`) on `B_.kind === 'secp'`
-- [ ] Existing test suite passes unchanged
+- [x] Define `CurvePoint` + helpers (`pointFromHexAuto`, `pointToHex`, `asSecpPoint`, `asBlsG1Point`) in `src/crypto/core.ts`
+- [x] Widen `src/model/BlindedMessage.ts:B_`
+- [x] Widen `src/model/BlindedSignature.ts:C_`
+- [x] OutputData call sites wrap secp points via `asSecpPoint`; serialized B*/C* remain hex strings
+- [x] Gate DLEQ verify (`OutputData.ts:146-151`) on `B_.kind === 'secp'`
+- [x] Existing test suite passes unchanged (4179 tests pass)
 
 ## Phase 3 — NUT01 / NUT13 / deriveKeysetId
 
@@ -81,3 +81,4 @@ Nutshell deterministic test vector (`secret = "test_message"`, `r = 3`, `a = 2`)
 
 - **2026-05-12** Phase 1 done. Noble v2.2.0 G2 BASE matches Nutshell `_G2_HEX` byte-for-byte; Fr.ORDER matches locked constant. Deterministic test vector (`secret="test_message"`, r=3, a=2) reproduces `B_`, `C_`, `C` exactly via `bls12_381.G1.hashToCurve(msg,{DST})` + `multiply` + `Fr.inv`. Pairing API: `bls12_381.pairing(g1,g2)` and `pairingBatch([{g1,g2},…])` returning `Fp12`; compare via `fields.Fp12.eql`. Batch verify implemented as `e(-Σr·C, G2) · Π e(Σr·Y, K2) == 1` so we only call `pairingBatch` once.
 - **Gotcha** noble's bls12-381 subpath import requires `.js` suffix (`@noble/curves/bls12-381.js`), not bare `bls12-381`. Mirror this in any new imports.
+- **2026-05-12** Phase 2 done. `BlindedMessage`/`BlindedSignature` classes are not exported from `src/index.ts` and only constructed inside `OutputData`, so widening their point fields to `CurvePoint` was self-contained. `pointFromHexAuto` sniffs by hex length (66/96); lengths are disjoint across supported curves. DLEQ block in `toProof` now bails when `bAuto.kind !== 'secp'` rather than throwing — v3 mints already omit DLEQ, so this is purely defensive.

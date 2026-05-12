@@ -7,6 +7,8 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
 
+import { type G1Point, pointFromHexG1 } from './bls';
+
 /**
  * Private key type - can be hex string or Uint8Array.
  */
@@ -65,6 +67,41 @@ export function pointFromBytes(bytes: Uint8Array) {
 
 export function pointFromHex(hex: string) {
   return secp256k1.Point.fromHex(hex);
+}
+
+/**
+ * Tagged-union point covering both keyset curves on the wallet output / proof path.
+ *
+ * - `secp`: secp256k1 compressed point (33 bytes, 66 hex) — v0/v1/v2 keysets.
+ * - `blsG1`: BLS12-381 G1 compressed point (48 bytes, 96 hex) — v3 keysets.
+ */
+export type CurvePoint =
+  | { kind: 'secp'; pt: WeierstrassPoint<bigint> }
+  | { kind: 'blsG1'; pt: G1Point };
+
+export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint {
+  return { kind: 'secp', pt };
+}
+
+export function asBlsG1Point(pt: G1Point): CurvePoint {
+  return { kind: 'blsG1', pt };
+}
+
+/**
+ * Decode a compressed point hex string to a {@link CurvePoint}, picking the curve by length: 66 hex
+ * chars → secp256k1, 96 hex chars → BLS12-381 G1.
+ *
+ * Lengths are disjoint across the supported curves (secp uncompressed is 130; G2 compressed is
+ * 192), so there is no ambiguity.
+ */
+export function pointFromHexAuto(hex: string): CurvePoint {
+  if (hex.length === 66) return { kind: 'secp', pt: secp256k1.Point.fromHex(hex) };
+  if (hex.length === 96) return { kind: 'blsG1', pt: pointFromHexG1(hex) };
+  throw new CTSError(`Cannot decode point: unexpected hex length ${hex.length}`);
+}
+
+export function pointToHex(p: CurvePoint): string {
+  return p.pt.toHex(true);
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
