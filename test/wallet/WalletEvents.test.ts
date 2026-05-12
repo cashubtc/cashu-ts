@@ -185,6 +185,32 @@ describe('WalletEvents', () => {
 
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ Y, state: 0 }));
     });
+
+    it('proofStateUpdates accepts ProofLike-shaped input and preserves its type', async () => {
+      type StoredProof = {
+        id: string;
+        amount: number;
+        secret: string;
+        C: string;
+        reserved: boolean;
+      };
+      const stored: StoredProof[] = [
+        { amount: 2, id: '00bd033559de27d0', secret: 's1', C: 'test', reserved: false },
+      ];
+      const seen: Array<{ proof: StoredProof }> = [];
+      const err = vi.fn();
+      await events.proofStateUpdates<StoredProof>(stored, (p) => seen.push(p), err);
+
+      const ws = mock.mint.webSocketConnection!;
+      const [Y] = ws.firstFilters('proof_state');
+      ws.emitProof({ Y, state: 0 });
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0].proof).toBe(stored[0]);
+      // input shape (number amount, reserved field) is preserved
+      expect(seen[0].proof.reserved).toBe(false);
+      expect(typeof seen[0].proof.amount).toBe('number');
+    });
   });
 
   describe('onceMintPaid', () => {
