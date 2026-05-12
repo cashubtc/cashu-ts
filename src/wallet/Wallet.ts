@@ -1829,7 +1829,7 @@ class Wallet {
       );
       this.failIf(
         signatures[i].id !== outputData[i].blindedMessage.id,
-        `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}.`,
+        `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       this.failIf(
         checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
