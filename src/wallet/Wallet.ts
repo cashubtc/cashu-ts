@@ -2662,20 +2662,16 @@ class Wallet {
   }
 
   /**
-   * Constructs melt change proofs from a melt response and prepared output data.
+   * Constructs melt change proofs from a melt response and prepared output data. Called internally
+   * by `completeMelt`; also exposed for NUT-06 async melts and any other path that defers change
+   * construction (crash recovery, process hand-off).
    *
-   * @remarks
-   * Called internally by `completeMelt`. Also exposed for NUT-06 async melts: call
-   * `completeMelt(preview, privkey, true)` to request async processing, persist
-   * `preview.outputData` via {@link OutputData.serialize}, then once the quote is paid (via
-   * `checkMeltQuote*()` or `wallet.on.onceMeltPaid()`) reconstruct the output data with
-   * {@link OutputData.deserialize} and pass it here alongside the response's `change` signatures to
-   * obtain spendable proofs. See {@link OutputData.serialize} for the full lifecycle example.
    * @param outputData Outputs from `prepareMelt()`, or deserialised persisted output data.
    * @param change The optional `change` signatures from the melt response or paid quote.
    * @returns Spendable change proofs (possibly empty).
-   * @throws {@link CTSError} If signature count exceeds output count or signatures cannot be
-   *   verified.
+   * @throws {@link CTSError} If signature count exceeds output count, output data mixes keysets, or
+   *   signatures cannot be verified.
+   * @see {@link OutputData.serialize} for the persist/restore lifecycle example.
    */
   hydrateMeltChange(outputData: OutputDataLike[], change: SerializedBlindedSignature[]): Proof[] {
     // Change may not use all outputs (shorter is ok)
@@ -2684,7 +2680,12 @@ class Wallet {
       `Mint returned ${change.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
     if (outputData.length === 0) return [];
-    const keyset = this.getKeyset(outputData[0].blindedMessage.id);
+    const keysetId = outputData[0].blindedMessage.id;
+    this.failIf(
+      outputData.some((o) => o.blindedMessage.id !== keysetId),
+      'Mixed keyset ids in melt outputData; expected all outputs to share a single keyset',
+    );
+    const keyset = this.getKeyset(keysetId);
     this.validateReturnedSignatures(change, outputData, {
       checkAmounts: false, // change outputs are blank
     });

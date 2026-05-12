@@ -723,6 +723,16 @@ describe('async melt preference body', () => {
     expect(/[0-9a-f]{64}/.test(change[0].secret)).toBe(true);
   });
 
+  test('hydrateMeltChange rejects outputData with mixed keyset ids', async () => {
+    const wallet = new Wallet(mint, { unit, logger });
+    await wallet.loadMint();
+
+    const o1 = OutputData.createSingleRandomData(0, '00bd033559de27d0');
+    const o2 = OutputData.createSingleRandomData(0, '009a1f293253e41e');
+
+    expect(() => wallet.hydrateMeltChange([o1, o2], [])).toThrow(/Mixed keyset ids/);
+  });
+
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {
     const meltQuote = {
       quote: 'q-async-1b',

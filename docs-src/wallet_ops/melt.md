@@ -44,34 +44,26 @@ const { quote, change } = await wallet.completeMelt(preview);
 
 ## 4) Async melt with later change recovery (NUT-06 `prefer_async`)
 
-For mints that support NUT-06 asynchronous melts, the melt response can return before the
-Lightning payment completes — meaning the response will not yet carry NUT-08 change
-signatures. To reclaim that change later, persist the prepared output data while the melt
-is pending, then hydrate change proofs from the eventual paid quote response.
+For mints that support NUT-06 async melts, `.prepare()` pairs with `OutputData.serialize` to
+persist the change-output blanks while the payment is in flight, and `wallet.hydrateMeltChange`
+reconstructs change proofs once the quote is paid.
 
 ```ts
 import { OutputData, type SerializedOutputData } from '@cashu/cashu-ts';
 
-// 1. Prepare the melt and persist the change-output data alongside the pending quote.
-const preview = await wallet.prepareMelt('bolt11', meltQuote, myProofs);
+const preview = await wallet.ops.meltBolt11(meltQuote, myProofs).asDeterministic().prepare();
 const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
 await wallet.completeMelt(preview, undefined, true); // preferAsync = true
 
-// 2. ... time passes ... use checkMeltQuote*() or wallet.on.onceMeltPaid() to learn the
-//    quote is paid. The paid response carries the change signatures.
-
-// 3. Restore the output data and reconstruct spendable change proofs.
+// ... later, once the quote is paid ...
 const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>
   OutputData.deserialize(s),
 );
 const change = wallet.hydrateMeltChange(restored, paidQuote.change ?? []);
 ```
 
-- `OutputData.serialize` / `OutputData.deserialize` are the JSON-safe round-trip primitives
-  (decimal-encoded bigints, hex-encoded bytes; preserves `ephemeralE` for P2BK).
-- `wallet.hydrateMeltChange` runs the same validation as the synchronous path and is also
-  callable directly if you've persisted output data outside the helpers above (crash
-  recovery, process hand-off, etc.).
+- See [Melt Token § 3 — Async melt with later change recovery](../usage/melt_token.md) for the
+  full annotated lifecycle using the low-level wallet methods directly.
 
 ## Custom payment methods
 
