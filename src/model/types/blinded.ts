@@ -9,7 +9,10 @@ export type SerializedBlindedMessage = {
    */
   amount: Amount;
   /**
-   * Blinded message.
+   * Blinded message. Hex length depends on the keyset version:
+   *
+   * - V1/v2 (`00…` / `01…` id): 66 hex chars (secp256k1 compressed, 33 bytes).
+   * - V3 (`02…` id): 96 hex chars (BLS12-381 G1 compressed, 48 bytes).
    */
   B_: string;
   /**
@@ -31,7 +34,10 @@ export type SerializedBlindedSignature = {
    */
   amount: Amount;
   /**
-   * Blinded signature.
+   * Blinded signature. Hex length matches `B_` for the same keyset:
+   *
+   * - V1/v2: 66 hex chars (secp256k1 compressed).
+   * - V3: 96 hex chars (BLS12-381 G1 compressed).
    */
   C_: string;
   /**

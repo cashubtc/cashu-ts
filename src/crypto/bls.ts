@@ -25,11 +25,33 @@ export type UnblindedSignatureBls = {
   id: string;
 };
 
-// Nutshell PR #999 — DST is the RFC 9380 G1 random-oracle suite with a Cashu prefix.
+/**
+ * Domain-separation tag for `hashToCurveG1` on v3 keysets.
+ *
+ * RFC 9380 random-oracle suite for BLS12-381 G1 (`BLS12381G1_XMD:SHA-256_SSWU_RO_`) with a
+ * Cashu-specific prefix so a v3 wallet's `Y = hashToCurveG1(secret)` matches the mint's exactly.
+ *
+ * Source: Nutshell PR #999 (`cashu/core/crypto/bls.py`).
+ */
 export const BLS_HASH_TO_CURVE_DST = 'CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_';
 
-// BLS12-381 scalar field order (Fr). Used for NUT-13 reduction and modular inverse.
+/**
+ * BLS12-381 scalar field order (Fr). Distinct from secp256k1's `n`.
+ *
+ * Used for the NUT-13 HMAC reduction on v3 keysets and for the modular inverse of `r` during
+ * wallet-side unblinding. Sourced from `@noble/curves/bls12-381` so it tracks the library; verified
+ * equal to the locked constant in Nutshell PR #999 / RFC 9380:
+ * `52435875175126190479447740508185965837690552500527637822603658699938581184513`.
+ */
 export const BLS_FR_ORDER = bls12_381.fields.Fr.ORDER;
+
+/**
+ * G2 generator used for the pairing equality `e(C, G2_gen) == e(Y, K2)`.
+ *
+ * Sourced from `@noble/curves/bls12-381` (`bls12_381.G2.Point.BASE`); verified byte-for-byte equal
+ * to Nutshell PR #999's hardcoded `_G2_HEX` (compressed, 96 bytes / 192 hex chars).
+ */
+export const BLS_G2_GENERATOR = bls12_381.G2.Point.BASE;
 
 const Fr = bls12_381.fields.Fr;
 
@@ -114,8 +136,7 @@ export function createBlindSignatureBls(
  */
 export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uint8Array): boolean {
   const Y = hashToCurveBls(secret);
-  const G2 = bls12_381.G2.Point.BASE;
-  const left = bls12_381.pairing(C, G2);
+  const left = bls12_381.pairing(C, BLS_G2_GENERATOR);
   const right = bls12_381.pairing(Y, K2);
   return bls12_381.fields.Fp12.eql(left, right);
 }
@@ -132,7 +153,7 @@ export function batchVerifyUnblindedSignatureBls(
   items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array }>,
 ): boolean {
   if (items.length === 0) return true;
-  const G2 = bls12_381.G2.Point.BASE;
+  const G2 = BLS_G2_GENERATOR;
 
   // Random 32-byte scalars per proof (reduced mod Fr).
   const rs = items.map(() => Fr.fromBytes(randomBytes(32)));
