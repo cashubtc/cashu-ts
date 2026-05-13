@@ -7,13 +7,7 @@ import { HDKey } from '@scure/bip32';
 import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
-import {
-  BLS_G2_GENERATOR,
-  type G2Point,
-  type UnblindedSignatureBls,
-  hashToCurveBls,
-  pointFromHexG2,
-} from './bls';
+import { BLS_G2_GENERATOR, type G2Point, hashToCurveBls, pointFromHexG2 } from './bls';
 import { type UnblindedSignature, createRandomSecretKey, hashToCurve } from './core';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
@@ -60,7 +54,7 @@ export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBuffe
  * V3 (BLS) mint pubkey: K2 = a · G2_gen, compressed to 96 bytes.
  *
  * The 32-byte private key is interpreted as a big-endian scalar and reduced mod the BLS Fr order
- * (same convention as {@link createBlindSignatureBls}).
+ * (same convention as the mint-side blind signer for v3).
  */
 export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   const a = bls12_381.fields.Fr.fromBytes(privKey);
@@ -132,17 +126,16 @@ export function createNewMintKeys(
  * Mint-side keyed verification: holds iff the proof's `C` equals `a · hashToCurve(secret)`.
  *
  * @remarks
- * Dispatches by keyset version. v0/v1/v2 keysets use secp256k1 and {@link UnblindedSignature}; v3
- * keysets use BLS12-381 G1 and {@link UnblindedSignatureBls}. The wallet-side pairing equivalent for
- * v3 is {@link verifyUnblindedSignatureBls} in `./bls`.
+ * Dispatches by keyset version. v0/v1/v2 keysets use secp256k1; v3 keysets use BLS12-381 G1. The
+ * wallet-side pairing equivalent for v3 is {@link verifyUnblindedSignatureBls} in `./bls`.
  */
-export function verifyUnblindedSignature(
-  proof: UnblindedSignature | UnblindedSignatureBls,
-  privKey: Uint8Array,
-): boolean {
+export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
   if (proof.id.startsWith('02')) {
-    const Y = hashToCurveBls(proof.secret);
     const a = bls12_381.fields.Fr.fromBytes(privKey);
+    if (a === 0n) {
+      throw new CTSError('Mint scalar must be non-zero');
+    }
+    const Y = hashToCurveBls(proof.secret);
     return Y.multiply(a).equals(proof.C);
   }
   const Y: WeierstrassPoint<bigint> = hashToCurve(proof.secret);

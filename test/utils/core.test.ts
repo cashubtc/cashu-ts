@@ -719,6 +719,18 @@ describe('test zero-knowledge utilities', () => {
       const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
       expect(() => hasValidDleq(v3Proof, keyset)).toThrow(/Undefined key for amount/);
     });
+
+    test('returns false when v3 keyset key is malformed (mirrors secp behaviour)', () => {
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      // Wrong length (66 hex would be a secp point); parseMintPubKey throws inside try/catch.
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: '00'.repeat(33) } };
+      expect(hasValidDleq(v3Proof, keyset)).toBe(false);
+    });
   });
 
   describe('verifyDleqIfPresent', () => {

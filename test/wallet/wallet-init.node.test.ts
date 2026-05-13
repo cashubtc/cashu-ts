@@ -176,6 +176,7 @@ describe('test wallet init', () => {
       await wallet.loadMint();
       const states = await wallet.checkProofsStates([
         {
+          id: '00bd033559de27d0',
           secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
         },
       ]);

@@ -717,15 +717,16 @@ export function hasValidDleq(
         `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
       );
     }
-    const k2 = parseMintPubKey(proof.id, keyset.keys[proof.amount.toString()]);
-    if (k2.kind !== 'blsG2') return false;
     try {
+      const k2 = parseMintPubKey(proof.id, keyset.keys[proof.amount.toString()]);
+      if (k2.kind !== 'blsG2') return false;
       return verifyUnblindedSignatureBls(
         k2.pt,
         pointFromHexG1(proof.C),
         new TextEncoder().encode(proof.secret),
       );
     } catch {
+      // Malformed v3 keyset hex, malformed proof.C, etc. — match secp behaviour: return false.
       return false;
     }
   }
