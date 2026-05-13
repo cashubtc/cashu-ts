@@ -146,6 +146,58 @@ describe('batchVerifyUnblindedSignatureBls', () => {
     expect(batchVerifyUnblindedSignatureBls(broken)).toBe(false);
   });
 
+  // Forgery attack: given a single aggregated signature C' = a·(Y1+Y2), an attacker picks any
+  // C1 and sets C2 := C' - C1. The un-weighted batch check passes (Σ C = C' on the left,
+  // Y1+Y2 on the right); the weighted check we actually run must reject it. This is the
+  // protocol-critical property — without per-proof randomness, one signed B_ = (Y1+Y2)·r would
+  // expand into two spendable proofs.
+  test('rejects the C1 + C2 = C aggregation forgery (per-proof randomness)', () => {
+    const aScalar = 5n;
+    const aBytes = hexToBytes(aScalar.toString(16).padStart(64, '0'));
+    const K2 = bls12_381.G2.Point.BASE.multiply(aScalar);
+    const secret1 = new TextEncoder().encode('forgery-victim-1');
+    const secret2 = new TextEncoder().encode('forgery-victim-2');
+    const Y1 = hashToCurveBls(secret1);
+    const Y2 = hashToCurveBls(secret2);
+
+    // The mint signs the aggregate once: C' = a·(Y1+Y2). The attacker has C' but no individual
+    // signature on Y1 or Y2.
+    const Cprime = Y1.add(Y2).multiply(aScalar);
+
+    // Attacker picks an arbitrary C1 (here: a·Y1 + a·Y2 + nonsense — any G1 point works) and
+    // computes C2 = C' - C1.
+    const C1 = bls12_381.G1.Point.BASE.multiply(123456789n);
+    const C2 = Cprime.subtract(C1);
+
+    const forged = [
+      { K2, C: C1, secret: secret1 },
+      { K2, C: C2, secret: secret2 },
+    ];
+
+    // Sanity: the un-weighted aggregation check that the attack exploits *would* pass.
+    const Yagg = Y1.add(Y2);
+    const Cagg = C1.add(C2);
+    expect(
+      bls12_381.fields.Fp12.eql(
+        bls12_381.pairing(Cagg, bls12_381.G2.Point.BASE),
+        bls12_381.pairing(Yagg, K2),
+      ),
+    ).toBe(true);
+
+    // Per-proof randomness must reject it. Run many times to catch any accidental rᵢ-coincidence
+    // (the only way the attack passes is r₁ == r₂, P ≈ 2⁻²⁵⁵).
+    for (let i = 0; i < 8; i++) {
+      expect(batchVerifyUnblindedSignatureBls(forged)).toBe(false);
+    }
+    // And per-proof verify (which has no batch shortcut to attack) must also reject.
+    expect(
+      bls12_381.fields.Fp12.eql(
+        bls12_381.pairing(C1, bls12_381.G2.Point.BASE),
+        bls12_381.pairing(Y1, K2),
+      ),
+    ).toBe(false);
+  });
+
   test('empty batch is vacuously true', () => {
     expect(batchVerifyUnblindedSignatureBls([])).toBe(true);
   });
