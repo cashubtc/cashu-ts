@@ -7,7 +7,13 @@ import { HDKey } from '@scure/bip32';
 import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
-import { type G2Point, type UnblindedSignatureBls, hashToCurveBls, pointFromHexG2 } from './bls';
+import {
+  BLS_G2_GENERATOR,
+  type G2Point,
+  type UnblindedSignatureBls,
+  hashToCurveBls,
+  pointFromHexG2,
+} from './bls';
 import { type UnblindedSignature, createRandomSecretKey, hashToCurve } from './core';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
@@ -48,6 +54,20 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
 
 export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   return secp256k1.getPublicKey(privKey, true);
+}
+
+/**
+ * V3 (BLS) mint pubkey: K2 = a · G2_gen, compressed to 96 bytes.
+ *
+ * The 32-byte private key is interpreted as a big-endian scalar and reduced mod the BLS Fr order
+ * (same convention as {@link createBlindSignatureBls}).
+ */
+export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
+  const a = bls12_381.fields.Fr.fromBytes(privKey);
+  if (a === 0n) {
+    throw new CTSError('Mint scalar must be non-zero');
+  }
+  return BLS_G2_GENERATOR.multiply(a).toBytes(true);
 }
 
 /**
@@ -93,7 +113,10 @@ export function createNewMintKeys(
       privKeys[index] = createRandomSecretKey();
     }
 
-    pubKeys[index] = getPubKeyFromPrivKey(privKeys[index]);
+    pubKeys[index] =
+      versionByte === 2
+        ? getG2PubKeyFromPrivKey(privKeys[index])
+        : getPubKeyFromPrivKey(privKeys[index]);
     counter++;
   }
   const keysetId = deriveKeysetId(serializeMintKeys(pubKeys), {

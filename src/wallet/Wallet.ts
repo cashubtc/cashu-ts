@@ -11,6 +11,7 @@ import {
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
+  hashToCurveBls,
   isP2PKSigAll,
   buildP2PKSigAllMessage,
   assertSigAllInputs,
@@ -1835,8 +1836,10 @@ class Wallet {
         checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
+      // v3 (BLS) signatures intentionally omit DLEQ — pairing verification replaces it.
+      const isV3 = signatures[i].id.startsWith('02');
       this.failIf(
-        requiresDleq && !signatures[i].dleq,
+        requiresDleq && !isV3 && !signatures[i].dleq,
         `Mint supports NUT-12, but returned a signature without DLEQ proof at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
     }
@@ -2715,10 +2718,16 @@ class Wallet {
    * @param proofs (only the `secret` field is required)
    * @returns NUT-07 state for each proof, in same order.
    */
-  async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]> {
+  async checkProofsStates(
+    proofs: Array<Pick<Proof, 'secret'> & Partial<Pick<Proof, 'id'>>>,
+  ): Promise<ProofState[]> {
     const enc = new TextEncoder();
-    const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
-      hashToCurve(enc.encode(p.secret)).toHex(true),
+    const Ys = proofs.map((p) =>
+      // Dispatch by keyset version. `id` is optional for back-compat — callers that omit it
+      // are implicitly secp (the only curve before v3).
+      p.id?.startsWith('02')
+        ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
+        : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
     // TODO: Replace this with a value from the info endpoint of the mint eventually
     const BATCH_SIZE = 100;
