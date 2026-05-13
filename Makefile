@@ -21,6 +21,14 @@ NUT_IMAGE_RC ?= cashubtc/nutshell:0.18.2
 NUT_IMAGE ?= cashubtc/nutshell:0.20.0
 NUT_NAME ?= cashu-dev-nutshell
 
+# BLS (v3) Nutshell: no published image yet — build from a local checkout that
+# carries v3 support. Default path assumes the worktree sibling layout used
+# during the BLS bring-up (../nutshell on feature/bls12-381-v3-keyset, ≥0.21.0
+# which emits v3 keysets by default; see cashu/core/base.py).
+NUT_BLS_PATH ?= ../nutshell
+NUT_BLS_IMAGE ?= cashu-dev-nutshell-bls:local
+NUT_BLS_NAME ?= cashu-dev-nutshell-bls
+
 # ------------------------
 # Docker envs per dependency
 # ------------------------
@@ -86,6 +94,7 @@ print-mint-images:
 	@echo "CDK_IMAGE_RC=$(CDK_IMAGE_RC)"
 	@echo "NUT_IMAGE=$(NUT_IMAGE)"
 	@echo "NUT_IMAGE_RC=$(NUT_IMAGE_RC)"
+	@echo "NUT_BLS_IMAGE=$(NUT_BLS_IMAGE) (built from $(NUT_BLS_PATH))"
 
 # ------------------------
 # Nutshell Targets
@@ -113,3 +122,23 @@ nutshell-stable-down:
 
 nutshell-rc-down:
 	$(MAKE) nutshell-down NUT_NAME=cashu-dev-nutshell-rc
+
+# ------------------------
+# Nutshell BLS (v3) Targets
+# ------------------------
+# Built natively (no PLATFORM_FLAG): the base image (python:3.10-slim) is
+# multi-arch, and BLS keygen through Rosetta is unusably slow on arm64 hosts.
+.PHONY: nutshell-bls-build nutshell-bls-up nutshell-bls-down
+
+nutshell-bls-build:
+	$(DOCKER) build -t $(NUT_BLS_IMAGE) $(NUT_BLS_PATH)
+
+nutshell-bls-up: nutshell-bls-build
+	-$(DOCKER) rm -f -v $(NUT_BLS_NAME) >/dev/null 2>&1 || true
+	$(DOCKER) run -d --name $(NUT_BLS_NAME) \
+		-p $(BIND_ADDR):$(PORT):3338 \
+		$(NUT_ENVS) \
+		$(NUT_BLS_IMAGE) poetry run mint
+
+nutshell-bls-down:
+	-$(DOCKER) rm -f -v $(NUT_BLS_NAME)
