@@ -213,6 +213,58 @@ describe('sendOffline witness normalization', () => {
   });
 });
 
+describe('sendOffline requireDleq', () => {
+  // v3 (BLS) proofs satisfy requireDleq via pairing equivalence — they carry no DLEQ proof
+  // but the receive-side `hasValidDleq` accepts them. sendOffline must mirror that.
+  const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+  const v3Secret = 'test_message';
+  const v3C =
+    'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+  // BLS12-381 G2 base point compressed (192 hex / 96 bytes) — only loaded for keyset
+  // resolution / fee lookup in this test; not used cryptographically.
+  const G2_BASE_HEX =
+    '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8';
+  const v3Keyset = { id: v3Id, unit, active: true, input_fee_ppk: 0, final_expiry: null };
+  const v3Keys = { ...v3Keyset, keys: { '1': G2_BASE_HEX, '2': G2_BASE_HEX } };
+
+  function mockV3Keyset() {
+    server.use(
+      http.get(mintUrl + '/v1/keysets', () => HttpResponse.json({ keysets: [v3Keyset] })),
+      http.get(mintUrl + '/v1/keys', () => HttpResponse.json({ keysets: [v3Keys] })),
+      http.get(mintUrl + '/v1/keys/' + v3Id, () => HttpResponse.json({ keysets: [v3Keys] })),
+    );
+  }
+
+  test('accepts v3 proofs even when requireDleq is true (pairing replaces DLEQ)', async () => {
+    mockV3Keyset();
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+
+    const v3Proofs: Proof[] = [{ id: v3Id, amount: Amount.from(1), secret: v3Secret, C: v3C }];
+
+    const { send } = wallet.sendOffline(1, v3Proofs, { requireDleq: true });
+    expect(send).toHaveLength(1);
+    expect(send[0].id).toBe(v3Id);
+    expect(send[0].dleq).toBeUndefined();
+  });
+
+  test('rejects v1/v2 proofs without DLEQ when requireDleq is true', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const v1Proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret: plainSecret,
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      },
+    ];
+    expect(() => wallet.sendOffline(1, v1Proofs, { requireDleq: true })).toThrow(
+      'Not enough funds available to send',
+    );
+  });
+});
+
 describe('send', () => {
   const proofs = [
     {

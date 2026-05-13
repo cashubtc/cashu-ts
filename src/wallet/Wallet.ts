@@ -1031,8 +1031,13 @@ class Wallet {
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
-      // Only use proofs that have a DLEQ
-      normalizedProofs = normalizedProofs.filter((p) => p.dleq != undefined);
+      // v3 (BLS, `02…`) proofs satisfy the "cryptographically-verified mint signature"
+      // semantic of `requireDleq` via pairing equality rather than a DLEQ proof. Accept
+      // them alongside v0/v1/v2 proofs that carry a DLEQ. Mirrors the receive-side
+      // `hasValidDleq` dispatch (`utils/core.ts`).
+      normalizedProofs = normalizedProofs.filter(
+        (p) => p.id.startsWith('02') || p.dleq != undefined,
+      );
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
