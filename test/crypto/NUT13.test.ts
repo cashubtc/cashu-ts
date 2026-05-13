@@ -44,4 +44,18 @@ describe('v3 (BLS) derivation', () => {
     const v3r = deriveBlindingFactor(seed, v3, 0);
     expect(bytesToHex(v2r)).not.toBe(bytesToHex(v3r));
   });
+
+  test('matches Nutshell vector at a counter where Fr-order reduction is non-trivial', () => {
+    // Cross-checked against Nutshell's `_derive_secret_hmac_sha256` for (seed, v3KeysetId, 2).
+    // Counter=2 was chosen because the raw HMAC exceeds BLS_FR_ORDER, so the mod reduction
+    // produces bytes that differ from the raw digest — making this a regression vector for
+    // the v3 mod-Fr_ORDER branch in deriveHmac.
+    const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, 2);
+    expect(bytesToHex(secret)).toBe(
+      '4729fe85ab3886ce03259ac658735ff534c9cd41b2b364d202ff497e4ee48809',
+    );
+    expect(bytesToHex(blindingFactor)).toBe(
+      '08bb237d625b73022cd50f6fedfb660c6125b676a4819474241c264903259d2f',
+    );
+  });
 });

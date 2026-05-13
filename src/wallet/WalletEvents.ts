@@ -1,4 +1,4 @@
-import { hashToCurve } from '../crypto';
+import { hashToCurve, hashToCurveBls } from '../crypto';
 import { safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
@@ -316,7 +316,9 @@ export class WalletEvents {
     // resolve to an inherited property and bypass the unknown-Y guard below.
     const proofMap = Object.create(null) as Record<string, T>;
     for (const p of proofs) {
-      const y = hashToCurve(enc.encode(p.secret)).toHex(true);
+      const y = p.id.startsWith('02')
+        ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
+        : hashToCurve(enc.encode(p.secret)).toHex(true);
       if (proofMap[y]) {
         throw new CTSError('Duplicate proof secret in proofStateUpdates input');
       }

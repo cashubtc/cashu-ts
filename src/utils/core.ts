@@ -1,7 +1,14 @@
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import {
+  type DLEQ,
+  parseMintPubKey,
+  pointFromHex,
+  pointFromHexG1,
+  verifyDLEQProof_reblind,
+  verifyUnblindedSignatureBls,
+} from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -658,10 +665,10 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 
     if (idBytes[0] === 0x00) {
       newProofs.push(proof);
-    } else if (idBytes[0] === 0x01) {
+    } else if (idBytes[0] === 0x01 || idBytes[0] === 0x02) {
       if (!uniqueIds.length) {
         throw new CTSError(
-          'A short keyset ID v2 was encountered, but got no keysets to map it to.',
+          'A short keyset ID v2/v3 was encountered, but got no keysets to map it to.',
         );
       }
       // Look for a match: prefix(keyset ID) == short ID
@@ -701,9 +708,27 @@ export function hasValidDleq(
   opts?: { require?: boolean },
 ): boolean {
   const require = opts?.require ?? true;
-  // v3 (BLS) proofs intentionally carry no DLEQ — pairing verification at swap/melt time
-  // is the equivalent guarantee. Treat as "valid" so the wallet-side acceptance gate passes.
-  if (proof.id.startsWith('02')) return true;
+  // v3 (BLS) proofs carry no DLEQ; pairing verification stands in. Returns true iff
+  // e(C, G2) == e(Y, K2). This is "valid signature" in v3 terms — equivalent guarantee
+  // to a verifying DLEQ on v0/v1/v2 proofs.
+  if (proof.id.startsWith('02')) {
+    if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
+      throw new CTSError(
+        `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
+      );
+    }
+    const k2 = parseMintPubKey(proof.id, keyset.keys[proof.amount.toString()]);
+    if (k2.kind !== 'blsG2') return false;
+    try {
+      return verifyUnblindedSignatureBls(
+        k2.pt,
+        pointFromHexG1(proof.C),
+        new TextEncoder().encode(proof.secret),
+      );
+    } catch {
+      return false;
+    }
+  }
   if (proof?.dleq == undefined) {
     return !require;
   }
@@ -737,6 +762,14 @@ export function hasValidDleq(
  *   Will be removed in v5.0.
  */
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
+  // v3 (BLS) proofs always require a pairing check at receive time — there's no DLEQ
+  // to short-circuit on, so we route through hasValidDleq which performs the pairing.
+  if (proof.id.startsWith('02')) {
+    return hasValidDleq(proof, keyset);
+  }
+  if (proof?.dleq == undefined) {
+    return true;
+  }
   return hasValidDleq(proof, keyset, { require: false });
 }
 

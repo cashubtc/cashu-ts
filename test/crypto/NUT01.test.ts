@@ -48,3 +48,18 @@ describe('serialize mint keys', () => {
     expect(serializedKeys).toEqual(keys);
   });
 });
+
+describe('v3 (BLS) mint keys', () => {
+  test('versionByte=2 produces 96-byte G2 pubkeys and a 02-prefixed id', () => {
+    const { pubKeys, keysetId } = createNewMintKeys(
+      4,
+      new TextEncoder().encode('TEST_PRIVATE_KEY'),
+      { versionByte: 2 },
+    );
+    expect(keysetId.startsWith('02')).toBe(true);
+    for (const amount of Object.keys(pubKeys)) {
+      // G2 compressed = 96 bytes
+      expect(pubKeys[amount].length).toBe(96);
+    }
+  });
+});

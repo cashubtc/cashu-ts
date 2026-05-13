@@ -5,6 +5,7 @@ import {
   pointFromBytes,
   createBlindSignature,
   getPubKeyFromPrivKey,
+  getG2PubKeyFromPrivKey,
 } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
 import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
@@ -675,15 +676,49 @@ describe('test zero-knowledge utilities', () => {
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
   });
-  test('v3 proof short-circuits to true even without dleq', () => {
-    // v3 (BLS) keysets do not carry DLEQ; pairing verification at swap/melt is the equivalent.
-    const v3Proof: Proof = {
-      ...serializedProof,
-      id: '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d',
-      dleq: undefined,
-    };
-    const keyset = { id: v3Proof.id, unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
-    expect(hasValidDleq(v3Proof, keyset)).toBe(true);
+  describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
+    // Locked Nutshell vector: secret="test_message", r=3, a=2 → C
+    const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+    const v3Secret = 'test_message';
+    const v3C =
+      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+    // K2 = a * G2 with a=2 (compressed G2, 192 hex)
+    const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
+
+    test('returns true for a v3 proof whose pairing equality holds', () => {
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      expect(hasValidDleq(v3Proof, keyset)).toBe(true);
+    });
+
+    test('returns false for a v3 proof with tampered C', () => {
+      const tampered = v3C.slice(0, v3C.length - 2) + (v3C.slice(-2) === 'aa' ? 'bb' : 'aa');
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: tampered,
+      };
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      expect(hasValidDleq(v3Proof, keyset)).toBe(false);
+    });
+
+    test('throws on missing key for amount in v3 keyset', () => {
+      const v3Proof: Proof = {
+        amount: Amount.from(2),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      expect(() => hasValidDleq(v3Proof, keyset)).toThrow(/Undefined key for amount/);
+    });
   });
 
   describe('verifyDleqIfPresent', () => {
@@ -1172,7 +1207,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     };
     const encoded = utils.getEncodedToken(token);
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /short keyset ID v2 was encountered, but got no keysets/,
+      /short keyset ID v2\/v3 was encountered, but got no keysets/,
     );
   });
 
@@ -1199,6 +1234,38 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     // Two full IDs that share the same 16-char prefix
     const ambiguous = fullV2Id + 'aa';
     expect(() => utils.getDecodedToken(encoded, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
+  });
+});
+
+describe('mapShortKeysetIds via getDecodedToken (v3 BLS keyset IDs)', () => {
+  // 02-prefixed v3 id derived in Phase 3 for the locked Nutshell test vector
+  const fullV3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+  // v3 proofs carry a 96-hex compressed G1 C value
+  const v3C =
+    'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+
+  test('maps short v3 keyset ID back to full ID round-trip', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [{ id: fullV3Id, amount: Amount.from(1), secret: 'test_message', C: v3C }],
+      unit: 'sat',
+    };
+    const encoded = utils.getEncodedToken(token);
+    const decoded = utils.getDecodedToken(encoded, [fullV3Id]);
+    expect(decoded.proofs[0].id).toBe(fullV3Id);
+    expect(decoded.proofs[0].C).toBe(v3C);
+  });
+
+  test('throws when v3 short ID has no keysets to map to', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [{ id: fullV3Id, amount: Amount.from(1), secret: 'test_message', C: v3C }],
+      unit: 'sat',
+    };
+    const encoded = utils.getEncodedToken(token);
+    expect(() => utils.getDecodedToken(encoded, [])).toThrow(
+      /short keyset ID v2\/v3 was encountered, but got no keysets/,
+    );
   });
 });
 
