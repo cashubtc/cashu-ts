@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 import {
   type DLEQ,
+  batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
   parseMintPubKey,
   pointFromHex,
@@ -773,6 +774,86 @@ export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolea
     return true;
   }
   return hasValidDleq(proof, keyset, { require: false });
+}
+
+/**
+ * Verifies a batch of received proofs in one pass, batching the v3 (BLS) subset into a single
+ * multi-pairing while keeping per-proof DLEQ verification for v0/v1/v2.
+ *
+ * Batch path: builds the {K2, C, secret} triples once, runs `batchVerifyUnblindedSignatureBls`, and
+ * on failure re-runs per-proof to identify the offending proof — cost is one extra batch's worth of
+ * work on the unhappy path, acceptable.
+ *
+ * @param proofs The proofs to verify (mixed curves allowed).
+ * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
+ * @param opts.requireDleq When `true`, missing DLEQs on v0/v1/v2 proofs reject (mirrors
+ *   {@link hasValidDleq}); v3 proofs always pairing-verify regardless. When `false`, present-but-
+ *   invalid DLEQs reject (mirrors {@link verifyDleqIfPresent}).
+ * @throws CTSError naming the offending proof id when verification fails.
+ */
+export function verifyProofsForReceive(
+  proofs: Proof[],
+  getKeyset: (id: string) => HasKeysetKeys,
+  opts?: { requireDleq?: boolean },
+): void {
+  const requireDleq = opts?.requireDleq ?? false;
+  const failMsg = requireDleq
+    ? 'Token contains proofs with invalid or missing DLEQ'
+    : 'Token contains a proof with an invalid DLEQ';
+
+  const blsProofs: Proof[] = [];
+  const otherProofs: Proof[] = [];
+  for (const p of proofs) {
+    (isBlsKeyset(p.id) ? blsProofs : otherProofs).push(p);
+  }
+
+  const offenderSuffix = (p: Proof) => ` (keyset ${p.id}, amount ${p.amount.toString()})`;
+
+  for (const p of otherProofs) {
+    const ks = getKeyset(p.id);
+    const ok = requireDleq ? hasValidDleq(p, ks) : verifyDleqIfPresent(p, ks);
+    if (!ok) throw new CTSError(failMsg + offenderSuffix(p));
+  }
+
+  if (blsProofs.length === 0) return;
+
+  // Build pairing items once.
+  const items = blsProofs.map((p) => {
+    const ks = getKeyset(p.id);
+    if (!hasCorrespondingKey(p.amount, ks.keys)) {
+      throw new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`);
+    }
+    const k2 = parseMintPubKey(p.id, ks.keys[p.amount.toString()]);
+    if (k2.kind !== 'blsG2') throw new CTSError(failMsg + offenderSuffix(p));
+    let C;
+    try {
+      C = pointFromHexG1(p.C);
+    } catch {
+      throw new CTSError(failMsg + offenderSuffix(p));
+    }
+    return { K2: k2.pt, C, secret: new TextEncoder().encode(p.secret), proof: p };
+  });
+
+  // Single proof: batch wrapper costs an extra mul; just pair directly.
+  if (items.length === 1) {
+    const it = items[0];
+    if (!verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
+      throw new CTSError(failMsg + offenderSuffix(it.proof));
+    }
+    return;
+  }
+
+  if (batchVerifyUnblindedSignatureBls(items)) return;
+
+  // Batch failed — pinpoint the offender so the caller can surface a useful error.
+  for (const it of items) {
+    if (!verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
+      throw new CTSError(failMsg + offenderSuffix(it.proof));
+    }
+  }
+  // Defensive: batch returned false but every proof verified individually. Shouldn't happen
+  // unless the batch implementation regresses; treat as a hard failure rather than silently passing.
+  throw new CTSError(failMsg);
 }
 
 /**

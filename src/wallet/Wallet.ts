@@ -51,13 +51,12 @@ import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
   getDecodedToken,
-  hasValidDleq,
   invoiceHasAmountInHRP,
   normalizeProofAmounts,
   normalizeUrl,
   splitAmount,
   sumProofs,
-  verifyDleqIfPresent,
+  verifyProofsForReceive,
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
@@ -968,14 +967,8 @@ class Wallet {
 
     // NUT-12: wallets MUST verify any DLEQ on a received proof. `requireDleq: true`
     // upgrades that to "DLEQ must also be present" via the stricter `hasValidDleq`.
-    for (const p of proofs) {
-      const ks = this._keyChain.getKeyset(p.id);
-      if (requireDleq) {
-        this.failIf(!hasValidDleq(p, ks), 'Token contains proofs with invalid or missing DLEQ');
-      } else {
-        this.failIf(!verifyDleqIfPresent(p, ks), 'Token contains a proof with an invalid DLEQ');
-      }
-    }
+    // For v3 (BLS) proofs the single multi-pairing replaces per-proof DLEQ verification.
+    verifyProofsForReceive(proofs, (id) => this._keyChain.getKeyset(id), { requireDleq });
 
     // Shape receive output type and denominations
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset
