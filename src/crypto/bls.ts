@@ -1,7 +1,9 @@
 import { type Fp2 } from '@noble/curves/abstract/tower.js';
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { randomBytes, bytesToHex } from '@noble/curves/utils.js';
+import { randomBytes, bytesToHex, bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
 
@@ -37,6 +39,13 @@ export const BLS_FR_ORDER = bls12_381.fields.Fr.ORDER;
  * to Nutshell PR #999's hardcoded `_G2_HEX` (compressed, 96 bytes / 192 hex chars).
  */
 export const BLS_G2_GENERATOR = bls12_381.G2.Point.BASE;
+
+/**
+ * Domain-separation tag for the Fiat-Shamir transcript used to derive batch-verification weights in
+ * {@link batchVerifyUnblindedSignatureBls}. See that function's doc comment for the rationale; see
+ * {@link deriveDLEQNonce} in `NUT12.ts` for the analogous secp-side pattern.
+ */
+const BLS_BATCH_DST = utf8ToBytes('Cashu_BLS_Batch_v1');
 
 const Fr = bls12_381.fields.Fr;
 
@@ -127,29 +136,67 @@ export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uin
 }
 
 /**
- * Batch verification across many proofs (one multi-pairing).
+ * Derive deterministic per-proof batch-verification weights.
  *
- * Each proof is weighted by a fresh, secret, uniformly-random scalar rᵢ ∈ Fr drawn by the verifier:
+ * @remarks
+ * The weights are non-zero positive scalars within the curve order `(rᵢ ∈ Fr*)`. Instead of relying
+ * on randombytes, we create a Fiat-Shamir transcript over all proofs in the batch. The length
+ * prefix makes the transcript injective, keeping transcripts unique, regardless of secret. Each
+ * weight (`rᵢ`) is distinct, based on the SHA256(transcript || position_in_batch || ctr).
  *
- *     e( Σ rᵢ·Cᵢ , G2 )  ?=  Π_{k2} e( Σ_{i:K2_i=k2} rᵢ·Yᵢ , k2 )
+ * Exposed for test-time determinism / transcript-coverage assertions; not part of the public API.
+ * @internal
+ */
+export function deriveBatchWeights(
+  items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array }>,
+): bigint[] {
+  // Build transcript: b'Cashu_BLS_Batch_v1' || (proofi_concat) || (...)
+  const parts: Uint8Array[] = [BLS_BATCH_DST];
+  for (const it of items) {
+    // proofi_concat bytes: C || K2 || len32(secret) || secret
+    parts.push(
+      it.C.toBytes(true),
+      it.K2.toBytes(true),
+      numberToBytesBE(it.secret.length, 4),
+      it.secret,
+    );
+  }
+  const transcript = concatBytes(...parts);
+
+  const rs: bigint[] = [];
+  for (let i = 0; i < items.length; i++) {
+    const iBytes = numberToBytesBE(i, 4);
+    let ri = 0n;
+    for (let ctr = 0; ctr < 256; ctr++) {
+      const h = sha256(concatBytes(transcript, iBytes, new Uint8Array([ctr])));
+      // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
+      const r = bytesToNumberBE(h) % BLS_FR_ORDER;
+      /* c8 ignore next */
+      if (r !== 0n) {
+        ri = r;
+        break;
+      }
+    }
+    /* c8 ignore next */
+    if (ri === 0n) throw new CTSError('BLS batch weight derivation failed');
+    rs.push(ri);
+  }
+  return rs;
+}
+
+/**
+ * Batch verify many proofs via a single multi-pairing.
  *
- * The per-proof randomness is what makes this safe. Without it (rᵢ = 1) the check is only on the
- * aggregate `Σ Cᵢ`, which is forgeable: given a single aggregated signature `C' = a·(Y₁+Y₂)`, an
- * attacker can pick any C₁ and set C₂ := C' − C₁. The un-weighted check `e(C₁+C₂, G2) = e(Y₁+Y₂,
- * K₂)` then passes even though neither (C₁, Y₁) nor (C₂, Y₂) is a real signature on its own. In a
- * Cashu context this would let one signed `B_ = (Y₁+Y₂)·r` expand into N spendable proofs — a fatal
- * forgery.
+ * Equation: `e(Σ rᵢ·Cᵢ, G2) == Π_{k2} e(Σ_{i:K2ᵢ=k2} rᵢ·Yᵢ, k2)`.
  *
- * With independent random weights, that same construction reduces to `(r₁−r₂)·C₁ = (r₁−r₂)·a·Y₁`,
- * which can only hold if C₁ = a·Y₁ (i.e. it was already a real signature) or if r₁ = r₂
- * (probability ≈ 1/|Fr| ≈ 2⁻²⁵⁵ — negligible). The same argument generalises to any subset of N
- * proofs: with N independent random weights, the only weighted combinations that pair-equate are
- * the genuine individual signatures.
+ * @remarks
+ * The per-proof weights `rᵢ` are what makes this safe: without them, an attacker holding one signed
+ * `C' = a·(Y₁+Y₂)` can pick any C₁ and present `(C₁, secret₁), (C' − C₁, secret₂)` as two valid
+ * proofs from a single signature. Independent weights reduce that attack to needing `C₁ = a·Y₁`
+ * (i.e. a real signature) unless `r₁ = r₂` (≈ 2⁻²⁵⁵). Weights come from {@link deriveBatchWeights}
+ * (Fiat-Shamir, no CSPRNG).
  *
- * The scalars are drawn here, after `items` is finalised, from `randomBytes(32)` (CSPRNG) reduced
- * mod Fr — never derived from the proofs themselves, so an attacker cannot predict them.
- *
- * Returns true iff every individual `e(Cᵢ, G2) == e(Yᵢ, K2_i)` holds.
+ * Returns true iff every individual `e(Cᵢ, G2) == e(Yᵢ, K2ᵢ)` holds.
  */
 export function batchVerifyUnblindedSignatureBls(
   items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array }>,
@@ -157,8 +204,7 @@ export function batchVerifyUnblindedSignatureBls(
   if (items.length === 0) return true;
   const G2 = BLS_G2_GENERATOR;
 
-  // Random 32-byte scalars per proof (reduced mod Fr).
-  const rs = items.map(() => Fr.fromBytes(randomBytes(32)));
+  const rs = deriveBatchWeights(items);
 
   // Left: Σ rᵢ·Cᵢ , then pair against G2.
   let sumC = items[0].C.multiply(rs[0]);

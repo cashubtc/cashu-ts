@@ -10,6 +10,7 @@ import {
   createBlindSignatureBls,
   verifyUnblindedSignatureBls,
   batchVerifyUnblindedSignatureBls,
+  deriveBatchWeights,
   pointFromHexG2,
 } from '../../src/crypto/bls';
 
@@ -200,5 +201,98 @@ describe('batchVerifyUnblindedSignatureBls', () => {
 
   test('empty batch is vacuously true', () => {
     expect(batchVerifyUnblindedSignatureBls([])).toBe(true);
+  });
+});
+
+describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
+  function makeItem(secretStr: string, r: bigint, aScalar: bigint) {
+    const secret = new TextEncoder().encode(secretStr);
+    const aBytes = hexToBytes(aScalar.toString(16).padStart(64, '0'));
+    const K2 = bls12_381.G2.Point.BASE.multiply(aScalar);
+    const { B_ } = blindMessageBls(secret, r);
+    const { C_ } = createBlindSignatureBls(B_, aBytes, 'k');
+    const C = unblindSignatureBls(C_, r);
+    return { K2, C, secret };
+  }
+
+  const itemsA = () => [makeItem('s1', 3n, 5n), makeItem('s2', 4n, 5n), makeItem('s3', 7n, 11n)];
+
+  test('same inputs → identical weights (deterministic, no CSPRNG dependency)', () => {
+    const ws1 = deriveBatchWeights(itemsA());
+    const ws2 = deriveBatchWeights(itemsA());
+    expect(ws1).toEqual(ws2);
+    expect(ws1).toHaveLength(3);
+  });
+
+  test('every weight is in [1, BLS_FR_ORDER)', () => {
+    const ws = deriveBatchWeights(itemsA());
+    for (const r of ws) {
+      expect(r).toBeGreaterThan(0n);
+      expect(r).toBeLessThan(BLS_FR_ORDER);
+    }
+  });
+
+  test('tampering with C changes the weights (transcript commits to C)', () => {
+    const baseline = deriveBatchWeights(itemsA());
+    const tampered = itemsA();
+    tampered[1] = { ...tampered[1], C: tampered[0].C }; // mutate just the C of item 1
+    const altered = deriveBatchWeights(tampered);
+    expect(altered).not.toEqual(baseline);
+  });
+
+  test('tampering with K2 changes the weights (transcript commits to K2)', () => {
+    const baseline = deriveBatchWeights(itemsA());
+    const tampered = itemsA();
+    tampered[1] = { ...tampered[1], K2: bls12_381.G2.Point.BASE.multiply(99n) };
+    const altered = deriveBatchWeights(tampered);
+    expect(altered).not.toEqual(baseline);
+  });
+
+  test('tampering with secret changes the weights (transcript commits to secret)', () => {
+    const baseline = deriveBatchWeights(itemsA());
+    const tampered = itemsA();
+    tampered[1] = { ...tampered[1], secret: new TextEncoder().encode('s2-but-different') };
+    const altered = deriveBatchWeights(tampered);
+    expect(altered).not.toEqual(baseline);
+  });
+
+  test('item reordering changes weights (position is committed)', () => {
+    const baseline = deriveBatchWeights(itemsA());
+    const reordered = itemsA();
+    [reordered[0], reordered[2]] = [reordered[2], reordered[0]];
+    const altered = deriveBatchWeights(reordered);
+    expect(altered).not.toEqual(baseline);
+  });
+
+  test('length-prefix prevents secret-boundary collision (s1||s2 vs differently split)', () => {
+    // Two items whose concatenated secrets are byte-identical to a different split.
+    // Without length-prefixing, an attacker could shift bytes between adjacent secrets and
+    // produce the same transcript; the length prefix makes that impossible.
+    const aBytes = hexToBytes('0'.repeat(63) + '5');
+    const K2 = bls12_381.G2.Point.BASE.multiply(5n);
+    const Cdummy = bls12_381.G1.Point.BASE; // same C for both shapes so only secret differs
+    const A = [
+      { K2, C: Cdummy, secret: new TextEncoder().encode('AAAA') },
+      { K2, C: Cdummy, secret: new TextEncoder().encode('BBBB') },
+    ];
+    const B = [
+      { K2, C: Cdummy, secret: new TextEncoder().encode('AAA') },
+      { K2, C: Cdummy, secret: new TextEncoder().encode('ABBBB') },
+    ];
+    expect(deriveBatchWeights(A)).not.toEqual(deriveBatchWeights(B));
+    void aBytes;
+  });
+
+  test('batchVerify result is deterministic across runs', () => {
+    // With Fiat-Shamir weights, same input → same boolean by construction (no CSPRNG flakiness
+    // to hedge against). A couple of iterations is enough to lock the property without burning
+    // pairing time under coverage instrumentation.
+    const good = itemsA();
+    const bad = itemsA();
+    bad[0] = { ...bad[0], C: bad[1].C };
+    for (let i = 0; i < 3; i++) {
+      expect(batchVerifyUnblindedSignatureBls(good)).toBe(true);
+      expect(batchVerifyUnblindedSignatureBls(bad)).toBe(false);
+    }
   });
 });

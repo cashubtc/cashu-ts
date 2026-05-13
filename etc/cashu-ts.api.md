@@ -2119,6 +2119,11 @@ export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedM
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
 // @public
+export function verifyProofsForReceive(proofs: ProofLike[], getKeyset: (id: string) => HasKeysetKeys, opts?: {
+    requireDleq?: boolean;
+}): void;
+
+// @public
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;
 
 // @public
