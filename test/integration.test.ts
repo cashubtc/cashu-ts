@@ -58,6 +58,13 @@ vi.setConfig({
   maxConcurrency: 1,
 });
 
+// True if the wallet's active keyset is a v3 (BLS12-381) keyset. The DLEQ tests below
+// only apply to v0/v1/v2 (secp256k1) keysets — v3 replaces DLEQ with pairing verification
+// and emits no DLEQ proof on signatures.
+function isV3Mint(wallet: Wallet): boolean {
+  return wallet.keyChain.getCheapestKeyset().id.startsWith('02');
+}
+
 // Helper to wait until mint quote is paid
 async function untilMintQuotePaid(wallet: Wallet, quote: MintQuoteBaseResponse) {
   try {
@@ -696,6 +703,7 @@ describe('dleq', () => {
     if (NUT12 == undefined || !NUT12.supported) {
       return; //skip
     }
+    if (isV3Mint(wallet)) return; // v3 proofs use pairing verification, no DLEQ
     const mintRequest = await wallet.createMintQuoteBolt11(3000);
     await untilMintQuotePaid(wallet, mintRequest);
     const proofs = await wallet.mintProofsBolt11(3000, mintRequest.quote);
@@ -713,6 +721,7 @@ describe('dleq', () => {
     if (NUT12 == undefined || !NUT12.supported) {
       return; //skip
     }
+    if (isV3Mint(wallet)) return; // v3 proofs use pairing verification, no DLEQ
     const mintRequest = await wallet.createMintQuoteBolt11(8);
     await untilMintQuotePaid(wallet, mintRequest);
     const proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
@@ -737,6 +746,7 @@ describe('dleq', () => {
     if (NUT12 == undefined || !NUT12.supported) {
       return; //skip
     }
+    if (isV3Mint(wallet)) return; // v3 proofs use pairing verification, no DLEQ
     const mintRequest = await wallet.createMintQuoteBolt11(8);
     await untilMintQuotePaid(wallet, mintRequest);
     const proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
@@ -753,6 +763,7 @@ describe('dleq', () => {
     if (NUT12 == undefined || !NUT12.supported) {
       return; //skip
     }
+    if (isV3Mint(wallet)) return; // v3 proofs use pairing verification, no DLEQ
     const mintRequest = await wallet.createMintQuoteBolt11(8);
     await untilMintQuotePaid(wallet, mintRequest);
     let proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
@@ -774,6 +785,7 @@ describe('dleq', () => {
     if (NUT12 == undefined || !NUT12.supported) {
       return; //skip
     }
+    if (isV3Mint(wallet)) return; // v3 proofs use pairing verification, no DLEQ
     const mintRequest = await wallet.createMintQuoteBolt11(8);
     await untilMintQuotePaid(wallet, mintRequest);
     let proofs = await wallet.mintProofsBolt11(8, mintRequest.quote);
