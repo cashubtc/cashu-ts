@@ -1,8 +1,11 @@
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
+  asBlsG1Point,
   asSecpPoint,
   blindMessage,
+  blindMessageBls,
+  constructUnblindedSignatureBls,
   createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
   deriveP2BKBlindedPubkeys,
@@ -10,7 +13,10 @@ import {
   normalizeP2PKOptions,
   pointFromHex,
   pointFromHexAuto,
+  pointFromHexG1,
   verifyDLEQProof,
+  type BlindSignatureBls,
+  type CurvePoint,
   type DLEQ,
   type BlindSignature,
   type P2PKOptions,
@@ -133,6 +139,21 @@ export class OutputData implements OutputDataLike {
         'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
       );
     }
+
+    // v3 (BLS12-381) path: multiplicative unblinding, no key needed, no DLEQ.
+    if (sig.id.startsWith('02')) {
+      const blindSig: BlindSignatureBls = { id: sig.id, C_: pointFromHexG1(sig.C_) };
+      const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
+      const proof: Proof = {
+        id: sig.id,
+        amount: sig.amount,
+        C: unblinded.C.toHex(true),
+        secret: new TextDecoder().decode(unblinded.secret),
+      };
+      if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+      return proof;
+    }
+
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
       dleq = {
@@ -144,8 +165,7 @@ export class OutputData implements OutputDataLike {
     const sigAmountKey = sig.amount.toString();
     const A = pointFromHex(keyset.keys[sigAmountKey]);
 
-    // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ; v3 (BLS)
-    // proofs skip this and rely on pairing-based verification at swap/melt time.
+    // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ.
     if (dleq) {
       const bAuto = pointFromHexAuto(this.blindedMessage.B_);
       if (bAuto.kind === 'secp') {
@@ -278,11 +298,11 @@ export class OutputData implements OutputDataLike {
 
     // blind the message
     const secretBytes = new TextEncoder().encode(parsed);
-    const { r, B_ } = blindMessage(secretBytes);
+    const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
 
     // create OutputData
     return new OutputData(
-      new BlindedMessage(amountValue, asSecpPoint(B_), keysetId).getSerializedBlindedMessage(),
+      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
       r,
       secretBytes,
       Ehex,
@@ -298,9 +318,9 @@ export class OutputData implements OutputDataLike {
     const amountValue = Amount.from(amount);
     const randomHex = bytesToHex(randomBytes(32));
     const secretBytes = new TextEncoder().encode(randomHex);
-    const { r, B_ } = blindMessage(secretBytes);
+    const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
     return new OutputData(
-      new BlindedMessage(amountValue, asSecpPoint(B_), keysetId).getSerializedBlindedMessage(),
+      new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
       r,
       secretBytes,
     );
@@ -427,10 +447,27 @@ function createSingleDeterministicDataFromBytes(
   // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
   // for BIP32-style retry logic (caller increments counter and retries).
   const deterministicR = Bytes.toBigInt(derived.blindingFactor);
-  const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
+  const { r, B_ } = blindMessageForKeyset(utf8SecretBytes, keysetId, deterministicR);
   return new OutputData(
-    new BlindedMessage(amountValue, asSecpPoint(B_), keysetId).getSerializedBlindedMessage(),
+    new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
     r,
     utf8SecretBytes,
   );
+}
+
+/**
+ * Curve dispatch for output blinding: v3 (`02…`) keysets use multiplicative BLS12-381 G1;
+ * everything else uses secp256k1 additive blinding.
+ */
+function blindMessageForKeyset(
+  secret: Uint8Array,
+  keysetId: string,
+  r?: bigint,
+): { r: bigint; B_: CurvePoint } {
+  if (keysetId.startsWith('02')) {
+    const out = blindMessageBls(secret, r);
+    return { r: out.r, B_: asBlsG1Point(out.B_) };
+  }
+  const out = blindMessage(secret, r);
+  return { r: out.r, B_: asSecpPoint(out.B_) };
 }

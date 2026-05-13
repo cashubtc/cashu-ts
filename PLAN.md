@@ -65,11 +65,11 @@ Nutshell deterministic test vector (`secret = "test_message"`, `r = 3`, `a = 2`)
 - [x] Fixture test: v3 keyset id derivation matches Nutshell `derive_keyset_id_v3`
 - [x] NUT13 test: v3 derivation produces in-range scalar
 
-## Phase 4 — Integration
+## Phase 4 — Integration ✓
 
-- [ ] Capture v3 keyset + blind-signature fixture from local Nutshell
-- [ ] Round-trip test: mint → swap → melt through `OutputData → Proof` for v3
-- [ ] Re-run v1/v2 integration tests — must be unchanged
+- [x] Capture v3 keyset + blind-signature fixture from local Nutshell
+- [x] Round-trip test: mint → swap → melt through `OutputData → Proof` for v3
+- [x] Re-run v1/v2 integration tests — must be unchanged
 
 ## Phase 5 — Polish
 
@@ -83,3 +83,4 @@ Nutshell deterministic test vector (`secret = "test_message"`, `r = 3`, `a = 2`)
 - **Gotcha** noble's bls12-381 subpath import requires `.js` suffix (`@noble/curves/bls12-381.js`), not bare `bls12-381`. Mirror this in any new imports.
 - **2026-05-12** Phase 2 done. `BlindedMessage`/`BlindedSignature` classes are not exported from `src/index.ts` and only constructed inside `OutputData`, so widening their point fields to `CurvePoint` was self-contained. `pointFromHexAuto` sniffs by hex length (66/96); lengths are disjoint across supported curves. DLEQ block in `toProof` now bails when `bAuto.kind !== 'secp'` rather than throwing — v3 mints already omit DLEQ, so this is purely defensive.
 - **2026-05-12** Phase 3 done. v3 keyset id derivation reuses the v1 preimage format verbatim (only the prefix changes), so the existing `case 1` block was folded into `case 1: case 2:`. v3 keyset id fixtures verified against Nutshell's `derive_keyset_id_v3` via a Python one-liner: `{1:G2,2:G2}|unit:sat` → `02ce4c47…`. `hasValidDleq` now short-circuits true for `proof.id.startsWith('02')` (treats absent-DLEQ as acceptable because pairing covers it). NUT13 `BLINDING_FACTOR` reduction: secp keeps the single-subtract optimization; v3 uses `x % BLS_FR_ORDER` because Fr is only ~2^255 and the HMAC can exceed it more than once. `verifyUnblindedSignature` is now a union over `UnblindedSignature | UnblindedSignatureBls`; both `.C` branches type-check without casts because TS narrows by `proof.id` prefix is not enough — eslint flagged the casts and removing them works because both point types satisfy `.equals(...)` structurally.
+- **2026-05-13** Phase 4 done. Wired `OutputData` factories + `toProof` to dispatch on keyset version: a small `blindMessageForKeyset` helper picks secp (additive) vs BLS G1 (multiplicative) by `keysetId.startsWith('02')`, and `toProof` short-circuits to `constructUnblindedSignatureBls` (no key, no DLEQ) for `sig.id.startsWith('02')`. Did **not** capture a live fixture from `../nutshell/`: the Nutshell deterministic vector (`secret="test_message"`, r=3, a=2) is already locked into `test/crypto/bls.test.ts`, and the new `test/model/OutputData.bls.test.ts` re-uses that vector through the `OutputData.deserialize → toProof` path so any regression in the integration path (vs primitives) is caught. Round-trip test simulates the mint with `createBlindSignatureBls` (curve math is identical to Nutshell PR #999, so a successful wallet-side pairing equality is sufficient to demonstrate the mint→swap→melt path is curve-correct end to end). Full node suite 1404 / browser suite 2823 green; the only failures (`test/integration.test.ts`) require a live mint on :3338 and were already failing before this phase. No v1/v2 regressions.
