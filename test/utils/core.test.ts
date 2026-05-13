@@ -772,6 +772,138 @@ describe('test zero-knowledge utilities', () => {
       );
     });
   });
+
+  describe('verifyProofsForReceive', () => {
+    const secpKeyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
+
+    test('accepts a single valid v0/v1/v2 proof (requireDleq=true)', () => {
+      const getKeyset = () => secpKeyset;
+      expect(() =>
+        utils.verifyProofsForReceive([serializedProof], getKeyset, { requireDleq: true }),
+      ).not.toThrow();
+    });
+
+    test('rejects a missing-DLEQ v0/v1/v2 proof under requireDleq=true (names offender)', () => {
+      const { dleq, ...noDleq } = serializedProof;
+      void dleq;
+      const getKeyset = () => secpKeyset;
+      expect(() =>
+        utils.verifyProofsForReceive([noDleq], getKeyset, { requireDleq: true }),
+      ).toThrow(/invalid or missing DLEQ.*keyset 00/);
+    });
+
+    describe('v3 BLS batches', () => {
+      // Locked Nutshell vector reused for the single-proof v3 happy path.
+      const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+      const v3Secret = 'test_message';
+      const v3C =
+        'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+      const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(hexToBytes('0'.repeat(63) + '2')));
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      const v3Keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+
+      test('single v3 proof verifies via direct pairing', () => {
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => v3Keyset)).not.toThrow();
+      });
+
+      test('mixed-denomination v3 batch verifies in one pairing', async () => {
+        const bls = await import('../../src/crypto/bls');
+        // Same mint key (a=2), different secrets + amounts → realistic mixed-denomination receive.
+        const aBytes = hexToBytes('0'.repeat(63) + '2');
+        const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
+        const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
+          const s = new TextEncoder().encode(secret);
+          const { B_ } = bls.blindMessageBls(s, r);
+          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = bls.unblindSignatureBls(C_, r);
+          return {
+            amount: Amount.from(amount),
+            id: v3Id,
+            secret,
+            C: bytesToHex(C.toBytes(true)),
+          };
+        };
+        const keyset = {
+          id: v3Id,
+          unit: 'sat',
+          keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
+        };
+        const proofs = [
+          makeProof(1n, 's1', 7n),
+          makeProof(2n, 's2', 11n),
+          makeProof(4n, 's3', 13n),
+          makeProof(8n, 's4', 17n),
+          makeProof(16n, 's5', 19n),
+        ];
+        expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
+      });
+
+      test('tampered C in a 5-proof v3 batch is rejected and offender named', async () => {
+        const bls = await import('../../src/crypto/bls');
+        const aBytes = hexToBytes('0'.repeat(63) + '2');
+        const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
+        const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
+          const s = new TextEncoder().encode(secret);
+          const { B_ } = bls.blindMessageBls(s, r);
+          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = bls.unblindSignatureBls(C_, r);
+          return {
+            amount: Amount.from(amount),
+            id: v3Id,
+            secret,
+            C: bytesToHex(C.toBytes(true)),
+          };
+        };
+        const keyset = {
+          id: v3Id,
+          unit: 'sat',
+          keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
+        };
+        const good = [
+          makeProof(1n, 's1', 7n),
+          makeProof(2n, 's2', 11n),
+          makeProof(4n, 's3', 13n),
+          makeProof(8n, 's4', 17n),
+          makeProof(16n, 's5', 19n),
+        ];
+        // Replace the C on the third proof with the first proof's C — keeps it on-curve
+        // (so parseHex doesn't throw) but breaks pairing equality for that secret.
+        const tampered = good.map((p, i) => (i === 2 ? { ...p, C: good[0].C } : p));
+        expect(() => utils.verifyProofsForReceive(tampered, () => keyset)).toThrow(
+          /invalid DLEQ.*amount 4/,
+        );
+      });
+
+      test('mixed-curve token: v0/v1/v2 path runs DLEQ, v3 path runs pairing', () => {
+        const getKeyset = (id: string) => (id === v3Id ? v3Keyset : secpKeyset);
+        expect(() =>
+          utils.verifyProofsForReceive([serializedProof, v3Proof], getKeyset),
+        ).not.toThrow();
+      });
+
+      test('v3 proof with malformed C surfaces offender id in error', () => {
+        const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
+        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+      });
+
+      test('requireDleq=true uses the strict error message for v3 failures', () => {
+        const tampered: Proof = {
+          ...v3Proof,
+          C: v3C.slice(0, -2) + (v3C.endsWith('aa') ? 'bb' : 'aa'),
+        };
+        expect(() =>
+          utils.verifyProofsForReceive([tampered], () => v3Keyset, { requireDleq: true }),
+        ).toThrow(/invalid or missing DLEQ/);
+      });
+    });
+  });
 });
 
 describe('test raw tokens', () => {
