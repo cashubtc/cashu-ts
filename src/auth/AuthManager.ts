@@ -13,7 +13,7 @@ import type {
 import request, { type RequestFn } from '../transport';
 import {
   joinUrls,
-  hasValidDleq,
+  verifyProofsForReceive,
   Bytes,
   encodeUint8toBase64UrlPadded,
   normalizeMintKeys,
@@ -68,7 +68,7 @@ type BlindAuthMintResponse = {
  *
  * - Owns CAT lifecycle (stores, optional refresh via attached OIDCAuth)
  * - Mints and serves BATs (NUT-22)
- * - Validates DLEQs for BATs per NUT-12.
+ * - Verifies minted BATs (NUT-12 DLEQ on v0/v1/v2; BLS pairing on v3 keysets)
  * - Supplies serialized BATs for 'Blind-auth' and CAT for 'Clear-auth'
  */
 export class AuthManager implements AuthProvider {
@@ -433,14 +433,14 @@ export class AuthManager implements AuthProvider {
       ...sig,
       amount: Amount.from(sig.amount),
     }));
-    // Create BAT proofs and check DLEQ
     const proofs = outputs.map((d, i) => d.toProof(signatures[i], keys));
-    for (const p of proofs) {
-      if (!hasValidDleq(p, keys)) {
-        throw new CTSError('AuthManager: mint returned BAT with invalid DLEQ');
-      }
+    try {
+      verifyProofsForReceive(proofs, () => keys, { requireDleq: true });
+    } catch (err) {
+      throw new CTSError('AuthManager: mint returned BAT that failed verification', {
+        cause: err,
+      });
     }
-    // Add BAT proofs to pool
     this.pool.push(...proofs);
     this.logger.debug('AuthManager: performed topUp', {
       minted: proofs.length,
