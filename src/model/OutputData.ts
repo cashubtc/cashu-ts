@@ -10,6 +10,7 @@ import {
   constructUnblindedSignature,
   deriveP2BKBlindedPubkeys,
   deriveSecretAndBlindingFactor,
+  isBlsKeyset,
   normalizeP2PKOptions,
   pointFromHex,
   pointFromHexAuto,
@@ -145,7 +146,7 @@ export class OutputData implements OutputDataLike {
     }
 
     // v3 (BLS12-381) path: multiplicative unblinding, no key needed, no DLEQ.
-    if (sig.id.startsWith('02')) {
+    if (isBlsKeyset(sig.id)) {
       const blindSig: BlindSignature = { id: sig.id, C_: pointFromHexG1(sig.C_) };
       const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
       const proof: Proof = {
@@ -468,7 +469,7 @@ function blindMessageForKeyset(
   keysetId: string,
   r?: bigint,
 ): { r: bigint; B_: CurvePoint } {
-  if (keysetId.startsWith('02')) {
+  if (isBlsKeyset(keysetId)) {
     const out = blindMessageBls(secret, r);
     return { r: out.r, B_: asBlsG1Point(out.B_) };
   }

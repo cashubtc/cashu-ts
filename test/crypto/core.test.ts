@@ -9,6 +9,7 @@ import {
   createRandomRawBlindedMessage,
   getKeysetIdInt,
   hash_e,
+  isBlsKeyset,
   pointFromBytes,
 } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
@@ -122,6 +123,32 @@ describe('point helpers and hash_e', () => {
     const concatUncompressed = P1.toHex(false) + P2.toHex(false);
     const expected = sha256(new TextEncoder().encode(concatUncompressed));
     expect(bytesToHex(e)).toBe(bytesToHex(expected));
+  });
+});
+
+describe('isBlsKeyset', () => {
+  test('v3 (`02…`) keysets are BLS', () => {
+    expect(isBlsKeyset('02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d')).toBe(
+      true,
+    );
+  });
+  test('v0 (`00…`) and v1 (`01…`) hex keysets are not BLS', () => {
+    expect(isBlsKeyset('00bd033559de27d0')).toBe(false);
+    expect(isBlsKeyset('01ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d')).toBe(
+      false,
+    );
+  });
+  test('forward-compatible: future BLS prefixes (`03…`, `09…`) also return true', () => {
+    expect(isBlsKeyset('03abcdef')).toBe(true);
+    expect(isBlsKeyset('09abcdef')).toBe(true);
+  });
+  test('legacy base64 keyset id returns false', () => {
+    expect(isBlsKeyset('AQID')).toBe(false);
+  });
+  test('empty / short / malformed input returns false', () => {
+    expect(isBlsKeyset('')).toBe(false);
+    expect(isBlsKeyset('0')).toBe(false);
+    expect(isBlsKeyset('zz')).toBe(false);
   });
 });
 

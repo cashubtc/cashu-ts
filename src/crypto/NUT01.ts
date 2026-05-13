@@ -8,7 +8,7 @@ import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
 import { BLS_G2_GENERATOR, type G2Point, hashToCurveBls, pointFromHexG2 } from './bls';
-import { type UnblindedSignature, createRandomSecretKey, hashToCurve } from './core';
+import { type UnblindedSignature, createRandomSecretKey, hashToCurve, isBlsKeyset } from './core';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 
@@ -130,7 +130,7 @@ export function createNewMintKeys(
  * wallet-side pairing equivalent for v3 is {@link verifyUnblindedSignatureBls} in `./bls`.
  */
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
-  if (proof.id.startsWith('02')) {
+  if (isBlsKeyset(proof.id)) {
     const a = bls12_381.fields.Fr.fromBytes(privKey);
     if (a === 0n) {
       throw new CTSError('Mint scalar must be non-zero');
@@ -158,7 +158,7 @@ export type MintPubKey =
  * Parse a mint pubkey hex string for a given keyset id. v3 (`02…`) keys are G2; others secp256k1.
  */
 export function parseMintPubKey(keysetId: string, hex: string): MintPubKey {
-  if (keysetId.startsWith('02')) {
+  if (isBlsKeyset(keysetId)) {
     return { kind: 'blsG2', pt: pointFromHexG2(hex) };
   }
   return { kind: 'secp', pt: secp256k1.Point.fromHex(hex) };

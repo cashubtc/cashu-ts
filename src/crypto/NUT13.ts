@@ -7,7 +7,7 @@ import { CTSError } from '../model/Errors';
 import { Bytes, isBase64String } from '../utils';
 
 import { BLS_FR_ORDER } from './bls';
-import { getKeysetIdInt } from './core';
+import { getKeysetIdInt, isBlsKeyset } from './core';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
@@ -165,7 +165,7 @@ function deriveHmac(
     const x = Bytes.toBigInt(hmacDigest);
     // Reduce modulo curve order. SECP256K1_N is ~2^256 so a single subtraction suffices;
     // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
-    const reduced = keysetId.startsWith('02')
+    const reduced = isBlsKeyset(keysetId)
       ? x % BLS_FR_ORDER
       : x >= SECP256K1_N
         ? x - SECP256K1_N

@@ -592,6 +592,9 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
 
 // @public
+export function isBlsKeyset(keysetId: string): boolean;
+
+// @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
 
 // @public

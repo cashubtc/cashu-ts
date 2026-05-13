@@ -12,6 +12,7 @@ import {
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
   hashToCurveBls,
+  isBlsKeyset,
   isP2PKSigAll,
   buildP2PKSigAllMessage,
   assertSigAllInputs,
@@ -1025,9 +1026,7 @@ class Wallet {
       // semantic of `requireDleq` via pairing equality rather than a DLEQ proof. Accept
       // them alongside v0/v1/v2 proofs that carry a DLEQ. Mirrors the receive-side
       // `hasValidDleq` dispatch (`utils/core.ts`).
-      normalizedProofs = normalizedProofs.filter(
-        (p) => p.id.startsWith('02') || p.dleq != undefined,
-      );
+      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || p.dleq != undefined);
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1842,7 +1841,7 @@ class Wallet {
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       // v3 (BLS) signatures intentionally omit DLEQ — pairing verification replaces it.
-      const isV3 = signatures[i].id.startsWith('02');
+      const isV3 = isBlsKeyset(signatures[i].id);
       this.failIf(
         requiresDleq && !isV3 && !signatures[i].dleq,
         `Mint supports NUT-12, but returned a signature without DLEQ proof at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
@@ -2727,7 +2726,7 @@ class Wallet {
   async checkProofsStates(proofs: Array<Pick<Proof, 'secret' | 'id'>>): Promise<ProofState[]> {
     const enc = new TextEncoder();
     const Ys = proofs.map((p) =>
-      p.id.startsWith('02')
+      isBlsKeyset(p.id)
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true),
     );

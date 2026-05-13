@@ -1,4 +1,4 @@
-import { hashToCurve, hashToCurveBls } from '../crypto';
+import { hashToCurve, hashToCurveBls, isBlsKeyset } from '../crypto';
 import { safeCallback } from '../logger';
 import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
@@ -307,7 +307,7 @@ export class WalletEvents {
     const enc = new TextEncoder();
     const proofMap: Record<string, Proof> = {};
     for (const p of proofs) {
-      const y = p.id.startsWith('02')
+      const y = isBlsKeyset(p.id)
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true);
       proofMap[y] = p;

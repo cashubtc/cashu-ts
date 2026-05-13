@@ -104,6 +104,19 @@ export function pointToHex(p: CurvePoint): string {
   return p.pt.toHex(true);
 }
 
+/**
+ * True if the keyset id uses BLS12-381 cryptography (version byte >= 0x02).
+ *
+ * Forward-compatible: any future BLS-based version (e.g. `03…`) also returns true. Legacy base64
+ * keysets and v0/v1 hex keysets (`00…` / `01…`) return false. Mirrors Nutshell's `is_bls_keyset`
+ * (`cashu/core/crypto/keys.py`) for protocol consistency.
+ */
+export function isBlsKeyset(keysetId: string): boolean {
+  if (keysetId.length < 2) return false;
+  const v = Number(keysetId.slice(0, 2));
+  return Number.isFinite(v) && v >= 2;
+}
+
 export const getKeysetIdInt = (keysetId: string): bigint => {
   let keysetIdInt: bigint;
   if (/^[a-fA-F0-9]+$/.test(keysetId)) {
