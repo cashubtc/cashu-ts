@@ -129,8 +129,25 @@ export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uin
 /**
  * Batch verification across many proofs (one multi-pairing).
  *
- * Uses random scalars per proof to prevent cancellation attacks (per Nutshell): e( Σ rᵢ·Cᵢ , G2 )
- * ?= Π_{k2} e( Σ_{i:K2_i=k2} rᵢ·Yᵢ , k2 )
+ * Each proof is weighted by a fresh, secret, uniformly-random scalar rᵢ ∈ Fr drawn by the verifier:
+ *
+ *     e( Σ rᵢ·Cᵢ , G2 )  ?=  Π_{k2} e( Σ_{i:K2_i=k2} rᵢ·Yᵢ , k2 )
+ *
+ * The per-proof randomness is what makes this safe. Without it (rᵢ = 1) the check is only on the
+ * aggregate `Σ Cᵢ`, which is forgeable: given a single aggregated signature `C' = a·(Y₁+Y₂)`, an
+ * attacker can pick any C₁ and set C₂ := C' − C₁. The un-weighted check `e(C₁+C₂, G2) = e(Y₁+Y₂,
+ * K₂)` then passes even though neither (C₁, Y₁) nor (C₂, Y₂) is a real signature on its own. In a
+ * Cashu context this would let one signed `B_ = (Y₁+Y₂)·r` expand into N spendable proofs — a fatal
+ * forgery.
+ *
+ * With independent random weights, that same construction reduces to `(r₁−r₂)·C₁ = (r₁−r₂)·a·Y₁`,
+ * which can only hold if C₁ = a·Y₁ (i.e. it was already a real signature) or if r₁ = r₂
+ * (probability ≈ 1/|Fr| ≈ 2⁻²⁵⁵ — negligible). The same argument generalises to any subset of N
+ * proofs: with N independent random weights, the only weighted combinations that pair-equate are
+ * the genuine individual signatures.
+ *
+ * The scalars are drawn here, after `items` is finalised, from `randomBytes(32)` (CSPRNG) reduced
+ * mod Fr — never derived from the proofs themselves, so an attacker cannot predict them.
  *
  * Returns true iff every individual `e(Cᵢ, G2) == e(Yᵢ, K2_i)` holds.
  */
