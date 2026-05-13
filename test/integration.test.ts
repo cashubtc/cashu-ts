@@ -38,6 +38,7 @@ import {
   MintQuoteBaseResponse,
   getEncodedToken,
   hexToNumber,
+  isBlsKeyset,
   numberToHexPadded64,
   sumProofs,
   HasKeysetKeys,
@@ -58,11 +59,11 @@ vi.setConfig({
   maxConcurrency: 1,
 });
 
-// True if the wallet's active keyset is a v3 (BLS12-381) keyset. The DLEQ tests below
-// only apply to v0/v1/v2 (secp256k1) keysets — v3 replaces DLEQ with pairing verification
-// and emits no DLEQ proof on signatures.
+// True if the wallet's active keyset is BLS12-381 (v3+). The DLEQ tests below only apply
+// to secp256k1 keysets (v0/v1/v2) — BLS keysets replace DLEQ with pairing verification and
+// emit no DLEQ proof on signatures.
 function isV3Mint(wallet: Wallet): boolean {
-  return wallet.keyChain.getCheapestKeyset().id.startsWith('02');
+  return isBlsKeyset(wallet.keyChain.getCheapestKeyset().id);
 }
 
 // Helper to wait until mint quote is paid

@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 import {
   type DLEQ,
+  isBlsKeyset,
   parseMintPubKey,
   pointFromHex,
   pointFromHexG1,
@@ -711,7 +712,7 @@ export function hasValidDleq(
   // v3 (BLS) proofs carry no DLEQ; pairing verification stands in. Returns true iff
   // e(C, G2) == e(Y, K2). This is "valid signature" in v3 terms — equivalent guarantee
   // to a verifying DLEQ on v0/v1/v2 proofs.
-  if (proof.id.startsWith('02')) {
+  if (isBlsKeyset(proof.id)) {
     if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
       throw new CTSError(
         `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
@@ -765,7 +766,7 @@ export function hasValidDleq(
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
   // v3 (BLS) proofs always require a pairing check at receive time — there's no DLEQ
   // to short-circuit on, so we route through hasValidDleq which performs the pairing.
-  if (proof.id.startsWith('02')) {
+  if (isBlsKeyset(proof.id)) {
     return hasValidDleq(proof, keyset);
   }
   if (proof?.dleq == undefined) {
