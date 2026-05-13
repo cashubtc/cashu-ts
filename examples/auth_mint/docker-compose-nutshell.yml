@@ -1,0 +1,61 @@
+services:
+  keycloak:
+    container_name: keycloak
+    image: quay.io/keycloak/keycloak:25.0.0
+    command: start-dev --import-realm --hostname keycloak.localtest.me
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./cashu-realm.json:/opt/keycloak/data/import/cashu-realm.json:ro
+    networks:
+      authnet:
+        aliases:
+          - keycloak.localtest.me
+
+  mint:
+    container_name: nutshell_auth_mint
+    # Build locally from the sibling Nutshell checkout (≥0.21.0 emits v3 BLS
+    # keysets by default). Native build only — Rosetta makes BLS keygen
+    # painfully slow. Override NUT_BLS_PATH if the checkout lives elsewhere.
+    build:
+      context: ${NUT_BLS_PATH:-../../../nutshell}
+    depends_on:
+      - keycloak
+    # depends_on only waits for the container to start, not for Keycloak to be
+    # serving the realm. Nutshell fetches the OIDC discovery URL once at
+    # startup and exits if it fails, so we block on a working discovery
+    # endpoint before invoking poetry run mint.
+    command: >
+      sh -c "until curl -sf
+      http://keycloak.localtest.me:8080/realms/cashu/.well-known/openid-configuration
+      >/dev/null; do echo 'waiting for keycloak...'; sleep 2; done;
+      exec poetry run mint"
+    environment:
+      # Core (mirrors NUT_ENVS in the repo-root Makefile)
+      - MINT_LIGHTNING_BACKEND=FakeWallet
+      - MINT_INPUT_FEE_PPK=100
+      - MINT_LISTEN_HOST=0.0.0.0
+      - MINT_LISTEN_PORT=3338
+      - MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+      - FAKEWALLET_DELAY_PAYMENT=TRUE
+      - FAKEWALLET_DELAY_OUTGOING_PAYMENT=1
+      - FAKEWALLET_DELAY_INCOMING_PAYMENT=1
+      - MINT_TRANSACTION_RATE_LIMIT_PER_MINUTE=200
+      - MINT_GLOBAL_RATE_LIMIT_PER_MINUTE=200
+      # Auth (NUT-21 / NUT-22) — matches the cashu realm imported into Keycloak
+      - MINT_REQUIRE_AUTH=TRUE
+      - MINT_AUTH_OICD_DISCOVERY_URL=http://keycloak.localtest.me:8080/realms/cashu/.well-known/openid-configuration
+      - MINT_AUTH_OICD_CLIENT_ID=cashu-client
+      - MINT_AUTH_RATE_LIMIT_PER_MINUTE=120
+      - MINT_AUTH_MAX_BLIND_TOKENS=100
+    ports:
+      - '3338:3338'
+    networks:
+      - authnet
+
+networks:
+  authnet:
+    driver: bridge
