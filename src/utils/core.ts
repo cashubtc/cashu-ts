@@ -786,7 +786,8 @@ export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolea
  * on failure re-runs per-proof to identify the offending proof — cost is one extra batch's worth of
  * work on the unhappy path, acceptable.
  *
- * @param proofs The proofs to verify (mixed curves allowed).
+ * @param proofs The proofs to verify (mixed curves allowed; `amount` may be any {@link AmountLike}
+ *   shape — normalized internally).
  * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
  * @param opts.requireDleq When `true`, missing DLEQs on v0/v1/v2 proofs reject (mirrors
  *   {@link hasValidDleq}); v3 proofs always pairing-verify regardless. When `false`, present-but-
@@ -794,10 +795,11 @@ export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolea
  * @throws CTSError naming the offending proof id when verification fails.
  */
 export function verifyProofsForReceive(
-  proofs: Proof[],
+  proofs: ProofLike[],
   getKeyset: (id: string) => HasKeysetKeys,
   opts?: { requireDleq?: boolean },
 ): void {
+  const normalized = normalizeProofAmounts(proofs);
   const requireDleq = opts?.requireDleq ?? false;
   const failMsg = requireDleq
     ? 'Token contains proofs with invalid or missing DLEQ'
@@ -805,7 +807,7 @@ export function verifyProofsForReceive(
 
   const blsProofs: Proof[] = [];
   const otherProofs: Proof[] = [];
-  for (const p of proofs) {
+  for (const p of normalized) {
     (isBlsKeyset(p.id) ? blsProofs : otherProofs).push(p);
   }
 

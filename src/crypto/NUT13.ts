@@ -165,11 +165,12 @@ function deriveHmac(
     const x = Bytes.toBigInt(hmacDigest);
     // Reduce modulo curve order. SECP256K1_N is ~2^256 so a single subtraction suffices;
     // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
-    const reduced = isBlsKeyset(keysetId)
-      ? x % BLS_FR_ORDER
-      : x >= SECP256K1_N
-        ? x - SECP256K1_N
-        : x;
+    let reduced: bigint;
+    if (isBlsKeyset(keysetId)) {
+      reduced = x % BLS_FR_ORDER;
+    } else {
+      reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
+    }
     /* c8 ignore next */
     if (reduced === 0n) {
       throw new CTSError('Derived invalid blinding scalar r == 0');
