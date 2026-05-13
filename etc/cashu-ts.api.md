@@ -237,10 +237,13 @@ export type BlindSignatureBls = {
     id: string;
 };
 
-// @public (undocumented)
+// @public
 export const BLS_FR_ORDER: bigint;
 
-// @public (undocumented)
+// @public
+export const BLS_G2_GENERATOR: WeierstrassPoint<Fp2>;
+
+// @public
 export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
 
 // @public (undocumented)
@@ -484,6 +487,9 @@ export function getEncodedToken(token: Token, opts?: {
 
 // @public
 export function getEncodedTokenBinary(token: Token): Uint8Array;
+
+// @public
+export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
 
 // @public
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined;
@@ -2168,7 +2174,7 @@ export class Wallet {
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
     checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
-    checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<Proof, 'secret'> & Partial<Pick<Proof, 'id'>>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
     // @deprecated (undocumented)
