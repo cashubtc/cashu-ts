@@ -15,7 +15,6 @@ import {
   pointFromHexAuto,
   pointFromHexG1,
   verifyDLEQProof,
-  type BlindSignatureBls,
   type CurvePoint,
   type DLEQ,
   type BlindSignature,
@@ -139,10 +138,15 @@ export class OutputData implements OutputDataLike {
         'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
       );
     }
+    if (sig.id !== this.blindedMessage.id) {
+      throw new CTSError(
+        `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
+      );
+    }
 
     // v3 (BLS12-381) path: multiplicative unblinding, no key needed, no DLEQ.
     if (sig.id.startsWith('02')) {
-      const blindSig: BlindSignatureBls = { id: sig.id, C_: pointFromHexG1(sig.C_) };
+      const blindSig: BlindSignature = { id: sig.id, C_: pointFromHexG1(sig.C_) };
       const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
       const proof: Proof = {
         id: sig.id,

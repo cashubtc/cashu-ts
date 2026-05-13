@@ -152,17 +152,11 @@ export function batchVerifyUnblindedSignatureBls(items: Array<{
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public
-export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessageBls;
+export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public (undocumented)
 export type BlindSignature = {
     C_: WeierstrassPoint<bigint>;
-    id: string;
-};
-
-// @public (undocumented)
-export type BlindSignatureBls = {
-    C_: G1Point;
     id: string;
 };
 
@@ -228,7 +222,7 @@ export class ConsoleLogger implements Logger {
 export function constructUnblindedSignature(blindSig: BlindSignature, r: bigint, secret: Uint8Array, key: WeierstrassPoint<bigint>): UnblindedSignature;
 
 // @public (undocumented)
-export function constructUnblindedSignatureBls(blindSig: BlindSignatureBls, r: bigint, secret: Uint8Array): UnblindedSignatureBls;
+export function constructUnblindedSignatureBls(blindSig: BlindSignature, r: bigint, secret: Uint8Array): UnblindedSignature;
 
 // @public
 export interface CounterRange {
@@ -262,7 +256,7 @@ export function createAuthWallet(mintUrl: string, options?: {
 export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, id: string): BlindSignature;
 
 // @public
-export function createBlindSignatureBls(B_: G1Point, privateKey: Uint8Array, id: string): BlindSignatureBls;
+export function createBlindSignatureBls(B_: G1Point, privateKey: Uint8Array, id: string): BlindSignature;
 
 // @public
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
@@ -1570,13 +1564,6 @@ export type RawBlindedMessage = {
 };
 
 // @public (undocumented)
-export type RawBlindedMessageBls = {
-    B_: G1Point;
-    r: bigint;
-    secret: Uint8Array;
-};
-
-// @public (undocumented)
 export type RawMintKeys = {
     [k: string]: Uint8Array;
 };
@@ -1963,13 +1950,6 @@ export type UnblindedSignature = {
 };
 
 // @public (undocumented)
-export type UnblindedSignatureBls = {
-    C: G1Point;
-    secret: Uint8Array;
-    id: string;
-};
-
-// @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
 // @public
@@ -1999,7 +1979,7 @@ export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedM
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
 // @public
-export function verifyUnblindedSignature(proof: UnblindedSignature | UnblindedSignatureBls, privKey: Uint8Array): boolean;
+export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;
 
 // @public
 export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uint8Array): boolean;
@@ -2035,7 +2015,7 @@ export class Wallet {
     }): Promise<TRes>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
-    checkProofsStates(proofs: Array<Pick<Proof, 'secret'> & Partial<Pick<Proof, 'id'>>>): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<Proof, 'secret' | 'id'>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;

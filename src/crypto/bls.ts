@@ -5,25 +5,10 @@ import { randomBytes, bytesToHex } from '@noble/curves/utils.js';
 
 import { CTSError } from '../model/Errors';
 
+import type { BlindSignature, RawBlindedMessage, UnblindedSignature } from './core';
+
 export type G1Point = WeierstrassPoint<bigint>;
 export type G2Point = WeierstrassPoint<Fp2>;
-
-export type BlindSignatureBls = {
-  C_: G1Point;
-  id: string;
-};
-
-export type RawBlindedMessageBls = {
-  B_: G1Point;
-  r: bigint;
-  secret: Uint8Array;
-};
-
-export type UnblindedSignatureBls = {
-  C: G1Point;
-  secret: Uint8Array;
-  id: string;
-};
 
 /**
  * Domain-separation tag for `hashToCurveG1` on v3 keysets.
@@ -78,7 +63,7 @@ function randomScalar(): bigint {
  * @param secret UTF-8 byte encoded secret (matches Nutshell `msg`).
  * @param r Optional deterministic blinding scalar.
  */
-export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessageBls {
+export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessage {
   const Y = hashToCurveBls(secret);
   if (r === undefined) {
     r = randomScalar();
@@ -101,10 +86,10 @@ export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point {
 }
 
 export function constructUnblindedSignatureBls(
-  blindSig: BlindSignatureBls,
+  blindSig: BlindSignature,
   r: bigint,
   secret: Uint8Array,
-): UnblindedSignatureBls {
+): UnblindedSignature {
   const C = unblindSignatureBls(blindSig.C_, r);
   return { id: blindSig.id, secret, C };
 }
@@ -118,7 +103,7 @@ export function createBlindSignatureBls(
   B_: G1Point,
   privateKey: Uint8Array,
   id: string,
-): BlindSignatureBls {
+): BlindSignature {
   const a = Fr.fromBytes(privateKey);
   if (a === 0n) {
     throw new CTSError('Mint scalar must be non-zero');
