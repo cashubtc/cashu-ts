@@ -2,6 +2,7 @@ import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { HDKey } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
@@ -97,11 +98,19 @@ export function createNewMintKeys(
   while (counter < pow2height) {
     const index: string = (2n ** counter).toString();
     if (masterKey) {
-      const k = masterKey.derive(`${DERIVATION_PATH}/${counter}`).privateKey;
+      // v3 hardens the per-amount path and hashes the BIP32 output before reducing mod Fr,
+      // matching Nutshell `derive_keys_v3`. Hardening prevents sibling-key derivation from
+      // a leaked child + xpub; the sha256 step gives a uniformly distributed input so the
+      // Fr reduction isn't biased (BIP32 outputs are mod secp's `n`, which differs from Fr).
+      // v0/v1/v2 keep the original unhardened path for back-compat with existing fixtures.
+      // TODO v5: Harden the v0/v1/v2 path and update TEST_PRIV_KEY_PUBS.
+      const path =
+        versionByte === 2 ? `${DERIVATION_PATH}/${counter}'` : `${DERIVATION_PATH}/${counter}`;
+      const k = masterKey.derive(path).privateKey;
       if (k) {
-        privKeys[index] = k;
+        privKeys[index] = versionByte === 2 ? sha256(k) : k;
       } else {
-        throw new CTSError(`Could not derive Private key from: ${DERIVATION_PATH}/${counter}`);
+        throw new CTSError(`Could not derive Private key from: ${path}`);
       }
     } else {
       privKeys[index] = createRandomSecretKey();
