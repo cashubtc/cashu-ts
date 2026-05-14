@@ -1,7 +1,9 @@
 /**
- * Phase 8 benchmark: per-proof vs batch BLS pairing verification.
+ * Per-proof vs batch BLS pairing verification regression bench.
  *
- * Decision threshold (PLAN.md): only wire batch into receive if speedup ≥ 2× at N=4.
+ * Originally Phase 8 (wire-or-not decision); batch is now wired in `verifyProofsForReceive`. Kept
+ * as a regression check — re-run after touching `verifyUnblindedSignatureBls`,
+ * `batchVerifyUnblindedSignatureBls`, or upgrading `@noble/curves`.
  *
  * Run: `npx tsx scripts/bench-bls-verify.ts`
  */
