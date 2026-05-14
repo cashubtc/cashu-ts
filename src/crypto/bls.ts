@@ -122,17 +122,24 @@ export function createBlindSignatureBls(
 }
 
 /**
- * Wallet-side verification via single pairing: e(C, G2_gen) == e(Y, K2).
+ * Wallet-side verification via pairing equality: e(C, G2_gen) == e(Y, K2).
  *
+ * @remarks
+ * Implemented as `e(-C, G2_gen) · e(Y, K2) == 1` and evaluated through `pairingBatch`, which
+ * accumulates both Miller loops and applies a single final exponentiation. That saves one final
+ * exponentiation versus two separate `pairing(...)` calls — material on low-power devices since
+ * final exp is ~60% of the cost of a BLS12-381 pairing.
  * @param K2 Mint pubkey in G2 for this amount.
  * @param C Unblinded signature (G1).
  * @param secret UTF-8 byte encoded secret.
  */
 export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uint8Array): boolean {
   const Y = hashToCurveBls(secret);
-  const left = bls12_381.pairing(C, BLS_G2_GENERATOR);
-  const right = bls12_381.pairing(Y, K2);
-  return bls12_381.fields.Fp12.eql(left, right);
+  const acc = bls12_381.pairingBatch([
+    { g1: C.negate(), g2: BLS_G2_GENERATOR },
+    { g1: Y, g2: K2 },
+  ]);
+  return bls12_381.fields.Fp12.eql(acc, bls12_381.fields.Fp12.ONE);
 }
 
 /**
