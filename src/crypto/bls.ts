@@ -195,6 +195,11 @@ export function deriveBatchWeights(
  * proofs from a single signature. Independent weights reduce that attack to needing `C₁ = a·Y₁`
  * (i.e. a real signature) unless `r₁ = r₂` (≈ 2⁻²⁵⁵). Weights come from {@link deriveBatchWeights}.
  *
+ * The weights are public and deterministically derived (security does not rely on secrecy). The
+ * Fiat-Shamir transcript binds each `rᵢ` to `(Cᵢ, K2ᵢ, secretᵢ)` for the whole batch, so an
+ * attacker cannot choose proofs in adversarial relation to the weights without first fixing the
+ * proofs (which in turn fixes the weights). Knowing the derivation does not help.
+ *
  * Returns true iff every individual `e(Cᵢ, G2) == e(Yᵢ, K2ᵢ)` holds.
  */
 export function batchVerifyUnblindedSignatureBls(
