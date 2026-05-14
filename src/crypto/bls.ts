@@ -200,7 +200,7 @@ export function deriveBatchWeights(
  * The per-proof weights `rᵢ` are what makes this safe: without them, an attacker holding one signed
  * `C' = a·(Y₁+Y₂)` can pick any C₁ and present `(C₁, secret₁), (C' − C₁, secret₂)` as two valid
  * proofs from a single signature. Independent weights reduce that attack to needing `C₁ = a·Y₁`
- * (i.e. a real signature) unless `r₁ = r₂` (≈ 2⁻²⁵⁵). Weights come from {@link deriveBatchWeights}.
+ * (i.e. a real signature) unless `r₁ = r₂` (≈ 2⁻²⁵⁵).
  *
  * The weights are public and deterministically derived (security does not rely on secrecy). The
  * Fiat-Shamir transcript binds each `rᵢ` to `(Cᵢ, K2ᵢ, secretᵢ)` for the whole batch, so an
