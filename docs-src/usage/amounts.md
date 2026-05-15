@@ -55,9 +55,9 @@ Amount.from(21).withUnit('sat'); // AmountWithUnit
 AmountWithUnit.sum([a, b]); // 150 sat (unit inferred)
 AmountWithUnit.sum([], 'sat'); // 0 sat (empty + explicit hint)
 
-// Display: string coercion is unit-bearing
-`balance: ${a}`; // 'balance: 100 sat'
-String(a); // '100 sat'
+// Display: string coercion is unit-bearing (and parseInt-safe)
+`balance: ${a}`; // 'balance: sat: 100'
+String(a); // 'sat: 100'
 
 // Numeric coercion is blocked so the unit can't be silently stripped
 // (these throw AmountWithUnitError; use .toAmount() if you really mean it)

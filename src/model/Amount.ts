@@ -462,11 +462,14 @@ export class AmountWithUnit {
   }
 
   /**
-   * Unit-bearing canonical form, e.g. `"100 sat"`. Used by `String(x)`, template literals,
+   * Unit-bearing canonical form, e.g. `"sat: 100"`. Used by `String(x)`, template literals,
    * `console.log`, and any other string-coercion context.
+   *
+   * Unit comes first so that `parseInt(String(x))` / `parseFloat(String(x))` return `NaN` rather
+   * than silently extracting the bare number and dropping the unit.
    */
   toString(): string {
-    return `${this._amount.toString()} ${this.unit}`;
+    return `${this.unit}: ${this._amount.toString()}`;
   }
 
   toJSON(): { amount: string; unit: string } {

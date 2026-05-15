@@ -53,10 +53,10 @@ describe('AmountWithUnit pass-through converters', () => {
     expect(a.toNumber()).toBe(a.toAmount().toNumber());
   });
 
-  it('toString includes the unit (does not silently drop it)', () => {
-    expect(AmountWithUnit.from(123, 'sat').toString()).toBe('123 sat');
-    expect(AmountWithUnit.from(5, 'usd').toString()).toBe('5 usd');
-    expect(AmountWithUnit.zero('msat').toString()).toBe('0 msat');
+  it('toString returns "<unit>: <amount>" (does not silently drop unit)', () => {
+    expect(AmountWithUnit.from(123, 'sat').toString()).toBe('sat: 123');
+    expect(AmountWithUnit.from(5, 'usd').toString()).toBe('usd: 5');
+    expect(AmountWithUnit.zero('msat').toString()).toBe('msat: 0');
   });
 
   it('isZero / isSafeNumber match underlying Amount', () => {
@@ -252,12 +252,20 @@ describe('AmountWithUnit implicit coercion is safe', () => {
   const a = AmountWithUnit.from(100, 'sat');
 
   it('template literals produce unit-bearing string', () => {
-    expect(`${a}`).toBe('100 sat');
-    expect(`balance: ${a}`).toBe('balance: 100 sat');
+    expect(`${a}`).toBe('sat: 100');
+    expect(`balance: ${a}`).toBe('balance: sat: 100');
   });
 
   it('String(x) produces unit-bearing string', () => {
-    expect(String(a)).toBe('100 sat');
+    expect(String(a)).toBe('sat: 100');
+  });
+
+  it('parseInt / parseFloat of the string form return NaN (unit cannot be stripped via parse)', () => {
+    expect(parseInt(String(a), 10)).toBeNaN();
+    expect(parseFloat(String(a))).toBeNaN();
+    // and via implicit string coercion on the object directly
+    expect(parseInt(a as unknown as string, 10)).toBeNaN();
+    expect(parseFloat(a as unknown as string)).toBeNaN();
   });
 
   it('Number(x) throws (does not silently strip unit)', () => {
