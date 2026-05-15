@@ -30,8 +30,6 @@ Amount.from(500).clamp(100, 1000); // 500
 Amount.from(500).inRange(100, 1000); // true
 ```
 
-See the full reference in [migration-4.0.0.md § Finance Helpers — going further with `Amount`](../../migration-4.0.0.md#finance-helpers--going-further-with-amount).
-
 ## Working with `AmountWithUnit`
 
 ```ts
@@ -54,8 +52,6 @@ Amount.from(21).withUnit('sat'); // AmountWithUnit
 AmountWithUnit.sum([a, b]); // 150 sat (unit inferred)
 AmountWithUnit.sum([], 'sat'); // 0 sat (empty + explicit hint)
 ```
-
-See the full reference in [migration-4.0.0.md § Multi-unit support: `AmountWithUnit`](../../migration-4.0.0.md#multi-unit-support-amountwithunit).
 
 ## Choosing between them
 
