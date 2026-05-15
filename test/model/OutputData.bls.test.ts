@@ -109,24 +109,33 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(verifyUnblindedSignatureBls(G2PubKeys['4'], C, secret)).toBe(true);
   });
 
-  test('toProof rejects a tampered C_ (pairing fails downstream)', () => {
+  test('toProof rejects a forged C_ via inline pairing check', () => {
     const out = OutputData.createSingleRandomData(8, keyset.id);
-    const sig = signWithMint(out, privKeys, keyset.id);
 
-    // Forge: substitute another amount's signing key on the same B_ — produces a C that does
-    // not satisfy e(C, G2) == e(Y, K2_8). toProof itself does not verify (no DLEQ for v3); the
-    // downstream pairing check is the gate, so we assert that it rejects.
+    // Forge: substitute another amount's signing key on the same B_. The resulting C does not
+    // satisfy `e(C, G2) == e(Y, K2_8)`, so toProof's inline pairing check MUST throw. This is
+    // the mint/swap-path defence against a malicious mint returning garbage — without it the
+    // wallet would store an invalid proof, mark inputs spent, and lose funds.
     const B_ = pointFromHexG1(out.blindedMessage.B_);
     const forged = createBlindSignatureBls(B_, privKeys['16'], keyset.id);
     const tamperedSig: SerializedBlindedSignature = {
       id: keyset.id,
-      amount: sig.amount,
+      amount: out.blindedMessage.amount,
       C_: forged.C_.toHex(true),
     };
-    const proof = out.toProof(tamperedSig, keyset);
-    const C = pointFromHexG1(proof.C);
-    const secret = new TextEncoder().encode(proof.secret);
-    expect(verifyUnblindedSignatureBls(G2PubKeys['8'], C, secret)).toBe(false);
+    expect(() => out.toProof(tamperedSig, keyset)).toThrowError(/BLS pairing verification failed/);
+  });
+
+  test('toProof rejects a completely garbage C_ (CTF: malicious mint)', () => {
+    const out = OutputData.createSingleRandomData(8, keyset.id);
+    // A G1 point unrelated to the output's Y is overwhelmingly unlikely to satisfy the pairing.
+    const garbageC_ = bls12_381.G1.Point.BASE.multiply(424242n);
+    const garbageSig: SerializedBlindedSignature = {
+      id: keyset.id,
+      amount: out.blindedMessage.amount,
+      C_: garbageC_.toHex(true),
+    };
+    expect(() => out.toProof(garbageSig, keyset)).toThrowError(/BLS pairing verification failed/);
   });
 
   test('round-trip preserves the wallet-chosen secret bytes', () => {
@@ -171,7 +180,9 @@ describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
       amount: Amount.from(1),
       C_: C_.toHex(true),
     };
-    const proof = od.toProof(sig, { id, keys: { '1': '00'.repeat(96) } });
+    // K2 = a·G2_BASE for a=2 — required for the inline pairing check inside toProof.
+    const K2Hex = bytesToHex(bls12_381.G2.Point.BASE.multiply(2n).toBytes(true));
+    const proof = od.toProof(sig, { id, keys: { '1': K2Hex } });
     expect(proof.C).toBe(NUTSHELL_C_HEX);
     expect(proof.secret).toBe(SECRET);
   });

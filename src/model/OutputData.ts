@@ -12,10 +12,12 @@ import {
   deriveSecretAndBlindingFactor,
   isBlsKeyset,
   normalizeP2PKOptions,
+  parseMintPubKey,
   pointFromHex,
   pointFromHexAuto,
   pointFromHexG1,
   verifyDLEQProof,
+  verifyUnblindedSignatureBls,
   type CurvePoint,
   type DLEQ,
   type BlindSignature,
@@ -145,10 +147,21 @@ export class OutputData implements OutputDataLike {
       );
     }
 
-    // v3 (BLS12-381) path: multiplicative unblinding, no key needed, no DLEQ.
+    // v3 (BLS12-381) path: multiplicative unblinding, then pairing equality
+    // `e(C, G2_gen) == e(Y, K2)` to confirm the mint actually signed this output. v3 carries no
+    // DLEQ — the pairing is the only check that the returned `C_` is a real signature, so it
+    // MUST run here. Without it, a malicious mint can return garbage `C_`, the wallet stores an
+    // invalid `C`, marks inputs spent, and the user loses funds. Mirrors the secp DLEQ check below.
     if (isBlsKeyset(sig.id)) {
       const blindSig: BlindSignature = { id: sig.id, C_: pointFromHexG1(sig.C_) };
       const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
+      const k2 = parseMintPubKey(sig.id, keyset.keys[sig.amount.toString()]);
+      if (
+        k2.kind !== 'blsG2' ||
+        !verifyUnblindedSignatureBls(k2.pt, unblinded.C, unblinded.secret)
+      ) {
+        throw new CTSError('BLS pairing verification failed on mint response');
+      }
       const proof: Proof = {
         id: sig.id,
         amount: sig.amount,
