@@ -147,6 +147,18 @@ export class OutputData implements OutputDataLike {
       );
     }
 
+    // Amount binding: a malicious mint can sign a smaller denomination and return it as
+    // `sig.amount`; that signature verifies under K2/A of the downgraded amount and the
+    // wallet would store a downgraded proof. Reject here, before key lookup.
+    // Blanks (amount=0, e.g. NUT-08 fee change, NUT-09 restore) declare no specific amount
+    // up front; the mint's amount is authoritative in that case.
+    const requested = this.blindedMessage.amount;
+    if (!requested.isZero() && !sig.amount.equals(requested)) {
+      throw new CTSError(
+        `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+      );
+    }
+
     // v3 (BLS12-381) path: multiplicative unblinding, then pairing equality
     // `e(C, G2_gen) == e(Y, K2)` to confirm the mint actually signed this output. v3 carries no
     // DLEQ — the pairing is the only check that the returned `C_` is a real signature, so it

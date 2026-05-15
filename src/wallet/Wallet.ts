@@ -1812,13 +1812,11 @@ class Wallet {
   private validateReturnedSignatures(
     signatures: SerializedBlindedSignature[],
     outputData: OutputDataLike[],
-    options?: { checkAmounts?: boolean },
   ): void {
     // With DLEQ we can verify the returned blinded signature is paired to the original B_.
     // Without DLEQ, equal-denomination reordering is a protocol trust assumption.
     const requiresDleq =
       this._requireSigDleq && (this._mintInfo?.isSupported(12).supported ?? false);
-    const checkAmounts = options?.checkAmounts ?? true;
 
     for (let i = 0; i < signatures.length; i++) {
       this.failIf(
@@ -1829,8 +1827,11 @@ class Wallet {
         signatures[i].id !== outputData[i].blindedMessage.id,
         `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
+      // amount=0 marks a blank (NUT-08 fee change, NUT-09 restore): the mint chooses the amount.
+      // Otherwise, the mint must return the exact requested amount or it's a downgrade attack.
       this.failIf(
-        checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
+        !outputData[i].blindedMessage.amount.isZero() &&
+          !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
       // v3 (BLS) signatures intentionally omit DLEQ — pairing verification replaces it.
@@ -2688,9 +2689,7 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    this.validateReturnedSignatures(changeSigs, outputData, {
-      checkAmounts: false, // change outputs are blank
-    });
+    this.validateReturnedSignatures(changeSigs, outputData);
     return changeSigs.map((s, i) => {
       let keyset: Keyset;
       try {
@@ -2716,7 +2715,7 @@ class Wallet {
    *   variant: v0/v1/v2 use secp256k1; v3 (`02…`) uses BLS12-381 G1.
    * @returns NUT-07 state for each proof, in same order.
    */
-  async checkProofsStates(proofs: Array<Pick<Proof, 'secret' | 'id'>>): Promise<ProofState[]> {
+  async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]> {
     const enc = new TextEncoder();
     const Ys = proofs.map((p) =>
       isBlsKeyset(p.id)
