@@ -187,8 +187,11 @@ export class Amount {
    * The default denominator of 100 makes common percentage calculations natural. Use a larger
    * denominator to express fractional percentages without floats.
    *
-   * @example Amount.ceilPercent(2) // ceil(2% of amount) amount.ceilPercent(1, 200) // ceil(0.5% of
-   * amount) amount.ceilPercent(15, 10) // ceil(1.5% of amount)
+   * @example
+   *
+   *     amount.ceilPercent(2); // ceil(2% of amount)
+   *     amount.ceilPercent(1, 200); // ceil(0.5% of amount)
+   *     amount.ceilPercent(15, 10); // ceil(1.5% of amount)
    *
    * @throws If numerator or denominator are not positive integers.
    */
@@ -213,8 +216,10 @@ export class Amount {
    * The natural complement to {@link Amount.ceilPercent} — use when you need the conservative lower
    * bound, e.g. "maximum spendable after reserving fees".
    *
-   * @example Amount.floorPercent(98) // floor(98% of amount) amount.floorPercent(1, 200) //
-   * floor(0.5% of amount)
+   * @example
+   *
+   *     amount.floorPercent(98); // floor(98% of amount)
+   *     amount.floorPercent(1, 200); // floor(0.5% of amount)
    *
    * @throws If numerator or denominator are not positive integers.
    */
@@ -233,7 +238,9 @@ export class Amount {
   /**
    * Returns true if this amount is within the inclusive range [min, max].
    *
-   * @example Msats.inRange(data.minSendable, data.maxSendable)
+   * @example
+   *
+   *     msats.inRange(data.minSendable, data.maxSendable);
    *
    * @throws If min > max.
    */
@@ -249,8 +256,10 @@ export class Amount {
   /**
    * Clamps this amount to the inclusive range [min, max].
    *
-   * @example Fee.clamp(MIN_FEE, tokenAmount) invoiceAmount.clamp(Amount.from(minSendable),
-   * Amount.from(maxSendable))
+   * @example
+   *
+   *     fee.clamp(MIN_FEE, tokenAmount);
+   *     invoiceAmount.clamp(Amount.from(minSendable), Amount.from(maxSendable));
    *
    * @throws If min > max.
    */
@@ -271,7 +280,10 @@ export class Amount {
    *
    * Uses the identity: `round(a × b / c) = floor((2 × a × b + c) / (2 × c))`
    *
-   * @example // Scale a 1000-sat amount down by a 3/4 ratio → 750 Amount.from(1000).scaledBy(3, 4)
+   * @example
+   *
+   *     // Scale a 1000-sat amount down by a 3/4 ratio → 750
+   *     Amount.from(1000).scaledBy(3, 4);
    *
    *     // Proportional rescale: if neededAmount is too high, shrink estInvAmount to fit
    *     estInvAmount.scaledBy(tokenAmount, neededAmount).subtract(1);

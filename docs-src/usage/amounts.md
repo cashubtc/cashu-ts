@@ -23,10 +23,13 @@ a.equals(Amount.from(100)); // true
 a.greaterThan(50); // true
 
 // Finance helpers — integer arithmetic, no floats
-Amount.from(1000).ceilPercent(2); // 20
-Amount.from(1000).floorPercent(98); // 980
+Amount.from(1000).ceilPercent(2); // 20 (2% of 1000)
+Amount.from(1001).ceilPercent(1, 200); // 6 (= ceil(0.5% of 1001), fractional via larger denom)
+Amount.from(1000).floorPercent(98); // 980 (98% of 1000)
+Amount.from(1001).floorPercent(1, 200); // 5 (= floor(0.5% of 1001), fractional via larger denom)
 Amount.from(1000).scaledBy(3, 4); // 750
-Amount.from(500).clamp(100, 1000); // 500
+Amount.from(500).clamp(100, 1000); // 500 (already in range, unchanged)
+Amount.from(500).clamp(100, 400); // 400 (clamped down to max)
 Amount.from(500).inRange(100, 1000); // true
 ```
 
