@@ -806,9 +806,7 @@ describe('dleq', () => {
     expect(exc).toBeInstanceOf(CTSError);
     // verifyProofsForReceive appends an offender suffix `(keyset …, amount …)` after the
     // headline message — match the prefix so the assertion survives format tweaks.
-    expect(exc).toMatchObject({
-      message: expect.stringContaining('Token contains proofs with invalid or missing DLEQ'),
-    });
+    expect((exc as Error).message).toContain('Token contains proofs with invalid or missing DLEQ');
   });
 });
 describe('Custom Outputs', () => {
