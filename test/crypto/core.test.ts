@@ -164,54 +164,45 @@ describe('CurvePoint helpers', () => {
 });
 
 describe('isBlsKeyset', () => {
-  test('v3 (`02…`) keysets are BLS', () => {
+  test('v3 (`02…`) full-form (66 char) is BLS', () => {
     expect(isBlsKeyset('02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d')).toBe(
       true,
     );
   });
-  test('v0 (`00…`) and v1 (`01…`) hex keysets are not BLS', () => {
+  test('v3 (`02…`) short-form (16 char) is BLS — tokens carry this form', () => {
+    expect(isBlsKeyset('02ce4c47836fd0e6')).toBe(true);
+  });
+  test('v1 (`00…`) and v2 (`01…`) hex keysets are not BLS', () => {
     expect(isBlsKeyset('00bd033559de27d0')).toBe(false);
     expect(isBlsKeyset('01ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d')).toBe(
       false,
     );
   });
-  test('forward-compatible: future BLS prefixes (`03…`, `09…`) also return true', () => {
-    expect(isBlsKeyset('03abcdef')).toBe(true);
-    expect(isBlsKeyset('09abcdef')).toBe(true);
+  test('forward-compat: hex version bytes including letters (`0a…`, `1e…`, `ff…`)', () => {
+    expect(isBlsKeyset('03abcdef01234567')).toBe(true);
+    // We expect all hex prefixes >=02 to be BLS, up to ff (255)
+    expect(isBlsKeyset('0abcdef012345678')).toBe(true); // v=0x0a
+    expect(isBlsKeyset('1eabcdef01234567')).toBe(true); // v=0x1e
+    expect(isBlsKeyset('ffabcdef01234567')).toBe(true); // v=0xff
+    expect(
+      isBlsKeyset('0a' + 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789'),
+    ).toBe(true); // 66-char with letter version
   });
-  test('forward-compatible: hex version bytes with letters (`0a…`, `1e…`, `ff…`)', () => {
-    // Regression: a previous fix used `Number(slice(0,2))` which returns NaN for any hex with
-    // letters, misclassifying ~39% of the 256-value version space as non-BLS. Must use
-    // parseInt(_, 16).
-    expect(isBlsKeyset('0abcdef012345678')).toBe(true); // v=0x0a=10
-    expect(isBlsKeyset('1eabcdef01234567')).toBe(true); // v=0x1e=30
-    expect(isBlsKeyset('ffabcdef01234567')).toBe(true); // v=0xff=255
-  });
-  test('12-char all-hex base64 ids are NOT misread as BLS', () => {
-    // Regression: a 12-char base64 id whose chars all happen to be 0-9/a-f would pass
-    // isValidHex AND have a digit-pair prefix like "22" — classifying as v3. Cashu legacy
-    // base64 ids are exactly 12 chars; modern hex ids are 16 or 66. Reject length 12.
+  test('legacy base64 ids return false regardless of shape or length', () => {
+    expect(isBlsKeyset('AQID')).toBe(false);
+    expect(isBlsKeyset('22aBcD+/eFgH')).toBe(false);
+    expect(isBlsKeyset('99aaaaaaaaaa=')).toBe(false);
+    // All-hex 12-char base64 — length disambiguates (modern hex ids are 16 or 66 only).
     expect(isBlsKeyset('22aabbccddee')).toBe(false);
-    expect(isBlsKeyset('05aabbccddee')).toBe(false);
     expect(isBlsKeyset('aabbccddeeff')).toBe(false);
   });
-  test('legacy base64 keyset id returns false', () => {
-    expect(isBlsKeyset('AQID')).toBe(false);
+  test('non-canonical lengths (not 16 or 66) return false', () => {
+    expect(isBlsKeyset('02')).toBe(false); // 2
+    expect(isBlsKeyset('02abcdef')).toBe(false); // 8
+    expect(isBlsKeyset('02abcdef0123456')).toBe(false); // 15 (length-16 boundary)
+    expect(isBlsKeyset('02abcdef012345678')).toBe(false); // 17
   });
-  test('legacy base64 ids starting with digits are NOT misread as BLS', () => {
-    // Regression: ~2.4% of legacy base64 keyset ids start with two digits
-    // (e.g. "22…", "05…", "34…"). A naive `Number(id.slice(0,2)) >= 2` check
-    // would have classified these as v3 BLS, breaking secp interop entirely.
-    expect(isBlsKeyset('22aBcD+/eFgH')).toBe(false);
-    expect(isBlsKeyset('05xYzABCDEFG')).toBe(false);
-    expect(isBlsKeyset('34abcd+abcde')).toBe(false);
-    expect(isBlsKeyset('99aaaaaaaaaa=')).toBe(false);
-  });
-  test('short-form v3 hex id (16 chars) is BLS', () => {
-    // Tokens carry the 16-char truncated form of the keyset id.
-    expect(isBlsKeyset('02ce4c47836fd0e6')).toBe(true);
-  });
-  test('empty / short / malformed input returns false', () => {
+  test('empty / short / non-hex input returns false', () => {
     expect(isBlsKeyset('')).toBe(false);
     expect(isBlsKeyset('0')).toBe(false);
     expect(isBlsKeyset('zz')).toBe(false);

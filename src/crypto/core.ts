@@ -105,27 +105,12 @@ export function pointToHex(p: CurvePoint): string {
 }
 
 /**
- * True if the keyset id uses BLS12-381 cryptography (version byte >= 0x02).
- *
- * Forward-compatible: any future BLS-based version byte (e.g. `03…`, `0a…`) also returns true.
- * Legacy base64 keysets and v0/v1 hex keysets (`00…` / `01…`) return false.
- *
- * Three guards in order:
- *
- * 1. `isValidHex` rejects mixed-alphabet base64 (e.g. `22aB/+=Z…`).
- * 2. `length === 12` rejects all-hex base64 ids (12 chars by cashu legacy spec); modern hex ids are 16
- *    (short) or 66 (full) chars, so the length classes are disjoint.
- * 3. `parseInt(..., 16)` (NOT `Number(...)`) reads the version byte as hex — `Number('0a')` is `NaN`,
- *    which would misclassify ~39% of future version bytes as non-BLS.
- *
- * Mirrors Nutshell's `is_bls_keyset` (`cashu/core/crypto/keys.py`).
+ * True if `keysetId` is a v3+ BLS12-381 keyset id (modern hex, version byte ≥ 0x02).
  */
 export function isBlsKeyset(keysetId: string): boolean {
-  if (keysetId.length < 2) return false;
+  if (keysetId.length !== 16 && keysetId.length !== 66) return false;
   if (!isValidHex(keysetId)) return false;
-  if (keysetId.length === 12) return false;
-  const v = parseInt(keysetId.slice(0, 2), 16);
-  return Number.isFinite(v) && v >= 2;
+  return parseInt(keysetId.slice(0, 2), 16) >= 2;
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {
