@@ -156,10 +156,12 @@ export class OutputData implements OutputDataLike {
       const blindSig: BlindSignature = { id: sig.id, C_: pointFromHexG1(sig.C_) };
       const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
       const k2 = parseMintPubKey(sig.id, keyset.keys[sig.amount.toString()]);
-      if (
-        k2.kind !== 'blsG2' ||
-        !verifyUnblindedSignatureBls(k2.pt, unblinded.C, unblinded.secret)
-      ) {
+      // Type-narrow only — `parseMintPubKey` returns `blsG2` iff `isBlsKeyset(sig.id)` is true.
+      /* c8 ignore next 3 */
+      if (k2.kind !== 'blsG2') {
+        throw new CTSError('BLS pairing verification failed on mint response');
+      }
+      if (!verifyUnblindedSignatureBls(k2.pt, unblinded.C, unblinded.secret)) {
         throw new CTSError('BLS pairing verification failed on mint response');
       }
       const proof: Proof = {

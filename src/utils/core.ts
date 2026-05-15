@@ -714,6 +714,8 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
     }
     try {
       const k2 = parseMintPubKey(proof.id, keyset.keys[proof.amount.toString()]);
+      // Type-narrow only — `parseMintPubKey` returns `blsG2` iff `isBlsKeyset(proof.id)` is true.
+      /* c8 ignore next */
       if (k2.kind !== 'blsG2') return false;
       return verifyUnblindedSignatureBls(
         k2.pt,
@@ -828,6 +830,9 @@ export function verifyProofsForReceive(
       throw new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`);
     }
     const k2 = parseMintPubKey(p.id, ks.keys[p.amount.toString()]);
+    // Type-narrow only — `parseMintPubKey` returns `blsG2` iff `isBlsKeyset(p.id)` is true,
+    // and `p` is in `blsProofs` precisely because `isBlsKeyset(p.id)` returned true above.
+    /* c8 ignore next */
     if (k2.kind !== 'blsG2') throw new CTSError(failMsg + offenderSuffix(p));
     let C;
     try {
