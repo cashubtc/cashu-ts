@@ -8,7 +8,7 @@ import { HDKey } from '@scure/bip32';
 import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
-import { BLS_G2_GENERATOR, type G2Point, hashToCurveBls, pointFromHexG2 } from './bls';
+import { BLS_G2_GENERATOR, hashToCurveBls } from './bls';
 import { type UnblindedSignature, createRandomSecretKey, hashToCurve, isBlsKeyset } from './core';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
@@ -153,24 +153,4 @@ export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uin
   const a = secp256k1.Point.Fn.fromBytes(privKey);
   const aY: WeierstrassPoint<bigint> = Y.multiply(a);
   return aY.equals(proof.C);
-}
-
-/**
- * Tagged-union mint pubkey covering both keyset curves.
- *
- * - `secp`: compressed secp256k1 (33 bytes, 66 hex) — v0/v1/v2 keysets.
- * - `blsG2`: compressed BLS12-381 G2 (96 bytes, 192 hex) — v3 keysets.
- */
-export type MintPubKey =
-  | { kind: 'secp'; pt: WeierstrassPoint<bigint> }
-  | { kind: 'blsG2'; pt: G2Point };
-
-/**
- * Parse a mint pubkey hex string for a given keyset id. v3 (`02…`) keys are G2; others secp256k1.
- */
-export function parseMintPubKey(keysetId: string, hex: string): MintPubKey {
-  if (isBlsKeyset(keysetId)) {
-    return { kind: 'blsG2', pt: pointFromHexG2(hex) };
-  }
-  return { kind: 'secp', pt: secp256k1.Point.fromHex(hex) };
 }
