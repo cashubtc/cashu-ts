@@ -103,8 +103,8 @@ export function createNewMintKeys(
       // matching Nutshell `derive_keys_v3`. Hardening prevents sibling-key derivation from
       // a leaked child + xpub; the sha256 step gives a uniformly distributed input so the
       // Fr reduction isn't biased (BIP32 outputs are mod secp's `n`, which differs from Fr).
-      // v0/v1/v2 keep the original unhardened path for back-compat with existing fixtures.
-      // TODO v5: Harden the v0/v1/v2 path and update TEST_PRIV_KEY_PUBS.
+      // v1/v2 keep the original unhardened path for back-compat with existing fixtures.
+      // TODO v5: Harden the v1/v2 path and update TEST_PRIV_KEY_PUBS.
       const path =
         versionByte === 2 ? `${DERIVATION_PATH}/${counter}'` : `${DERIVATION_PATH}/${counter}`;
       const k = masterKey.derive(path).privateKey;
