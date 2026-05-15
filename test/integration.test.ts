@@ -804,7 +804,11 @@ describe('dleq', () => {
     } as Token;
     const exc = await wallet.receive(token, { requireDleq: true }).catch((e) => e);
     expect(exc).toBeInstanceOf(CTSError);
-    expect(exc).toMatchObject({ message: 'Token contains proofs with invalid or missing DLEQ' });
+    // verifyProofsForReceive appends an offender suffix `(keyset …, amount …)` after the
+    // headline message — match the prefix so the assertion survives format tweaks.
+    expect(exc).toMatchObject({
+      message: expect.stringContaining('Token contains proofs with invalid or missing DLEQ'),
+    });
   });
 });
 describe('Custom Outputs', () => {
