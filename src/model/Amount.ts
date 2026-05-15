@@ -477,6 +477,8 @@ export class AmountWithUnit {
    * Coercion hook: returns the unit-bearing string for `"string"` hints (`String(x)`, template
    * literals), throws otherwise. Prevents `+`, `-`, `*`, `==`, `Number(x)`, etc. from silently
    * stripping the unit — use {@link AmountWithUnit.toAmount} for explicit numeric access.
+   *
+   * @internal
    */
   [Symbol.toPrimitive](hint: 'number' | 'string' | 'default'): string {
     if (hint === 'string') return this.toString();

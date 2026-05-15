@@ -122,7 +122,6 @@ export class AmountWithUnit {
     };
     // (undocumented)
     toNumber(): number;
-    // (undocumented)
     toString(): string;
     // (undocumented)
     readonly unit: string;
