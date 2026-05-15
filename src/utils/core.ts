@@ -5,9 +5,9 @@ import {
   type DLEQ,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
-  parseMintPubKey,
   pointFromHex,
   pointFromHexG1,
+  pointFromHexG2,
   verifyDLEQProof_reblind,
   verifyUnblindedSignatureBls,
 } from '../crypto';
@@ -713,12 +713,9 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
       );
     }
     try {
-      const k2 = parseMintPubKey(proof.id, keyset.keys[proof.amount.toString()]);
-      // Type-narrow only — `parseMintPubKey` returns `blsG2` iff `isBlsKeyset(proof.id)` is true.
-      /* c8 ignore next */
-      if (k2.kind !== 'blsG2') return false;
+      const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
       return verifyUnblindedSignatureBls(
-        k2.pt,
+        K2,
         pointFromHexG1(proof.C),
         new TextEncoder().encode(proof.secret),
       );
@@ -829,18 +826,14 @@ export function verifyProofsForReceive(
     if (!hasCorrespondingKey(p.amount, ks.keys)) {
       throw new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`);
     }
-    const k2 = parseMintPubKey(p.id, ks.keys[p.amount.toString()]);
-    // Type-narrow only — `parseMintPubKey` returns `blsG2` iff `isBlsKeyset(p.id)` is true,
-    // and `p` is in `blsProofs` precisely because `isBlsKeyset(p.id)` returned true above.
-    /* c8 ignore next */
-    if (k2.kind !== 'blsG2') throw new CTSError(failMsg + offenderSuffix(p));
+    const K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
     let C;
     try {
       C = pointFromHexG1(p.C);
     } catch {
       throw new CTSError(failMsg + offenderSuffix(p));
     }
-    return { K2: k2.pt, C, secret: new TextEncoder().encode(p.secret), proof: p };
+    return { K2, C, secret: new TextEncoder().encode(p.secret), proof: p };
   });
 
   // Single proof: batch wrapper costs an extra mul; just pair directly.
