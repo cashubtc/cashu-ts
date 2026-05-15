@@ -53,10 +53,10 @@ describe('AmountWithUnit pass-through converters', () => {
     expect(a.toNumber()).toBe(a.toAmount().toNumber());
   });
 
-  it('toString returns "<unit>: <amount>" (does not silently drop unit)', () => {
-    expect(AmountWithUnit.from(123, 'sat').toString()).toBe('sat: 123');
-    expect(AmountWithUnit.from(5, 'usd').toString()).toBe('usd: 5');
-    expect(AmountWithUnit.zero('msat').toString()).toBe('msat: 0');
+  it('toString returns "[<unit>]: <amount>" (does not silently drop unit)', () => {
+    expect(AmountWithUnit.from(123, 'sat').toString()).toBe('[sat]: 123');
+    expect(AmountWithUnit.from(5, 'usd').toString()).toBe('[usd]: 5');
+    expect(AmountWithUnit.zero('msat').toString()).toBe('[msat]: 0');
   });
 
   it('isZero / isSafeNumber match underlying Amount', () => {
@@ -252,12 +252,12 @@ describe('AmountWithUnit implicit coercion is safe', () => {
   const a = AmountWithUnit.from(100, 'sat');
 
   it('template literals produce unit-bearing string', () => {
-    expect(`${a}`).toBe('sat: 100');
-    expect(`balance: ${a}`).toBe('balance: sat: 100');
+    expect(`${a}`).toBe('[sat]: 100');
+    expect(`balance: ${a}`).toBe('balance: [sat]: 100');
   });
 
   it('String(x) produces unit-bearing string', () => {
-    expect(String(a)).toBe('sat: 100');
+    expect(String(a)).toBe('[sat]: 100');
   });
 
   it('parseInt / parseFloat of the string form return NaN (unit cannot be stripped via parse)', () => {
@@ -266,6 +266,13 @@ describe('AmountWithUnit implicit coercion is safe', () => {
     // and via implicit string coercion on the object directly
     expect(parseInt(a as unknown as string, 10)).toBeNaN();
     expect(parseFloat(a as unknown as string)).toBeNaN();
+  });
+
+  it('parseInt / parseFloat return NaN even when unit string itself starts with digits', () => {
+    const tricky = AmountWithUnit.from(1, '9999sat');
+    expect(String(tricky)).toBe('[9999sat]: 1');
+    expect(parseInt(String(tricky), 10)).toBeNaN();
+    expect(parseFloat(String(tricky))).toBeNaN();
   });
 
   it('Number(x) throws (does not silently strip unit)', () => {
