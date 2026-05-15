@@ -1,7 +1,12 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
+  asBlsG1Point,
+  asSecpPoint,
   hashToCurve,
   pointFromHex,
+  pointFromHexAuto,
+  pointToHex,
   blindMessage,
   unblindSignature,
   createBlindSignature,
@@ -123,6 +128,38 @@ describe('point helpers and hash_e', () => {
     const concatUncompressed = P1.toHex(false) + P2.toHex(false);
     const expected = sha256(new TextEncoder().encode(concatUncompressed));
     expect(bytesToHex(e)).toBe(bytesToHex(expected));
+  });
+});
+
+describe('CurvePoint helpers', () => {
+  test('asSecpPoint tags a secp point with kind:secp', () => {
+    const sk = secp256k1.utils.randomSecretKey();
+    const pt = pointFromHex(bytesToHex(secp256k1.getPublicKey(sk, true)));
+    const cp = asSecpPoint(pt);
+    expect(cp.kind).toBe('secp');
+    expect(cp.pt).toBe(pt);
+  });
+
+  test('asBlsG1Point tags a G1 point with kind:blsG1', () => {
+    const G1 = bls12_381.G1.Point.BASE;
+    const cp = asBlsG1Point(G1);
+    expect(cp.kind).toBe('blsG1');
+    expect(cp.pt).toBe(G1);
+  });
+
+  test('pointToHex round-trips through pointFromHexAuto for both curves', () => {
+    const sk = secp256k1.utils.randomSecretKey();
+    const secpHex = bytesToHex(secp256k1.getPublicKey(sk, true));
+    const secpRound = pointToHex(pointFromHexAuto(secpHex));
+    expect(secpRound).toBe(secpHex);
+
+    const blsHex = bytesToHex(bls12_381.G1.Point.BASE.toBytes(true));
+    const blsRound = pointToHex(pointFromHexAuto(blsHex));
+    expect(blsRound).toBe(blsHex);
+  });
+
+  test('pointFromHexAuto throws on unexpected hex length', () => {
+    expect(() => pointFromHexAuto('00'.repeat(40))).toThrow(/unexpected hex length/);
   });
 });
 
