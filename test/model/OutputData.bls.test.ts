@@ -145,6 +145,42 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     const proof = out.toProof(sig, keyset);
     expect(proof.secret).toBe(originalSecret);
   });
+
+  test('toProof rejects amount downgrade (malicious mint)', () => {
+    // Request amount=8; mint returns a perfectly valid v3 signature for amount=4 on the
+    // same B_. The pairing check against K2_4 would succeed — funds-loss vector if the
+    // request/response amount mismatch is not enforced before key lookup.
+    const out = OutputData.createSingleRandomData(8, keyset.id);
+    const B_ = pointFromHexG1(out.blindedMessage.B_);
+    const downgraded = createBlindSignatureBls(B_, privKeys['4'], keyset.id);
+    const downgradedSig: SerializedBlindedSignature = {
+      id: keyset.id,
+      amount: Amount.from(4),
+      C_: downgraded.C_.toHex(true),
+    };
+    expect(() => out.toProof(downgradedSig, keyset)).toThrowError(
+      /does not match requested amount/,
+    );
+  });
+
+  test('toProof accepts amount=0 blank (NUT-08 fee change / NUT-09 restore)', () => {
+    // Blank outputs declare amount=0 up front; the mint chooses the actual denomination.
+    // toProof must trust sig.amount for key lookup and final Proof.amount in this case.
+    const blank = OutputData.createSingleRandomData(0, keyset.id);
+    const B_ = pointFromHexG1(blank.blindedMessage.B_);
+    // Mint fills in amount=2 from the blank
+    const filled = createBlindSignatureBls(B_, privKeys['2'], keyset.id);
+    const sig: SerializedBlindedSignature = {
+      id: keyset.id,
+      amount: Amount.from(2),
+      C_: filled.C_.toHex(true),
+    };
+    const proof = blank.toProof(sig, keyset);
+    expect(proof.amount).toEqual(Amount.from(2));
+    const C = pointFromHexG1(proof.C);
+    const secret = new TextEncoder().encode(proof.secret);
+    expect(verifyUnblindedSignatureBls(G2PubKeys['2'], C, secret)).toBe(true);
+  });
 });
 
 describe('OutputData v3 — Nutshell PR #999 deterministic test vector', () => {
