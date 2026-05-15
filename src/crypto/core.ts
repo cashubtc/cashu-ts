@@ -107,18 +107,24 @@ export function pointToHex(p: CurvePoint): string {
 /**
  * True if the keyset id uses BLS12-381 cryptography (version byte >= 0x02).
  *
- * Forward-compatible: any future BLS-based version (e.g. `03…`) also returns true. Legacy base64
- * keysets and v0/v1 hex keysets (`00…` / `01…`) return false. Mirrors Nutshell's `is_bls_keyset`
- * (`cashu/core/crypto/keys.py`) for protocol consistency.
+ * Forward-compatible: any future BLS-based version byte (e.g. `03…`, `0a…`) also returns true.
+ * Legacy base64 keysets and v0/v1 hex keysets (`00…` / `01…`) return false.
  *
- * Hex check first because legacy base64 ids can start with digits (e.g. `22aB/+=…`); naive
- * `Number(id.slice(0,2))` would read those as numeric version bytes and misclassify ~2.4% of legacy
- * keysets as v3. Same hex-vs-base64 convention as `NUT13.ts:getDerivationKind`.
+ * Three guards in order:
+ *
+ * 1. `isValidHex` rejects mixed-alphabet base64 (e.g. `22aB/+=Z…`).
+ * 2. `length === 12` rejects all-hex base64 ids (12 chars by cashu legacy spec); modern hex ids are 16
+ *    (short) or 66 (full) chars, so the length classes are disjoint.
+ * 3. `parseInt(..., 16)` (NOT `Number(...)`) reads the version byte as hex — `Number('0a')` is `NaN`,
+ *    which would misclassify ~39% of future version bytes as non-BLS.
+ *
+ * Mirrors Nutshell's `is_bls_keyset` (`cashu/core/crypto/keys.py`).
  */
 export function isBlsKeyset(keysetId: string): boolean {
   if (keysetId.length < 2) return false;
   if (!isValidHex(keysetId)) return false;
-  const v = Number(keysetId.slice(0, 2));
+  if (keysetId.length === 12) return false;
+  const v = parseInt(keysetId.slice(0, 2), 16);
   return Number.isFinite(v) && v >= 2;
 }
 

@@ -179,6 +179,22 @@ describe('isBlsKeyset', () => {
     expect(isBlsKeyset('03abcdef')).toBe(true);
     expect(isBlsKeyset('09abcdef')).toBe(true);
   });
+  test('forward-compatible: hex version bytes with letters (`0a…`, `1e…`, `ff…`)', () => {
+    // Regression: a previous fix used `Number(slice(0,2))` which returns NaN for any hex with
+    // letters, misclassifying ~39% of the 256-value version space as non-BLS. Must use
+    // parseInt(_, 16).
+    expect(isBlsKeyset('0abcdef012345678')).toBe(true); // v=0x0a=10
+    expect(isBlsKeyset('1eabcdef01234567')).toBe(true); // v=0x1e=30
+    expect(isBlsKeyset('ffabcdef01234567')).toBe(true); // v=0xff=255
+  });
+  test('12-char all-hex base64 ids are NOT misread as BLS', () => {
+    // Regression: a 12-char base64 id whose chars all happen to be 0-9/a-f would pass
+    // isValidHex AND have a digit-pair prefix like "22" — classifying as v3. Cashu legacy
+    // base64 ids are exactly 12 chars; modern hex ids are 16 or 66. Reject length 12.
+    expect(isBlsKeyset('22aabbccddee')).toBe(false);
+    expect(isBlsKeyset('05aabbccddee')).toBe(false);
+    expect(isBlsKeyset('aabbccddeeff')).toBe(false);
+  });
   test('legacy base64 keyset id returns false', () => {
     expect(isBlsKeyset('AQID')).toBe(false);
   });
