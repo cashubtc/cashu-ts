@@ -5,7 +5,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { CTSError } from '../model/Errors';
-import { Bytes, hexToNumber, encodeBase64toUint8 } from '../utils';
+import { Bytes, hexToNumber, encodeBase64toUint8, isValidHex } from '../utils';
 
 import { type G1Point, pointFromHexG1 } from './bls';
 
@@ -110,9 +110,14 @@ export function pointToHex(p: CurvePoint): string {
  * Forward-compatible: any future BLS-based version (e.g. `03…`) also returns true. Legacy base64
  * keysets and v0/v1 hex keysets (`00…` / `01…`) return false. Mirrors Nutshell's `is_bls_keyset`
  * (`cashu/core/crypto/keys.py`) for protocol consistency.
+ *
+ * Hex check first because legacy base64 ids can start with digits (e.g. `22aB/+=…`); naive
+ * `Number(id.slice(0,2))` would read those as numeric version bytes and misclassify ~2.4% of legacy
+ * keysets as v3. Same hex-vs-base64 convention as `NUT13.ts:getDerivationKind`.
  */
 export function isBlsKeyset(keysetId: string): boolean {
   if (keysetId.length < 2) return false;
+  if (!isValidHex(keysetId)) return false;
   const v = Number(keysetId.slice(0, 2));
   return Number.isFinite(v) && v >= 2;
 }
