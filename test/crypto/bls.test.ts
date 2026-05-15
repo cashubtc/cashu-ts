@@ -11,8 +11,10 @@ import {
   verifyUnblindedSignatureBls,
   batchVerifyUnblindedSignatureBls,
   deriveBatchWeights,
+  pointFromHexG1,
   pointFromHexG2,
 } from '../../src/crypto/bls';
+import { CTSError } from '../../src/model/Errors';
 
 // Nutshell PR #999 test vectors (cashu/core/crypto/bls_dhke.py +
 // tests/test_crypto.py::test_deterministic_bls_steps).
@@ -40,6 +42,21 @@ describe('BLS constants', () => {
 
   test("noble's G2 BASE matches Nutshell hardcoded _G2_HEX", () => {
     expect(bytesToHex(bls12_381.G2.Point.BASE.toBytes(true))).toBe(NUTSHELL_G2_HEX);
+  });
+});
+
+describe('point parsing rejects the identity', () => {
+  // Compressed identity encodings per IETF: top bit set + infinity bit set, rest zero.
+  // G1: 48 bytes / 96 hex chars; G2: 96 bytes / 192 hex chars.
+  const G1_ZERO_HEX = 'c0' + '00'.repeat(47);
+  const G2_ZERO_HEX = 'c0' + '00'.repeat(95);
+
+  test('pointFromHexG1 throws CTSError on G1 identity', () => {
+    expect(() => pointFromHexG1(G1_ZERO_HEX)).toThrow(CTSError);
+  });
+
+  test('pointFromHexG2 throws CTSError on G2 identity', () => {
+    expect(() => pointFromHexG2(G2_ZERO_HEX)).toThrow(CTSError);
   });
 });
 
