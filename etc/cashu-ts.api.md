@@ -1085,15 +1085,6 @@ export type MintProofsConfig = {
 };
 
 // @public
-export type MintPubKey = {
-    kind: 'secp';
-    pt: WeierstrassPoint<bigint>;
-} | {
-    kind: 'blsG2';
-    pt: G2Point;
-};
-
-// @public
 export type MintQuoteBaseRequest = {
     unit: string;
     pubkey?: string;
@@ -1430,9 +1421,6 @@ export type P2PKWitness = {
 
 // @public
 export function parseHTLCSecret(secret: string | Secret): Secret;
-
-// @public
-export function parseMintPubKey(keysetId: string, hex: string): MintPubKey;
 
 // @public
 export function parseP2PKSecret(secret: string | Secret): Secret;

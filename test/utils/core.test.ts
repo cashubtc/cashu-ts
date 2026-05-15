@@ -727,7 +727,7 @@ describe('test zero-knowledge utilities', () => {
         secret: v3Secret,
         C: v3C,
       };
-      // Wrong length (66 hex would be a secp point); parseMintPubKey throws inside try/catch.
+      // Wrong length (66 hex would be a secp point); pointFromHexG2 throws inside try/catch.
       const keyset = { id: v3Id, unit: 'sat', keys: { [1]: '00'.repeat(33) } };
       expect(hasValidDleq(v3Proof, keyset)).toBe(false);
     });
