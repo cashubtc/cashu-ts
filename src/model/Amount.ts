@@ -362,4 +362,235 @@ export class Amount {
     }
     return new Amount(total);
   }
+
+  // -----------------------------------------------------------------
+  // Section: Unit lifting
+  // -----------------------------------------------------------------
+
+  /**
+   * Tag this {@link Amount} with a currency unit, returning an {@link AmountWithUnit}.
+   */
+  withUnit(unit: string): AmountWithUnit {
+    return new AmountWithUnit(this, unit);
+  }
+}
+
+export class AmountWithUnitError extends CTSError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AmountWithUnitError';
+    Object.setPrototypeOf(this, AmountWithUnitError.prototype);
+  }
+}
+
+/**
+ * Immutable {@link Amount} paired with a currency unit.
+ *
+ * Binary ops require matching units (throw {@link AmountWithUnitError} otherwise); scalar ops
+ * preserve the unit.
+ *
+ * Lift via {@link Amount.withUnit} / {@link AmountWithUnit.from}, drop via
+ * {@link AmountWithUnit.toAmount}.
+ *
+ * @example
+ *
+ *     AmountWithUnit.from(100, 'sat');
+ *     Amount.from(21).withUnit('sat');
+ */
+export class AmountWithUnit {
+  private readonly _amount: Amount;
+  readonly unit: string;
+
+  constructor(amount: Amount, unit: string) {
+    if (typeof unit !== 'string' || unit.length === 0) {
+      throw new AmountWithUnitError('unit required');
+    }
+    this._amount = amount;
+    this.unit = unit;
+    Object.freeze(this);
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Static Factories
+  // -----------------------------------------------------------------
+
+  static from(value: AmountLike, unit: string): AmountWithUnit {
+    return new AmountWithUnit(Amount.from(value), unit);
+  }
+
+  static zero(unit: string): AmountWithUnit {
+    return new AmountWithUnit(Amount.zero(), unit);
+  }
+
+  static one(unit: string): AmountWithUnit {
+    return new AmountWithUnit(Amount.one(), unit);
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Escape hatch
+  // -----------------------------------------------------------------
+
+  /**
+   * Return the underlying unitless {@link Amount}, dropping the unit guard.
+   */
+  toAmount(): Amount {
+    return this._amount;
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Pass-through converters (no unit dimension)
+  // -----------------------------------------------------------------
+
+  toBigInt(): bigint {
+    return this._amount.toBigInt();
+  }
+
+  toNumber(): number {
+    return this._amount.toNumber();
+  }
+
+  toString(): string {
+    return this._amount.toString();
+  }
+
+  toJSON(): { amount: string; unit: string } {
+    return { amount: this._amount.toString(), unit: this.unit };
+  }
+
+  isZero(): boolean {
+    return this._amount.isZero();
+  }
+
+  isSafeNumber(): boolean {
+    return this._amount.isSafeNumber();
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Binary ops — strict unit match
+  // -----------------------------------------------------------------
+
+  private requireSameUnit(other: AmountWithUnit): void {
+    if (this.unit !== other.unit) {
+      throw new AmountWithUnitError(`unit mismatch: ${this.unit} vs ${other.unit}`);
+    }
+  }
+
+  add(other: AmountWithUnit): AmountWithUnit {
+    this.requireSameUnit(other);
+    return new AmountWithUnit(this._amount.add(other._amount), this.unit);
+  }
+
+  subtract(other: AmountWithUnit): AmountWithUnit {
+    this.requireSameUnit(other);
+    return new AmountWithUnit(this._amount.subtract(other._amount), this.unit);
+  }
+
+  equals(other: AmountWithUnit): boolean {
+    this.requireSameUnit(other);
+    return this._amount.equals(other._amount);
+  }
+
+  compareTo(other: AmountWithUnit): -1 | 0 | 1 {
+    this.requireSameUnit(other);
+    return this._amount.compareTo(other._amount);
+  }
+
+  lessThan(other: AmountWithUnit): boolean {
+    return this.compareTo(other) < 0;
+  }
+
+  lessThanOrEqual(other: AmountWithUnit): boolean {
+    return this.compareTo(other) <= 0;
+  }
+
+  greaterThan(other: AmountWithUnit): boolean {
+    return this.compareTo(other) > 0;
+  }
+
+  greaterThanOrEqual(other: AmountWithUnit): boolean {
+    return this.compareTo(other) >= 0;
+  }
+
+  inRange(min: AmountWithUnit, max: AmountWithUnit): boolean {
+    this.requireSameUnit(min);
+    this.requireSameUnit(max);
+    return this._amount.inRange(min._amount, max._amount);
+  }
+
+  clamp(min: AmountWithUnit, max: AmountWithUnit): AmountWithUnit {
+    this.requireSameUnit(min);
+    this.requireSameUnit(max);
+    return new AmountWithUnit(this._amount.clamp(min._amount, max._amount), this.unit);
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Scalar ops — second arg dimensionless, unit preserved
+  // -----------------------------------------------------------------
+
+  multiplyBy(factor: AmountLike): AmountWithUnit {
+    return new AmountWithUnit(this._amount.multiplyBy(factor), this.unit);
+  }
+
+  divideBy(divisor: AmountLike): AmountWithUnit {
+    return new AmountWithUnit(this._amount.divideBy(divisor), this.unit);
+  }
+
+  modulo(divisor: AmountLike): AmountWithUnit {
+    return new AmountWithUnit(this._amount.modulo(divisor), this.unit);
+  }
+
+  ceilPercent(numerator: number, denominator?: number): AmountWithUnit {
+    return new AmountWithUnit(this._amount.ceilPercent(numerator, denominator), this.unit);
+  }
+
+  floorPercent(numerator: number, denominator?: number): AmountWithUnit {
+    return new AmountWithUnit(this._amount.floorPercent(numerator, denominator), this.unit);
+  }
+
+  scaledBy(numerator: AmountLike, denominator: AmountLike): AmountWithUnit {
+    return new AmountWithUnit(this._amount.scaledBy(numerator, denominator), this.unit);
+  }
+
+  // -----------------------------------------------------------------
+  // Section: Statics
+  // -----------------------------------------------------------------
+
+  static min(a: AmountWithUnit, b: AmountWithUnit): AmountWithUnit {
+    a.requireSameUnit(b);
+    return a.compareTo(b) <= 0 ? a : b;
+  }
+
+  static max(a: AmountWithUnit, b: AmountWithUnit): AmountWithUnit {
+    a.requireSameUnit(b);
+    return a.compareTo(b) >= 0 ? a : b;
+  }
+
+  /**
+   * Sum a unit-tagged iterable.
+   *
+   * - If `unit` is provided, every element must match it; the result has that unit. An empty iterable
+   *   returns `AmountWithUnit.zero(unit)`.
+   * - If `unit` is omitted, the iterable must be non-empty; the unit is inferred from the first
+   *   element and every subsequent element must match. An empty iterable throws.
+   *
+   * @throws {AmountWithUnitError} On unit mismatch, or on empty iterable when `unit` is omitted.
+   */
+  static sum(values: Iterable<AmountWithUnit>, unit?: string): AmountWithUnit {
+    let expected = unit;
+    let total = 0n;
+    let seen = false;
+    for (const v of values) {
+      if (expected === undefined) {
+        expected = v.unit;
+      } else if (v.unit !== expected) {
+        throw new AmountWithUnitError(`unit mismatch: ${expected} vs ${v.unit}`);
+      }
+      total += v._amount.toBigInt();
+      seen = true;
+    }
+    if (expected === undefined) {
+      throw new AmountWithUnitError('cannot infer unit from empty sum');
+    }
+    return new AmountWithUnit(seen ? Amount.from(total) : Amount.zero(), expected);
+  }
 }

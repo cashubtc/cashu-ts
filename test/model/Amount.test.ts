@@ -10,6 +10,16 @@ describe('Amount.from validation', () => {
     expect(() => Amount.from(-1)).toThrow('Amount must be >= 0');
   });
 
+  it('rejects non-finite or non-integer number amounts', () => {
+    expect(() => Amount.from(Number.NaN)).toThrow('Invalid number amount');
+    expect(() => Amount.from(Number.POSITIVE_INFINITY)).toThrow('Invalid number amount');
+    expect(() => Amount.from(1.5)).toThrow('Invalid number amount');
+  });
+
+  it('rejects unsafe-integer number amounts', () => {
+    expect(() => Amount.from(Number.MAX_SAFE_INTEGER + 1)).toThrow('Unsafe integer amount');
+  });
+
   it('rejects invalid decimal strings', () => {
     expect(() => Amount.from('-1')).toThrow('Invalid amount string');
     expect(() => Amount.from('01')).toThrow('Invalid amount string');
@@ -209,10 +219,17 @@ describe('Amount arithmetic and comparisons', () => {
 
   it('handles comparison helpers', () => {
     const amount = Amount.from(5);
+    expect(amount.lessThan(6)).toBe(true);
+    expect(amount.lessThan(5)).toBe(false);
     expect(amount.lessThanOrEqual(5)).toBe(true);
     expect(amount.lessThanOrEqual(6)).toBe(true);
     expect(amount.greaterThanOrEqual(5)).toBe(true);
     expect(amount.greaterThanOrEqual(4)).toBe(true);
+  });
+
+  it('sums an iterable of AmountLike values', () => {
+    expect(Amount.sum([1, 2n, '3', Amount.from(4)]).toBigInt()).toBe(10n);
+    expect(Amount.sum([]).toBigInt()).toBe(0n);
   });
 
   it('performs arithmetic operations', () => {
