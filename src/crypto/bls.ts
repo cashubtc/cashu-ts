@@ -134,6 +134,8 @@ export function createBlindSignatureBls(
  * @param secret UTF-8 byte encoded secret.
  */
 export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uint8Array): boolean {
+  // pairingBatch throws a generic Error on identity inputs; reject as invalid instead.
+  if (C.is0() || K2.is0()) return false;
   const Y = hashToCurveBls(secret);
   const acc = bls12_381.pairingBatch([
     { g1: C.negate(), g2: BLS_G2_GENERATOR },
@@ -213,6 +215,10 @@ export function batchVerifyUnblindedSignatureBls(
   items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array }>,
 ): boolean {
   if (items.length === 0) return true;
+  // pairingBatch throws a generic Error on identity inputs; reject as invalid instead.
+  for (const it of items) {
+    if (it.C.is0() || it.K2.is0()) return false;
+  }
   const G2 = BLS_G2_GENERATOR;
 
   const rs = deriveBatchWeights(items);

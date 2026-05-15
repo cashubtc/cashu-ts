@@ -117,6 +117,19 @@ describe('verifyUnblindedSignatureBls (single pairing)', () => {
     const K2parsed = pointFromHexG2(bytesToHex(K2.toBytes(true)));
     expect(K2parsed.equals(K2)).toBe(true);
   });
+
+  test('returns false (not throws) when C is the point at infinity', () => {
+    expect(() => verifyUnblindedSignatureBls(K2, bls12_381.G1.Point.ZERO, secret)).not.toThrow();
+    expect(verifyUnblindedSignatureBls(K2, bls12_381.G1.Point.ZERO, secret)).toBe(false);
+  });
+
+  test('returns false (not throws) when K2 is the point at infinity', () => {
+    const { B_ } = blindMessageBls(secret, 3n);
+    const { C_ } = createBlindSignatureBls(B_, aBytes, 'k');
+    const C = unblindSignatureBls(C_, 3n);
+    expect(() => verifyUnblindedSignatureBls(bls12_381.G2.Point.ZERO, C, secret)).not.toThrow();
+    expect(verifyUnblindedSignatureBls(bls12_381.G2.Point.ZERO, C, secret)).toBe(false);
+  });
 });
 
 describe('batchVerifyUnblindedSignatureBls', () => {
@@ -201,6 +214,20 @@ describe('batchVerifyUnblindedSignatureBls', () => {
 
   test('empty batch is vacuously true', () => {
     expect(batchVerifyUnblindedSignatureBls([])).toBe(true);
+  });
+
+  test('returns false (not throws) when any item has C at infinity', () => {
+    const items = [makeProof('s1', 3n, 5n), makeProof('s2', 4n, 5n)];
+    const withZeroC = [items[0], { ...items[1], C: bls12_381.G1.Point.ZERO }];
+    expect(() => batchVerifyUnblindedSignatureBls(withZeroC)).not.toThrow();
+    expect(batchVerifyUnblindedSignatureBls(withZeroC)).toBe(false);
+  });
+
+  test('returns false (not throws) when any item has K2 at infinity', () => {
+    const items = [makeProof('s1', 3n, 5n), makeProof('s2', 4n, 5n)];
+    const withZeroK2 = [items[0], { ...items[1], K2: bls12_381.G2.Point.ZERO }];
+    expect(() => batchVerifyUnblindedSignatureBls(withZeroK2)).not.toThrow();
+    expect(batchVerifyUnblindedSignatureBls(withZeroK2)).toBe(false);
   });
 });
 
