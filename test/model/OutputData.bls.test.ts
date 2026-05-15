@@ -70,6 +70,9 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     expect(out.blindedMessage.id).toBe(keyset.id);
   });
 
+  // ~21 BLS pairings (7 amounts × 3 verifications each). Locally ~700ms, but under the
+  // 4-environment parallel run (node + chromium + firefox + webkit), CPU contention can
+  // push this past the 5s default. Bumped to absorb that noise.
   test('full mint → swap path: outputs round-trip and verify under pairing', () => {
     const outputs = AMOUNTS.map((a) => OutputData.createSingleRandomData(a, keyset.id));
     const sigs = outputs.map((o) => signWithMint(o, privKeys, keyset.id));
@@ -93,7 +96,7 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
         true,
       );
     }
-  });
+  }, 15000);
 
   test('deterministic v3 derivation produces a verifiable proof', () => {
     const seed = hexToBytes('11'.repeat(32));
