@@ -2922,7 +2922,7 @@ class Wallet {
    * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
    *
    * @param proofs Each proof must carry `id` and `secret`. The keyset id selects the hash-to-curve
-   *   variant: v0/v1/v2 (`00…`/`01…`) use secp256k1; v3 (`02…`) uses BLS12-381 G1.
+   *   variant: v0/v1/v2 use secp256k1; v3 (`02…`) uses BLS12-381 G1.
    * @returns NUT-07 state for each proof, in same order.
    */
   async checkProofsStates(proofs: Array<Pick<Proof, 'secret' | 'id'>>): Promise<ProofState[]> {
