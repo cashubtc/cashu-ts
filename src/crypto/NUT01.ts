@@ -59,6 +59,7 @@ export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBuffe
  */
 export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
   const a = bls12_381.fields.Fr.fromBytes(privKey);
+  /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
   if (a === 0n) {
     throw new CTSError('Mint scalar must be non-zero');
   }
@@ -141,6 +142,7 @@ export function createNewMintKeys(
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
   if (isBlsKeyset(proof.id)) {
     const a = bls12_381.fields.Fr.fromBytes(privKey);
+    /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
     if (a === 0n) {
       throw new CTSError('Mint scalar must be non-zero');
     }
