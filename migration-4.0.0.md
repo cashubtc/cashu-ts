@@ -924,6 +924,14 @@ Single-unit consumers (the common case — one `Wallet` per mint+unit) don't nee
 
 `AmountWithUnit` exposes the same arithmetic, comparison, and finance helpers as `Amount`, plus `static AmountWithUnit.sum(iter, unit?)` for aggregating a unit-tagged iterable.
 
+### Implicit coercion is intentionally restricted
+
+To keep the unit guard meaningful, `AmountWithUnit` overrides JS coercion so that the unit cannot be silently stripped:
+
+- **String coercion** (`String(x)`, `` `${x}` ``, `.toString()`) returns a unit-bearing form like `"100 sat"`.
+- **Numeric / default coercion** (`+x`, `x - 1`, `x == 5`, `Number(x)`, `x + y` between two `AmountWithUnit`) **throws** `AmountWithUnitError`. Use `.toAmount()` to get the unitless `Amount` if you genuinely need raw arithmetic.
+- **JSON** is unaffected — `JSON.stringify(x)` uses `toJSON()` and emits `{"amount":"...","unit":"..."}`.
+
 ---
 
 ## New: `createEphemeralCounterSource` factory

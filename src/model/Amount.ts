@@ -461,12 +461,28 @@ export class AmountWithUnit {
     return this._amount.toNumber();
   }
 
+  /**
+   * Unit-bearing canonical form, e.g. `"100 sat"`. Used by `String(x)`, template literals,
+   * `console.log`, and any other string-coercion context.
+   */
   toString(): string {
-    return this._amount.toString();
+    return `${this._amount.toString()} ${this.unit}`;
   }
 
   toJSON(): { amount: string; unit: string } {
     return { amount: this._amount.toString(), unit: this.unit };
+  }
+
+  /**
+   * Coercion hook: returns the unit-bearing string for `"string"` hints (`String(x)`, template
+   * literals), throws otherwise. Prevents `+`, `-`, `*`, `==`, `Number(x)`, etc. from silently
+   * stripping the unit — use {@link AmountWithUnit.toAmount} for explicit numeric access.
+   */
+  [Symbol.toPrimitive](hint: 'number' | 'string' | 'default'): string {
+    if (hint === 'string') return this.toString();
+    throw new AmountWithUnitError(
+      `Implicit ${hint === 'number' ? 'numeric' : 'default'} coercion of AmountWithUnit is unsafe; use .toAmount() then explicit arithmetic, or .toString() for display.`,
+    );
   }
 
   isZero(): boolean {

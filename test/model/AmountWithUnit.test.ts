@@ -47,11 +47,16 @@ describe('AmountWithUnit factories', () => {
 });
 
 describe('AmountWithUnit pass-through converters', () => {
-  it('toBigInt / toNumber / toString match underlying Amount', () => {
+  it('toBigInt / toNumber match underlying Amount', () => {
     const a = AmountWithUnit.from(123, 'sat');
     expect(a.toBigInt()).toBe(a.toAmount().toBigInt());
     expect(a.toNumber()).toBe(a.toAmount().toNumber());
-    expect(a.toString()).toBe(a.toAmount().toString());
+  });
+
+  it('toString includes the unit (does not silently drop it)', () => {
+    expect(AmountWithUnit.from(123, 'sat').toString()).toBe('123 sat');
+    expect(AmountWithUnit.from(5, 'usd').toString()).toBe('5 usd');
+    expect(AmountWithUnit.zero('msat').toString()).toBe('0 msat');
   });
 
   it('isZero / isSafeNumber match underlying Amount', () => {
@@ -240,6 +245,47 @@ describe('Amount.withUnit', () => {
 
   it('rejects empty unit', () => {
     expect(() => Amount.from(1).withUnit('')).toThrow(AmountWithUnitError);
+  });
+});
+
+describe('AmountWithUnit implicit coercion is safe', () => {
+  const a = AmountWithUnit.from(100, 'sat');
+
+  it('template literals produce unit-bearing string', () => {
+    expect(`${a}`).toBe('100 sat');
+    expect(`balance: ${a}`).toBe('balance: 100 sat');
+  });
+
+  it('String(x) produces unit-bearing string', () => {
+    expect(String(a)).toBe('100 sat');
+  });
+
+  it('Number(x) throws (does not silently strip unit)', () => {
+    expect(() => Number(a)).toThrow(AmountWithUnitError);
+    expect(() => Number(a)).toThrow(/numeric coercion .* unsafe/i);
+  });
+
+  it('unary + throws', () => {
+    expect(() => +(a as unknown as number)).toThrow(AmountWithUnitError);
+  });
+
+  it('arithmetic operators throw (a - n, n * a, etc.)', () => {
+    expect(() => (a as unknown as number) - 10).toThrow(AmountWithUnitError);
+    expect(() => 2 * (a as unknown as number)).toThrow(AmountWithUnitError);
+    expect(() => (a as unknown as number) / 5).toThrow(AmountWithUnitError);
+  });
+
+  it('loose equality with a number throws (no silent comparison on bare value)', () => {
+    expect(() => (a as unknown) == 100).toThrow(AmountWithUnitError);
+  });
+
+  it('`a + b` with two AmountWithUnit throws (no silent numeric add)', () => {
+    const b = AmountWithUnit.from(50, 'sat');
+    expect(() => (a as unknown as number) + (b as unknown as number)).toThrow(AmountWithUnitError);
+  });
+
+  it('JSON.stringify is unaffected (uses toJSON, not toString)', () => {
+    expect(JSON.stringify(a)).toBe('{"amount":"100","unit":"sat"}');
   });
 });
 
