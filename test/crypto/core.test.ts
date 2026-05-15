@@ -145,6 +145,19 @@ describe('isBlsKeyset', () => {
   test('legacy base64 keyset id returns false', () => {
     expect(isBlsKeyset('AQID')).toBe(false);
   });
+  test('legacy base64 ids starting with digits are NOT misread as BLS', () => {
+    // Regression: ~2.4% of legacy base64 keyset ids start with two digits
+    // (e.g. "22…", "05…", "34…"). A naive `Number(id.slice(0,2)) >= 2` check
+    // would have classified these as v3 BLS, breaking secp interop entirely.
+    expect(isBlsKeyset('22aBcD+/eFgH')).toBe(false);
+    expect(isBlsKeyset('05xYzABCDEFG')).toBe(false);
+    expect(isBlsKeyset('34abcd+abcde')).toBe(false);
+    expect(isBlsKeyset('99aaaaaaaaaa=')).toBe(false);
+  });
+  test('short-form v3 hex id (16 chars) is BLS', () => {
+    // Tokens carry the 16-char truncated form of the keyset id.
+    expect(isBlsKeyset('02ce4c47836fd0e6')).toBe(true);
+  });
   test('empty / short / malformed input returns false', () => {
     expect(isBlsKeyset('')).toBe(false);
     expect(isBlsKeyset('0')).toBe(false);
