@@ -54,11 +54,17 @@ export function hashToCurveBls(secret: Uint8Array): G1Point {
 }
 
 export function pointFromHexG1(hex: string): G1Point {
-  return bls12_381.G1.Point.fromHex(hex);
+  // @noble/curves permits parsing the identity; never valid as a Cashu signature or commitment.
+  const p = bls12_381.G1.Point.fromHex(hex);
+  if (p.is0()) throw new CTSError('G1 point at infinity');
+  return p;
 }
 
 export function pointFromHexG2(hex: string): G2Point {
-  return bls12_381.G2.Point.fromHex(hex);
+  // @noble/curves permits parsing the identity; never valid as a Cashu mint pubkey.
+  const p = bls12_381.G2.Point.fromHex(hex);
+  if (p.is0()) throw new CTSError('G2 point at infinity');
+  return p;
 }
 
 function randomScalar(): bigint {
