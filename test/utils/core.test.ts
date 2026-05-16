@@ -9,6 +9,7 @@ import {
 } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
 import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
+import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
 import {
   NUT02_V1_VECTOR1_KEYS,
@@ -968,6 +969,30 @@ describe('test zero-knowledge utilities', () => {
         const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
         expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
           new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+      });
+
+      // Regression: a v3-prefixed keyset whose pubkey is actually a 33-byte secp key used to
+      // escape as an unhandled throw because only the G1 parse was wrapped.
+      test('v3-prefixed keyset with a non-G2 pubkey throws CTSError, not an unhandled error', () => {
+        const secpPubHex = pubkey.toHex(true); // 33-byte / 66-hex secp key
+        const hostileKeyset = { id: v3Id, unit: 'sat', keys: { [1]: secpPubHex } };
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => hostileKeyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => hostileKeyset)).toThrow(
+          CTSError,
+        );
+      });
+
+      test('v3 proof with truncated K2 hex throws CTSError, not an unhandled error', () => {
+        const truncatedKeyset = {
+          id: v3Id,
+          unit: 'sat',
+          keys: { [1]: v3K2.slice(0, -2) }, // chop one byte off the 96-byte G2 encoding
+        };
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => truncatedKeyset)).toThrow(
+          CTSError,
         );
       });
 

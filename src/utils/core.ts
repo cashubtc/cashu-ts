@@ -3,6 +3,8 @@ import { sha256 } from '@noble/hashes/sha2.js';
 
 import {
   type DLEQ,
+  type G1Point,
+  type G2Point,
   batchVerifyUnblindedSignatureBls,
   isBlsKeyset,
   pointFromHex,
@@ -803,9 +805,12 @@ export function verifyProofsForReceive(
     if (!hasCorrespondingKey(p.amount, ks.keys)) {
       throw new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`);
     }
-    const K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
-    let C;
+    // Wrap both parses: a malformed/foreign-curve K2 must surface as a CTSError, not an
+    // unhandled throw that escapes the receive path.
+    let K2: G2Point;
+    let C: G1Point;
     try {
+      K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
       C = pointFromHexG1(p.C);
     } catch {
       throw new CTSError(failMsg + offenderSuffix(p));

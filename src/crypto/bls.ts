@@ -154,10 +154,9 @@ export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uin
  * Derive deterministic per-proof batch-verification weights.
  *
  * @remarks
- * The weights are non-zero positive scalars within the curve order `(rᵢ ∈ Fr*)`. Instead of relying
- * on randombytes, we create a Fiat-Shamir transcript over all proofs in the batch. The length
- * prefix makes the transcript injective, keeping transcripts unique, regardless of secret. Each
- * weight (`rᵢ`) is distinct, based on the SHA256(transcript || position_in_batch || ctr).
+ * Non-zero scalars in `Fr*`, derived via Fiat-Shamir over the batch (no CSPRNG). The transcript is
+ * length-prefixed (injective) and collapsed to a 32-byte challenge once so the per-item derivation
+ * stays O(1) — re-hashing the full transcript inside the loop would be O(n²) and a DoS lever.
  *
  * Exposed for test-time determinism / transcript-coverage assertions; not part of the public API.
  * @internal
@@ -176,14 +175,15 @@ export function deriveBatchWeights(
       it.secret,
     );
   }
-  const transcript = concatBytes(...parts);
+  // Collapse to a fixed 32-byte challenge so per-item derivation is O(1), not O(n).
+  const challenge = sha256(concatBytes(...parts));
 
   const rs: bigint[] = [];
   for (let i = 0; i < items.length; i++) {
     const iBytes = numberToBytesBE(i, 4);
     let ri = 0n;
     for (let ctr = 0; ctr < 256; ctr++) {
-      const h = sha256(concatBytes(transcript, iBytes, new Uint8Array([ctr])));
+      const h = sha256(concatBytes(challenge, iBytes, new Uint8Array([ctr])));
       // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
       const r = bytesToNumberBE(h) % BLS_FR_ORDER;
       /* c8 ignore next */
