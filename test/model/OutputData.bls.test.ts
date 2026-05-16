@@ -166,6 +166,39 @@ describe('OutputData v3 round-trip (BLS12-381)', () => {
     );
   });
 
+  test('maps malformed BLS C_ to a CTSError with NUT-09 hint', () => {
+    // A buggy or malicious mint that returns un-parseable hex must not leak a generic
+    // Error after the inputs have been destroyed. toProof must surface a CTSError that
+    // tells the wallet how to recover.
+    const out = OutputData.createSingleRandomData(1, keyset.id);
+    const sig: SerializedBlindedSignature = {
+      id: keyset.id,
+      amount: Amount.from(1),
+      C_: 'not-hex',
+    };
+    expect(() => out.toProof(sig, keyset)).toThrowError(
+      /Mint returned invalid signature or amount\. .*NUT-09/,
+    );
+  });
+
+  test('maps missing keyset key for blank output to a CTSError with NUT-09 hint', () => {
+    // Blank outputs (amount=0) let the mint pick the denomination. If the picked amount
+    // isn't in our keyset, keys[amount] is undefined and pointFromHexG2(undefined) used
+    // to throw an opaque TypeError — now it must be a CTSError with the recovery hint.
+    const blank = OutputData.createSingleRandomData(0, keyset.id);
+    const B_ = pointFromHexG1(blank.blindedMessage.B_);
+    // 128 (not in AMOUNTS) — mint signs with some scalar but the wallet has no K2_128.
+    const signed = createBlindSignatureBls(B_, privKeys['2'], keyset.id);
+    const sig: SerializedBlindedSignature = {
+      id: keyset.id,
+      amount: Amount.from(128),
+      C_: signed.C_.toHex(true),
+    };
+    expect(() => blank.toProof(sig, keyset)).toThrowError(
+      /Mint returned invalid signature or amount\. .*NUT-09/,
+    );
+  });
+
   test('toProof accepts amount=0 blank (NUT-08 fee change / NUT-09 restore)', () => {
     // Blank outputs declare amount=0 up front; the mint chooses the actual denomination.
     // toProof must trust sig.amount for key lookup and final Proof.amount in this case.

@@ -1,3 +1,4 @@
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
@@ -21,6 +22,8 @@ import {
   type CurvePoint,
   type DLEQ,
   type BlindSignature,
+  type G1Point,
+  type G2Point,
   type P2PKOptions,
 } from '../crypto';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
@@ -43,6 +46,9 @@ import {
  * @internal
  */
 export const MAX_SECRET_LENGTH = 1024;
+
+const RECOVERY_HINT =
+  'Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.';
 
 /**
  * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
@@ -138,7 +144,7 @@ export class OutputData implements OutputDataLike {
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
     if (sig == undefined) {
       throw new CTSError(
-        'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
+        `Mint response is missing a signature for one of the outputs. ${RECOVERY_HINT}`,
       );
     }
     if (sig.id !== this.blindedMessage.id) {
@@ -155,7 +161,7 @@ export class OutputData implements OutputDataLike {
     const requested = this.blindedMessage.amount;
     if (!requested.isZero() && !sig.amount.equals(requested)) {
       throw new CTSError(
-        `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
+        `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. ${RECOVERY_HINT}`,
       );
     }
 
@@ -165,9 +171,22 @@ export class OutputData implements OutputDataLike {
     // MUST run here. Without it, a malicious mint can return garbage `C_`, the wallet stores an
     // invalid `C`, marks inputs spent, and the user loses funds. Mirrors the secp DLEQ check below.
     if (isBlsKeyset(sig.id)) {
-      const blindSig: BlindSignature = { id: sig.id, C_: pointFromHexG1(sig.C_) };
+      let C_: G1Point;
+      let K2: G2Point;
+      try {
+        const K2Hex = keyset.keys[sig.amount.toString()];
+        if (!K2Hex) {
+          throw new Error(`Amount ${sig.amount.toString()} not in keyset`);
+        }
+        C_ = pointFromHexG1(sig.C_);
+        K2 = pointFromHexG2(K2Hex);
+      } catch (e) {
+        throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
+          cause: e,
+        });
+      }
+      const blindSig: BlindSignature = { id: sig.id, C_ };
       const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
-      const K2 = pointFromHexG2(keyset.keys[sig.amount.toString()]);
       if (!verifyUnblindedSignatureBls(K2, unblinded.C, unblinded.secret)) {
         throw new CTSError('BLS pairing verification failed on mint response');
       }
@@ -181,6 +200,21 @@ export class OutputData implements OutputDataLike {
       return proof;
     }
 
+    let A: WeierstrassPoint<bigint>;
+    let C_: WeierstrassPoint<bigint>;
+    try {
+      const AHex = keyset.keys[sig.amount.toString()];
+      if (!AHex) {
+        throw new Error(`Amount ${sig.amount.toString()} not in keyset`);
+      }
+      A = pointFromHex(AHex);
+      C_ = pointFromHex(sig.C_);
+    } catch (e) {
+      throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
+        cause: e,
+      });
+    }
+
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
       dleq = {
@@ -189,21 +223,18 @@ export class OutputData implements OutputDataLike {
         r: this.blindingFactor,
       };
     }
-    const sigAmountKey = sig.amount.toString();
-    const A = pointFromHex(keyset.keys[sigAmountKey]);
 
     // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ.
     if (dleq) {
       const bAuto = pointFromHexAuto(this.blindedMessage.B_);
       if (bAuto.kind === 'secp') {
-        const C_ = pointFromHex(sig.C_);
         if (!verifyDLEQProof(dleq, bAuto.pt, C_, A)) {
           throw new CTSError('DLEQ verification failed on mint response');
         }
       }
     }
 
-    const blindSig: BlindSignature = { id: sig.id, C_: pointFromHex(sig.C_) };
+    const blindSig: BlindSignature = { id: sig.id, C_ };
     const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
     const proof: Proof = {
       id: sig.id,
