@@ -31,6 +31,7 @@ If you are building a wallet integration from scratch, read these in order:
 | [Bolt12](./bolt12.md)                 | Work with reusable BOLT12 offers for minting and melting.              |
 | [NUT-19 Cached Responses](./nut19.md) | Understand cached endpoint retries and timeout behavior.               |
 | [Logging](./logging.md)               | Enable and route library logs while debugging wallet or mint behavior. |
+| [Amounts](./amounts.md)               | Work with the `Amount` and `AmountWithUnit` value objects.             |
 
 ## Related docs
 

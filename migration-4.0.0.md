@@ -899,6 +899,41 @@ if (msats.inRange(data.minSendable, data.maxSendable)) { ... }
 
 ---
 
+## Multi-unit support: `AmountWithUnit`
+
+If your application handles more than one currency unit (e.g. `sat` and `usd` from the same mint, or wallets across multiple mints with different units), `AmountWithUnit` is the unit-aware sibling of `Amount`. It refuses to silently mix units in arithmetic or comparison.
+
+`AmountWithUnit` is a thin wrapper composing an `Amount` and a `unit: string`. The two type families are deliberately distinct — `AmountWithUnit.add` accepts only `AmountWithUnit`, and there is no implicit coercion from one to the other. Lifting is always explicit.
+
+```ts
+import { Amount, AmountWithUnit, AmountWithUnitError } from '@cashu/cashu-ts';
+
+const a = AmountWithUnit.from(100, 'sat');
+const b = AmountWithUnit.from(50, 'sat');
+const c = AmountWithUnit.from(5, 'usd');
+
+a.add(b); // AmountWithUnit { amount: 150, unit: 'sat' }
+a.add(c); // throws AmountWithUnitError: unit mismatch
+a.toAmount().add(b.toAmount()); // Amount 150 — raw arithmetic, intentional escape hatch
+
+// Lift a unitless Amount when needed:
+Amount.from(21).withUnit('sat'); // AmountWithUnit
+```
+
+Single-unit consumers (the common case — one `Wallet` per mint+unit) don't need this. It exists for downstream wallets that aggregate across units (balances, transfers, multi-currency display) without reinventing the unit-equality bookkeeping.
+
+`AmountWithUnit` exposes the same arithmetic, comparison, and finance helpers as `Amount`, plus `static AmountWithUnit.sum(iter, unit?)` for aggregating a unit-tagged iterable.
+
+### Implicit coercion is intentionally restricted
+
+To keep the unit guard meaningful, `AmountWithUnit` overrides JS coercion so that the unit cannot be silently stripped:
+
+- **String coercion** (`String(x)`, `` `${x}` ``, `.toString()`) returns a unit-bearing form like `"sat: 100"`. The unit-first ordering is deliberate: `parseInt`/`parseFloat` on the string form return `NaN` rather than silently extracting the bare number.
+- **Numeric / default coercion** (`+x`, `x - 1`, `x == 5`, `Number(x)`, `x + y` between two `AmountWithUnit`) **throws** `AmountWithUnitError`. Use `.toAmount()` to get the unitless `Amount` if you genuinely need raw arithmetic.
+- **JSON** is unaffected — `JSON.stringify(x)` uses `toJSON()` and emits `{"amount":"...","unit":"..."}`.
+
+---
+
 ## New: `createEphemeralCounterSource` factory
 
 v4 adds a public factory for the built-in in-memory `CounterSource`:
