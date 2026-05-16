@@ -695,23 +695,30 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 }
 
 /**
- * Checks that the proof has a valid DLEQ proof according to keyset `keys`
+ * NUT-12: verifies the DLEQ on a Proof. v3 (BLS) proofs have no DLEQ payload — pairing equality
+ * stands in and runs regardless of `require`.
  *
  * @param proof The proof subject to verification.
- * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
+ * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache).
+ * @param opts.require Default `false` (NUT-12 "MUST verify-if-present" — missing DLEQ on v0/v1/v2
+ *   returns `true`). `true` opts into above-spec strictness: missing DLEQ → `false`.
  * @returns True if verification succeeded, false otherwise.
- * @throws Throws if the proof amount does not match any key in the provided keyset.
+ * @throws CTSError if the proof amount is not a denomination in the keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
-  // v3 (BLS) proofs carry no DLEQ; pairing verification stands in. Returns true iff
-  // e(C, G2) == e(Y, K2). This is "valid signature" in v3 terms — equivalent guarantee
-  // to a verifying DLEQ on v0/v1/v2 proofs.
+export function hasValidDleq(
+  proof: Proof,
+  keyset: HasKeysetKeys,
+  opts?: { require?: boolean },
+): boolean {
+  const require = opts?.require ?? false;
+
+  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
+    throw new CTSError(
+      `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
+    );
+  }
+
   if (isBlsKeyset(proof.id)) {
-    if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-      throw new CTSError(
-        `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
-      );
-    }
     try {
       const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
       return verifyUnblindedSignatureBls(
@@ -724,14 +731,11 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
       return false;
     }
   }
+
   if (proof?.dleq == undefined) {
-    return false;
+    return !require;
   }
-  if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
-    throw new CTSError(
-      `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
-    );
-  }
+
   const key = keyset.keys[proof.amount.toString()];
   try {
     const dleq = {
@@ -752,32 +756,6 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
 }
 
 /**
- * NUT-12: verifies the DLEQ proof on a Proof when one is included.
- *
- * @remarks
- * Distinct from {@link hasValidDleq}: if the proof carries no DLEQ this returns true (nothing to
- * verify), satisfying the spec "MUST verify-if-present" rule. Use {@link hasValidDleq} when you want
- * a stricter "must be present and valid" check.
- * @param proof The proof subject to verification.
- * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
- * @returns True if no DLEQ is present, or if the present DLEQ verifies; false if the present DLEQ
- *   fails to verify.
- * @throws Throws if a DLEQ is present and the proof amount does not match any key in the provided
- *   keyset.
- */
-export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
-  // v3 (BLS) proofs always require a pairing check at receive time — there's no DLEQ
-  // to short-circuit on, so we route through hasValidDleq which performs the pairing.
-  if (isBlsKeyset(proof.id)) {
-    return hasValidDleq(proof, keyset);
-  }
-  if (proof?.dleq == undefined) {
-    return true;
-  }
-  return hasValidDleq(proof, keyset);
-}
-
-/**
  * Verifies a batch of received proofs in one pass, batching the v3 (BLS) subset into a single
  * multi-pairing while keeping per-proof DLEQ verification for v0/v1/v2.
  *
@@ -788,10 +766,9 @@ export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolea
  * @param proofs The proofs to verify (mixed curves allowed; `amount` may be any {@link AmountLike}
  *   shape — normalized internally).
  * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
- * @param opts.requireDleq When `true`, missing DLEQs on v0/v1/v2 proofs reject (mirrors
- *   {@link hasValidDleq}); v3 proofs always pairing-verify regardless. When `false`, present-but-
- *   invalid DLEQs reject (mirrors {@link verifyDleqIfPresent}).
- * @throws CTSError naming the offending proof id when verification fails.
+ * @param opts.requireDleq Forwarded to {@link hasValidDleq} as `require` for v0/v1/v2 proofs;
+ *   ignored for v3.
+ * @throws CTSError if any proof's amount is not in its keyset, or DLEQ/pairing verification fails.
  */
 export function verifyProofsForReceive(
   proofs: ProofLike[],
@@ -813,14 +790,14 @@ export function verifyProofsForReceive(
   const offenderSuffix = (p: Proof) => ` (keyset ${p.id}, amount ${p.amount.toString()})`;
 
   for (const p of otherProofs) {
-    const ks = getKeyset(p.id);
-    const ok = requireDleq ? hasValidDleq(p, ks) : verifyDleqIfPresent(p, ks);
-    if (!ok) throw new CTSError(failMsg + offenderSuffix(p));
+    if (!hasValidDleq(p, getKeyset(p.id), { require: requireDleq })) {
+      throw new CTSError(failMsg + offenderSuffix(p));
+    }
   }
 
   if (blsProofs.length === 0) return;
 
-  // Build pairing items once.
+  // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
   const items = blsProofs.map((p) => {
     const ks = getKeyset(p.id);
     if (!hasCorrespondingKey(p.amount, ks.keys)) {

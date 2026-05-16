@@ -568,7 +568,9 @@ export function hasP2PKSignedProof(pubkey: string, proof: Proof, message?: strin
 export function hasTag(secret: Secret | string, key: string): boolean;
 
 // @public
-export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean;
+export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys, opts?: {
+    require?: boolean;
+}): boolean;
 
 // @public
 export type HTLCWitness = {
@@ -1945,9 +1947,6 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 
 // @public
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
-
-// @public
-export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean;
 
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
