@@ -689,12 +689,19 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
  *
  * @param proof The proof subject to verification.
  * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
+ * @param opts.require Default `true`. When `false`, a proof without a DLEQ payload returns `true`
+ *   (NUT-12 "MUST verify-if-present"). The default flips to `false` in v5.0.
  * @returns True if verification succeeded, false otherwise.
  * @throws Throws if the proof amount does not match any key in the provided keyset.
  */
-export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
+export function hasValidDleq(
+  proof: Proof,
+  keyset: HasKeysetKeys,
+  opts?: { require?: boolean },
+): boolean {
+  const require = opts?.require ?? true;
   if (proof?.dleq == undefined) {
-    return false;
+    return !require;
   }
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
     throw new CTSError(
@@ -721,24 +728,12 @@ export function hasValidDleq(proof: Proof, keyset: HasKeysetKeys): boolean {
 }
 
 /**
- * NUT-12: verifies the DLEQ proof on a Proof when one is included.
+ * @deprecated Use `hasValidDleq(proof, keyset, { require: false })`.
  *
- * @remarks
- * Distinct from {@link hasValidDleq}: if the proof carries no DLEQ this returns true (nothing to
- * verify), satisfying the spec "MUST verify-if-present" rule. Use {@link hasValidDleq} when you want
- * a stricter "must be present and valid" check.
- * @param proof The proof subject to verification.
- * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
- * @returns True if no DLEQ is present, or if the present DLEQ verifies; false if the present DLEQ
- *   fails to verify.
- * @throws Throws if a DLEQ is present and the proof amount does not match any key in the provided
- *   keyset.
+ *   Will be removed in v5.0.
  */
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
-  if (proof?.dleq == undefined) {
-    return true;
-  }
-  return hasValidDleq(proof, keyset);
+  return hasValidDleq(proof, keyset, { require: false });
 }
 
 /**
