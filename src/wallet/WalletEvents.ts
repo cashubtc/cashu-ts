@@ -311,7 +311,10 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const enc = new TextEncoder();
-    const proofMap: Record<string, T> = {};
+    // Object.create(null) avoids prototype-key collisions: a mint sending
+    // payload.Y === '__proto__' (or 'constructor', etc.) would otherwise
+    // resolve to an inherited property and bypass the unknown-Y guard below.
+    const proofMap = Object.create(null) as Record<string, T>;
     for (const p of proofs) {
       const y = hashToCurve(enc.encode(p.secret)).toHex(true);
       if (proofMap[y]) {
@@ -627,6 +630,7 @@ export class WalletEvents {
         wake();
       };
 
+      let setupErr: Error | null = null;
       const cancelP: Promise<SubscriptionCanceller> = this.proofStateUpdates<P>(
         proofs,
         push,
@@ -636,6 +640,14 @@ export class WalletEvents {
         },
         { signal: opts?.signal },
       );
+      // Attach a catch handler in the same tick so a synchronous setup
+      // failure (e.g. duplicate proof secrets) cannot escape as an
+      // unhandled rejection. The error is surfaced once the loop drains.
+      cancelP.catch((e: unknown) => {
+        setupErr = normalizeError(e);
+        done = true;
+        wake();
+      });
 
       const onAbort = () => {
         done = true;
@@ -651,6 +663,13 @@ export class WalletEvents {
           while (queue.length) yield queue.shift()!;
           if (done) break;
           await new Promise<void>((resolve) => (notify = resolve));
+        }
+        // Check after the loop, not inside. The catch handler sets done=true
+        // before waking the awaited notify, so the next loop iteration exits
+        // immediately and an in-loop throw would never be reached.
+        if (setupErr) {
+          const err: Error = setupErr;
+          throw err;
         }
       } finally {
         cancelSafely(cancelP);

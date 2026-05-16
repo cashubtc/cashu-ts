@@ -248,6 +248,26 @@ describe('WalletEvents', () => {
       expect(cb).not.toHaveBeenCalled();
       expect(err).not.toHaveBeenCalled();
     });
+
+    it('proofStateUpdates ignores prototype-key Ys (no pollution lookup)', async () => {
+      const cb = vi.fn();
+      const err = vi.fn();
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
+      ];
+      await events.proofStateUpdates(proofs, cb, err);
+
+      const ws = mock.mint.webSocketConnection!;
+      // A plain-object proofMap would resolve these to inherited values
+      // (Object.prototype, the constructor, etc.) and bypass the unknown-Y guard.
+      ws.emitProofRaw({ Y: '__proto__', state: 0 });
+      ws.emitProofRaw({ Y: 'constructor', state: 0 });
+      ws.emitProofRaw({ Y: 'hasOwnProperty', state: 0 });
+      ws.emitProofRaw({ Y: 'toString', state: 0 });
+
+      expect(cb).not.toHaveBeenCalled();
+      expect(err).not.toHaveBeenCalled();
+    });
   });
 
   describe('onceMintPaid', () => {
@@ -447,6 +467,23 @@ describe('WalletEvents', () => {
   });
 
   describe('proofStatesStream', () => {
+    it('surfaces setup errors via the consumer (no hang, no unhandled rejection)', async () => {
+      // Vitest fails the test on any unhandled rejection, so reaching the
+      // explicit rejection assertion below also proves cancelP did not leak.
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'dup', C: 'a' },
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'dup', C: 'b' },
+      ];
+      const iter = events.proofStatesStream(proofs);
+      await expect(
+        (async () => {
+          for await (const _ of iter) {
+            // should never yield
+          }
+        })(),
+      ).rejects.toThrow(/Duplicate proof secret/);
+    });
+
     it('yields payloads until error completes the stream, then cancels', async () => {
       const proofs: Proof[] = [
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
