@@ -2043,14 +2043,18 @@ export class WalletEvents {
         signal?: AbortSignal;
         timeoutMs?: number;
     }): Promise<MintQuoteBolt11Response>;
-    proofStatesStream<T = unknown>(proofs: Proof[], opts?: {
+    proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: {
         signal?: AbortSignal;
         maxBuffer?: number;
         drop?: 'oldest' | 'newest';
-        onDrop?: (payload: T) => void;
-    }): AsyncIterable<T>;
-    proofStateUpdates(proofs: Proof[], cb: (payload: ProofState & {
-        proof: Proof;
+        onDrop?: (payload: ProofState & {
+            proof: P;
+        }) => void;
+    }): AsyncIterable<ProofState & {
+        proof: P;
+    }>;
+    proofStateUpdates<T extends ProofLike = Proof>(proofs: T[], cb: (payload: ProofState & {
+        proof: T;
     }) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
 }
 
