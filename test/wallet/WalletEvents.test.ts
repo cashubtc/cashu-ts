@@ -484,7 +484,7 @@ describe('WalletEvents', () => {
       ).rejects.toThrow(/Duplicate proof secret/);
     });
 
-    it('yields payloads until error completes the stream, then cancels', async () => {
+    it('yields buffered payloads, then throws the wallet error and cancels', async () => {
       const proofs: Proof[] = [
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
         { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's2', C: 'test2' },
@@ -502,10 +502,10 @@ describe('WalletEvents', () => {
       const [y1, y2] = ws.firstFilters('proof_state');
       ws.emitProof({ Y: y1, state: 0 });
       ws.emitProof({ Y: y2, state: 1 });
-      ws.fail('proof_state', new Error('done'));
+      ws.fail('proof_state', new Error('ws-down'));
 
-      const collected = await consumer;
-      expect(collected).toEqual([
+      await expect(consumer).rejects.toThrow('ws-down');
+      expect(out).toEqual([
         expect.objectContaining({ Y: y1, state: 0 }),
         expect.objectContaining({ Y: y2, state: 1 }),
       ]);
@@ -544,8 +544,10 @@ describe('WalletEvents', () => {
     it('buffers with maxBuffer, drops oldest by default, calls onDrop', async () => {
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const dropped: any[] = [];
+      const ac = new AbortController();
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 2,
+        signal: ac.signal,
         onDrop: (p) => dropped.push(p),
       });
 
@@ -561,7 +563,7 @@ describe('WalletEvents', () => {
       ws.emitProof({ Y, n: 1 });
       ws.emitProof({ Y, n: 2 });
       ws.emitProof({ Y, n: 3 }); // drop {n:1}
-      ws.fail('proof_state', new Error('end'));
+      ac.abort();
 
       const result = await consumer;
       expect(dropped).toEqual([expect.objectContaining({ n: 1 })]);
@@ -574,9 +576,11 @@ describe('WalletEvents', () => {
     it('drop:newest discards incoming payload and reports it via onDrop', async () => {
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
       const dropped: any[] = [];
+      const ac = new AbortController();
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 2,
         drop: 'newest',
+        signal: ac.signal,
         onDrop: (p) => dropped.push(p),
       });
 
@@ -592,7 +596,7 @@ describe('WalletEvents', () => {
       ws.emitProof({ Y, n: 1 });
       ws.emitProof({ Y, n: 2 });
       ws.emitProof({ Y, n: 3 }); // dropped
-      ws.fail('proof_state', new Error('end'));
+      ac.abort();
 
       const result = await consumer;
       expect(dropped).toEqual([expect.objectContaining({ n: 3 })]);
@@ -604,8 +608,10 @@ describe('WalletEvents', () => {
 
     it('onDrop exceptions are swallowed', async () => {
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'i', secret: 's', C: 'c' }];
+      const ac = new AbortController();
       const iter = events.proofStatesStream(proofs, {
         maxBuffer: 1,
+        signal: ac.signal,
         onDrop: () => {
           throw new Error('ignore');
         },
@@ -622,7 +628,7 @@ describe('WalletEvents', () => {
       const [Y] = ws.firstFilters('proof_state');
       ws.emitProof({ Y, n: 1 });
       ws.emitProof({ Y, n: 2 }); // drops n:1; onDrop throws (ignored)
-      ws.fail('proof_state', new Error('end'));
+      ac.abort();
 
       const result = await consumer;
       expect(result).toEqual([expect.objectContaining({ n: 2 })]);
@@ -716,7 +722,12 @@ describe('WalletEvents', () => {
   describe("proofStatesStream drop:'newest' without onDrop", () => {
     it('drops the incoming payload and does not enqueue it (no onDrop provided)', async () => {
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'd', secret: 's', C: 'c' }];
-      const iter = events.proofStatesStream(proofs, { maxBuffer: 1, drop: 'newest' });
+      const ac = new AbortController();
+      const iter = events.proofStatesStream(proofs, {
+        maxBuffer: 1,
+        drop: 'newest',
+        signal: ac.signal,
+      });
 
       const out: any[] = [];
       const consumer = (async () => {
@@ -729,7 +740,7 @@ describe('WalletEvents', () => {
       const [Y] = ws.firstFilters('proof_state');
       ws.emitProof({ Y, n: 1 }); // queued
       ws.emitProof({ Y, n: 2 }); // dropped
-      ws.fail('proof_state', new Error('done'));
+      ac.abort();
 
       const collected = await consumer;
       expect(collected).toEqual([expect.objectContaining({ n: 1 })]);
@@ -739,7 +750,12 @@ describe('WalletEvents', () => {
 
     it('drops incoming payload silently when buffer full and no onDrop provided', async () => {
       const proofs: Proof[] = [{ amount: Amount.from(1), id: 'd', secret: 's', C: 'c' }];
-      const iter = events.proofStatesStream(proofs, { maxBuffer: 1, drop: 'newest' });
+      const ac = new AbortController();
+      const iter = events.proofStatesStream(proofs, {
+        maxBuffer: 1,
+        drop: 'newest',
+        signal: ac.signal,
+      });
 
       const out: any[] = [];
       const consumer = (async () => {
@@ -757,7 +773,7 @@ describe('WalletEvents', () => {
       ws.emitProof({ Y, n: 1 }); // queued
       ws.emitProof({ Y, n: 2 }); // silently dropped (newest)
       ws.emitProof({ Y, n: 3 }); // silently dropped (newest)
-      ws.fail('proof_state', new Error('end'));
+      ac.abort();
 
       const result = await consumer;
       expect(result).toEqual([{ Y, n: 1, proof: proofs[0] }]);

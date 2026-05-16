@@ -60,3 +60,36 @@ if (!hasValidDleq(proof, keyset, { require: true })) throw new Error('DLEQ missi
 If you were calling `hasValidDleq(proof, keyset)` and relying on the previous strict semantics (missing DLEQ → `false`), add `{ require: true }`. If you were calling `verifyDleqIfPresent`, drop it for `hasValidDleq` with no `opts` — same behavior.
 
 `Wallet.prepareSwapToReceive`'s `requireDleq` option is unchanged: leave it unset (or `false`) for spec-default verify-if-present, pass `true` for the strict policy.
+
+---
+
+## `proofStatesStream` errors now throw
+
+`wallet.on.proofStatesStream` previously treated a WebSocket failure or mint-side RPC error as a graceful end of the iterator — the `for await` loop would exit normally and the consumer was responsible for inferring a problem via timeout. v5 throws the error from the iterator instead, matching the Node `AsyncIterable` convention (`Readable`, async generators, etc.).
+
+Abort handling is unchanged: aborting the supplied `AbortSignal` still ends the stream cleanly without throwing.
+
+### Migration
+
+Wrap the `for await` in a `try/catch` to recover from wallet errors:
+
+```ts
+// Before — silent end on error
+for await (const update of wallet.on.proofStatesStream(proofs)) {
+  // ...
+}
+// (a websocket failure here exited the loop cleanly; you'd never know)
+
+// After — error throws
+try {
+  for await (const update of wallet.on.proofStatesStream(proofs, { signal: ac.signal })) {
+    // ...
+  }
+} catch (e) {
+  if ((e as Error).name === 'AbortError') return; // abort, not a real error
+  // surface the websocket / mint failure however your app prefers
+  console.error('Proof state stream failed', e);
+}
+```
+
+If your consumer was already wrapping the loop in `try/catch` (e.g. to handle abort), no change is required beyond not assuming silent completion means all expected updates arrived.
