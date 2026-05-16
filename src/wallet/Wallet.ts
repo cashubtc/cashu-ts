@@ -965,8 +965,8 @@ class Wallet {
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
     this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
 
-    // NUT-12: wallets MUST verify any DLEQ on a received proof. `requireDleq: true`
-    // upgrades that to "DLEQ must also be present" via the stricter `hasValidDleq`.
+    // NUT-12: wallets MUST verify any DLEQ on a received proof (the spec default).
+    // `requireDleq: true` opts into the stricter "DLEQ must also be present" policy.
     // For v3 (BLS) proofs the single multi-pairing replaces per-proof DLEQ verification.
     verifyProofsForReceive(proofs, (id) => this._keyChain.getKeyset(id), { requireDleq });
 

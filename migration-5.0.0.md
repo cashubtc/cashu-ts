@@ -29,3 +29,34 @@ await wallet.checkProofsStates([{ id: '00bd033559de27d0', secret: '…' }]);
 ```
 
 If you were already passing full `Proof` objects (the normal case — `wallet.checkProofsStates(proofs)` where `proofs: Proof[]`), no change is required.
+
+---
+
+## `verifyDleqIfPresent` removed; `hasValidDleq` default flipped to spec semantics
+
+`verifyDleqIfPresent` is removed. Its NUT-12 "verify-if-present" semantic is now the default behavior of `hasValidDleq`, which gains an optional `{ require?: boolean }` argument for the stricter opt-in policy.
+
+- **Default** (`require: false`, or omit `opts`): a v0/v1/v2 proof without a DLEQ returns `true` (NUT-12 "MUST verify-if-present"); present DLEQs are verified. v3 (BLS) proofs always pairing-verify regardless.
+- **Strict** (`require: true`): a v0/v1/v2 proof without a DLEQ returns `false` (above-spec policy callers can opt into when they want to require DLEQs on every proof).
+
+The proof's `amount` is now validated against the keyset on every path through `hasValidDleq`, not just when a DLEQ is present. A forged-amount proof with no DLEQ now throws `Undefined key for amount …` instead of silently passing.
+
+### Migration
+
+```ts
+// Before
+import { verifyDleqIfPresent, hasValidDleq } from '@cashu/cashu-ts';
+
+if (!verifyDleqIfPresent(proof, keyset)) throw new Error('bad DLEQ');
+if (!hasValidDleq(proof, keyset)) throw new Error('DLEQ missing or invalid');
+
+// After
+import { hasValidDleq } from '@cashu/cashu-ts';
+
+if (!hasValidDleq(proof, keyset)) throw new Error('bad DLEQ');
+if (!hasValidDleq(proof, keyset, { require: true })) throw new Error('DLEQ missing or invalid');
+```
+
+If you were calling `hasValidDleq(proof, keyset)` and relying on the previous strict semantics (missing DLEQ → `false`), add `{ require: true }`. If you were calling `verifyDleqIfPresent`, drop it for `hasValidDleq` with no `opts` — same behavior.
+
+`Wallet.prepareSwapToReceive`'s `requireDleq` option is unchanged: leave it unset (or `false`) for spec-default verify-if-present, pass `true` for the strict policy.
