@@ -141,3 +141,20 @@ describe('OutputData helpers', () => {
     expect(output.ephemeralE).toBeDefined();
   });
 });
+
+describe('OutputData.toProof', () => {
+  test('rejects a signature whose keyset id does not match the output', () => {
+    const outputKeysetId = '009a1f293253e41e';
+    const wrongKeysetId = '00ad268c4d1f5826';
+    const output = OutputData.createSingleRandomData(1, outputKeysetId);
+    const keyset: HasKeysetKeys = { id: outputKeysetId, keys: { 1: 'deadbeef' } };
+    const sig: SerializedBlindedSignature = {
+      id: wrongKeysetId,
+      amount: Amount.from(1),
+      C_: '03' + '00'.repeat(32),
+    };
+    expect(() => output.toProof(sig, keyset)).toThrow(
+      /Mint signature keyset id .* does not match output/,
+    );
+  });
+});

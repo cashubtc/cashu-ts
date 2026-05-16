@@ -623,6 +623,46 @@ describe('test v4 encoding', () => {
   });
 });
 
+describe('test deriveKeysetId edge cases', () => {
+  // v3 (BLS) keysets folded case 2 into the case 1 unit-required branch and rewrote the
+  // throw to interpolate the version byte. Cover both paths against the shared guard.
+  test('throws when versionByte 1 is requested without a unit', () => {
+    expect(() => utils.deriveKeysetId({ 1: 'deadbeef' }, { versionByte: 1, unit: '' })).toThrow(
+      /version 01: unit is required/,
+    );
+  });
+
+  test('throws when versionByte 2 is requested without a unit', () => {
+    expect(() => utils.deriveKeysetId({ 1: 'deadbeef' }, { versionByte: 2, unit: '' })).toThrow(
+      /version 02: unit is required/,
+    );
+  });
+});
+
+describe('test mapShortKeysetIds edge cases', () => {
+  test('rejects a v4-encoded proof carrying an unknown keyset ID version byte', () => {
+    // Regression check for the v3 expansion: short-ID handling was widened from
+    // `=== 0x01` to `=== 0x01 || 0x02`. Version 0x03 must still fall through to the
+    // unknown-version throw, not get silently accepted.
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [
+        {
+          amount: Amount.from(1),
+          C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+          id: '030102030405060708',
+          secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+        },
+      ],
+      unit: 'sat',
+    };
+    const encoded = utils.getEncodedToken(token);
+    expect(() => utils.getDecodedToken(encoded, ['030102030405060708'])).toThrow(
+      /Unknown keyset ID version/,
+    );
+  });
+});
+
 describe('test output selection', () => {
   test('hasCorrespondingKey accepts AmountLike', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
