@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.4.0](https://github.com/cashubtc/cashu-ts/compare/v4.3.0...v4.4.0) (2026-05-16)
+
+
+### Features
+
+* allow ProofLike in WalletEvent proof state updates ([#660](https://github.com/cashubtc/cashu-ts/issues/660)) ([6c3589c](https://github.com/cashubtc/cashu-ts/commit/6c3589c9d316e57fc44d4b7b6cfabd15cc22ba88))
+* **model:** add AmountWithUnit value object ([#662](https://github.com/cashubtc/cashu-ts/issues/662)) ([3cd03d7](https://github.com/cashubtc/cashu-ts/commit/3cd03d7d98ba8b42e22f48bc92ceb35c388704b5))
+
 ## [4.3.0](https://github.com/cashubtc/cashu-ts/compare/v4.2.1...v4.3.0) (2026-05-12)
 
 
