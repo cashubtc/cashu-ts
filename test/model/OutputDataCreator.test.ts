@@ -157,4 +157,46 @@ describe('OutputData.toProof', () => {
       /Mint signature keyset id .* does not match output/,
     );
   });
+
+  test('maps malformed secp C_ to a CTSError with NUT-09 hint', () => {
+    // A buggy or malicious mint that returns un-parseable hex must not leak a generic
+    // TypeError/Error after the inputs have been destroyed; toProof should surface a
+    // CTSError that tells the wallet how to recover.
+    const keysetId = '009a1f293253e41e';
+    const output = OutputData.createSingleRandomData(1, keysetId);
+    const keyset: HasKeysetKeys = {
+      id: keysetId,
+      // Valid secp generator-shaped hex so the A lookup itself parses; the failure must
+      // come from the bad C_ specifically.
+      keys: { 1: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798' },
+    };
+    const sig: SerializedBlindedSignature = {
+      id: keysetId,
+      amount: Amount.from(1),
+      C_: 'not-hex',
+    };
+    expect(() => output.toProof(sig, keyset)).toThrow(
+      /Mint returned invalid signature or amount\. .*NUT-09/,
+    );
+  });
+
+  test('maps missing keyset key for blank output to a CTSError with NUT-09 hint', () => {
+    // Blank outputs (amount=0) let the mint pick the denomination. If that pick isn't
+    // in our keyset, `keys[amount]` is undefined and pointFromHex(undefined) used to
+    // throw an opaque TypeError — now it must be a CTSError with recovery hint.
+    const keysetId = '009a1f293253e41e';
+    const blank = OutputData.createSingleRandomData(0, keysetId);
+    const keyset: HasKeysetKeys = {
+      id: keysetId,
+      keys: { 1: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798' },
+    };
+    const sig: SerializedBlindedSignature = {
+      id: keysetId,
+      amount: Amount.from(99),
+      C_: '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798',
+    };
+    expect(() => blank.toProof(sig, keyset)).toThrow(
+      /Mint returned invalid signature or amount\. .*NUT-09/,
+    );
+  });
 });
