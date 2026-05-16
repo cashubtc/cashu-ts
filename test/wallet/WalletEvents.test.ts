@@ -55,6 +55,17 @@ class MockWS {
   }
 
   /**
+   * Deliver a proof_state payload to every proof_state subscriber unconditionally, simulating a
+   * misbehaving mint that sends a Y outside the subscribed filters.
+   */
+  emitProofRaw(payload: { Y: string; [k: string]: any }) {
+    for (const { kind: k, cb } of this.subs.values()) {
+      if (k !== 'proof_state') continue;
+      cb(payload);
+    }
+  }
+
+  /**
    * Invoke error callbacks for a kind.
    */
   fail(kind: string, error: any) {
@@ -210,6 +221,32 @@ describe('WalletEvents', () => {
       // input shape (number amount, reserved field) is preserved
       expect(seen[0].proof.reserved).toBe(false);
       expect(typeof seen[0].proof.amount).toBe('number');
+    });
+
+    it('proofStateUpdates throws on duplicate proof secrets', async () => {
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'same', C: 'a' },
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 'same', C: 'b' },
+      ];
+      await expect(events.proofStateUpdates(proofs, vi.fn(), vi.fn())).rejects.toThrow(
+        /Duplicate proof secret/,
+      );
+    });
+
+    it('proofStateUpdates ignores updates for an unsubscribed Y', async () => {
+      const cb = vi.fn();
+      const err = vi.fn();
+      const proofs: Proof[] = [
+        { amount: Amount.from(2), id: '00bd033559de27d0', secret: 's1', C: 'test' },
+      ];
+      await events.proofStateUpdates(proofs, cb, err);
+
+      const ws = mock.mint.webSocketConnection!;
+      // Simulate a misbehaving mint sending a Y the wallet never subscribed to.
+      ws.emitProofRaw({ Y: 'bogus_Y_from_malicious_mint', state: 0 });
+
+      expect(cb).not.toHaveBeenCalled();
+      expect(err).not.toHaveBeenCalled();
     });
   });
 

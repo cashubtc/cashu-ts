@@ -314,12 +314,17 @@ export class WalletEvents {
     const proofMap: Record<string, T> = {};
     for (const p of proofs) {
       const y = hashToCurve(enc.encode(p.secret)).toHex(true);
+      if (proofMap[y]) {
+        throw new CTSError('Duplicate proof secret in proofStateUpdates input');
+      }
       proofMap[y] = p;
     }
     const ys = Object.keys(proofMap);
 
     const handler = (payload: ProofState) => {
-      cb({ ...payload, proof: proofMap[payload.Y] });
+      const proof = proofMap[payload.Y];
+      if (!proof) return; // ignore unsolicited Y from a misbehaving mint
+      cb({ ...payload, proof });
     };
     const subId = ws.createSubscription({ kind: 'proof_state', filters: ys }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
