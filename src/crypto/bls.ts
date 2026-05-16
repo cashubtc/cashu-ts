@@ -164,19 +164,19 @@ export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uin
 export function deriveBatchWeights(
   items: Array<{ K2: G2Point; C: G1Point; secret: Uint8Array }>,
 ): bigint[] {
-  // Build transcript: b'Cashu_BLS_Batch_v1' || (proofi_concat) || (...)
-  const parts: Uint8Array[] = [BLS_BATCH_DST];
+  // Stream into the digest rather than concat-then-hash: `concatBytes(...parts)` would spread an
+  // array of 4n+1 chunks as function args and hit V8's argument-count limit on large batches.
+  // Transcript shape: BLS_BATCH_DST || (C || K2 || len32(secret) || secret) per item.
+  const transcript = sha256.create();
+  transcript.update(BLS_BATCH_DST);
   for (const it of items) {
-    // proofi_concat bytes: C || K2 || len32(secret) || secret
-    parts.push(
-      it.C.toBytes(true),
-      it.K2.toBytes(true),
-      numberToBytesBE(it.secret.length, 4),
-      it.secret,
-    );
+    transcript.update(it.C.toBytes(true));
+    transcript.update(it.K2.toBytes(true));
+    transcript.update(numberToBytesBE(it.secret.length, 4));
+    transcript.update(it.secret);
   }
-  // Collapse to a fixed 32-byte challenge so per-item derivation is O(1), not O(n).
-  const challenge = sha256(concatBytes(...parts));
+  // 32-byte challenge collapses the transcript so per-item derivation below is O(1), not O(n).
+  const challenge = transcript.digest();
 
   const rs: bigint[] = [];
   for (let i = 0; i < items.length; i++) {
