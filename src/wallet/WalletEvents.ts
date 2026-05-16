@@ -553,7 +553,9 @@ export class WalletEvents {
    *   both cases `onDrop` is invoked with the dropped payload.
    *
    * The stream ends and cleans up on abort or on the wallet error callback. Errors from the wallet
-   * are treated as a graceful end for this iterator.
+   * are treated as a graceful end for this iterator — consumers should not treat normal completion
+   * as proof that every expected update was delivered. Pair with a timeout or an out-of-band
+   * liveness check (`Wallet.checkProofsStates` is one option) if you need that guarantee.
    *
    * The subscription is sent to the mint on the first iteration, not when this method is called.
    * Per NUT-17 the mint replays the current state on subscribe, so the latest state is never lost;
