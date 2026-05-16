@@ -52,6 +52,7 @@ export class Amount {
     toNumber(): number;
     toNumberUnsafe(): number;
     toString(): string;
+    withUnit(unit: string): AmountWithUnit;
     // (undocumented)
     static zero(): Amount;
 }
@@ -63,6 +64,76 @@ export class AmountError extends CTSError {
 
 // @public
 export type AmountLike = number | bigint | string | Amount;
+
+// @public
+export class AmountWithUnit {
+    constructor(amount: Amount, unit: string);
+    // (undocumented)
+    add(other: AmountWithUnit): AmountWithUnit;
+    // (undocumented)
+    ceilPercent(numerator: number, denominator?: number): AmountWithUnit;
+    // (undocumented)
+    clamp(min: AmountWithUnit, max: AmountWithUnit): AmountWithUnit;
+    // (undocumented)
+    compareTo(other: AmountWithUnit): -1 | 0 | 1;
+    // (undocumented)
+    divideBy(divisor: AmountLike): AmountWithUnit;
+    // (undocumented)
+    equals(other: AmountWithUnit): boolean;
+    // (undocumented)
+    floorPercent(numerator: number, denominator?: number): AmountWithUnit;
+    // (undocumented)
+    static from(value: AmountLike, unit: string): AmountWithUnit;
+    // (undocumented)
+    greaterThan(other: AmountWithUnit): boolean;
+    // (undocumented)
+    greaterThanOrEqual(other: AmountWithUnit): boolean;
+    // (undocumented)
+    inRange(min: AmountWithUnit, max: AmountWithUnit): boolean;
+    // (undocumented)
+    isSafeNumber(): boolean;
+    // (undocumented)
+    isZero(): boolean;
+    // (undocumented)
+    lessThan(other: AmountWithUnit): boolean;
+    // (undocumented)
+    lessThanOrEqual(other: AmountWithUnit): boolean;
+    // (undocumented)
+    static max(a: AmountWithUnit, b: AmountWithUnit): AmountWithUnit;
+    // (undocumented)
+    static min(a: AmountWithUnit, b: AmountWithUnit): AmountWithUnit;
+    // (undocumented)
+    modulo(divisor: AmountLike): AmountWithUnit;
+    // (undocumented)
+    multiplyBy(factor: AmountLike): AmountWithUnit;
+    // (undocumented)
+    static one(unit: string): AmountWithUnit;
+    // (undocumented)
+    scaledBy(numerator: AmountLike, denominator: AmountLike): AmountWithUnit;
+    // (undocumented)
+    subtract(other: AmountWithUnit): AmountWithUnit;
+    static sum(values: Iterable<AmountWithUnit>, unit?: string): AmountWithUnit;
+    toAmount(): Amount;
+    // (undocumented)
+    toBigInt(): bigint;
+    // (undocumented)
+    toJSON(): {
+        amount: string;
+        unit: string;
+    };
+    // (undocumented)
+    toNumber(): number;
+    toString(): string;
+    // (undocumented)
+    readonly unit: string;
+    // (undocumented)
+    static zero(unit: string): AmountWithUnit;
+}
+
+// @public (undocumented)
+export class AmountWithUnitError extends CTSError {
+    constructor(message: string);
+}
 
 // @public (undocumented)
 export function asBlsG1Point(pt: G1Point): CurvePoint;
@@ -2121,14 +2192,18 @@ export class WalletEvents {
         signal?: AbortSignal;
         timeoutMs?: number;
     }): Promise<MintQuoteBolt11Response>;
-    proofStatesStream<T = unknown>(proofs: Proof[], opts?: {
+    proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: {
         signal?: AbortSignal;
         maxBuffer?: number;
         drop?: 'oldest' | 'newest';
-        onDrop?: (payload: T) => void;
-    }): AsyncIterable<T>;
-    proofStateUpdates(proofs: Proof[], cb: (payload: ProofState & {
-        proof: Proof;
+        onDrop?: (payload: ProofState & {
+            proof: P;
+        }) => void;
+    }): AsyncIterable<ProofState & {
+        proof: P;
+    }>;
+    proofStateUpdates<T extends ProofLike = Proof>(proofs: T[], cb: (payload: ProofState & {
+        proof: T;
     }) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
 }
 

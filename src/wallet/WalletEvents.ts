@@ -4,6 +4,7 @@ import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
 import type {
   Proof,
+  ProofLike,
   ProofState,
   MeltQuoteBolt11Response,
   MintQuoteBolt11Response,
@@ -289,14 +290,19 @@ export class WalletEvents {
   /**
    * Register a callback to be called whenever a subscribed proof state changes.
    *
+   * Only `secret` is read from each proof to derive the subscription filter; any `ProofLike`-shaped
+   * object (e.g. proofs loaded from storage where `amount` has not yet been normalized to `Amount`)
+   * may be passed without conversion. The original proof object is echoed back on the callback
+   * payload as the inferred input type.
+   *
    * @param proofs List of proofs that should be subscribed to.
    * @param callback Callback function that will be called whenever a proof's state changes.
    * @param errorCallback
    * @returns
    */
-  async proofStateUpdates(
-    proofs: Proof[],
-    cb: (payload: ProofState & { proof: Proof }) => void,
+  async proofStateUpdates<T extends ProofLike = Proof>(
+    proofs: T[],
+    cb: (payload: ProofState & { proof: T }) => void,
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
@@ -305,17 +311,25 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const enc = new TextEncoder();
-    const proofMap: Record<string, Proof> = {};
+    // Object.create(null) avoids prototype-key collisions: a mint sending
+    // payload.Y === '__proto__' (or 'constructor', etc.) would otherwise
+    // resolve to an inherited property and bypass the unknown-Y guard below.
+    const proofMap = Object.create(null) as Record<string, T>;
     for (const p of proofs) {
       const y = isBlsKeyset(p.id)
         ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
         : hashToCurve(enc.encode(p.secret)).toHex(true);
+      if (proofMap[y]) {
+        throw new CTSError('Duplicate proof secret in proofStateUpdates input');
+      }
       proofMap[y] = p;
     }
     const ys = Object.keys(proofMap);
 
     const handler = (payload: ProofState) => {
-      cb({ ...payload, proof: proofMap[payload.Y] });
+      const proof = proofMap[payload.Y];
+      if (!proof) return; // ignore unsolicited Y from a misbehaving mint
+      cb({ ...payload, proof });
     };
     const subId = ws.createSubscription({ kind: 'proof_state', filters: ys }, handler, err);
     const cancel = () => ws.cancelSubscription(subId, handler);
@@ -557,26 +571,29 @@ export class WalletEvents {
    * }
    * ```
    *
-   * @param proofs The proofs to subscribe to. Only `secret` is required.
+   * @param proofs The proofs to subscribe to. Only `secret` is required, so any `ProofLike`-shaped
+   *   object may be passed without first normalizing `amount` to `Amount`.
    * @param opts Optional controls.
    * @param opts.signal AbortSignal that stops the stream when aborted.
    * @param opts.maxBuffer Maximum number of queued items before applying the drop strategy.
    * @param opts.drop Overflow strategy when `maxBuffer` is reached, 'oldest' | 'newest'. Default
    *   'oldest'.
    * @param opts.onDrop Callback invoked with the payload that was dropped.
-   * @returns An async iterable of update payloads.
+   * @returns An async iterable of update payloads. The `proof` field on each payload preserves the
+   *   input proof type.
    */
-  proofStatesStream<T = unknown>(
-    proofs: Proof[],
+  proofStatesStream<P extends ProofLike = Proof>(
+    proofs: P[],
     opts?: {
       signal?: AbortSignal;
       maxBuffer?: number;
       drop?: 'oldest' | 'newest';
-      onDrop?: (payload: T) => void;
+      onDrop?: (payload: ProofState & { proof: P }) => void;
     },
-  ): AsyncIterable<T> {
+  ): AsyncIterable<ProofState & { proof: P }> {
+    type Payload = ProofState & { proof: P };
     return async function* (this: WalletEvents) {
-      const queue: T[] = [];
+      const queue: Payload[] = [];
       let done = false;
       let notify: (() => void) | null = null;
 
@@ -589,7 +606,7 @@ export class WalletEvents {
         if (n) n();
       };
 
-      const push = (payload: T) => {
+      const push = (payload: Payload) => {
         if (queue.length >= max) {
           if (dropMode === 'oldest') {
             const dropped = queue.shift();
@@ -615,18 +632,24 @@ export class WalletEvents {
         wake();
       };
 
-      const cancelP: Promise<SubscriptionCanceller> = this.proofStateUpdates(
+      let setupErr: Error | null = null;
+      const cancelP: Promise<SubscriptionCanceller> = this.proofStateUpdates<P>(
         proofs,
-        (payload: ProofState & { proof: Proof }) => {
-          // Accept wallet payload type and expose as generic T to consumer
-          push(payload as unknown as T);
-        },
+        push,
         () => {
           done = true;
           wake();
         },
         { signal: opts?.signal },
       );
+      // Attach a catch handler in the same tick so a synchronous setup
+      // failure (e.g. duplicate proof secrets) cannot escape as an
+      // unhandled rejection. The error is surfaced once the loop drains.
+      cancelP.catch((e: unknown) => {
+        setupErr = normalizeError(e);
+        done = true;
+        wake();
+      });
 
       const onAbort = () => {
         done = true;
@@ -642,6 +665,13 @@ export class WalletEvents {
           while (queue.length) yield queue.shift()!;
           if (done) break;
           await new Promise<void>((resolve) => (notify = resolve));
+        }
+        // Check after the loop, not inside. The catch handler sets done=true
+        // before waking the awaited notify, so the next loop iteration exits
+        // immediately and an in-loop throw would never be reached.
+        if (setupErr) {
+          const err: Error = setupErr;
+          throw err;
         }
       } finally {
         cancelSafely(cancelP);

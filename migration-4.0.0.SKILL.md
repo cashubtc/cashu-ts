@@ -35,6 +35,8 @@ v4 introduces an immutable, bigint-backed `Amount` value object wherever the lib
 - **Finance**: `.scaledBy()`, `.ceilPercent()`, `.floorPercent()`, `.clamp()`, `.inRange()`
 - **Construction**: `Amount.from(x)` accepts `number`, `bigint`, `string`, or another `Amount`
 
+**Multi-unit apps:** If the app handles more than one currency unit (e.g. `sat` _and_ `usd`, or cross-unit balance aggregation), also see `AmountWithUnit` — the unit-aware wrapper that prevents silent unit-mixing in arithmetic. See `migration-4.0.0.md` § "Multi-unit support: AmountWithUnit". Most apps are single-unit and don't need it.
+
 **Ask the user before proceeding:**
 
 > v4 returns `Amount` objects from several APIs (see Step 3). Do you want the app to:
