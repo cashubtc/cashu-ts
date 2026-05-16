@@ -552,10 +552,10 @@ export class WalletEvents {
    *   queued payload (`drop: 'oldest'`, default) or the incoming payload (`drop: 'newest'`). In
    *   both cases `onDrop` is invoked with the dropped payload.
    *
-   * The stream ends and cleans up on abort or on the wallet error callback. Errors from the wallet
-   * are treated as a graceful end for this iterator — consumers should not treat normal completion
-   * as proof that every expected update was delivered. Pair with a timeout or an out-of-band
-   * liveness check (`Wallet.checkProofsStates` is one option) if you need that guarantee.
+   * The stream ends and cleans up on abort. Errors from the wallet (e.g. a WebSocket failure or an
+   * RPC error from the mint) are thrown from the iterator — wrap the `for await` in `try/catch` to
+   * recover. Normal completion happens only when the consumer breaks out of the loop or the abort
+   * signal fires.
    *
    * The subscription is sent to the mint on the first iteration, not when this method is called.
    * Per NUT-17 the mint replays the current state on subscribe, so the latest state is never lost;
@@ -637,25 +637,24 @@ export class WalletEvents {
         }
         wake();
       };
-
-      let setupErr: Error | null = null;
-      // Subscribing here (inside the generator body, so on first iteration) is
-      // safe: NUT-17 requires the mint to replay the current proof state on
-      // subscribe, so a state update made before iteration starts is not lost.
+      // Captures errors from either source so a single throw at the end of the loop surfaces
+      // them: (1) setup-promise rejection (e.g. duplicate proof secrets) via cancelP.catch, or
+      // (2) runtime wallet/websocket error via the proofStateUpdates err callback.
+      let streamErr: Error | null = null;
       const cancelP: Promise<SubscriptionCanceller> = this.proofStateUpdates<P>(
         proofs,
         push,
-        () => {
+        (e: Error) => {
+          streamErr = e;
           done = true;
           wake();
         },
         { signal: opts?.signal },
       );
-      // Attach a catch handler in the same tick so a synchronous setup
-      // failure (e.g. duplicate proof secrets) cannot escape as an
-      // unhandled rejection. The error is surfaced once the loop drains.
+      // Attach in the same tick so a synchronous setup failure cannot escape as an unhandled
+      // rejection. The error is surfaced once the loop drains.
       cancelP.catch((e: unknown) => {
-        setupErr = normalizeError(e);
+        streamErr = normalizeError(e);
         done = true;
         wake();
       });
@@ -675,11 +674,11 @@ export class WalletEvents {
           if (done) break;
           await new Promise<void>((resolve) => (notify = resolve));
         }
-        // Check after the loop, not inside. The catch handler sets done=true
-        // before waking the awaited notify, so the next loop iteration exits
-        // immediately and an in-loop throw would never be reached.
-        if (setupErr) {
-          const err: Error = setupErr;
+        // Check after the loop, not inside. The error sources above set done=true before waking
+        // the awaited notify, so the next loop iteration exits immediately and an in-loop throw
+        // would never be reached.
+        if (streamErr) {
+          const err: Error = streamErr;
           throw err;
         }
       } finally {
