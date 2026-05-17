@@ -1454,7 +1454,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     };
     const encoded = utils.getEncodedToken(token);
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /short keyset ID v2\/v3 was encountered, but got no keysets/,
+      /Short v2\/v3 keyset ID .* cannot be resolved/,
     );
   });
 
@@ -1511,7 +1511,50 @@ describe('mapShortKeysetIds via getDecodedToken (v3 BLS keyset IDs)', () => {
     };
     const encoded = utils.getEncodedToken(token);
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /short keyset ID v2\/v3 was encountered, but got no keysets/,
+      /Short v2\/v3 keyset ID .* cannot be resolved/,
+    );
+  });
+});
+
+describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', () => {
+  // Build a cashuB token directly from a CBOR template so we can inject full-length
+  // (33-byte) v2/v3 keyset IDs that the standard encoder would otherwise truncate.
+  function encodeRawToken(idBytes: Uint8Array, cBytes: Uint8Array): string {
+    const template = {
+      m: 'http://localhost:3338',
+      u: 'sat',
+      t: [
+        {
+          i: idBytes,
+          p: [{ a: 1n, s: 'abc', c: cBytes }],
+        },
+      ],
+    };
+    return 'cashuB' + utils.encodeUint8toBase64Url(utils.encodeCBOR(template));
+  }
+
+  test('passes full-length v2 ID through unchanged with empty keyset cache', () => {
+    const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
+    const encoded = encodeRawToken(hexToBytes(fullV2Id), hexToBytes('02' + '00'.repeat(32)));
+    const decoded = utils.getDecodedToken(encoded, []);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+
+  test('passes full-length v3 ID through unchanged with empty keyset cache', () => {
+    const fullV3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+    const v3C =
+      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+    const encoded = encodeRawToken(hexToBytes(fullV3Id), hexToBytes(v3C));
+    const decoded = utils.getDecodedToken(encoded, []);
+    expect(decoded.proofs[0].id).toBe(fullV3Id);
+  });
+
+  test('throws on malformed v2/v3 ID length (neither 16 nor 66)', () => {
+    // 20-char hex: 0x01-prefixed but not a valid short (16) or full (66) length
+    const malformedId = '01' + '00'.repeat(9); // 20 chars total
+    const encoded = encodeRawToken(hexToBytes(malformedId), hexToBytes('02' + '00'.repeat(32)));
+    expect(() => utils.getDecodedToken(encoded, [])).toThrow(
+      /Malformed v2\/v3 keyset ID \(unexpected length\)/,
     );
   });
 });

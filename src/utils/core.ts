@@ -670,9 +670,19 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
     if (idBytes[0] === 0x00) {
       newProofs.push(proof);
     } else if (idBytes[0] === 0x01 || idBytes[0] === 0x02) {
+      // v2/v3 IDs are spec'd at exactly 8 bytes (short, in tokens) or 33 bytes (full).
+      // Full IDs need no resolution — pass through. Anything else is malformed.
+      if (proof.id.length === 66) {
+        newProofs.push(proof);
+        continue;
+      }
+      if (proof.id.length !== 16) {
+        throw new CTSError(`Malformed v2/v3 keyset ID (unexpected length): ${proof.id}`);
+      }
       if (!uniqueIds.length) {
         throw new CTSError(
-          'A short keyset ID v2/v3 was encountered, but got no keysets to map it to.',
+          `Short v2/v3 keyset ID ${proof.id} cannot be resolved. ` +
+            'Call `wallet.loadMint()` (or pass `KeyChain.getAllKeysetIds()`) first.',
         );
       }
       // Look for a match: prefix(keyset ID) == short ID
