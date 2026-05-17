@@ -1,16 +1,29 @@
+import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 
 import {
+  asBlsG1Point,
+  asSecpPoint,
   blindMessage,
+  blindMessageBls,
+  constructUnblindedSignatureBls,
   createSecretAndBlindingFactorDeriver,
   constructUnblindedSignature,
   deriveP2BKBlindedPubkeys,
   deriveSecretAndBlindingFactor,
+  isBlsKeyset,
   normalizeP2PKOptions,
   pointFromHex,
+  pointFromHexAuto,
+  pointFromHexG1,
+  pointFromHexG2,
   verifyDLEQProof,
+  verifyUnblindedSignatureBls,
+  type CurvePoint,
   type DLEQ,
   type BlindSignature,
+  type G1Point,
+  type G2Point,
   type P2PKOptions,
 } from '../crypto';
 import { Bytes, numberToHexPadded64, splitAmount } from '../utils';
@@ -33,6 +46,9 @@ import {
  * @internal
  */
 export const MAX_SECRET_LENGTH = 1024;
+
+const RECOVERY_HINT =
+  'Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.';
 
 /**
  * Minimum interface for an output data object. OutputData helpers only require keyset `id` and
@@ -128,9 +144,77 @@ export class OutputData implements OutputDataLike {
   toProof(sig: SerializedBlindedSignature, keyset: HasKeysetKeys) {
     if (sig == undefined) {
       throw new CTSError(
-        'Mint response is missing a signature for one of the outputs. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.',
+        `Mint response is missing a signature for one of the outputs. ${RECOVERY_HINT}`,
       );
     }
+    if (sig.id !== this.blindedMessage.id) {
+      throw new CTSError(
+        `Mint signature keyset id ${sig.id} does not match output ${this.blindedMessage.id}`,
+      );
+    }
+
+    // Amount binding: a malicious mint can sign a smaller denomination and return it as
+    // `sig.amount`; that signature verifies under K2/A of the downgraded amount and the
+    // wallet would store a downgraded proof. Reject here, before key lookup.
+    // Blanks (amount=0, e.g. NUT-08 fee change, NUT-09 restore) declare no specific amount
+    // up front; the mint's amount is authoritative in that case.
+    const requested = this.blindedMessage.amount;
+    if (!requested.isZero() && !sig.amount.equals(requested)) {
+      throw new CTSError(
+        `Mint signature amount ${sig.amount.toString()} does not match requested amount ${requested.toString()}. ${RECOVERY_HINT}`,
+      );
+    }
+
+    // v3 (BLS12-381) path: multiplicative unblinding, then pairing equality
+    // `e(C, G2_gen) == e(Y, K2)` to confirm the mint actually signed this output. v3 carries no
+    // DLEQ — the pairing is the only check that the returned `C_` is a real signature, so it
+    // MUST run here. Without it, a malicious mint can return garbage `C_`, the wallet stores an
+    // invalid `C`, marks inputs spent, and the user loses funds. Mirrors the secp DLEQ check below.
+    if (isBlsKeyset(sig.id)) {
+      let C_: G1Point;
+      let K2: G2Point;
+      try {
+        const K2Hex = keyset.keys[sig.amount.toString()];
+        if (!K2Hex) {
+          throw new Error(`Amount ${sig.amount.toString()} not in keyset`);
+        }
+        C_ = pointFromHexG1(sig.C_);
+        K2 = pointFromHexG2(K2Hex);
+      } catch (e) {
+        throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
+          cause: e,
+        });
+      }
+      const blindSig: BlindSignature = { id: sig.id, C_ };
+      const unblinded = constructUnblindedSignatureBls(blindSig, this.blindingFactor, this.secret);
+      if (!verifyUnblindedSignatureBls(K2, unblinded.C, unblinded.secret)) {
+        throw new CTSError('BLS pairing verification failed on mint response');
+      }
+      const proof: Proof = {
+        id: sig.id,
+        amount: sig.amount,
+        C: unblinded.C.toHex(true),
+        secret: new TextDecoder().decode(unblinded.secret),
+      };
+      if (this.ephemeralE) proof.p2pk_e = this.ephemeralE;
+      return proof;
+    }
+
+    let A: WeierstrassPoint<bigint>;
+    let C_: WeierstrassPoint<bigint>;
+    try {
+      const AHex = keyset.keys[sig.amount.toString()];
+      if (!AHex) {
+        throw new Error(`Amount ${sig.amount.toString()} not in keyset`);
+      }
+      A = pointFromHex(AHex);
+      C_ = pointFromHex(sig.C_);
+    } catch (e) {
+      throw new CTSError(`Mint returned invalid signature or amount. ${RECOVERY_HINT}`, {
+        cause: e,
+      });
+    }
+
     let dleq: DLEQ | undefined;
     if (sig.dleq) {
       dleq = {
@@ -139,19 +223,18 @@ export class OutputData implements OutputDataLike {
         r: this.blindingFactor,
       };
     }
-    const sigAmountKey = sig.amount.toString();
-    const A = pointFromHex(keyset.keys[sigAmountKey]);
 
-    // NUT-12: Verify DLEQ proof if present
+    // NUT-12: Verify DLEQ proof if present. Only secp keysets carry DLEQ.
     if (dleq) {
-      const B_ = pointFromHex(this.blindedMessage.B_);
-      const C_ = pointFromHex(sig.C_);
-      if (!verifyDLEQProof(dleq, B_, C_, A)) {
-        throw new CTSError('DLEQ verification failed on mint response');
+      const bAuto = pointFromHexAuto(this.blindedMessage.B_);
+      if (bAuto.kind === 'secp') {
+        if (!verifyDLEQProof(dleq, bAuto.pt, C_, A)) {
+          throw new CTSError('DLEQ verification failed on mint response');
+        }
       }
     }
 
-    const blindSig: BlindSignature = { id: sig.id, C_: pointFromHex(sig.C_) };
+    const blindSig: BlindSignature = { id: sig.id, C_ };
     const unblinded = constructUnblindedSignature(blindSig, this.blindingFactor, this.secret, A);
     const proof: Proof = {
       id: sig.id,
@@ -273,7 +356,7 @@ export class OutputData implements OutputDataLike {
 
     // blind the message
     const secretBytes = new TextEncoder().encode(parsed);
-    const { r, B_ } = blindMessage(secretBytes);
+    const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
 
     // create OutputData
     return new OutputData(
@@ -293,7 +376,7 @@ export class OutputData implements OutputDataLike {
     const amountValue = Amount.from(amount);
     const randomHex = bytesToHex(randomBytes(32));
     const secretBytes = new TextEncoder().encode(randomHex);
-    const { r, B_ } = blindMessage(secretBytes);
+    const { r, B_ } = blindMessageForKeyset(secretBytes, keysetId);
     return new OutputData(
       new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
       r,
@@ -422,10 +505,27 @@ function createSingleDeterministicDataFromBytes(
   // Note: Bytes.toBigInt is used here so invalid values bubble up as throws
   // for BIP32-style retry logic (caller increments counter and retries).
   const deterministicR = Bytes.toBigInt(derived.blindingFactor);
-  const { r, B_ } = blindMessage(utf8SecretBytes, deterministicR);
+  const { r, B_ } = blindMessageForKeyset(utf8SecretBytes, keysetId, deterministicR);
   return new OutputData(
     new BlindedMessage(amountValue, B_, keysetId).getSerializedBlindedMessage(),
     r,
     utf8SecretBytes,
   );
+}
+
+/**
+ * Curve dispatch for output blinding: v3 (`02…`) keysets use multiplicative BLS12-381 G1;
+ * everything else uses secp256k1 additive blinding.
+ */
+function blindMessageForKeyset(
+  secret: Uint8Array,
+  keysetId: string,
+  r?: bigint,
+): { r: bigint; B_: CurvePoint } {
+  if (isBlsKeyset(keysetId)) {
+    const out = blindMessageBls(secret, r);
+    return { r: out.r, B_: asBlsG1Point(out.B_) };
+  }
+  const out = blindMessage(secret, r);
+  return { r: out.r, B_: asSecpPoint(out.B_) };
 }

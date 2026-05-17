@@ -11,6 +11,8 @@ import {
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
+  hashToCurveBls,
+  isBlsKeyset,
   isP2PKSigAll,
   buildP2PKSigAllMessage,
   assertSigAllInputs,
@@ -47,13 +49,12 @@ import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
 import {
   getDecodedToken,
-  hasValidDleq,
   invoiceHasAmountInHRP,
   normalizeProofAmounts,
   normalizeUrl,
   splitAmount,
   sumProofs,
-  verifyDleqIfPresent,
+  verifyProofsForReceive,
   ABSOLUTE_MAX_BATCH_SIZE,
 } from '../utils';
 
@@ -954,16 +955,10 @@ class Wallet {
     const totalAmount = this.parseAmount(sumProofs(proofs), 'prepareSwapToReceive', true);
     this.failIf(totalAmount.isZero(), 'Token contains no proofs', { proofs });
 
-    // NUT-12: wallets MUST verify any DLEQ on a received proof. `requireDleq: true`
-    // upgrades that to "DLEQ must also be present" via the stricter `hasValidDleq`.
-    for (const p of proofs) {
-      const ks = this._keyChain.getKeyset(p.id);
-      if (requireDleq) {
-        this.failIf(!hasValidDleq(p, ks), 'Token contains proofs with invalid or missing DLEQ');
-      } else {
-        this.failIf(!verifyDleqIfPresent(p, ks), 'Token contains a proof with an invalid DLEQ');
-      }
-    }
+    // NUT-12: wallets MUST verify any DLEQ on a received proof (the spec default).
+    // `requireDleq: true` opts into the stricter "DLEQ must also be present" policy.
+    // For v3 (BLS) proofs the single multi-pairing replaces per-proof DLEQ verification.
+    verifyProofsForReceive(proofs, (id) => this._keyChain.getKeyset(id), { requireDleq });
 
     // Shape receive output type and denominations
     const keyset = this.getKeyset(keysetId); // specified or wallet keyset
@@ -1020,8 +1015,11 @@ class Wallet {
     let normalizedProofs = normalizeProofAmounts(proofs);
     const { requireDleq = false, includeFees = false, exactMatch = true } = config || {};
     if (requireDleq) {
-      // Only use proofs that have a DLEQ
-      normalizedProofs = normalizedProofs.filter((p) => p.dleq != undefined);
+      // v3 (BLS, `02…`) proofs satisfy the "cryptographically-verified mint signature"
+      // semantic of `requireDleq` via pairing equality rather than a DLEQ proof. Accept
+      // them alongside v0/v1/v2 proofs that carry a DLEQ. Mirrors the receive-side
+      // `hasValidDleq` dispatch (`utils/core.ts`).
+      normalizedProofs = normalizedProofs.filter((p) => isBlsKeyset(p.id) || p.dleq != undefined);
     }
     this.failIf(
       sumProofs(normalizedProofs).lessThan(sendAmount),
@@ -1814,13 +1812,11 @@ class Wallet {
   private validateReturnedSignatures(
     signatures: SerializedBlindedSignature[],
     outputData: OutputDataLike[],
-    options?: { checkAmounts?: boolean },
   ): void {
     // With DLEQ we can verify the returned blinded signature is paired to the original B_.
     // Without DLEQ, equal-denomination reordering is a protocol trust assumption.
     const requiresDleq =
       this._requireSigDleq && (this._mintInfo?.isSupported(12).supported ?? false);
-    const checkAmounts = options?.checkAmounts ?? true;
 
     for (let i = 0; i < signatures.length; i++) {
       this.failIf(
@@ -1831,12 +1827,17 @@ class Wallet {
         signatures[i].id !== outputData[i].blindedMessage.id,
         `Mint signature keyset id at index ${i} does not match output: expected ${outputData[i].blindedMessage.id}, got ${signatures[i].id}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
+      // amount=0 marks a blank (NUT-08 fee change, NUT-09 restore): the mint chooses the amount.
+      // Otherwise, the mint must return the exact requested amount or it's a downgrade attack.
       this.failIf(
-        checkAmounts && !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
+        !outputData[i].blindedMessage.amount.isZero() &&
+          !signatures[i].amount.equals(outputData[i].blindedMessage.amount),
         `Mint returned signature with wrong amount at index ${i}: expected ${outputData[i].blindedMessage.amount.toString()}, got ${signatures[i].amount.toString()}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
+      // v3 (BLS) signatures intentionally omit DLEQ — pairing verification replaces it.
+      const isV3 = isBlsKeyset(signatures[i].id);
       this.failIf(
-        requiresDleq && !signatures[i].dleq,
+        requiresDleq && !isV3 && !signatures[i].dleq,
         `Mint supports NUT-12, but returned a signature without DLEQ proof at index ${i}. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
       );
     }
@@ -2688,9 +2689,7 @@ class Wallet {
       changeSigs.length > outputData.length,
       `Mint returned ${changeSigs.length} signatures, but only ${outputData.length} blanks were provided. Inputs may already be spent; if the wallet is seeded, try restoring (NUT-09) to recover.`,
     );
-    this.validateReturnedSignatures(changeSigs, outputData, {
-      checkAmounts: false, // change outputs are blank
-    });
+    this.validateReturnedSignatures(changeSigs, outputData);
     return changeSigs.map((s, i) => {
       let keyset: Keyset;
       try {
@@ -2712,13 +2711,16 @@ class Wallet {
   /**
    * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
    *
-   * @param proofs (only the `secret` field is required)
+   * @param proofs Each proof must carry `id` and `secret`. The keyset id selects the hash-to-curve
+   *   variant: v0/v1/v2 use secp256k1; v3 (`02…`) uses BLS12-381 G1.
    * @returns NUT-07 state for each proof, in same order.
    */
-  async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]> {
+  async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]> {
     const enc = new TextEncoder();
-    const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
-      hashToCurve(enc.encode(p.secret)).toHex(true),
+    const Ys = proofs.map((p) =>
+      isBlsKeyset(p.id)
+        ? hashToCurveBls(enc.encode(p.secret)).toHex(true)
+        : hashToCurve(enc.encode(p.secret)).toHex(true),
     );
     // TODO: Replace this with a value from the info endpoint of the mint eventually
     const BATCH_SIZE = 100;

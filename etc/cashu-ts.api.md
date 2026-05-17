@@ -4,6 +4,7 @@
 
 ```ts
 
+import { Fp2 } from '@noble/curves/abstract/tower.js';
 import { WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 
 // @public
@@ -134,6 +135,12 @@ export class AmountWithUnitError extends CTSError {
     constructor(message: string);
 }
 
+// @public (undocumented)
+export function asBlsG1Point(pt: G1Point): CurvePoint;
+
+// @public (undocumented)
+export function asSecpPoint(pt: WeierstrassPoint<bigint>): CurvePoint;
+
 // @public
 export function assertSecretKind(allowed: SecretKind | SecretKind[], secret: Secret | string): Secret;
 
@@ -206,13 +213,32 @@ export type BatchMintRequest = {
 };
 
 // @public
+export function batchVerifyUnblindedSignatureBls(items: Array<{
+    K2: G2Point;
+    C: G1Point;
+    secret: Uint8Array;
+}>): boolean;
+
+// @public
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
+
+// @public
+export function blindMessageBls(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public (undocumented)
 export type BlindSignature = {
     C_: WeierstrassPoint<bigint>;
     id: string;
 };
+
+// @public
+export const BLS_FR_ORDER: bigint;
+
+// @public
+export const BLS_G2_GENERATOR: WeierstrassPoint<Fp2>;
+
+// @public
+export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
 
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
@@ -266,6 +292,9 @@ export class ConsoleLogger implements Logger {
 // @public (undocumented)
 export function constructUnblindedSignature(blindSig: BlindSignature, r: bigint, secret: Uint8Array, key: WeierstrassPoint<bigint>): UnblindedSignature;
 
+// @public (undocumented)
+export function constructUnblindedSignatureBls(blindSig: BlindSignature, r: bigint, secret: Uint8Array): UnblindedSignature;
+
 // @public
 export interface CounterRange {
     // (undocumented)
@@ -296,6 +325,9 @@ export function createAuthWallet(mintUrl: string, options?: {
 
 // @public (undocumented)
 export function createBlindSignature(B_: WeierstrassPoint<bigint>, privateKey: Uint8Array, id: string): BlindSignature;
+
+// @public
+export function createBlindSignatureBls(B_: G1Point, privateKey: Uint8Array, id: string): BlindSignature;
 
 // @public
 export const createDLEQProof: (B_: WeierstrassPoint<bigint>, a: Uint8Array) => DLEQ;
@@ -340,6 +372,15 @@ export class CTSError extends Error {
     // (undocumented)
     readonly cause?: unknown;
 }
+
+// @public
+export type CurvePoint = {
+    kind: 'secp';
+    pt: WeierstrassPoint<bigint>;
+} | {
+    kind: 'blsG1';
+    pt: G1Point;
+};
 
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
@@ -412,6 +453,12 @@ export type Enumerate<N extends number, Acc extends number[] = []> = Acc['length
 // @public
 export function findSigningKey(pubkey: string, privkeys: string | string[]): string;
 
+// @public (undocumented)
+export type G1Point = WeierstrassPoint<bigint>;
+
+// @public (undocumented)
+export type G2Point = WeierstrassPoint<Fp2>;
+
 // @public
 export function getDataField(secret: Secret | string): string;
 
@@ -428,6 +475,9 @@ export function getEncodedToken(token: Token, opts?: {
 
 // @public
 export function getEncodedTokenBinary(token: Token): Uint8Array;
+
+// @public
+export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike>;
 
 // @public
 export function getHTLCWitnessPreimage(witness: Proof['witness']): string | undefined;
@@ -568,6 +618,9 @@ export function hash_e(pubkeys: Array<WeierstrassPoint<bigint>>): Uint8Array;
 // @public (undocumented)
 export function hashToCurve(secret: Uint8Array): WeierstrassPoint<bigint>;
 
+// @public (undocumented)
+export function hashToCurveBls(secret: Uint8Array): G1Point;
+
 // @public
 export type HasKeysetId = {
     id: string;
@@ -610,6 +663,9 @@ export function injectWebSocketImpl(ws: typeof WebSocket): void;
 
 // @public (undocumented)
 export type IntRange<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>;
+
+// @public
+export function isBlsKeyset(keysetId: string): boolean;
 
 // @public
 export function isHTLCSpendAuthorised(proof: Proof, logger?: Logger, message?: string): boolean;
@@ -1509,6 +1565,18 @@ export function pointFromBytes(bytes: Uint8Array): WeierstrassPoint<bigint>;
 export function pointFromHex(hex: string): WeierstrassPoint<bigint>;
 
 // @public
+export function pointFromHexAuto(hex: string): CurvePoint;
+
+// @public (undocumented)
+export function pointFromHexG1(hex: string): G1Point;
+
+// @public (undocumented)
+export function pointFromHexG2(hex: string): G2Point;
+
+// @public (undocumented)
+export function pointToHex(p: CurvePoint): string;
+
+// @public
 export type PostRestorePayload = {
     outputs: SerializedBlindedMessage[];
 };
@@ -1948,8 +2016,8 @@ export type UnblindedSignature = {
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
 
-// @public @deprecated (undocumented)
-export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean;
+// @public
+export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
 
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
@@ -1971,8 +2039,16 @@ export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedM
 // @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
 
-// @public (undocumented)
+// @public
+export function verifyProofsForReceive(proofs: ProofLike[], getKeyset: (id: string) => HasKeysetKeys, opts?: {
+    requireDleq?: boolean;
+}): void;
+
+// @public
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean;
+
+// @public
+export function verifyUnblindedSignatureBls(K2: G2Point, C: G1Point, secret: Uint8Array): boolean;
 
 // @public
 export class Wallet {
@@ -2005,7 +2081,7 @@ export class Wallet {
     }): Promise<TRes>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
-    checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
+    checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;

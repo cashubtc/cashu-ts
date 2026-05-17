@@ -104,11 +104,13 @@ function fakeInfo({
  * Per-test state
  * -------------------------- */
 let reqSpy: ReturnType<typeof vi.fn>;
-let hasValidDleqSpy: MockInstance;
+let verifyProofsForReceiveSpy: MockInstance;
 
 beforeEach(() => {
   reqSpy = vi.fn();
-  hasValidDleqSpy = vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
+  verifyProofsForReceiveSpy = vi
+    .spyOn(utils, 'verifyProofsForReceive')
+    .mockImplementation(() => {});
 
   const KeyChainMock = getKeyChainMock();
   if (vi.isMockFunction(KeyChainMock)) KeyChainMock.mockClear();
@@ -590,7 +592,7 @@ describe('topUp error branches', () => {
     await expect(am.ensure(1)).rejects.toThrow('bad BAT mint response');
   });
 
-  test('throws when DLEQ is invalid', async () => {
+  test('throws when proof verification fails', async () => {
     const am = new AuthManager(mintUrl, { request: reqSpy as RequestFn });
     am['info'] = fakeInfo({ batMax: 1 });
     am['keychain'] = {
@@ -598,10 +600,12 @@ describe('topUp error branches', () => {
     } as any;
 
     stubOutputs(1);
-    hasValidDleqSpy.mockReturnValue(false);
+    verifyProofsForReceiveSpy.mockImplementation(() => {
+      throw new Error('Token contains proofs with invalid or missing DLEQ');
+    });
     reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
-    await expect(am.ensure(1)).rejects.toThrow('invalid DLEQ');
+    await expect(am.ensure(1)).rejects.toThrow('BAT that failed verification');
   });
 });
 
@@ -679,7 +683,6 @@ test('topUp sets Clear-auth header when mint endpoint requires CAT', async () =>
       }),
     },
   ]);
-  vi.spyOn(utils, 'hasValidDleq').mockReturnValue(true);
   reqSpy.mockResolvedValueOnce({ signatures: [fakeSig] });
 
   await am.ensure(1);

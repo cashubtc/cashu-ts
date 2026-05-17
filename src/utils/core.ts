@@ -1,7 +1,18 @@
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-import { type DLEQ, pointFromHex, verifyDLEQProof_reblind } from '../crypto';
+import {
+  type DLEQ,
+  type G1Point,
+  type G2Point,
+  batchVerifyUnblindedSignatureBls,
+  isBlsKeyset,
+  pointFromHex,
+  pointFromHexG1,
+  pointFromHexG2,
+  verifyDLEQProof_reblind,
+  verifyUnblindedSignatureBls,
+} from '../crypto';
 import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { PaymentRequest } from '../model/PaymentRequest';
@@ -444,9 +455,10 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       const hashHex = Bytes.toHex(hash).slice(0, 14);
       return '00' + hashHex;
     }
-    case 1: {
+    case 1:
+    case 2: {
       if (!unit) {
-        throw new CTSError('Cannot compute keyset ID version 01: unit is required.');
+        throw new CTSError(`Cannot compute keyset ID version 0${versionByte}: unit is required.`);
       }
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
@@ -462,7 +474,7 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       }
       const hash = sha256(Bytes.fromString(preimage));
       const hashHex = Bytes.toHex(hash);
-      return '01' + hashHex;
+      return (versionByte === 2 ? '02' : '01') + hashHex;
     }
     default:
       throw new CTSError(`Unrecognized keyset ID version: ${versionByte}`);
@@ -657,10 +669,20 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 
     if (idBytes[0] === 0x00) {
       newProofs.push(proof);
-    } else if (idBytes[0] === 0x01) {
+    } else if (idBytes[0] === 0x01 || idBytes[0] === 0x02) {
+      // v2/v3 IDs are spec'd at exactly 8 bytes (short, in tokens) or 33 bytes (full).
+      // Full IDs need no resolution — pass through. Anything else is malformed.
+      if (proof.id.length === 66) {
+        newProofs.push(proof);
+        continue;
+      }
+      if (proof.id.length !== 16) {
+        throw new CTSError(`Malformed v2/v3 keyset ID (unexpected length): ${proof.id}`);
+      }
       if (!uniqueIds.length) {
         throw new CTSError(
-          'A short keyset ID v2 was encountered, but got no keysets to map it to.',
+          `Short v2/v3 keyset ID ${proof.id} cannot be resolved. ` +
+            'Call `wallet.loadMint()` (or pass `KeyChain.getAllKeysetIds()`) first.',
         );
       }
       // Look for a match: prefix(keyset ID) == short ID
@@ -685,29 +707,47 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 }
 
 /**
- * Checks that the proof has a valid DLEQ proof according to keyset `keys`
+ * NUT-12: verifies the DLEQ on a Proof. v3 (BLS) proofs have no DLEQ payload — pairing equality
+ * stands in and runs regardless of `require`.
  *
  * @param proof The proof subject to verification.
- * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache)
- * @param opts.require Default `true`. When `false`, a proof without a DLEQ payload returns `true`
- *   (NUT-12 "MUST verify-if-present"). The default flips to `false` in v5.0.
+ * @param keyset Object containing keyset keys (eg: Keyset, MintKeys, KeysetCache).
+ * @param opts.require Default `false` (NUT-12 "MUST verify-if-present" — missing DLEQ on v0/v1/v2
+ *   returns `true`). `true` opts into above-spec strictness: missing DLEQ → `false`.
  * @returns True if verification succeeded, false otherwise.
- * @throws Throws if the proof amount does not match any key in the provided keyset.
+ * @throws CTSError if the proof amount is not a denomination in the keyset.
  */
 export function hasValidDleq(
   proof: Proof,
   keyset: HasKeysetKeys,
   opts?: { require?: boolean },
 ): boolean {
-  const require = opts?.require ?? true;
-  if (proof?.dleq == undefined) {
-    return !require;
-  }
+  const require = opts?.require ?? false;
+
   if (!hasCorrespondingKey(proof.amount, keyset.keys)) {
     throw new CTSError(
       `Undefined key for amount ${proof.amount.toString()} in keyset ${keyset.id}`,
     );
   }
+
+  if (isBlsKeyset(proof.id)) {
+    try {
+      const K2 = pointFromHexG2(keyset.keys[proof.amount.toString()]);
+      return verifyUnblindedSignatureBls(
+        K2,
+        pointFromHexG1(proof.C),
+        new TextEncoder().encode(proof.secret),
+      );
+    } catch {
+      // Malformed v3 keyset hex, malformed proof.C, etc. — match secp behaviour: return false.
+      return false;
+    }
+  }
+
+  if (proof?.dleq == undefined) {
+    return !require;
+  }
+
   const key = keyset.keys[proof.amount.toString()];
   try {
     const dleq = {
@@ -728,12 +768,86 @@ export function hasValidDleq(
 }
 
 /**
- * @deprecated Use `hasValidDleq(proof, keyset, { require: false })`.
+ * Verifies a batch of received proofs in one pass, batching the v3 (BLS) subset into a single
+ * multi-pairing while keeping per-proof DLEQ verification for v0/v1/v2.
  *
- *   Will be removed in v5.0.
+ * Batch path: builds the {K2, C, secret} triples once, runs `batchVerifyUnblindedSignatureBls`, and
+ * on failure re-runs per-proof to identify the offending proof — cost is one extra batch's worth of
+ * work on the unhappy path, acceptable.
+ *
+ * @param proofs The proofs to verify (mixed curves allowed; `amount` may be any {@link AmountLike}
+ *   shape — normalized internally).
+ * @param getKeyset Lookup callback (e.g. `(id) => keyChain.getKeyset(id)`).
+ * @param opts.requireDleq Forwarded to {@link hasValidDleq} as `require` for v0/v1/v2 proofs;
+ *   ignored for v3.
+ * @throws CTSError if any proof's amount is not in its keyset, or DLEQ/pairing verification fails.
  */
-export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
-  return hasValidDleq(proof, keyset, { require: false });
+export function verifyProofsForReceive(
+  proofs: ProofLike[],
+  getKeyset: (id: string) => HasKeysetKeys,
+  opts?: { requireDleq?: boolean },
+): void {
+  const normalized = normalizeProofAmounts(proofs);
+  const requireDleq = opts?.requireDleq ?? false;
+  const failMsg = requireDleq
+    ? 'Token contains proofs with invalid or missing DLEQ'
+    : 'Token contains a proof with an invalid DLEQ';
+
+  const blsProofs: Proof[] = [];
+  const otherProofs: Proof[] = [];
+  for (const p of normalized) {
+    (isBlsKeyset(p.id) ? blsProofs : otherProofs).push(p);
+  }
+
+  const offenderSuffix = (p: Proof) => ` (keyset ${p.id}, amount ${p.amount.toString()})`;
+
+  for (const p of otherProofs) {
+    if (!hasValidDleq(p, getKeyset(p.id), { require: requireDleq })) {
+      throw new CTSError(failMsg + offenderSuffix(p));
+    }
+  }
+
+  if (blsProofs.length === 0) return;
+
+  // Batch path bypasses hasValidDleq, so the amount-in-keyset check is repeated here.
+  const items = blsProofs.map((p) => {
+    const ks = getKeyset(p.id);
+    if (!hasCorrespondingKey(p.amount, ks.keys)) {
+      throw new CTSError(`Undefined key for amount ${p.amount.toString()} in keyset ${ks.id}`);
+    }
+    // Wrap both parses: a malformed/foreign-curve K2 must surface as a CTSError, not an
+    // unhandled throw that escapes the receive path.
+    let K2: G2Point;
+    let C: G1Point;
+    try {
+      K2 = pointFromHexG2(ks.keys[p.amount.toString()]);
+      C = pointFromHexG1(p.C);
+    } catch {
+      throw new CTSError(failMsg + offenderSuffix(p));
+    }
+    return { K2, C, secret: new TextEncoder().encode(p.secret), proof: p };
+  });
+
+  // Single proof: batch wrapper costs an extra mul; just pair directly.
+  if (items.length === 1) {
+    const it = items[0];
+    if (!verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
+      throw new CTSError(failMsg + offenderSuffix(it.proof));
+    }
+    return;
+  }
+
+  if (batchVerifyUnblindedSignatureBls(items)) return;
+
+  // Batch failed — pinpoint the offender so the caller can surface a useful error.
+  for (const it of items) {
+    if (!verifyUnblindedSignatureBls(it.K2, it.C, it.secret)) {
+      throw new CTSError(failMsg + offenderSuffix(it.proof));
+    }
+  }
+  // Defensive: batch returned false but every proof verified individually. Shouldn't happen
+  // unless the batch implementation regresses; treat as a hard failure rather than silently passing.
+  throw new CTSError(failMsg);
 }
 
 /**
