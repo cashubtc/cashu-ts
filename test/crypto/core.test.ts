@@ -178,15 +178,16 @@ describe('isBlsKeyset', () => {
       false,
     );
   });
-  test('forward-compat: hex version bytes including letters (`0a…`, `1e…`, `ff…`)', () => {
-    expect(isBlsKeyset('03abcdef01234567')).toBe(true);
-    // We expect all hex prefixes >=02 to be BLS, up to ff (255)
-    expect(isBlsKeyset('0abcdef012345678')).toBe(true); // v=0x0a
-    expect(isBlsKeyset('1eabcdef01234567')).toBe(true); // v=0x1e
-    expect(isBlsKeyset('ffabcdef01234567')).toBe(true); // v=0xff
+  test('strict: unknown version bytes (`03…`, `0a…`, `ff…`) return false', () => {
+    // Fails closed on unknown versions. Must be widened deliberately alongside
+    // `getDerivationKind` when a new BLS-based version lands.
+    expect(isBlsKeyset('03abcdef01234567')).toBe(false);
+    expect(isBlsKeyset('0abcdef012345678')).toBe(false); // v=0x0a
+    expect(isBlsKeyset('1eabcdef01234567')).toBe(false); // v=0x1e
+    expect(isBlsKeyset('ffabcdef01234567')).toBe(false); // v=0xff
     expect(
       isBlsKeyset('0a' + 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789'),
-    ).toBe(true); // 66-char with letter version
+    ).toBe(false); // 66-char with letter version
   });
   test('legacy base64 ids return false regardless of shape or length', () => {
     expect(isBlsKeyset('AQID')).toBe(false);

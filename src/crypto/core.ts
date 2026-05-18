@@ -105,12 +105,15 @@ export function pointToHex(p: CurvePoint): string {
 }
 
 /**
- * True if `keysetId` is a v3+ BLS12-381 keyset id (modern hex, version byte ≥ 0x02).
+ * True if `keysetId` is a v3 BLS12-381 keyset id (modern hex, version byte 0x02).
+ *
+ * @remarks
+ * Strict version gate: does not assume future keyset versions are BLS.
  */
 export function isBlsKeyset(keysetId: string): boolean {
   if (keysetId.length !== 16 && keysetId.length !== 66) return false;
   if (!isValidHex(keysetId)) return false;
-  return parseInt(keysetId.slice(0, 2), 16) >= 2;
+  return keysetId.startsWith('02');
 }
 
 export const getKeysetIdInt = (keysetId: string): bigint => {

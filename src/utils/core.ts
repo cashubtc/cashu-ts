@@ -669,19 +669,20 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
 
     if (idBytes[0] === 0x00) {
       newProofs.push(proof);
-    } else if (idBytes[0] === 0x01 || idBytes[0] === 0x02) {
-      // v2/v3 IDs are spec'd at exactly 8 bytes (short, in tokens) or 33 bytes (full).
-      // Full IDs need no resolution — pass through. Anything else is malformed.
+    } else {
+      // Modern hex keyset IDs (v1+) are spec'd at exactly 8 bytes (short, in tokens) or 33 bytes
+      // (full). v0 is the only short-form outlier and was handled above.
+      // Permissive version gate: assumes future keyset versions follow same length spec.
       if (proof.id.length === 66) {
         newProofs.push(proof);
         continue;
       }
       if (proof.id.length !== 16) {
-        throw new CTSError(`Malformed v2/v3 keyset ID (unexpected length): ${proof.id}`);
+        throw new CTSError(`Malformed keyset ID (unexpected length): ${proof.id}`);
       }
       if (!uniqueIds.length) {
         throw new CTSError(
-          `Short v2/v3 keyset ID ${proof.id} cannot be resolved. ` +
+          `Short keyset ID ${proof.id} cannot be resolved. ` +
             'Call `wallet.loadMint()` (or pass `KeyChain.getAllKeysetIds()`) first.',
         );
       }
@@ -698,8 +699,6 @@ function mapShortKeysetIds(proofs: Proof[], keysetIds: readonly string[]): Proof
       }
       proof.id = matches[0];
       newProofs.push(proof);
-    } else {
-      throw new CTSError(`Unknown keyset ID version: ${idBytes[0]}`);
     }
   }
 

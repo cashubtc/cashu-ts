@@ -640,26 +640,27 @@ describe('test deriveKeysetId edge cases', () => {
 });
 
 describe('test mapShortKeysetIds edge cases', () => {
-  test('rejects a v4-encoded proof carrying an unknown keyset ID version byte', () => {
-    // Regression check for the v3 expansion: short-ID handling was widened from
-    // `=== 0x01` to `=== 0x01 || 0x02`. Version 0x03 must still fall through to the
-    // unknown-version throw, not get silently accepted.
+  test('forward-compat: prefix-resolves a 0x03-prefixed short ID', () => {
+    // Short-ID prefix-match is version-agnostic for modern hex IDs (v1+). v0 is the only
+    // short-form outlier and is handled separately. This is the inverse of the strict KDF
+    // dispatch in `getDerivationKind` — see `isBlsKeyset` docstring for the design rationale.
+    const fullId = '03' + 'ab'.repeat(32); // 66 chars, 0x03-prefixed
+    const shortId = fullId.slice(0, 16);
     const token: Token = {
       mint: 'http://localhost:3338',
       proofs: [
         {
           amount: Amount.from(1),
           C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
-          id: '030102030405060708',
+          id: shortId,
           secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
         },
       ],
       unit: 'sat',
     };
     const encoded = utils.getEncodedToken(token);
-    expect(() => utils.getDecodedToken(encoded, ['030102030405060708'])).toThrow(
-      /Unknown keyset ID version/,
-    );
+    const decoded = utils.getDecodedToken(encoded, [fullId]);
+    expect(decoded.proofs[0].id).toBe(fullId);
   });
 });
 
@@ -1454,7 +1455,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     };
     const encoded = utils.getEncodedToken(token);
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /Short v2\/v3 keyset ID .* cannot be resolved/,
+      /Short keyset ID .* cannot be resolved/,
     );
   });
 
@@ -1511,7 +1512,7 @@ describe('mapShortKeysetIds via getDecodedToken (v3 BLS keyset IDs)', () => {
     };
     const encoded = utils.getEncodedToken(token);
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /Short v2\/v3 keyset ID .* cannot be resolved/,
+      /Short keyset ID .* cannot be resolved/,
     );
   });
 });
@@ -1549,12 +1550,12 @@ describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', (
     expect(decoded.proofs[0].id).toBe(fullV3Id);
   });
 
-  test('throws on malformed v2/v3 ID length (neither 16 nor 66)', () => {
+  test('throws on malformed modern hex ID length (neither 16 nor 66)', () => {
     // 20-char hex: 0x01-prefixed but not a valid short (16) or full (66) length
     const malformedId = '01' + '00'.repeat(9); // 20 chars total
     const encoded = encodeRawToken(hexToBytes(malformedId), hexToBytes('02' + '00'.repeat(32)));
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /Malformed v2\/v3 keyset ID \(unexpected length\)/,
+      /Malformed keyset ID \(unexpected length\)/,
     );
   });
 });

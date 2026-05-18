@@ -105,6 +105,7 @@ function getDerivationKind(keysetId: string): DerivationKind {
   if (isValidHex && keysetId.startsWith('00')) {
     return DerivationKind.DEPRECATED_BIP32;
   }
+  // Strict version gate: does not assume future keyset versions are BLS.
   if (isValidHex && (keysetId.startsWith('01') || keysetId.startsWith('02'))) {
     return DerivationKind.HMAC_SHA256;
   }
