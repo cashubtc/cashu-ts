@@ -1,5 +1,5 @@
 import dns from 'node:dns';
-import { Wallet, getEncodedToken, sumProofs } from '../src';
+import { Wallet, getEncodedToken, sumProofs, type MeltQuoteOnchainResponse } from '../src';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
@@ -87,41 +87,50 @@ const runOnchainExample = async () => {
     `   mint accepts melt: min ${onchainMeltMethod.min_amount} sats, max ${onchainMeltMethod.max_amount} sats\n`,
   );
 
-  // We want to send as much as possible. The proofs sent to the mint must cover:
-  //   melt_amount + fee_reserve (mint's onchain fee buffer) + input_fee (NUT-02
-  //   per-proof swap fee, scales with how many proofs we spend).
-  // fee_reserve depends on tx shape (mostly fixed for one P2WPKH output);
-  // input_fee depends on which proofs are selected. We start optimistically
-  // (try to send everything), then scale down once we know fee_reserve.
-
+  // We want to send as much as possible, so we quote, shrink to fit, and re-quote until stable.
+  // fee_reserve usually stabilises but can drift either way with UTXO-selection. Cap at 3
+  // passes; if the final pass drifts above budget, fall back to the prior quote that fit.
   const inputFee = wallet.getFeesForProofs(proofs);
-  const pickCheapest = (q: { fee_options: typeof meltQuote.fee_options }) =>
+  const pickCheapest = (q: MeltQuoteOnchainResponse) =>
     q.fee_options.reduce((a, b) => (a.fee_reserve.lessThan(b.fee_reserve) ? a : b));
 
-  console.log(`📋 First pass: requesting melt quote for full ${minted.toString()} sats`);
   let meltAmount = minted;
   let meltQuote = await wallet.createMeltQuoteOnchain(FAUCET_REFUND_ADDRESS, meltAmount);
   let cheapest = pickCheapest(meltQuote);
-  console.log(`   fee_reserve (cheapest option): ${cheapest.fee_reserve.toString()} sats`);
-  console.log(`   input_fee (NUT-02, all ${proofs.length} proofs): ${inputFee.toString()} sats`);
+  console.log(
+    `📋 Pass 1: quote for ${meltAmount.toString()} sats, fee_reserve=${cheapest.fee_reserve.toString()}, input_fee=${inputFee.toString()}`,
+  );
+
+  // Last quote that fit (used as fallback if a later pass drifts over budget).
+  let fitMelt:
+    | { amount: typeof meltAmount; quote: typeof meltQuote; cheapest: typeof cheapest }
+    | undefined;
+
+  for (let pass = 2; pass <= 3; pass++) {
+    const fitted = wallet.maxSpendableAfterFees(proofs, cheapest.fee_reserve);
+    if (fitted.greaterThanOrEqual(meltAmount)) {
+      fitMelt = { amount: meltAmount, quote: meltQuote, cheapest };
+      if (fitted.equals(meltAmount)) break; // converged
+    }
+    meltAmount = fitted;
+    meltQuote = await wallet.createMeltQuoteOnchain(FAUCET_REFUND_ADDRESS, meltAmount);
+    cheapest = pickCheapest(meltQuote);
+    console.log(
+      `📋 Pass ${pass}: quote for ${meltAmount.toString()} sats, fee_reserve=${cheapest.fee_reserve.toString()}`,
+    );
+  }
 
   let needed = meltAmount.add(cheapest.fee_reserve).add(inputFee);
   if (needed.greaterThan(minted)) {
-    // Doesn't fit. Scale down to leave room for fee_reserve and input_fee.
-    // For onchain, fee_reserve is fairly stable across amounts, so a single
-    // adjustment suffices. In production code you may want a 1-sat safety
-    // margin to absorb fee_reserve drift between quote requests or unexpected
-    // coin-selection swaps.
-    meltAmount = minted.subtract(cheapest.fee_reserve).subtract(inputFee);
-    if (meltAmount.lessThanOrEqual(0)) {
+    if (!fitMelt) {
       throw new Error(
-        `Cannot fit melt: minted=${minted}, fee_reserve=${cheapest.fee_reserve}, input_fee=${inputFee}`,
+        `Could not converge on a melt quote within ${minted.toString()} sats — fee_reserve drifted upward on every pass`,
       );
     }
-    console.log(`\n📋 Second pass: requesting melt quote for ${meltAmount.toString()} sats`);
-    meltQuote = await wallet.createMeltQuoteOnchain(FAUCET_REFUND_ADDRESS, meltAmount);
-    cheapest = pickCheapest(meltQuote);
-    console.log(`   fee_reserve: ${cheapest.fee_reserve.toString()} sats`);
+    console.log(`   (fee drift on final pass; falling back to prior fitting quote)`);
+    meltAmount = fitMelt.amount;
+    meltQuote = fitMelt.quote;
+    cheapest = fitMelt.cheapest;
     needed = meltAmount.add(cheapest.fee_reserve).add(inputFee);
   }
 
@@ -144,22 +153,17 @@ const runOnchainExample = async () => {
   const sendResp = await wallet.send(totalNeeded, proofs, { includeFees: true });
 
   console.log(`💸 Executing melt...`);
+  // meltProofsOnchain returns UNPAID with no change at melt-time; the mint populates `change` on
+  // the quote after broadcast, and we unblind it later using `response.outputData`.
   const response = await wallet.meltProofsOnchain(
     meltQuote,
     sendResp.send,
     cheapest.estimated_blocks,
   );
   console.log(`✅ Melt accepted: state=${response.quote.state}`);
-  if (response.change.length > 0) {
-    console.log(
-      `   change: ${sumProofs(response.change).toString()} sats in ${response.change.length} proof(s)`,
-    );
-  }
 
-  // The mint typically returns PENDING with no outpoint until it broadcasts the
-  // tx. Per NUT-XX, mints MAY batch multiple melts into a single onchain tx,
-  // so broadcast can be delayed until enough volume accumulates — there's no
-  // SLA on how long PENDING lasts. Poll until the outpoint appears.
+  // Per NUT-XX, mints MAY batch melts into a single onchain tx — broadcast can lag.
+  // Poll until the outpoint appears.
   if (!response.quote.outpoint) {
     console.log(`   (mint may batch melts; broadcast can take a while)`);
   }
@@ -172,8 +176,14 @@ const runOnchainExample = async () => {
     console.log(`   tx on mempool: ${MEMPOOL_TX_URL(txid)}`);
   }
 
+  // Unblind deferred change (mint refunds unused fee_reserve once the actual onchain fee is known).
+  const change = wallet.createMeltChangeProofs(response.outputData, broadcast.change ?? []);
+  if (change.length > 0) {
+    console.log(`   change: ${sumProofs(change).toString()} sats in ${change.length} proof(s)`);
+  }
+
   // -------------------- Summary --------------------
-  const remainingProofs = [...sendResp.keep, ...response.change];
+  const remainingProofs = [...sendResp.keep, ...change];
   console.log(`\n🎯 Summary`);
   console.log(`==========`);
   console.log(`💰 Started:    ${minted.toString()} sats minted from faucet payment`);
