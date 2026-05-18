@@ -2637,11 +2637,16 @@ class Wallet {
    * @remarks
    * ProofsToSend must cover `quote.amount + selected fee + input fee`. Any additional amount is
    * offered as NUT-08 change. This function does not perform coin selection!
+   *
+   * Any `change` is only returned once the quote is `PAID` (mined and confirmed). Poll the quote
+   * until broadcast, then unblind change with the returned `outputData` via
+   * `wallet.createMeltChangeProofs()`.
    * @param meltQuote The onchain melt quote.
    * @param proofsToSend Proofs to melt.
    * @param estimatedBlocks Selected `estimated_blocks` value from `meltQuote.fee_options`.
    * @param config Optional parameters (e.g. privkey for P2PK proofs, keysetId).
-   * @returns MeltProofsResponse with the final quote state and any returned NUT-08 change proofs.
+   * @returns MeltProofsResponse with quote, any immediate change, and `outputData` for
+   *   deferred-change reconstruction.
    * @experimental Onchain support follows draft NUT-XX semantics and may change.
    */
   async meltProofsOnchain(
@@ -2841,8 +2846,13 @@ class Wallet {
     }
 
     // Merge preview quote with response to protect against incomplete response.
+    // Retain outputData if no change was returned, so async/onchain can recover it later.
     const mergedQuote = { ...meltPreview.quote, ...meltResponse } as TQuote;
-    return { quote: mergedQuote, change };
+    return {
+      quote: mergedQuote,
+      change,
+      outputData: change.length > 0 ? [] : meltPreview.outputData,
+    };
   }
 
   /**

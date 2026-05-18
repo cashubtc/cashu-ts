@@ -1458,6 +1458,8 @@ describe('generic mint/melt methods', () => {
       expect(response.quote.outpoint).toBe('txid:0');
       expect(response.change).toHaveLength(1);
       expect(response.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
+      // outputData is empty when change came back immediately — no recovery needed.
+      expect(response.outputData).toEqual([]);
     });
 
     test('meltProofsOnchain rejects unknown estimated_blocks option', async () => {
@@ -1563,6 +1565,51 @@ describe('generic mint/melt methods', () => {
         expect.any(Array),
         'onchain-melt-sigall',
       );
+    });
+
+    test('meltProofsOnchain retains outputData for deferred change recovery', async () => {
+      let seenBody: { outputs?: unknown[] } | undefined;
+      server.use(
+        http.post(mintUrl + '/v1/melt/onchain', async ({ request }) => {
+          seenBody = (await request.json()) as typeof seenBody;
+          return HttpResponse.json({
+            quote: 'onchain-melt-async',
+            request: 'bc1qrecipient',
+            amount: 10,
+            unit: 'sat',
+            fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+            selected_estimated_blocks: 6,
+            state: MeltQuoteState.PENDING,
+            expiry: 3600,
+            outpoint: null,
+          });
+        }),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+      const meltQuote: MeltQuoteOnchainResponse = {
+        quote: 'onchain-melt-async',
+        request: 'bc1qrecipient',
+        amount: Amount.from(10),
+        unit: 'sat',
+        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+        selected_estimated_blocks: null,
+        state: MeltQuoteState.UNPAID,
+        expiry: 3600,
+        outpoint: null,
+      };
+      const proofsToSend: Proof[] = [
+        { id: '00bd033559de27d0', amount: Amount.from(8), secret: 'secret1', C: 'C1' },
+        { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
+      ];
+
+      const response = await wallet.meltProofsOnchain(meltQuote, proofsToSend, 6);
+
+      expect(response.quote.state).toBe(MeltQuoteState.PENDING);
+      expect(response.change).toHaveLength(0);
+      // outputData must match the outputs the mint received for later createMeltChangeProofs().
+      expect(response.outputData.length).toBe(seenBody?.outputs?.length);
+      expect(response.outputData.length).toBeGreaterThan(0);
     });
   });
 

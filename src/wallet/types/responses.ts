@@ -1,3 +1,4 @@
+import type { OutputDataLike } from '../../model/OutputData';
 import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
 /**
@@ -12,9 +13,15 @@ export type MeltProofsResponse<
    */
   quote: TQuote;
   /**
-   * Return/change from overpaid fees.
+   * Return/change from overpaid fees. Empty when the mint defers change (async/onchain melts).
    */
   change: Proof[];
+  /**
+   * NUT-08 outputs retained for deferred-change recovery (onchain, NUT-23 `prefer_async`). Empty
+   * when `change` is populated — no recovery needed. Otherwise pair with the polled quote's
+   * `change` via `wallet.createMeltChangeProofs()`.
+   */
+  outputData: OutputDataLike[];
 };
 
 /**

@@ -882,7 +882,7 @@ export class MeltBuilder<
   /**
    * Execute the melt against the quote.
    *
-   * @returns The melt result: `{ quote, change }`.
+   * @returns The melt result: `{ quote, change, outputData }`.
    */
   async run(): Promise<MeltProofsResponse<TQuote>> {
     // Step 1, preview and allocate NUT-08 blanks
@@ -964,7 +964,8 @@ export class MeltOnchainBuilder {
   /**
    * Execute the onchain melt against the quote.
    *
-   * @returns The melt result with quote and any returned NUT-08 change proofs.
+   * @returns The melt result: `{ quote, change, outputData }`. Use `outputData` with the polled
+   *   quote's `change` to unblind deferred change after broadcast.
    */
   async run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
     // Ensure fee_option is selected if there is only one
