@@ -1,7 +1,7 @@
 import type { MeltQuoteBaseResponse, Proof } from '../../model/types';
 
 /**
- * Response after paying a Lightning invoice.
+ * Response after melting proofs.
  */
 export type MeltProofsResponse<
   TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse,
@@ -12,7 +12,7 @@ export type MeltProofsResponse<
    */
   quote: TQuote;
   /**
-   * Return/Change from overpaid fees. This happens due to Lighting fee estimation being inaccurate.
+   * Return/change from overpaid fees.
    */
   change: Proof[];
 };

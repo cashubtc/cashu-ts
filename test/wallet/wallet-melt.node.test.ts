@@ -376,6 +376,71 @@ describe('melt proofs', () => {
     expect(meltTxn.outputData[1].blindedMessage).toEqual(customOutputType.data[1].blindedMessage);
   });
 
+  test('prepareMelt can skip automatic NUT-08 change outputs', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(3),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+    };
+    const proofsToSend: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(8),
+        secret: 'secret1',
+        C: 'C1',
+      },
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(5),
+        secret: 'secret2',
+        C: 'C2',
+      },
+    ];
+
+    const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend, {
+      nut08Change: false,
+    });
+
+    expect(meltTxn.outputData).toHaveLength(0);
+    expect(meltTxn.inputs).toHaveLength(2);
+    expect(meltTxn.quote.quote).toBe('test_melt_quote');
+  });
+
+  test('prepareMelt uses one NUT-08 blank for a 1-sat fee reserve', async () => {
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const meltQuote: MeltQuoteBolt11Response = {
+      quote: 'test_melt_quote',
+      amount: Amount.from(10),
+      fee_reserve: Amount.from(1),
+      request: 'bolt11request',
+      state: MeltQuoteState.UNPAID,
+      expiry: 1234567890,
+      payment_preimage: null,
+      unit: 'sat',
+    };
+    const proofsToSend: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(11),
+        secret: 'secret1',
+        C: 'C1',
+      },
+    ];
+
+    const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofsToSend);
+
+    expect(meltTxn.outputData).toHaveLength(1);
+    expect(meltTxn.outputData[0].blindedMessage.amount).toEqual(Amount.zero());
+  });
+
   describe('melt, NUT-08 blanks', () => {
     test('includes zero-amount blanks covering fee reserve (bolt11)', async () => {
       const wallet = new Wallet(mint, { unit, bip39seed: randomBytes(32) });
@@ -755,6 +820,50 @@ describe('async melt preference body', () => {
     expect(() => wallet.createMeltChangeProofs([output], [sig])).toThrow(
       /is not loaded in this wallet.*restoring \(NUT-09\)/is,
     );
+  });
+  test('completeMelt supports deprecated boolean preferAsync argument', async () => {
+    const meltQuote = {
+      quote: 'q-async-boolean',
+      amount: Amount.from(1),
+      unit: 'sat',
+      request: invoice,
+      state: 'UNPAID',
+      fee_reserve: Amount.from(0),
+    } as unknown as MeltQuoteBolt11Response;
+    const proofs: Proof[] = [
+      {
+        id: '00bd033559de27d0',
+        amount: Amount.from(1),
+        secret: '1f98e6837a434644c9411825d7c6d6e13974b931f8f0652217cea29010674a13',
+        C: '034268c0bd30b945adf578aca2dc0d1e26ef089869aaf9a08ba3a6da40fda1d8be',
+      },
+    ];
+
+    server.use(
+      http.post(mintUrl + '/v1/melt/bolt11', async ({ request }) => {
+        const body = (await request.json()) as { prefer_async?: boolean };
+        expect(body.prefer_async).toBe(true);
+        return HttpResponse.json({
+          quote: meltQuote.quote,
+          amount: meltQuote.amount,
+          unit: meltQuote.unit,
+          request: meltQuote.request,
+          state: 'UNPAID',
+          expiry: 1234567890,
+          fee_reserve: meltQuote.fee_reserve,
+          payment_preimage: null,
+          change: [],
+        });
+      }),
+    );
+
+    const wallet = new Wallet(mint, { unit });
+    await wallet.loadMint();
+    const meltTxn = await wallet.prepareMelt('bolt11', meltQuote, proofs);
+    const res = await wallet.completeMelt(meltTxn, undefined, { preferAsync: true });
+
+    expect(res.quote.quote).toBe(meltQuote.quote);
+    expect(res.change).toHaveLength(0);
   });
 
   test('bolt11: does not send prefer_async when preferAsync is not set', async () => {

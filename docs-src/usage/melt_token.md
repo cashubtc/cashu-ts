@@ -64,7 +64,7 @@ import { OutputData, type SerializedOutputData } from '@cashu/cashu-ts';
 // 1. Prepare the melt and persist the change-output data alongside the pending quote.
 const preview = await wallet.prepareMelt('bolt11', meltQuote, myProofs);
 const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
-await wallet.completeMelt(preview, undefined, true); // preferAsync = true
+await wallet.completeMelt(preview, undefined, { preferAsync: true });
 
 // 2. ... time passes ... use checkMeltQuote*() or wallet.on.onceMeltPaid() to learn the
 // quote is paid. The paid response carries the change signatures.

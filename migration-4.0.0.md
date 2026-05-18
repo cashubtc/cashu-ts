@@ -659,7 +659,7 @@ These APIs were already deprecated in v3. In v4 they have been removed:
 - `Wallet` constructor preload options `keys`, `keysets`, and `mintInfo`; use `loadMintFromCache()` after construction.
 - Deprecated wallet method alias: `wallet.swap`; use `send`.
 - `Keyset` getter aliases `active`, `input_fee_ppk`, and `final_expiry`; use `isActive`, `fee`, and `expiry`. Ensure you are looking at the Cashu-TS `Keyset` domain model: raw API `MintKeyset` / `MintKeys` DTOs may still expose the old field names.
-- `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, true)`.
+- `preferAsync` on melt option objects; set `prefer_async: true` in the melt payload or call `completeMelt(preview, privkey, { preferAsync: true })`.
 - `MeltBlanks`, `wallet.on.meltBlanksCreated(cb)`, and `onChangeOutputsCreated`; use `prepareMelt()` / `completeMelt()` with `MeltPreview`.
 - Deprecated utility helpers and overloads in `src/utils/core`: `bytesToNumber`, `verifyKeysetId`, the positional `deriveKeysetId(...)` signature, and the `getDecodedToken(..., HasKeysetId[])` overload; use `Bytes.toBigInt`, `Keyset.verifyKeysetId(...)`, the options-based `deriveKeysetId(...)`, and `string[]` keyset IDs.
 - Deprecated convenience aliases removed elsewhere in the API: `MintInfo.supportsBolt12Description` and `WSConnection.closeSubscription()`; use `supportsNut04Description('bolt12')` and `cancelSubscription()` instead.
