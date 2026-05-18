@@ -786,6 +786,7 @@ export type MeltProofsConfig = {
 export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> = {
     quote: TQuote;
     change: Proof[];
+    outputData: OutputDataLike[];
 };
 
 // @public
