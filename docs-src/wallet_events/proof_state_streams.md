@@ -18,3 +18,9 @@ const ac = new AbortController();
 // later
 ac.abort();
 ```
+
+> **Note:** the subscription is sent to the mint on the first iteration, not when
+> `proofStatesStream` is called. Per
+> [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) the mint replays the
+> _current_ state on subscribe, so the latest state is never lost — only intermediate
+> transitions before the first iteration are collapsed into that snapshot.
