@@ -1765,7 +1765,7 @@ class Wallet {
    *
    * @param pubkey Public key to lock the quote to. Required for onchain minting.
    * @returns The mint will return a mint quote with a Bitcoin address for minting tokens.
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
@@ -1829,7 +1829,7 @@ class Wallet {
    *
    * @param quote Quote ID.
    * @returns The latest mint quote for the given quote ID.
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse> {
     return this.mint.checkMintQuoteOnchain(quote);
@@ -2026,7 +2026,7 @@ class Wallet {
    * @param config Optional parameters (e.g. keysetId).
    * @param outputType Configuration for proof generation. Defaults to wallet.defaultOutputType().
    * @returns Minted proofs.
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async mintProofsOnchain(
     amount: AmountLike,
@@ -2444,7 +2444,7 @@ class Wallet {
    * @param address Bitcoin address to send to.
    * @param amount Amount to melt.
    * @returns Melt quote with fee options.
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async createMeltQuoteOnchain(
     address: string,
@@ -2550,7 +2550,7 @@ class Wallet {
    *
    * @param quote ID of the melt quote.
    * @returns The mint will return an existing melt quote.
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse> {
     return this.mint.checkMeltQuoteOnchain(quote);
@@ -2647,7 +2647,7 @@ class Wallet {
    * @param config Optional parameters (e.g. privkey for P2PK proofs, keysetId).
    * @returns MeltProofsResponse with quote, any immediate change, and `outputData` for
    *   deferred-change reconstruction.
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async meltProofsOnchain(
     meltQuote: MeltQuoteOnchainResponse,

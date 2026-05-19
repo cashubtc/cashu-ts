@@ -63,7 +63,7 @@ export class WalletOps {
     return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
   }
   /**
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   mintOnchain(amount: AmountLike, quote: MintQuoteFor<'onchain'>) {
     return new MintBuilder<'onchain'>(this.wallet, 'onchain', amount, quote);
@@ -75,7 +75,7 @@ export class WalletOps {
     return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
   }
   /**
-   * @experimental Onchain support follows draft NUT-XX semantics and may change.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   meltOnchain(quote: MeltQuoteOnchainResponse, proofs: ProofLike[]) {
     return new MeltOnchainBuilder(this.wallet, quote, proofs);
@@ -919,7 +919,7 @@ export class MeltBuilder<
  *   .run();
  * ```
  *
- * @experimental Onchain support follows draft NUT-XX semantics and may change.
+ * @experimental Onchain support follows NUT-30 semantics and may change.
  */
 export class MeltOnchainBuilder {
   private config: MeltProofsConfig = {};

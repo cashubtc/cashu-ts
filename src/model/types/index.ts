@@ -10,7 +10,7 @@ export type * from './NUT19';
 export type * from './NUT23';
 export type * from './NUT25';
 export type * from './NUT29';
-export type * from './NUTXX';
+export type * from './NUT30';
 export type * from './proof';
 export type * from './token';
 export type * from './token.v4';

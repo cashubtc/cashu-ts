@@ -17,7 +17,7 @@ const MEMPOOL_TX_URL = (txid: string) => `https://mutinynet.com/tx/${txid}`;
 const POLL_INTERVAL_MS = 10_000;
 
 const runOnchainExample = async () => {
-  console.log('🚀 Onchain (NUT-XX) Wallet Example');
+  console.log('🚀 Onchain (NUT-30) Wallet Example');
   console.log('===================================\n');
 
   const wallet = new Wallet(MINT_URL, { unit: 'sat' });
@@ -162,7 +162,7 @@ const runOnchainExample = async () => {
   );
   console.log(`✅ Melt accepted: state=${response.quote.state}`);
 
-  // Per NUT-XX, mints MAY batch melts into a single onchain tx — broadcast can lag.
+  // Per NUT-30, mints MAY batch melts into a single onchain tx — broadcast can lag.
   // Poll until the outpoint appears.
   if (!response.quote.outpoint) {
     console.log(`   (mint may batch melts; broadcast can take a while)`);
