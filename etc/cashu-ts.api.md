@@ -759,7 +759,7 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
 // @public
 export class MeltOnchainBuilder {
     constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
-    estimatedBlocks(blocks: number): this;
+    feeIndex(index: number): this;
     keyset(id: string): this;
     privkey(k: string | string[]): this;
     run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
@@ -838,6 +838,7 @@ export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
 
 // @public
 export type MeltQuoteOnchainFeeOption = {
+    fee_index: number;
     fee_reserve: Amount;
     estimated_blocks: number;
 };
@@ -851,7 +852,7 @@ export type MeltQuoteOnchainRequest = MeltQuoteBaseRequest & {
 export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
     request: string;
     fee_options: MeltQuoteOnchainFeeOption[];
-    selected_estimated_blocks: number | null;
+    selected_fee_index: number | null;
     outpoint: string | null;
 };
 
@@ -2116,7 +2117,7 @@ export class Wallet {
     meltProofs<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<TQuote>>;
     meltProofsBolt11(meltQuote: MeltQuoteBolt11Response, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
-    meltProofsOnchain(meltQuote: MeltQuoteOnchainResponse, proofsToSend: ProofLike[], estimatedBlocks: number, config?: MeltProofsConfig): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
+    meltProofsOnchain(meltQuote: MeltQuoteOnchainResponse, proofsToSend: ProofLike[], feeIndex: number, config?: MeltProofsConfig): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
     readonly mint: Mint;
     mintProofs<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;

@@ -46,9 +46,13 @@ export type MeltQuoteOnchainRequest = MeltQuoteBaseRequest & {
 };
 
 /**
- * Response from the mint after requesting an onchain melt quote.
+ * One fee/confirmation option offered for an onchain melt quote.
  */
 export type MeltQuoteOnchainFeeOption = {
+  /**
+   * Index used to select this option in the melt request.
+   */
+  fee_index: number;
   /**
    * Fee reserve for the onchain transaction.
    */
@@ -76,9 +80,9 @@ export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
    */
   fee_options: MeltQuoteOnchainFeeOption[];
   /**
-   * The selected fee option once the quote has been executed.
+   * `fee_index` of the chosen fee option once the quote has been executed.
    */
-  selected_estimated_blocks: number | null;
+  selected_fee_index: number | null;
   /**
    * Outpoint (txid:vout) once the transaction has been broadcast.
    */

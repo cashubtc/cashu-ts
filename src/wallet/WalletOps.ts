@@ -915,7 +915,7 @@ export class MeltBuilder<
  *   .meltOnchain(quote, proofs)
  *   .keyset('01abc...')
  *   .privkey('sk')
- *   .estimatedBlocks(1)
+ *   .feeIndex(0)
  *   .run();
  * ```
  *
@@ -923,7 +923,7 @@ export class MeltBuilder<
  */
 export class MeltOnchainBuilder {
   private config: MeltProofsConfig = {};
-  private selectedEstimatedBlocks?: number;
+  private selectedFeeIndex?: number;
 
   constructor(
     private wallet: Wallet,
@@ -952,12 +952,12 @@ export class MeltOnchainBuilder {
   }
 
   /**
-   * Select a fee option by its estimated block target.
+   * Select a fee option by its `fee_index`.
    *
-   * @param blocks `estimated_blocks` value from the quote's fee_options.
+   * @param index `fee_index` value from the quote's fee_options.
    */
-  estimatedBlocks(blocks: number) {
-    this.selectedEstimatedBlocks = blocks;
+  feeIndex(index: number) {
+    this.selectedFeeIndex = index;
     return this;
   }
 
@@ -969,20 +969,18 @@ export class MeltOnchainBuilder {
    */
   async run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
     // Ensure fee_option is selected if there is only one
-    if (this.selectedEstimatedBlocks === undefined && this.quote.fee_options.length === 1) {
-      this.selectedEstimatedBlocks = this.quote.fee_options[0].estimated_blocks;
+    if (this.selectedFeeIndex === undefined && this.quote.fee_options.length === 1) {
+      this.selectedFeeIndex = this.quote.fee_options[0].fee_index;
     }
 
-    if (this.selectedEstimatedBlocks === undefined) {
-      throw new Error(
-        'estimatedBlocks is required when an onchain melt quote has multiple fee options',
-      );
+    if (this.selectedFeeIndex === undefined) {
+      throw new Error('feeIndex is required when an onchain melt quote has multiple fee options');
     }
 
     return this.wallet.meltProofsOnchain(
       this.quote,
       this.proofs,
-      this.selectedEstimatedBlocks,
+      this.selectedFeeIndex,
       this.config,
     );
   }

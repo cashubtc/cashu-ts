@@ -665,7 +665,7 @@ describe('Mint normalization', () => {
       state: MeltQuoteState.UNPAID,
       expiry: 123,
       request: 'bc1qrecipient',
-      selected_estimated_blocks: null,
+      selected_fee_index: null,
       outpoint: null,
     };
 
@@ -674,69 +674,52 @@ describe('Mint normalization', () => {
         customRequest: makeRequest({
           ...baseOnchainQuote,
           fee_options: [
-            { fee_reserve: 5, estimated_blocks: 1 },
-            { fee_reserve: 2, estimated_blocks: 6 },
+            { fee_index: 0, fee_reserve: 5, estimated_blocks: 1 },
+            { fee_index: 1, fee_reserve: 2, estimated_blocks: 6 },
           ],
         }),
       });
 
       const response = await mint.checkMeltQuoteOnchain('q1');
 
+      expect(response.fee_options[0].fee_index).toBe(0);
       expect(response.fee_options[0].fee_reserve.toBigInt()).toBe(5n);
       expect(response.fee_options[0].estimated_blocks).toBe(1);
+      expect(response.fee_options[1].fee_index).toBe(1);
       expect(response.fee_options[1].fee_reserve.toBigInt()).toBe(2n);
       expect(response.fee_options[1].estimated_blocks).toBe(6);
-      expect(response.selected_estimated_blocks).toBeNull();
+      expect(response.selected_fee_index).toBeNull();
       expect(response.outpoint).toBeNull();
     });
 
-    it('accepts a string outpoint and a numeric selected_estimated_blocks', async () => {
+    it('accepts a string outpoint and a numeric selected_fee_index', async () => {
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({
           ...baseOnchainQuote,
           state: MeltQuoteState.PAID,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
-          selected_estimated_blocks: 6,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+          selected_fee_index: 0,
           outpoint: 'txid:0',
         }),
       });
 
       const response = await mint.checkMeltQuoteOnchain('q1');
-      expect(response.selected_estimated_blocks).toBe(6);
+      expect(response.selected_fee_index).toBe(0);
       expect(response.outpoint).toBe('txid:0');
     });
 
-    it('treats absent selected_estimated_blocks and outpoint as null', async () => {
+    it('treats absent selected_fee_index and outpoint as null', async () => {
       // CDK omits nullable fields when they have no value; we accept that as null.
-      const { selected_estimated_blocks: _s, outpoint: _o, ...withoutNullables } = baseOnchainQuote;
+      const { selected_fee_index: _s, outpoint: _o, ...withoutNullables } = baseOnchainQuote;
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({
           ...withoutNullables,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
         }),
       });
       const response = await mint.checkMeltQuoteOnchain('q1');
-      expect(response.selected_estimated_blocks).toBeNull();
+      expect(response.selected_fee_index).toBeNull();
       expect(response.outpoint).toBeNull();
-    });
-
-    it('does not police mint spec compliance for fee_options entries', async () => {
-      // We trust per-option fields that aren't load-bearing for the wallet
-      // (uniqueness, integer-safety of estimated_blocks). Mint-conformance
-      // checking is the mint's job; we just need to be able to use the response.
-      const mint = new Mint(mintUrl, {
-        customRequest: makeRequest({
-          ...baseOnchainQuote,
-          fee_options: [
-            { fee_reserve: 5, estimated_blocks: 6 },
-            { fee_reserve: 2, estimated_blocks: 6 }, // duplicate — spec violation, we still accept
-          ],
-        }),
-      });
-      const response = await mint.checkMeltQuoteOnchain('q1');
-      expect(response.fee_options).toHaveLength(2);
-      expect(response.fee_options[0].fee_reserve.toBigInt()).toBe(5n);
-      expect(response.fee_options[1].fee_reserve.toBigInt()).toBe(2n);
     });
 
     it('throws when fee_options is not an array', async () => {
@@ -767,13 +750,35 @@ describe('Mint normalization', () => {
       });
     });
 
+    it.each([
+      ['missing', { fee_reserve: 2, estimated_blocks: 6 }],
+      ['a non-integer', { fee_index: 1.5, fee_reserve: 2, estimated_blocks: 6 }],
+      [
+        'an unsafe integer',
+        { fee_index: Number.MAX_SAFE_INTEGER + 1, fee_reserve: 2, estimated_blocks: 6 },
+      ],
+      ['a string', { fee_index: '0', fee_reserve: 2, estimated_blocks: 6 }],
+    ])('throws when a fee_options entry has %s fee_index', async (_label, badOption) => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...baseOnchainQuote, fee_options: [badOption] }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+
     it('throws when request is not a string', async () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({
           ...baseOnchainQuote,
           request: 42,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
         }),
         logger,
       });
@@ -785,13 +790,13 @@ describe('Mint normalization', () => {
       });
     });
 
-    it('throws when selected_estimated_blocks is non-null and not a safe integer', async () => {
+    it('throws when selected_fee_index is non-null and not a safe integer', async () => {
       const logger = createLogger();
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({
           ...baseOnchainQuote,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
-          selected_estimated_blocks: 1.5,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+          selected_fee_index: 1.5,
         }),
         logger,
       });
@@ -808,7 +813,7 @@ describe('Mint normalization', () => {
       const mint = new Mint(mintUrl, {
         customRequest: makeRequest({
           ...baseOnchainQuote,
-          fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
           outpoint: 12345,
         }),
         logger,
@@ -847,8 +852,8 @@ describe('Mint normalization', () => {
         state: MeltQuoteState.PAID,
         expiry: 123,
         request: 'bc1qrecipient',
-        fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
-        selected_estimated_blocks: 6,
+        fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+        selected_fee_index: 0,
         outpoint: 'txid:0',
       };
     }) as RequestFn;
@@ -858,7 +863,7 @@ describe('Mint normalization', () => {
 
     expect(response.amount.toBigInt()).toBe(10n);
     expect(response.fee_options[0].fee_reserve.toBigInt()).toBe(2n);
-    expect(response.selected_estimated_blocks).toBe(6);
+    expect(response.selected_fee_index).toBe(0);
     expect(response.outpoint).toBe('txid:0');
   });
 

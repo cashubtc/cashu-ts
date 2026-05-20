@@ -141,11 +141,11 @@ const runOnchainExample = async () => {
   console.log(`   fee_options:`);
   for (const opt of meltQuote.fee_options) {
     console.log(
-      `     - ${opt.fee_reserve.toString()} sats reserve, ~${opt.estimated_blocks} blocks`,
+      `     - [${opt.fee_index}] ${opt.fee_reserve.toString()} sats reserve, ~${opt.estimated_blocks} blocks`,
     );
   }
   console.log(
-    `\n👉 Selected cheapest: ${cheapest.fee_reserve.toString()} sats reserve, ~${cheapest.estimated_blocks} blocks\n`,
+    `\n👉 Selected cheapest [${cheapest.fee_index}]: ${cheapest.fee_reserve.toString()} sats reserve, ~${cheapest.estimated_blocks} blocks\n`,
   );
 
   // Coin-select proofs covering amount + fee_reserve (input fees added by send())
@@ -155,11 +155,7 @@ const runOnchainExample = async () => {
   console.log(`💸 Executing melt...`);
   // meltProofsOnchain returns UNPAID with no change at melt-time; the mint populates `change` on
   // the quote after broadcast, and we unblind it later using `response.outputData`.
-  const response = await wallet.meltProofsOnchain(
-    meltQuote,
-    sendResp.send,
-    cheapest.estimated_blocks,
-  );
+  const response = await wallet.meltProofsOnchain(meltQuote, sendResp.send, cheapest.fee_index);
   console.log(`✅ Melt accepted: state=${response.quote.state}`);
 
   // Per NUT-30, mints MAY batch melts into a single onchain tx — broadcast can lag.

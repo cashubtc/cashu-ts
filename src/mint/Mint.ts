@@ -1270,17 +1270,22 @@ class Mint {
     }
     data.fee_options = data.fee_options.map((raw) => {
       const opt = raw as Record<string, unknown>;
+      // fee_index is the load-bearing selector for the melt request
+      if (!Number.isSafeInteger(opt.fee_index)) {
+        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+        throw new Error('Invalid response from mint');
+      }
       return {
         ...opt,
+        fee_index: opt.fee_index as number,
         fee_reserve: Amount.from(opt.fee_reserve as AmountLike),
         estimated_blocks: opt.estimated_blocks as number,
       };
     });
-    nullIfUndefined(data, 'selected_estimated_blocks', 'outpoint');
+    nullIfUndefined(data, 'selected_fee_index', 'outpoint');
     if (
       typeof data.request !== 'string' ||
-      (data.selected_estimated_blocks !== null &&
-        !Number.isSafeInteger(data.selected_estimated_blocks)) ||
+      (data.selected_fee_index !== null && !Number.isSafeInteger(data.selected_fee_index)) ||
       (data.outpoint !== null && typeof data.outpoint !== 'string')
     ) {
       this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });

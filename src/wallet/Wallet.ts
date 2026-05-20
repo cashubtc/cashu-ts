@@ -2643,7 +2643,7 @@ class Wallet {
    * `wallet.createMeltChangeProofs()`.
    * @param meltQuote The onchain melt quote.
    * @param proofsToSend Proofs to melt.
-   * @param estimatedBlocks Selected `estimated_blocks` value from `meltQuote.fee_options`.
+   * @param feeIndex Selected `fee_index` value from `meltQuote.fee_options`.
    * @param config Optional parameters (e.g. privkey for P2PK proofs, keysetId).
    * @returns MeltProofsResponse with quote, any immediate change, and `outputData` for
    *   deferred-change reconstruction.
@@ -2652,15 +2652,15 @@ class Wallet {
   async meltProofsOnchain(
     meltQuote: MeltQuoteOnchainResponse,
     proofsToSend: ProofLike[],
-    estimatedBlocks: number,
+    feeIndex: number,
     config?: MeltProofsConfig,
   ): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
     this.validateMeltQuote(meltQuote);
     // Validate fee_option selection
-    const feeOption = meltQuote.fee_options.find((o) => o.estimated_blocks === estimatedBlocks);
-    this.failIfNullish(feeOption, 'estimatedBlocks must match an onchain melt quote fee option', {
-      estimatedBlocks,
-      feeOptions: meltQuote.fee_options.map((o) => o.estimated_blocks),
+    const feeOption = meltQuote.fee_options.find((o) => o.fee_index === feeIndex);
+    this.failIfNullish(feeOption, 'feeIndex must match an onchain melt quote fee option', {
+      feeIndex,
+      feeOptions: meltQuote.fee_options.map((o) => o.fee_index),
     });
     // Ensure we have enough proofs
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
@@ -2677,7 +2677,7 @@ class Wallet {
     // Perform melt
     const meltTxn = await this.prepareMelt('onchain', meltQuote, normalizedProofs, config);
     const response = await this.completeMelt<MeltQuoteOnchainResponse>(meltTxn, config?.privkey, {
-      extraPayload: { estimated_blocks: estimatedBlocks },
+      extraPayload: { fee_index: feeIndex },
     });
     return response;
   }

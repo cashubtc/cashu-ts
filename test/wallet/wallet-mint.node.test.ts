@@ -968,8 +968,8 @@ describe('generic mint/melt methods', () => {
             request: 'bc1qrecipient',
             amount: 10,
             unit: 'sat',
-            fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
-            selected_estimated_blocks: 6,
+            fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+            selected_fee_index: 0,
             state: MeltQuoteState.PAID,
             expiry: 3600,
             outpoint: 'txid:0',
@@ -984,7 +984,7 @@ describe('generic mint/melt methods', () => {
       expect(quote.quote).toBe('onchain-melt-check');
       expect(quote.amount).toEqual(Amount.from(10));
       expect(quote.fee_options[0].fee_reserve).toEqual(Amount.from(2));
-      expect(quote.selected_estimated_blocks).toBe(6);
+      expect(quote.selected_fee_index).toBe(0);
     });
   });
 
@@ -1288,10 +1288,10 @@ describe('generic mint/melt methods', () => {
             amount: body.amount,
             unit: body.unit,
             fee_options: [
-              { fee_reserve: 5, estimated_blocks: 1 },
-              { fee_reserve: 2, estimated_blocks: 6 },
+              { fee_index: 0, fee_reserve: 5, estimated_blocks: 1 },
+              { fee_index: 1, fee_reserve: 2, estimated_blocks: 6 },
             ],
-            selected_estimated_blocks: null,
+            selected_fee_index: null,
             state: MeltQuoteState.UNPAID,
             expiry: 3600,
             outpoint: null,
@@ -1306,7 +1306,7 @@ describe('generic mint/melt methods', () => {
       expect(quote.quote).toBe('onchain-melt-1');
       expect(quote.amount).toEqual(Amount.from(10));
       expect(quote.fee_options[0].fee_reserve).toEqual(Amount.from(5));
-      expect(quote.fee_options[1]).toMatchObject({ estimated_blocks: 6 });
+      expect(quote.fee_options[1]).toMatchObject({ fee_index: 1, estimated_blocks: 6 });
     });
 
     test('createMeltQuoteOnchain accepts response with omitted nullable fields', async () => {
@@ -1320,10 +1320,10 @@ describe('generic mint/melt methods', () => {
             request: 'bc1qrecipient',
             amount: 10,
             unit: 'sat',
-            fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
+            fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
             state: MeltQuoteState.UNPAID,
             expiry: 3600,
-            // selected_estimated_blocks and outpoint omitted entirely
+            // selected_fee_index and outpoint omitted entirely
           }),
         ),
       );
@@ -1331,7 +1331,7 @@ describe('generic mint/melt methods', () => {
       await wallet.loadMint();
 
       const quote = await wallet.createMeltQuoteOnchain('bc1qrecipient', 10);
-      expect(quote.selected_estimated_blocks).toBeNull();
+      expect(quote.selected_fee_index).toBeNull();
       expect(quote.outpoint).toBeNull();
     });
   });
@@ -1393,17 +1393,17 @@ describe('generic mint/melt methods', () => {
       ).rejects.toThrow("Quote unit 'usd' does not match wallet unit 'sat'");
     });
 
-    test('meltProofsOnchain sends selected estimated_blocks with NUT-08 outputs', async () => {
+    test('meltProofsOnchain sends selected fee_index with NUT-08 outputs', async () => {
       server.use(
         http.post(mintUrl + '/v1/melt/onchain', async ({ request }) => {
           const body = (await request.json()) as {
             quote: string;
-            estimated_blocks: number;
+            fee_index: number;
             inputs: Proof[];
             outputs?: unknown;
           };
           expect(body.quote).toBe('onchain-melt-1');
-          expect(body.estimated_blocks).toBe(6);
+          expect(body.fee_index).toBe(1);
           expect(body.inputs).toHaveLength(2);
           expect(body.outputs).toEqual(expect.any(Array));
           return HttpResponse.json({
@@ -1412,10 +1412,10 @@ describe('generic mint/melt methods', () => {
             amount: 10,
             unit: 'sat',
             fee_options: [
-              { fee_reserve: 5, estimated_blocks: 1 },
-              { fee_reserve: 2, estimated_blocks: 6 },
+              { fee_index: 0, fee_reserve: 5, estimated_blocks: 1 },
+              { fee_index: 1, fee_reserve: 2, estimated_blocks: 6 },
             ],
-            selected_estimated_blocks: 6,
+            selected_fee_index: 1,
             state: MeltQuoteState.PAID,
             expiry: 3600,
             outpoint: 'txid:0',
@@ -1438,10 +1438,10 @@ describe('generic mint/melt methods', () => {
         amount: Amount.from(10),
         unit: 'sat',
         fee_options: [
-          { fee_reserve: Amount.from(5), estimated_blocks: 1 },
-          { fee_reserve: Amount.from(2), estimated_blocks: 6 },
+          { fee_index: 0, fee_reserve: Amount.from(5), estimated_blocks: 1 },
+          { fee_index: 1, fee_reserve: Amount.from(2), estimated_blocks: 6 },
         ],
-        selected_estimated_blocks: null,
+        selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
         outpoint: null,
@@ -1451,10 +1451,10 @@ describe('generic mint/melt methods', () => {
         { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
       ];
 
-      const response = await wallet.meltProofsOnchain(meltQuote, proofsToSend, 6);
+      const response = await wallet.meltProofsOnchain(meltQuote, proofsToSend, 1);
 
       expect(response.quote.state).toBe(MeltQuoteState.PAID);
-      expect(response.quote.selected_estimated_blocks).toBe(6);
+      expect(response.quote.selected_fee_index).toBe(1);
       expect(response.quote.outpoint).toBe('txid:0');
       expect(response.change).toHaveLength(1);
       expect(response.change[0]).toMatchObject({ amount: Amount.from(1), id: '00bd033559de27d0' });
@@ -1462,7 +1462,7 @@ describe('generic mint/melt methods', () => {
       expect(response.outputData).toEqual([]);
     });
 
-    test('meltProofsOnchain rejects unknown estimated_blocks option', async () => {
+    test('meltProofsOnchain rejects unknown fee_index option', async () => {
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
       const meltQuote: MeltQuoteOnchainResponse = {
@@ -1470,8 +1470,8 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
-        selected_estimated_blocks: null,
+        fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+        selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
         outpoint: null,
@@ -1480,8 +1480,8 @@ describe('generic mint/melt methods', () => {
         { id: '00bd033559de27d0', amount: Amount.from(12), secret: 'secret1', C: 'C1' },
       ];
 
-      await expect(wallet.meltProofsOnchain(meltQuote, proofsToSend, 1)).rejects.toThrow(
-        'estimatedBlocks must match an onchain melt quote fee option',
+      await expect(wallet.meltProofsOnchain(meltQuote, proofsToSend, 7)).rejects.toThrow(
+        'feeIndex must match an onchain melt quote fee option',
       );
     });
 
@@ -1493,8 +1493,8 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
-        selected_estimated_blocks: null,
+        fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+        selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
         outpoint: null,
@@ -1503,7 +1503,7 @@ describe('generic mint/melt methods', () => {
         { id: '00bd033559de27d0', amount: Amount.from(11), secret: 'secret1', C: 'C1' },
       ];
 
-      await expect(wallet.meltProofsOnchain(meltQuote, proofsToSend, 6)).rejects.toThrow(
+      await expect(wallet.meltProofsOnchain(meltQuote, proofsToSend, 0)).rejects.toThrow(
         'Not enough proofs to cover amount + fee',
       );
     });
@@ -1513,7 +1513,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/onchain', async ({ request }) => {
           const body = (await request.json()) as {
             quote: string;
-            estimated_blocks: number;
+            fee_index: number;
             outputs?: unknown;
           };
           expect(body.outputs).toEqual(expect.any(Array));
@@ -1522,8 +1522,8 @@ describe('generic mint/melt methods', () => {
             request: 'bc1qrecipient',
             amount: 10,
             unit: 'sat',
-            fee_options: [{ fee_reserve: 2, estimated_blocks: body.estimated_blocks }],
-            selected_estimated_blocks: body.estimated_blocks,
+            fee_options: [{ fee_index: body.fee_index, fee_reserve: 2, estimated_blocks: 6 }],
+            selected_fee_index: body.fee_index,
             state: MeltQuoteState.PENDING,
             expiry: 3600,
             outpoint: 'txid:0',
@@ -1542,8 +1542,8 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
-        selected_estimated_blocks: null,
+        fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+        selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
         outpoint: null,
@@ -1557,7 +1557,7 @@ describe('generic mint/melt methods', () => {
         },
       ];
 
-      await wallet.meltProofsOnchain(meltQuote, proofsToSend, 6, { privkey: 'privkey' });
+      await wallet.meltProofsOnchain(meltQuote, proofsToSend, 0, { privkey: 'privkey' });
 
       expect(signSpy).toHaveBeenCalledWith(
         expect.any(Array),
@@ -1577,8 +1577,8 @@ describe('generic mint/melt methods', () => {
             request: 'bc1qrecipient',
             amount: 10,
             unit: 'sat',
-            fee_options: [{ fee_reserve: 2, estimated_blocks: 6 }],
-            selected_estimated_blocks: 6,
+            fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+            selected_fee_index: 0,
             state: MeltQuoteState.PENDING,
             expiry: 3600,
             outpoint: null,
@@ -1592,8 +1592,8 @@ describe('generic mint/melt methods', () => {
         request: 'bc1qrecipient',
         amount: Amount.from(10),
         unit: 'sat',
-        fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
-        selected_estimated_blocks: null,
+        fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+        selected_fee_index: null,
         state: MeltQuoteState.UNPAID,
         expiry: 3600,
         outpoint: null,
@@ -1603,7 +1603,7 @@ describe('generic mint/melt methods', () => {
         { id: '00bd033559de27d0', amount: Amount.from(4), secret: 'secret2', C: 'C2' },
       ];
 
-      const response = await wallet.meltProofsOnchain(meltQuote, proofsToSend, 6);
+      const response = await wallet.meltProofsOnchain(meltQuote, proofsToSend, 0);
 
       expect(response.quote.state).toBe(MeltQuoteState.PENDING);
       expect(response.change).toHaveLength(0);

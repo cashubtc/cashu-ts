@@ -113,7 +113,7 @@ type CompleteMeltFn = (
 type MeltProofsOnchainFn = (
   quote: MeltQuoteOnchainResponse,
   proofs: Proof[],
-  estimatedBlocks: number,
+  feeIndex: number,
   config?: MeltProofsConfig,
 ) => Promise<{ quote: MeltQuoteOnchainResponse; change: Proof[] }>;
 
@@ -231,8 +231,8 @@ const meltOnchainSingle: MeltQuoteOnchainResponse = {
   expiry: 0,
   request: 'bc1qrecipient',
   unit: 'sat',
-  fee_options: [{ fee_reserve: Amount.from(2), estimated_blocks: 6 }],
-  selected_estimated_blocks: null,
+  fee_options: [{ fee_index: 0, fee_reserve: Amount.from(2), estimated_blocks: 6 }],
+  selected_fee_index: null,
   outpoint: null,
 };
 
@@ -244,10 +244,10 @@ const meltOnchainMulti: MeltQuoteOnchainResponse = {
   request: 'bc1qrecipient',
   unit: 'sat',
   fee_options: [
-    { fee_reserve: Amount.from(5), estimated_blocks: 1 },
-    { fee_reserve: Amount.from(2), estimated_blocks: 6 },
+    { fee_index: 0, fee_reserve: Amount.from(5), estimated_blocks: 1 },
+    { fee_index: 1, fee_reserve: Amount.from(2), estimated_blocks: 6 },
   ],
-  selected_estimated_blocks: null,
+  selected_fee_index: null,
   outpoint: null,
 };
 
@@ -977,36 +977,31 @@ describe('WalletOps builders', () => {
   // --------------------------- MeltOnchainBuilder ----------------------------
 
   describe('MeltOnchainBuilder', () => {
-    it('auto-selects the only fee option when no estimatedBlocks is set', async () => {
+    it('auto-selects the only fee option when no feeIndex is set', async () => {
       await ops.meltOnchain(meltOnchainSingle, proofs).privkey('sk').run();
 
       expect(wallet.meltProofsOnchain).toHaveBeenCalledTimes(1);
-      const [q, ps, blocks, cfg] = wallet.meltProofsOnchain.mock.calls[0];
+      const [q, ps, idx, cfg] = wallet.meltProofsOnchain.mock.calls[0];
       expect(q).toBe(meltOnchainSingle);
       expect(ps).toBe(proofs);
-      expect(blocks).toBe(6); // single option estimated_blocks
+      expect(idx).toBe(0); // single option fee_index
       expect(cfg).toMatchObject({ privkey: 'sk' });
     });
 
-    it('uses the explicitly selected estimatedBlocks when multiple options exist', async () => {
-      await ops
-        .meltOnchain(meltOnchainMulti, proofs)
-        .keyset('kid')
-        .privkey('sk')
-        .estimatedBlocks(1)
-        .run();
+    it('uses the explicitly selected feeIndex when multiple options exist', async () => {
+      await ops.meltOnchain(meltOnchainMulti, proofs).keyset('kid').privkey('sk').feeIndex(0).run();
 
       expect(wallet.meltProofsOnchain).toHaveBeenCalledTimes(1);
-      const [q, ps, blocks, cfg] = wallet.meltProofsOnchain.mock.calls[0];
+      const [q, ps, idx, cfg] = wallet.meltProofsOnchain.mock.calls[0];
       expect(q).toBe(meltOnchainMulti);
       expect(ps).toBe(proofs);
-      expect(blocks).toBe(1);
+      expect(idx).toBe(0);
       expect(cfg).toMatchObject({ keysetId: 'kid', privkey: 'sk' });
     });
 
-    it('throws when multiple fee options exist and no estimatedBlocks is selected', async () => {
+    it('throws when multiple fee options exist and no feeIndex is selected', async () => {
       await expect(ops.meltOnchain(meltOnchainMulti, proofs).privkey('sk').run()).rejects.toThrow(
-        /estimatedBlocks is required/i,
+        /feeIndex is required/i,
       );
       expect(wallet.meltProofsOnchain).not.toHaveBeenCalled();
     });
