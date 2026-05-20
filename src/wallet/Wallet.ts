@@ -265,6 +265,12 @@ class Wallet {
   ): asserts value is Exclude<T, null | undefined> {
     return failIfNullish(value, message, this._logger, context);
   }
+  private requireSupport(op: 'mint' | 'melt', method: string): void {
+    this.failIf(
+      !this.getMintInfo().supportsMintMeltMethod(op, method, this._unit),
+      `Mint does not support ${method} ${op} for unit '${this._unit}'`,
+    );
+  }
   private safeCallback<T>(
     cb: ((p: T) => void) | undefined,
     payload: T,
@@ -1673,6 +1679,7 @@ class Wallet {
     amount: AmountLike,
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
+    this.requireSupport('mint', 'bolt11');
     const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11');
     // Check if mint supports description for bolt11
     if (description) {
@@ -1705,6 +1712,7 @@ class Wallet {
     pubkey: string,
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
+    this.requireSupport('mint', 'bolt11');
     const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
     const { supported } = this.getMintInfo().isSupported(20);
     this.failIf(!supported, 'Mint does not support NUT-20');
@@ -1738,6 +1746,7 @@ class Wallet {
       description?: string;
     },
   ): Promise<MintQuoteBolt12Response> {
+    this.requireSupport('mint', 'bolt12');
     // Check if mint supports description for bolt12
     const mintInfo = this.getMintInfo();
     if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
@@ -1768,6 +1777,7 @@ class Wallet {
    * @experimental Onchain support follows NUT-30 semantics and may change.
    */
   async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
+    this.requireSupport('mint', 'onchain');
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
     return { ...res, unit: res.unit || this._unit };
   }
@@ -1969,6 +1979,7 @@ class Wallet {
     config?: MintProofsConfig,
     outputType?: OutputType,
   ): Promise<Proof[]> {
+    this.requireSupport('mint', 'bolt11');
     if (typeof quote === 'string') {
       // Skip checkMintQuoteBolt11 to avoid an extra round-trip. This method returns Proof[]
       // so the quote object is never exposed to the caller — a stub is sufficient and
@@ -2003,6 +2014,7 @@ class Wallet {
     config?: { keysetId?: string },
     outputType?: OutputType,
   ): Promise<Proof[]> {
+    this.requireSupport('mint', 'bolt12');
     const preview = await this.prepareMint(
       'bolt12',
       amount,
@@ -2035,6 +2047,7 @@ class Wallet {
     config?: { keysetId?: string },
     outputType?: OutputType,
   ): Promise<Proof[]> {
+    this.requireSupport('mint', 'onchain');
     const preview = await this.prepareMint(
       'onchain',
       amount,
@@ -2375,6 +2388,7 @@ class Wallet {
     invoice: string,
     amountMsat?: AmountLike,
   ): Promise<MeltQuoteBolt11Response> {
+    this.requireSupport('melt', 'bolt11');
     const normalizedAmountMsat =
       amountMsat !== undefined ? this.parseAmount(amountMsat, 'createMeltQuoteBolt11') : undefined;
 
@@ -2423,6 +2437,7 @@ class Wallet {
     offer: string,
     amountMsat?: AmountLike,
   ): Promise<MeltQuoteBolt12Response> {
+    this.requireSupport('melt', 'bolt12');
     const normalizedAmountMsat =
       amountMsat !== undefined ? this.parseAmount(amountMsat, 'createMeltQuoteBolt12') : undefined;
     return this.mint.createMeltQuoteBolt12({
@@ -2450,6 +2465,7 @@ class Wallet {
     address: string,
     amount: AmountLike,
   ): Promise<MeltQuoteOnchainResponse> {
+    this.requireSupport('melt', 'onchain');
     const normalizedAmount = this.parseAmount(amount, 'createMeltQuoteOnchain');
     const quote = await this.mint.createMeltQuoteOnchain({
       unit: this._unit,
@@ -2605,6 +2621,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt11Response>> {
+    this.requireSupport('melt', 'bolt11');
     const meltTxn = await this.prepareMelt('bolt11', meltQuote, proofsToSend, config, outputType);
     return this.completeMelt<MeltQuoteBolt11Response>(meltTxn, config?.privkey);
   }
@@ -2627,6 +2644,7 @@ class Wallet {
     config?: MeltProofsConfig,
     outputType?: OutputType,
   ): Promise<MeltProofsResponse<MeltQuoteBolt12Response>> {
+    this.requireSupport('melt', 'bolt12');
     const meltTxn = await this.prepareMelt('bolt12', meltQuote, proofsToSend, config, outputType);
     return this.completeMelt<MeltQuoteBolt12Response>(meltTxn, config?.privkey);
   }
@@ -2655,6 +2673,7 @@ class Wallet {
     feeIndex: number,
     config?: MeltProofsConfig,
   ): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
+    this.requireSupport('melt', 'onchain');
     this.validateMeltQuote(meltQuote);
     // Validate fee_option selection
     const feeOption = meltQuote.fee_options.find((o) => o.fee_index === feeIndex);

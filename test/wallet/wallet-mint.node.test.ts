@@ -935,6 +935,63 @@ describe('generic mint/melt methods', () => {
       expect(quote.amount_issued).toEqual(Amount.from(3));
     });
 
+    test('createMintQuoteOnchain throws when mint does not advertise onchain support', async () => {
+      // Default fixture supports onchain for sat; this wallet uses usd which is bolt11-only.
+      const wallet = new Wallet(mint, { unit: 'usd' });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.createMintQuoteOnchain(
+          '02f01fd65b16d80f7eff6ef2e0b3c5a8028b745796bbdc06cb503022262b2ebb51',
+        ),
+      ).rejects.toThrow("Mint does not support onchain mint for unit 'usd'");
+    });
+
+    test('createMeltQuoteOnchain throws when mint does not advertise onchain support', async () => {
+      const wallet = new Wallet(mint, { unit: 'usd' });
+      await wallet.loadMint();
+
+      await expect(wallet.createMeltQuoteOnchain('bc1qrecipient', 10)).rejects.toThrow(
+        "Mint does not support onchain melt for unit 'usd'",
+      );
+    });
+
+    test('createMintQuoteBolt12 throws when mint does not advertise bolt12 mint for the unit', async () => {
+      // Default fixture supports bolt12 for sat only; usd is bolt11-only.
+      const wallet = new Wallet(mint, { unit: 'usd' });
+      await wallet.loadMint();
+
+      await expect(wallet.createMintQuoteBolt12('02abcd', { amount: 10 })).rejects.toThrow(
+        "Mint does not support bolt12 mint for unit 'usd'",
+      );
+    });
+
+    test('createMeltQuoteBolt12 throws when mint does not advertise bolt12 melt for the unit', async () => {
+      const wallet = new Wallet(mint, { unit: 'usd' });
+      await wallet.loadMint();
+
+      await expect(wallet.createMeltQuoteBolt12('lno1offer...')).rejects.toThrow(
+        "Mint does not support bolt12 melt for unit 'usd'",
+      );
+    });
+
+    test('createMintQuoteBolt11 throws when mint disables NUT-04', async () => {
+      server.use(
+        http.get(mintUrl + '/v1/info', () =>
+          HttpResponse.json({
+            ...mintInfoResp,
+            nuts: { ...mintInfoResp.nuts, 4: { methods: [], disabled: true } },
+          }),
+        ),
+      );
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      await expect(wallet.createMintQuoteBolt11(10)).rejects.toThrow(
+        "Mint does not support bolt11 mint for unit 'sat'",
+      );
+    });
+
     test('checkMintQuoteOnchain returns normalized onchain quote', async () => {
       server.use(
         http.get(mintUrl + '/v1/mint/quote/onchain/onchain-mint-check', () =>

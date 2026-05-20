@@ -1093,6 +1093,7 @@ export class MintInfo {
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     supportsAmountless(method?: string, unit?: string): boolean;
+    supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;

@@ -383,6 +383,16 @@ export class MintInfo {
     );
   }
 
+  /**
+   * Checks if the mint advertises the given (method, unit) pair for the given operation (`'mint'` →
+   * NUT-4, `'melt'` → NUT-5).
+   */
+  supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean {
+    const { disabled, params } = this.isSupported(op === 'mint' ? 4 : 5);
+    if (disabled) return false;
+    return params.some((m) => m.method === method && m.unit === unit);
+  }
+
   supportsAmountless(method: string = 'bolt11', unit: string = 'sat'): boolean {
     const meltMethods = this._mintInfo?.nuts?.[5]?.methods ?? [];
 

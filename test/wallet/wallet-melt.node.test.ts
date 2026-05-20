@@ -964,6 +964,7 @@ describe('async melt preference body', () => {
       contact: [],
       time: 0,
       nuts: {
+        5: { methods: [{ method: 'bolt11', unit: 'sat' }], disabled: false },
         22: {
           bat_max_mint: 1,
           protected_endpoints: [{ method: 'POST', path: '/v1/melt/bolt11' }],
@@ -1028,6 +1029,7 @@ describe('async melt preference body', () => {
       contact: [],
       time: 0,
       nuts: {
+        5: { methods: [{ method: 'bolt12', unit: 'sat' }], disabled: false },
         22: {
           bat_max_mint: 1,
           protected_endpoints: [{ method: 'POST', path: '/v1/melt/bolt12' }],
