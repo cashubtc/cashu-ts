@@ -1,4 +1,5 @@
 import dns from 'node:dns';
+import * as readline from 'node:readline/promises';
 import { Wallet, getEncodedToken, sumProofs, type MeltQuoteOnchainResponse } from '../src';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
@@ -87,40 +88,51 @@ const runOnchainExample = async () => {
     `   mint accepts melt: min ${onchainMeltMethod.min_amount} sats, max ${onchainMeltMethod.max_amount} sats\n`,
   );
 
-  // We want to send as much as possible, so we quote, shrink to fit, and re-quote until stable.
-  // fee_reserve usually stabilises but can drift either way with UTXO-selection. Cap at 3
-  // passes; if the final pass drifts above budget, fall back to the prior quote that fit.
+  // Initial quote at the full minted amount so the user can see the mint's fee
+  // options and pick one before we converge.
   const inputFee = wallet.getFeesForProofs(proofs);
   const pickCheapest = (q: MeltQuoteOnchainResponse) =>
     q.fee_options.reduce((a, b) => (a.fee_reserve.lessThan(b.fee_reserve) ? a : b));
 
   let meltAmount = minted;
   let meltQuote = await wallet.createMeltQuoteOnchain(FAUCET_REFUND_ADDRESS, meltAmount);
-  let cheapest = pickCheapest(meltQuote);
+  const chosenIndex = await promptFeeChoice(meltQuote);
+  // estimated_blocks is a stable human-meaningful label across re-quotes during
+  // the convergence loop below; fall back to cheapest if the mint drops the tier.
+  const targetBlocks = meltQuote.fee_options.find(
+    (o) => o.fee_index === chosenIndex,
+  )!.estimated_blocks;
+  const pickTier = (q: MeltQuoteOnchainResponse) =>
+    q.fee_options.find((o) => o.estimated_blocks === targetBlocks) ?? pickCheapest(q);
+
+  // We want to send as much as possible, so we shrink to fit and re-quote until stable.
+  // fee_reserve usually stabilises but can drift either way with UTXO-selection. Cap at 3
+  // passes; if the final pass drifts above budget, fall back to the prior quote that fit.
+  let chosen = pickTier(meltQuote);
   console.log(
-    `📋 Pass 1: quote for ${meltAmount.toString()} sats, fee_reserve=${cheapest.fee_reserve.toString()}, input_fee=${inputFee.toString()}`,
+    `📋 Pass 1: quote for ${meltAmount.toString()} sats, fee_reserve=${chosen.fee_reserve.toString()}, input_fee=${inputFee.toString()}`,
   );
 
   // Last quote that fit (used as fallback if a later pass drifts over budget).
   let fitMelt:
-    | { amount: typeof meltAmount; quote: typeof meltQuote; cheapest: typeof cheapest }
+    | { amount: typeof meltAmount; quote: typeof meltQuote; chosen: typeof chosen }
     | undefined;
 
   for (let pass = 2; pass <= 3; pass++) {
-    const fitted = wallet.maxSpendableAfterFees(proofs, cheapest.fee_reserve);
+    const fitted = wallet.maxSpendableAfterFees(proofs, chosen.fee_reserve);
     if (fitted.greaterThanOrEqual(meltAmount)) {
-      fitMelt = { amount: meltAmount, quote: meltQuote, cheapest };
+      fitMelt = { amount: meltAmount, quote: meltQuote, chosen };
       if (fitted.equals(meltAmount)) break; // converged
     }
     meltAmount = fitted;
     meltQuote = await wallet.createMeltQuoteOnchain(FAUCET_REFUND_ADDRESS, meltAmount);
-    cheapest = pickCheapest(meltQuote);
+    chosen = pickTier(meltQuote);
     console.log(
-      `📋 Pass ${pass}: quote for ${meltAmount.toString()} sats, fee_reserve=${cheapest.fee_reserve.toString()}`,
+      `📋 Pass ${pass}: quote for ${meltAmount.toString()} sats, fee_reserve=${chosen.fee_reserve.toString()}`,
     );
   }
 
-  let needed = meltAmount.add(cheapest.fee_reserve).add(inputFee);
+  let needed = meltAmount.add(chosen.fee_reserve).add(inputFee);
   if (needed.greaterThan(minted)) {
     if (!fitMelt) {
       throw new Error(
@@ -130,32 +142,25 @@ const runOnchainExample = async () => {
     console.log(`   (fee drift on final pass; falling back to prior fitting quote)`);
     meltAmount = fitMelt.amount;
     meltQuote = fitMelt.quote;
-    cheapest = fitMelt.cheapest;
-    needed = meltAmount.add(cheapest.fee_reserve).add(inputFee);
+    chosen = fitMelt.chosen;
+    needed = meltAmount.add(chosen.fee_reserve).add(inputFee);
   }
 
   console.log(
     `\n   melt_amount + fee_reserve + input_fee = ${needed.toString()} sats (have ${minted.toString()})`,
   );
-  console.log(`✅ Melt quote ID: ${meltQuote.quote}`);
-  console.log(`   fee_options:`);
-  for (const opt of meltQuote.fee_options) {
-    console.log(
-      `     - [${opt.fee_index}] ${opt.fee_reserve.toString()} sats reserve, ~${opt.estimated_blocks} blocks`,
-    );
-  }
   console.log(
-    `\n👉 Selected cheapest [${cheapest.fee_index}]: ${cheapest.fee_reserve.toString()} sats reserve, ~${cheapest.estimated_blocks} blocks\n`,
+    `👉 Using fee_index [${chosen.fee_index}]: ${chosen.fee_reserve.toString()} sats reserve, ~${chosen.estimated_blocks} blocks\n`,
   );
 
   // Coin-select proofs covering amount + fee_reserve (input fees added by send())
-  const totalNeeded = meltAmount.add(cheapest.fee_reserve);
+  const totalNeeded = meltAmount.add(chosen.fee_reserve);
   const sendResp = await wallet.send(totalNeeded, proofs, { includeFees: true });
 
   console.log(`💸 Executing melt...`);
   // meltProofsOnchain returns UNPAID with no change at melt-time; the mint populates `change` on
   // the quote after broadcast, and we unblind it later using `response.outputData`.
-  const response = await wallet.meltProofsOnchain(meltQuote, sendResp.send, cheapest.fee_index);
+  const response = await wallet.meltProofsOnchain(meltQuote, sendResp.send, chosen.fee_index);
   console.log(`✅ Melt accepted: state=${response.quote.state}`);
 
   // Per NUT-30, mints MAY batch melts into a single onchain tx — broadcast can lag.
@@ -185,7 +190,7 @@ const runOnchainExample = async () => {
   console.log(`💰 Started:    ${minted.toString()} sats minted from faucet payment`);
   console.log(`📤 Melted:     ${meltAmount.toString()} sats to ${FAUCET_REFUND_ADDRESS}`);
   console.log(
-    `⛓️  Fee reserve: ${cheapest.fee_reserve.toString()} sats (mint may return unused as change)`,
+    `⛓️  Fee reserve: ${chosen.fee_reserve.toString()} sats (~${chosen.estimated_blocks} blocks; mint may return unused as change)`,
   );
   console.log(`🔧 Input fee:  ${inputFee.toString()} sats (NUT-02 swap fee)`);
   console.log(
@@ -202,6 +207,40 @@ const runOnchainExample = async () => {
     console.log(`🔍 Verify melt on mempool: ${MEMPOOL_ADDRESS_URL(FAUCET_REFUND_ADDRESS)}`);
   }
   console.log(`✅ Onchain example completed!`);
+};
+
+// Interactive prompt: show fee_options and ask the user to pick a fee_index.
+// Empty input or invalid input defaults to the cheapest option.
+const promptFeeChoice = async (quote: MeltQuoteOnchainResponse): Promise<number> => {
+  const cheapest = quote.fee_options.reduce((a, b) =>
+    a.fee_reserve.lessThan(b.fee_reserve) ? a : b,
+  );
+  console.log(`✅ Melt quote ID: ${quote.quote}`);
+  console.log(`   fee_options:`);
+  for (const opt of quote.fee_options) {
+    const tag = opt.fee_index === cheapest.fee_index ? ' (cheapest)' : '';
+    console.log(
+      `     - [${opt.fee_index}] ${opt.fee_reserve.toString()} sats reserve, ~${opt.estimated_blocks} blocks${tag}`,
+    );
+  }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (
+      await rl.question(`\n👉 Select fee_index [default ${cheapest.fee_index}]: `)
+    ).trim();
+    if (answer === '') {
+      console.log(`   (defaulting to cheapest)`);
+      return cheapest.fee_index;
+    }
+    const idx = Number(answer);
+    if (!Number.isInteger(idx) || !quote.fee_options.some((o) => o.fee_index === idx)) {
+      console.log(`   (invalid choice — defaulting to cheapest)`);
+      return cheapest.fee_index;
+    }
+    return idx;
+  } finally {
+    rl.close();
+  }
 };
 
 // Heartbeat helpers: write a dot per poll, terminate the dots line whenever
