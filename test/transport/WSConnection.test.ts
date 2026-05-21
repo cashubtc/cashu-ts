@@ -28,6 +28,30 @@ describe('testing WSConnection', () => {
 			const callback = vi.fn();
 			const errorCallback = vi.fn();
 			conn.createSubscription(
+				{ kind: 'mint_quote', filters: ['12345'] },
+				callback,
+				errorCallback,
+			);
+		})) as string;
+		expect(JSON.parse(message)).toMatchObject({
+			jsonrpc: '2.0',
+			method: 'subscribe',
+			params: { kind: 'mint_quote', filters: ['12345'] },
+		});
+	});
+	test('keeps deprecated bolt11 subscription kinds working', async () => {
+		const message = (await new Promise(async (res) => {
+			server.on('connection', (socket) => {
+				socket.on('message', (m) => {
+					res(m.toString());
+				});
+			});
+			const conn = new WSConnection(fakeUrl);
+			await conn.connect();
+
+			const callback = vi.fn();
+			const errorCallback = vi.fn();
+			conn.createSubscription(
 				{ kind: 'bolt11_mint_quote', filters: ['12345'] },
 				callback,
 				errorCallback,
@@ -45,7 +69,7 @@ describe('testing WSConnection', () => {
 		const errorCallback = vi.fn();
 		expect(() => {
 			conn.createSubscription(
-				{ kind: 'bolt11_mint_quote', filters: ['123'] },
+				{ kind: 'mint_quote', filters: ['123'] },
 				callback,
 				errorCallback,
 			);
@@ -75,7 +99,7 @@ describe('testing WSConnection', () => {
 				}
 			});
 			subId = conn.createSubscription(
-				{ kind: 'bolt11_mint_quote', filters: ['123'] },
+				{ kind: 'mint_quote', filters: ['123'] },
 				callback,
 				errorCallback,
 			);
@@ -117,7 +141,7 @@ describe('testing WSConnection', () => {
 			});
 			const errorCallback = vi.fn();
 			conn.createSubscription(
-				{ kind: 'bolt11_mint_quote', filters: ['123'] },
+				{ kind: 'mint_quote', filters: ['123'] },
 				callback,
 				errorCallback,
 			);

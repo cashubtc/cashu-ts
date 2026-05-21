@@ -34,7 +34,7 @@ class MockWS {
 	 * Deliver an update payload to matching subscribers for a kind.
 	 */
 	emit(
-		kind: 'bolt11_mint_quote' | 'bolt11_melt_quote',
+		kind: 'mint_quote' | 'melt_quote',
 		payload: { quote: string; [k: string]: any },
 	) {
 		for (const { kind: k, filters, cb } of this.subs.values()) {
@@ -128,7 +128,7 @@ describe('WalletEvents', () => {
 			const canceller = await events.mintQuoteUpdates(['a', 'b'], cb, err);
 
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_mint_quote', { quote: 'a', state: 'PAID' });
+			ws.emit('mint_quote', { quote: 'a', state: 'PAID' });
 
 			expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'a' }));
 			expect(typeof canceller).toBe('function');
@@ -140,10 +140,10 @@ describe('WalletEvents', () => {
 			await events.mintQuotePaid('x', cb, err);
 
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_mint_quote', { quote: 'x', state: 'UNPAID' });
+			ws.emit('mint_quote', { quote: 'x', state: 'UNPAID' });
 			expect(cb).not.toHaveBeenCalled();
 
-			ws.emit('bolt11_mint_quote', { quote: 'x', state: 'PAID' });
+			ws.emit('mint_quote', { quote: 'x', state: 'PAID' });
 			expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'x' }));
 		});
 
@@ -153,7 +153,7 @@ describe('WalletEvents', () => {
 			await events.meltQuoteUpdates(['m1'], cb, err);
 
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_melt_quote', { quote: 'm1', state: 'PAID' });
+			ws.emit('melt_quote', { quote: 'm1', state: 'PAID' });
 			expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'm1' }));
 		});
 
@@ -163,10 +163,10 @@ describe('WalletEvents', () => {
 			await events.meltQuotePaid('m2', cb, err);
 
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_melt_quote', { quote: 'm2', state: 'UNPAID' });
+			ws.emit('melt_quote', { quote: 'm2', state: 'UNPAID' });
 			expect(cb).not.toHaveBeenCalled();
 
-			ws.emit('bolt11_melt_quote', { quote: 'm2', state: 'PAID' });
+			ws.emit('melt_quote', { quote: 'm2', state: 'PAID' });
 			expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'm2' }));
 		});
 
@@ -189,7 +189,7 @@ describe('WalletEvents', () => {
 			const p = events.onceMintPaid('q1');
 			await flushMicrotasks(); // wait for subscription to be created
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_mint_quote', { quote: 'q1', state: 'PAID', amount: 123 });
+			ws.emit('mint_quote', { quote: 'q1', state: 'PAID', amount: 123 });
 			const res = await p;
 			expect(res).toMatchObject({ quote: 'q1', amount: 123 });
 			await flushMicrotasks();
@@ -221,7 +221,7 @@ describe('WalletEvents', () => {
 			const p = events.onceMintPaid('q4');
 			await flushMicrotasks(); // wait for subscription
 			const ws = mock.mint.webSocketConnection!;
-			ws.fail('bolt11_mint_quote', new Error('boom'));
+			ws.fail('mint_quote', new Error('boom'));
 			await expect(p).rejects.toThrow('boom');
 			await flushMicrotasks();
 			expect(ws.cancelSubscription).toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe('WalletEvents', () => {
 			const p = events.onceAnyMintPaid(['a', 'b', 'c']);
 			await flushMicrotasks(); // subs ready
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_mint_quote', { quote: 'b', state: 'PAID', amount: 42 });
+			ws.emit('mint_quote', { quote: 'b', state: 'PAID', amount: 42 });
 			const res = await p;
 			expect(res).toMatchObject({ id: 'b', quote: expect.objectContaining({ amount: 42 }) });
 			await flushMicrotasks();
@@ -269,7 +269,7 @@ describe('WalletEvents', () => {
 			const p = events.onceAnyMintPaid(['f1', 'f2', 'f3'], { failOnError: true });
 			await flushMicrotasks(); // subs ready
 			const ws = mock.mint.webSocketConnection!;
-			ws.fail('bolt11_mint_quote', new Error('bad'));
+			ws.fail('mint_quote', new Error('bad'));
 			await expect(p).rejects.toThrow(/bad/);
 			await flushMicrotasks();
 			expect(ws.cancelSubscription.mock.calls.length).toBeGreaterThanOrEqual(3);
@@ -279,8 +279,8 @@ describe('WalletEvents', () => {
 			const p = events.onceAnyMintPaid(['dup', 'dup', 'other']);
 			await flushMicrotasks(); // subs ready
 			const ws = mock.mint.webSocketConnection!;
-			expect(ws.count('bolt11_mint_quote')).toBe(2); // dup + other
-			ws.emit('bolt11_mint_quote', { quote: 'dup', state: 'PAID' });
+			expect(ws.count('mint_quote')).toBe(2); // dup + other
+			ws.emit('mint_quote', { quote: 'dup', state: 'PAID' });
 			const res = await p;
 			expect(res.id).toBe('dup');
 		});
@@ -292,8 +292,8 @@ describe('WalletEvents', () => {
 			const ws = mock.mint.webSocketConnection!;
 			// Our WS mock broadcasts the same error to all subs per call; the first call
 			// already empties the set. So assert we get *a* JSON-stringified object.
-			ws.fail('bolt11_mint_quote', { code: 1, msg: 'x' } as any);
-			ws.fail('bolt11_mint_quote', { code: 2, msg: 'y' } as any);
+			ws.fail('mint_quote', { code: 1, msg: 'x' } as any);
+			ws.fail('mint_quote', { code: 2, msg: 'y' } as any);
 
 			await expect(p).rejects.toThrow(/"code":\s*\d/);
 		});
@@ -302,7 +302,7 @@ describe('WalletEvents', () => {
 			const p = events.onceMintPaid('bigobj');
 			await flushMicrotasks(); // sub ready
 			const ws = mock.mint.webSocketConnection!;
-			ws.fail('bolt11_mint_quote', { n: 10n } as any);
+			ws.fail('mint_quote', { n: 10n } as any);
 			await expect(p).rejects.toThrow(/\[object Object\]/);
 		});
 
@@ -311,7 +311,7 @@ describe('WalletEvents', () => {
 			await flushMicrotasks(); // sub ready
 
 			const ws = mock.mint.webSocketConnection!;
-			ws.fail('bolt11_mint_quote', 10n);
+			ws.fail('mint_quote', 10n);
 
 			// With current normalizeError/safeStringify, primitives fall back to
 			// Object.prototype.toString => "[object BigInt]".
@@ -324,7 +324,7 @@ describe('WalletEvents', () => {
 			const p = events.onceMeltPaid('m1');
 			await flushMicrotasks(); // sub ready
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_melt_quote', { quote: 'm1', state: 'PAID', amount: 7 });
+			ws.emit('melt_quote', { quote: 'm1', state: 'PAID', amount: 7 });
 			const res = await p;
 			expect(res).toMatchObject({ quote: 'm1', amount: 7 });
 			await flushMicrotasks();
@@ -360,7 +360,7 @@ describe('WalletEvents', () => {
 			const p = events.onceMeltPaid('m-error');
 			await flushMicrotasks(); // sub ready
 			const ws = mock.mint.webSocketConnection!;
-			ws.fail('bolt11_melt_quote', new Error('melt-boom'));
+			ws.fail('melt_quote', new Error('melt-boom'));
 			await expect(p).rejects.toThrow('melt-boom');
 			await flushMicrotasks();
 			expect(ws.cancelSubscription).toHaveBeenCalled();
@@ -372,7 +372,7 @@ describe('WalletEvents', () => {
 			const p = events.onceMeltPaid('m-ok', { signal: ac.signal });
 			await flushMicrotasks(); // sub ready
 			const ws = mock.mint.webSocketConnection!;
-			ws.emit('bolt11_melt_quote', { quote: 'm-ok', state: 'PAID', amount: 1 });
+			ws.emit('melt_quote', { quote: 'm-ok', state: 'PAID', amount: 1 });
 			await expect(p).resolves.toMatchObject({ quote: 'm-ok' });
 			await flushMicrotasks();
 			expect(ws.cancelSubscription).toHaveBeenCalled();

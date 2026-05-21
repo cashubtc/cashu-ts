@@ -244,7 +244,8 @@ export class WalletEvents {
 		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
 		const uniq = Array.from(new Set(ids));
-		const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, cb, err);
+		// TODO: Remove the deprecated bolt11_* aliases once old NUT-17 subscription kinds are gone.
+		const subId = ws.createSubscription({ kind: 'mint_quote', filters: uniq }, cb, err);
 		const cancel = () => ws.cancelSubscription(subId, cb);
 		return this.withAbort(opts?.signal, cancel);
 	}
@@ -292,7 +293,8 @@ export class WalletEvents {
 		if (!ws) throw new Error('Failed to establish WebSocket connection.');
 
 		const uniq = Array.from(new Set(ids));
-		const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, cb, err);
+		// TODO: Remove the deprecated bolt11_* aliases once old NUT-17 subscription kinds are gone.
+		const subId = ws.createSubscription({ kind: 'melt_quote', filters: uniq }, cb, err);
 		const cancel = () => ws.cancelSubscription(subId, cb);
 		return this.withAbort(opts?.signal, cancel);
 	}

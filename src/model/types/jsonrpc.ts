@@ -1,4 +1,12 @@
-export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
+export type RpcSubKinds = RpcSubKind | DeprecatedRpcSubKind;
+
+export type RpcSubKind = 'mint_quote' | 'melt_quote' | 'proof_state';
+
+/**
+ * @deprecated NUT-17 subscription kinds are method-independent now.
+ * Remove these aliases once old bolt11-specific subscription kinds are no longer needed.
+ */
+export type DeprecatedRpcSubKind = 'bolt11_mint_quote' | 'bolt11_melt_quote';
 export type RpcSubId = string | number | null;
 
 export type JsonRpcParams = {
