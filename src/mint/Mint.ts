@@ -28,6 +28,10 @@ import {
   type MintRequest,
   type MintQuoteBolt11Request,
   type MintQuoteBolt12Request,
+  type MintQuoteOnchainRequest,
+  type MintQuoteOnchainResponse,
+  type MeltQuoteOnchainRequest,
+  type MeltQuoteOnchainResponse,
   type SwapRequest,
   type SerializedBlindedMessage,
   type SerializedBlindedSignature,
@@ -280,6 +284,25 @@ class Mint {
     return this.createMintQuote<MintQuoteBolt12Response>('bolt12', body, { customRequest });
   }
 
+  /**
+   * Requests a new onchain mint quote from the mint.
+   *
+   * @remarks
+   * Thin wrapper around createMintQuote('onchain', ...).
+   * @param mintQuotePayload Payload containing unit and required pubkey.
+   * @param customRequest Optional override for the request function.
+   * @returns A mint quote containing a Bitcoin address for minting tokens.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  async createMintQuoteOnchain(
+    mintQuotePayload: MintQuoteOnchainRequest,
+    customRequest?: RequestFn,
+  ): Promise<MintQuoteOnchainResponse> {
+    return this.createMintQuote<MintQuoteOnchainResponse>('onchain', mintQuotePayload, {
+      customRequest,
+    });
+  }
+
   // -----------------------------------------------------------------
   // Section: Check Mint Quote
   // -----------------------------------------------------------------
@@ -343,6 +366,23 @@ class Mint {
     return this.checkMintQuote<MintQuoteBolt12Response>('bolt12', quote, { customRequest });
   }
 
+  /**
+   * Gets an existing onchain mint quote from the mint.
+   *
+   * @remarks
+   * Thin wrapper around checkMintQuote('onchain', ...).
+   * @param quote Quote ID.
+   * @param customRequest Optional override for the request function.
+   * @returns Updated quote with current payment and issuance amounts.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  async checkMintQuoteOnchain(
+    quote: string,
+    customRequest?: RequestFn,
+  ): Promise<MintQuoteOnchainResponse> {
+    return this.checkMintQuote<MintQuoteOnchainResponse>('onchain', quote, { customRequest });
+  }
+
   // -----------------------------------------------------------------
   // Section: Mint Proofs
   // -----------------------------------------------------------------
@@ -371,6 +411,20 @@ class Mint {
    */
   async mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
     return this.mint('bolt12', mintPayload, { customRequest });
+  }
+
+  /**
+   * Mints new tokens using an onchain quote.
+   *
+   * @remarks
+   * Thin wrapper around mint('onchain', ...).
+   * @param mintPayload Payload containing the quote ID and outputs.
+   * @param customRequest Optional override for the request function.
+   * @returns Serialized blinded signatures.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  async mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse> {
+    return this.mint('onchain', mintPayload, { customRequest });
   }
 
   /**
@@ -558,6 +612,30 @@ class Mint {
     );
   }
 
+  /**
+   * Requests an onchain melt quote from the mint.
+   *
+   * @remarks
+   * Thin wrapper around createMeltQuote('onchain', ...).
+   * @param meltQuotePayload Payload containing the Bitcoin address, amount, and unit.
+   * @param customRequest Optional override for the request function.
+   * @returns Melt quote with fee options.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  async createMeltQuoteOnchain(
+    meltQuotePayload: MeltQuoteOnchainRequest,
+    customRequest?: RequestFn,
+  ): Promise<MeltQuoteOnchainResponse> {
+    return this.createMeltQuote<MeltQuoteOnchainResponse>(
+      'onchain',
+      {
+        ...meltQuotePayload,
+        amount: Amount.from(meltQuotePayload.amount).toBigInt(),
+      },
+      { customRequest },
+    );
+  }
+
   // -----------------------------------------------------------------
   // Section: Check Melt Quote
   // -----------------------------------------------------------------
@@ -620,6 +698,23 @@ class Mint {
     customRequest?: RequestFn,
   ): Promise<MeltQuoteBolt12Response> {
     return this.checkMeltQuote<MeltQuoteBolt12Response>('bolt12', quote, { customRequest });
+  }
+
+  /**
+   * Gets an existing onchain melt quote from the mint.
+   *
+   * @remarks
+   * Thin wrapper around checkMeltQuote('onchain', ...).
+   * @param quote Quote ID.
+   * @param customRequest Optional override for the request function.
+   * @returns Updated melt quote with current state.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  async checkMeltQuoteOnchain(
+    quote: string,
+    customRequest?: RequestFn,
+  ): Promise<MeltQuoteOnchainResponse> {
+    return this.checkMeltQuote<MeltQuoteOnchainResponse>('onchain', quote, { customRequest });
   }
 
   // -----------------------------------------------------------------
@@ -704,6 +799,24 @@ class Mint {
     },
   ): Promise<MeltQuoteBolt12Response> {
     return this.melt<MeltQuoteBolt12Response>('bolt12', meltPayload, options);
+  }
+
+  /**
+   * Requests the mint to execute an onchain melt by providing ecash inputs.
+   *
+   * @remarks
+   * Thin wrapper around melt('onchain', ...). No outputs should be included in the payload as
+   * NUT-08 fee change does not apply to onchain melts.
+   * @param meltPayload The melt payload containing inputs (no outputs).
+   * @param options.customRequest Optional override for the request function.
+   * @returns The melt response.
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  async meltOnchain(
+    meltPayload: MeltRequest,
+    options?: { customRequest?: RequestFn },
+  ): Promise<MeltQuoteOnchainResponse> {
+    return this.melt<MeltQuoteOnchainResponse>('onchain', meltPayload, options);
   }
 
   // -----------------------------------------------------------------
@@ -971,7 +1084,7 @@ class Mint {
   private normalizeMeltQuoteRequestOptions(
     payload: MeltQuoteBolt11Request | MeltQuoteBolt12Request,
   ): Record<string, unknown> {
-    if (!payload.options) return payload;
+    if (!payload.options) return { ...payload };
     const opts: Record<string, unknown> = { ...payload.options };
     if (payload.options.amountless) {
       opts.amountless = {
@@ -1035,6 +1148,8 @@ class Mint {
       this.normalizeMintQuoteBolt11Fields(data);
     } else if (method === 'bolt12') {
       this.normalizeMintQuoteBolt12Fields(data);
+    } else if (method === 'onchain') {
+      this.normalizeMintQuoteOnchainFields(data);
     }
     return normalize ? normalize(data) : (data as TRes);
   }
@@ -1070,6 +1185,19 @@ class Mint {
   }
 
   /**
+   * Mutates `data` in place, normalizing onchain mint-quote fields.
+   */
+  private normalizeMintQuoteOnchainFields(data: Record<string, unknown>): void {
+    data.expiry = normalizeSafeIntegerMetadata(
+      data.expiry as number,
+      'mintQuoteOnchain.expiry',
+      null,
+    );
+    data.amount_paid = Amount.from(data.amount_paid as Amount);
+    data.amount_issued = Amount.from(data.amount_issued as Amount);
+  }
+
+  /**
    * Stacks normalizers for melt quote responses: base normalization (amount, expiry, change) is
    * always applied, then first-class bolt normalization for known methods, then any custom
    * normalize callback.
@@ -1084,6 +1212,8 @@ class Mint {
     this.normalizeMeltBaseFields(data, op);
     if (method === 'bolt11' || method === 'bolt12') {
       this.normalizeMeltBoltFields(data, op);
+    } else if (method === 'onchain') {
+      this.normalizeMeltOnchainFields(data);
     }
     return normalize ? normalize(data) : (data as TRes);
   }
@@ -1128,6 +1258,39 @@ class Mint {
     // until the invoice is paid; coerce undefined → null so consumers can
     // rely on `payment_preimage === null` checks.
     nullIfUndefined(data, 'payment_preimage');
+  }
+
+  /**
+   * Mutates `data` in place, normalizing onchain-specific melt fields.
+   */
+  private normalizeMeltOnchainFields(data: Record<string, unknown>): void {
+    if (!Array.isArray(data.fee_options) || data.fee_options.length === 0) {
+      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+      throw new Error('Invalid response from mint');
+    }
+    data.fee_options = data.fee_options.map((raw) => {
+      const opt = raw as Record<string, unknown>;
+      // fee_index is the load-bearing selector for the melt request
+      if (!Number.isSafeInteger(opt.fee_index)) {
+        this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+        throw new Error('Invalid response from mint');
+      }
+      return {
+        ...opt,
+        fee_index: opt.fee_index as number,
+        fee_reserve: Amount.from(opt.fee_reserve as AmountLike),
+        estimated_blocks: opt.estimated_blocks as number,
+      };
+    });
+    nullIfUndefined(data, 'selected_fee_index', 'outpoint');
+    if (
+      typeof data.request !== 'string' ||
+      (data.selected_fee_index !== null && !Number.isSafeInteger(data.selected_fee_index)) ||
+      (data.outpoint !== null && typeof data.outpoint !== 'string')
+    ) {
+      this._logger.error('Invalid response from mint...', { data, op: 'onchain melt quote' });
+      throw new Error('Invalid response from mint');
+    }
   }
 }
 

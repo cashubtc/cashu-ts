@@ -657,6 +657,216 @@ describe('Mint normalization', () => {
     });
   });
 
+  describe('normalizeMeltOnchainFields', () => {
+    const baseOnchainQuote = {
+      quote: 'q1',
+      amount: 10,
+      unit: 'sat',
+      state: MeltQuoteState.UNPAID,
+      expiry: 123,
+      request: 'bc1qrecipient',
+      selected_fee_index: null,
+      outpoint: null,
+    };
+
+    it('normalizes a valid onchain melt quote response', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseOnchainQuote,
+          fee_options: [
+            { fee_index: 0, fee_reserve: 5, estimated_blocks: 1 },
+            { fee_index: 1, fee_reserve: 2, estimated_blocks: 6 },
+          ],
+        }),
+      });
+
+      const response = await mint.checkMeltQuoteOnchain('q1');
+
+      expect(response.fee_options[0].fee_index).toBe(0);
+      expect(response.fee_options[0].fee_reserve.toBigInt()).toBe(5n);
+      expect(response.fee_options[0].estimated_blocks).toBe(1);
+      expect(response.fee_options[1].fee_index).toBe(1);
+      expect(response.fee_options[1].fee_reserve.toBigInt()).toBe(2n);
+      expect(response.fee_options[1].estimated_blocks).toBe(6);
+      expect(response.selected_fee_index).toBeNull();
+      expect(response.outpoint).toBeNull();
+    });
+
+    it('accepts a string outpoint and a numeric selected_fee_index', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseOnchainQuote,
+          state: MeltQuoteState.PAID,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+          selected_fee_index: 0,
+          outpoint: 'txid:0',
+        }),
+      });
+
+      const response = await mint.checkMeltQuoteOnchain('q1');
+      expect(response.selected_fee_index).toBe(0);
+      expect(response.outpoint).toBe('txid:0');
+    });
+
+    it('treats absent selected_fee_index and outpoint as null', async () => {
+      // CDK omits nullable fields when they have no value; we accept that as null.
+      const { selected_fee_index: _s, outpoint: _o, ...withoutNullables } = baseOnchainQuote;
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...withoutNullables,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+        }),
+      });
+      const response = await mint.checkMeltQuoteOnchain('q1');
+      expect(response.selected_fee_index).toBeNull();
+      expect(response.outpoint).toBeNull();
+    });
+
+    it('throws when fee_options is not an array', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...baseOnchainQuote, fee_options: 'nope' }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+
+    it('throws when fee_options is empty', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...baseOnchainQuote, fee_options: [] }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+
+    it.each([
+      ['missing', { fee_reserve: 2, estimated_blocks: 6 }],
+      ['a non-integer', { fee_index: 1.5, fee_reserve: 2, estimated_blocks: 6 }],
+      [
+        'an unsafe integer',
+        { fee_index: Number.MAX_SAFE_INTEGER + 1, fee_reserve: 2, estimated_blocks: 6 },
+      ],
+      ['a string', { fee_index: '0', fee_reserve: 2, estimated_blocks: 6 }],
+    ])('throws when a fee_options entry has %s fee_index', async (_label, badOption) => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...baseOnchainQuote, fee_options: [badOption] }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+
+    it('throws when request is not a string', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseOnchainQuote,
+          request: 42,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+        }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+
+    it('throws when selected_fee_index is non-null and not a safe integer', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseOnchainQuote,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+          selected_fee_index: 1.5,
+        }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+
+    it('throws when outpoint is non-null and not a string', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseOnchainQuote,
+          fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+          outpoint: 12345,
+        }),
+        logger,
+      });
+
+      await expect(mint.checkMeltQuoteOnchain('q1')).rejects.toThrow('Invalid response from mint');
+      expect(logger.error).toHaveBeenCalledWith('Invalid response from mint...', {
+        data: expect.objectContaining({ quote: 'q1' }),
+        op: 'onchain melt quote',
+      });
+    });
+  });
+
+  it('mintOnchain posts to /v1/mint/onchain', async () => {
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      expect(options.endpoint).toBe(mintUrl + '/v1/mint/onchain');
+      expect(options.method).toBe('POST');
+      return { signatures: [{ amount: 4, C_: '02sig', id: '00' }] };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    const response = await mint.mintOnchain({ quote: 'q1', outputs: [] });
+
+    expect(response.signatures).toHaveLength(1);
+    expect(response.signatures[0].amount.toBigInt()).toBe(4n);
+  });
+
+  it('meltOnchain posts to /v1/melt/onchain and normalizes onchain fields', async () => {
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      expect(options.endpoint).toBe(mintUrl + '/v1/melt/onchain');
+      expect(options.method).toBe('POST');
+      return {
+        quote: 'q1',
+        amount: 10,
+        unit: 'sat',
+        state: MeltQuoteState.PAID,
+        expiry: 123,
+        request: 'bc1qrecipient',
+        fee_options: [{ fee_index: 0, fee_reserve: 2, estimated_blocks: 6 }],
+        selected_fee_index: 0,
+        outpoint: 'txid:0',
+      };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    const response = await mint.meltOnchain({ quote: 'q1', inputs: [], outputs: [] });
+
+    expect(response.amount.toBigInt()).toBe(10n);
+    expect(response.fee_options[0].fee_reserve.toBigInt()).toBe(2n);
+    expect(response.selected_fee_index).toBe(0);
+    expect(response.outpoint).toBe('txid:0');
+  });
+
   it('mintBatchBolt11 posts to /v1/mint/bolt11/batch and normalizes signature amounts', async () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
       expect(options.endpoint).toBe(mintUrl + '/v1/mint/bolt11/batch');

@@ -314,17 +314,17 @@ Search: `wallet\.swap\b`, `\.createMintQuote\b`, `\.checkMintQuote\b`, `\.mintPr
 `\.createMeltQuote\b`, `\.checkMeltQuote\b`, `\.meltProofs\b`,
 `MeltBlanks`, `meltBlanksCreated`, `onChangeOutputsCreated`, `preferAsync`
 
-| Removed                            | Replacement                                                                 |
-| ---------------------------------- | --------------------------------------------------------------------------- |
-| `wallet.swap(…)`                   | `wallet.send(…)`                                                            |
-| `wallet.createMintQuote(amt)`      | `wallet.createMintQuoteBolt11(amt)`                                         |
-| `wallet.checkMintQuote(id)`        | `wallet.checkMintQuoteBolt11(id)`                                           |
-| `wallet.mintProofs(amt, q)`        | `wallet.mintProofsBolt11(amt, q)`                                           |
-| `wallet.createMeltQuote(inv)`      | `wallet.createMeltQuoteBolt11(inv)`                                         |
-| `wallet.checkMeltQuote(id)`        | `wallet.checkMeltQuoteBolt11(id)`                                           |
-| `wallet.meltProofs(q, ps)`         | `wallet.meltProofsBolt11(q, ps)`                                            |
-| `MeltBlanks` / `meltBlanksCreated` | `prepareMelt()` / `completeMelt()`                                          |
-| `preferAsync: true`                | `prefer_async: true` in melt payload, or `completeMelt(preview, key, true)` |
+| Removed                            | Replacement                                                                                  |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| `wallet.swap(…)`                   | `wallet.send(…)`                                                                             |
+| `wallet.createMintQuote(amt)`      | `wallet.createMintQuoteBolt11(amt)`                                                          |
+| `wallet.checkMintQuote(id)`        | `wallet.checkMintQuoteBolt11(id)`                                                            |
+| `wallet.mintProofs(amt, q)`        | `wallet.mintProofsBolt11(amt, q)`                                                            |
+| `wallet.createMeltQuote(inv)`      | `wallet.createMeltQuoteBolt11(inv)`                                                          |
+| `wallet.checkMeltQuote(id)`        | `wallet.checkMeltQuoteBolt11(id)`                                                            |
+| `wallet.meltProofs(q, ps)`         | `wallet.meltProofsBolt11(q, ps)`                                                             |
+| `MeltBlanks` / `meltBlanksCreated` | `prepareMelt()` / `completeMelt()`                                                           |
+| `preferAsync: true`                | `prefer_async: true` in melt payload, or `completeMelt(preview, key, { preferAsync: true })` |
 
 ---
 

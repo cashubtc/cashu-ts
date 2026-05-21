@@ -543,6 +543,7 @@ export class WalletEvents {
   /**
    * Async iterable that yields proof state updates for the provided proofs.
    *
+   * @remarks
    * Adds a bounded buffer option:
    *
    * - If `maxBuffer` is set and the queue is full when a new payload arrives, either drop the oldest
@@ -552,6 +553,9 @@ export class WalletEvents {
    * The stream ends and cleans up on abort or on the wallet error callback. Errors from the wallet
    * are treated as a graceful end for this iterator.
    *
+   * The subscription is sent to the mint on the first iteration, not when this method is called.
+   * Per NUT-17 the mint replays the current state on subscribe, so the latest state is never lost;
+   * only intermediate transitions before the first iteration are collapsed into that snapshot.
    * @example
    *
    * ```ts
@@ -631,6 +635,9 @@ export class WalletEvents {
       };
 
       let setupErr: Error | null = null;
+      // Subscribing here (inside the generator body, so on first iteration) is
+      // safe: NUT-17 requires the mint to replay the current proof state on
+      // subscribe, so a state update made before iteration starts is not lost.
       const cancelP: Promise<SubscriptionCanceller> = this.proofStateUpdates<P>(
         proofs,
         push,

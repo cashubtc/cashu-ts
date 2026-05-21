@@ -315,6 +315,8 @@ describe('test info', () => {
         { method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null },
         { method: 'bolt11', unit: 'usd', min_amount: null, max_amount: null },
         { method: 'bolt11', unit: 'eur', min_amount: null, max_amount: null },
+        { method: 'bolt12', unit: 'sat', min_amount: null, max_amount: null },
+        { method: 'onchain', unit: 'sat', min_amount: null, max_amount: null },
       ],
     });
     expect(info.isSupported(17)).toEqual({

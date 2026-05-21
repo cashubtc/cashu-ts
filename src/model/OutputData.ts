@@ -357,7 +357,7 @@ export class OutputData implements OutputDataLike {
    * // Save while async melt is pending:
    * const preview = await wallet.prepareMelt('bolt11', meltQuote, proofs);
    * const stored = JSON.stringify(preview.outputData.map((o) => OutputData.serialize(o)));
-   * await wallet.completeMelt(preview, undefined, true); // prefer_async
+   * await wallet.completeMelt(preview, undefined, { preferAsync: true });
    *
    * // ... time passes, quote pays ...
    * const restored = (JSON.parse(stored) as SerializedOutputData[]).map((s) =>

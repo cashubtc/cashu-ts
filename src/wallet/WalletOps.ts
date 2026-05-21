@@ -6,8 +6,10 @@ import {
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
   type MeltQuoteBaseResponse,
+  type MeltQuoteOnchainResponse,
   type MintQuoteBolt12Response,
   type MintQuoteBolt11Response,
+  type MintQuoteOnchainResponse,
 } from '../model/types';
 import type { ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
@@ -26,11 +28,13 @@ import {
 } from './types';
 import type { Wallet } from './Wallet';
 
-export type MintMethod = 'bolt11' | 'bolt12';
+export type MintMethod = 'bolt11' | 'bolt12' | 'onchain';
 
 export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11'
   ? string | MintQuoteBolt11Response
-  : MintQuoteBolt12Response;
+  : M extends 'bolt12'
+    ? MintQuoteBolt12Response
+    : MintQuoteOnchainResponse;
 
 /**
  * Fluent operations builder for a Wallet instance.
@@ -58,11 +62,23 @@ export class WalletOps {
   mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>) {
     return new MintBuilder<'bolt12'>(this.wallet, 'bolt12', amount, quote);
   }
+  /**
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  mintOnchain(amount: AmountLike, quote: MintQuoteFor<'onchain'>) {
+    return new MintBuilder<'onchain'>(this.wallet, 'onchain', amount, quote);
+  }
   meltBolt11(quote: MeltQuoteBolt11Response, proofs: ProofLike[]) {
     return new MeltBuilder<MeltQuoteBolt11Response>(this.wallet, 'bolt11', quote, proofs);
   }
   meltBolt12(quote: MeltQuoteBolt12Response, proofs: ProofLike[]) {
     return new MeltBuilder<MeltQuoteBolt12Response>(this.wallet, 'bolt12', quote, proofs);
+  }
+  /**
+   * @experimental Onchain support follows NUT-30 semantics and may change.
+   */
+  meltOnchain(quote: MeltQuoteOnchainResponse, proofs: ProofLike[]) {
+    return new MeltOnchainBuilder(this.wallet, quote, proofs);
   }
 }
 
@@ -520,7 +536,7 @@ export class ReceiveBuilder {
  */
 export class MintBuilder<
   M extends MintMethod,
-  HasPrivKey extends boolean = M extends 'bolt12' ? false : true,
+  HasPrivKey extends boolean = M extends 'bolt12' | 'onchain' ? false : true,
 > {
   private outputType?: OutputType;
   private config: MintProofsConfig = {};
@@ -655,8 +671,18 @@ export class MintBuilder<
   async prepare(
     this: MintBuilder<M, true>,
   ): Promise<
-    M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>
+    M extends 'bolt11'
+      ? MintPreview<MintQuoteBolt11Response>
+      : M extends 'bolt12'
+        ? MintPreview<MintQuoteBolt12Response>
+        : MintPreview<MintQuoteOnchainResponse>
   > {
+    type ReturnType = M extends 'bolt11'
+      ? MintPreview<MintQuoteBolt11Response>
+      : M extends 'bolt12'
+        ? MintPreview<MintQuoteBolt12Response>
+        : MintPreview<MintQuoteOnchainResponse>;
+
     // BOLT 11
     if (this.method === 'bolt11') {
       const raw = this.quote as string | MintQuoteBolt11Response;
@@ -672,30 +698,38 @@ export class MintBuilder<
         quote,
         this.config,
         this.outputType,
-      ) as Promise<
-        M extends 'bolt11'
-          ? MintPreview<MintQuoteBolt11Response>
-          : MintPreview<MintQuoteBolt12Response>
-      >;
+      ) as Promise<ReturnType>;
     }
 
     // BOLT 12
-    const bolt12 = this.quote as MintQuoteBolt12Response;
-    this.wallet.validateMintQuote(bolt12);
+    if (this.method === 'bolt12') {
+      const bolt12 = this.quote as MintQuoteBolt12Response;
+      this.wallet.validateMintQuote(bolt12);
+      if (!this.config.privkey) {
+        throw new Error('privkey is required for BOLT12 mint quotes');
+      }
+      return this.wallet.prepareMint(
+        this.method,
+        this.amount,
+        bolt12,
+        this.config,
+        this.outputType,
+      ) as Promise<ReturnType>;
+    }
+
+    // Onchain
+    const onchain = this.quote as MintQuoteOnchainResponse;
+    this.wallet.validateMintQuote(onchain);
     if (!this.config.privkey) {
-      throw new CTSError('privkey is required for BOLT12 mint quotes');
+      throw new CTSError('privkey is required for onchain mint quotes');
     }
     return this.wallet.prepareMint(
       this.method,
       this.amount,
-      bolt12,
+      onchain,
       this.config,
       this.outputType,
-    ) as Promise<
-      M extends 'bolt11'
-        ? MintPreview<MintQuoteBolt11Response>
-        : MintPreview<MintQuoteBolt12Response>
-    >;
+    ) as Promise<ReturnType>;
   }
 
   /**
@@ -848,7 +882,7 @@ export class MeltBuilder<
   /**
    * Execute the melt against the quote.
    *
-   * @returns The melt result: `{ quote, change }`.
+   * @returns The melt result: `{ quote, change, outputData }`.
    */
   async run(): Promise<MeltProofsResponse<TQuote>> {
     // Step 1, preview and allocate NUT-08 blanks
@@ -862,5 +896,92 @@ export class MeltBuilder<
 
     // Step 2, sign if needed and complete the melt
     return this.wallet.completeMelt(preview, this.config.privkey);
+  }
+}
+
+/**
+ * Builder for melting proofs via an onchain Bitcoin transaction.
+ *
+ * @remarks
+ * Any overage above the selected quote amount and fee option is offered as NUT-08 change.
+ * @example
+ *
+ * ```typescript
+ * // Basic onchain melt (1 fee option)
+ * const result = await wallet.ops.meltOnchain(quote, proofs).privkey('sk').run();
+ *
+ * // with custom keyset ID and selected fee option
+ * await wallet.ops
+ *   .meltOnchain(quote, proofs)
+ *   .keyset('01abc...')
+ *   .privkey('sk')
+ *   .feeIndex(0)
+ *   .run();
+ * ```
+ *
+ * @experimental Onchain support follows NUT-30 semantics and may change.
+ */
+export class MeltOnchainBuilder {
+  private config: MeltProofsConfig = {};
+  private selectedFeeIndex?: number;
+
+  constructor(
+    private wallet: Wallet,
+    private quote: MeltQuoteOnchainResponse,
+    private proofs: ProofLike[],
+  ) {}
+
+  /**
+   * Use a specific keyset for the melt operation.
+   *
+   * @param id Keyset id to use for mint keys and fee lookup.
+   */
+  keyset(id: string) {
+    this.config.keysetId = id;
+    return this;
+  }
+
+  /**
+   * Private key(s) used to sign P2PK locked proofs.
+   *
+   * @param k Single key or array of multisig keys.
+   */
+  privkey(k: string | string[]) {
+    this.config.privkey = k;
+    return this;
+  }
+
+  /**
+   * Select a fee option by its `fee_index`.
+   *
+   * @param index `fee_index` value from the quote's fee_options.
+   */
+  feeIndex(index: number) {
+    this.selectedFeeIndex = index;
+    return this;
+  }
+
+  /**
+   * Execute the onchain melt against the quote.
+   *
+   * @returns The melt result: `{ quote, change, outputData }`. Use `outputData` with the polled
+   *   quote's `change` to unblind deferred change after broadcast.
+   */
+  async run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>> {
+    // Ensure fee_option is selected if there is only one
+    if (this.selectedFeeIndex === undefined && this.quote.fee_options.length === 1) {
+      this.selectedFeeIndex = this.quote.fee_options[0].fee_index;
+    }
+
+    if (this.selectedFeeIndex === undefined) {
+      throw new Error('feeIndex is required when an onchain melt quote has multiple fee options');
+    }
+
+    return this.wallet.meltProofsOnchain(
+      this.quote,
+      this.proofs,
+      this.selectedFeeIndex,
+      this.config,
+    );
   }
 }

@@ -237,6 +237,12 @@ export type CheckStateResponse = {
     states: ProofState[];
 };
 
+// @public (undocumented)
+export type CompleteMeltOptions = {
+    preferAsync?: boolean;
+    extraPayload?: Record<string, unknown>;
+};
+
 // @public
 export function computeMessageDigest(message: string): Uint8Array;
 
@@ -751,6 +757,15 @@ export class MeltBuilder<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | '
 }
 
 // @public
+export class MeltOnchainBuilder {
+    constructor(wallet: Wallet, quote: MeltQuoteOnchainResponse, proofs: ProofLike[]);
+    feeIndex(index: number): this;
+    keyset(id: string): this;
+    privkey(k: string | string[]): this;
+    run(): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
+}
+
+// @public
 export interface MeltPreview<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> {
     inputs: Proof[];
     keysetId: string;
@@ -771,6 +786,7 @@ export type MeltProofsConfig = {
 export type MeltProofsResponse<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse> = {
     quote: TQuote;
     change: Proof[];
+    outputData: OutputDataLike[];
 };
 
 // @public
@@ -820,6 +836,26 @@ export type MeltQuoteBolt12Request = MeltQuoteBaseRequest & {
 // @public
 export type MeltQuoteBolt12Response = MeltQuoteBolt11Response;
 
+// @public
+export type MeltQuoteOnchainFeeOption = {
+    fee_index: number;
+    fee_reserve: Amount;
+    estimated_blocks: number;
+};
+
+// @public
+export type MeltQuoteOnchainRequest = MeltQuoteBaseRequest & {
+    amount: AmountLike;
+};
+
+// @public
+export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
+    request: string;
+    fee_options: MeltQuoteOnchainFeeOption[];
+    selected_fee_index: number | null;
+    outpoint: string | null;
+};
+
 // @public (undocumented)
 export const MeltQuoteState: {
     readonly UNPAID: "UNPAID";
@@ -852,12 +888,14 @@ export class Mint {
     }): Promise<TRes>;
     checkMeltQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quote: string, options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
     checkMintQuoteBolt11(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
     connectWebSocket(): Promise<void>;
     createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         customRequest?: RequestFn;
@@ -865,12 +903,14 @@ export class Mint {
     }): Promise<TRes>;
     createMeltQuoteBolt11(meltQuotePayload: MeltQuoteBolt11Request, customRequest?: RequestFn): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(meltQuotePayload: MeltQuoteBolt12Request, customRequest?: RequestFn): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(meltQuotePayload: MeltQuoteOnchainRequest, customRequest?: RequestFn): Promise<MeltQuoteOnchainResponse>;
     createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
     createMintQuoteBolt11(mintQuotePayload: MintQuoteBolt11Request, customRequest?: RequestFn): Promise<MintQuoteBolt11Response>;
     createMintQuoteBolt12(mintQuotePayload: MintQuoteBolt12Request, customRequest?: RequestFn): Promise<MintQuoteBolt12Response>;
+    createMintQuoteOnchain(mintQuotePayload: MintQuoteOnchainRequest, customRequest?: RequestFn): Promise<MintQuoteOnchainResponse>;
     disconnectWebSocket(): void;
     getInfo(customRequest?: RequestFn): Promise<GetInfoResponse>;
     getKeys(keysetId?: string, mintUrl?: string, customRequest?: RequestFn): Promise<GetKeysResponse>;
@@ -887,6 +927,9 @@ export class Mint {
     meltBolt12(meltPayload: MeltRequest, options?: {
         customRequest?: RequestFn;
     }): Promise<MeltQuoteBolt12Response>;
+    meltOnchain(meltPayload: MeltRequest, options?: {
+        customRequest?: RequestFn;
+    }): Promise<MeltQuoteOnchainResponse>;
     mint<TRes extends Record<string, unknown> = Record<string, unknown>>(method: string, mintPayload: MintRequest, options?: {
         customRequest?: RequestFn;
         normalize?: (raw: Record<string, unknown>) => MintResponse & TRes;
@@ -899,6 +942,7 @@ export class Mint {
     mintBatchBolt12(mintPayload: BatchMintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt11(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     mintBolt12(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
+    mintOnchain(mintPayload: MintRequest, customRequest?: RequestFn): Promise<MintResponse>;
     // (undocumented)
     get mintUrl(): string;
     oidcAuth(opts?: OIDCAuthOptions): Promise<OIDCAuth>;
@@ -910,7 +954,7 @@ export class Mint {
 }
 
 // @public
-export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' ? false : true> {
+export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M extends 'bolt12' | 'onchain' ? false : true> {
     constructor(wallet: Wallet, method: M, amount: AmountLike, quote: MintQuoteFor<M>);
     asCustom(data: OutputDataLike[]): this;
     asDeterministic(counter?: number, denoms?: AmountLike[]): this;
@@ -919,7 +963,7 @@ export class MintBuilder<M extends MintMethod, HasPrivKey extends boolean = M ex
     asRandom(denoms?: AmountLike[]): this;
     keyset(id: string): this;
     onCountersReserved(cb: OnCountersReserved): this;
-    prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : MintPreview<MintQuoteBolt12Response>>;
+    prepare(this: MintBuilder<M, true>): Promise<M extends 'bolt11' ? MintPreview<MintQuoteBolt11Response> : M extends 'bolt12' ? MintPreview<MintQuoteBolt12Response> : MintPreview<MintQuoteOnchainResponse>>;
     privkey(k: string): MintBuilder<M, true>;
     proofsWeHave(p: Array<Pick<ProofLike, 'amount'>>): this;
     run(this: MintBuilder<M, true>): Promise<Proof[]>;
@@ -1049,6 +1093,7 @@ export class MintInfo {
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     supportsAmountless(method?: string, unit?: string): boolean;
+    supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean;
     supportsNut04Description(method: 'bolt11' | 'bolt12', unit?: string): boolean;
     // (undocumented)
     get version(): string;
@@ -1074,7 +1119,7 @@ export type MintKeyset = {
 };
 
 // @public (undocumented)
-export type MintMethod = 'bolt11' | 'bolt12';
+export type MintMethod = 'bolt11' | 'bolt12' | 'onchain';
 
 // @public
 export class MintOperationError extends HttpResponseError {
@@ -1144,7 +1189,20 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
 };
 
 // @public (undocumented)
-export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : MintQuoteBolt12Response;
+export type MintQuoteFor<M extends MintMethod> = M extends 'bolt11' ? string | MintQuoteBolt11Response : M extends 'bolt12' ? MintQuoteBolt12Response : MintQuoteOnchainResponse;
+
+// @public
+export type MintQuoteOnchainRequest = MintQuoteBaseRequest & {
+    pubkey: string;
+};
+
+// @public
+export type MintQuoteOnchainResponse = MintQuoteBaseResponse & {
+    expiry: number | null;
+    pubkey: string;
+    amount_paid: Amount;
+    amount_issued: Amount;
+};
 
 // @public (undocumented)
 export const MintQuoteState: {
@@ -1519,6 +1577,11 @@ export type PostRestoreResponse = {
     signatures: SerializedBlindedSignature[];
 };
 
+// @public (undocumented)
+export type PrepareMeltConfig = MeltProofsConfig & {
+    nut08Change?: boolean;
+};
+
 // @public
 export type PrivKey = Uint8Array | string;
 
@@ -1876,6 +1939,7 @@ export type SwapMethod = {
     options?: {
         description?: boolean;
         amountless?: boolean;
+        confirmations?: number;
     };
 };
 
@@ -2000,13 +2064,17 @@ export class Wallet {
     }): Promise<TRes>;
     checkMeltQuoteBolt11(quote: string | MeltQuoteBolt11Response): Promise<MeltQuoteBolt11Response>;
     checkMeltQuoteBolt12(quote: string): Promise<MeltQuoteBolt12Response>;
+    checkMeltQuoteOnchain(quote: string): Promise<MeltQuoteOnchainResponse>;
     checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, quote: string | Pick<TRes, 'quote'>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
     checkMintQuoteBolt11(quote: string | MintQuoteBolt11Response): Promise<MintQuoteBolt11Response>;
     checkMintQuoteBolt12(quote: string): Promise<MintQuoteBolt12Response>;
+    checkMintQuoteOnchain(quote: string): Promise<MintQuoteOnchainResponse>;
     checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
+    completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
+    // @deprecated (undocumented)
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
@@ -2018,6 +2086,7 @@ export class Wallet {
     }): Promise<TRes>;
     createMeltQuoteBolt11(invoice: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt11Response>;
     createMeltQuoteBolt12(offer: string, amountMsat?: AmountLike): Promise<MeltQuoteBolt12Response>;
+    createMeltQuoteOnchain(address: string, amount: AmountLike): Promise<MeltQuoteOnchainResponse>;
     createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(method: string, payload: Record<string, unknown>, options?: {
         normalize?: (raw: Record<string, unknown>) => TRes;
     }): Promise<TRes>;
@@ -2026,6 +2095,7 @@ export class Wallet {
         amount?: AmountLike;
         description?: string;
     }): Promise<MintQuoteBolt12Response>;
+    createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse>;
     createMultiPathMeltQuote(invoice: string, millisatPartialAmount: AmountLike): Promise<MeltQuoteBolt11Response>;
     decodeToken(token: string): Token;
     defaultOutputType(): OutputType;
@@ -2048,10 +2118,14 @@ export class Wallet {
     meltProofs<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<TQuote>>;
     meltProofsBolt11(meltQuote: MeltQuoteBolt11Response, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt11Response>>;
     meltProofsBolt12(meltQuote: MeltQuoteBolt12Response, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltProofsResponse<MeltQuoteBolt12Response>>;
+    meltProofsOnchain(meltQuote: MeltQuoteOnchainResponse, proofsToSend: ProofLike[], feeIndex: number, config?: MeltProofsConfig): Promise<MeltProofsResponse<MeltQuoteOnchainResponse>>;
     readonly mint: Mint;
     mintProofs<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt11(amount: AmountLike, quote: string | MintQuoteBolt11Response, config?: MintProofsConfig, outputType?: OutputType): Promise<Proof[]>;
     mintProofsBolt12(amount: AmountLike, quote: MintQuoteBolt12Response, privkey: string, config?: {
+        keysetId?: string;
+    }, outputType?: OutputType): Promise<Proof[]>;
+    mintProofsOnchain(amount: AmountLike, quote: MintQuoteOnchainResponse, privkey: string, config?: {
         keysetId?: string;
     }, outputType?: OutputType): Promise<Proof[]>;
     readonly on: WalletEvents;
@@ -2060,7 +2134,7 @@ export class Wallet {
         amount: AmountLike;
         quote: TQuote;
     }>, config?: MintProofsConfig, outputType?: OutputType): Promise<BatchMintPreview<TQuote>>;
-    prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: MeltProofsConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
+    prepareMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'amount' | 'quote'>>(method: string, meltQuote: TQuote, proofsToSend: ProofLike[], config?: PrepareMeltConfig, outputType?: OutputType): Promise<MeltPreview<TQuote>>;
     prepareMint<TQuote extends Pick<MintQuoteBaseResponse, 'quote'>>(method: string, amount: AmountLike, quote: TQuote, config?: MintProofsConfig, outputType?: OutputType): Promise<MintPreview<TQuote>>;
     prepareSwapToReceive(token: Token | string | ProofLike[], config?: ReceiveConfig, outputType?: OutputType): Promise<SwapPreview>;
     prepareSwapToSend(amount: AmountLike, proofs: ProofLike[], config?: SendConfig, outputConfig?: OutputConfig): Promise<SwapPreview>;
@@ -2138,10 +2212,12 @@ export class WalletOps {
     meltBolt11(quote: MeltQuoteBolt11Response, proofs: ProofLike[]): MeltBuilder<MeltQuoteBolt11Response>;
     // (undocumented)
     meltBolt12(quote: MeltQuoteBolt12Response, proofs: ProofLike[]): MeltBuilder<MeltQuoteBolt11Response>;
+    meltOnchain(quote: MeltQuoteOnchainResponse, proofs: ProofLike[]): MeltOnchainBuilder;
     // (undocumented)
     mintBolt11(amount: AmountLike, quote: MintQuoteFor<'bolt11'>): MintBuilder<"bolt11", true>;
     // (undocumented)
     mintBolt12(amount: AmountLike, quote: MintQuoteFor<'bolt12'>): MintBuilder<"bolt12", false>;
+    mintOnchain(amount: AmountLike, quote: MintQuoteFor<'onchain'>): MintBuilder<"onchain", false>;
     // (undocumented)
     receive(token: Token | string | ProofLike[]): ReceiveBuilder;
     // (undocumented)
