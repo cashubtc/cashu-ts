@@ -777,23 +777,6 @@ export function hasValidDleq(
 }
 
 /**
- * @deprecated Use `hasValidDleq(proof, keyset, { require: false })`.
- *
- *   Will be removed in v5.0.
- */
-export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean {
-  // v3 (BLS) proofs always require a pairing check at receive time — there's no DLEQ
-  // to short-circuit on, so we route through hasValidDleq which performs the pairing.
-  if (isBlsKeyset(proof.id)) {
-    return hasValidDleq(proof, keyset);
-  }
-  if (proof?.dleq == undefined) {
-    return true;
-  }
-  return hasValidDleq(proof, keyset, { require: false });
-}
-
-/**
  * Verifies a batch of received proofs in one pass, batching the v3 (BLS) subset into a single
  * multi-pairing while keeping per-proof DLEQ verification for v0/v1/v2.
  *
