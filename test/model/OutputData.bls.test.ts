@@ -7,7 +7,7 @@ import {
   createBlindSignatureBls,
   pointFromHexG1,
   verifyUnblindedSignatureBls,
-} from '../../src/crypto/bls';
+} from '../../src/crypto';
 import { verifyUnblindedSignature } from '../../src/crypto/NUT01';
 import { Amount } from '../../src/model/Amount';
 import { OutputData } from '../../src/model/OutputData';

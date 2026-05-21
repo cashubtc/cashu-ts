@@ -6,7 +6,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 import { Bytes, hexToNumber, numberToHexPadded64 } from '../utils';
 
-import { pointFromHex } from './core';
+import { pointFromHex } from './curve_secp';
 
 /**
  * BIP340-style domain separation tag (DST) for P2BK.
