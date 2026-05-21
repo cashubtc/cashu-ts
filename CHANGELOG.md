@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.0](https://github.com/cashubtc/cashu-ts/compare/v4.4.0...v4.5.0) (2026-05-21)
+
+
+### Features
+
+* add onchain mint/melt support ([#633](https://github.com/cashubtc/cashu-ts/issues/633)) ([d95f923](https://github.com/cashubtc/cashu-ts/commit/d95f92308f96c8ac1d32160e242e83b89f29cb3b))
+
 ## [4.4.0](https://github.com/cashubtc/cashu-ts/compare/v4.3.0...v4.4.0) (2026-05-16)
 
 
