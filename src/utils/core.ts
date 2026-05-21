@@ -460,11 +460,14 @@ export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): str
       if (!unit) {
         throw new CTSError(`Cannot compute keyset ID version 0${versionByte}: unit is required.`);
       }
+      // Per NUT-02 V2/V3: pubkey hex and unit string MUST be lowercased in the preimage.
       const sortedEntries = Object.entries(keys).sort(([amountA], [amountB]) =>
         Amount.from(amountA).compareTo(amountB),
       );
-      let preimage = sortedEntries.map(([amount, pubkey]) => `${amount}:${pubkey}`).join(',');
-      preimage += `|unit:${unit}`;
+      let preimage = sortedEntries
+        .map(([amount, pubkey]) => `${amount}:${pubkey.toLowerCase()}`)
+        .join(',');
+      preimage += `|unit:${unit.toLowerCase()}`;
       // Per NUT-02: input_fee_ppk and expiry must be specified AND non-zero (truthy)
       if (input_fee_ppk) {
         preimage += `|input_fee_ppk:${input_fee_ppk}`;

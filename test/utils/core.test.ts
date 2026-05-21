@@ -456,6 +456,50 @@ describe('test keyset derivation', () => {
     });
     expect(keysetId).toBe(NUT02_V3_VECTOR2_KEYS.id);
   });
+
+  test('NUT-02 V3 derivation is case-insensitive in unit and pubkey hex', () => {
+    const upperUnitId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+    });
+    expect(upperUnitId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+
+    const upperKeys = Object.fromEntries(
+      Object.entries(NUT02_V3_VECTOR2_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
+    );
+    const upperKeysId = utils.deriveKeysetId(upperKeys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+    });
+    expect(upperKeysId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+  });
+
+  // Mirror of the V3 case-insensitivity test on the V2 (secp256k1) path. The two share the same
+  // preimage code path; this lock-in catches a future regression that lowercases for v3 only.
+  test('NUT-02 V2 derivation is case-insensitive in unit and pubkey hex', () => {
+    const upperUnitId = utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
+      versionByte: 1,
+      unit: NUT02_V2_VECTOR1_KEYS.unit.toUpperCase(),
+      input_fee_ppk: NUT02_V2_VECTOR1_KEYS.input_fee_ppk,
+      expiry: NUT02_V2_VECTOR1_KEYS.final_expiry,
+    });
+    expect(upperUnitId).toBe(NUT02_V2_VECTOR1_KEYS.id);
+
+    const upperKeys = Object.fromEntries(
+      Object.entries(NUT02_V2_VECTOR1_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
+    );
+    const upperKeysId = utils.deriveKeysetId(upperKeys, {
+      versionByte: 1,
+      unit: NUT02_V2_VECTOR1_KEYS.unit,
+      input_fee_ppk: NUT02_V2_VECTOR1_KEYS.input_fee_ppk,
+      expiry: NUT02_V2_VECTOR1_KEYS.final_expiry,
+    });
+    expect(upperKeysId).toBe(NUT02_V2_VECTOR1_KEYS.id);
+  });
 });
 
 describe('test v4 encoding', () => {
