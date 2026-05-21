@@ -1,7 +1,13 @@
 import { type Fp2 } from '@noble/curves/abstract/tower.js';
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { randomBytes, bytesToHex, bytesToNumberBE, numberToBytesBE } from '@noble/curves/utils.js';
+import {
+  randomBytes,
+  bytesToHex,
+  bytesToNumberBE,
+  hexToBytes,
+  numberToBytesBE,
+} from '@noble/curves/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -48,22 +54,64 @@ export const BLS_G2_GENERATOR = bls12_381.G2.Point.BASE;
 const BLS_BATCH_DST = utf8ToBytes('Cashu_BLS_Batch_v1');
 
 const Fr = bls12_381.fields.Fr;
+const Fp_ORDER = bls12_381.fields.Fp.ORDER;
 
 export function hashToCurveBls(secret: Uint8Array): G1Point {
   return bls12_381.G1.hashToCurve(secret, { DST: BLS_HASH_TO_CURVE_DST });
 }
 
+/**
+ * Reject encodings whose field-coordinate value (with flag bits cleared) is `>= p`.
+ *
+ * @remarks
+ * @noble/curves silently reduces field coordinates modulo `p` rather than rejecting non-canonical
+ * encodings ("`fromBytes()` reduces modulo q instead of rejecting non-canonical encodings"). The
+ * BLS12-381 Pairing-Friendly Curves draft and the BLS Signatures draft both require a strict `< p`
+ * check, and NUT-00 Point Validation makes it MUST for v3. Without this, two distinct byte strings
+ * can decode to the same point (fine for pairing equality, but breaks canonicality for anything
+ * that hashes over compressed bytes such as Fiat-Shamir transcripts or future byte-level commits).
+ */
+function assertCanonicalCoordinates(
+  bytes: Uint8Array,
+  width: number,
+  coordCount: 1 | 2,
+  label: string,
+): void {
+  if (bytes.length !== width) return; // wrong length is noble's job to flag
+  const cleared = new Uint8Array(bytes);
+  cleared[0] &= 0b0001_1111; // strip the three top flag bits
+  const coordWidth = width / coordCount;
+  for (let i = 0; i < coordCount; i++) {
+    const v = bytesToNumberBE(cleared.subarray(i * coordWidth, (i + 1) * coordWidth));
+    if (v >= Fp_ORDER) {
+      throw new CTSError(`${label} point non-canonical: coordinate >= p`);
+    }
+  }
+}
+
 export function pointFromHexG1(hex: string): G1Point {
+  // Spec NUT-00 Point Validation: enforce canonical field-coordinate range before noble's decoder
+  // silently mod-reduces. See `assertCanonicalCoordinates` for the rationale.
+  assertCanonicalCoordinates(hexToBytes(hex), 48, 1, 'G1');
   // @noble/curves permits parsing the identity; never valid as a Cashu signature or commitment.
   const p = bls12_381.G1.Point.fromHex(hex);
   if (p.is0()) throw new CTSError('G1 point at infinity');
+  // Spec NUT-00 Point Validation: reject non-prime-order-subgroup points. fromHex/assertValidity
+  // confirm the encoding is canonical and on-curve, but BLS12-381 G1 has cofactor h_1, so an
+  // attacker can craft on-curve points outside the q-order subgroup. Without this guard, a
+  // malicious B_ submitted to the mint would let it sign a small-subgroup component.
+  if (!p.isTorsionFree()) throw new CTSError('G1 point not in prime-order subgroup');
   return p;
 }
 
 export function pointFromHexG2(hex: string): G2Point {
+  // G2 compressed: c1 || c0, 48 bytes each. Both must be in [0, p).
+  assertCanonicalCoordinates(hexToBytes(hex), 96, 2, 'G2');
   // @noble/curves permits parsing the identity; never valid as a Cashu mint pubkey.
   const p = bls12_381.G2.Point.fromHex(hex);
   if (p.is0()) throw new CTSError('G2 point at infinity');
+  // Spec NUT-00 Point Validation: reject non-prime-order-subgroup mint pubkeys.
+  if (!p.isTorsionFree()) throw new CTSError('G2 point not in prime-order subgroup');
   return p;
 }
 
@@ -182,15 +230,17 @@ export function deriveBatchWeights(
   for (let i = 0; i < items.length; i++) {
     const iBytes = numberToBytesBE(i, 4);
     let ri = 0n;
-    for (let ctr = 0; ctr < 256; ctr++) {
-      const h = sha256(concatBytes(challenge, iBytes, new Uint8Array([ctr])));
-      // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
-      const r = bytesToNumberBE(h) % BLS_FR_ORDER;
-      /* c8 ignore next */
-      if (r !== 0n) {
-        ri = r;
-        break;
-      }
+    // Per NUT-00: true rejection sampling, not modular reduction. Accept the first hash that
+    // falls in [1, BLS_FR_ORDER); mod-reduction would bias r_i because BLS_FR_ORDER ~ 0.45·2^256
+    // (some residues have three preimages in [0, 2^256), others two). u32 counter keeps the
+    // ceiling effectively unbounded; with ~45% acceptance the failure probability after 16 tries
+    // is 2^-17, after 256 tries 2^-265. The inner cap is a defensive bound, not a real ceiling.
+    for (let ctr = 0; ctr < 1 << 16; ctr++) {
+      const h = sha256(concatBytes(challenge, iBytes, numberToBytesBE(ctr, 4)));
+      const x = bytesToNumberBE(h);
+      if (x === 0n || x >= BLS_FR_ORDER) continue;
+      ri = x;
+      break;
     }
     /* c8 ignore next */
     if (ri === 0n) throw new CTSError('BLS batch weight derivation failed');

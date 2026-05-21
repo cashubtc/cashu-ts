@@ -17,6 +17,8 @@ import {
   NUT02_V2_VECTOR1_KEYS,
   NUT02_V2_VECTOR2_KEYS,
   NUT02_V2_VECTOR3_KEYS,
+  NUT02_V3_VECTOR1_KEYS,
+  NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
 import {
@@ -437,23 +439,22 @@ describe('test keyset derivation', () => {
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR3_KEYS)).toBe(true);
   });
   // v3 keyset id derivation — matches Nutshell `derive_keyset_id_v3` (G2 pubkeys, prefix 02).
-  test('derives v3 keyset id (BLS, unit only)', () => {
-    const G2_HEX =
-      '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8';
-    const keysetId = utils.deriveKeysetId(
-      { 1: G2_HEX, 2: G2_HEX },
-      { versionByte: 2, unit: 'sat' },
-    );
-    expect(keysetId).toBe('02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d');
+  // Vectors mirror nuts/tests/02-tests.md "Version 3"; keys are K_i = i·G2.
+  test('derives NUT-02 version 3 vector 1', () => {
+    const keysetId = utils.deriveKeysetId(NUT02_V3_VECTOR1_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR1_KEYS.unit,
+    });
+    expect(keysetId).toBe(NUT02_V3_VECTOR1_KEYS.id);
   });
-  test('derives v3 keyset id with input_fee_ppk and final_expiry', () => {
-    const G2_HEX =
-      '93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8';
-    const keysetId = utils.deriveKeysetId(
-      { 1: G2_HEX, 2: G2_HEX, 4: G2_HEX, 8: G2_HEX },
-      { versionByte: 2, unit: 'sat', input_fee_ppk: 100, expiry: 2000000000 },
-    );
-    expect(keysetId).toBe('02b532391cadf8c5d98bf0ff05b85e3cfb76a8175d71822140df3396c20cf40588');
+  test('derives NUT-02 version 3 vector 2', () => {
+    const keysetId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+    });
+    expect(keysetId).toBe(NUT02_V3_VECTOR2_KEYS.id);
   });
 });
 

@@ -13,11 +13,6 @@ const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
-enum DerivationType {
-  SECRET = 0,
-  BLINDING_FACTOR = 1,
-}
-
 enum DerivationKind {
   DEPRECATED_BIP32,
   HMAC_SHA256,
@@ -134,50 +129,41 @@ function deriveHmacSecretAndBlindingFactor(
   keysetId: string,
   counter: number,
 ): DerivedSecretAndBlindingFactor {
-  return {
-    secret: deriveHmac(seed, keysetId, counter, DerivationType.SECRET),
-    blindingFactor: deriveHmac(seed, keysetId, counter, DerivationType.BLINDING_FACTOR),
-  };
-}
-
-function deriveHmac(
-  seed: Uint8Array,
-  keysetId: string,
-  counter: number,
-  secretOrBlinding: DerivationType,
-): Uint8Array {
-  let message = Bytes.concat(
+  const base = Bytes.concat(
     Bytes.fromString('Cashu_KDF_HMAC_SHA256'),
     Bytes.fromHex(keysetId),
     Bytes.writeBigUint64BE(BigInt(counter)),
   );
+  return {
+    secret: hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('00'))),
+    blindingFactor: computeBlindingFactor(seed, base, keysetId),
+  };
+}
 
-  switch (secretOrBlinding) {
-    case DerivationType.SECRET:
-      message = Bytes.concat(message, Bytes.fromHex('00'));
-      break;
-    case DerivationType.BLINDING_FACTOR:
-      message = Bytes.concat(message, Bytes.fromHex('01'));
-  }
-
-  const hmacDigest = hmac(sha256, seed, message);
-
-  if (secretOrBlinding === DerivationType.BLINDING_FACTOR) {
-    const x = Bytes.toBigInt(hmacDigest);
-    // Reduce modulo curve order. SECP256K1_N is ~2^256 so a single subtraction suffices;
-    // BLS_FR_ORDER is ~2^255 so the 256-bit HMAC can exceed it by more than once — use mod.
-    let reduced: bigint;
-    if (isBlsKeyset(keysetId)) {
-      reduced = x % BLS_FR_ORDER;
-    } else {
-      reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
+function computeBlindingFactor(seed: Uint8Array, base: Uint8Array, keysetId: string): Uint8Array {
+  if (isBlsKeyset(keysetId)) {
+    // V3 (BLS12-381): rejection sampling. Append u32_BE(attempt) to the HMAC input and accept the
+    // first digest with 0 < x < BLS_FR_ORDER. Modular reduction would bias ~7.5% because
+    // BLS_FR_ORDER ~ 0.45·2^256; rejection sampling yields a uniform sample over Fr*. Match the
+    // NUT-00 batch-weight pattern. Loop cap is defensive; expected attempts ≈ 2.2.
+    for (let attempt = 0; attempt < 1 << 16; attempt++) {
+      const msg = Bytes.concat(base, Bytes.fromHex('01'), numberToBytesBE(attempt, 4));
+      const digest = hmac(sha256, seed, msg);
+      const x = Bytes.toBigInt(digest);
+      if (x === 0n || x >= BLS_FR_ORDER) continue;
+      return digest; // raw 32 bytes; x < 2^256 so the BE encoding matches the digest
     }
     /* c8 ignore next */
-    if (reduced === 0n) {
-      throw new CTSError('Derived invalid blinding scalar r == 0');
-    }
-    return numberToBytesBE(reduced, 32); // preserves 32-byte width
+    throw new CTSError('V3 blinding factor derivation failed');
   }
-
-  return hmacDigest;
+  // V2 (secp256k1): single HMAC, single-subtraction modular reduction. SECP256K1_N is ~2^256 so
+  // at most one subtraction is needed; bias is ~2^-128 (negligible).
+  const digest = hmac(sha256, seed, Bytes.concat(base, Bytes.fromHex('01')));
+  const x = Bytes.toBigInt(digest);
+  const reduced = x >= SECP256K1_N ? x - SECP256K1_N : x;
+  /* c8 ignore next */
+  if (reduced === 0n) {
+    throw new CTSError('Derived invalid blinding scalar r == 0');
+  }
+  return numberToBytesBE(reduced, 32);
 }

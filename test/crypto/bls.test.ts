@@ -58,6 +58,28 @@ describe('point parsing rejects the identity', () => {
   test('pointFromHexG2 throws CTSError on G2 identity', () => {
     expect(() => pointFromHexG2(G2_ZERO_HEX)).toThrow(CTSError);
   });
+
+  // NUT-00 Point Validation: encodings whose stripped field coordinate is >= p must be rejected.
+  // Constructed by taking the field prime p, encoding it as 48-byte BE, and ORing the compression
+  // bit. noble's permissive decoder would silently mod-reduce to x=0; our wrapper rejects.
+  const FP_P_HEX =
+    '1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab';
+  const G1_NONCANONICAL_HEX = '9' + FP_P_HEX.slice(1); // top nibble = 1001 (set compression bit)
+  const G2_NONCANONICAL_HEX = G1_NONCANONICAL_HEX + '00'.repeat(48); // c1=p, c0=0
+  // c1 bytes: 0x80 || 47 zeros (compression flag, c1 coord = 0); c0 bytes: p
+  const G2_NONCANONICAL_C0_HEX = '80' + '00'.repeat(47) + FP_P_HEX;
+
+  test('pointFromHexG1 rejects coordinate >= p', () => {
+    expect(() => pointFromHexG1(G1_NONCANONICAL_HEX)).toThrow(/non-canonical/);
+  });
+
+  test('pointFromHexG2 rejects c1 >= p', () => {
+    expect(() => pointFromHexG2(G2_NONCANONICAL_HEX)).toThrow(/non-canonical/);
+  });
+
+  test('pointFromHexG2 rejects c0 >= p', () => {
+    expect(() => pointFromHexG2(G2_NONCANONICAL_C0_HEX)).toThrow(/non-canonical/);
+  });
 });
 
 describe('hashToCurveBls', () => {
@@ -325,6 +347,33 @@ describe('deriveBatchWeights (Fiat-Shamir transcript)', () => {
     ];
     expect(deriveBatchWeights(A)).not.toEqual(deriveBatchWeights(B));
     void aBytes;
+  });
+
+  test('matches NUT-00 batch test vector byte-for-byte', () => {
+    // Lock-in for nuts/tests/00-tests.md "BLS12-381 (v3) batch verification". Two proofs signed
+    // under K = 2·G2 with secrets "batch_proof_1"/r=5 and "batch_proof_2"/r=7. If the rejection-
+    // sampling derivation changes, this test fails and signals a spec divergence.
+    const a = 2n;
+    const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const K = bls12_381.G2.Point.BASE.multiply(a);
+    const items = (
+      [
+        ['batch_proof_1', 5n],
+        ['batch_proof_2', 7n],
+      ] as Array<[string, bigint]>
+    ).map(([sec, r]) => {
+      const secret = new TextEncoder().encode(sec);
+      const { B_ } = blindMessageBls(secret, r);
+      const { C_ } = createBlindSignatureBls(B_, aBytes, 'k');
+      const C = unblindSignatureBls(C_, r);
+      return { K2: K, C, secret };
+    });
+    const weights = deriveBatchWeights(items).map((w) => w.toString(16).padStart(64, '0'));
+    expect(weights).toEqual([
+      '0e7ff8be2ccb756d4ef390991bdd77eb65e8db624a2729fa1657c3cf8d7d4b55',
+      '6d026a181a6215b233e73b121d01908a1a1eb6911955bea5130bbf2f2966554d',
+    ]);
+    expect(batchVerifyUnblindedSignatureBls(items)).toBe(true);
   });
 
   test('batchVerify result is deterministic across runs', () => {

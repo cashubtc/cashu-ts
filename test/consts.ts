@@ -322,6 +322,46 @@ export const NUT02_V2_VECTOR3_KEYSET: MintKeyset = {
   final_expiry: NUT02_V2_VECTOR3_KEYS.final_expiry,
 };
 
+// NUT-02 V3 (BLS12-381) keyset test vectors. Mirror of nuts/tests/02-tests.md "Version 3".
+// Public keys are arbitrary distinct G2 points; only the keyset ID derivation is exercised.
+export const NUT02_V3_VECTOR1_KEYS: MintKeys = {
+  id: '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd',
+  unit: 'sat',
+  keys: {
+    '1': '8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c',
+    '2': '8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c',
+  },
+};
+
+export const NUT02_V3_VECTOR2_KEYS: MintKeys = {
+  id: '020c5210bbb16757130c7e26061df3ea3f97a47046d2cebb54a21b3b4c370f42d8',
+  unit: 'sat',
+  input_fee_ppk: 100,
+  final_expiry: 2000000000,
+  keys: {
+    '1': '8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c',
+    '2': '8bf78a97086750eb166986ed8e428ca1d23ae3bbf8b2ee67451d7dd84445311e8bc8ab558b0bc008199f577195fc39b7152110e866f1a6e8c5348f6e005dbd93de671b7d0fbfa04d6614bcdd27a3cb2a70f0deacb3608ba95226268481a0be7c',
+    '4': '8c60dae92451206390e30b5daa7151d63624dee496753c87dd54eadc92dc9602081fae02a1a53bac97e984a571923a5d0a29e38da2d42fd4712052800c7c8dd6e94fd9f506e946068aaac799d60b94c2d7515769ffdd32ea95d3910330ec47de',
+    '8': 'a55dafcdf339360f74e3fd32296d062d5e36db3c2570e13a889b38502c0ff71864b19e324bc9c661c29b07c9cc378b5919c1656979648d7c3ef4bd6501fcc96490a34e47fe25afc8b14d60f1c3772138acaf8a0a5e4f940f57206eba74fdc973',
+  },
+};
+
+export const NUT02_V3_VECTOR1_KEYSET: MintKeyset = {
+  id: NUT02_V3_VECTOR1_KEYS.id,
+  unit: NUT02_V3_VECTOR1_KEYS.unit,
+  active: true,
+  input_fee_ppk: NUT02_V3_VECTOR1_KEYS.input_fee_ppk,
+  final_expiry: NUT02_V3_VECTOR1_KEYS.final_expiry,
+};
+
+export const NUT02_V3_VECTOR2_KEYSET: MintKeyset = {
+  id: NUT02_V3_VECTOR2_KEYS.id,
+  unit: NUT02_V3_VECTOR2_KEYS.unit,
+  active: true,
+  input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+  final_expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+};
+
 export const DUMMY_TEST_KEYSET: MintKeyset = {
   id: '00bd033559de27d0',
   unit: 'sat',

@@ -20,8 +20,8 @@ describe('deriveBlindingFactor', () => {
 });
 
 describe('v3 (BLS) derivation', () => {
-  const seed = new TextEncoder().encode('test seed v3 reduction');
-  const v3KeysetId = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+  const seed = new TextEncoder().encode('nut13 v3 test seed');
+  const v3KeysetId = '02abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd';
 
   test('uses HMAC_SHA256 and produces a 32-byte blinding factor below BLS_FR_ORDER', () => {
     for (let counter = 0; counter < 8; counter++) {
@@ -35,27 +35,24 @@ describe('v3 (BLS) derivation', () => {
   });
 
   test('v3 and v2 derivations diverge for the same seed/counter', () => {
-    // Identical 64-hex tail across both ids; only the version prefix differs (01 vs 02).
-    const tail = 'ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+    const tail = 'abd02ebc1ff44652153375162407deaf0b30e590844cca0b6e4894a08a8828dd';
     const v2 = '01' + tail.slice(0, 62);
     const v3 = '02' + tail.slice(0, 62);
-    // The keyset id is mixed into the HMAC message, so different prefixes give different outputs.
     const v2r = deriveBlindingFactor(seed, v2, 0);
     const v3r = deriveBlindingFactor(seed, v3, 0);
     expect(bytesToHex(v2r)).not.toBe(bytesToHex(v3r));
   });
 
-  test('matches Nutshell vector at a counter where Fr-order reduction is non-trivial', () => {
-    // Cross-checked against Nutshell's `_derive_secret_hmac_sha256` for (seed, v3KeysetId, 2).
-    // Counter=2 was chosen because the raw HMAC exceeds BLS_FR_ORDER, so the mod reduction
-    // produces bytes that differ from the raw digest — making this a regression vector for
-    // the v3 mod-Fr_ORDER branch in deriveHmac.
-    const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, 2);
+  test('matches NUT-13 V3 spec vector (rejection sampling, attempt=1)', () => {
+    // Lock-in for nuts/tests/13-tests.md "Version 3: Secret derivation". The (seed, keyset, counter)
+    // tuple is chosen so attempt=0 produces x >= BLS_FR_ORDER and is rejected; attempt=1 succeeds.
+    // Implementations that omit the rejection loop will compute a different blinding_factor.
+    const { blindingFactor, secret } = deriveSecretAndBlindingFactor(seed, v3KeysetId, 3);
     expect(bytesToHex(secret)).toBe(
-      '4729fe85ab3886ce03259ac658735ff534c9cd41b2b364d202ff497e4ee48809',
+      '7a45e04943504b25273e9569ab7019ab62f814dade23998c12f5f4cb1bb7978a',
     );
     expect(bytesToHex(blindingFactor)).toBe(
-      '08bb237d625b73022cd50f6fedfb660c6125b676a4819474241c264903259d2f',
+      '236dbcb12fc064ceeae6c5e2de7f79258374dccbf23ac0afdf72cf9eb53540c9',
     );
   });
 });
