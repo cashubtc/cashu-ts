@@ -18,13 +18,22 @@ npm run test:prepare
 
 ```
 
-### Branching model update
+### Branching model
 
-This repository no longer uses a separate development branch. All development now happens directly against main.
+`main` always tracks the **current major** under active development — there is no separate development branch for it. Each still-supported **prior major** is maintained on its own long-lived `vN-dev` branch for fixes only.
 
-The project will continue to support the last prior major release on a version branch. At the time of this change main tracks v4, while the v3 linage exists on `v3-dev`.
+Open PRs against the branch for the major you are targeting (don't mix majors in one PR):
 
-If you are backporting fixes to the v3 line, please open pull requests against the `v3-dev` branch instead.
+- Features and fixes for the current major → `main`
+- Backports to a maintained prior major → that major's `vN-dev` branch
+
+Current branches:
+
+| Branch   | Major | Status                             |
+| -------- | ----- | ---------------------------------- |
+| `main`   | v5    | Current — active development       |
+| `v4-dev` | v4    | LTS — critical/security fixes only |
+| `v3-dev` | v3    | LTS — critical/security fixes only |
 
 Notes:
 
@@ -33,7 +42,7 @@ Notes:
 
 ### ⚠️ Important — run `npm ci` after switching major branches
 
-When switching between major branches (for example `main` for v4 and `v3-dev` for v3) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
+When switching between major branches (for example `main` and a `vN-dev` branch) the lockfile and installed dependencies can differ. This frequently causes confusing failures when compiling or running `api-extractor`.
 
 Always run a clean install after switching major branches to ensure `node_modules` matches the checked-in lockfile:
 
@@ -281,19 +290,13 @@ npm install <pkg> --save-dev
 
 Cashu-TS uses semantic versioning.
 
-The repository uses a single primary development branch, `main`, which tracks the current major release (v4).
-
-All new development is merged into `main` via pull requests.
-
-The previous major version (v3) is maintained on the `v3-dev` branch for critical fixes only.
-
-If you need to backport a fix to v3, open a separate PR targeting `v3-dev` (do not mix both in a single PR).
+`main` is the single primary development branch and tracks the **current major**. All new development is merged into `main` via pull requests. Each supported **prior major** is maintained on its own `vN-dev` branch for critical/security fixes only — open backports as a separate PR against the matching `vN-dev` branch (do not mix majors in a single PR). See [Branching model](#branching-model).
 
 ## Releases
 
-### v4 stable releases (release-please)
+### Current-major releases on `main` (release-please)
 
-Stable v4 releases on `main` are automated with [release-please](https://github.com/googleapis/release-please).
+Releases on `main` are automated with [release-please](https://github.com/googleapis/release-please).
 
 #### How it works
 
@@ -307,52 +310,61 @@ Stable v4 releases on `main` are automated with [release-please](https://github.
     - `fix` → patch version bump
     - Breaking changes (`feat!` / `fix!`) → major version bump
 
-#### Cutting a stable release
+#### Cutting a release
 
 - A release is created **by merging the Release PR**.
 - When the Release PR is merged:
   - A Git tag is created
   - A GitHub Release is published
-  - CI builds and publishes the package to npm as `latest` (with provenance)
+  - CI builds and publishes the package to npm via `version.yml` (with provenance)
 
 **Merging the Release PR is the release action. No additional steps are required.**
 
-### v4 release candidates (manual)
+> **Major bumps:** when breaking changes (`feat!` / `fix!`) land on `main`, release-please proposes the next major automatically. To control the pre-release cadence, add a `Release-As: X.0.0-rc.1` footer to a commit so the Release PR targets that version (it publishes to `next`).
 
-Release candidates are cut manually from a branch, keeping `main` clean for the pending release-please PR.
+### Pre-releases / release candidates
 
-1. Branch off `main` (e.g. `v4-rc1`).
-2. Bump `package.json` to the RC version (e.g. `4.0.0-rc.1`).
-3. Tag, push, and create a GitHub Release — mark it as a **pre-release**.
-4. The publish workflow (`version.yml`) detects the prerelease version and publishes to npm with the `next` dist-tag.
-5. For subsequent RCs, either add commits to the same branch or branch fresh from `main`.
+Any version containing `-rc`, `-beta`, or `-alpha` publishes to the `next` dist-tag, regardless of branch. Cut these either from `main` (via a `Release-As` footer) or from a short-lived branch off `main` (bump `package.json`, tag, and publish a GitHub **pre-release**).
 
-When the RC phase is complete, merge the release-please PR on `main` to cut the stable release.
+### LTS releases on `vN-dev` (manual)
 
-### v3 LTS releases (manual)
+release-please only watches `main`, so prior-major maintenance releases are cut manually:
 
-v3 maintenance releases are handled manually — release-please only watches `main`.
-
-1. Cherry-pick or commit fixes to `v3-dev`.
-2. Bump `package.json` to the next patch version (e.g. `3.6.2`).
-3. Tag and push: `git tag v3.6.2 && git push origin v3-dev --tags`
+1. Commit or cherry-pick the fix to the `vN-dev` branch.
+2. Bump `package.json` to the next patch version (e.g. `4.5.1`).
+3. Tag and push: `git tag v4.5.1 && git push origin v4-dev --tags`
 4. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
-5. The publish workflow detects major version 3 and publishes to npm with the `v3-lts` dist-tag.
+5. `version.yml` maps the major version to the correct dist-tag (see below).
 
 ### npm dist-tags
 
-| Version            | npm dist-tag | Install command                      |
-| ------------------ | ------------ | ------------------------------------ |
-| v4 stable          | `latest`     | `npm install @cashu/cashu-ts`        |
-| v4 RC / prerelease | `next`       | `npm install @cashu/cashu-ts@next`   |
-| v3 LTS             | `v3-lts`     | `npm install @cashu/cashu-ts@v3-lts` |
+`version.yml` derives the dist-tag from the version being published:
+
+- Prerelease (`-rc` / `-beta` / `-alpha`) → `next`
+- Major equal to `LATEST_MAJOR` (a workflow-level env var) → `latest`
+- Any other major → `vN-lts`
+
+| Version                       | npm dist-tag | Install command                      |
+| ----------------------------- | ------------ | ------------------------------------ |
+| Current major, stable         | `latest`     | `npm install @cashu/cashu-ts`        |
+| Any RC / prerelease           | `next`       | `npm install @cashu/cashu-ts@next`   |
+| Older supported major, stable | `vN-lts`     | `npm install @cashu/cashu-ts@v3-lts` |
+
+> `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`.
+
+### Major transitions
+
+Promoting a new major happens in two steps:
+
+1. **Incoming major lands on `main`.** release-please proposes the new major; cut release candidates (`-rc`), which publish to `next`. Leave `LATEST_MAJOR` unchanged so `latest` keeps pointing at the outgoing major, and start cutting the outgoing major's maintenance releases from its `vN-dev` branch.
+2. **GA.** Bump `LATEST_MAJOR` in `version.yml` (one-line PR) and cut the release on `main` — it publishes to `latest`, and the previous major automatically drops to `vN-lts`. Update the branch table above.
 
 ### Notes on Versioning
 
 - Follow **Conventional Commits** to ensure correct version bumps.
-- Breaking API changes must be clearly marked to trigger a major version bump.
-- Stable version numbers on `main` are determined automatically by release-please; contributors should not attempt to control versions directly.
-- RC and v3 LTS versions are bumped manually in `package.json`.
+- Breaking API changes must be clearly marked (`feat!` / `fix!` or `BREAKING CHANGE:`) to trigger a major version bump.
+- Version numbers on `main` are determined automatically by release-please; contributors should not attempt to control versions directly.
+- LTS and RC versions are bumped manually in `package.json`.
 
 ## Troubleshooting (common issues)
 

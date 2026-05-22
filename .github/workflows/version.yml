@@ -4,6 +4,12 @@ permissions:
   contents: write
   id-token: write
 
+# Major version currently published under the npm `latest` dist-tag.
+# Bump this (e.g. "4" -> "5") in a reviewed PR when a new major reaches GA — see the release
+# strategy in DEVELOPER.md. Any major that is not LATEST_MAJOR publishes as `vN-lts`, never `latest`.
+env:
+  LATEST_MAJOR: '4'
+
 on:
   release:
     types: [published]
@@ -38,7 +44,7 @@ jobs:
           MAJOR_VERSION=$(echo $VERSION | cut -d. -f1)
           if echo "$VERSION" | grep -qE '[-](rc|alpha|beta)'; then
             echo "tag=next" >> $GITHUB_OUTPUT
-          elif [ "$MAJOR_VERSION" = "4" ]; then
+          elif [ "$MAJOR_VERSION" = "$LATEST_MAJOR" ]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=v${MAJOR_VERSION}-lts" >> $GITHUB_OUTPUT
