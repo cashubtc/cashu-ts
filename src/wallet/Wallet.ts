@@ -2921,10 +2921,17 @@ class Wallet {
   /**
    * Get an array of the states of proofs from the mint (as an array of CheckStateEnum's)
    *
-   * @param proofs (only the `secret` field is required)
+   * @param proofs Each proof should carry both `secret` and `id`. The `id` is currently unused, but
+   *   becomes required in v5 where it selects the hash-to-curve variant (secp256k1 vs BLS12-381).
    * @returns NUT-07 state for each proof, in same order.
    */
-  async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]> {
+  async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]>;
+  /**
+   * @deprecated Include `id` on each proof alongside `secret`. The keyset `id` becomes required in
+   *   v5 to select the hash-to-curve variant; `secret`-only proofs will stop working then.
+   */
+  async checkProofsStates(proofs: Array<Pick<Proof, 'secret'>>): Promise<ProofState[]>;
+  async checkProofsStates(proofs: Array<Pick<ProofLike, 'secret'>>): Promise<ProofState[]> {
     const enc = new TextEncoder();
     const Ys = proofs.map((p: Pick<Proof, 'secret'>) =>
       hashToCurve(enc.encode(p.secret)).toHex(true),
