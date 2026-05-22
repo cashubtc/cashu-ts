@@ -2001,6 +2001,7 @@ export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
 export type SwapMethod = {
     method: string;
     unit: string;
+    method_name: string | null;
     min_amount: AmountLike | null;
     max_amount: AmountLike | null;
     description?: boolean;

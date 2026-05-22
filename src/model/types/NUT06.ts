@@ -100,6 +100,11 @@ export type MintContactInfo = {
 export type SwapMethod = {
   method: string;
   unit: string;
+  /**
+   * Human-readable name for this method (NUT-04/05), e.g. `"Lightning"`. `<str|null>` on the wire
+   * and coerced to `null` when the mint omits it. Fall back to {@link method} for display.
+   */
+  method_name: string | null;
   min_amount: AmountLike | null;
   max_amount: AmountLike | null;
   description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783

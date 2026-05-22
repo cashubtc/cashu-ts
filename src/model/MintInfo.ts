@@ -68,13 +68,13 @@ export class MintInfo {
     };
   }
 
-  // Per NUT-04/05/25/XX, `min_amount` and `max_amount` are `<int|null>`. Mints that omit
-  // them entirely (older Nutshell, etc.) leave the field as `undefined`; coerce to null
-  // so the runtime value matches the `AmountLike | null` type.
+  // Per NUT-04/05/25/XX, `min_amount`, `max_amount`, and `method_name` are `<x|null>`. Mints that
+  // omit them entirely (older Nutshell, etc.) leave the field as `undefined`; coerce to null so the
+  // normalized response is spec-valid and matches the declared types.
   private static normalizeSwapMethods(methods: SwapMethod[]): SwapMethod[] {
     return methods.map((m) => {
       const next = { ...m } as Record<string, unknown>;
-      nullIfUndefined(next, 'min_amount', 'max_amount');
+      nullIfUndefined(next, 'min_amount', 'max_amount', 'method_name');
       return next as SwapMethod;
     });
   }

@@ -108,7 +108,15 @@ describe('MintInfo protected endpoint matching', () => {
       nuts: {
         4: {
           disabled: false,
-          methods: [{ method: 'bolt11', unit: 'sat', min_amount: 1n, max_amount: 2n }],
+          methods: [
+            {
+              method: 'bolt11',
+              unit: 'sat',
+              method_name: 'Lightning',
+              min_amount: 1n,
+              max_amount: 2n,
+            },
+          ],
         },
         5: {
           disabled: false,
@@ -130,6 +138,9 @@ describe('MintInfo protected endpoint matching', () => {
     expect(info.nuts['4'].methods[0].max_amount).toBe(2n);
     expect(info.nuts['5'].methods[0].min_amount).toBe(3n);
     expect(info.nuts['5'].methods[0].max_amount).toBe(4n);
+    // method_name (NUT-04/05) passes through; coerced to null on mints that omit it
+    expect(info.nuts['4'].methods[0].method_name).toBe('Lightning');
+    expect(info.nuts['5'].methods[0].method_name).toBeNull();
     // metadata integers (ttl, bat_max_mint) are still normalized to safe numbers
     expect(info.nuts['19']?.ttl).toBe(30);
     expect(info.nuts['22']?.bat_max_mint).toBe(5);
