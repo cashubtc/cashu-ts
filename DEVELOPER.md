@@ -344,11 +344,11 @@ release-please only watches `main`, so prior-major maintenance releases are cut 
 - Major equal to `LATEST_MAJOR` (a workflow-level env var) → `latest`
 - Any other major → `vN-lts`
 
-| Version                       | npm dist-tag | Install command                      |
-| ----------------------------- | ------------ | ------------------------------------ |
-| Current major, stable         | `latest`     | `npm install @cashu/cashu-ts`        |
-| Any RC / prerelease           | `next`       | `npm install @cashu/cashu-ts@next`   |
-| Older supported major, stable | `vN-lts`     | `npm install @cashu/cashu-ts@v3-lts` |
+| Version       | Tag      | Install                              |
+| ------------- | -------- | ------------------------------------ |
+| Current major | `latest` | `npm install @cashu/cashu-ts`        |
+| Prerelease    | `next`   | `npm install @cashu/cashu-ts@next`   |
+| LTS           | `vN-lts` | `npm install @cashu/cashu-ts@v3-lts` |
 
 > `latest` is governed **solely** by `LATEST_MAJOR` in `version.yml`. Any major that is not `LATEST_MAJOR` (and is not a prerelease) falls through to `vN-lts` and can never accidentally become `latest`.
 
