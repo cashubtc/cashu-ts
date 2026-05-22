@@ -1,4 +1,4 @@
-import { type CurvePoint, pointToHex } from '../crypto/core';
+import { type CurvePoint, pointToHex } from '../crypto/curves';
 
 import { Amount, type AmountLike } from './Amount';
 import { type SerializedBlindedMessage } from './types/index';

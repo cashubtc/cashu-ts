@@ -12,6 +12,27 @@ Existing v0 (legacy base64), v1 (`00…`), and v2 (`01…`) keysets continue to 
 
 ---
 
+## Crypto deep imports were reorganized
+
+The internal crypto module layout changed to separate curve-specific primitives from shared
+coordination code. The new curve files are implementation modules, not stable import targets. If
+you were relying on existing file-level imports such as `crypto/core`, move those imports to the
+public package entry point.
+
+Use the public package entry point instead:
+
+```ts
+// Before
+import { blindMessage, hashToCurve } from '@cashu/cashu-ts/crypto/core';
+
+// After
+import { blindMessage, hashToCurve } from '@cashu/cashu-ts';
+```
+
+If you were relying on a symbol that is not exported by the package entry point in v5, treat it as internal implementation detail and open an issue before depending on it.
+
+---
+
 ## `checkProofsStates` now requires `id` on every proof
 
 `Wallet.checkProofsStates` previously accepted `Array<Pick<Proof, 'secret'>>` — only `secret` was required. v5 requires both `id` and `secret`: `Array<Pick<Proof, 'secret' | 'id'>>`.

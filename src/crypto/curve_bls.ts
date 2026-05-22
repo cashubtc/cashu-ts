@@ -115,6 +115,21 @@ export function pointFromHexG2(hex: string): G2Point {
   return p;
 }
 
+/**
+ * V3 (BLS) mint pubkey: K2 = a · G2_gen, compressed to 96 bytes.
+ *
+ * The 32-byte private key is interpreted as a big-endian scalar and reduced mod the BLS Fr order
+ * (same convention as the mint-side blind signer for v3).
+ */
+export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
+  const a = Fr.fromBytes(privKey);
+  /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
+  if (a === 0n) {
+    throw new CTSError('Mint scalar must be non-zero');
+  }
+  return BLS_G2_GENERATOR.multiply(a).toBytes(true);
+}
+
 function randomScalar(): bigint {
   // bls12_381's Fr.fromBytes accepts 32 bytes BE and reduces mod ORDER.
   return Fr.fromBytes(randomBytes(32));

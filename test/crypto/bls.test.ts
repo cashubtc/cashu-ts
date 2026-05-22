@@ -15,7 +15,7 @@ import {
   deriveBatchWeights,
   pointFromHexG1,
   pointFromHexG2,
-} from '../../src/crypto/bls';
+} from '../../src/crypto';
 import { CTSError } from '../../src/model/Errors';
 
 // NUT-00 v3 round-trip vector (nuts/tests/00-tests.md "BLS12-381 (v3) round-trip"). The same hex

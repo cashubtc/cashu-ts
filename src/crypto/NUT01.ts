@@ -8,8 +8,10 @@ import { HDKey } from '@scure/bip32';
 import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
-import { BLS_G2_GENERATOR, hashToCurveBls } from './bls';
-import { type UnblindedSignature, createRandomSecretKey, hashToCurve, isBlsKeyset } from './core';
+import { type UnblindedSignature } from './core';
+import { getG2PubKeyFromPrivKey, hashToCurveBls } from './curve_bls';
+import { createRandomSecretKey, getPubKeyFromPrivKey, hashToCurve } from './curve_secp';
+import { isBlsKeyset } from './curves';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 
@@ -45,25 +47,6 @@ export function deserializeMintKeys(serializedMintKeys: SerializedMintKeys): Raw
     mintKeys[p] = hexToBytes(serializedMintKeys[p]);
   });
   return mintKeys;
-}
-
-export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
-  return secp256k1.getPublicKey(privKey, true);
-}
-
-/**
- * V3 (BLS) mint pubkey: K2 = a · G2_gen, compressed to 96 bytes.
- *
- * The 32-byte private key is interpreted as a big-endian scalar and reduced mod the BLS Fr order
- * (same convention as the mint-side blind signer for v3).
- */
-export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
-  const a = bls12_381.fields.Fr.fromBytes(privKey);
-  /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
-  if (a === 0n) {
-    throw new CTSError('Mint scalar must be non-zero');
-  }
-  return BLS_G2_GENERATOR.multiply(a).toBytes(true);
 }
 
 /**
@@ -137,7 +120,7 @@ export function createNewMintKeys(
  *
  * @remarks
  * Dispatches by keyset version. v0/v1/v2 keysets use secp256k1; v3 keysets use BLS12-381 G1. The
- * wallet-side pairing equivalent for v3 is {@link verifyUnblindedSignatureBls} in `./bls`.
+ * wallet-side pairing equivalent for v3 is {@link verifyUnblindedSignatureBls} in `./curve_bls`.
  */
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
   if (isBlsKeyset(proof.id)) {

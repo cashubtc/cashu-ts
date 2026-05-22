@@ -937,7 +937,7 @@ describe('test zero-knowledge utilities', () => {
       });
 
       test('mixed-denomination v3 batch verifies in one pairing', async () => {
-        const bls = await import('../../src/crypto/bls');
+        const bls = await import('../../src/crypto');
         // Same mint key (a=2), different secrets + amounts → realistic mixed-denomination receive.
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
@@ -969,7 +969,7 @@ describe('test zero-knowledge utilities', () => {
       });
 
       test('tampered C in a 5-proof v3 batch is rejected and offender named', async () => {
-        const bls = await import('../../src/crypto/bls');
+        const bls = await import('../../src/crypto');
         const aBytes = hexToBytes('0'.repeat(63) + '2');
         const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
         const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {

@@ -8,7 +8,8 @@ import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { CTSError } from '../model/Errors';
 import { Bytes } from '../utils';
 
-import { type DLEQ, hash_e, hashToCurve } from './core';
+import { type DLEQ } from './core';
+import { hash_e, hashToCurve } from './curve_secp';
 
 const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');

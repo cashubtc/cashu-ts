@@ -6,8 +6,8 @@ import { HDKey } from '@scure/bip32';
 import { CTSError } from '../model/Errors';
 import { Bytes, isBase64String } from '../utils';
 
-import { BLS_FR_ORDER } from './bls';
-import { getKeysetIdInt, isBlsKeyset } from './core';
+import { BLS_FR_ORDER } from './curve_bls';
+import { getKeysetIdInt, isBlsKeyset } from './curves';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
 
