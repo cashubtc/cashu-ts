@@ -4,6 +4,9 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { Amount, MintRequest } from '../../src';
 
+/**
+ * NUT-20 test vectors for batch mint signatures.
+ */
 describe('mint quote signatures', () => {
   test('valid signature verification', () => {
     let mintRequest = {
@@ -36,11 +39,11 @@ describe('mint quote signatures', () => {
         },
       ],
       signature:
-        'd4b386f21f7aa7172f0994ee6e4dd966539484247ea71c99b81b8e09b1bb2acbc0026a43c221fd773471dc30d6a32b04692e6837ddaccf0830a63128308e4ee0',
+        '567238205b7f431c7249645715288557617e47f1e347ce598c845588e104a5f23df0fad34f4736668c5da6a8be8346db5f5b84ed071dcf75772ebe02053e9a53',
     } as MintRequest;
     const sig = mintRequest.signature!;
     const quote = mintRequest.quote;
-    const pubkey = '03d56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
+    const pubkey = '03e8c0ef99aa610787b91a5aa522cbc569646630bfdb575718bf2f022e1341615c';
     const blindedMessages = mintRequest.outputs;
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, sig)).toBe(true);
   });
@@ -75,11 +78,11 @@ describe('mint quote signatures', () => {
         },
       ],
       signature:
-        'cb2b8e7ea69362dfe2a07093f2bbc319226db33db2ef686c940b5ec976bcbfc78df0cd35b3e998adf437b09ee2c950bd66dfe9eb64abd706e43ebc7c669c36c3',
+        '577238205b7f431c7249645715288557617e47f1e347ce598c845588e104a5f23df0fad34f4736668c5da6a8be8346db5f5b84ed071dcf75772ebe02053e9a53',
     } as MintRequest;
     const sig = mintRequest.signature!;
     const quote = mintRequest.quote;
-    const pubkey = '03d56ce4e446a85bbdaa547b4ec2b073d40ff802831352b8272b7dd7a4de5a7cac';
+    const pubkey = '03e8c0ef99aa610787b91a5aa522cbc569646630bfdb575718bf2f022e1341615c';
     const blindedMessages = mintRequest.outputs;
     expect(verifyMintQuoteSignature(pubkey, quote, blindedMessages, sig)).toBe(false);
   });
