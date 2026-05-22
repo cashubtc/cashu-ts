@@ -15,6 +15,13 @@ npm run test:prepare
 
 ```
 
+## Target branch
+
+- Features and fixes for the current major → open against `main`.
+- Backports to a maintained prior major → open against that major's `vN-dev` branch (e.g. `v4-dev`, `v3-dev`); don't mix majors in one PR.
+
+See the [branching model](./DEVELOPER.md#branching-model) in the developer guide for details.
+
 ## PR checklist (author)
 
 - Code compiles / build passes: `npm run compile`

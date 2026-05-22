@@ -140,12 +140,13 @@ Hooks are installed by Husky:
 
 ## Branching and releases
 
-- `main` is the active development branch (v4).
-- `v3-dev` is the maintenance branch for v3 backports.
-- Releases are automated with release-please; do not cut releases manually.
+- `main` tracks the current major and is where active development lands.
+- Each supported prior major has a `vN-dev` LTS branch (`v4-dev`, `v3-dev`) for backports only; target the matching branch and don't mix majors in one PR.
+- Current-major releases on `main` are automated with release-please (don't bump versions by hand). LTS releases on `vN-dev` are cut manually (tag + GitHub Release).
+- npm `latest` is governed solely by `LATEST_MAJOR` in `.github/workflows/version.yml`.
 
 ## Common pitfalls (save time)
 
-- Switching `main` ↔ `v3-dev`: run `npm ci` after checkout to refresh dependencies.
+- Switching between major branches (`main` ↔ a `vN-dev` branch): run `npm ci` after checkout to refresh dependencies.
 - Integration tests expect port `3338`; ensure no other service is bound.
 - API Extractor only updates with `npm run api:update`; `api:check` is read-only.
