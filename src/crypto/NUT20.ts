@@ -7,7 +7,7 @@ import { type SerializedBlindedMessage } from '../model/types';
 function constructMessage(quote: string, blindedMessages: SerializedBlindedMessage[]): Uint8Array {
   let message = quote;
   for (const blindedMessage of blindedMessages) {
-    message += blindedMessage.B_;
+    message += ':' + blindedMessage.B_;
   }
   const msgbytes = new TextEncoder().encode(message);
   return sha256(msgbytes);
