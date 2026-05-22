@@ -1,6 +1,7 @@
 {
   "realm": "cashu",
   "enabled": true,
+  "sslRequired": "none",
 
   "defaultRoles": ["offline_access", "uma_authorization"],
 

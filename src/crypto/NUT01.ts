@@ -1,12 +1,15 @@
 import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 import { HDKey } from '@scure/bip32';
 
 import { CTSError } from '../model/Errors';
 import { deriveKeysetId } from '../utils';
 
-import { type UnblindedSignature, createRandomSecretKey, hashToCurve } from './core';
+import { BLS_G2_GENERATOR, hashToCurveBls } from './bls';
+import { type UnblindedSignature, createRandomSecretKey, hashToCurve, isBlsKeyset } from './core';
 
 const DERIVATION_PATH = "m/0'/0'/0'";
 
@@ -49,6 +52,21 @@ export function getPubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBuffe
 }
 
 /**
+ * V3 (BLS) mint pubkey: K2 = a · G2_gen, compressed to 96 bytes.
+ *
+ * The 32-byte private key is interpreted as a big-endian scalar and reduced mod the BLS Fr order
+ * (same convention as the mint-side blind signer for v3).
+ */
+export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBufferLike> {
+  const a = bls12_381.fields.Fr.fromBytes(privKey);
+  /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
+  if (a === 0n) {
+    throw new CTSError('Mint scalar must be non-zero');
+  }
+  return BLS_G2_GENERATOR.multiply(a).toBytes(true);
+}
+
+/**
  * Creates new mint keys.
  *
  * @param pow2height Number of powers of 2 to create (Max 65).
@@ -81,17 +99,28 @@ export function createNewMintKeys(
   while (counter < pow2height) {
     const index: string = (2n ** counter).toString();
     if (masterKey) {
-      const k = masterKey.derive(`${DERIVATION_PATH}/${counter}`).privateKey;
+      // v3 hardens the per-amount path and hashes the BIP32 output before reducing mod Fr,
+      // matching Nutshell `derive_keys_v3`. Hardening prevents sibling-key derivation from
+      // a leaked child + xpub; the sha256 step gives a uniformly distributed input so the
+      // Fr reduction isn't biased (BIP32 outputs are mod secp's `n`, which differs from Fr).
+      // v1/v2 keep the original unhardened path for back-compat with existing fixtures.
+      // TODO v5: Harden the v1/v2 path and update TEST_PRIV_KEY_PUBS.
+      const path =
+        versionByte === 2 ? `${DERIVATION_PATH}/${counter}'` : `${DERIVATION_PATH}/${counter}`;
+      const k = masterKey.derive(path).privateKey;
       if (k) {
-        privKeys[index] = k;
+        privKeys[index] = versionByte === 2 ? sha256(k) : k;
       } else {
-        throw new CTSError(`Could not derive Private key from: ${DERIVATION_PATH}/${counter}`);
+        throw new CTSError(`Could not derive Private key from: ${path}`);
       }
     } else {
       privKeys[index] = createRandomSecretKey();
     }
 
-    pubKeys[index] = getPubKeyFromPrivKey(privKeys[index]);
+    pubKeys[index] =
+      versionByte === 2
+        ? getG2PubKeyFromPrivKey(privKeys[index])
+        : getPubKeyFromPrivKey(privKeys[index]);
     counter++;
   }
   const keysetId = deriveKeysetId(serializeMintKeys(pubKeys), {
@@ -103,7 +132,23 @@ export function createNewMintKeys(
   return { pubKeys, privKeys, keysetId };
 }
 
+/**
+ * Mint-side keyed verification: holds iff the proof's `C` equals `a · hashToCurve(secret)`.
+ *
+ * @remarks
+ * Dispatches by keyset version. v0/v1/v2 keysets use secp256k1; v3 keysets use BLS12-381 G1. The
+ * wallet-side pairing equivalent for v3 is {@link verifyUnblindedSignatureBls} in `./bls`.
+ */
 export function verifyUnblindedSignature(proof: UnblindedSignature, privKey: Uint8Array): boolean {
+  if (isBlsKeyset(proof.id)) {
+    const a = bls12_381.fields.Fr.fromBytes(privKey);
+    /* c8 ignore next 3 — defensive guard; a==0 requires all-zero privKey bytes (impossible in practice). */
+    if (a === 0n) {
+      throw new CTSError('Mint scalar must be non-zero');
+    }
+    const Y = hashToCurveBls(proof.secret);
+    return Y.multiply(a).equals(proof.C);
+  }
   const Y: WeierstrassPoint<bigint> = hashToCurve(proof.secret);
   const a = secp256k1.Point.Fn.fromBytes(privKey);
   const aY: WeierstrassPoint<bigint> = Y.multiply(a);

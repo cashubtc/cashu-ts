@@ -1,7 +1,12 @@
+import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
+  asBlsG1Point,
+  asSecpPoint,
   hashToCurve,
   pointFromHex,
+  pointFromHexAuto,
+  pointToHex,
   blindMessage,
   unblindSignature,
   createBlindSignature,
@@ -9,6 +14,7 @@ import {
   createRandomRawBlindedMessage,
   getKeysetIdInt,
   hash_e,
+  isBlsKeyset,
   pointFromBytes,
 } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
@@ -122,6 +128,85 @@ describe('point helpers and hash_e', () => {
     const concatUncompressed = P1.toHex(false) + P2.toHex(false);
     const expected = sha256(new TextEncoder().encode(concatUncompressed));
     expect(bytesToHex(e)).toBe(bytesToHex(expected));
+  });
+});
+
+describe('CurvePoint helpers', () => {
+  test('asSecpPoint tags a secp point with kind:secp', () => {
+    const sk = secp256k1.utils.randomSecretKey();
+    const pt = pointFromHex(bytesToHex(secp256k1.getPublicKey(sk, true)));
+    const cp = asSecpPoint(pt);
+    expect(cp.kind).toBe('secp');
+    expect(cp.pt).toBe(pt);
+  });
+
+  test('asBlsG1Point tags a G1 point with kind:blsG1', () => {
+    const G1 = bls12_381.G1.Point.BASE;
+    const cp = asBlsG1Point(G1);
+    expect(cp.kind).toBe('blsG1');
+    expect(cp.pt).toBe(G1);
+  });
+
+  test('pointToHex round-trips through pointFromHexAuto for both curves', () => {
+    const sk = secp256k1.utils.randomSecretKey();
+    const secpHex = bytesToHex(secp256k1.getPublicKey(sk, true));
+    const secpRound = pointToHex(pointFromHexAuto(secpHex));
+    expect(secpRound).toBe(secpHex);
+
+    const blsHex = bytesToHex(bls12_381.G1.Point.BASE.toBytes(true));
+    const blsRound = pointToHex(pointFromHexAuto(blsHex));
+    expect(blsRound).toBe(blsHex);
+  });
+
+  test('pointFromHexAuto throws on unexpected hex length', () => {
+    expect(() => pointFromHexAuto('00'.repeat(40))).toThrow(/unexpected hex length/);
+  });
+});
+
+describe('isBlsKeyset', () => {
+  test('v3 (`02…`) full-form (66 char) is BLS', () => {
+    expect(isBlsKeyset('02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d')).toBe(
+      true,
+    );
+  });
+  test('v3 (`02…`) short-form (16 char) is BLS — tokens carry this form', () => {
+    expect(isBlsKeyset('02ce4c47836fd0e6')).toBe(true);
+  });
+  test('v1 (`00…`) and v2 (`01…`) hex keysets are not BLS', () => {
+    expect(isBlsKeyset('00bd033559de27d0')).toBe(false);
+    expect(isBlsKeyset('01ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d')).toBe(
+      false,
+    );
+  });
+  test('strict: unknown version bytes (`03…`, `0a…`, `ff…`) return false', () => {
+    // Fails closed on unknown versions. Must be widened deliberately alongside
+    // `getDerivationKind` when a new BLS-based version lands.
+    expect(isBlsKeyset('03abcdef01234567')).toBe(false);
+    expect(isBlsKeyset('0abcdef012345678')).toBe(false); // v=0x0a
+    expect(isBlsKeyset('1eabcdef01234567')).toBe(false); // v=0x1e
+    expect(isBlsKeyset('ffabcdef01234567')).toBe(false); // v=0xff
+    expect(
+      isBlsKeyset('0a' + 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789'),
+    ).toBe(false); // 66-char with letter version
+  });
+  test('legacy base64 ids return false regardless of shape or length', () => {
+    expect(isBlsKeyset('AQID')).toBe(false);
+    expect(isBlsKeyset('22aBcD+/eFgH')).toBe(false);
+    expect(isBlsKeyset('99aaaaaaaaaa=')).toBe(false);
+    // All-hex 12-char base64 — length disambiguates (modern hex ids are 16 or 66 only).
+    expect(isBlsKeyset('22aabbccddee')).toBe(false);
+    expect(isBlsKeyset('aabbccddeeff')).toBe(false);
+  });
+  test('non-canonical lengths (not 16 or 66) return false', () => {
+    expect(isBlsKeyset('02')).toBe(false); // 2
+    expect(isBlsKeyset('02abcdef')).toBe(false); // 8
+    expect(isBlsKeyset('02abcdef0123456')).toBe(false); // 15 (length-16 boundary)
+    expect(isBlsKeyset('02abcdef012345678')).toBe(false); // 17
+  });
+  test('empty / short / non-hex input returns false', () => {
+    expect(isBlsKeyset('')).toBe(false);
+    expect(isBlsKeyset('0')).toBe(false);
+    expect(isBlsKeyset('zz')).toBe(false);
   });
 });
 

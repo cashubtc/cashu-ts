@@ -5,9 +5,11 @@ import {
   pointFromBytes,
   createBlindSignature,
   getPubKeyFromPrivKey,
+  getG2PubKeyFromPrivKey,
 } from '../../src/crypto';
 import { test, describe, expect } from 'vitest';
 import { Amount, MintKeys, type Keys, type Proof, type Token, Keyset } from '../../src';
+import { CTSError } from '../../src/model/Errors';
 import * as utils from '../../src/utils';
 import {
   NUT02_V1_VECTOR1_KEYS,
@@ -15,6 +17,8 @@ import {
   NUT02_V2_VECTOR1_KEYS,
   NUT02_V2_VECTOR2_KEYS,
   NUT02_V2_VECTOR3_KEYS,
+  NUT02_V3_VECTOR1_KEYS,
+  NUT02_V3_VECTOR2_KEYS,
   PUBKEYS,
 } from '../consts';
 import {
@@ -29,7 +33,6 @@ import {
   normalizeProofAmounts,
   sortProofsById,
   normalizeUrl,
-  verifyDleqIfPresent,
 } from '../../src/utils';
 import { bytesToHex, hexToBytes } from '@noble/curves/utils.js';
 
@@ -435,6 +438,68 @@ describe('test keyset derivation', () => {
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR2_KEYS)).toBe(true);
     expect(Keyset.verifyKeysetId(NUT02_V2_VECTOR3_KEYS)).toBe(true);
   });
+  // v3 keyset id derivation — matches Nutshell `derive_keyset_id_v3` (G2 pubkeys, prefix 02).
+  // Vectors mirror nuts/tests/02-tests.md "Version 3"; keys are K_i = i·G2.
+  test('derives NUT-02 version 3 vector 1', () => {
+    const keysetId = utils.deriveKeysetId(NUT02_V3_VECTOR1_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR1_KEYS.unit,
+    });
+    expect(keysetId).toBe(NUT02_V3_VECTOR1_KEYS.id);
+  });
+  test('derives NUT-02 version 3 vector 2', () => {
+    const keysetId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+    });
+    expect(keysetId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+  });
+
+  test('NUT-02 V3 derivation is case-insensitive in unit and pubkey hex', () => {
+    const upperUnitId = utils.deriveKeysetId(NUT02_V3_VECTOR2_KEYS.keys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit.toUpperCase(),
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+    });
+    expect(upperUnitId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+
+    const upperKeys = Object.fromEntries(
+      Object.entries(NUT02_V3_VECTOR2_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
+    );
+    const upperKeysId = utils.deriveKeysetId(upperKeys, {
+      versionByte: 2,
+      unit: NUT02_V3_VECTOR2_KEYS.unit,
+      input_fee_ppk: NUT02_V3_VECTOR2_KEYS.input_fee_ppk,
+      expiry: NUT02_V3_VECTOR2_KEYS.final_expiry,
+    });
+    expect(upperKeysId).toBe(NUT02_V3_VECTOR2_KEYS.id);
+  });
+
+  // Mirror of the V3 case-insensitivity test on the V2 (secp256k1) path. The two share the same
+  // preimage code path; this lock-in catches a future regression that lowercases for v3 only.
+  test('NUT-02 V2 derivation is case-insensitive in unit and pubkey hex', () => {
+    const upperUnitId = utils.deriveKeysetId(NUT02_V2_VECTOR1_KEYS.keys, {
+      versionByte: 1,
+      unit: NUT02_V2_VECTOR1_KEYS.unit.toUpperCase(),
+      input_fee_ppk: NUT02_V2_VECTOR1_KEYS.input_fee_ppk,
+      expiry: NUT02_V2_VECTOR1_KEYS.final_expiry,
+    });
+    expect(upperUnitId).toBe(NUT02_V2_VECTOR1_KEYS.id);
+
+    const upperKeys = Object.fromEntries(
+      Object.entries(NUT02_V2_VECTOR1_KEYS.keys).map(([k, v]) => [k, v.toUpperCase()]),
+    );
+    const upperKeysId = utils.deriveKeysetId(upperKeys, {
+      versionByte: 1,
+      unit: NUT02_V2_VECTOR1_KEYS.unit,
+      input_fee_ppk: NUT02_V2_VECTOR1_KEYS.input_fee_ppk,
+      expiry: NUT02_V2_VECTOR1_KEYS.final_expiry,
+    });
+    expect(upperKeysId).toBe(NUT02_V2_VECTOR1_KEYS.id);
+  });
 });
 
 describe('test v4 encoding', () => {
@@ -603,6 +668,47 @@ describe('test v4 encoding', () => {
   });
 });
 
+describe('test deriveKeysetId edge cases', () => {
+  // v3 (BLS) keysets folded case 2 into the case 1 unit-required branch and rewrote the
+  // throw to interpolate the version byte. Cover both paths against the shared guard.
+  test('throws when versionByte 1 is requested without a unit', () => {
+    expect(() => utils.deriveKeysetId({ 1: 'deadbeef' }, { versionByte: 1, unit: '' })).toThrow(
+      /version 01: unit is required/,
+    );
+  });
+
+  test('throws when versionByte 2 is requested without a unit', () => {
+    expect(() => utils.deriveKeysetId({ 1: 'deadbeef' }, { versionByte: 2, unit: '' })).toThrow(
+      /version 02: unit is required/,
+    );
+  });
+});
+
+describe('test mapShortKeysetIds edge cases', () => {
+  test('forward-compat: prefix-resolves a 0x03-prefixed short ID', () => {
+    // Short-ID prefix-match is version-agnostic for modern hex IDs (v1+). v0 is the only
+    // short-form outlier and is handled separately. This is the inverse of the strict KDF
+    // dispatch in `getDerivationKind` — see `isBlsKeyset` docstring for the design rationale.
+    const fullId = '03' + 'ab'.repeat(32); // 66 chars, 0x03-prefixed
+    const shortId = fullId.slice(0, 16);
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [
+        {
+          amount: Amount.from(1),
+          C: '038618543ffb6b8695df4ad4babcde92a34a96bdcd97dcee0d7ccf98d472126792',
+          id: shortId,
+          secret: '9a6dbb847bd232ba76db0df197216b29d3b8cc14553cd27827fc1cc942fedb4e',
+        },
+      ],
+      unit: 'sat',
+    };
+    const encoded = utils.getEncodedToken(token);
+    const decoded = utils.getDecodedToken(encoded, [fullId]);
+    expect(decoded.proofs[0].id).toBe(fullId);
+  });
+});
+
 describe('test output selection', () => {
   test('hasCorrespondingKey accepts AmountLike', () => {
     expect(utils.hasCorrespondingKey('8', keys)).toBe(true);
@@ -656,22 +762,78 @@ describe('test zero-knowledge utilities', () => {
     };
     expect(() => hasValidDleq(serializedProof, keyset)).toThrow(/Undefined key for amount/);
   });
+  describe('v3 (BLS) proof signature verification via hasValidDleq', () => {
+    // Locked Nutshell vector: secret="test_message", r=3, a=2 → C
+    const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+    const v3Secret = 'test_message';
+    const v3C =
+      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+    // K2 = a * G2 with a=2 (compressed G2, 192 hex)
+    const aBytes = hexToBytes('0'.repeat(63) + '2');
+    const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
 
-  describe('verifyDleqIfPresent', () => {
+    test('returns true for a v3 proof whose pairing equality holds', () => {
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      expect(hasValidDleq(v3Proof, keyset)).toBe(true);
+    });
+
+    test('returns false for a v3 proof with tampered C', () => {
+      const tampered = v3C.slice(0, v3C.length - 2) + (v3C.slice(-2) === 'aa' ? 'bb' : 'aa');
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: tampered,
+      };
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      expect(hasValidDleq(v3Proof, keyset)).toBe(false);
+    });
+
+    test('throws on missing key for amount in v3 keyset', () => {
+      const v3Proof: Proof = {
+        amount: Amount.from(2),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+      expect(() => hasValidDleq(v3Proof, keyset)).toThrow(/Undefined key for amount/);
+    });
+
+    test('returns false when v3 keyset key is malformed (mirrors secp behaviour)', () => {
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      // Wrong length (66 hex would be a secp point); pointFromHexG2 throws inside try/catch.
+      const keyset = { id: v3Id, unit: 'sat', keys: { [1]: '00'.repeat(33) } };
+      expect(hasValidDleq(v3Proof, keyset)).toBe(false);
+    });
+  });
+
+  describe('hasValidDleq default (NUT-12 verify-if-present)', () => {
     const keyset = {
       id: '00',
       unit: 'sat',
       keys: { [1]: pubkey.toHex(true) },
     };
 
-    test('returns true when no DLEQ is present', () => {
+    test('returns true when no DLEQ is present (spec default)', () => {
       const { dleq, ...proofNoDleq } = serializedProof;
       void dleq;
-      expect(verifyDleqIfPresent(proofNoDleq, keyset)).toBe(true);
+      expect(hasValidDleq(proofNoDleq, keyset)).toBe(true);
     });
 
     test('returns true for a valid DLEQ', () => {
-      expect(verifyDleqIfPresent(serializedProof, keyset)).toBe(true);
+      expect(hasValidDleq(serializedProof, keyset)).toBe(true);
     });
 
     test('returns false for a tampered DLEQ', () => {
@@ -682,7 +844,7 @@ describe('test zero-knowledge utilities', () => {
           e: '00'.repeat(32),
         },
       };
-      expect(verifyDleqIfPresent(tampered, keyset)).toBe(false);
+      expect(hasValidDleq(tampered, keyset)).toBe(false);
     });
 
     test('throws if DLEQ is present but no matching keyset key', () => {
@@ -691,9 +853,204 @@ describe('test zero-knowledge utilities', () => {
         unit: 'sat',
         keys: { [2]: pubkey.toHex(true) },
       };
-      expect(() => verifyDleqIfPresent(serializedProof, wrongKeyset)).toThrow(
-        /Undefined key for amount/,
+      expect(() => hasValidDleq(serializedProof, wrongKeyset)).toThrow(/Undefined key for amount/);
+    });
+
+    test('throws on bad amount even when DLEQ is absent (amount check is unbypassable)', () => {
+      const { dleq, ...proofNoDleq } = serializedProof;
+      void dleq;
+      const wrongKeyset = {
+        id: '00',
+        unit: 'sat',
+        keys: { [2]: pubkey.toHex(true) },
+      };
+      expect(() => hasValidDleq(proofNoDleq, wrongKeyset)).toThrow(
+        /Undefined key for amount 1 in keyset 00/,
       );
+    });
+  });
+
+  describe('hasValidDleq with require: true (opt-in strict)', () => {
+    const keyset = {
+      id: '00',
+      unit: 'sat',
+      keys: { [1]: pubkey.toHex(true) },
+    };
+
+    test('returns false when no DLEQ is present (above-spec strict policy)', () => {
+      const { dleq, ...proofNoDleq } = serializedProof;
+      void dleq;
+      expect(hasValidDleq(proofNoDleq, keyset, { require: true })).toBe(false);
+    });
+
+    test('returns true for a valid DLEQ (same as default)', () => {
+      expect(hasValidDleq(serializedProof, keyset, { require: true })).toBe(true);
+    });
+  });
+
+  describe('verifyProofsForReceive', () => {
+    const secpKeyset = { id: '00', unit: 'sat', keys: { [1]: pubkey.toHex(true) } };
+
+    test('accepts a single valid v0/v1/v2 proof (requireDleq=true)', () => {
+      const getKeyset = () => secpKeyset;
+      expect(() =>
+        utils.verifyProofsForReceive([serializedProof], getKeyset, { requireDleq: true }),
+      ).not.toThrow();
+    });
+
+    test('rejects a missing-DLEQ v0/v1/v2 proof under requireDleq=true (names offender)', () => {
+      const { dleq, ...noDleq } = serializedProof;
+      void dleq;
+      const getKeyset = () => secpKeyset;
+      expect(() =>
+        utils.verifyProofsForReceive([noDleq], getKeyset, { requireDleq: true }),
+      ).toThrow(/invalid or missing DLEQ.*keyset 00/);
+    });
+
+    test('rejects a v0/v1/v2 proof whose amount is not in the keyset, even with no DLEQ', () => {
+      const { dleq, ...noDleq } = serializedProof;
+      void dleq;
+      const tampered = { ...noDleq, amount: Amount.from(3) };
+      const getKeyset = () => secpKeyset;
+      expect(() => utils.verifyProofsForReceive([tampered], getKeyset)).toThrow(
+        /Undefined key for amount 3 in keyset 00/,
+      );
+    });
+
+    describe('v3 BLS batches', () => {
+      // Locked Nutshell vector reused for the single-proof v3 happy path.
+      const v3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+      const v3Secret = 'test_message';
+      const v3C =
+        'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+      const v3K2 = bytesToHex(getG2PubKeyFromPrivKey(hexToBytes('0'.repeat(63) + '2')));
+      const v3Proof: Proof = {
+        amount: Amount.from(1),
+        id: v3Id,
+        secret: v3Secret,
+        C: v3C,
+      };
+      const v3Keyset = { id: v3Id, unit: 'sat', keys: { [1]: v3K2 } };
+
+      test('single v3 proof verifies via direct pairing', () => {
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => v3Keyset)).not.toThrow();
+      });
+
+      test('mixed-denomination v3 batch verifies in one pairing', async () => {
+        const bls = await import('../../src/crypto/bls');
+        // Same mint key (a=2), different secrets + amounts → realistic mixed-denomination receive.
+        const aBytes = hexToBytes('0'.repeat(63) + '2');
+        const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
+        const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
+          const s = new TextEncoder().encode(secret);
+          const { B_ } = bls.blindMessageBls(s, r);
+          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = bls.unblindSignatureBls(C_, r);
+          return {
+            amount: Amount.from(amount),
+            id: v3Id,
+            secret,
+            C: bytesToHex(C.toBytes(true)),
+          };
+        };
+        const keyset = {
+          id: v3Id,
+          unit: 'sat',
+          keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
+        };
+        const proofs = [
+          makeProof(1n, 's1', 7n),
+          makeProof(2n, 's2', 11n),
+          makeProof(4n, 's3', 13n),
+          makeProof(8n, 's4', 17n),
+          makeProof(16n, 's5', 19n),
+        ];
+        expect(() => utils.verifyProofsForReceive(proofs, () => keyset)).not.toThrow();
+      });
+
+      test('tampered C in a 5-proof v3 batch is rejected and offender named', async () => {
+        const bls = await import('../../src/crypto/bls');
+        const aBytes = hexToBytes('0'.repeat(63) + '2');
+        const K2hex = bytesToHex(getG2PubKeyFromPrivKey(aBytes));
+        const makeProof = (amount: bigint, secret: string, r: bigint): Proof => {
+          const s = new TextEncoder().encode(secret);
+          const { B_ } = bls.blindMessageBls(s, r);
+          const { C_ } = bls.createBlindSignatureBls(B_, aBytes, v3Id);
+          const C = bls.unblindSignatureBls(C_, r);
+          return {
+            amount: Amount.from(amount),
+            id: v3Id,
+            secret,
+            C: bytesToHex(C.toBytes(true)),
+          };
+        };
+        const keyset = {
+          id: v3Id,
+          unit: 'sat',
+          keys: { [1]: K2hex, [2]: K2hex, [4]: K2hex, [8]: K2hex, [16]: K2hex },
+        };
+        const good = [
+          makeProof(1n, 's1', 7n),
+          makeProof(2n, 's2', 11n),
+          makeProof(4n, 's3', 13n),
+          makeProof(8n, 's4', 17n),
+          makeProof(16n, 's5', 19n),
+        ];
+        // Replace the C on the third proof with the first proof's C — keeps it on-curve
+        // (so parseHex doesn't throw) but breaks pairing equality for that secret.
+        const tampered = good.map((p, i) => (i === 2 ? { ...p, C: good[0].C } : p));
+        expect(() => utils.verifyProofsForReceive(tampered, () => keyset)).toThrow(
+          /invalid DLEQ.*amount 4/,
+        );
+      });
+
+      test('mixed-curve token: v0/v1/v2 path runs DLEQ, v3 path runs pairing', () => {
+        const getKeyset = (id: string) => (id === v3Id ? v3Keyset : secpKeyset);
+        expect(() =>
+          utils.verifyProofsForReceive([serializedProof, v3Proof], getKeyset),
+        ).not.toThrow();
+      });
+
+      test('v3 proof with malformed C surfaces offender id in error', () => {
+        const bad: Proof = { ...v3Proof, C: 'gg'.repeat(48) };
+        expect(() => utils.verifyProofsForReceive([bad], () => v3Keyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+      });
+
+      // Regression: a v3-prefixed keyset whose pubkey is actually a 33-byte secp key used to
+      // escape as an unhandled throw because only the G1 parse was wrapped.
+      test('v3-prefixed keyset with a non-G2 pubkey throws CTSError, not an unhandled error', () => {
+        const secpPubHex = pubkey.toHex(true); // 33-byte / 66-hex secp key
+        const hostileKeyset = { id: v3Id, unit: 'sat', keys: { [1]: secpPubHex } };
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => hostileKeyset)).toThrow(
+          new RegExp(`invalid DLEQ.*keyset ${v3Id}`),
+        );
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => hostileKeyset)).toThrow(
+          CTSError,
+        );
+      });
+
+      test('v3 proof with truncated K2 hex throws CTSError, not an unhandled error', () => {
+        const truncatedKeyset = {
+          id: v3Id,
+          unit: 'sat',
+          keys: { [1]: v3K2.slice(0, -2) }, // chop one byte off the 96-byte G2 encoding
+        };
+        expect(() => utils.verifyProofsForReceive([v3Proof], () => truncatedKeyset)).toThrow(
+          CTSError,
+        );
+      });
+
+      test('requireDleq=true uses the strict error message for v3 failures', () => {
+        const tampered: Proof = {
+          ...v3Proof,
+          C: v3C.slice(0, -2) + (v3C.endsWith('aa') ? 'bb' : 'aa'),
+        };
+        expect(() =>
+          utils.verifyProofsForReceive([tampered], () => v3Keyset, { requireDleq: true }),
+        ).toThrow(/invalid or missing DLEQ/);
+      });
     });
   });
 });
@@ -1143,7 +1500,7 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     };
     const encoded = utils.getEncodedToken(token);
     expect(() => utils.getDecodedToken(encoded, [])).toThrow(
-      /short keyset ID v2 was encountered, but got no keysets/,
+      /Short keyset ID .* cannot be resolved/,
     );
   });
 
@@ -1170,6 +1527,81 @@ describe('mapShortKeysetIds via getDecodedToken (v2 keyset IDs)', () => {
     // Two full IDs that share the same 16-char prefix
     const ambiguous = fullV2Id + 'aa';
     expect(() => utils.getDecodedToken(encoded, [fullV2Id, ambiguous])).toThrow(/ambiguous/);
+  });
+});
+
+describe('mapShortKeysetIds via getDecodedToken (v3 BLS keyset IDs)', () => {
+  // 02-prefixed v3 id derived in Phase 3 for the locked Nutshell test vector
+  const fullV3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+  // v3 proofs carry a 96-hex compressed G1 C value
+  const v3C =
+    'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+
+  test('maps short v3 keyset ID back to full ID round-trip', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [{ id: fullV3Id, amount: Amount.from(1), secret: 'test_message', C: v3C }],
+      unit: 'sat',
+    };
+    const encoded = utils.getEncodedToken(token);
+    const decoded = utils.getDecodedToken(encoded, [fullV3Id]);
+    expect(decoded.proofs[0].id).toBe(fullV3Id);
+    expect(decoded.proofs[0].C).toBe(v3C);
+  });
+
+  test('throws when v3 short ID has no keysets to map to', () => {
+    const token: Token = {
+      mint: 'http://localhost:3338',
+      proofs: [{ id: fullV3Id, amount: Amount.from(1), secret: 'test_message', C: v3C }],
+      unit: 'sat',
+    };
+    const encoded = utils.getEncodedToken(token);
+    expect(() => utils.getDecodedToken(encoded, [])).toThrow(
+      /Short keyset ID .* cannot be resolved/,
+    );
+  });
+});
+
+describe('mapShortKeysetIds full-length pass-through (non-conformant tokens)', () => {
+  // Build a cashuB token directly from a CBOR template so we can inject full-length
+  // (33-byte) v2/v3 keyset IDs that the standard encoder would otherwise truncate.
+  function encodeRawToken(idBytes: Uint8Array, cBytes: Uint8Array): string {
+    const template = {
+      m: 'http://localhost:3338',
+      u: 'sat',
+      t: [
+        {
+          i: idBytes,
+          p: [{ a: 1n, s: 'abc', c: cBytes }],
+        },
+      ],
+    };
+    return 'cashuB' + utils.encodeUint8toBase64Url(utils.encodeCBOR(template));
+  }
+
+  test('passes full-length v2 ID through unchanged with empty keyset cache', () => {
+    const fullV2Id = NUT02_V2_VECTOR1_KEYS.id;
+    const encoded = encodeRawToken(hexToBytes(fullV2Id), hexToBytes('02' + '00'.repeat(32)));
+    const decoded = utils.getDecodedToken(encoded, []);
+    expect(decoded.proofs[0].id).toBe(fullV2Id);
+  });
+
+  test('passes full-length v3 ID through unchanged with empty keyset cache', () => {
+    const fullV3Id = '02ce4c47836fd0e64f37a08254777b7fd0dedb95fc1ddd0acadf5600674c743c5d';
+    const v3C =
+      'b7a4881059133fd91a8753600d9a5e524c65d6224f6fe2d5aef9e59f1507fdad90b3b4d48ee46da5c8dfaa0b88e28b69';
+    const encoded = encodeRawToken(hexToBytes(fullV3Id), hexToBytes(v3C));
+    const decoded = utils.getDecodedToken(encoded, []);
+    expect(decoded.proofs[0].id).toBe(fullV3Id);
+  });
+
+  test('throws on malformed modern hex ID length (neither 16 nor 66)', () => {
+    // 20-char hex: 0x01-prefixed but not a valid short (16) or full (66) length
+    const malformedId = '01' + '00'.repeat(9); // 20 chars total
+    const encoded = encodeRawToken(hexToBytes(malformedId), hexToBytes('02' + '00'.repeat(32)));
+    expect(() => utils.getDecodedToken(encoded, [])).toThrow(
+      /Malformed keyset ID \(unexpected length\)/,
+    );
   });
 });
 

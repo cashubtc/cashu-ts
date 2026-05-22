@@ -30,6 +30,11 @@ export type Proof = {
   secret: string;
   /**
    * The unblinded signature for this secret, signed by the mints private key.
+   *
+   * Hex length depends on the keyset version (id prefix):
+   *
+   * - V1/v2 (`00…` / `01…`): 66 hex chars (secp256k1 compressed).
+   * - V3 (`02…`): 96 hex chars (BLS12-381 G1 compressed).
    */
   C: string;
   /**

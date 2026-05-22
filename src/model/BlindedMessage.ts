@@ -1,13 +1,13 @@
-import { type WeierstrassPoint } from '@noble/curves/abstract/weierstrass.js';
+import { type CurvePoint, pointToHex } from '../crypto/core';
 
 import { Amount, type AmountLike } from './Amount';
 import { type SerializedBlindedMessage } from './types/index';
 
 class BlindedMessage {
   private readonly amountValue: Amount;
-  B_: WeierstrassPoint<bigint>;
+  B_: CurvePoint;
   id: string;
-  constructor(amount: AmountLike, B_: WeierstrassPoint<bigint>, id: string) {
+  constructor(amount: AmountLike, B_: CurvePoint, id: string) {
     this.amountValue = Amount.from(amount);
     this.B_ = B_;
     this.id = id;
@@ -18,7 +18,7 @@ class BlindedMessage {
   }
 
   getSerializedBlindedMessage(): SerializedBlindedMessage {
-    return { amount: this.amountValue, B_: this.B_.toHex(true), id: this.id };
+    return { amount: this.amountValue, B_: pointToHex(this.B_), id: this.id };
   }
 }
 export { BlindedMessage };

@@ -8,10 +8,15 @@
 import { CheckStateEnum } from '@cashu/cashu-ts';
 const ac = new AbortController();
 (async () => {
-  for await (const u of wallet.on.proofStatesStream(proofs, { signal: ac.signal })) {
-    if (u.state === CheckStateEnum.SPENT) {
-      console.log('Spent proof', u.proof.id);
+  try {
+    for await (const u of wallet.on.proofStatesStream(proofs, { signal: ac.signal })) {
+      if (u.state === CheckStateEnum.SPENT) {
+        console.log('Spent proof', u.proof.id);
+      }
     }
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') return; // ac.abort() ended the loop
+    console.error('Stream error', e); // websocket / mint RPC failure
   }
 })();
 
@@ -19,8 +24,4 @@ const ac = new AbortController();
 ac.abort();
 ```
 
-> **Note:** the subscription is sent to the mint on the first iteration, not when
-> `proofStatesStream` is called. Per
-> [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) the mint replays the
-> _current_ state on subscribe, so the latest state is never lost — only intermediate
-> transitions before the first iteration are collapsed into that snapshot.
+The iterator ends cleanly when the abort signal fires or the consumer breaks out of the loop. Wallet errors (WebSocket failure, RPC error from the mint) are thrown from the iterator — wrap in `try/catch` to recover.

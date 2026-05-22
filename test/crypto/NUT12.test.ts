@@ -203,4 +203,42 @@ describe('OutputData.toProof DLEQ verification', () => {
     expect(proof.p2pk_e).toBe(bytesToHex(p2pkE));
     expect(proofAgain.p2pk_e).toBe(bytesToHex(p2pkE));
   });
+
+  test('toProof rejects amount downgrade on secp (malicious mint)', () => {
+    // Wallet requested amount=8 but the mint returns sig.amount=1. Even with a valid C_
+    // and DLEQ for amount=1, the request/response mismatch alone must cause toProof to
+    // throw — funds-loss prevention upstream of key lookup.
+    const { blindSig, dleq, keyset, od } = mintSetup();
+    const downgradedOd = new OutputData(
+      { amount: Amount.from(8), B_: od.blindedMessage.B_, id: od.blindedMessage.id },
+      od.blindingFactor,
+      od.secret,
+    );
+    const sig = {
+      id: 'test-keyset',
+      amount: Amount.from(1),
+      C_: blindSig.C_.toHex(true),
+      dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
+    };
+    expect(() => downgradedOd.toProof(sig, keyset)).toThrow(/does not match requested amount/);
+  });
+
+  test('toProof accepts amount=0 blank on secp (NUT-08 / NUT-09)', () => {
+    // Blank outputs (melt change, restore) declare amount=0; the mint fills in the
+    // actual denomination. toProof must succeed and carry sig.amount onto the Proof.
+    const { blindSig, dleq, keyset, od } = mintSetup();
+    const blank = new OutputData(
+      { amount: Amount.from(0), B_: od.blindedMessage.B_, id: od.blindedMessage.id },
+      od.blindingFactor,
+      od.secret,
+    );
+    const sig = {
+      id: 'test-keyset',
+      amount: Amount.from(1),
+      C_: blindSig.C_.toHex(true),
+      dleq: { s: bytesToHex(dleq.s), e: bytesToHex(dleq.e) },
+    };
+    const proof = blank.toProof(sig, keyset);
+    expect(proof.amount.equals(Amount.from(1))).toBe(true);
+  });
 });
