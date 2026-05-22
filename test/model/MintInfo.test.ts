@@ -142,6 +142,28 @@ describe('MintInfo protected endpoint matching', () => {
     });
   });
 
+  it('supportedMethods lists usable methods and returns [] for disabled ops', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [
+            { method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null },
+            { method: 'bolt12', unit: 'sat', min_amount: null, max_amount: null },
+          ],
+        },
+        5: {
+          disabled: true,
+          methods: [{ method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null }],
+        },
+      },
+    } as any);
+
+    expect(info.supportedMethods('mint').map((m) => m.method)).toEqual(['bolt11', 'bolt12']);
+    expect(info.supportedMethods('melt')).toEqual([]);
+  });
+
   it('rejects out-of-range bigint info metadata at construction', () => {
     expect(
       () =>

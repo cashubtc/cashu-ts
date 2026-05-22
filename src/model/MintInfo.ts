@@ -384,6 +384,16 @@ export class MintInfo {
   }
 
   /**
+   * Lists the method-unit settings the mint advertises for an operation (`'mint'` → NUT-4, `'melt'`
+   * → NUT-5), or `[]` when that operation is disabled. Use this to discover what a consumer can
+   * mint or melt with; to test a single pair use `supportsMintMeltMethod`.
+   */
+  supportedMethods(op: 'mint' | 'melt'): SwapMethod[] {
+    const { disabled, params } = this.isSupported(op === 'mint' ? 4 : 5);
+    return disabled ? [] : params;
+  }
+
+  /**
    * Checks if the mint advertises the given (method, unit) pair for the given operation (`'mint'` →
    * NUT-4, `'melt'` → NUT-5).
    */

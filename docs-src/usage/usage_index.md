@@ -20,18 +20,19 @@ If you are building a wallet integration from scratch, read these in order:
 
 ## Recipes
 
-| Recipe                                | Use it for                                                             |
-| :------------------------------------ | :--------------------------------------------------------------------- |
-| [Create Wallet](./create_wallet.md)   | Initialize a wallet from a mint URL or cached mint state.              |
-| [Mint Token](./mint_token.md)         | Create proofs from a paid quote, including two-step mint flows.        |
-| [Create Token](./create_token.md)     | Send standard Cashu tokens to another wallet.                          |
-| [Create P2PK](./create_p2pk.md)       | Send tokens locked to a public key.                                    |
-| [Get Token](./get_token.md)           | Inspect token metadata before wallet creation or decode it after load. |
-| [Melt Token](./melt_token.md)         | Pay BOLT11 invoices or other payment methods with wallet proofs.       |
-| [Bolt12](./bolt12.md)                 | Work with reusable BOLT12 offers for minting and melting.              |
-| [NUT-19 Cached Responses](./nut19.md) | Understand cached endpoint retries and timeout behavior.               |
-| [Logging](./logging.md)               | Enable and route library logs while debugging wallet or mint behavior. |
-| [Amounts](./amounts.md)               | Work with the `Amount` and `AmountWithUnit` value objects.             |
+| Recipe                                              | Use it for                                                                      |
+| :-------------------------------------------------- | :------------------------------------------------------------------------------ |
+| [Create Wallet](./create_wallet.md)                 | Initialize a wallet from a mint URL or cached mint state.                       |
+| [Inspect Mint Capabilities](./mint_capabilities.md) | Discover which methods you can mint/melt with and which NUTs the mint supports. |
+| [Mint Token](./mint_token.md)                       | Create proofs from a paid quote, including two-step mint flows.                 |
+| [Create Token](./create_token.md)                   | Send standard Cashu tokens to another wallet.                                   |
+| [Create P2PK](./create_p2pk.md)                     | Send tokens locked to a public key.                                             |
+| [Get Token](./get_token.md)                         | Inspect token metadata before wallet creation or decode it after load.          |
+| [Melt Token](./melt_token.md)                       | Pay BOLT11 invoices or other payment methods with wallet proofs.                |
+| [Bolt12](./bolt12.md)                               | Work with reusable BOLT12 offers for minting and melting.                       |
+| [NUT-19 Cached Responses](./nut19.md)               | Understand cached endpoint retries and timeout behavior.                        |
+| [Logging](./logging.md)                             | Enable and route library logs while debugging wallet or mint behavior.          |
+| [Amounts](./amounts.md)                             | Work with the `Amount` and `AmountWithUnit` value objects.                      |
 
 ## Related docs
 
