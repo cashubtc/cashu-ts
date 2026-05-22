@@ -1147,6 +1147,7 @@ export class MintInfo {
     requiresBlindAuthToken(method: 'GET' | 'POST', path: string): boolean;
     // (undocumented)
     requiresClearAuthToken(method: 'GET' | 'POST', path: string): boolean;
+    supportedMethods(op: 'mint' | 'melt'): SwapMethod[];
     // (undocumented)
     supportsAmountless(method?: string, unit?: string): boolean;
     supportsMintMeltMethod(op: 'mint' | 'melt', method: string, unit: string): boolean;
