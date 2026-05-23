@@ -549,7 +549,7 @@ describe('mint api', () => {
     expect(fee.greaterThan(0)).toBeTruthy();
     const melt = await wallet.prepareMelt('bolt11', meltRequest, proofs);
     // complete melt async
-    const response = await wallet.completeMelt(melt, undefined, true);
+    const response = await wallet.completeMelt(melt, undefined, { preferAsync: true });
     // console.log('melt response', response);
     expect(response).toBeDefined();
     if (response.quote.state === MeltQuoteState.PAID) {

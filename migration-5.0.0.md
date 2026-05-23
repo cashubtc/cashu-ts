@@ -114,3 +114,44 @@ try {
 ```
 
 If your consumer was already wrapping the loop in `try/catch` (e.g. to handle abort), no change is required beyond not assuming silent completion means all expected updates arrived.
+
+---
+
+## `deriveSecret` and `deriveBlindingFactor` removed
+
+The single-value NUT-13 derivation helpers `deriveSecret` and `deriveBlindingFactor` are removed. Use `deriveSecretAndBlindingFactor`, which derives both values for a counter in one call (and, for legacy BIP-32 keysets, avoids repeating the shared path derivation).
+
+### Migration
+
+```ts
+// Before
+import { deriveSecret, deriveBlindingFactor } from '@cashu/cashu-ts';
+
+const secret = deriveSecret(seed, keysetId, counter);
+const blindingFactor = deriveBlindingFactor(seed, keysetId, counter);
+
+// After
+import { deriveSecretAndBlindingFactor } from '@cashu/cashu-ts';
+
+const { secret, blindingFactor } = deriveSecretAndBlindingFactor(seed, keysetId, counter);
+```
+
+If you only need one of the two values, destructure just that field — `const { secret } = deriveSecretAndBlindingFactor(seed, keysetId, counter)`.
+
+---
+
+## `completeMelt` no longer accepts a boolean third argument
+
+`Wallet.completeMelt`'s deprecated boolean `preferAsync` parameter is removed. Pass the option on the `CompleteMeltOptions` object instead.
+
+### Migration
+
+```ts
+// Before
+await wallet.completeMelt(meltPreview, privkey, true);
+
+// After
+await wallet.completeMelt(meltPreview, privkey, { preferAsync: true });
+```
+
+Calls that already pass a `CompleteMeltOptions` object (or omit the third argument) need no change.
