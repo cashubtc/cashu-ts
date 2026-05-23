@@ -375,11 +375,11 @@ describe('test info', () => {
     expect(info.isSupported(5)).toEqual({
       disabled: false,
       params: [
-        { method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null },
-        { method: 'bolt11', unit: 'usd', min_amount: null, max_amount: null },
-        { method: 'bolt11', unit: 'eur', min_amount: null, max_amount: null },
-        { method: 'bolt12', unit: 'sat', min_amount: null, max_amount: null },
-        { method: 'onchain', unit: 'sat', min_amount: null, max_amount: null },
+        { method: 'bolt11', unit: 'sat', method_name: null, min_amount: null, max_amount: null },
+        { method: 'bolt11', unit: 'usd', method_name: null, min_amount: null, max_amount: null },
+        { method: 'bolt11', unit: 'eur', method_name: null, min_amount: null, max_amount: null },
+        { method: 'bolt12', unit: 'sat', method_name: null, min_amount: null, max_amount: null },
+        { method: 'onchain', unit: 'sat', method_name: null, min_amount: null, max_amount: null },
       ],
     });
     expect(info.isSupported(17)).toEqual({
