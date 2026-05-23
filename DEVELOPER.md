@@ -333,11 +333,19 @@ When the RC phase is complete, merge the release-please PR on `main` to cut the 
 
 v3 maintenance releases are handled manually — release-please only watches `main`.
 
-1. Cherry-pick or commit fixes to `v3-dev`.
-2. Bump `package.json` to the next patch version (e.g. `3.6.2`).
-3. Tag and push: `git tag v3.6.2 && git push origin v3-dev --tags`
-4. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
-5. The publish workflow detects major version 3 and publishes to npm with the `v3-lts` dist-tag.
+1. Open a release PR targeting `v3-dev`.
+2. Include the cherry-picked fixes and bump `package.json` to the next patch version (e.g. `3.6.2`).
+3. Merge the PR into `v3-dev`.
+4. Tag the merged `v3-dev` commit that contains the version bump:
+
+   ```bash
+   git fetch origin v3-dev --tags
+   git tag -a v3.6.2 origin/v3-dev -m "v3.6.2"
+   git push origin v3.6.2
+   ```
+
+5. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
+6. The publish workflow detects major version 3 and publishes to npm with the `v3-lts` dist-tag.
 
 ### npm dist-tags
 
