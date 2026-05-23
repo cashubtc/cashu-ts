@@ -1,5 +1,6 @@
 import { type Logger } from '../logger';
 import { Mint } from '../mint/Mint';
+import request, { type RequestFetch, type RequestFn, type RequestOptions } from '../transport';
 import { Wallet } from '../wallet/Wallet';
 
 import { AuthManager } from './AuthManager';
@@ -15,6 +16,9 @@ import type { OIDCAuth, OIDCAuthOptions } from './OIDCAuth';
  * @param options.authPool Optional. Desired BAT pool size and per-request mint cap. Both
  *   desiredPoolSize and maxPerMint on the AuthManager will be set to this value. Defaults to 10.
  * @param options.oidc Optional. Options for OIDCAuth (scope, clientId, logger, etc.)
+ * @param options.customRequest Optional request function for mint HTTP calls.
+ * @param options.requestFetch Optional fetch-compatible transport for mint HTTP calls. Ignored when
+ *   `customRequest` is supplied.
  * @returns {mint, auth, oidc, wallet} — hydrated, ready to use.
  * @throws If mint does not require authentication.
  */
@@ -23,18 +27,33 @@ export async function createAuthWallet(
   options?: {
     authPool?: number;
     oidc?: OIDCAuthOptions;
+    customRequest?: RequestFn;
+    requestFetch?: RequestFetch;
     logger?: Logger;
   },
 ): Promise<{ mint: Mint; auth: AuthManager; oidc: OIDCAuth; wallet: Wallet }> {
+  let requestInstance: RequestFn | undefined = options?.customRequest;
+  if (!requestInstance && options?.requestFetch) {
+    const requestFetch = options.requestFetch;
+    requestInstance = <T>(args: RequestOptions): Promise<T> =>
+      request<T>({ ...args, fetch: requestFetch });
+  }
+
   // 1. Create an AuthManager for both BAT and CAT handling
   const auth = new AuthManager(mintUrl, {
     desiredPoolSize: options?.authPool ?? 10,
     maxPerMint: options?.authPool ?? 10,
+    request: requestInstance,
     logger: options?.logger,
   });
 
   // 2. Create a Mint instance using the AuthManager
-  const mint = new Mint(mintUrl, { authProvider: auth, logger: options?.logger });
+  const mint = new Mint(mintUrl, {
+    authProvider: auth,
+    customRequest: options?.customRequest,
+    requestFetch: options?.requestFetch,
+    logger: options?.logger,
+  });
 
   // 3. Discover and configure OIDCAuth from the mint
   const oidc = await mint.oidcAuth({

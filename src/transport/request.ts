@@ -13,6 +13,11 @@ import { JSONInt } from '../utils/JSONInt';
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
 /**
+ * Fetch-compatible function used by the default request implementation.
+ */
+export type RequestFetch = typeof fetch;
+
+/**
  * Subset of globalThis used by {@link detectBrowserLike}; loosened for unit tests.
  *
  * @internal
@@ -132,6 +137,12 @@ export type RequestOptions = RequestArgs &
      * metadata even when the request fails.
      */
     onResponseMeta?: (meta: ResponseMeta) => void;
+    /**
+     * Optional fetch-compatible transport for the default request implementation. Use this to route
+     * mint HTTP requests through transports such as OHTTP, Tor, native HTTP clients, or proxies
+     * while preserving cashu-ts JSON parsing, timeout handling, errors, and NUT-19 retry logic.
+     */
+    fetch?: RequestFetch;
   };
 
 /**
@@ -351,6 +362,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
     headers: requestHeaders,
     requestTimeout,
     onResponseMeta,
+    fetch: fetchImpl,
     // consumed by requestWithRetry, excluded from raw fetch options
     cached_endpoints,
     ttl,
@@ -363,6 +375,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
   void ttl;
   void logger;
 
+  const requestFetch = fetchImpl ?? fetch;
   const body = requestBody ? JSONInt.stringify(requestBody) : undefined;
   const headers = buildRequestHeaders(body, requestHeaders);
   const callerSignal = options.signal ?? undefined;
@@ -396,7 +409,7 @@ async function _request(options: RequestOptions): Promise<unknown> {
 
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await requestFetch(endpoint, {
       body,
       headers,
       // Anti-fingerprinting fetch options.
@@ -525,6 +538,9 @@ export default async function request<T>(options: RequestOptions): Promise<T> {
   const perRequest = options.onResponseMeta;
   const globalMeta = globalRequestOptions.onResponseMeta;
   const merged: RequestOptions = { ...options, ...globalRequestOptions };
+
+  // Scoped transports should override the process-wide default.
+  if (options.fetch) merged.fetch = options.fetch;
 
   // Default: per-request callback only
   if (perRequest) merged.onResponseMeta = perRequest;

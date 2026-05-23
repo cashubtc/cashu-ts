@@ -49,6 +49,7 @@ import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+import type { RequestFetch, RequestFn } from '../transport';
 import {
   getDecodedToken,
   invoiceHasAmountInHRP,
@@ -196,6 +197,13 @@ class Wallet {
    * @param options.requireSigDleq Fail mint/swap/melt responses when the mint advertises NUT-12
    *   support but omits DLEQ proofs on returned blinded signatures. This is a fail-fast consistency
    *   check, not protection against a malicious mint already consuming inputs or payments.
+   * @param options.customRequest Custom mint request function. Use this to route all mint HTTP
+   *   requests through runtime-specific transports such as OHTTP, Tor, native HTTP clients, or
+   *   proxies. Only used when `mint` is passed as a URL string; pass a configured `Mint` instance
+   *   when you need full control.
+   * @param options.requestFetch Custom fetch-compatible transport for mint HTTP requests. Use this
+   *   for per-wallet OHTTP, Tor, native HTTP clients, or proxies while preserving the default
+   *   request pipeline. Ignored when `customRequest` is supplied.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -212,6 +220,8 @@ class Wallet {
       selectProofs?: SelectProofs; // optional override
       outputDataCreator?: OutputDataCreator;
       requireSigDleq?: boolean;
+      customRequest?: RequestFn;
+      requestFetch?: RequestFetch;
       logger?: Logger;
     },
   ) {
@@ -222,7 +232,12 @@ class Wallet {
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
     this.mint =
       typeof mint === 'string'
-        ? new Mint(mint, { authProvider: options?.authProvider, logger: this._logger })
+        ? new Mint(mint, {
+            authProvider: options?.authProvider,
+            customRequest: options?.customRequest,
+            requestFetch: options?.requestFetch,
+            logger: this._logger,
+          })
         : mint;
     this._unit = options?.unit ?? this._unit;
     this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;

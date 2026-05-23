@@ -6,6 +6,7 @@ import {
   MintOperationError,
   RateLimitError,
   type ResponseMeta,
+  type RequestFetch,
 } from '../../src';
 import { HttpResponse, http, delay } from 'msw';
 import { setupServer } from 'msw/node';
@@ -104,6 +105,73 @@ describe('requests', { timeout: 7500 }, () => {
 
       expect(headers!).toBeDefined();
       expect(headers!.get('x-cashu')).toContain('xyz-123-abc');
+    } finally {
+      setGlobalRequestOptions({});
+    }
+  });
+
+  test('global custom fetch can be set', async () => {
+    const fetchCalls: Array<{ endpoint: string; method?: string }> = [];
+    const customFetch = (async (
+      input: Parameters<RequestFetch>[0],
+      init?: Parameters<RequestFetch>[1],
+    ) => {
+      fetchCalls.push({ endpoint: String(input), method: init?.method });
+      return new Response(
+        JSON.stringify({
+          quote: 'test_melt_quote_id',
+          amount: 2000,
+          fee_reserve: 20,
+          payment_preimage: null,
+          state: 'UNPAID',
+          unit: 'sat',
+          expiry: 9999999999,
+          request: 'bolt11invoice...',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as RequestFetch;
+
+    try {
+      const wallet = new Wallet(mintUrl);
+      wallet.loadMintFromCache(MINTCACHE.mintInfo, MINTCACHE.keychainCache);
+      setGlobalRequestOptions({ fetch: customFetch });
+
+      await wallet.checkMeltQuoteBolt11('test');
+
+      expect(fetchCalls).toEqual([
+        { endpoint: `${mintUrl}/v1/melt/quote/bolt11/test`, method: 'GET' },
+      ]);
+    } finally {
+      setGlobalRequestOptions({});
+    }
+  });
+
+  test('request fetch overrides global custom fetch', async () => {
+    const globalFetch = vi.fn(async () => {
+      return new Response(JSON.stringify({ error: 'global fetch should not run' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+    const localFetch = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    try {
+      setGlobalRequestOptions({ fetch: globalFetch });
+
+      const result = await request<{ ok: true }>({
+        endpoint: `${mintUrl}/v1/info`,
+        fetch: localFetch,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(localFetch).toHaveBeenCalledTimes(1);
+      expect(globalFetch).not.toHaveBeenCalled();
     } finally {
       setGlobalRequestOptions({});
     }
