@@ -44,11 +44,35 @@ jobs:
           MAJOR_VERSION=$(echo $VERSION | cut -d. -f1)
           if echo "$VERSION" | grep -qE '[-](rc|alpha|beta)'; then
             echo "tag=next" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
           elif [ "$MAJOR_VERSION" = "$LATEST_MAJOR" ]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           else
             echo "tag=v${MAJOR_VERSION}-lts" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Mark GitHub prerelease
+        if: ${{ steps.npm-tag.outputs.prerelease == 'true' && (inputs.tag || github.event.release.tag_name) }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_RELEASE_ID: ${{ github.event.release.id }}
+        run: |
+          set -euo pipefail
+
+          TAG="${{ inputs.tag || github.event.release.tag_name }}"
+          RELEASE_ID="$EVENT_RELEASE_ID"
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq '.id')
+          fi
+
+          gh api \
+            --method PATCH \
+            "repos/${{ github.repository }}/releases/$RELEASE_ID" \
+            -F prerelease=true \
+            -f make_latest=false
 
       - name: Publish to npm (skip if already published)
         run: |
