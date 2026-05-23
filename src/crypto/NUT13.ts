@@ -22,24 +22,6 @@ type DerivedSecretAndBlindingFactor = { blindingFactor: Uint8Array; secret: Uint
 type SecretAndBlindingFactorDeriver = (counter: number) => DerivedSecretAndBlindingFactor;
 
 /**
- * @deprecated Use {@link deriveSecretAndBlindingFactor} to derive both values together.
- */
-export const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array => {
-  return deriveSecretAndBlindingFactor(seed, keysetId, counter).secret;
-};
-
-/**
- * @deprecated Use {@link deriveSecretAndBlindingFactor} to derive both values together.
- */
-export const deriveBlindingFactor = (
-  seed: Uint8Array,
-  keysetId: string,
-  counter: number,
-): Uint8Array => {
-  return deriveSecretAndBlindingFactor(seed, keysetId, counter).blindingFactor;
-};
-
-/**
  * Derives the deterministic secret and blinding factor for one counter.
  *
  * @remarks

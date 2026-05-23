@@ -1,11 +1,11 @@
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
-import {
-  BLS_FR_ORDER,
-  deriveBlindingFactor,
-  deriveSecretAndBlindingFactor,
-} from '../../src/crypto';
+import { BLS_FR_ORDER, deriveSecretAndBlindingFactor } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
+
+// The standalone deriveBlindingFactor() helper was removed in v5; derive it locally for these tests.
+const deriveBlindingFactor = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
+  deriveSecretAndBlindingFactor(seed, keysetId, counter).blindingFactor;
 
 describe('deriveBlindingFactor', () => {
   test('preserves 32-byte encoding when reduced scalar has leading zeros', () => {

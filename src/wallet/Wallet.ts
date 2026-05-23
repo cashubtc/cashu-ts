@@ -2809,22 +2809,8 @@ class Wallet {
     meltPreview: MeltPreview<TQuote>,
     privkey?: string | string[],
     options?: CompleteMeltOptions,
-  ): Promise<MeltProofsResponse<TQuote>>;
-  /**
-   * @deprecated Pass `{ preferAsync: true }` as the third param, instead of `true`.
-   */
-  async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
-    meltPreview: MeltPreview<TQuote>,
-    privkey?: string | string[],
-    preferAsync?: boolean,
-  ): Promise<MeltProofsResponse<TQuote>>;
-  async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
-    meltPreview: MeltPreview<TQuote>,
-    privkey?: string | string[],
-    options?: boolean | CompleteMeltOptions,
   ): Promise<MeltProofsResponse<TQuote>> {
-    const completeOptions: CompleteMeltOptions =
-      typeof options === 'boolean' ? { preferAsync: options } : (options ?? {});
+    const completeOptions: CompleteMeltOptions = options ?? {};
 
     // Extract vars from MeltPreview
     let inputs = meltPreview.inputs;

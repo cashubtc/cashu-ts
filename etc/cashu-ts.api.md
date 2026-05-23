@@ -391,9 +391,6 @@ export type CurvePoint = {
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
-// @public @deprecated (undocumented)
-export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
-
 // @public
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
 
@@ -417,9 +414,6 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[]): string[];
-
-// @public @deprecated (undocumented)
-export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): {
@@ -2151,8 +2145,6 @@ export class Wallet {
     checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
-    // @deprecated (undocumented)
-    completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;

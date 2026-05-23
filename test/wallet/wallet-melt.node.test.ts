@@ -821,7 +821,7 @@ describe('async melt preference body', () => {
       /is not loaded in this wallet.*restoring \(NUT-09\)/is,
     );
   });
-  test('completeMelt supports deprecated boolean preferAsync argument', async () => {
+  test('completeMelt sends prefer_async when { preferAsync: true } is passed', async () => {
     const meltQuote = {
       quote: 'q-async-boolean',
       amount: Amount.from(1),
