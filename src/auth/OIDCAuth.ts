@@ -33,16 +33,29 @@ export type DeviceStartResponse = {
   expires_in?: number;
 };
 
+/**
+ * Fetch-compatible function used by OIDC auth helpers.
+ */
+export type OIDCFetch = typeof fetch;
+
 export type OIDCAuthOptions = {
   clientId?: string;
   scope?: string;
   logger?: Logger;
+  /**
+   * Custom fetch implementation for OIDC discovery and token endpoint requests.
+   *
+   * Use this to apply the same transport privacy policy as mint requests when the auth provider
+   * should also be reached through OHTTP, Tor, native HTTP clients, or a proxy.
+   */
+  fetch?: OIDCFetch;
   onTokens?: (t: TokenResponse) => void | Promise<void>;
 };
 
 export class OIDCAuth {
   private readonly discoveryUrl: string;
   private readonly logger: Logger;
+  private readonly fetch: OIDCFetch;
 
   private clientId: string;
   private scope: string;
@@ -66,6 +79,7 @@ export class OIDCAuth {
     this.logger = opts?.logger ?? NULL_LOGGER;
     this.clientId = opts?.clientId ?? 'cashu-client';
     this.scope = opts?.scope ?? 'openid';
+    this.fetch = opts?.fetch ?? fetch;
     this.onTokens = opts?.onTokens;
   }
 
@@ -88,7 +102,7 @@ export class OIDCAuth {
 
   async loadConfig(): Promise<OIDCConfig> {
     if (this.config) return this.config;
-    const res = await fetch(this.discoveryUrl, {
+    const res = await this.fetch(this.discoveryUrl, {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
@@ -337,7 +351,7 @@ export class OIDCAuth {
   ): Promise<TSuccess> {
     try {
       this.logger.debug('OIDCAuth Request', { formBody });
-      const res = await fetch(endpoint, {
+      const res = await this.fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -374,7 +388,7 @@ export class OIDCAuth {
   ): Promise<T | TokenResponse> {
     try {
       this.logger.debug('OIDCAuth Request', { formBody });
-      const res = await fetch(endpoint, {
+      const res = await this.fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
