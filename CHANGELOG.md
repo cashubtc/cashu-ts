@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.0.0-rc.1](https://github.com/cashubtc/cashu-ts/compare/v4.5.0...v5.0.0-rc.1) (2026-05-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove v4-deprecated APIs ([#676](https://github.com/cashubtc/cashu-ts/issues/676))
+* **crypto:** BLS12-381 v3 keysets ([#661](https://github.com/cashubtc/cashu-ts/issues/661))
+
+### Features
+
+* add scoped request fetch hooks ([#677](https://github.com/cashubtc/cashu-ts/issues/677)) ([0216b78](https://github.com/cashubtc/cashu-ts/commit/0216b78d1f1df8bc40651ba3d2c1d965eff83197))
+* **crypto:** BLS12-381 v3 keysets ([#661](https://github.com/cashubtc/cashu-ts/issues/661)) ([a80dbf4](https://github.com/cashubtc/cashu-ts/commit/a80dbf4d36ba4e1101a41180b46de0d59cd526fc))
+* **mintinfo:** add supportedMethods(op) to list usable mint/melt methods ([#673](https://github.com/cashubtc/cashu-ts/issues/673)) ([9be2d56](https://github.com/cashubtc/cashu-ts/commit/9be2d56346ec2b747655c4db65006be79c8f9861))
+* **nut06:** add method_name to mint/melt method settings (NUT-04/05) ([#672](https://github.com/cashubtc/cashu-ts/issues/672)) ([28e3a20](https://github.com/cashubtc/cashu-ts/commit/28e3a208020cb1dd61512ced33e815ff61d488f1))
+
+
+### Code Refactoring
+
+* **crypto:** split curve primitives ([#667](https://github.com/cashubtc/cashu-ts/issues/667)) ([35da507](https://github.com/cashubtc/cashu-ts/commit/35da507bb4e3e33ee12a0801c917478c5015a48d))
+* remove v4-deprecated APIs ([#676](https://github.com/cashubtc/cashu-ts/issues/676)) ([994675a](https://github.com/cashubtc/cashu-ts/commit/994675aa13ea382300923a5e18277dc709e19699))
+
 ## [4.5.0](https://github.com/cashubtc/cashu-ts/compare/v4.4.0...v4.5.0) (2026-05-21)
 
 
