@@ -9,7 +9,7 @@ import type { AuthProvider } from '../auth/AuthProvider';
 import { OIDCAuth, type OIDCAuthOptions } from '../auth/OIDCAuth';
 import { type Logger, NULL_LOGGER, failIf } from '../logger';
 import { Amount, type AmountLike } from '../model/Amount';
-import { CTSError } from '../model/Errors';
+import { CTSError, MintOperationError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import {
   type MintQuoteBaseResponse,
@@ -61,6 +61,21 @@ import type {
   SwapResponse,
   CheckStatePayload,
   PostRestorePayload,
+  CtfConditionInfo,
+  CtfSplitRequest,
+  CtfSplitResponse,
+  RedeemOutcomeRequest,
+  RedeemOutcomeResponse,
+  ConditionalKeysetsResponse,
+  GetConditionalKeysetsQuery,
+  GetConditionsQuery,
+  GetConditionsResponse,
+  RegisterConditionRequest,
+  RegisterConditionResponse,
+  RegisterPartitionRequest,
+  RegisterPartitionResponse,
+  CtfMergeRequest,
+  CtfMergeResponse,
 } from './types';
 
 /**
@@ -958,6 +973,266 @@ class Mint {
     return data;
   }
 
+  /**
+   * Lists conditional keysets exposed by a NUT-CTF-aware mint.
+   *
+   * Conditional keysets are intentionally excluded from regular NUT-02 `/v1/keysets` discovery.
+   * Wallets use this endpoint to bind condition metadata before verifying condition-derived keyset
+   * ids.
+   */
+  async getConditionalKeysets(
+    query: GetConditionalKeysetsQuery = {},
+    customRequest?: RequestFn,
+  ): Promise<ConditionalKeysetsResponse> {
+    const params = new URLSearchParams();
+    if (query.since !== undefined) params.set('since', String(query.since));
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    if (query.active !== undefined) params.set('active', String(query.active));
+    const suffix = params.toString();
+    const path = suffix ? `/v1/conditional_keysets?${suffix}` : '/v1/conditional_keysets';
+    const data = await this.requestWithAuth<ConditionalKeysetsResponse>(
+      'GET',
+      path,
+      {},
+      customRequest,
+    );
+    if (!isObj(data) || !Array.isArray(data.keysets)) {
+      this._logger.error('Invalid response from mint...', { data, op: 'getConditionalKeysets' });
+      throw new CTSError('Invalid response from mint');
+    }
+    return {
+      keysets: data.keysets.map((keyset) => ({
+        ...keyset,
+        input_fee_ppk: normalizeSafeIntegerMetadata(
+          keyset.input_fee_ppk,
+          'conditional_keyset.input_fee_ppk',
+          undefined,
+        ),
+        final_expiry: normalizeSafeIntegerMetadata(
+          keyset.final_expiry,
+          'conditional_keyset.final_expiry',
+          undefined,
+        ),
+        registered_at: normalizeSafeIntegerMetadata(
+          keyset.registered_at,
+          'conditional_keyset.registered_at',
+          undefined,
+        ),
+      })),
+    };
+  }
+
+  async getConditions(
+    query: GetConditionsQuery = {},
+    customRequest?: RequestFn,
+  ): Promise<GetConditionsResponse> {
+    const params = new URLSearchParams();
+    if (query.since !== undefined) params.set('since', String(query.since));
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    for (const status of query.status ?? []) params.append('status', status);
+    const suffix = params.toString();
+    const path = suffix ? `/v1/conditions?${suffix}` : '/v1/conditions';
+    const data = await this.requestWithAuth<GetConditionsResponse>('GET', path, {}, customRequest);
+    if (!isObj(data) || !Array.isArray(data.conditions)) {
+      this._logger.error('Invalid response from mint...', { data, op: 'getConditions' });
+      throw new CTSError('Invalid response from mint');
+    }
+    return data;
+  }
+
+  async registerCondition(
+    payload: RegisterConditionRequest,
+    customRequest?: RequestFn,
+  ): Promise<RegisterConditionResponse> {
+    const data = await this.requestWithAuth<RegisterConditionResponse>(
+      'POST',
+      '/v1/conditions',
+      { requestBody: payload as unknown as Record<string, unknown> },
+      customRequest,
+    );
+    if (!isObj(data) || typeof data.condition_id !== 'string') {
+      this._logger.error('Invalid response from mint...', { data, op: 'registerCondition' });
+      throw new CTSError('Invalid response from mint');
+    }
+    return data;
+  }
+
+  async registerPartition(
+    conditionId: string,
+    payload: RegisterPartitionRequest,
+    customRequest?: RequestFn,
+  ): Promise<RegisterPartitionResponse> {
+    if (!/^[0-9a-fA-F]{64}$/.test(conditionId)) {
+      throw new CTSError(
+        'conditionId must be a 64-character hex string for CTF partition registration',
+      );
+    }
+    const data = await this.requestWithAuth<RegisterPartitionResponse>(
+      'POST',
+      `/v1/conditions/${conditionId.toLowerCase()}/partitions`,
+      { requestBody: payload as unknown as Record<string, unknown> },
+      customRequest,
+    );
+    if (!isObj(data) || !isObj(data.keysets)) {
+      this._logger.error('Invalid response from mint...', { data, op: 'registerPartition' });
+      throw new CTSError('Invalid response from mint');
+    }
+    return data;
+  }
+
+  /**
+   * Fetches one conditional-token condition from a CTF-aware mint.
+   *
+   * The CTF extension keeps condition partition metadata outside NUT-02 keyset discovery; callers
+   * use this to resolve root outcome collection keysets before building complete-set split
+   * outputs.
+   */
+  async getCtfCondition(conditionId: string, customRequest?: RequestFn): Promise<CtfConditionInfo> {
+    if (!/^[0-9a-fA-F]{64}$/.test(conditionId)) {
+      throw new CTSError('conditionId must be a 64-character hex string for CTF condition lookup');
+    }
+    const normalizedConditionId = conditionId.toLowerCase();
+    const data = await this.getCtfConditionResponse(normalizedConditionId, customRequest);
+    const dataObject = data as Record<string, unknown>;
+    const condition = isObj(dataObject.condition)
+      ? (dataObject.condition as CtfConditionInfo)
+      : (data as CtfConditionInfo);
+    if (
+      !isObj(condition) ||
+      condition.condition_id?.toLowerCase() !== normalizedConditionId ||
+      !Array.isArray(condition.partitions)
+    ) {
+      this._logger.error('Invalid response from mint...', { data, op: 'getCtfCondition' });
+      throw new CTSError(`Mint did not return condition ${normalizedConditionId}`);
+    }
+    return condition;
+  }
+
+  private async getCtfConditionResponse(
+    normalizedConditionId: string,
+    customRequest?: RequestFn,
+  ): Promise<CtfConditionInfo | { condition?: CtfConditionInfo }> {
+    try {
+      return await this.requestWithAuth<CtfConditionInfo | { condition?: CtfConditionInfo }>(
+        'GET',
+        `/v1/conditions/${normalizedConditionId}`,
+        {},
+        customRequest,
+      );
+    } catch (e) {
+      if (!this.isConditionNotFound(e)) throw e;
+      const data = await this.requestWithAuth<
+        CtfConditionInfo[] | { conditions?: CtfConditionInfo[] }
+      >('GET', '/v1/conditions', {}, customRequest);
+      const conditions = Array.isArray(data)
+        ? data
+        : isObj(data) && Array.isArray(data.conditions)
+          ? data.conditions
+          : [];
+      const condition = conditions.find(
+        (candidate) => candidate.condition_id?.toLowerCase() === normalizedConditionId,
+      );
+      if (!condition) throw e;
+      return condition;
+    }
+  }
+
+  private isConditionNotFound(e: unknown): boolean {
+    if (e instanceof MintOperationError && e.code === 13021) return true;
+    if (e instanceof CTSError && /condition not found/i.test(e.message)) return true;
+    return false;
+  }
+
+  /**
+   * Performs a CTF complete-set split.
+   *
+   * Inputs are regular collateral proofs and outputs are grouped by outcome collection. The mint
+   * returns one signature array per requested collection.
+   */
+  async ctfSplit(
+    splitPayload: CtfSplitRequest,
+    customRequest?: RequestFn,
+  ): Promise<CtfSplitResponse> {
+    const requestPayload = {
+      ...splitPayload,
+      outputs: Object.fromEntries(
+        Object.entries(splitPayload.outputs).map(([collection, outputs]) => [
+          collection,
+          this.toWireBlindedMessages(outputs),
+        ]),
+      ),
+    };
+    const data = await this.requestWithAuth<CtfSplitResponse>(
+      'POST',
+      '/v1/ctf/split',
+      { requestBody: requestPayload as unknown as Record<string, unknown> },
+      customRequest,
+    );
+    if (!isObj(data) || !isObj(data.signatures)) {
+      this._logger.error('Invalid response from mint...', { data, op: 'ctfSplit' });
+      throw new CTSError('Invalid response from mint');
+    }
+    for (const [collection, signatures] of Object.entries(data.signatures)) {
+      if (!Array.isArray(signatures)) {
+        this._logger.error('Invalid response from mint...', { data, op: 'ctfSplit' });
+        throw new CTSError(`Mint returned invalid CTF split signatures for ${collection}`);
+      }
+      data.signatures[collection] = this.normalizeSignatureAmounts(signatures);
+    }
+    return data;
+  }
+
+  async ctfMerge(
+    mergePayload: CtfMergeRequest,
+    customRequest?: RequestFn,
+  ): Promise<CtfMergeResponse> {
+    const requestPayload = {
+      ...mergePayload,
+      outputs: this.toWireBlindedMessages(mergePayload.outputs),
+    };
+    const data = await this.requestWithAuth<CtfMergeResponse>(
+      'POST',
+      '/v1/ctf/merge',
+      { requestBody: requestPayload as unknown as Record<string, unknown> },
+      customRequest,
+    );
+    if (!isObj(data) || !Array.isArray(data.signatures)) {
+      this._logger.error('Invalid response from mint...', { data, op: 'ctfMerge' });
+      throw new CTSError('Invalid response from mint');
+    }
+    data.signatures = this.normalizeSignatureAmounts(data.signatures);
+    return data;
+  }
+
+  /**
+   * Redeems witnessed conditional outcome proofs into regular mint proofs.
+   *
+   * Callers must attach the oracle witness to each conditional input proof before invoking this
+   * method. Output blinded messages are normalized to the mint's numeric wire shape so CTF redeem
+   * follows the same request encoding as regular swaps.
+   */
+  async redeemOutcome(
+    redeemPayload: RedeemOutcomeRequest,
+    customRequest?: RequestFn,
+  ): Promise<RedeemOutcomeResponse> {
+    const requestPayload = {
+      ...redeemPayload,
+      outputs: this.toWireBlindedMessages(redeemPayload.outputs),
+    };
+    const data = await this.requestWithAuth<RedeemOutcomeResponse>(
+      'POST',
+      '/v1/redeem_outcome',
+      { requestBody: requestPayload as unknown as Record<string, unknown> },
+      customRequest,
+    );
+    if (!isObj(data) || !Array.isArray(data.signatures)) {
+      this._logger.error('Invalid response from mint...', { data, op: 'redeemOutcome' });
+      throw new CTSError('Invalid response from mint');
+    }
+    data.signatures = this.normalizeSignatureAmounts(data.signatures);
+    return data;
+  }
+
   // -----------------------------------------------------------------
   // Section: Websockets
   // -----------------------------------------------------------------
@@ -1140,6 +1415,15 @@ class Mint {
     return messages.map((message) => ({
       ...message,
       amount: Amount.from(message.amount),
+    }));
+  }
+
+  private toWireBlindedMessages(
+    messages: SerializedBlindedMessage[],
+  ): Array<Omit<SerializedBlindedMessage, 'amount'> & { amount: number }> {
+    return messages.map((message) => ({
+      ...message,
+      amount: Amount.from(message.amount).toNumber(),
     }));
   }
 

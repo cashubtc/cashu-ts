@@ -1,4 +1,5 @@
 export * from './core';
+export * from './CTF';
 export * from './curve_bls';
 export * from './curve_secp';
 export * from './curves';

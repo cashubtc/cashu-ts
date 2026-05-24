@@ -1,6 +1,7 @@
 import { Mint } from '../mint';
 import { CTSError } from '../model/Errors';
 import type {
+  ConditionalKeysetMetadata,
   MintKeyset,
   MintKeys,
   GetKeysetsResponse,
@@ -102,6 +103,7 @@ export class KeyChain {
       active: k.active,
       input_fee_ppk: k.input_fee_ppk,
       final_expiry: k.final_expiry,
+      conditional: k.conditional,
     }));
 
     const keys: MintKeys[] = cache.keysets
@@ -112,6 +114,7 @@ export class KeyChain {
         active: k.active,
         input_fee_ppk: k.input_fee_ppk,
         final_expiry: k.final_expiry,
+        conditional: k.conditional,
         keys: k.keys,
       }));
 
@@ -213,7 +216,7 @@ export class KeyChain {
       throw new CTSError('KeyChain not initialized');
     }
     const activeKeysets = Object.values(this.keysets).filter(
-      (k) => k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
+      (k) => !k.isConditional && k.unit === this.unit && k.isActive && k.hasHexId && k.hasKeys,
     );
     if (activeKeysets.length === 0) {
       throw new CTSError(`No active keyset found for unit: ${this.unit}`);
@@ -276,6 +279,84 @@ export class KeyChain {
   }
 
   /**
+   * Registers a conditional keyset that was discovered through NUT-CTF metadata.
+   *
+   * Conditional keysets are addressable by id but excluded from regular wallet keyset selection
+   * (`getCheapestKeyset` / `getKeysets`).
+   */
+  registerConditionalKeyset(
+    meta: MintKeyset & { conditional: ConditionalKeysetMetadata },
+    keys?: MintKeys,
+  ): Keyset {
+    const keyset = keys ? Keyset.fromMintApi(meta, keys) : Keyset.fromMintApi(meta);
+    if (keyset.hasKeys && !keyset.verify()) {
+      throw new CTSError(`Conditional keyset verification failed for ID ${meta.id}`);
+    }
+    this.keysets[keyset.id] = keyset;
+    return keyset;
+  }
+
+  async loadConditionalKeyset(id: string): Promise<Keyset> {
+    const existing = this.keysets[id];
+    if (existing?.isConditional && existing.hasKeys) {
+      return existing;
+    }
+
+    const pending = this.pendingKeyFetches.get(id);
+    if (pending) {
+      return await pending;
+    }
+
+    const promise = (async () => {
+      const registry = await this.mint.getConditionalKeysets();
+      const info = registry.keysets.find((keyset) => keyset.id === id);
+      if (!info) {
+        throw new CTSError(`Conditional keyset '${id}' not found`);
+      }
+
+      const conditional: ConditionalKeysetMetadata = {
+        conditionId: info.condition_id,
+        outcomeCollection: info.outcome_collection,
+        outcomeCollectionId: info.outcome_collection_id,
+        registeredAt: info.registered_at,
+      };
+      const meta: MintKeyset & { conditional: ConditionalKeysetMetadata } = {
+        id: info.id,
+        unit: info.unit,
+        active: info.active,
+        input_fee_ppk: info.input_fee_ppk,
+        final_expiry: info.final_expiry,
+        conditional,
+      };
+      const res = await this.mint.getKeys(id);
+      const keys = res.keysets.find((keyset) => keyset.id === id);
+      if (!keys || !keys.keys || Object.keys(keys.keys).length === 0) {
+        throw new CTSError(`Mint returned no keys for conditional keyset '${id}'`);
+      }
+      return this.registerConditionalKeyset(meta, { ...keys, conditional });
+    })();
+
+    this.pendingKeyFetches.set(id, promise);
+    try {
+      return await promise;
+    } finally {
+      this.pendingKeyFetches.delete(id);
+    }
+  }
+
+  getConditionalKeyset(id: string): Keyset {
+    const keyset = this.keysets[id];
+    if (!keyset || !keyset.isConditional) {
+      throw new CTSError(`Conditional keyset '${id}' not found`);
+    }
+    return keyset;
+  }
+
+  hasConditionalKeyset(id: string): boolean {
+    return !!this.keysets[id]?.isConditional;
+  }
+
+  /**
    * Get list of all keysets for the wallet's unit.
    *
    * @returns Array of Keysets for `this.unit`.
@@ -283,7 +364,9 @@ export class KeyChain {
    */
   getKeysets(): Keyset[] {
     this.assertInitialized();
-    const unitKeysets = Object.values(this.keysets).filter((k) => k.unit === this.unit);
+    const unitKeysets = Object.values(this.keysets).filter(
+      (k) => !k.isConditional && k.unit === this.unit,
+    );
     if (unitKeysets.length === 0) {
       throw new CTSError(`No keysets found for unit: ${this.unit}`);
     }
