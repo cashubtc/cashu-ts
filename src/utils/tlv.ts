@@ -22,6 +22,7 @@ export type DecodedTLVPaymentRequest = {
   unit?: string;
   singleUse?: boolean;
   mints?: string[];
+  mintsStrict?: boolean;
   description?: string;
   transports?: PaymentRequestTransport[];
   nut10?: Nut10SpendingCondition;
@@ -40,6 +41,7 @@ export type DecodedTLVPaymentRequest = {
  * | 0x06 | description | string    | Human-readable description                       |
  * | 0x07 | transport   | sub-TLV   | Transport configuration (repeatable)             |
  * | 0x08 | nut10       | sub-TLV   | NUT-10 spending conditions (not yet implemented) |
+ * | 0x09 | mint_strict | u8        | Mint list strict flag: 0=false, 1=true; if absent, defaults to 1 |
  */
 const TAG_ID = 0x01;
 const TAG_AMOUNT = 0x02;
@@ -49,6 +51,7 @@ const TAG_MINT = 0x05;
 const TAG_DESCRIPTION = 0x06;
 const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
+const TAG_MINT_STRICT = 0x09;
 
 /**
  * Transport Sub-TLV Tag definitions.
@@ -138,6 +141,9 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
           throw new CTSError('invalid pr: multiple nut10 spending conditions');
         }
         result.nut10 = parseNut10(part.value);
+        break;
+      case TAG_MINT_STRICT:
+        result.mintsStrict = parseU8(part.value) === 1;
         break;
       default:
         // Ignore unknown tags for forward compatibility
@@ -428,6 +434,10 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
   // Not repeatable: single nut10 spending condition (NUT-26 tag 0x08)
   if (request.nut10) {
     parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(request.nut10)));
+  }
+
+  if (request.mintsStrict !== undefined) {
+    parts.push(encodeTLVPart(TAG_MINT_STRICT, encodeU8(request.mintsStrict ? 1 : 0)));
   }
 
   // Concatenate all parts

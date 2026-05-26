@@ -28,6 +28,7 @@ export class PaymentRequest {
     public description?: string,
     public singleUse: boolean = false,
     public nut10?: NUT10Option,
+    public mintsStrict?: boolean,
   ) {
     this.amount = amount !== undefined ? Amount.from(amount) : undefined;
   }
@@ -52,6 +53,9 @@ export class PaymentRequest {
     }
     if (this.mints) {
       rawRequest.m = this.mints;
+    }
+    if (this.mintsStrict !== undefined) {
+      rawRequest.ms = this.mintsStrict;
     }
     if (this.description) {
       rawRequest.d = this.description;
@@ -98,6 +102,7 @@ export class PaymentRequest {
       unit: this.unit,
       singleUse: this.singleUse,
       mints: this.mints,
+      mintsStrict: this.mintsStrict,
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
@@ -203,6 +208,7 @@ export class PaymentRequest {
       rawPaymentRequest.d,
       rawPaymentRequest.s,
       nut10,
+      rawPaymentRequest.ms,
     );
   }
 
@@ -229,6 +235,7 @@ export class PaymentRequest {
         decoded.description,
         decoded.singleUse ?? false,
         nut10,
+        decoded.mintsStrict,
       );
     }
 

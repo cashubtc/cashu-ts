@@ -18,6 +18,7 @@ export type RawPaymentRequest = {
   u?: string; // unit
   s?: boolean; // single use
   m?: string[]; // mints
+  ms?: boolean; // mints strict
   d?: string; // description
   t?: RawTransport[]; // transports
   nut10?: RawNUT10Option;
