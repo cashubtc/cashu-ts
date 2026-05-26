@@ -1,11 +1,13 @@
 import { test, describe, expect } from 'vitest';
-import { signMintQuote, verifyMintQuoteSignature } from '../../src/crypto';
+import { signBatchMintQuote, verifyBatchMintQuoteSignature } from '../../src/crypto';
 import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { Amount } from '../../src';
 
 /**
- * NUT-29 test vectors for batch mint signatures.
+ * NUT-29 batch mint signatures.
+ *
+ * Test vector from nuts/tests/29-tests.md (sk = 1)
  */
 describe('NUT-29 batch mint signatures', () => {
   const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
@@ -25,41 +27,58 @@ describe('NUT-29 batch mint signatures', () => {
     },
   ];
 
-  const expectedMsgHash = '73027f17704341b1595f9aa0ccc02ccfb066ff60fc4d29f328cb2eeda6e34673';
+  // Canonical results from the spec test vector.
+  const expectedMsgToSign =
+    '43617368755f4d696e7451756f74655369675f76310000000c6c6f636b65642d71756f7465' +
+    '000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2' +
+    '000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59';
+  const expectedMsgHash = '03dc68d6617bba502d8648efd0965bf393841082cf04fd03e5de4bcb5777cdfc';
   const expectedSignature =
-    '1c7e4d05aab3c9a474b9238a6ed894f9fd19431c6663518da572e4ed4219930b73090b479dc314ad13fc1d386106ed4292bda3af2aba8a7b2912f0b8586d749c';
+    'a913e48177027d87e0e38c6f2021763c46997ff4866a4b63ebca800b0776b28519eab37377cf9bc1869e489d7b25747b7a998eaa1c33c2cac7fa168449d8267a';
 
-  test('message hash matches test vector', () => {
-    const message = 'locked-quote' + ':' + allOutputs[0].B_ + ':' + allOutputs[1].B_;
-    const hash = bytesToHex(sha256(new TextEncoder().encode(message)));
-    expect(hash).toBe(expectedMsgHash);
+  test('canonical msg_to_sign hashes to the test vector', () => {
+    expect(bytesToHex(sha256(hexToBytes(expectedMsgToSign)))).toBe(expectedMsgHash);
   });
 
   test('test vector signature verifies correctly', () => {
-    expect(verifyMintQuoteSignature(pubkey, 'locked-quote', allOutputs, expectedSignature)).toBe(
-      true,
-    );
+    expect(
+      verifyBatchMintQuoteSignature(pubkey, 'locked-quote', allOutputs, expectedSignature),
+    ).toBe(true);
   });
 
-  test('signMintQuote over all outputs produces a valid signature', () => {
-    const signature = signMintQuote(privkey, 'locked-quote', allOutputs);
-    expect(verifyMintQuoteSignature(pubkey, 'locked-quote', allOutputs, signature)).toBe(true);
+  test('signBatchMintQuote over all outputs produces a valid signature', () => {
+    const signature = signBatchMintQuote(privkey, 'locked-quote', allOutputs);
+    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', allOutputs, signature)).toBe(true);
   });
 
   test('signature over per-quote subset is invalid against full output set', () => {
-    const perQuoteSig = signMintQuote(privkey, 'locked-quote', [allOutputs[0]]);
-    expect(verifyMintQuoteSignature(pubkey, 'locked-quote', allOutputs, perQuoteSig)).toBe(false);
+    const perQuoteSig = signBatchMintQuote(privkey, 'locked-quote', [allOutputs[0]]);
+    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', allOutputs, perQuoteSig)).toBe(
+      false,
+    );
   });
 
-  test('each quote in a batch must sign over the same complete output set', () => {
-    const sigQuote1 = signMintQuote(privkey, 'quote-1', allOutputs);
-    const sigQuote2 = signMintQuote(privkey, 'quote-2', allOutputs);
+  test('signature is bound to output amounts', () => {
+    const signature = signBatchMintQuote(privkey, 'locked-quote', allOutputs);
+    const reValued = [{ ...allOutputs[0], amount: Amount.from(2) }, allOutputs[1]];
+    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', reValued, signature)).toBe(false);
+  });
 
-    expect(verifyMintQuoteSignature(pubkey, 'quote-1', allOutputs, sigQuote1)).toBe(true);
-    expect(verifyMintQuoteSignature(pubkey, 'quote-2', allOutputs, sigQuote2)).toBe(true);
+  test('signature is bound to output order', () => {
+    const signature = signBatchMintQuote(privkey, 'locked-quote', allOutputs);
+    const reordered = [allOutputs[1], allOutputs[0]];
+    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', reordered, signature)).toBe(false);
+  });
+
+  test('each quote in a batch signs over the same output set, bound to its quote ID', () => {
+    const sigQuote1 = signBatchMintQuote(privkey, 'quote-1', allOutputs);
+    const sigQuote2 = signBatchMintQuote(privkey, 'quote-2', allOutputs);
+
+    expect(verifyBatchMintQuoteSignature(pubkey, 'quote-1', allOutputs, sigQuote1)).toBe(true);
+    expect(verifyBatchMintQuoteSignature(pubkey, 'quote-2', allOutputs, sigQuote2)).toBe(true);
 
     // Each signature is bound to its quote ID
-    expect(verifyMintQuoteSignature(pubkey, 'quote-1', allOutputs, sigQuote2)).toBe(false);
-    expect(verifyMintQuoteSignature(pubkey, 'quote-2', allOutputs, sigQuote1)).toBe(false);
+    expect(verifyBatchMintQuoteSignature(pubkey, 'quote-1', allOutputs, sigQuote2)).toBe(false);
+    expect(verifyBatchMintQuoteSignature(pubkey, 'quote-2', allOutputs, sigQuote1)).toBe(false);
   });
 });
