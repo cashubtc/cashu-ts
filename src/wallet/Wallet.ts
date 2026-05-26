@@ -8,6 +8,7 @@
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
   signMintQuote,
+  signBatchMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
@@ -2287,7 +2288,7 @@ class Wallet {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && privkey) {
         const signingKey = findSigningKey(quotePubkey, privkey);
-        signatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
+        signatures.push(signBatchMintQuote(signingKey, entry.quote.quote, blindedMessages));
         hasSignatures = true;
       } else {
         if (privkey && !quotePubkey) {

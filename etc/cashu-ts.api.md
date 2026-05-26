@@ -1970,6 +1970,9 @@ export const SigFlags: {
 };
 
 // @public (undocumented)
+export function signBatchMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
+
+// @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
@@ -2083,6 +2086,9 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 
 // @public
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
+
+// @public (undocumented)
+export function verifyBatchMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
