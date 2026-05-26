@@ -64,6 +64,17 @@ describe('NUT-29 batch mint signatures', () => {
     expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', reValued, signature)).toBe(false);
   });
 
+  test('normalizes a raw JSON number amount (Amount instances pass through)', () => {
+    // A server may pass outputs straight from JSON.parse, where amount is a primitive number.
+    const numberOutputs = allOutputs.map((o) => ({ ...o, amount: o.amount.toNumber() }));
+    const cast = numberOutputs as unknown as typeof allOutputs;
+    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', cast, expectedSignature)).toBe(
+      true,
+    );
+    const sig = signBatchMintQuote(privkey, 'locked-quote', cast);
+    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', allOutputs, sig)).toBe(true);
+  });
+
   test('signature is bound to output order', () => {
     const signature = signBatchMintQuote(privkey, 'locked-quote', allOutputs);
     const reordered = [allOutputs[1], allOutputs[0]];
