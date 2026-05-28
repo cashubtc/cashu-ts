@@ -18,6 +18,7 @@ import { CTSError } from './Errors';
 
 export class PaymentRequest {
   public amount?: Amount;
+  public feeReserve?: Amount;
 
   constructor(
     public transport?: PaymentRequestTransport[],
@@ -29,8 +30,25 @@ export class PaymentRequest {
     public singleUse: boolean = false,
     public nut10?: NUT10Option,
     public mintsStrict?: boolean,
+    feeReserve?: AmountLike,
+    public supportedMethods?: string[],
   ) {
     this.amount = amount !== undefined ? Amount.from(amount) : undefined;
+    this.feeReserve = feeReserve !== undefined ? Amount.from(feeReserve) : undefined;
+  }
+
+  /**
+   * Resolves the NUT-18 mint list strictness per spec.
+   *
+   * - `undefined` if no mint list is set (`ms` and `fr` SHOULD be ignored)
+   * - `true` if the list is strict (`ms` absent or `true`)
+   * - `false` if the list is preferred (`ms === false`)
+   */
+  get isMintListStrict(): boolean | undefined {
+    if (!this.mints?.length) {
+      return undefined;
+    }
+    return this.mintsStrict !== false;
   }
 
   toRawRequest() {
@@ -56,6 +74,12 @@ export class PaymentRequest {
     }
     if (this.mintsStrict !== undefined) {
       rawRequest.ms = this.mintsStrict;
+    }
+    if (this.feeReserve) {
+      rawRequest.fr = this.feeReserve.toBigInt();
+    }
+    if (this.supportedMethods && this.supportedMethods.length > 0) {
+      rawRequest.sm = this.supportedMethods;
     }
     if (this.description) {
       rawRequest.d = this.description;
@@ -103,6 +127,8 @@ export class PaymentRequest {
       singleUse: this.singleUse,
       mints: this.mints,
       mintsStrict: this.mintsStrict,
+      feeReserve: this.feeReserve !== undefined ? this.feeReserve.toBigInt() : undefined,
+      supportedMethods: this.supportedMethods,
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
@@ -209,6 +235,8 @@ export class PaymentRequest {
       rawPaymentRequest.s,
       nut10,
       rawPaymentRequest.ms,
+      rawPaymentRequest.fr,
+      rawPaymentRequest.sm,
     );
   }
 
@@ -236,6 +264,8 @@ export class PaymentRequest {
         decoded.singleUse ?? false,
         nut10,
         decoded.mintsStrict,
+        decoded.feeReserve,
+        decoded.supportedMethods,
       );
     }
 

@@ -23,6 +23,8 @@ export type DecodedTLVPaymentRequest = {
   singleUse?: boolean;
   mints?: string[];
   mintsStrict?: boolean;
+  feeReserve?: bigint;
+  supportedMethods?: string[];
   description?: string;
   transports?: PaymentRequestTransport[];
   nut10?: Nut10SpendingCondition;
@@ -31,17 +33,19 @@ export type DecodedTLVPaymentRequest = {
 /**
  * TLV Tag definitions for Payment Request (NUT-18 version B).
  *
- * | Tag  | Field       | Type      | Description                                      |
- * | ---- | ----------- | --------- | ------------------------------------------------ |
- * | 0x01 | id          | string    | Payment identifier                               |
- * | 0x02 | amount      | u64       | Amount in base units                             |
- * | 0x03 | unit        | u8/string | Currency unit (0x00 = 'sat')                     |
- * | 0x04 | single_use  | u8        | Single-use flag: 0=false, 1=true                 |
- * | 0x05 | mint        | string    | Mint URL (repeatable)                            |
- * | 0x06 | description | string    | Human-readable description                       |
- * | 0x07 | transport   | sub-TLV   | Transport configuration (repeatable)             |
- * | 0x08 | nut10       | sub-TLV   | NUT-10 spending conditions (not yet implemented) |
- * | 0x09 | mint_strict | u8        | Mint list strict flag: 0=false, 1=true; if absent, defaults to 1 |
+ * | Tag  | Field             | Type      | Description                                                                                   |
+ * | ---- | ----------------- | --------- | --------------------------------------------------------------------------------------------- |
+ * | 0x01 | id                | string    | Payment identifier                                                                            |
+ * | 0x02 | amount            | u64       | Amount in base units                                                                          |
+ * | 0x03 | unit              | u8/string | Currency unit (0x00 = 'sat')                                                                  |
+ * | 0x04 | single_use        | u8        | Single-use flag: 0=false, 1=true                                                              |
+ * | 0x05 | mint              | string    | Mint URL (repeatable)                                                                         |
+ * | 0x06 | description       | string    | Human-readable description                                                                    |
+ * | 0x07 | transport         | sub-TLV   | Transport configuration (repeatable)                                                          |
+ * | 0x08 | nut10             | sub-TLV   | NUT-10 spending conditions (not yet implemented)                                              |
+ * | 0x09 | mint_strict       | u8        | Mint list strict flag: 0=false, 1=true; if absent, defaults to 1                              |
+ * | 0x0a | fee_reserve       | u64       | Additional fee reserve, in the request unit, when paying from a mint outside `mint` list      |
+ * | 0x0b | supported_methods | string    | Payment method the sending mint must support, e.g. "bolt11", "bolt12", "onchain" (repeatable) |
  */
 const TAG_ID = 0x01;
 const TAG_AMOUNT = 0x02;
@@ -52,6 +56,8 @@ const TAG_DESCRIPTION = 0x06;
 const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
 const TAG_MINT_STRICT = 0x09;
+const TAG_FEE_RESERVE = 0x0a;
+const TAG_SUPPORTED_METHODS = 0x0b;
 
 /**
  * Transport Sub-TLV Tag definitions.
@@ -144,6 +150,15 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         break;
       case TAG_MINT_STRICT:
         result.mintsStrict = parseU8(part.value) === 1;
+        break;
+      case TAG_FEE_RESERVE:
+        result.feeReserve = parseU64(part.value);
+        break;
+      case TAG_SUPPORTED_METHODS:
+        if (!result.supportedMethods) {
+          result.supportedMethods = [];
+        }
+        result.supportedMethods.push(parseString(part.value));
         break;
       default:
         // Ignore unknown tags for forward compatibility
@@ -438,6 +453,17 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
 
   if (request.mintsStrict !== undefined) {
     parts.push(encodeTLVPart(TAG_MINT_STRICT, encodeU8(request.mintsStrict ? 1 : 0)));
+  }
+
+  if (request.feeReserve !== undefined) {
+    parts.push(encodeTLVPart(TAG_FEE_RESERVE, encodeU64(request.feeReserve)));
+  }
+
+  // Repeatable: supported_methods
+  if (request.supportedMethods && request.supportedMethods.length > 0) {
+    for (const method of request.supportedMethods) {
+      parts.push(encodeTLVPart(TAG_SUPPORTED_METHODS, encodeString(method)));
+    }
   }
 
   // Concatenate all parts

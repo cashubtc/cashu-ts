@@ -357,6 +357,37 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
     });
   });
 
+  describe('Preferred Mint List with Fee Reserve and Supported Methods', () => {
+    // NUT-26 spec test vector — payment request with ms=false (preferred mint list),
+    // a fee reserve for non-preferred mints, and required mint payment methods.
+    const encoded =
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGQPGQQSQQQQQQQQQQQQG9SQPNZDAK8GVF3PVQQVCN0D36RZVSUP24PH';
+
+    test('roundtrip preferred mint list with fee reserve and supported methods', () => {
+      testRoundtrip(encoded, 'NUT-26 spec vector: ms=false, fr=2, sm=[bolt11, bolt12]');
+    });
+
+    test('verify ms, fr, sm fields', () => {
+      const bytes = decodeBech32mToBytes(encoded.toLowerCase());
+      const decoded = decodeTLV(bytes);
+
+      expect(decoded.id).toBe('preferred_fee_methods');
+      expect(decoded.amount).toBe(BigInt(100));
+      expect(decoded.unit).toBe('sat');
+      expect(decoded.mints).toEqual(['https://mint.example.com']);
+      expect(decoded.mintsStrict).toBe(false);
+      expect(decoded.feeReserve).toBe(BigInt(2));
+      expect(decoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+
+      const reEncoded = encodeTLV(decoded);
+      const finalDecoded = decodeTLV(reEncoded);
+
+      expect(finalDecoded.mintsStrict).toBe(false);
+      expect(finalDecoded.feeReserve).toBe(BigInt(2));
+      expect(finalDecoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+    });
+  });
+
   describe('Custom Currency Unit', () => {
     const encoded =
       'CREQB1QYQQKCM4WD6X7M2LW4HXJAQZQQYQQQQQQQQQQQRYQVQQXCN5VVZSQXRGW368QUE69UHK66TWWSHX27RPD4CXCEFWVDHK6PZHCW8';

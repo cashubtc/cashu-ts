@@ -111,6 +111,110 @@ describe('payment requests', () => {
     expect(() => decodePaymentRequest(prWithInvalidVersion)).toThrow('unsupported pr version');
   });
 
+  describe('mint preferences (ms, fr, sm)', () => {
+    test('encode/decode preferred mint list with fee reserve and supported methods (creqA)', () => {
+      const request = new PaymentRequest(
+        undefined,
+        'preferred_fee_methods',
+        100,
+        'sat',
+        ['https://mint.example.com'],
+        undefined,
+        false,
+        undefined,
+        false, // mintsStrict
+        2, // feeReserve
+        ['bolt11', 'bolt12'], // supportedMethods
+      );
+
+      const pr = request.toEncodedRequest();
+      const decoded = decodePaymentRequest(pr);
+
+      expect(decoded.mintsStrict).toBe(false);
+      expect(decoded.feeReserve?.equals(2)).toBeTruthy();
+      expect(decoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+    });
+
+    test('encode/decode preferred mint list with fee reserve and supported methods (creqB)', () => {
+      const request = new PaymentRequest(
+        undefined,
+        'preferred_fee_methods',
+        100,
+        'sat',
+        ['https://mint.example.com'],
+        undefined,
+        false,
+        undefined,
+        false,
+        2,
+        ['bolt11', 'bolt12'],
+      );
+
+      const encoded = request.toEncodedCreqB();
+      const decoded = PaymentRequest.fromEncodedRequest(encoded);
+
+      expect(decoded.mintsStrict).toBe(false);
+      expect(decoded.feeReserve?.equals(2)).toBeTruthy();
+      expect(decoded.supportedMethods).toEqual(['bolt11', 'bolt12']);
+    });
+
+    test('isMintListStrict resolves NUT-18 default-to-true semantic', () => {
+      const noMints = new PaymentRequest(undefined, 'no_mints', 100, 'sat');
+      expect(noMints.isMintListStrict).toBeUndefined();
+
+      const mintsOnly = new PaymentRequest(undefined, 'mints_only', 100, 'sat', [
+        'https://mint.example.com',
+      ]);
+      expect(mintsOnly.isMintListStrict).toBe(true);
+
+      const explicitStrict = new PaymentRequest(
+        undefined,
+        'explicit_strict',
+        100,
+        'sat',
+        ['https://mint.example.com'],
+        undefined,
+        false,
+        undefined,
+        true,
+      );
+      expect(explicitStrict.isMintListStrict).toBe(true);
+
+      const preferred = new PaymentRequest(
+        undefined,
+        'preferred',
+        100,
+        'sat',
+        ['https://mint.example.com'],
+        undefined,
+        false,
+        undefined,
+        false,
+      );
+      expect(preferred.isMintListStrict).toBe(false);
+
+      // Decoded request with mints set and ms absent — should resolve to strict
+      const fromWire = decodePaymentRequest(mintsOnly.toEncodedRequest());
+      expect(fromWire.mintsStrict).toBeUndefined();
+      expect(fromWire.isMintListStrict).toBe(true);
+    });
+
+    test('ms/fr/sm absent by default (no serialization, no defaults injected)', () => {
+      const request = new PaymentRequest(undefined, 'no_prefs', 100, 'sat', [
+        'https://mint.example.com',
+      ]);
+      const raw = request.toRawRequest();
+      expect(raw.ms).toBeUndefined();
+      expect(raw.fr).toBeUndefined();
+      expect(raw.sm).toBeUndefined();
+
+      const decoded = decodePaymentRequest(request.toEncodedRequest());
+      expect(decoded.mintsStrict).toBeUndefined();
+      expect(decoded.feeReserve).toBeUndefined();
+      expect(decoded.supportedMethods).toBeUndefined();
+    });
+  });
+
   describe('toEncodedCreqB - creqB format (TLV + bech32m)', () => {
     test('encode and decode basic payment request with nostr transport', () => {
       const pr = new PaymentRequest(
