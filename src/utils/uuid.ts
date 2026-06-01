@@ -28,10 +28,10 @@ export function generateUuidV7(): string {
   buf[5] = Number(tsMs & 0xffn);
 
   // Byte 6: version nibble (0x7) in the high nibble, keep low nibble random (rand_a[0:4])
-  buf[6] = (0x70 | (buf[6] & 0x0f)) >>> 0;
+  buf[6] = 0x70 | (buf[6] & 0x0f);
 
   // Byte 8: variant bits 0b10 in the two high bits, keep lower 6 bits random (rand_b[0:6])
-  buf[8] = (0x80 | (buf[8] & 0x3f)) >>> 0;
+  buf[8] = 0x80 | (buf[8] & 0x3f);
 
   const hex = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
