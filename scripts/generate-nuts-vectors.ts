@@ -17,7 +17,7 @@ import {
   verifyUnblindedSignatureBls,
   type G1Point,
   type G2Point,
-} from '../src/crypto/bls';
+} from '../src/crypto/curve_bls';
 import { deriveKeysetId } from '../src/utils/core';
 
 const G2 = BLS_G2_GENERATOR;
