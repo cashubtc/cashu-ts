@@ -1060,34 +1060,42 @@ describe('Mint normalization', () => {
     expect(seen).toHaveLength(2);
   });
 
-  it('ctfMerge posts grouped conditional inputs and normalizes signatures', async () => {
+  it('ctfConvert posts grouped inputs and outputs and normalizes signatures', async () => {
     const requestSpy = vi.fn(async (options: ReqArgs) => {
-      expect(options.endpoint).toBe(`${mintUrl}/v1/ctf/merge`);
+      expect(options.endpoint).toBe(`${mintUrl}/v1/ctf/convert`);
       expect(options.method).toBe('POST');
       expect(options.requestBody).toEqual({
         condition_id: 'e'.repeat(64),
+        parent_collection_id: '0'.repeat(64),
         inputs: { YES: [] },
-        outputs: [{ id: '00bd033559de27d0', amount: 100, B_: '02'.padEnd(66, 'a') }],
+        outputs: {
+          '*': [{ id: '00bd033559de27d0', amount: 100, B_: '02'.padEnd(66, 'a') }],
+        },
       });
       return {
-        signatures: [
-          {
-            id: '00bd033559de27d0',
-            amount: 100,
-            C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
-          },
-        ],
+        signatures: {
+          '*': [
+            {
+              id: '00bd033559de27d0',
+              amount: 100,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        },
       };
     }) as RequestFn;
     const mint = new Mint(mintUrl, { customRequest: requestSpy });
 
-    const response = await mint.ctfMerge({
+    const response = await mint.ctfConvert({
       condition_id: 'e'.repeat(64),
+      parent_collection_id: '0'.repeat(64),
       inputs: { YES: [] },
-      outputs: [{ id: '00bd033559de27d0', amount: Amount.from(100), B_: '02'.padEnd(66, 'a') }],
+      outputs: {
+        '*': [{ id: '00bd033559de27d0', amount: Amount.from(100), B_: '02'.padEnd(66, 'a') }],
+      },
     });
 
-    expect(response.signatures[0].amount).toEqual(Amount.from(100));
+    expect(response.signatures['*'][0].amount).toEqual(Amount.from(100));
   });
 
   it('throws on invalid minted signatures responses', async () => {

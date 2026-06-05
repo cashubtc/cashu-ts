@@ -58,6 +58,7 @@ export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
 export type * from './mint/types/payloads';
 export type * from './mint/types/responses';
+export type * from './mint/types/ctf';
 
 // Shared models & primitives
 export type * from './model/types/blinded';

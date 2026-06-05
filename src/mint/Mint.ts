@@ -62,8 +62,8 @@ import type {
   CheckStatePayload,
   PostRestorePayload,
   CtfConditionInfo,
-  CtfSplitRequest,
-  CtfSplitResponse,
+  CtfConvertRequest,
+  CtfConvertResponse,
   RedeemOutcomeRequest,
   RedeemOutcomeResponse,
   ConditionalKeysetsResponse,
@@ -74,8 +74,6 @@ import type {
   RegisterConditionResponse,
   RegisterPartitionRequest,
   RegisterPartitionResponse,
-  CtfMergeRequest,
-  CtfMergeResponse,
 } from './types';
 
 /**
@@ -1144,63 +1142,38 @@ class Mint {
   }
 
   /**
-   * Performs a CTF complete-set split.
-   *
-   * Inputs are regular collateral proofs and outputs are grouped by outcome collection. The mint
-   * returns one signature array per requested collection.
+   * Performs a CTF payoff-preserving convert.
    */
-  async ctfSplit(
-    splitPayload: CtfSplitRequest,
+  async ctfConvert(
+    convertPayload: CtfConvertRequest,
     customRequest?: RequestFn,
-  ): Promise<CtfSplitResponse> {
+  ): Promise<CtfConvertResponse> {
     const requestPayload = {
-      ...splitPayload,
+      ...convertPayload,
       outputs: Object.fromEntries(
-        Object.entries(splitPayload.outputs).map(([collection, outputs]) => [
+        Object.entries(convertPayload.outputs).map(([collection, outputs]) => [
           collection,
           this.toWireBlindedMessages(outputs),
         ]),
       ),
     };
-    const data = await this.requestWithAuth<CtfSplitResponse>(
+    const data = await this.requestWithAuth<CtfConvertResponse>(
       'POST',
-      '/v1/ctf/split',
+      '/v1/ctf/convert',
       { requestBody: requestPayload as unknown as Record<string, unknown> },
       customRequest,
     );
     if (!isObj(data) || !isObj(data.signatures)) {
-      this._logger.error('Invalid response from mint...', { data, op: 'ctfSplit' });
+      this._logger.error('Invalid response from mint...', { data, op: 'ctfConvert' });
       throw new CTSError('Invalid response from mint');
     }
     for (const [collection, signatures] of Object.entries(data.signatures)) {
       if (!Array.isArray(signatures)) {
-        this._logger.error('Invalid response from mint...', { data, op: 'ctfSplit' });
-        throw new CTSError(`Mint returned invalid CTF split signatures for ${collection}`);
+        this._logger.error('Invalid response from mint...', { data, op: 'ctfConvert' });
+        throw new CTSError(`Mint returned invalid CTF convert signatures for ${collection}`);
       }
       data.signatures[collection] = this.normalizeSignatureAmounts(signatures);
     }
-    return data;
-  }
-
-  async ctfMerge(
-    mergePayload: CtfMergeRequest,
-    customRequest?: RequestFn,
-  ): Promise<CtfMergeResponse> {
-    const requestPayload = {
-      ...mergePayload,
-      outputs: this.toWireBlindedMessages(mergePayload.outputs),
-    };
-    const data = await this.requestWithAuth<CtfMergeResponse>(
-      'POST',
-      '/v1/ctf/merge',
-      { requestBody: requestPayload as unknown as Record<string, unknown> },
-      customRequest,
-    );
-    if (!isObj(data) || !Array.isArray(data.signatures)) {
-      this._logger.error('Invalid response from mint...', { data, op: 'ctfMerge' });
-      throw new CTSError('Invalid response from mint');
-    }
-    data.signatures = this.normalizeSignatureAmounts(data.signatures);
     return data;
   }
 

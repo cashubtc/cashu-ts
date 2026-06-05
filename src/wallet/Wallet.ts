@@ -1469,6 +1469,15 @@ class Wallet {
           `${expectedOutputTotal.toString()} after fees`,
       );
     }
+    for (const group of built) {
+      const mismatchedOutput = group.data.find((output) => output.blindedMessage.id !== keysetId);
+      if (mismatchedOutput) {
+        throw new CTSError(
+          `prepareConditionalSwap output ${group.label} uses keyset ` +
+            `${mismatchedOutput.blindedMessage.id}; expected ${keysetId}`,
+        );
+      }
+    }
 
     return {
       keysetId,

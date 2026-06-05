@@ -86,24 +86,15 @@ export interface RegisterPartitionResponse {
   keysets: Record<string, string>;
 }
 
-export interface CtfSplitRequest {
+export interface CtfConvertRequest {
   condition_id: string;
-  inputs: Proof[];
+  parent_collection_id?: string;
+  inputs: Record<string, Proof[]>;
   outputs: Record<string, SerializedBlindedMessage[]>;
 }
 
-export interface CtfSplitResponse {
+export interface CtfConvertResponse {
   signatures: Record<string, SerializedBlindedSignature[]>;
-}
-
-export interface CtfMergeRequest {
-  condition_id: string;
-  inputs: Record<string, Proof[]>;
-  outputs: SerializedBlindedMessage[];
-}
-
-export interface CtfMergeResponse {
-  signatures: SerializedBlindedSignature[];
 }
 
 export interface RedeemOutcomeRequest {
