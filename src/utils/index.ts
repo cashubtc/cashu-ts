@@ -6,3 +6,4 @@ export * from './limits';
 export * from './core';
 export * from './JSONInt';
 export * from './normalizeNumbers';
+export * from './uuid';

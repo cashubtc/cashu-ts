@@ -1,6 +1,7 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { CTSError } from '../model/Errors';
 import { type JsonRpcMessage, type JsonRpcReqParams, type RpcSubId } from '../model/types';
+import { generateUuidV7 } from '../utils/uuid.js';
 
 import { getWebSocketImpl } from './ws';
 
@@ -349,7 +350,7 @@ export class WSConnection {
       throw new CTSError('Socket is not open');
     }
 
-    const subId = (Math.random() + 1).toString(36).substring(7);
+    const subId = generateUuidV7();
     const rpcId = this.rpcId; // this is the id sendRequest will use next
     this.addRpcListener(
       () => {
