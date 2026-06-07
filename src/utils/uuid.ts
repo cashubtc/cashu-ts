@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, randomBytes } from '@noble/hashes/utils.js';
 
 /**
  * Generates a UUID v7 string.
@@ -33,6 +33,6 @@ export function generateUuidV7(): string {
   // Byte 8: variant bits 0b10 in the two high bits, keep lower 6 bits random (rand_b[0:6])
   buf[8] = 0x80 | (buf[8] & 0x3f);
 
-  const hex = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+  const hex = bytesToHex(buf);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
