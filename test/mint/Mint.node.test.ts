@@ -8,6 +8,7 @@ import {
   injectWebSocketImpl,
   RateLimitError,
   Amount,
+  MintOperationError,
 } from '../../src';
 import type { AuthProvider, Logger, RequestFn } from '../../src';
 import { HttpResponse, http } from 'msw';
@@ -957,6 +958,144 @@ describe('Mint normalization', () => {
       data: { signatures: {} },
       op: 'mintBatch.bolt11',
     });
+  });
+
+  it('getCtfCondition falls back to the conditions list when direct lookup is unsupported', async () => {
+    const conditionId = 'a'.repeat(64);
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      if (options.endpoint === `${mintUrl}/v1/conditions/${conditionId}`) {
+        throw new MintOperationError(13021, 'Condition not found');
+      }
+      expect(options.endpoint).toBe(`${mintUrl}/v1/conditions`);
+      return {
+        conditions: [
+          {
+            condition_id: conditionId,
+            partitions: [
+              {
+                collateral: 'sat',
+                parent_collection_id: '0'.repeat(64),
+                keysets: { YES: 'keyset-yes', NO: 'keyset-no' },
+              },
+            ],
+          },
+        ],
+      };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    const condition = await mint.getCtfCondition(conditionId);
+
+    expect(condition.condition_id).toBe(conditionId);
+    expect(condition.partitions[0].keysets).toEqual({
+      YES: 'keyset-yes',
+      NO: 'keyset-no',
+    });
+    expect(requestSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('lists conditional keysets with query parameters and normalizes metadata numbers', async () => {
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      expect(options.endpoint).toBe(
+        `${mintUrl}/v1/conditional_keysets?since=1700000000&limit=5&active=true`,
+      );
+      expect(options.method).toBe('GET');
+      return {
+        keysets: [
+          {
+            id: '01' + 'a'.repeat(64),
+            unit: 'sat',
+            active: true,
+            input_fee_ppk: '250',
+            final_expiry: '1754296607',
+            condition_id: 'b'.repeat(64),
+            outcome_collection: 'YES',
+            outcome_collection_id: 'c'.repeat(64),
+            registered_at: '1700000001',
+          },
+        ],
+      };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    const response = await mint.getConditionalKeysets({
+      since: 1_700_000_000,
+      limit: 5,
+      active: true,
+    });
+
+    expect(response.keysets[0].input_fee_ppk).toBe(250);
+    expect(response.keysets[0].final_expiry).toBe(1_754_296_607);
+    expect(response.keysets[0].registered_at).toBe(1_700_000_001);
+  });
+
+  it('wraps condition registration and partition endpoints', async () => {
+    const conditionId = 'd'.repeat(64);
+    const seen: ReqArgs[] = [];
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      seen.push(options);
+      if (options.endpoint === `${mintUrl}/v1/conditions`) {
+        expect(options.method).toBe('POST');
+        return { condition_id: conditionId };
+      }
+      expect(options.endpoint).toBe(`${mintUrl}/v1/conditions/${conditionId}/partitions`);
+      expect(options.method).toBe('POST');
+      return { keysets: { YES: 'keyset-yes', NO: 'keyset-no' } };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    await expect(
+      mint.registerCondition({
+        threshold: 1,
+        tags: [['description', 'question']],
+        announcements: ['abcd'],
+      }),
+    ).resolves.toEqual({ condition_id: conditionId });
+    await expect(
+      mint.registerPartition(conditionId, {
+        collateral: 'sat',
+        partition: ['YES', 'NO'],
+      }),
+    ).resolves.toEqual({ keysets: { YES: 'keyset-yes', NO: 'keyset-no' } });
+    expect(seen).toHaveLength(2);
+  });
+
+  it('ctfConvert posts grouped inputs and outputs and normalizes signatures', async () => {
+    const requestSpy = vi.fn(async (options: ReqArgs) => {
+      expect(options.endpoint).toBe(`${mintUrl}/v1/ctf/convert`);
+      expect(options.method).toBe('POST');
+      expect(options.requestBody).toEqual({
+        condition_id: 'e'.repeat(64),
+        parent_collection_id: '0'.repeat(64),
+        inputs: { YES: [] },
+        outputs: {
+          '*': [{ id: '00bd033559de27d0', amount: 100, B_: '02'.padEnd(66, 'a') }],
+        },
+      });
+      return {
+        signatures: {
+          '*': [
+            {
+              id: '00bd033559de27d0',
+              amount: 100,
+              C_: '021179b095a67380ab3285424b563b7aab9818bd38068e1930641b3dceb364d422',
+            },
+          ],
+        },
+      };
+    }) as RequestFn;
+    const mint = new Mint(mintUrl, { customRequest: requestSpy });
+
+    const response = await mint.ctfConvert({
+      condition_id: 'e'.repeat(64),
+      parent_collection_id: '0'.repeat(64),
+      inputs: { YES: [] },
+      outputs: {
+        '*': [{ id: '00bd033559de27d0', amount: Amount.from(100), B_: '02'.padEnd(66, 'a') }],
+      },
+    });
+
+    expect(response.signatures['*'][0].amount).toEqual(Amount.from(100));
   });
 
   it('throws on invalid minted signatures responses', async () => {

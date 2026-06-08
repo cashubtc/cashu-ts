@@ -1,7 +1,8 @@
 import { hexToBytes } from '@noble/curves/utils.js';
 
+import { deriveConditionalKeysetId } from '../crypto';
 import { CTSError } from '../model/Errors';
-import { type MintKeyset, type MintKeys } from '../model/types';
+import { type ConditionalKeysetMetadata, type MintKeyset, type MintKeys } from '../model/types';
 import { isValidHex, deriveKeysetId, isBase64String } from '../utils';
 import { normalizeMintKeyset, normalizeMintKeys } from '../utils/normalizeNumbers';
 
@@ -12,6 +13,7 @@ export class Keyset {
   private _keys: Record<number, string> = {};
   private _input_fee_ppk?: number;
   private _final_expiry?: number;
+  private _conditional?: ConditionalKeysetMetadata;
 
   constructor(
     id: string,
@@ -19,12 +21,14 @@ export class Keyset {
     active: boolean,
     input_fee_ppk?: number,
     final_expiry?: number,
+    conditional?: ConditionalKeysetMetadata,
   ) {
     this._id = id;
     this._unit = unit;
     this._active = active;
     this._input_fee_ppk = input_fee_ppk;
     this._final_expiry = final_expiry;
+    this._conditional = conditional;
   }
 
   get id(): string {
@@ -51,6 +55,14 @@ export class Keyset {
     return Object.keys(this._keys).length > 0;
   }
 
+  get conditional(): ConditionalKeysetMetadata | undefined {
+    return this._conditional;
+  }
+
+  get isConditional(): boolean {
+    return !!this._conditional;
+  }
+
   get hasHexId(): boolean {
     return isValidHex(this._id);
   }
@@ -75,6 +87,7 @@ export class Keyset {
       active: this._active,
       input_fee_ppk: this._input_fee_ppk,
       final_expiry: this._final_expiry,
+      conditional: this._conditional,
     };
   }
 
@@ -93,6 +106,7 @@ export class Keyset {
       active: this._active,
       input_fee_ppk: this._input_fee_ppk,
       final_expiry: this._final_expiry,
+      conditional: this._conditional,
       keys: this._keys,
     };
   }
@@ -105,6 +119,9 @@ export class Keyset {
   verify(): boolean {
     if (!this.hasKeys) {
       return false;
+    }
+    if (this._conditional) {
+      return Keyset.verifyConditionalKeysetId(this.toMintKeys()!, this._conditional);
     }
     return Keyset.verifyKeysetId(this.toMintKeys()!);
   }
@@ -135,6 +152,29 @@ export class Keyset {
   }
 
   /**
+   * Verifies a NUT-CTF conditional keyset id against its keys and condition metadata.
+   */
+  static verifyConditionalKeysetId(
+    keys: MintKeys,
+    conditional: ConditionalKeysetMetadata,
+  ): boolean {
+    try {
+      if (!keys.keys || Object.keys(keys.keys).length === 0) return false;
+      const derivedId = deriveConditionalKeysetId({
+        keys: keys.keys,
+        input_fee_ppk: keys.input_fee_ppk,
+        final_expiry: keys.final_expiry,
+        unit: keys.unit,
+        conditionId: conditional.conditionId,
+        outcomeCollectionId: conditional.outcomeCollectionId,
+      });
+      return derivedId === keys.id;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Create a Keyset from Mint API DTOs.
    *
    * @param meta The MintKeyset metadata from GetKeysetsResponse.
@@ -150,6 +190,7 @@ export class Keyset {
       nMeta.active,
       nMeta.input_fee_ppk,
       nMeta.final_expiry,
+      nMeta.conditional,
     );
 
     // Sanity checks

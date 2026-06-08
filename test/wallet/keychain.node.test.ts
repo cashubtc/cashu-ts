@@ -9,6 +9,9 @@ import { DUMMY_TEST_KEYS, DUMMY_TEST_KEYSET, PUBKEYS } from '../consts';
 const mintUrl = 'http://localhost:3338';
 const mint = new Mint(mintUrl);
 const unit = 'sat';
+const CTF_CONDITION_ID = 'aa'.repeat(32);
+const CTF_OUTCOME_COLLECTION_ID = 'cc'.repeat(32);
+const CTF_KEYSET_ID = '0170110f06b9bb85565a6746ca5715f877b99db14d87219f6e9030cb529f61e6ea';
 
 const dummyKeysResp: { keysets: MintKeys[] } = {
   keysets: [
@@ -182,6 +185,75 @@ describe('KeyChain initialization', () => {
     expect(() => keyChain.getCheapestKeyset()).toThrow('No active keyset found for unit: sat');
   });
 
+  test('should not use a registered conditional keyset as the cheapest regular keyset', () => {
+    const keyChain = new KeyChain(mint, unit);
+    keyChain.registerConditionalKeyset(
+      {
+        id: CTF_KEYSET_ID,
+        unit,
+        active: true,
+        input_fee_ppk: 0,
+        final_expiry: 1754296607,
+        conditional: {
+          conditionId: CTF_CONDITION_ID,
+          outcomeCollection: 'YES',
+          outcomeCollectionId: CTF_OUTCOME_COLLECTION_ID,
+        },
+      },
+      {
+        ...DUMMY_TEST_KEYS,
+        id: CTF_KEYSET_ID,
+        conditional: {
+          conditionId: CTF_CONDITION_ID,
+          outcomeCollection: 'YES',
+          outcomeCollectionId: CTF_OUTCOME_COLLECTION_ID,
+        },
+      },
+    );
+
+    expect(() => keyChain.getCheapestKeyset()).toThrow('No active keyset found for unit: sat');
+  });
+
+  test('should reject tampered keys for a discovered conditional keyset', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/conditional_keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            {
+              id: CTF_KEYSET_ID,
+              unit,
+              active: true,
+              input_fee_ppk: 0,
+              condition_id: CTF_CONDITION_ID,
+              outcome_collection: 'YES',
+              outcome_collection_id: CTF_OUTCOME_COLLECTION_ID,
+              registered_at: 1_700_000_000,
+            },
+          ],
+        }),
+      ),
+      http.get(mintUrl + '/v1/keys/' + CTF_KEYSET_ID, () =>
+        HttpResponse.json({
+          keysets: [
+            {
+              ...DUMMY_TEST_KEYS,
+              id: CTF_KEYSET_ID,
+              keys: {
+                ...DUMMY_TEST_KEYS.keys,
+                1: PUBKEYS['2'],
+              },
+            },
+          ],
+        }),
+      ),
+    );
+
+    const keyChain = new KeyChain(mint, unit);
+    await expect(keyChain.loadConditionalKeyset(CTF_KEYSET_ID)).rejects.toThrow(
+      'Conditional keyset verification failed',
+    );
+  });
+
   test('should remove keys if verification fails', async () => {
     // Create mismatched data by changing ID but keeping keys the same (derived ID won't match)
     const mismatchedKeysetResp = JSON.parse(JSON.stringify(dummyKeysetResp));
@@ -273,6 +345,74 @@ describe('KeyChain initialization', () => {
     expect(cachedActive.id).toBe(singleKeys[0].id);
     expect(cachedChain.getKeysets().length).toBe(1);
   });
+
+  test('loads conditional keysets through the conditional registry', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/conditional_keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            {
+              id: CTF_KEYSET_ID,
+              unit: 'sat',
+              active: true,
+              input_fee_ppk: 0,
+              final_expiry: 1754296607,
+              condition_id: CTF_CONDITION_ID,
+              outcome_collection: 'YES',
+              outcome_collection_id: CTF_OUTCOME_COLLECTION_ID,
+              registered_at: 1_700_000_000,
+            },
+          ],
+        }),
+      ),
+      http.get(mintUrl + '/v1/keys/' + CTF_KEYSET_ID, () =>
+        HttpResponse.json({
+          keysets: [{ ...DUMMY_TEST_KEYS, id: CTF_KEYSET_ID }],
+        }),
+      ),
+    );
+
+    const keyChain = new KeyChain(mint, unit);
+    const conditional = await keyChain.loadConditionalKeyset(CTF_KEYSET_ID);
+
+    expect(conditional.id).toBe(CTF_KEYSET_ID);
+    expect(conditional.isConditional).toBe(true);
+    expect(conditional.verify()).toBe(true);
+    expect(keyChain.getConditionalKeyset(CTF_KEYSET_ID)).toBe(conditional);
+    expect(keyChain.hasConditionalKeyset(CTF_KEYSET_ID)).toBe(true);
+    expect(() => keyChain.getCheapestKeyset()).toThrow(/No active keyset found/);
+  });
+
+  test('rejects conditional keysets whose keys do not match their condition-derived id', async () => {
+    server.use(
+      http.get(mintUrl + '/v1/conditional_keysets', () =>
+        HttpResponse.json({
+          keysets: [
+            {
+              id: CTF_KEYSET_ID,
+              unit: 'sat',
+              active: true,
+              input_fee_ppk: 0,
+              final_expiry: 1754296607,
+              condition_id: 'bb'.repeat(32),
+              outcome_collection: 'YES',
+              outcome_collection_id: CTF_OUTCOME_COLLECTION_ID,
+            },
+          ],
+        }),
+      ),
+      http.get(mintUrl + '/v1/keys/' + CTF_KEYSET_ID, () =>
+        HttpResponse.json({
+          keysets: [{ ...DUMMY_TEST_KEYS, id: CTF_KEYSET_ID }],
+        }),
+      ),
+    );
+
+    const keyChain = new KeyChain(mint, unit);
+    await expect(keyChain.loadConditionalKeyset(CTF_KEYSET_ID)).rejects.toThrow(
+      /Conditional keyset verification failed/,
+    );
+  });
 });
 
 describe('KeyChain getters', () => {
@@ -326,6 +466,31 @@ describe('KeyChain getters', () => {
     const list = keyChain.getKeysets();
     expect(list).toHaveLength(4);
     expect(list.map((k) => k.id).sort()).toEqual(dummyKeysetResp.keysets.map((ks) => ks.id).sort());
+  });
+
+  test('regular keyset selectors exclude registered conditional keysets', async () => {
+    const keyChain = new KeyChain(mint, unit);
+    await keyChain.init();
+    keyChain.registerConditionalKeyset(
+      {
+        id: CTF_KEYSET_ID,
+        unit: 'sat',
+        active: true,
+        input_fee_ppk: 0,
+        final_expiry: 1754296607,
+        conditional: {
+          conditionId: CTF_CONDITION_ID,
+          outcomeCollection: 'YES',
+          outcomeCollectionId: CTF_OUTCOME_COLLECTION_ID,
+          registeredAt: 1_700_000_000,
+        },
+      },
+      { ...DUMMY_TEST_KEYS, id: CTF_KEYSET_ID },
+    );
+
+    expect(keyChain.getKeysets().map((keyset) => keyset.id)).not.toContain(CTF_KEYSET_ID);
+    expect(keyChain.getCheapestKeyset().id).not.toBe(CTF_KEYSET_ID);
+    expect(keyChain.getAllKeysetIds()).toContain(CTF_KEYSET_ID);
   });
 
   test('should get keyset IDs', () => {
@@ -386,6 +551,33 @@ describe('Keyset', () => {
   test('fromMintApi should load if keys / meta match', () => {
     const keyset = Keyset.fromMintApi(dummyKeysetResp.keysets[0], dummyKeysResp.keysets[0]);
     expect(keyset.id).toBe(dummyKeysetResp.keysets[0].id);
+  });
+  test('conditional verify should pass valid condition metadata and reject tampering', () => {
+    const conditionalMeta = {
+      conditionId: CTF_CONDITION_ID,
+      outcomeCollection: 'YES',
+      outcomeCollectionId: CTF_OUTCOME_COLLECTION_ID,
+      registeredAt: 1_700_000_000,
+    };
+    const keyset = Keyset.fromMintApi(
+      {
+        id: CTF_KEYSET_ID,
+        unit: 'sat',
+        active: true,
+        input_fee_ppk: 0,
+        final_expiry: 1754296607,
+        conditional: conditionalMeta,
+      },
+      { ...DUMMY_TEST_KEYS, id: CTF_KEYSET_ID, conditional: conditionalMeta },
+    );
+    expect(keyset.isConditional).toBe(true);
+    expect(keyset.verify()).toBe(true);
+    expect(
+      Keyset.verifyConditionalKeysetId(
+        { ...DUMMY_TEST_KEYS, id: CTF_KEYSET_ID },
+        { ...conditionalMeta, outcomeCollectionId: 'dd'.repeat(32) },
+      ),
+    ).toBe(false);
   });
   test('fromMintApi should throw if keys / meta mismatched unit', () => {
     const badKeys = { ...dummyKeysResp.keysets[0], unit: 'usd' };

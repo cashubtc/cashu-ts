@@ -15,6 +15,13 @@ export { Keyset } from './wallet/Keyset';
 export { P2PKBuilder } from './wallet/P2PKBuilder';
 export { type SelectProofs, selectProofsRGLI } from './wallet/SelectProofs';
 export { Wallet } from './wallet/Wallet';
+export type {
+  ConditionalSwapOptions,
+  ConditionalSwapOutputGroup,
+  ConditionalSwapPreview,
+  RedeemOutcomeProofsOptions,
+  WalletCtf,
+} from './wallet/Wallet';
 export { WalletCounters } from './wallet/WalletCounters';
 export { WalletEvents } from './wallet/WalletEvents';
 export {
@@ -51,6 +58,7 @@ export type * from './wallet/types/payloads';
 export type * from './wallet/types/responses';
 export type * from './mint/types/payloads';
 export type * from './mint/types/responses';
+export type * from './mint/types/ctf';
 
 // Shared models & primitives
 export type * from './model/types/blinded';
