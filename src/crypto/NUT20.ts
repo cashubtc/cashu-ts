@@ -4,6 +4,12 @@ import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 
 import { type SerializedBlindedMessage } from '../model/types';
 
+/**
+ * Legacy NUT-20 mint-quote signature message: `quote || B_0 || … || B_(n-1)`, hex strings
+ * concatenated as UTF-8. cashubtc/nuts#375 replaces this with the domain-separated, length-framed
+ * message in `NUT29.ts` for both single (NUT-20) and batch (NUT-29) minting. Kept for mints that
+ * predate the amendment — see `wallet/mintCompat.ts`.
+ */
 function constructMessage(quote: string, blindedMessages: SerializedBlindedMessage[]): Uint8Array {
   let message = quote;
   for (const blindedMessage of blindedMessages) {

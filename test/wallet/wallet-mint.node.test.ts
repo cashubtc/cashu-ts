@@ -19,7 +19,7 @@ import {
 
 import { Bytes, sumProofs } from '../../src/utils';
 import { verifyMintQuoteSignature, verifyBatchMintQuoteSignature } from '../../src/crypto';
-import { AMENDED_BATCH_SIG_RELEASES } from '../../src/wallet/Wallet';
+import { AMENDED_QUOTE_SIG_RELEASES } from '../../src/wallet/mintCompat';
 import { hexToBytes } from '@noble/curves/utils.js';
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
@@ -595,17 +595,21 @@ describe('requestTokens', () => {
   });
 });
 
-describe('NUT-29 batch signature format gating', () => {
+describe('mint quote signature format gating', () => {
   const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
   const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-  async function prepareLockedBatch(version: string) {
+  async function makeWallet(version: string) {
     server.use(
       http.get(mintUrl + '/v1/info', () => HttpResponse.json({ ...mintInfoResp, version })),
     );
     const wallet = new Wallet(mint, { unit });
     await wallet.loadMint();
-    const quote: MintQuoteBolt11Response = {
+    return wallet;
+  }
+
+  function makeLockedQuote(): MintQuoteBolt11Response {
+    return {
       quote: 'locked-quote',
       request: 'lnbc...',
       amount: Amount.from(3),
@@ -614,31 +618,54 @@ describe('NUT-29 batch signature format gating', () => {
       expiry: null,
       pubkey,
     };
-    const preview = await wallet.prepareBatchMint('bolt11', [{ amount: 3, quote }], { privkey });
+  }
+
+  async function prepareLockedBatch(version: string) {
+    const wallet = await makeWallet(version);
+    const preview = await wallet.prepareBatchMint(
+      'bolt11',
+      [{ amount: 3, quote: makeLockedQuote() }],
+      { privkey },
+    );
     return { signature: preview.payload.signatures![0]!, outputs: preview.payload.outputs };
   }
 
-  test.each([...AMENDED_BATCH_SIG_RELEASES])(
-    'signs with the legacy NUT-20-style message for %s below %s',
-    async (implementation) => {
-      const { signature, outputs } = await prepareLockedBatch(`${implementation}/0.0.1`);
-      expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
-      expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(false);
-    },
-  );
+  async function prepareLockedSingle(version: string) {
+    const wallet = await makeWallet(version);
+    const preview = await wallet.prepareMint('bolt11', 3, makeLockedQuote(), { privkey });
+    return { signature: preview.payload.signature!, outputs: preview.payload.outputs };
+  }
 
-  test.each([...AMENDED_BATCH_SIG_RELEASES])(
-    'signs with the amended NUT-29 message for %s at %s',
-    async (implementation, minVersion) => {
-      const { signature, outputs } = await prepareLockedBatch(`${implementation}/${minVersion}`);
+  describe.each([
+    ['prepareBatchMint', prepareLockedBatch],
+    ['prepareMint', prepareLockedSingle],
+  ])('%s', (_name, prepareLocked) => {
+    test.each([...AMENDED_QUOTE_SIG_RELEASES])(
+      'signs with the legacy NUT-20 message for %s below %s',
+      async (implementation) => {
+        const { signature, outputs } = await prepareLocked(`${implementation}/0.0.1`);
+        expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
+        expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(
+          false,
+        );
+      },
+    );
+
+    test.each([...AMENDED_QUOTE_SIG_RELEASES])(
+      'signs with the amended message for %s at %s',
+      async (implementation, minVersion) => {
+        const { signature, outputs } = await prepareLocked(`${implementation}/${minVersion}`);
+        expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(
+          true,
+        );
+        expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(false);
+      },
+    );
+
+    test('signs with the amended message for unknown implementations', async () => {
+      const { signature, outputs } = await prepareLocked('acme-mint/0.0.1');
       expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
-      expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(false);
-    },
-  );
-
-  test('signs with the amended NUT-29 message for unknown implementations', async () => {
-    const { signature, outputs } = await prepareLockedBatch('acme-mint/0.0.1');
-    expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
+    });
   });
 });
 
