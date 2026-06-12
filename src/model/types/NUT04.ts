@@ -50,6 +50,10 @@ export type MintQuoteBaseResponse = {
    */
   unit: string;
   /**
+   * Payment method of the quote. Populated from the request endpoint when the mint omits it.
+   */
+  method: string;
+  /**
    * Total amount paid to the mint for this quote, in `unit`. Derived from the legacy `state` for
    * mints that do not report accounting fields.
    */

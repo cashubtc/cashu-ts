@@ -46,6 +46,10 @@ export type MeltQuoteBaseResponse = {
    */
   amount: Amount;
   /**
+   * Payment method of the quote. Populated from the request endpoint when the mint omits it.
+   */
+  method: string;
+  /**
    * Optional. Additional fee reserve for using the method.
    */
   fee_reserve?: Amount;

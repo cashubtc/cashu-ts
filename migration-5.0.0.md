@@ -233,12 +233,13 @@ asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
 
 ## Mint quote responses now carry NUT-04 accounting fields
 
-`MintQuoteBaseResponse` (and every method-specific mint quote response) gains four required fields:
+`MintQuoteBaseResponse` (and every method-specific mint quote response) gains five required fields:
 
 - `amount_paid: Amount` — total paid to the mint for this quote
 - `amount_issued: Amount` — total ecash issued for this quote
 - `updated_at: number | null` — Unix timestamp of the last quote update (`null` when the mint does not report it)
 - `expiry: number | null` — moved here from the method-specific response types
+- `method: string` — the payment method, populated from the request endpoint when the mint omits it; a reported method that disagrees with the endpoint throws `Invalid response from mint`
 
 The difference `amount_paid − amount_issued` is the amount available to mint. The single-use `state` field is deprecated in NUT-04 in favour of the accounting fields, but cashu-ts always populates it on `MintQuoteBolt11Response` (derived from the accounting fields when the mint omits it).
 
@@ -267,6 +268,7 @@ const quote: MintQuoteBolt11Response = {
   amount: Amount.from(21),
   state: 'UNPAID',
   expiry: null,
+  method: 'bolt11',
   amount_paid: Amount.from(0),
   amount_issued: Amount.from(0),
   updated_at: null,
@@ -277,11 +279,13 @@ Generic mint quote responses (custom payment methods) are now base-validated lik
 
 ---
 
-## Melt quote responses require `request`
+## Melt quote responses require `request` and carry `method`
 
 `request` (the method-specific payment routing instructions) moved from the bolt11/onchain response types into `MeltQuoteBaseResponse`, and the base type gains an optional `fee_reserve`. Melt quote responses from any method — including custom ones — that lack a `request` string now throw `Invalid response from mint`.
 
-bolt11, bolt12 and onchain flows are unaffected: those responses already required `request`. Code constructing a plain `MeltQuoteBaseResponse` must include it.
+`MeltQuoteBaseResponse` also gains a required `method: string` with the same semantics as on mint quotes: populated from the request endpoint when the mint omits it, throwing on a mismatch.
+
+bolt11, bolt12 and onchain flows are unaffected: those responses already required `request`. Code constructing a plain `MeltQuoteBaseResponse` must include `request` and `method`.
 
 ---
 
