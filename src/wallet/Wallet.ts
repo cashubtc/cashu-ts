@@ -1960,7 +1960,7 @@ class Wallet {
     }
     const amountPaid = Amount.from(quote.amount_paid as AmountLike);
     const amountIssued = Amount.from(quote.amount_issued as AmountLike);
-    // A 0/0 snapshot is indistinguishable from a stale pre-payment quote (create -> pay
+    // A 0/0 snapshot may simply have been fetched before the payment was made (create -> pay
     // externally -> mint with the original object); the mint is the source of truth.
     if (amountPaid.isZero() && amountIssued.isZero()) {
       return;

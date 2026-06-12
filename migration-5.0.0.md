@@ -262,6 +262,6 @@ bolt11, bolt12 and onchain flows are unaffected: those responses already require
 Two escape hatches keep stored-quote flows working:
 
 - Quote objects without accounting fields (e.g. minimal `{ quote: '…' }` references) skip the check, as before.
-- Quotes reporting `0/0` defer to the mint — a zero snapshot is indistinguishable from a stale pre-payment quote, so the create → pay externally → mint flow is unaffected.
+- Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
 
 The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.

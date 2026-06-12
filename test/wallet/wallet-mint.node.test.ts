@@ -1150,8 +1150,8 @@ describe('generic mint/melt methods', () => {
 
     test('prepareMint defers to the mint when the quote reports no payment activity', async () => {
       // create -> pay externally -> mint with the original quote object is the
-      // canonical bolt11 flow; a 0/0 accounting snapshot is indistinguishable
-      // from a stale pre-payment quote and must not fail fast.
+      // canonical bolt11 flow; a 0/0 accounting snapshot may simply predate the
+      // payment and must not fail fast.
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
 
