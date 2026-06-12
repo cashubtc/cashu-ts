@@ -25,14 +25,6 @@ export type MintQuoteOnchainResponse = MintQuoteBaseResponse & {
    * Public key the quote is locked to.
    */
   pubkey: string;
-  /**
-   * The amount that has been paid to the mint via the onchain transaction.
-   */
-  amount_paid: Amount;
-  /**
-   * The amount of ecash that has been issued for the given mint quote.
-   */
-  amount_issued: Amount;
 };
 
 /**

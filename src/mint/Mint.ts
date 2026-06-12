@@ -19,6 +19,7 @@ import {
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
   MeltQuoteState,
+  MintQuoteState,
   type MintResponse,
   type GetInfoResponse,
   type MeltRequest,
@@ -1153,9 +1154,9 @@ class Mint {
     response: TRes,
     normalize?: (raw: Record<string, unknown>) => TRes,
   ): TRes {
-    // MintQuoteBaseResponse has no Amount fields to normalize at the base level.
-    // Stack first-class normalization for known methods.
+    const op = `${method} mint quote`;
     const data: Record<string, unknown> = { ...response };
+    this.normalizeMintBaseFields(data, op);
     if (method === 'bolt11') {
       this.normalizeMintQuoteBolt11Fields(data);
     } else if (method === 'bolt12') {
@@ -1164,6 +1165,72 @@ class Mint {
       this.normalizeMintQuoteOnchainFields(data);
     }
     return normalize ? normalize(data) : (data as TRes);
+  }
+
+  /**
+   * Mutates `data` in place, normalizing protocol-mandatory mint quote base fields.
+   *
+   * NUT-04 requires `amount_paid`/`amount_issued` on every mint quote response; for mints that
+   * predate quote accounting they are derived from the legacy single-use `state` and `amount`.
+   */
+  private normalizeMintBaseFields(data: Record<string, unknown>, op: string): void {
+    if (data.amount_paid !== undefined && data.amount_issued !== undefined) {
+      data.amount_paid = Amount.from(data.amount_paid as AmountLike);
+      data.amount_issued = Amount.from(data.amount_issued as AmountLike);
+    } else {
+      const derived = this.deriveMintQuoteAccounting(data);
+      if (!derived) {
+        this._logger.error('Invalid response from mint...', { data, op });
+        throw new CTSError('Invalid response from mint');
+      }
+      [data.amount_paid, data.amount_issued] = derived;
+    }
+    data.updated_at = normalizeSafeIntegerMetadata(
+      data.updated_at as number | undefined,
+      'mintQuote.updated_at',
+      null,
+    );
+    if (
+      typeof data.quote !== 'string' ||
+      typeof data.request !== 'string' ||
+      typeof data.unit !== 'string'
+    ) {
+      this._logger.error('Invalid response from mint...', { data, op });
+      throw new CTSError('Invalid response from mint');
+    }
+  }
+
+  /**
+   * Derives `[amount_paid, amount_issued]` from the legacy single-use `state` and quote `amount`,
+   * or returns null when underivable.
+   */
+  private deriveMintQuoteAccounting(data: Record<string, unknown>): [Amount, Amount] | null {
+    if (
+      typeof data.state !== 'string' ||
+      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
+    ) {
+      return null;
+    }
+    if (data.state === MintQuoteState.UNPAID) {
+      return [Amount.from(0), Amount.from(0)];
+    }
+    let amount: Amount;
+    try {
+      amount = Amount.from(data.amount as AmountLike);
+    } catch {
+      return null;
+    }
+    return data.state === MintQuoteState.PAID ? [amount, Amount.from(0)] : [amount, amount];
+  }
+
+  /**
+   * Derives the deprecated single-use `state` from the accounting fields (NUT-04).
+   */
+  private deriveMintQuoteState(paid: Amount, issued: Amount): MintQuoteState {
+    if (paid.isZero() && issued.isZero()) {
+      return MintQuoteState.UNPAID;
+    }
+    return paid.greaterThan(issued) ? MintQuoteState.PAID : MintQuoteState.ISSUED;
   }
 
   /**
@@ -1176,6 +1243,15 @@ class Mint {
       'mintQuoteBolt11.expiry',
       null,
     );
+    if (
+      typeof data.state !== 'string' ||
+      !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
+    ) {
+      data.state = this.deriveMintQuoteState(
+        data.amount_paid as Amount,
+        data.amount_issued as Amount,
+      );
+    }
   }
 
   /**
@@ -1192,8 +1268,6 @@ class Mint {
       'mintQuoteBolt12.expiry',
       null,
     );
-    data.amount_paid = Amount.from(data.amount_paid as AmountLike);
-    data.amount_issued = Amount.from(data.amount_issued as AmountLike);
   }
 
   /**
@@ -1205,8 +1279,6 @@ class Mint {
       'mintQuoteOnchain.expiry',
       null,
     );
-    data.amount_paid = Amount.from(data.amount_paid as Amount);
-    data.amount_issued = Amount.from(data.amount_issued as Amount);
   }
 
   /**

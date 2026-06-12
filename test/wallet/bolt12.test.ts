@@ -417,7 +417,8 @@ describe('Wallet (BOLT12) – wrappers', () => {
   it('wallet.checkMintQuoteBolt12 delegates to mint', async () => {
     const response = {
       quote: 'q1',
-      state: 'PAID',
+      request: 'lno1offer...',
+      unit: 'sat',
       expiry: null,
       amount_paid: 21,
       amount_issued: 21,

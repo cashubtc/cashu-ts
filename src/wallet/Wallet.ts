@@ -1953,9 +1953,6 @@ class Wallet {
     quote: Pick<MintQuoteBaseResponse, 'quote'>,
     requestedAmount: Amount,
   ): void {
-    if (method !== 'bolt12' && method !== 'onchain') {
-      return;
-    }
     if (!('amount_paid' in quote) || !('amount_issued' in quote)) {
       return;
     }
