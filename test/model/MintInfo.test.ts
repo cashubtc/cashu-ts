@@ -501,13 +501,20 @@ describe('MintInfo.isImplementationBelow', () => {
     );
   });
 
-  it('ignores non-numeric suffixes within a segment', () => {
+  it('treats a prerelease as its base version (rc of the threshold gets the amended format)', () => {
     expect(infoWithVersion('Nutshell/0.16.4-rc1').isImplementationBelow('nutshell', '0.20.1')).toBe(
       true,
     );
+    // Both rc styles: semver dash (cdk-mintd) and PEP440 (Nutshell).
     expect(infoWithVersion('Nutshell/0.20.1-rc1').isImplementationBelow('nutshell', '0.20.1')).toBe(
       false,
     );
+    expect(infoWithVersion('Nutshell/0.20.1rc1').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      false,
+    );
+    expect(
+      infoWithVersion('cdk-mintd/0.20.1-rc.1').isImplementationBelow('cdk-mintd', '0.20.1'),
+    ).toBe(false);
   });
 
   it('zero-pads the minimum version when the advertised version has more segments', () => {

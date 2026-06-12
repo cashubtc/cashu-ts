@@ -10,7 +10,9 @@ import { type MintInfo } from '../model/MintInfo';
  * First releases that verify the amended mint-quote signature message (cashubtc/nuts#375,
  * `Cashu_MintQuoteSig_v1`) for NUT-20 single and NUT-29 batch minting. Earlier releases only verify
  * the legacy NUT-20 concatenation, and quotes carry no version, so the wallet picks the format from
- * the mint's advertised version.
+ * the mint's advertised version. Prereleases of a threshold release count as at-threshold — rcs are
+ * cut after the release branch's feature set is frozen, and during the rc window they are the only
+ * deployments that verify the amended message.
  *
  * PLACEHOLDER versions (next minor above the latest releases, which verify only the legacy message)
  * — pin to the actual upstream releases before merging.

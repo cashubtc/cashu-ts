@@ -417,9 +417,10 @@ export class MintInfo {
    * Checks whether the mint's advertised `version` (`"<implementation>/<version>"`, e.g.
    * `"Nutshell/0.20.1"`) identifies the given implementation with a version lower than
    * `minVersion`. The implementation name is matched case-insensitively; versions compare
-   * numerically per dot-separated segment, ignoring any non-numeric suffix within a segment.
-   * Returns false for other implementations and for missing or unparseable versions, so callers
-   * gating a legacy fallback treat those as current.
+   * numerically per dot-separated segment, ignoring any non-numeric suffix within a segment, so a
+   * prerelease compares equal to its base version (`0.21.0rc1` ≡ `0.21.0-rc.1` ≡ `0.21.0`). Returns
+   * false for other implementations and for missing or unparseable versions, so callers gating a
+   * legacy fallback treat those as current.
    */
   isImplementationBelow(implementation: string, minVersion: string): boolean {
     const advertised = this._mintInfo.version;
