@@ -8,7 +8,7 @@
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
   signMintQuote,
-  signBatchMintQuote,
+  signMintQuoteLegacy,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
@@ -2144,8 +2144,8 @@ class Wallet {
           : privkey;
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
       const signQuote = requiresLegacyQuoteSignature(this._mintInfo)
-        ? signMintQuote
-        : signBatchMintQuote;
+        ? signMintQuoteLegacy
+        : signMintQuote;
       mintPayload.signature = signQuote(signingKey, quote.quote, blindedMessages);
     }
 
@@ -2284,8 +2284,8 @@ class Wallet {
     const blindedMessages = outputs.map((d) => d.blindedMessage);
 
     const signQuote = requiresLegacyQuoteSignature(this._mintInfo)
-      ? signMintQuote
-      : signBatchMintQuote;
+      ? signMintQuoteLegacy
+      : signMintQuote;
 
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.

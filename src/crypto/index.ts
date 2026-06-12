@@ -10,4 +10,3 @@ export * from './NUT13';
 export * from './NUT14';
 export * from './NUT20';
 export * from './NUT28';
-export * from './NUT29';

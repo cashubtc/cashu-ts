@@ -1791,6 +1791,9 @@ export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => st
 export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
 
 // @public
+export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubkey: string, throws?: boolean) => boolean;
+
+// @public
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public (undocumented)
@@ -1971,10 +1974,10 @@ export const SigFlags: {
 };
 
 // @public (undocumented)
-export function signBatchMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
+export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public (undocumented)
-export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
+export function signMintQuoteLegacy(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
 export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof;
@@ -2089,9 +2092,6 @@ export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: Wei
 export function unblindSignatureBls(C_: G1Point, r: bigint): G1Point;
 
 // @public (undocumented)
-export function verifyBatchMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
-
-// @public (undocumented)
 export const verifyDLEQProof: (dleq: DLEQ, B_: WeierstrassPoint<bigint>, C_: WeierstrassPoint<bigint>, A: WeierstrassPoint<bigint>) => boolean;
 
 // @public (undocumented)
@@ -2107,6 +2107,9 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, mess
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
+
+// @public (undocumented)
+export function verifyMintQuoteSignatureLegacy(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;
