@@ -99,6 +99,18 @@ import { WalletOps } from './WalletOps';
 const PENDING_KEYSET_ID = '__PENDING__';
 
 /**
+ * First releases that verify the amended NUT-29 batch signature message (cashubtc/nuts#375).
+ * Earlier releases of these implementations only verify the legacy NUT-20-style message, and quotes
+ * carry no version, so the wallet picks the format from the mint's advertised version.
+ *
+ * PLACEHOLDER versions — pin to the actual upstream releases before merging.
+ */
+export const AMENDED_BATCH_SIG_RELEASES: ReadonlyArray<readonly [string, string]> = [
+  ['nutshell', '0.20.1'],
+  ['cdk-mintd', '0.16.0'],
+];
+
+/**
  * Class that represents a Cashu wallet.
  *
  * @remarks
@@ -2278,6 +2290,13 @@ class Wallet {
     const outputs = this.createOutputData(totalAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
 
+    // Mints that predate the amended NUT-29 message only verify the legacy NUT-20-style
+    // message; unknown implementations and missing mint info get the amended (spec) format.
+    const useLegacySignature = AMENDED_BATCH_SIG_RELEASES.some(([implementation, version]) =>
+      this._mintInfo?.isImplementationBelow(implementation, version),
+    );
+    const signQuote = useLegacySignature ? signMintQuote : signBatchMintQuote;
+
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
     // Each locked quote's pubkey is matched against the provided privkey(s).
@@ -2287,7 +2306,7 @@ class Wallet {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && privkey) {
         const signingKey = findSigningKey(quotePubkey, privkey);
-        signatures.push(signBatchMintQuote(signingKey, entry.quote.quote, blindedMessages));
+        signatures.push(signQuote(signingKey, entry.quote.quote, blindedMessages));
         hasSignatures = true;
       } else {
         if (privkey && !quotePubkey) {
