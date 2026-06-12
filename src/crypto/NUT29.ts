@@ -18,6 +18,11 @@ function amountToMinimalBytes(blindedMessage: SerializedBlindedMessage): Uint8Ar
   return hexToBytes(hex.length % 2 === 1 ? '0' + hex : hex);
 }
 
+/**
+ * Amended mint-quote signature message (cashubtc/nuts#375): domain-separated and length-framed,
+ * shared by NUT-20 single and NUT-29 batch minting. Mints predating the amendment only verify the
+ * legacy message in `NUT20.ts` — see `wallet/mintCompat.ts`.
+ */
 function constructBatchMessage(
   quote: string,
   blindedMessages: SerializedBlindedMessage[],
