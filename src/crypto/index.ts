@@ -5,6 +5,8 @@ export * from './NUT11';
 export * from './NUT12';
 export * from './NUT13';
 export * from './NUT14';
-export * from './NUT20';
+// Selective: the amended (cashubtc/nuts#375) pair is wallet-internal on v4 — the released
+// signMintQuote/verifyMintQuoteSignature keep their legacy bytes; v5 exports the amended
+// pair under those names.
+export { signMintQuote, verifyMintQuoteSignature } from './NUT20';
 export * from './NUT28';
-export * from './NUT29';

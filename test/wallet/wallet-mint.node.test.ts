@@ -18,7 +18,8 @@ import {
 } from '../../src';
 
 import { Bytes, sumProofs } from '../../src/utils';
-import { verifyMintQuoteSignature, verifyBatchMintQuoteSignature } from '../../src/crypto';
+import { verifyMintQuoteSignature } from '../../src/crypto';
+import { verifyMintQuoteSignatureAmended } from '../../src/crypto/NUT20';
 import { AMENDED_QUOTE_SIG_RELEASES } from '../../src/wallet/mintCompat';
 import { hexToBytes } from '@noble/curves/utils.js';
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
@@ -645,7 +646,7 @@ describe('mint quote signature format gating', () => {
       async (implementation) => {
         const { signature, outputs } = await prepareLocked(`${implementation}/0.0.1`);
         expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
-        expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(
+        expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', outputs, signature)).toBe(
           false,
         );
       },
@@ -655,7 +656,7 @@ describe('mint quote signature format gating', () => {
       'signs with the amended message for %s at %s',
       async (implementation, minVersion) => {
         const { signature, outputs } = await prepareLocked(`${implementation}/${minVersion}`);
-        expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(
+        expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', outputs, signature)).toBe(
           true,
         );
         expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(false);
@@ -664,7 +665,9 @@ describe('mint quote signature format gating', () => {
 
     test('signs with the amended message for unknown implementations', async () => {
       const { signature, outputs } = await prepareLocked('acme-mint/0.0.1');
-      expect(verifyBatchMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
+      expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', outputs, signature)).toBe(
+        true,
+      );
     });
   });
 });

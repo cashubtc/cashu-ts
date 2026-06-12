@@ -1722,6 +1722,9 @@ export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => st
 export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
 
 // @public
+export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubkey: string, throws?: boolean) => boolean;
+
+// @public
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
 
 // @public (undocumented)
@@ -1902,9 +1905,6 @@ export const SigFlags: {
 };
 
 // @public (undocumented)
-export function signBatchMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
-
-// @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
 // @public
@@ -2015,9 +2015,6 @@ export type UnblindedSignature = {
 
 // @public (undocumented)
 export function unblindSignature(C_: WeierstrassPoint<bigint>, r: bigint, A: WeierstrassPoint<bigint>): WeierstrassPoint<bigint>;
-
-// @public (undocumented)
-export function verifyBatchMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public @deprecated (undocumented)
 export function verifyDleqIfPresent(proof: Proof, keyset: HasKeysetKeys): boolean;

@@ -8,7 +8,6 @@
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
   signMintQuote,
-  signBatchMintQuote,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
@@ -18,6 +17,7 @@ import {
   buildLegacyP2PKSigAllMessage,
   parseSecret,
 } from '../crypto';
+import { signMintQuoteAmended } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
@@ -2144,7 +2144,7 @@ class Wallet {
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
       const signQuote = requiresLegacyQuoteSignature(this._mintInfo)
         ? signMintQuote
-        : signBatchMintQuote;
+        : signMintQuoteAmended;
       mintPayload.signature = signQuote(signingKey, quote.quote, blindedMessages);
     }
 
@@ -2284,7 +2284,7 @@ class Wallet {
 
     const signQuote = requiresLegacyQuoteSignature(this._mintInfo)
       ? signMintQuote
-      : signBatchMintQuote;
+      : signMintQuoteAmended;
 
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
