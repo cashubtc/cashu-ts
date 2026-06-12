@@ -30,12 +30,14 @@ import type {
   GetInfoResponse,
   MeltRequest,
   MeltQuoteBaseResponse,
+  MeltQuoteGenericResponse,
   MeltQuoteBolt11Request,
   MeltQuoteBolt11Response,
   MeltQuoteBolt12Response,
   MeltQuoteOnchainResponse,
   MintRequest,
   MintQuoteBaseResponse,
+  MintQuoteGenericResponse,
   MintQuoteBolt11Response,
   MintQuoteBolt12Response,
   MintQuoteOnchainResponse,
@@ -1711,7 +1713,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -1865,7 +1867,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quote: string | Pick<TRes, 'quote'>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -2429,7 +2431,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -2596,7 +2598,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     quote: string | Pick<TRes, 'quote'>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },

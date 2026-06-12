@@ -13,9 +13,11 @@ import { CTSError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import {
   type MintQuoteBaseResponse,
+  type MintQuoteGenericResponse,
   type MintQuoteBolt11Response,
   type MintQuoteBolt12Response,
   type MeltQuoteBaseResponse,
+  type MeltQuoteGenericResponse,
   type MeltQuoteBolt11Response,
   type MeltQuoteBolt12Response,
   MeltQuoteState,
@@ -238,7 +240,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -332,7 +334,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quote: string,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -569,7 +571,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -665,7 +667,7 @@ class Mint {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     quote: string,
     options?: { customRequest?: RequestFn; normalize?: (raw: Record<string, unknown>) => TRes },
@@ -1145,9 +1147,10 @@ class Mint {
   }
 
   /**
-   * Stacks normalizers for mint quote responses: first-class (bolt11/bolt12) normalization is
-   * applied for known methods, then any custom normalize callback. Works on untyped wire data
-   * internally — the caller casts the result to the desired TRes.
+   * Stacks normalizers for mint quote responses: base normalization (accounting, expiry,
+   * updated_at) is always applied, then first-class normalization for known methods, then any
+   * custom normalize callback. Works on untyped wire data internally — the caller casts the result
+   * to the desired TRes.
    */
   private normalizeMintQuoteResponse<TRes extends MintQuoteBaseResponse>(
     method: string,
@@ -1161,8 +1164,6 @@ class Mint {
       this.normalizeMintQuoteBolt11Fields(data);
     } else if (method === 'bolt12') {
       this.normalizeMintQuoteBolt12Fields(data);
-    } else if (method === 'onchain') {
-      this.normalizeMintQuoteOnchainFields(data);
     }
     return normalize ? normalize(data) : (data as TRes);
   }
@@ -1190,6 +1191,7 @@ class Mint {
       'mintQuote.updated_at',
       null,
     );
+    data.expiry = normalizeSafeIntegerMetadata(data.expiry as number, 'mintQuote.expiry', null);
     if (
       typeof data.quote !== 'string' ||
       typeof data.request !== 'string' ||
@@ -1238,11 +1240,6 @@ class Mint {
    */
   private normalizeMintQuoteBolt11Fields(data: Record<string, unknown>): void {
     data.amount = Amount.from(data.amount as AmountLike);
-    data.expiry = normalizeSafeIntegerMetadata(
-      data.expiry as number,
-      'mintQuoteBolt11.expiry',
-      null,
-    );
     if (
       typeof data.state !== 'string' ||
       !Object.values(MintQuoteState).includes(data.state as MintQuoteState)
@@ -1263,22 +1260,6 @@ class Mint {
     // values are coerced to Amount.
     nullIfUndefined(data, 'amount');
     data.amount = data.amount === null ? null : Amount.from(data.amount as Amount);
-    data.expiry = normalizeSafeIntegerMetadata(
-      data.expiry as number,
-      'mintQuoteBolt12.expiry',
-      null,
-    );
-  }
-
-  /**
-   * Mutates `data` in place, normalizing onchain mint-quote fields.
-   */
-  private normalizeMintQuoteOnchainFields(data: Record<string, unknown>): void {
-    data.expiry = normalizeSafeIntegerMetadata(
-      data.expiry as number,
-      'mintQuoteOnchain.expiry',
-      null,
-    );
   }
 
   /**
@@ -1312,12 +1293,16 @@ class Mint {
       'meltQuote.expiry',
       undefined,
     );
+    if (data.fee_reserve !== undefined) {
+      data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
+    }
     if (data.change) {
       data.change = this.normalizeSignatureAmounts(data.change as SerializedBlindedSignature[]);
     }
     if (
       !isObj(data) ||
       typeof data.quote !== 'string' ||
+      typeof data.request !== 'string' ||
       !(data.amount instanceof Amount) ||
       typeof data.unit !== 'string' ||
       typeof data.state !== 'string' ||
@@ -1333,8 +1318,8 @@ class Mint {
    * Mutates `data` in place, normalizing bolt11/bolt12-specific melt fields.
    */
   private normalizeMeltBoltFields(data: Record<string, unknown>, op: string): void {
-    data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
-    if (typeof data.request !== 'string' || !(data.fee_reserve instanceof Amount)) {
+    // Base normalization already coerced fee_reserve when present; bolt methods require it.
+    if (!(data.fee_reserve instanceof Amount)) {
       this._logger.error('Invalid response from mint...', { data, op });
       throw new CTSError('Invalid response from mint');
     }
@@ -1368,7 +1353,6 @@ class Mint {
     });
     nullIfUndefined(data, 'selected_fee_index', 'outpoint');
     if (
-      typeof data.request !== 'string' ||
       (data.selected_fee_index !== null && !Number.isSafeInteger(data.selected_fee_index)) ||
       (data.outpoint !== null && typeof data.outpoint !== 'string')
     ) {
