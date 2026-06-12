@@ -510,6 +510,15 @@ describe('MintInfo.isImplementationBelow', () => {
     );
   });
 
+  it('zero-pads the minimum version when the advertised version has more segments', () => {
+    expect(infoWithVersion('Nutshell/0.21.0.1').isImplementationBelow('nutshell', '0.21')).toBe(
+      false,
+    );
+    expect(infoWithVersion('Nutshell/0.20.99.9').isImplementationBelow('nutshell', '0.21')).toBe(
+      true,
+    );
+  });
+
   it('returns false for missing or unparseable versions', () => {
     expect(infoWithVersion(undefined).isImplementationBelow('nutshell', '0.20.1')).toBe(false);
     expect(infoWithVersion('Nutshell').isImplementationBelow('nutshell', '0.20.1')).toBe(false);

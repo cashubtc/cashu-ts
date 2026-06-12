@@ -82,6 +82,27 @@ describe('mint quote signatures (amended message)', () => {
     expect(verifyMintQuoteSignature(pubkey, 'locked-quote', reordered, signature)).toBe(false);
   });
 
+  test('encodes amounts canonically (0 -> empty, even-length hex unpadded)', () => {
+    const outputs = [
+      { ...allOutputs[0], amount: Amount.from(0) },
+      { ...allOutputs[1], amount: Amount.from(16) },
+    ];
+    const signature = signMintQuote(privkey, 'locked-quote', outputs);
+    expect(verifyMintQuoteSignature(pubkey, 'locked-quote', outputs, signature)).toBe(true);
+    expect(verifyMintQuoteSignature(pubkey, 'locked-quote', allOutputs, signature)).toBe(false);
+  });
+
+  test('rejects pubkeys that are not 33-byte compressed', () => {
+    const xOnly = pubkey.slice(2);
+    expect(verifyMintQuoteSignature(xOnly, 'locked-quote', allOutputs, expectedSignature)).toBe(
+      false,
+    );
+    const legacySig = signMintQuoteLegacy(privkey, 'locked-quote', allOutputs);
+    expect(verifyMintQuoteSignatureLegacy(xOnly, 'locked-quote', allOutputs, legacySig)).toBe(
+      false,
+    );
+  });
+
   test('each quote in a batch signs over the same output set, bound to its quote ID', () => {
     const sigQuote1 = signMintQuote(privkey, 'quote-1', allOutputs);
     const sigQuote2 = signMintQuote(privkey, 'quote-2', allOutputs);
