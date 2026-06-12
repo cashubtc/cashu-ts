@@ -1236,6 +1236,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/quote/bacs', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: 'gbp',
             state: MeltQuoteState.UNPAID,
@@ -1282,6 +1283,7 @@ describe('generic mint/melt methods', () => {
           const body = (await request.json()) as { unit: string };
           return HttpResponse.json({
             quote: 'bacs-melt-unit',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: body.unit,
             state: MeltQuoteState.UNPAID,
@@ -1306,6 +1308,7 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/melt/quote/bacs/bacs-melt-1', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: 'gbp',
             state: MeltQuoteState.PAID,
@@ -1360,6 +1363,7 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/melt/quote/bacs/bacs-melt-2', () =>
           HttpResponse.json({
             quote: 'bacs-melt-2',
+            request: 'GB29NWBK60161331926819',
             amount: 100,
             unit: 'gbp',
             state: MeltQuoteState.UNPAID,
@@ -1443,6 +1447,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/bacs', () => {
           return HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 10,
             unit: 'sat',
             state: MeltQuoteState.PAID,
@@ -1797,6 +1802,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/quote/swift', () =>
           HttpResponse.json({
             quote: 'swift-1',
+            request: 'SWIFT-REF',
             amount: 200,
             unit: 'usd',
             state: MeltQuoteState.UNPAID,

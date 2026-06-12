@@ -1,4 +1,4 @@
-import type { Amount } from '../Amount';
+import type { Amount, AmountLike } from '../Amount';
 
 import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
 import { type Proof } from './proof';
@@ -22,6 +22,10 @@ export type MeltQuoteBaseRequest = {
    * Request to be melted to.
    */
   request: string;
+  /**
+   * Optional. Amount to be melted. Method-specific NUTs may require it (e.g. onchain).
+   */
+  amount?: AmountLike;
 };
 
 /**
@@ -33,9 +37,18 @@ export type MeltQuoteBaseResponse = {
    */
   quote: string;
   /**
+   * Method-specific payment routing instructions (e.g. bolt11 invoice, onchain address, bank
+   * account reference).
+   */
+  request: string;
+  /**
    * Amount to be melted.
    */
   amount: Amount;
+  /**
+   * Optional. Additional fee reserve for using the method.
+   */
+  fee_reserve?: Amount;
   /**
    * Unit of the melt quote.
    */
@@ -54,6 +67,12 @@ export type MeltQuoteBaseResponse = {
    */
   change?: SerializedBlindedSignature[];
 };
+
+/**
+ * Melt quote response for methods without first-class types. Base fields are normalized and
+ * validated; method-specific fields pass through unchanged.
+ */
+export type MeltQuoteGenericResponse = MeltQuoteBaseResponse & Record<string, unknown>;
 
 /**
  * Generic Melt request payload.

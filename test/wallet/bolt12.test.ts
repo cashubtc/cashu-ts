@@ -153,7 +153,7 @@ describe('Mint (BOLT12) – instance methods via customRequest', () => {
         unit: 'sat',
         pubkey: '02abcd',
       }),
-    ).rejects.toThrow('mintQuoteBolt12.expiry');
+    ).rejects.toThrow('mintQuote.expiry');
   });
 
   it('checkMintQuoteBolt12 requests /v1/mint/quote/bolt12/{quote}', async () => {
