@@ -466,9 +466,8 @@ class Wallet {
    * them, so fail fast here. Unknown hex versions are already excluded upstream: their keys fail
    * verification and `getKeyset` rejects keysets without keys.
    *
-   * Only the prepare-side ops use this gate. The `complete*` ops use plain `getKeyset` — there the
-   * mint has already signed, and refusing to construct proofs would strand issued ecash (e.g. a
-   * keyset rotated to inactive between prepare and complete).
+   * Only the prepare-side ops use this gate. The `complete*` ops use plain `getKeyset` as the mint
+   * will have signed.
    * @param id Optional keyset id to resolve. If omitted, the wallet's bound keyset is used.
    * @returns The resolved `Keyset`.
    * @throws If the keyset fails `getKeyset` validation, has a legacy (non-hex) id, or is inactive.
