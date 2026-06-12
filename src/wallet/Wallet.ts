@@ -1717,8 +1717,8 @@ class Wallet {
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
-    // No requireSupport here, by design: the generic method is the escape hatch
-    // for custom methods a mint exposes without advertising in NUT-06 info.
+    // Custom methods are fine, but NUT-04 requires the mint to advertise them
+    this.requireSupport('mint', method);
     this.requireMintableKeyset('createMintQuote');
     const body = { ...payload, unit: this._unit };
     const res = await this.mint.createMintQuote<TRes>(method, body, {
@@ -2438,6 +2438,8 @@ class Wallet {
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
+    // Custom methods are fine, but NUT-05 requires the mint to advertise them
+    this.requireSupport('melt', method);
     const body = { ...payload, unit: this._unit };
     const res = await this.mint.createMeltQuote<TRes>(method, body, {
       normalize: options?.normalize,

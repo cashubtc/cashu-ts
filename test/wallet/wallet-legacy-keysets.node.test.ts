@@ -153,6 +153,18 @@ describe('Legacy (pre-v1) keyset output gating', () => {
     );
   });
 
+  test('generic quote methods refuse methods the mint does not advertise (NUT-04/05)', async () => {
+    const wallet = new Wallet(mint);
+    await wallet.loadMint();
+
+    await expect(wallet.createMintQuote('fancypay', { amount: 1000 })).rejects.toThrow(
+      /does not support/i,
+    );
+    await expect(wallet.createMeltQuote('fancypay', { request: 'x' })).rejects.toThrow(
+      /does not support/i,
+    );
+  });
+
   test('mint quotes still work when an active keyset exists', async () => {
     server.use(
       http.post(mintUrl + '/v1/mint/quote/bolt11', () =>
