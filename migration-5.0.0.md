@@ -12,6 +12,49 @@ Existing v0 (legacy base64), v1 (`00…`), and v2 (`01…`) keysets continue to 
 
 ---
 
+## Keyset output policy: new proofs require an active, prefixed keyset
+
+Proofs on **any** keyset can still be spent, swapped, and restored. But v5 now enforces a policy on which keysets may be used to **create new proofs**: the output keyset must be active and have a hex-prefixed id (`00…`/`01…`/`02…`).
+
+Previously this was only enforced on the automatic path (the wallet binds to the cheapest active hex keyset). An explicit `config.keysetId` bypassed both checks, so outputs could be created on a deprecated legacy (base64-id) keyset or on an inactive keyset — which the mint would then reject.
+
+- `receive`, `prepareSwap`/`send`, `prepareMint`, `prepareBatchMint`, and `prepareMelt` now throw `Legacy keyset cannot be used to create new proofs` or `Inactive keyset cannot be used to create new proofs` if the resolved output keyset (explicit `keysetId` or wallet-bound) violates the policy.
+- `completeSwap`/`completeMint`/`completeBatchMint` are **not** gated: the mint has already signed, so a persisted preview (NUT-19) still completes even if the keyset was deactivated in the meantime.
+- `restore()` is **not** gated: proofs on legacy keysets remain recoverable.
+- `bindKeyset()`/`withKeyset()` still allow binding to inactive keysets (useful for restore); the policy fires when an output operation is attempted.
+
+No migration is needed unless you deliberately created outputs on inactive or legacy keysets — those calls were already doomed to fail at the mint and now fail earlier with a clearer error.
+
+---
+
+## Mint quotes now require a usable active keyset
+
+All mint-quote creation methods (`createMintQuote`, `createMintQuoteBolt11`, `createLockedMintQuote`, `createMintQuoteBolt12`, `createMintQuoteOnchain`) now throw `no active keyset for unit '…' — a paid mint quote could not be redeemed` if the mint has no usable (active, hex-id, keyed) keyset for the wallet's unit. This prevents paying an invoice for a quote that could never be redeemed for proofs — `loadMint` deliberately tolerates keyset-less mints (e.g. a mint unwinding liabilities) by leaving the wallet unbound, so without this check the failure only surfaced after payment, at minting time.
+
+### Migration
+
+⚠️ The generic `createMintQuote()` previously worked **before** `loadMint()` — it was a thin POST wrapper with no initialization requirement. It now requires an initialized wallet (in v4 the keyset check logs a deprecation warning instead of throwing).
+
+The generic `createMintQuote()` and `createMeltQuote()` also now enforce NUT-04/NUT-05 method support, like the typed helpers always did: the mint must advertise the method for the wallet's unit in its info (`nuts.4.methods` / `nuts.5.methods`), or the call throws `Mint does not support <method> mint for unit '…'`. Custom methods remain fully supported — the spec requires mints to advertise them like any other method.
+
+```ts
+// Before (worked without loadMint)
+const wallet = new Wallet(mintUrl);
+const quote = await wallet.createMintQuote('bolt11', { amount: 21 });
+
+// After: load the mint first (recommended)
+const wallet = new Wallet(mintUrl);
+await wallet.loadMint();
+const quote = await wallet.createMintQuote('bolt11', { amount: 21 });
+
+// Or, for a bare HTTP call with no keyset checks, drop down to the Mint class
+const quote = await new Mint(mintUrl).createMintQuote('bolt11', { amount: 21, unit: 'sat' });
+```
+
+The typed methods (`createMintQuoteBolt11` etc.) already required `loadMint()` (they check NUT-04/NUT-06 support), so no call-order change is needed there.
+
+---
+
 ## Crypto deep imports were reorganized
 
 The internal crypto module layout changed to separate curve-specific primitives from shared
