@@ -1960,6 +1960,11 @@ class Wallet {
     }
     const amountPaid = Amount.from(quote.amount_paid as AmountLike);
     const amountIssued = Amount.from(quote.amount_issued as AmountLike);
+    // A 0/0 snapshot is indistinguishable from a stale pre-payment quote (create -> pay
+    // externally -> mint with the original object); the mint is the source of truth.
+    if (amountPaid.isZero() && amountIssued.isZero()) {
+      return;
+    }
     const availableAmount = amountPaid.subtract(amountIssued);
     this.failIf(
       requestedAmount.greaterThan(availableAmount),
