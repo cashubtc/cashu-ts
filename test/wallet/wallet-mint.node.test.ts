@@ -1148,6 +1148,24 @@ describe('generic mint/melt methods', () => {
       ).rejects.toThrow('Mint quote bacs-partial has only 2 available to mint; requested 3');
     });
 
+    test('prepareMint defers to the mint when the quote reports no payment activity', async () => {
+      // create -> pay externally -> mint with the original quote object is the
+      // canonical bolt11 flow; a 0/0 accounting snapshot is indistinguishable
+      // from a stale pre-payment quote and must not fail fast.
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const preview = await wallet.prepareMint('bolt11', 3, {
+        quote: 'stale-unpaid',
+        request: 'lnbc1...',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      });
+
+      expect(preview.payload.quote).toBe('stale-unpaid');
+    });
+
     test('prepareMint keeps string-only quote support without available amount fields', async () => {
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
