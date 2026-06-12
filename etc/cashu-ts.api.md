@@ -853,6 +853,7 @@ export type MeltQuoteBaseResponse = {
     quote: string;
     request: string;
     amount: Amount;
+    method: string;
     fee_reserve?: Amount;
     unit: string;
     state: MeltQuoteState;
@@ -1217,6 +1218,7 @@ export type MintQuoteBaseResponse = {
     quote: string;
     request: string;
     unit: string;
+    method: string;
     amount_paid: Amount;
     amount_issued: Amount;
     updated_at: number | null;

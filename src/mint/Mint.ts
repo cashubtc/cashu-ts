@@ -1159,7 +1159,7 @@ class Mint {
   ): TRes {
     const op = `${method} mint quote`;
     const data: Record<string, unknown> = { ...response };
-    this.normalizeMintBaseFields(data, op);
+    this.normalizeMintBaseFields(data, method, op);
     if (method === 'bolt11') {
       this.normalizeMintQuoteBolt11Fields(data);
     } else if (method === 'bolt12') {
@@ -1174,7 +1174,8 @@ class Mint {
    * NUT-04 requires `amount_paid`/`amount_issued` on every mint quote response; for mints that
    * predate quote accounting they are derived from the legacy single-use `state` and `amount`.
    */
-  private normalizeMintBaseFields(data: Record<string, unknown>, op: string): void {
+  private normalizeMintBaseFields(data: Record<string, unknown>, method: string, op: string): void {
+    this.normalizeQuoteMethod(data, method, op);
     if (data.amount_paid !== undefined && data.amount_issued !== undefined) {
       data.amount_paid = Amount.from(data.amount_paid as AmountLike);
       data.amount_issued = Amount.from(data.amount_issued as AmountLike);
@@ -1197,6 +1198,19 @@ class Mint {
       typeof data.request !== 'string' ||
       typeof data.unit !== 'string'
     ) {
+      this._logger.error('Invalid response from mint...', { data, op });
+      throw new CTSError('Invalid response from mint');
+    }
+  }
+
+  /**
+   * Mutates `data` in place, reconciling the quote's `method` with the request endpoint: absent is
+   * populated from the endpoint; a disagreeing value is a protocol violation.
+   */
+  private normalizeQuoteMethod(data: Record<string, unknown>, method: string, op: string): void {
+    if (data.method === undefined) {
+      data.method = method;
+    } else if (data.method !== method) {
       this._logger.error('Invalid response from mint...', { data, op });
       throw new CTSError('Invalid response from mint');
     }
@@ -1274,7 +1288,7 @@ class Mint {
   ): TRes {
     const op = `${method} melt quote`;
     const data: Record<string, unknown> = { ...response };
-    this.normalizeMeltBaseFields(data, op);
+    this.normalizeMeltBaseFields(data, method, op);
     if (method === 'bolt11' || method === 'bolt12') {
       this.normalizeMeltBoltFields(data, op);
     } else if (method === 'onchain') {
@@ -1286,7 +1300,8 @@ class Mint {
   /**
    * Mutates `data` in place, normalizing protocol-mandatory melt base fields.
    */
-  private normalizeMeltBaseFields(data: Record<string, unknown>, op: string): void {
+  private normalizeMeltBaseFields(data: Record<string, unknown>, method: string, op: string): void {
+    this.normalizeQuoteMethod(data, method, op);
     data.amount = Amount.from(data.amount as AmountLike);
     data.expiry = normalizeSafeIntegerMetadata(
       data.expiry as number,

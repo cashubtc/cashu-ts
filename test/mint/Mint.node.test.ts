@@ -647,6 +647,75 @@ describe('Mint normalization', () => {
     });
   });
 
+  describe('method field on quote responses', () => {
+    const mintQuote = {
+      quote: 'q1',
+      request: 'lnbc1...',
+      unit: 'sat',
+      state: 'UNPAID',
+      expiry: 123,
+      amount: 21,
+    };
+    const meltQuote = {
+      quote: 'm1',
+      request: 'lnbc1...',
+      amount: 9,
+      unit: 'sat',
+      state: 'UNPAID',
+      expiry: 123,
+      fee_reserve: 1,
+    };
+
+    it('injects method from the endpoint when the mint omits it', async () => {
+      const mint = new Mint(mintUrl, { customRequest: makeRequest(mintQuote) });
+
+      expect((await mint.checkMintQuoteBolt11('q1')).method).toBe('bolt11');
+    });
+
+    it('injects method on custom quotes and passes a matching method through', async () => {
+      const custom = {
+        quote: 'q1',
+        request: 'acct:12345',
+        unit: 'usd',
+        amount_paid: 0,
+        amount_issued: 0,
+      };
+      const omitted = new Mint(mintUrl, { customRequest: makeRequest(custom) });
+      const matching = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...custom, method: 'paypal' }),
+      });
+
+      expect((await omitted.checkMintQuote('paypal', 'q1')).method).toBe('paypal');
+      expect((await matching.checkMintQuote('paypal', 'q1')).method).toBe('paypal');
+    });
+
+    it('injects method on melt quotes when the mint omits it', async () => {
+      const mint = new Mint(mintUrl, { customRequest: makeRequest(meltQuote) });
+
+      expect((await mint.checkMeltQuoteBolt11('m1')).method).toBe('bolt11');
+    });
+
+    it('throws when the reported method disagrees with the endpoint', async () => {
+      const logger = createLogger();
+      const wrongMint = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...mintQuote, method: 'bolt12' }),
+        logger,
+      });
+      const wrongMelt = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...meltQuote, method: 'bolt12' }),
+        logger,
+      });
+
+      await expect(wrongMint.checkMintQuoteBolt11('q1')).rejects.toThrow(
+        'Invalid response from mint',
+      );
+      await expect(wrongMelt.checkMeltQuoteBolt11('m1')).rejects.toThrow(
+        'Invalid response from mint',
+      );
+      expect(logger.error).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('custom payment method base normalization (NUT-04/05 common formats)', () => {
     it('normalizes expiry on custom mint quotes and defaults it to null', async () => {
       const base = {
