@@ -412,4 +412,35 @@ export class MintInfo {
       (met) => met.method === method && met.unit === unit && met.options?.amountless === true,
     );
   }
+
+  /**
+   * Checks whether the mint's advertised `version` (`"<implementation>/<version>"`, e.g.
+   * `"Nutshell/0.20.1"`) identifies the given implementation with a version lower than
+   * `minVersion`. The implementation name is matched case-insensitively; versions compare
+   * numerically per dot-separated segment, ignoring any non-numeric suffix within a segment.
+   * Returns false for other implementations and for missing or unparseable versions, so callers
+   * gating a legacy fallback treat those as current.
+   */
+  isImplementationBelow(implementation: string, minVersion: string): boolean {
+    const advertised = this._mintInfo.version;
+    if (typeof advertised !== 'string') return false;
+    const slash = advertised.indexOf('/');
+    if (slash === -1) return false;
+    if (advertised.slice(0, slash).toLowerCase() !== implementation.toLowerCase()) return false;
+    const version = MintInfo.parseVersionSegments(advertised.slice(slash + 1));
+    const min = MintInfo.parseVersionSegments(minVersion);
+    if (!version || !min) return false;
+    for (let i = 0; i < Math.max(version.length, min.length); i++) {
+      const a = version[i] ?? 0;
+      const b = min[i] ?? 0;
+      if (a !== b) return a < b;
+    }
+    return false;
+  }
+
+  // "0.16.4-rc1" → [0, 16, 4]; null when any segment lacks a leading integer.
+  private static parseVersionSegments(version: string): number[] | null {
+    const segments = version.split('.').map((s) => parseInt(s, 10));
+    return segments.every((n) => Number.isSafeInteger(n) && n >= 0) ? segments : null;
+  }
 }

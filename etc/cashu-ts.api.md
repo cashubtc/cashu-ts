@@ -1042,6 +1042,7 @@ export class MintInfo {
     get description(): string | undefined;
     // (undocumented)
     get description_long(): string | undefined;
+    isImplementationBelow(implementation: string, minVersion: string): boolean;
     // (undocumented)
     isSupported(num: 4 | 5): {
         disabled: boolean;

@@ -454,3 +454,66 @@ describe('MintInfo NUT-22 bat_max_mint normalization', () => {
     expect(info.isSupported(29)).toEqual({ supported: false });
   });
 });
+
+describe('MintInfo.isImplementationBelow', () => {
+  function infoWithVersion(version: unknown) {
+    return new MintInfo({ ...MINTINFORESP, version } as any);
+  }
+
+  it('returns true when the implementation matches and the version is lower', () => {
+    expect(infoWithVersion('Nutshell/0.16.3').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      true,
+    );
+    expect(infoWithVersion('cdk-mintd/0.15.9').isImplementationBelow('cdk-mintd', '0.16.0')).toBe(
+      true,
+    );
+  });
+
+  it('returns false when the version is equal or higher', () => {
+    expect(infoWithVersion('Nutshell/0.20.1').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      false,
+    );
+    expect(infoWithVersion('Nutshell/0.21.0').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      false,
+    );
+    expect(infoWithVersion('Nutshell/1.0').isImplementationBelow('nutshell', '0.20.1')).toBe(false);
+  });
+
+  it('matches the implementation name case-insensitively', () => {
+    expect(infoWithVersion('NUTSHELL/0.16.3').isImplementationBelow('Nutshell', '0.20.1')).toBe(
+      true,
+    );
+  });
+
+  it('returns false for a different implementation', () => {
+    expect(infoWithVersion('cdk-mintd/0.1.0').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      false,
+    );
+  });
+
+  it('compares numerically per segment, padding missing segments with zero', () => {
+    expect(infoWithVersion('Nutshell/0.20').isImplementationBelow('nutshell', '0.20.1')).toBe(true);
+    expect(infoWithVersion('Nutshell/0.9.9').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      true,
+    );
+    expect(infoWithVersion('Nutshell/0.100.0').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      false,
+    );
+  });
+
+  it('ignores non-numeric suffixes within a segment', () => {
+    expect(infoWithVersion('Nutshell/0.16.4-rc1').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      true,
+    );
+    expect(infoWithVersion('Nutshell/0.20.1-rc1').isImplementationBelow('nutshell', '0.20.1')).toBe(
+      false,
+    );
+  });
+
+  it('returns false for missing or unparseable versions', () => {
+    expect(infoWithVersion(undefined).isImplementationBelow('nutshell', '0.20.1')).toBe(false);
+    expect(infoWithVersion('Nutshell').isImplementationBelow('nutshell', '0.20.1')).toBe(false);
+    expect(infoWithVersion('Nutshell/x').isImplementationBelow('nutshell', '0.20.1')).toBe(false);
+    expect(infoWithVersion('Nutshell/').isImplementationBelow('nutshell', '0.20.1')).toBe(false);
+  });
+});
