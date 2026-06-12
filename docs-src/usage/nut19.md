@@ -46,7 +46,9 @@ await wallet.loadMint();
 
 // If the mint advertises this endpoint in NUT-19, timed out attempts are retried
 // until the NUT-19 TTL window is exhausted.
-const states = await wallet.checkProofsStates([{ secret: 'my-proof-secret' }]);
+const states = await wallet.checkProofsStates([
+  { id: '00bd033559de27d0', secret: 'my-proof-secret' },
+]);
 
 // Reset if you only wanted this policy temporarily.
 setGlobalRequestOptions({});
