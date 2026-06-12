@@ -12,11 +12,12 @@ import { type MintInfo } from '../model/MintInfo';
  * the legacy NUT-20 concatenation, and quotes carry no version, so the wallet picks the format from
  * the mint's advertised version.
  *
- * PLACEHOLDER versions — pin to the actual upstream releases before merging.
+ * PLACEHOLDER versions (next minor above the latest releases, which verify only the legacy message)
+ * — pin to the actual upstream releases before merging.
  */
 export const AMENDED_QUOTE_SIG_RELEASES: ReadonlyArray<readonly [string, string]> = [
-  ['nutshell', '0.20.1'],
-  ['cdk-mintd', '0.16.0'],
+  ['nutshell', '0.21.0'],
+  ['cdk-mintd', '0.17.0'],
 ];
 
 /**
