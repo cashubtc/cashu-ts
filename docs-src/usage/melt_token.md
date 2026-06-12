@@ -91,6 +91,12 @@ requiring first-class library support.
 
 The mint must advertise the method at `/v1/melt/quote/{method}`.
 
+The NUT-05 base fields (`quote`, `request`, `amount`, `unit`, `method`, `state`, `expiry`, optional
+`fee_reserve`) are normalized and validated automatically for every method — `state` always uses
+the standard `UNPAID`/`PENDING`/`PAID` values. The optional `normalize` callback is only needed for
+method-specific fields. Without a type parameter, the generic methods return
+`MeltQuoteGenericResponse`, which exposes method-specific fields as `unknown`.
+
 ```ts
 import { Wallet, Amount, type MeltQuoteBaseResponse, type AmountLike } from '@cashu/cashu-ts';
 
