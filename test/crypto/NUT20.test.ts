@@ -211,6 +211,27 @@ describe('mint quote signatures (amended message)', () => {
     );
   });
 
+  test('encodes amounts canonically (0 -> empty, even-length hex unpadded)', () => {
+    const outputs = [
+      { ...allOutputs[0], amount: Amount.from(0) },
+      { ...allOutputs[1], amount: Amount.from(16) },
+    ];
+    const signature = signMintQuoteAmended(privkey, 'locked-quote', outputs);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', outputs, signature)).toBe(true);
+    expect(verifyMintQuoteSignatureAmended(pubkey, 'locked-quote', allOutputs, signature)).toBe(
+      false,
+    );
+  });
+
+  test('rejects pubkeys that are not 33-byte compressed', () => {
+    const xOnly = pubkey.slice(2);
+    expect(
+      verifyMintQuoteSignatureAmended(xOnly, 'locked-quote', allOutputs, expectedSignature),
+    ).toBe(false);
+    const legacySig = signMintQuote(privkey, 'locked-quote', allOutputs);
+    expect(verifyMintQuoteSignature(xOnly, 'locked-quote', allOutputs, legacySig)).toBe(false);
+  });
+
   test('each quote in a batch signs over the same output set, bound to its quote ID', () => {
     const sigQuote1 = signMintQuoteAmended(privkey, 'quote-1', allOutputs);
     const sigQuote2 = signMintQuoteAmended(privkey, 'quote-2', allOutputs);
