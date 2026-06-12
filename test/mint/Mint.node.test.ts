@@ -353,7 +353,8 @@ describe('Mint normalization', () => {
       return {
         quote: 'q1',
         request: 'lnbc1...',
-        paid: false,
+        unit: 'sat',
+        state: 'UNPAID',
         expiry: null,
         amount: 21,
       };
@@ -378,7 +379,7 @@ describe('Mint normalization', () => {
       return {
         quote: 'q1',
         request: 'lno1...',
-        paid: true,
+        unit: 'sat',
         expiry: 123,
         amount_paid: 5,
         amount_issued: 4,
@@ -462,7 +463,10 @@ describe('Mint normalization', () => {
   it('supports custom quote methods with a normalize callback', async () => {
     const requestSpy = vi.fn(async () => ({
       quote: 'q1',
-      paid: false,
+      request: 'acct:12345',
+      unit: 'sat',
+      amount_paid: 0,
+      amount_issued: 0,
       expiry: 123,
       note: 'custom',
     })) as RequestFn;
@@ -511,6 +515,136 @@ describe('Mint normalization', () => {
     await expect(mint.melt('bad method', { quote: 'q1', inputs: [] })).rejects.toThrow(
       'Invalid melt method: bad method',
     );
+  });
+
+  describe('mint quote accounting (NUT-04 amount_paid/amount_issued/updated_at)', () => {
+    const baseBolt11 = {
+      quote: 'q1',
+      request: 'lnbc1...',
+      unit: 'sat',
+      amount: 21,
+      expiry: 123,
+    };
+
+    it.each([
+      ['UNPAID', 0n, 0n],
+      ['PAID', 21n, 0n],
+      ['ISSUED', 21n, 21n],
+    ])('derives accounting from legacy bolt11 state %s', async (state, paid, issued) => {
+      const mint = new Mint(mintUrl, { customRequest: makeRequest({ ...baseBolt11, state }) });
+
+      const response = await mint.checkMintQuoteBolt11('q1');
+
+      expect(response.amount_paid.toBigInt()).toBe(paid);
+      expect(response.amount_issued.toBigInt()).toBe(issued);
+      expect(response.updated_at).toBeNull();
+      expect(response.state).toBe(state);
+    });
+
+    it.each([
+      [21, 0, 'PAID'],
+      [21, 10, 'PAID'],
+      [21, 21, 'ISSUED'],
+      [0, 0, 'UNPAID'],
+    ])(
+      'derives bolt11 state from accounting fields paid=%d issued=%d -> %s',
+      async (paid, issued, state) => {
+        const mint = new Mint(mintUrl, {
+          customRequest: makeRequest({
+            ...baseBolt11,
+            amount_paid: paid,
+            amount_issued: issued,
+            updated_at: 1750000000,
+          }),
+        });
+
+        const response = await mint.checkMintQuoteBolt11('q1');
+
+        expect(response.state).toBe(state);
+        expect(response.amount_paid.toBigInt()).toBe(BigInt(paid));
+        expect(response.amount_issued.toBigInt()).toBe(BigInt(issued));
+        expect(response.updated_at).toBe(1750000000);
+      },
+    );
+
+    it('keeps the mint-provided state when both state and accounting fields are present', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          ...baseBolt11,
+          state: 'PAID',
+          amount_paid: 21,
+          amount_issued: 0,
+        }),
+      });
+
+      const response = await mint.checkMintQuoteBolt11('q1');
+
+      expect(response.state).toBe('PAID');
+    });
+
+    it('normalizes updated_at on bolt12 responses and defaults it to null', async () => {
+      const bolt12 = {
+        quote: 'q1',
+        request: 'lno1...',
+        unit: 'sat',
+        amount: null,
+        expiry: 123,
+        pubkey: '02abcd',
+        amount_paid: 5,
+        amount_issued: 4,
+      };
+      const withTimestamp = new Mint(mintUrl, {
+        customRequest: makeRequest({ ...bolt12, updated_at: 1750000001 }),
+      });
+      const without = new Mint(mintUrl, { customRequest: makeRequest(bolt12) });
+
+      expect((await withTimestamp.checkMintQuoteBolt12('q1')).updated_at).toBe(1750000001);
+      expect((await without.checkMintQuoteBolt12('q1')).updated_at).toBeNull();
+    });
+
+    it('normalizes base accounting for custom methods and preserves unknown fields', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({
+          quote: 'q1',
+          request: 'acct:12345',
+          unit: 'usd',
+          amount_paid: 100,
+          amount_issued: 40,
+          updated_at: 1750000002,
+          processor_ref: 'px-77',
+        }),
+      });
+
+      const response = await mint.checkMintQuote('paypal', 'q1');
+
+      expect(response.amount_paid.toBigInt()).toBe(100n);
+      expect(response.amount_issued.toBigInt()).toBe(40n);
+      expect(response.updated_at).toBe(1750000002);
+      expect((response as Record<string, unknown>).processor_ref).toBe('px-77');
+    });
+
+    it('throws when accounting fields are missing and underivable', async () => {
+      const logger = createLogger();
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({ quote: 'q1', request: 'acct:12345', unit: 'usd' }),
+        logger,
+      });
+
+      await expect(mint.checkMintQuote('paypal', 'q1')).rejects.toThrow(
+        'Invalid response from mint',
+      );
+      expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('throws when a mint quote response lacks base fields', async () => {
+      const mint = new Mint(mintUrl, {
+        customRequest: makeRequest({ quote: 'q1', amount_paid: 1, amount_issued: 0 }),
+      });
+
+      await expect(mint.checkMintQuote('paypal', 'q1')).rejects.toThrow(
+        'Invalid response from mint',
+      );
+    });
   });
 
   it('throws on invalid swap responses', async () => {

@@ -808,6 +808,8 @@ describe('generic mint/melt methods', () => {
             quote: 'bacs-quote-unit',
             request: 'CASHU-REF-UNIT',
             unit: body.unit,
+            amount_paid: 0,
+            amount_issued: 0,
           });
         }),
       );
@@ -1129,6 +1131,21 @@ describe('generic mint/melt methods', () => {
           privkey: '01'.repeat(32),
         }),
       ).rejects.toThrow('Mint quote bolt12-partial has only 2 available to mint; requested 3');
+    });
+
+    test('prepareMint rejects amounts above paid minus issued for custom methods', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.prepareMint('bacs', 3, {
+          quote: 'bacs-partial',
+          request: 'CASHU-REF',
+          unit: 'sat',
+          amount_paid: Amount.from(5),
+          amount_issued: Amount.from(3),
+        }),
+      ).rejects.toThrow('Mint quote bacs-partial has only 2 available to mint; requested 3');
     });
 
     test('prepareMint keeps string-only quote support without available amount fields', async () => {

@@ -1,3 +1,5 @@
+import type { Amount } from '../Amount';
+
 import { type SerializedBlindedMessage, type SerializedBlindedSignature } from './blinded';
 
 export const MintQuoteState = {
@@ -39,6 +41,20 @@ export type MintQuoteBaseResponse = {
    * Unit of the melt quote.
    */
   unit: string;
+  /**
+   * Total amount paid to the mint for this quote, in `unit`. Derived from the legacy `state` for
+   * mints that do not report accounting fields.
+   */
+  amount_paid: Amount;
+  /**
+   * Total amount of ecash issued for this quote, in `unit`. The difference between `amount_paid`
+   * and `amount_issued` can be minted.
+   */
+  amount_issued: Amount;
+  /**
+   * Unix timestamp of the last quote update. `null` when the mint does not report it.
+   */
+  updated_at: number | null;
   /**
    * Optional. Public key the quote is locked to (NUT-20)
    */
