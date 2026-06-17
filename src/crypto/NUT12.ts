@@ -12,7 +12,6 @@ import { type DLEQ } from './core';
 import { hash_e, hashToCurve } from './curve_secp';
 
 const DST_R = utf8ToBytes('Cashu_DLEQ_R_v1');
-const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
 function deriveDLEQNonce(
   a: Uint8Array,
@@ -23,12 +22,10 @@ function deriveDLEQNonce(
   const base = concatBytes(DST_R, A.toBytes(false), B_.toBytes(false), C_.toBytes(false));
   for (let ctr = 0; ctr < 256; ctr++) {
     const h = hmac(sha256, a, concatBytes(base, new Uint8Array([ctr])));
-    const x = bytesToNumberBE(h);
-    // Reduce modulo curve order. Single subtraction suffices since HMAC output
-    // is 256 bits and SECP256K1_N is ~2^256, so x can exceed N by at most once.
-    const r = x >= SECP256K1_N ? x - SECP256K1_N : x;
+    const r = bytesToNumberBE(h);
+    // Rejection sampling: accept r only if it is a valid scalar in [1, n-1].
     /* c8 ignore next */
-    if (r !== 0n) return r;
+    if (r > 0n && r < secp256k1.Point.CURVE().n) return r;
   }
   /* c8 ignore next */
   throw new CTSError('DLEQ nonce derivation failed');
