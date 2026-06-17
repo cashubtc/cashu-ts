@@ -356,6 +356,12 @@ export function createHTLCHash(preimage?: string): {
 export function createHTLCsecret(hash: string, tags?: string[][]): string;
 
 // @public
+export function createKeyPairDeriver(seed: Uint8Array, purpose: Bip32KeyPurpose): (counter: number) => {
+    pubkey: string;
+    privkey: string;
+};
+
+// @public
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array, options?: {
     expiry?: number;
     input_fee_ppk?: number;
@@ -374,9 +380,6 @@ export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
 
 // @public
 export function createSecret(kind: SecretKind, data: string, tags?: string[][]): string;
-
-// @public
-export function createSecretKeyDeriver(seed: Uint8Array, purpose: Bip32KeyPurpose): (counter: number) => Uint8Array;
 
 // @public
 export class CTSError extends Error {

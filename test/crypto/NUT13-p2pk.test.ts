@@ -1,6 +1,6 @@
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { hexToBytes } from '@noble/hashes/utils.js';
 import { describe, expect, test } from 'vitest';
-import { type Bip32KeyPurpose, createSecretKeyDeriver, deriveKeyPair } from '../../src/crypto';
+import { type Bip32KeyPurpose, createKeyPairDeriver, deriveKeyPair } from '../../src/crypto';
 
 // BIP39 seed (no passphrase) for the mnemonic in the NUT-11 / NUT-20 test vectors:
 // "half depart obvious quality work element tank gorilla view sugar picture humble"
@@ -32,13 +32,13 @@ describe('deterministic P2PK / quote-lock key derivation (NUT-11, NUT-20)', () =
     '%s matches spec test vectors for counters 0-4',
     (purpose) => {
       const expected = VECTORS[purpose];
-      const deriveSecretKey = createSecretKeyDeriver(SEED, purpose);
+      const derive = createKeyPairDeriver(SEED, purpose);
       for (let counter = 0; counter < expected.length; counter++) {
         const pair = deriveKeyPair(SEED, purpose, counter);
         expect(pair.privkey).toHaveLength(64); // 32 bytes, hex
         expect(pair.pubkey).toBe(expected[counter]);
         // cached factory must agree with the one-shot keypair
-        expect(bytesToHex(deriveSecretKey(counter))).toBe(pair.privkey);
+        expect(derive(counter)).toEqual(pair);
       }
     },
   );

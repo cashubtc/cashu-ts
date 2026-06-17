@@ -58,16 +58,15 @@ persist it alongside whatever the key locks.
 ## Restore scans
 
 To find which counter a recovered pubkey belongs to, scan counters and match. For tight loops use
-`createSecretKeyDeriver`, which caches the shared parent derivation (one child derivation per
-counter instead of re-walking the full path):
+`createKeyPairDeriver`, which caches the shared parent derivation (one child derivation per counter
+instead of re-walking the full path):
 
 ```typescript
-import { createSecretKeyDeriver, getPubKeyFromPrivKey } from '@cashu/cashu-ts';
-import { bytesToHex } from '@noble/curves/utils.js';
+import { createKeyPairDeriver } from '@cashu/cashu-ts';
 
-const deriveSecretKey = createSecretKeyDeriver(seed, 'P2PK'); // returns (counter) => Uint8Array
+const derive = createKeyPairDeriver(seed, 'P2PK'); // cached; returns (counter) => { pubkey, privkey }
 for (let counter = 0; counter < gapLimit; counter++) {
-  if (bytesToHex(getPubKeyFromPrivKey(deriveSecretKey(counter))) === targetPubkey) {
+  if (derive(counter).pubkey === targetPubkey) {
     // matched: counter found
     break;
   }

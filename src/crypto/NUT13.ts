@@ -73,7 +73,7 @@ export function deriveSecretAndBlindingFactor(
  * @remarks
  * Used for NUT-11 P2PK keys and NUT-20 quote locking keys. Both fields are hex: `pubkey` drops into
  * the lock/quote APIs and `privkey` into `signP2PKProofs`. To scan many counters from the same
- * seed, prefer {@link createSecretKeyDeriver}, which caches the shared parent.
+ * seed, prefer {@link createKeyPairDeriver}, which caches the shared parent.
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
  * @param counter - Non-hardened BIP-32 child index.
@@ -85,35 +85,35 @@ export function deriveKeyPair(
   purpose: Bip32KeyPurpose,
   counter: number,
 ): { pubkey: string; privkey: string } {
-  const secretKey = createSecretKeyDeriver(seed, purpose)(counter);
-  return { pubkey: bytesToHex(getPubKeyFromPrivKey(secretKey)), privkey: bytesToHex(secretKey) };
+  const derive = createKeyPairDeriver(seed, purpose);
+  return derive(counter);
 }
 
 /**
- * Creates a deterministic secret-key deriver for a seed/purpose pair.
+ * Creates a deterministic keypair deriver for a seed/purpose pair.
  *
  * @remarks
  * Caches the parent `m/129373'/{purpose}'/0'/0'` derivation once so each per-counter call is a
  * single non-hardened child derivation. This is ~5x faster than re-traversing the full path per
- * counter, which matters for restore loops scanning many counters. Returns raw secret-key bytes;
- * for a ready-to-use keypair use {@link deriveKeyPair}.
+ * counter, so it is the path to use for restore loops scanning many counters. Each call returns a
+ * ready-to-use hex keypair; for a single counter use {@link deriveKeyPair}.
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose, which selects the path's purpose index.
- * @returns A function mapping a non-hardened counter to its 32-byte secret key.
+ * @returns A function mapping a non-hardened counter to its hex keypair.
  */
-export function createSecretKeyDeriver(
+export function createKeyPairDeriver(
   seed: Uint8Array,
   purpose: Bip32KeyPurpose,
-): (counter: number) => Uint8Array {
+): (counter: number) => { pubkey: string; privkey: string } {
   const index = PURPOSE_INDEX[purpose];
   const parentKey = HDKey.fromMasterSeed(seed).derive(`m/129373'/${index}'/0'/0'`);
   return (counter: number) => {
-    const key = parentKey.deriveChild(counter).privateKey;
+    const secretKey = parentKey.deriveChild(counter).privateKey;
     /* c8 ignore next */
-    if (key === null) {
+    if (secretKey === null) {
       throw new CTSError('Could not derive secret key');
     }
-    return key;
+    return { pubkey: bytesToHex(getPubKeyFromPrivKey(secretKey)), privkey: bytesToHex(secretKey) };
   };
 }
 
