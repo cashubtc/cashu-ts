@@ -220,6 +220,9 @@ export function batchVerifyUnblindedSignatureBls(items: Array<{
 }>): boolean;
 
 // @public
+export type Bip32KeyPurpose = 'P2PK' | 'QuoteLock';
+
+// @public
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public
@@ -373,6 +376,9 @@ export function createRandomSecretKey(): Uint8Array<ArrayBufferLike>;
 export function createSecret(kind: SecretKind, data: string, tags?: string[][]): string;
 
 // @public
+export function createSecretKeyDeriver(seed: Uint8Array, purpose: Bip32KeyPurpose): (counter: number) => Uint8Array;
+
+// @public
 export class CTSError extends Error {
     constructor(message: string, options?: {
         cause?: unknown;
@@ -392,6 +398,12 @@ export type CurvePoint = {
 
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
+
+// @public
+export function deriveKeyPair(seed: Uint8Array, purpose: Bip32KeyPurpose, counter: number): {
+    pubkey: string;
+    privkey: string;
+};
 
 // @public
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;

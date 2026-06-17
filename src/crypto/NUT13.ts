@@ -1,4 +1,4 @@
-import { numberToBytesBE } from '@noble/curves/utils.js';
+import { bytesToHex, numberToBytesBE } from '@noble/curves/utils.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { HDKey } from '@scure/bip32';
@@ -7,9 +7,27 @@ import { CTSError } from '../model/Errors';
 import { Bytes, isBase64String } from '../utils';
 
 import { BLS_FR_ORDER } from './curve_bls';
+import { getPubKeyFromPrivKey } from './curve_secp';
 import { getKeysetIdInt, isBlsKeyset } from './curves';
 
 const STANDARD_DERIVATION_PATH = `m/129372'/0'`;
+
+/**
+ * Purpose of a deterministically-derived key, selecting the index in the BIP-32 path
+ * `m/129373'/{index}'/0'/0'/{counter}`.
+ *
+ * - `P2PK`: NUT-11 P2PK signing key.
+ * - `QuoteLock`: NUT-20 quote locking key.
+ */
+export type Bip32KeyPurpose = 'P2PK' | 'QuoteLock';
+
+/**
+ * Path purpose index per {@link Bip32KeyPurpose}.
+ */
+const PURPOSE_INDEX: Record<Bip32KeyPurpose, number> = {
+  P2PK: 10,
+  QuoteLock: 20,
+};
 
 const SECP256K1_N = BigInt('0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141');
 
@@ -46,6 +64,57 @@ export function deriveSecretAndBlindingFactor(
 ): { blindingFactor: Uint8Array; secret: Uint8Array } {
   const derive = createSecretAndBlindingFactorDeriver(seed, keysetId);
   return derive(counter);
+}
+
+/**
+ * Derives the deterministic keypair for one counter under the BIP-32 path
+ * `m/129373'/{purpose}'/0'/0'/{counter}` (the counter child is non-hardened).
+ *
+ * @remarks
+ * Used for NUT-11 P2PK keys and NUT-20 quote locking keys. Both fields are hex: `pubkey` drops into
+ * the lock/quote APIs and `privkey` into `signP2PKProofs`. To scan many counters from the same
+ * seed, prefer {@link createSecretKeyDeriver}, which caches the shared parent.
+ * @param seed - Wallet seed used for deterministic derivation.
+ * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
+ * @param counter - Non-hardened BIP-32 child index.
+ * @returns The derived keypair, both hex-encoded: compressed (02/03) `pubkey` and `privkey`.
+ * @throws {@link CTSError} If derivation produces an invalid private key.
+ */
+export function deriveKeyPair(
+  seed: Uint8Array,
+  purpose: Bip32KeyPurpose,
+  counter: number,
+): { pubkey: string; privkey: string } {
+  const secretKey = createSecretKeyDeriver(seed, purpose)(counter);
+  return { pubkey: bytesToHex(getPubKeyFromPrivKey(secretKey)), privkey: bytesToHex(secretKey) };
+}
+
+/**
+ * Creates a deterministic secret-key deriver for a seed/purpose pair.
+ *
+ * @remarks
+ * Caches the parent `m/129373'/{purpose}'/0'/0'` derivation once so each per-counter call is a
+ * single non-hardened child derivation. This is ~5x faster than re-traversing the full path per
+ * counter, which matters for restore loops scanning many counters. Returns raw secret-key bytes;
+ * for a ready-to-use keypair use {@link deriveKeyPair}.
+ * @param seed - Wallet seed used for deterministic derivation.
+ * @param purpose - Key purpose, which selects the path's purpose index.
+ * @returns A function mapping a non-hardened counter to its 32-byte secret key.
+ */
+export function createSecretKeyDeriver(
+  seed: Uint8Array,
+  purpose: Bip32KeyPurpose,
+): (counter: number) => Uint8Array {
+  const index = PURPOSE_INDEX[purpose];
+  const parentKey = HDKey.fromMasterSeed(seed).derive(`m/129373'/${index}'/0'/0'`);
+  return (counter: number) => {
+    const key = parentKey.deriveChild(counter).privateKey;
+    /* c8 ignore next */
+    if (key === null) {
+      throw new CTSError('Could not derive secret key');
+    }
+    return key;
+  };
 }
 
 // ------------------------------
