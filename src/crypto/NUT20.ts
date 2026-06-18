@@ -78,7 +78,14 @@ export function verifyMintQuoteSignature(
   signature: string,
 ): boolean {
   if (!isCompressedPubkey(pubkey)) return false;
-  return schnorrVerifyDigest(signature, constructMessage(quote, blindedMessages), pubkey);
+  // Malformed outputs (negative amount, bad hex B_) must verify as false, not throw: these
+  // functions take untrusted input and the boolean contract mirrors schnorrVerifyDigest's
+  // own error swallowing.
+  try {
+    return schnorrVerifyDigest(signature, constructMessage(quote, blindedMessages), pubkey);
+  } catch {
+    return false;
+  }
 }
 
 export function signMintQuoteLegacy(
@@ -96,5 +103,11 @@ export function verifyMintQuoteSignatureLegacy(
   signature: string,
 ): boolean {
   if (!isCompressedPubkey(pubkey)) return false;
-  return schnorrVerifyDigest(signature, constructLegacyMessage(quote, blindedMessages), pubkey);
+  // See verifyMintQuoteSignature: malformed input must verify as false rather than throw
+  // past schnorrVerifyDigest's try/catch.
+  try {
+    return schnorrVerifyDigest(signature, constructLegacyMessage(quote, blindedMessages), pubkey);
+  } catch {
+    return false;
+  }
 }

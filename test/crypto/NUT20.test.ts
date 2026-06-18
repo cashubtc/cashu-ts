@@ -269,3 +269,30 @@ describe('mint quote signatures (legacy message)', () => {
     expect(verifyMintQuoteSignatureLegacy(pubkey, quote, blindedMessages, signature)).toBe(true);
   });
 });
+
+describe('mint quote signature verification rejects malformed input (no throw)', () => {
+  const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
+  const keysetId = '010000000000000000000000000000000000000000000000000000000000000000';
+  const sig =
+    'a913e48177027d87e0e38c6f2021763c46997ff4866a4b63ebca800b0776b28519eab37377cf9bc1869e489d7b25747b7a998eaa1c33c2cac7fa168449d8267a';
+  const goodB_ = '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2';
+
+  // A server may pass outputs straight from JSON.parse; an attacker controls amount and B_.
+  const withOutputs = (outputs: unknown) => outputs as { amount: Amount; id: string; B_: string }[];
+
+  test('amended: negative amount verifies as false', () => {
+    const outputs = withOutputs([{ amount: -1, id: keysetId, B_: goodB_ }]);
+    expect(verifyMintQuoteSignature(pubkey, 'q', outputs, sig)).toBe(false);
+  });
+
+  test('amended: invalid hex B_ verifies as false', () => {
+    const outputs = withOutputs([{ amount: 1, id: keysetId, B_: 'invalidhex' }]);
+    expect(verifyMintQuoteSignature(pubkey, 'q', outputs, sig)).toBe(false);
+  });
+
+  test('legacy: non-string quote with no outputs verifies as false', () => {
+    // message stays a non-string and utf8ToBytes would throw without the guard.
+    const quote = 256 as unknown as string;
+    expect(verifyMintQuoteSignatureLegacy(pubkey, quote, [], sig)).toBe(false);
+  });
+});
