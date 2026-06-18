@@ -243,4 +243,37 @@ describe('mint quote signatures (amended message)', () => {
     expect(verifyMintQuoteSignatureAmended(pubkey, 'quote-1', allOutputs, sigQuote2)).toBe(false);
     expect(verifyMintQuoteSignatureAmended(pubkey, 'quote-2', allOutputs, sigQuote1)).toBe(false);
   });
+
+  // Canonical NUT-20 single-mint vector from nuts/tests/20-test.md (sk = 1, UUIDv7 quote id).
+  describe('NUT-20 single-mint spec vector', () => {
+    const quote = '0192d3c0-7e8a-7c3d-8e9f-1a2b3c4d5e6f';
+    const outputs = [
+      {
+        amount: Amount.from(1),
+        id: '009a1f293253e41e',
+        B_: '036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2',
+      },
+      {
+        amount: Amount.from(1),
+        id: '009a1f293253e41e',
+        B_: '021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59',
+      },
+    ];
+    const expectedMsgToSign =
+      '43617368755f4d696e7451756f74655369675f7631000000243031393264336330' +
+      '2d376538612d376333642d386539662d316132623363346435653666' +
+      '000000010100000021036d6caac248af96f6afa7f904f550253a0f3ef3f5aa2fe6838a95b216691468e2' +
+      '000000010100000021021f8a566c205633d029094747d2e18f44e05993dda7a5f88f496078205f656e59';
+    const expectedMsgHash = 'c164fd384879f74ab6ea2e7cf13d90ed42e6df9d5de607eeb5c9cc7d36fb1c21';
+    const expectedSignature =
+      '4881093a332ff7c79f3e598ce5b249d64978b47165a0b19c18adf0ced0246228e61e702f0abaf1bf27b92be4336bdbabacfbe4c914076386b3c66fdcd0b3480e';
+
+    test('canonical msg_to_sign hashes to the test vector', () => {
+      expect(bytesToHex(sha256(hexToBytes(expectedMsgToSign)))).toBe(expectedMsgHash);
+    });
+
+    test('test vector signature verifies correctly', () => {
+      expect(verifyMintQuoteSignatureAmended(pubkey, quote, outputs, expectedSignature)).toBe(true);
+    });
+  });
 });
