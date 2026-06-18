@@ -1,13 +1,15 @@
 import { hashToCurve, hashToCurveBls, isBlsKeyset } from '../crypto';
 import { safeCallback } from '../logger';
+import { Amount, type AmountLike } from '../model/Amount';
 import { CTSError } from '../model/Errors';
 import { MintQuoteState, MeltQuoteState } from '../model/types';
 import type {
   Proof,
   ProofLike,
   ProofState,
-  MeltQuoteBolt11Response,
-  MintQuoteBolt11Response,
+  MintQuoteGenericResponse,
+  MeltQuoteGenericResponse,
+  RpcSubKinds,
 } from '../model/types';
 
 import { type OperationCounters } from './CounterSource';
@@ -62,11 +64,58 @@ function cancelSafely(c: CancellerLike | null | undefined): void {
     });
 }
 
+// Mint quote has funds available to mint: `amount_paid` > `amount_issued`, falling back to legacy
+// `state` for pre-accounting mints. Payloads are raw JSON (not `Amount`), hence `Amount.from` and
+// `!= null` (a real 0 is not absent).
+function isMintQuotePaid(p: MintQuoteGenericResponse): boolean {
+  const paid = (p as { amount_paid?: AmountLike }).amount_paid;
+  const issued = (p as { amount_issued?: AmountLike }).amount_issued;
+  if (paid != null && issued != null) {
+    return Amount.from(paid).greaterThan(Amount.from(issued));
+  }
+  return (p as { state?: MintQuoteState }).state === MintQuoteState.PAID;
+}
+
+// Melt quote payment completed. `state` is a base field on every melt quote, so no accounting fallback.
+function isMeltQuotePaid(p: MeltQuoteGenericResponse): boolean {
+  return p.state === MeltQuoteState.PAID;
+}
+
 export class WalletEvents {
   constructor(private wallet: Wallet) {}
 
   // Callbacks registered for Counters Reserved events
   private countersReservedHandlers = new Set<(payload: OperationCounters) => void>();
+
+  // NUT-17 kind(s) to open for a quote subscription, independent of payment method: the generic
+  // kind if the mint advertises it, else every per-method kind it advertises for this unit (fanned
+  // out and merged). Falls back to the generic kind when mint info is unavailable.
+  private quoteSubKinds(type: 'mint' | 'melt'): RpcSubKinds[] {
+    const generic: RpcSubKinds = type === 'mint' ? 'mint_quote' : 'melt_quote';
+    const suffix = type === 'mint' ? '_mint_quote' : '_melt_quote';
+
+    try {
+      const { supported, params } = this.wallet.getMintInfo().isSupported(17);
+      if (!supported) return [generic];
+
+      const commands = Array.from(
+        new Set(
+          params?.filter((p) => p.unit === this.wallet.unit).flatMap((p) => p.commands) ?? [],
+        ),
+      );
+
+      if (commands.includes(generic)) return [generic];
+
+      // `endsWith(suffix)` excludes the bare generic kind (no leading method prefix). The cast
+      // forwards any advertised per-method kind, including custom ones not enumerated by RpcSubKinds.
+      const perMethod = commands.filter((c) => c.endsWith(suffix)) as RpcSubKinds[];
+      if (perMethod.length > 0) return perMethod;
+    } catch {
+      // WalletEvents is also used in tests with a minimal mocked Wallet surface.
+    }
+
+    return [generic];
+  }
 
   // Binds an abort signal to each subscription canceller
   private withAbort(
@@ -191,17 +240,12 @@ export class WalletEvents {
     }
   }
 
-  /**
-   * Register a callback to be called whenever a mint quote's state changes.
-   *
-   * @param quoteIds List of mint quote IDs that should be subscribed to.
-   * @param callback Callback function that will be called whenever a mint quote state changes.
-   * @param errorCallback
-   * @returns
-   */
-  async mintQuoteUpdates(
+  // Core quote-subscription primitive: opens one sub per kind from `quoteSubKinds` (usually one),
+  // routes each to `cb`, and returns a canceller that tears all of them down.
+  private async quoteUpdates<T>(
+    type: 'mint' | 'melt',
     ids: string[],
-    cb: (p: MintQuoteBolt11Response) => void,
+    cb: (p: T) => void,
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
@@ -210,29 +254,65 @@ export class WalletEvents {
     if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
 
     const uniq = Array.from(new Set(ids));
-    const subId = ws.createSubscription({ kind: 'bolt11_mint_quote', filters: uniq }, cb, err);
-    const cancel = () => ws.cancelSubscription(subId, cb);
+    const kinds = this.quoteSubKinds(type);
+    // Fanned-out kinds share one stream but isolate errors. A quote id belongs to a single method,
+    // so only one kind ever delivers; don't let another kind's error (e.g. a mint that advertises a
+    // kind but rejects the subscribe) tear down the sibling that works. Surface `err` only once
+    // every kind has failed.
+    let alive = kinds.length;
+    const onErr = (e: Error) => {
+      if (--alive <= 0) err(e);
+    };
+    const subIds = kinds.map((kind) =>
+      ws.createSubscription<T>({ kind, filters: uniq }, cb, onErr),
+    );
+    const cancel = () => {
+      for (const subId of subIds) ws.cancelSubscription(subId, cb);
+    };
     return this.withAbort(opts?.signal, cancel);
   }
 
   /**
-   * Register a callback to be called when a single mint quote gets paid.
+   * Subscribe to mint quote state changes for any payment method.
    *
-   * @param quoteId Mint quote id that should be subscribed to.
-   * @param callback Callback function that will be called when this mint quote gets paid.
-   * @param errorCallback
-   * @returns
+   * @remarks
+   * Payload defaults to {@link MintQuoteGenericResponse}; narrow via `T` (e.g.
+   * `MintQuoteBolt12Response`) when you know the quotes' method.
+   * @param ids Mint quote ids to subscribe to.
+   * @param cb Called whenever a subscribed mint quote changes.
+   * @param err Called if the subscription errors.
+   * @returns A canceller that unsubscribes.
    */
-  async mintQuotePaid(
-    id: string,
-    cb: (p: MintQuoteBolt11Response) => void,
+  async mintQuoteUpdates<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(
+    ids: string[],
+    cb: (p: T) => void,
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
-    return this.mintQuoteUpdates(
+    return this.quoteUpdates<T>('mint', ids, cb, err, opts);
+  }
+
+  /**
+   * Subscribe to a single mint quote and fire once it is mintable.
+   *
+   * @remarks
+   * "Mintable" means `amount_paid` > `amount_issued`, falling back to legacy `state` PAID for
+   * pre-accounting mints.
+   * @param id Mint quote id to subscribe to.
+   * @param cb Called once the quote becomes mintable.
+   * @param err Called if the subscription errors.
+   * @returns A canceller that unsubscribes.
+   */
+  async mintQuotePaid<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(
+    id: string,
+    cb: (p: T) => void,
+    err: (e: Error) => void,
+    opts?: SubscribeOpts,
+  ): Promise<SubscriptionCanceller> {
+    return this.mintQuoteUpdates<T>(
       [id],
       (p) => {
-        if (p.state === MintQuoteState.PAID) cb(p);
+        if (isMintQuotePaid(p)) cb(p);
       },
       err,
       opts,
@@ -240,47 +320,43 @@ export class WalletEvents {
   }
 
   /**
-   * Register a callback to be called whenever a melt quote’s state changes.
+   * Subscribe to melt quote state changes for any payment method.
    *
-   * @param quoteId Melt quote id that should be subscribed to.
-   * @param callback Callback function that will be called when this melt quote gets paid.
-   * @param errorCallback
-   * @returns
+   * @remarks
+   * Payload defaults to {@link MeltQuoteGenericResponse}; narrow via `T` when you know the quotes'
+   * method.
+   * @param ids Melt quote ids to subscribe to.
+   * @param cb Called whenever a subscribed melt quote changes.
+   * @param err Called if the subscription errors.
+   * @returns A canceller that unsubscribes.
    */
-  async meltQuoteUpdates(
+  async meltQuoteUpdates<T extends MeltQuoteGenericResponse = MeltQuoteGenericResponse>(
     ids: string[],
-    cb: (p: MeltQuoteBolt11Response) => void,
+    cb: (p: T) => void,
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
-    await this.wallet.mint.connectWebSocket();
-    const ws = this.wallet.mint.webSocketConnection;
-    if (!ws) throw new CTSError('Failed to establish WebSocket connection.');
-
-    const uniq = Array.from(new Set(ids));
-    const subId = ws.createSubscription({ kind: 'bolt11_melt_quote', filters: uniq }, cb, err);
-    const cancel = () => ws.cancelSubscription(subId, cb);
-    return this.withAbort(opts?.signal, cancel);
+    return this.quoteUpdates<T>('melt', ids, cb, err, opts);
   }
 
   /**
-   * Register a callback to be called when a single melt quote gets paid.
+   * Subscribe to a single melt quote and fire once it reaches PAID.
    *
-   * @param quoteIds List of melt quote IDs that should be subscribed to.
-   * @param callback Callback function that will be called whenever a melt quote state changes.
-   * @param errorCallback
-   * @returns
+   * @param id Melt quote id to subscribe to.
+   * @param cb Called once the quote is PAID.
+   * @param err Called if the subscription errors.
+   * @returns A canceller that unsubscribes.
    */
-  async meltQuotePaid(
+  async meltQuotePaid<T extends MeltQuoteGenericResponse = MeltQuoteGenericResponse>(
     id: string,
-    cb: (p: MeltQuoteBolt11Response) => void,
+    cb: (p: T) => void,
     err: (e: Error) => void,
     opts?: SubscribeOpts,
   ): Promise<SubscriptionCanceller> {
-    return this.meltQuoteUpdates(
+    return this.meltQuoteUpdates<T>(
       [id],
       (p) => {
-        if (p.state === MeltQuoteState.PAID) cb(p);
+        if (isMeltQuotePaid(p)) cb(p);
       },
       err,
       opts,
@@ -338,46 +414,23 @@ export class WalletEvents {
   }
 
   /**
-   * Resolve once a mint quote transitions to PAID, with automatic unsubscription, optional abort
-   * signal, and optional timeout.
+   * Resolve once a mint quote becomes mintable, then auto-unsubscribe.
    *
-   * The underlying subscription is always cancelled after resolution or rejection, including on
-   * timeout or abort.
-   *
-   * @example
-   *
-   * ```ts
-   * const ac = new AbortController();
-   * // Cancel if the user navigates away
-   * window.addEventListener('beforeunload', () => ac.abort(), { once: true });
-   *
-   * try {
-   *   const paid = await wallet.on.onceMintPaid(quoteId, {
-   *     signal: ac.signal,
-   *     timeoutMs: 60_000,
-   *   });
-   *   console.log('Mint paid, amount', paid.amount);
-   * } catch (e) {
-   *   if ((e as Error).name === 'AbortError') {
-   *     console.log('User aborted');
-   *   } else {
-   *     console.error('Mint not paid', e);
-   *   }
-   * }
-   * ```
-   *
+   * @remarks
+   * The subscription is always cancelled after resolution, rejection, timeout, or abort. "Mintable"
+   * is defined as in `mintQuotePaid`.
    * @param id Mint quote id to watch.
    * @param opts Optional controls.
    * @param opts.signal AbortSignal to cancel the wait early.
    * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
-   * @returns A promise that resolves with the latest `MintQuoteBolt11Response` once PAID.
+   * @returns A promise that resolves with the mint quote once it is mintable.
    */
-  onceMintPaid(
+  onceMintPaid<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(
     id: string,
     opts?: { signal?: AbortSignal; timeoutMs?: number },
-  ): Promise<MintQuoteBolt11Response> {
-    return this.waitUntilPaid<MintQuoteBolt11Response>(
-      this.mintQuotePaid.bind(this),
+  ): Promise<T> {
+    return this.waitUntilPaid<T>(
+      (qid, cb, err, o) => this.mintQuotePaid<T>(qid, cb, err, o),
       id,
       opts,
       'Timeout waiting for mint paid',
@@ -385,36 +438,23 @@ export class WalletEvents {
   }
 
   /**
-   * Resolve when ANY of several mint quotes is PAID, cancelling the rest.
+   * Resolve when ANY of several mint quotes becomes mintable, cancelling the rest.
    *
-   * Subscribes to all distinct ids, resolves with `{ id, quote }` for the first PAID, and cancels
-   * all remaining subscriptions.
-   *
-   * Errors from individual subscriptions are ignored by default so a single noisy stream does not
-   * abort the whole race. Set `failOnError: true` to reject on the first error instead. If all
-   * subscriptions error and none paid, the promise rejects with the last seen error.
-   *
-   * @example
-   *
-   * ```ts
-   * // Race multiple quotes obtained from splitting a large top up
-   * const { id, quote } = await wallet.on.onceAnyMintPaid(batchQuoteIds, {
-   *   timeoutMs: 120_000,
-   * });
-   * console.log('First top up paid', id, quote.preimage?.length);
-   * ```
-   *
+   * @remarks
+   * Resolves with `{ id, quote }` for the first mintable quote. Per-subscription errors are ignored
+   * by default (set `failOnError` to reject on the first); if all error and none resolve, rejects
+   * with the last error.
    * @param ids Array of mint quote ids (duplicates are ignored).
    * @param opts Optional controls.
    * @param opts.signal AbortSignal to cancel the wait early.
    * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
    * @param opts.failOnError When true, reject on first error. Default false.
-   * @returns A promise resolving to the id that won and its `MintQuoteBolt11Response`.
+   * @returns A promise resolving to the id that won and its mint quote.
    */
-  onceAnyMintPaid(
+  onceAnyMintPaid<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(
     ids: string[],
     opts?: { signal?: AbortSignal; timeoutMs?: number; failOnError?: boolean },
-  ): Promise<{ id: string; quote: MintQuoteBolt11Response }> {
+  ): Promise<{ id: string; quote: T }> {
     return new Promise((resolve, reject) => {
       const unique = Array.from(new Set(ids));
       const cancels: Map<string, CancellerLike> = new Map();
@@ -455,7 +495,7 @@ export class WalletEvents {
       if (unique.length === 0) return cleanup(new CTSError('No quote ids provided'));
 
       for (const quoteId of unique) {
-        const c = this.mintQuotePaid(
+        const c = this.mintQuotePaid<T>(
           quoteId,
           (p) => {
             cleanup();
@@ -508,34 +548,23 @@ export class WalletEvents {
   }
 
   /**
-   * Resolve once a melt quote transitions to PAID, with automatic unsubscription, optional abort
-   * signal, and optional timeout.
+   * Resolve once a melt quote reaches PAID, then auto-unsubscribe.
    *
-   * Mirrors onceMintPaid, but for melts.
-   *
-   * @example
-   *
-   * ```ts
-   * try {
-   *   const paid = await wallet.on.onceMeltPaid(meltId, { timeoutMs: 45_000 });
-   *   console.log('Invoice paid by mint, paid msat', paid.paid ?? 0);
-   * } catch (e) {
-   *   console.error('Payment did not complete in time', e);
-   * }
-   * ```
-   *
+   * @remarks
+   * Mirrors `onceMintPaid`, but for melts. The subscription is always cancelled after resolution,
+   * rejection, timeout, or abort.
    * @param id Melt quote id to watch.
    * @param opts Optional controls.
    * @param opts.signal AbortSignal to cancel the wait early.
    * @param opts.timeoutMs Milliseconds to wait before rejecting with a timeout error.
-   * @returns A promise that resolves with the `MeltQuoteBolt11Response` once PAID.
+   * @returns A promise that resolves with the melt quote once PAID.
    */
-  onceMeltPaid(
+  onceMeltPaid<T extends MeltQuoteGenericResponse = MeltQuoteGenericResponse>(
     id: string,
     opts?: { signal?: AbortSignal; timeoutMs?: number },
-  ): Promise<MeltQuoteBolt11Response> {
-    return this.waitUntilPaid<MeltQuoteBolt11Response>(
-      this.meltQuotePaid.bind(this),
+  ): Promise<T> {
+    return this.waitUntilPaid<T>(
+      (qid, cb, err, o) => this.meltQuotePaid<T>(qid, cb, err, o),
       id,
       opts,
       'Timeout waiting for melt paid',

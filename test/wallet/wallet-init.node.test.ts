@@ -388,17 +388,17 @@ describe('test info', () => {
         {
           method: 'bolt11',
           unit: 'sat',
-          commands: ['bolt11_melt_quote', 'proof_state', 'bolt11_mint_quote'],
+          commands: ['melt_quote', 'proof_state', 'mint_quote'],
         },
         {
           method: 'bolt11',
           unit: 'usd',
-          commands: ['bolt11_melt_quote', 'proof_state', 'bolt11_mint_quote'],
+          commands: ['melt_quote', 'proof_state', 'mint_quote'],
         },
         {
           method: 'bolt11',
           unit: 'eur',
-          commands: ['bolt11_melt_quote', 'proof_state', 'bolt11_mint_quote'],
+          commands: ['melt_quote', 'proof_state', 'mint_quote'],
         },
       ],
     });
@@ -425,7 +425,7 @@ describe('test info', () => {
     // mintInfoRespDeprecated uses the old array-of-arrays contact format
     // v4 no longer normalizes this — it is passed through from the wire
     const mintInfoRespDeprecated = JSON.parse(
-      '{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. All your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[["email","contact@me.com"],["twitter","@me"],["nostr","npub1337"]],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"17":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]},{"method":"bolt11","unit":"usd","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}',
+      '{"name":"Testnut mint","pubkey":"0296d0aa13b6a31cf0cd974249f28c7b7176d7274712c95a41c7d8066d3f29d679","version":"Nutshell/0.16.3","description":"Mint for testing Cashu wallets","description_long":"This mint usually runs the latest main branch of the nutshell repository. All your Lightning invoices will always be marked paid so that you can test minting and melting ecash via Lightning.","contact":[["email","contact@me.com"],["twitter","@me"],["nostr","npub1337"]],"motd":"This is a message of the day field. You should display this field to your users if the content changes!","nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"},{"method":"bolt11","unit":"usd"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"17":[{"method":"bolt11","unit":"sat","commands":["melt_quote","proof_state","mint_quote"]},{"method":"bolt11","unit":"usd","commands":["melt_quote","proof_state","mint_quote"]}]}}',
     );
     server.use(
       http.get(mintUrl + '/v1/info', () => {
@@ -658,7 +658,7 @@ describe('bindKeyset & withKeyset', () => {
 
 describe('multi mint', async () => {
   const mintInfo = JSON.parse(
-    '{"name":"Cashu mint","pubkey":"023ef9a3cda9945d5e784e478d3bd0c8d39726bcb3ca11098fe685a95d3f889d28","version":"Nutshell/0.16.4","contact":[],"time":1737973290,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"20":{"supported":true},"15":{"methods":[{"method":"bolt11","unit":"sat"}]},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["bolt11_melt_quote","proof_state","bolt11_mint_quote"]}]}}}',
+    '{"name":"Cashu mint","pubkey":"023ef9a3cda9945d5e784e478d3bd0c8d39726bcb3ca11098fe685a95d3f889d28","version":"Nutshell/0.16.4","contact":[],"time":1737973290,"nuts":{"4":{"methods":[{"method":"bolt11","unit":"sat","description":true}],"disabled":false},"5":{"methods":[{"method":"bolt11","unit":"sat"}],"disabled":false},"7":{"supported":true},"8":{"supported":true},"9":{"supported":true},"10":{"supported":true},"11":{"supported":true},"12":{"supported":true},"14":{"supported":true},"20":{"supported":true},"15":{"methods":[{"method":"bolt11","unit":"sat"}]},"17":{"supported":[{"method":"bolt11","unit":"sat","commands":["melt_quote","proof_state","mint_quote"]}]}}}',
   );
   test('multi path melt quotes', async () => {
     server.use(
@@ -666,28 +666,24 @@ describe('multi mint', async () => {
         return HttpResponse.json(mintInfo);
       }),
     );
+    let seenMppAmount: unknown;
     server.use(
-      http.post<any, { options: { mpp: number } }>(
-        mintUrl + '/v1/melt/quote/bolt11',
-        async ({ request }) => {
-          const body = await request.json();
-          if (!body?.options.mpp) {
-            return new HttpResponse('No MPP', { status: 400 });
-          }
-          return HttpResponse.json({
-            quote: 'K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D',
-            amount: 1,
-            fee_reserve: 2,
-            unit: 'sat',
-            request: invoice,
-            paid: false,
-            state: 'UNPAID',
-            expiry: 1673972705,
-            payment_preimage: null,
-            change: null,
-          });
-        },
-      ),
+      http.post(mintUrl + '/v1/melt/quote/bolt11', async ({ request }) => {
+        const body = await request.json();
+        seenMppAmount = body?.options?.mpp?.amount;
+        return HttpResponse.json({
+          quote: 'K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D',
+          amount: 1,
+          fee_reserve: 2,
+          unit: 'sat',
+          request: invoice,
+          paid: false,
+          state: 'UNPAID',
+          expiry: 1673972705,
+          payment_preimage: null,
+          change: null,
+        });
+      }),
     );
     const mint = new Mint(mintUrl);
     const wallet = new Wallet(mint);
@@ -696,6 +692,6 @@ describe('multi mint', async () => {
     const meltQuote = await wallet.createMultiPathMeltQuote(invoice, 1000);
     expect(meltQuote.amount).toEqual(Amount.from(1));
     expect(meltQuote.quote).toBe('K-80Mo7xrtQRgaA1ifrxDKGQGZEGlo7zNDwTtf-D');
-    await expect(wallet.createMeltQuoteBolt11(invoice)).rejects.toThrow();
+    expect(seenMppAmount).toBe(1000);
   });
 });
