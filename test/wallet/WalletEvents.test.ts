@@ -314,6 +314,45 @@ describe('WalletEvents', () => {
       await expect(paid).rejects.toThrow('bolt11 broken');
     });
 
+    // Documents the blind-fan-out tradeoff: with only an id, the wallet can't map a quote to the
+    // kind that owns it, so a subscribe rejection on the *relevant* kind looks identical to one on
+    // an idle sibling. The `alive` policy waits for every kind before surfacing `err` (so it never
+    // false-alarms when the working kind still delivers, see the sibling test above); the cost is
+    // that a lone relevant-kind rejection is masked while an idle sibling keeps the count above 0.
+    it('masks a relevant-kind rejection while an idle sibling stays subscribed', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const cb = vi.fn();
+      const err = vi.fn();
+      await events.mintQuoteUpdates(['q'], cb, err);
+      const ws = mock.mint.webSocketConnection!;
+
+      // 'q' is a bolt11 quote; the mint rejects its subscribe but accepts (then idles) bolt12.
+      ws.fail('bolt11_mint_quote', new Error('bolt11 broken'));
+      await flushMicrotasks();
+
+      // Masked: one kind remains alive, so the rejection is not surfaced.
+      expect(err).not.toHaveBeenCalled();
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('a relevant-kind rejection still terminates a once* wait via timeoutMs', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const paid = events.onceMintPaid('q', { timeoutMs: 50 });
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      // Relevant kind rejected; sibling idles. The wait is not surfaced as an error, but the
+      // bounded one-shot escape hatch still resolves the hang.
+      ws.fail('bolt11_mint_quote', new Error('bolt11 broken'));
+
+      await expect(paid).rejects.toThrow(/Timeout/);
+    });
+
     it('mintQuotePaid treats a mintable accounting balance as paid (no state field)', async () => {
       const cb = vi.fn();
       await events.mintQuotePaid('x', cb, vi.fn());
