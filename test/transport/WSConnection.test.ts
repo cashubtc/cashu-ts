@@ -59,6 +59,26 @@ describe('testing WSConnection', () => {
 
       const callback = vi.fn();
       const errorCallback = vi.fn();
+      conn.createSubscription({ kind: 'mint_quote', filters: ['12345'] }, callback, errorCallback);
+    })) as string;
+    expect(JSON.parse(message)).toMatchObject({
+      jsonrpc: '2.0',
+      method: 'subscribe',
+      params: { kind: 'mint_quote', filters: ['12345'] },
+    });
+  });
+  test('keeps deprecated bolt11 subscription kinds working', async () => {
+    const message = (await new Promise(async (res) => {
+      server.on('connection', (socket) => {
+        socket.on('message', (m) => {
+          res(m.toString());
+        });
+      });
+      const conn = new WSConnection(fakeUrl);
+      await conn.connect();
+
+      const callback = vi.fn();
+      const errorCallback = vi.fn();
       conn.createSubscription(
         { kind: 'bolt11_mint_quote', filters: ['12345'] },
         callback,
@@ -76,11 +96,7 @@ describe('testing WSConnection', () => {
     const callback = vi.fn();
     const errorCallback = vi.fn();
     expect(() => {
-      conn.createSubscription(
-        { kind: 'bolt11_mint_quote', filters: ['123'] },
-        callback,
-        errorCallback,
-      );
+      conn.createSubscription({ kind: 'mint_quote', filters: ['123'] }, callback, errorCallback);
     }).toThrow('Socket is not open');
     expect(errorCallback).not.toHaveBeenCalled(); // No soft callback invocation
   });
@@ -98,7 +114,7 @@ describe('testing WSConnection', () => {
     const callback = vi.fn();
     const errorCallback = vi.fn();
     subId = conn.createSubscription(
-      { kind: 'bolt11_mint_quote', filters: ['123'] },
+      { kind: 'mint_quote', filters: ['123'] },
       callback,
       errorCallback,
     );
@@ -149,11 +165,7 @@ describe('testing WSConnection', () => {
         res(p);
       });
       const errorCallback = vi.fn();
-      conn.createSubscription(
-        { kind: 'bolt11_mint_quote', filters: ['123'] },
-        callback,
-        errorCallback,
-      );
+      conn.createSubscription({ kind: 'mint_quote', filters: ['123'] }, callback, errorCallback);
     });
     expect(payload).toMatchObject({ quote: '123', request: '456', paid: true, expiry: 123 });
   });
@@ -168,7 +180,7 @@ describe('WSConnection – socket-not-open paths', () => {
   test('sendRequest subscribe throws when socket not open', () => {
     const conn = new WSConnection(fakeUrl);
     expect(() =>
-      conn.sendRequest('subscribe', { subId: 'test', kind: 'bolt11_mint_quote', filters: [] }),
+      conn.sendRequest('subscribe', { subId: 'test', kind: 'mint_quote', filters: [] }),
     ).toThrow('Socket not open');
   });
 });
@@ -180,7 +192,7 @@ describe('WSConnection – close and lifecycle', () => {
 
     conn.setLogger(logger);
     expect(() =>
-      conn.sendRequest('subscribe', { subId: 'test', kind: 'bolt11_mint_quote', filters: [] }),
+      conn.sendRequest('subscribe', { subId: 'test', kind: 'mint_quote', filters: [] }),
     ).toThrow('Socket not open');
     expect(logger.error).toHaveBeenCalledWith('Attempted sendRequest, but socket was not open');
   });
@@ -364,7 +376,7 @@ describe('WSConnection – close and lifecycle', () => {
     });
 
     const errorCb = vi.fn();
-    conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), errorCb);
+    conn.createSubscription({ kind: 'mint_quote', filters: [] }, vi.fn(), errorCb);
 
     await new Promise<void>((res) => {
       conn.onClose(() => setTimeout(res, 0));
@@ -391,7 +403,7 @@ describe('WSConnection – close and lifecycle', () => {
     });
 
     const errorCb = vi.fn();
-    conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), errorCb);
+    conn.createSubscription({ kind: 'mint_quote', filters: [] }, vi.fn(), errorCb);
 
     await new Promise<void>((res) => {
       conn.onClose(() => setTimeout(res, 0));
@@ -453,7 +465,7 @@ describe('WSConnection – message handling', () => {
 
     const errorCb = vi.fn();
     await new Promise<void>((res) => {
-      conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), (e) => {
+      conn.createSubscription({ kind: 'mint_quote', filters: [] }, vi.fn(), (e) => {
         errorCb(e);
         res();
       });
@@ -495,7 +507,7 @@ describe('WSConnection – message handling', () => {
 
     const callback = vi.fn();
     await new Promise<void>((res) => {
-      conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, callback, vi.fn());
+      conn.createSubscription({ kind: 'mint_quote', filters: [] }, callback, vi.fn());
       setTimeout(res, 150);
     });
 
@@ -548,7 +560,7 @@ describe('WSConnection – message handling', () => {
 
     const callback = vi.fn();
     await new Promise<void>((res) => {
-      conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, callback, vi.fn());
+      conn.createSubscription({ kind: 'mint_quote', filters: [] }, callback, vi.fn());
       setTimeout(res, 150);
     });
 
@@ -590,7 +602,7 @@ describe('WSConnection – message handling', () => {
 
     await new Promise<void>((res) => {
       conn.createSubscription(
-        { kind: 'bolt11_mint_quote', filters: [] },
+        { kind: 'mint_quote', filters: [] },
         () => {
           throw new Error('listener boom');
         },
@@ -688,8 +700,8 @@ describe('WSConnection – listener management', () => {
     });
     const errorCb2 = vi.fn();
 
-    conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), errorCb1);
-    conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), errorCb2);
+    conn.createSubscription({ kind: 'mint_quote', filters: [] }, vi.fn(), errorCb1);
+    conn.createSubscription({ kind: 'mint_quote', filters: [] }, vi.fn(), errorCb2);
 
     await new Promise<void>((res) => {
       conn.onClose(() => setTimeout(res, 0));
@@ -730,11 +742,7 @@ describe('WSConnection – listener management', () => {
     await conn.connect();
 
     const callback = vi.fn();
-    const subId = conn.createSubscription(
-      { kind: 'bolt11_mint_quote', filters: [] },
-      callback,
-      vi.fn(),
-    );
+    const subId = conn.createSubscription({ kind: 'mint_quote', filters: [] }, callback, vi.fn());
     await waitForSubscription(conn, subId);
 
     await new Promise<void>((res) => {
@@ -780,11 +788,7 @@ describe('WSConnection – listener management', () => {
     await conn.connect();
 
     const callback = vi.fn();
-    const subId = conn.createSubscription(
-      { kind: 'bolt11_mint_quote', filters: [] },
-      callback,
-      vi.fn(),
-    );
+    const subId = conn.createSubscription({ kind: 'mint_quote', filters: [] }, callback, vi.fn());
     await waitForSubscription(conn, subId);
 
     const errorCallback = vi.fn();
@@ -836,11 +840,7 @@ describe('WSConnection – listener management', () => {
     await conn.connect();
 
     const callback = vi.fn();
-    const subId = conn.createSubscription(
-      { kind: 'bolt11_mint_quote', filters: [] },
-      callback,
-      vi.fn(),
-    );
+    const subId = conn.createSubscription({ kind: 'mint_quote', filters: [] }, callback, vi.fn());
     await waitForSubscription(conn, subId);
 
     await new Promise<void>((res) => {
@@ -888,7 +888,7 @@ describe('WSConnection – listener management', () => {
       await conn.connect();
 
       expect(() =>
-        conn.createSubscription({ kind: 'bolt11_mint_quote', filters: [] }, vi.fn(), vi.fn()),
+        conn.createSubscription({ kind: 'mint_quote', filters: [] }, vi.fn(), vi.fn()),
       ).toThrow('send boom');
       expect(
         Object.keys((conn as unknown as { rpcListeners: Record<string, unknown> }).rpcListeners),

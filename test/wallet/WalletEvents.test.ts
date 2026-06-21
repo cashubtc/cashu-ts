@@ -34,10 +34,7 @@ class MockWS {
   /**
    * Deliver an update payload to matching subscribers for a kind.
    */
-  emit(
-    kind: 'bolt11_mint_quote' | 'bolt11_melt_quote',
-    payload: { quote: string; [k: string]: any },
-  ) {
+  emit(kind: string, payload: { quote: string; [k: string]: any }) {
     for (const { kind: k, filters, cb } of this.subs.values()) {
       if (k !== kind) continue;
       if (filters.includes(payload.quote)) cb(payload);
@@ -114,7 +111,24 @@ class MockMint {
  * Only what WalletEvents touches.
  */
 class MockWallet {
+  public unit = 'sat';
   public mint = new MockMint();
+
+  constructor(
+    private commands: string[] | undefined = ['mint_quote', 'melt_quote', 'proof_state'],
+    private supportsNut17 = true,
+  ) {}
+
+  getMintInfo() {
+    return {
+      isSupported: () => ({
+        supported: this.supportsNut17,
+        params: this.commands
+          ? [{ method: 'bolt11', unit: this.unit, commands: this.commands }]
+          : undefined,
+      }),
+    };
+  }
 }
 
 describe('WalletEvents', () => {
@@ -140,7 +154,7 @@ describe('WalletEvents', () => {
       const canceller = await events.mintQuoteUpdates(['a', 'b'], cb, err);
 
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_mint_quote', { quote: 'a', state: 'PAID' });
+      ws.emit('mint_quote', { quote: 'a', state: 'PAID' });
 
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'a' }));
       expect(typeof canceller).toBe('function');
@@ -152,10 +166,10 @@ describe('WalletEvents', () => {
       await events.mintQuotePaid('x', cb, err);
 
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_mint_quote', { quote: 'x', state: 'UNPAID' });
+      ws.emit('mint_quote', { quote: 'x', state: 'UNPAID' });
       expect(cb).not.toHaveBeenCalled();
 
-      ws.emit('bolt11_mint_quote', { quote: 'x', state: 'PAID' });
+      ws.emit('mint_quote', { quote: 'x', state: 'PAID' });
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'x' }));
     });
 
@@ -165,7 +179,7 @@ describe('WalletEvents', () => {
       await events.meltQuoteUpdates(['m1'], cb, err);
 
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_melt_quote', { quote: 'm1', state: 'PAID' });
+      ws.emit('melt_quote', { quote: 'm1', state: 'PAID' });
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'm1' }));
     });
 
@@ -175,11 +189,209 @@ describe('WalletEvents', () => {
       await events.meltQuotePaid('m2', cb, err);
 
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_melt_quote', { quote: 'm2', state: 'UNPAID' });
+      ws.emit('melt_quote', { quote: 'm2', state: 'UNPAID' });
       expect(cb).not.toHaveBeenCalled();
 
-      ws.emit('bolt11_melt_quote', { quote: 'm2', state: 'PAID' });
+      ws.emit('melt_quote', { quote: 'm2', state: 'PAID' });
       expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'm2' }));
+    });
+
+    it('falls back to deprecated bolt11 quote kinds when mint info advertises them', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt11_melt_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn());
+      await events.meltQuoteUpdates(['m1'], vi.fn(), vi.fn());
+
+      const ws = mock.mint.webSocketConnection!;
+      expect(ws.count('bolt11_mint_quote')).toBe(1);
+      expect(ws.count('bolt11_melt_quote')).toBe(1);
+    });
+
+    it('uses generic quote kinds when no quote command matches the wallet unit', async () => {
+      mock = new MockWallet(['proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn());
+
+      expect(mock.mint.webSocketConnection!.count('mint_quote')).toBe(1);
+    });
+
+    it('uses generic quote kinds when NUT-17 params are absent or unsupported', async () => {
+      // null (not undefined) is required to skip MockWallet's default-param and make `params` undefined
+      for (const fallbackMock of [new MockWallet(null as any), new MockWallet([], false)]) {
+        // @ts-expect-error only the mocked subset is injected
+        const fallbackEvents = new WalletEvents(fallbackMock);
+        await fallbackEvents.mintQuoteUpdates(['a'], vi.fn(), vi.fn());
+        expect(fallbackMock.mint.webSocketConnection!.count('mint_quote')).toBe(1);
+      }
+    });
+
+    it('fans out across every advertised per-method quote kind', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const cb = vi.fn();
+      await events.mintQuoteUpdates(['a'], cb, vi.fn());
+
+      const ws = mock.mint.webSocketConnection!;
+      expect(ws.count('bolt11_mint_quote')).toBe(1);
+      expect(ws.count('bolt12_mint_quote')).toBe(1);
+
+      // An update on either kind reaches the single merged callback.
+      ws.emit('bolt12_mint_quote', { quote: 'a', amount_paid: 5, amount_issued: 0 });
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'a' }));
+    });
+
+    it('subscribes to only the generic kind when both generic and per-method kinds are advertised', async () => {
+      mock = new MockWallet([
+        'mint_quote',
+        'bolt11_mint_quote',
+        'bolt12_mint_quote',
+        'proof_state',
+      ]);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn());
+
+      const ws = mock.mint.webSocketConnection!;
+      expect(ws.count('mint_quote')).toBe(1);
+      expect(ws.count('bolt11_mint_quote')).toBe(0);
+      expect(ws.count('bolt12_mint_quote')).toBe(0);
+    });
+
+    it('subscribes to custom per-method quote kinds the mint advertises', async () => {
+      mock = new MockWallet(['bacs_melt_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      await events.meltQuoteUpdates(['m'], vi.fn(), vi.fn());
+      expect(mock.mint.webSocketConnection!.count('bacs_melt_quote')).toBe(1);
+    });
+
+    it('cancelling a fanned-out subscription tears down every underlying kind', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const cancel = await events.mintQuoteUpdates(['a'], vi.fn(), vi.fn());
+      const ws = mock.mint.webSocketConnection!;
+      cancel();
+      expect(ws.count('bolt11_mint_quote')).toBe(0);
+      expect(ws.count('bolt12_mint_quote')).toBe(0);
+    });
+
+    it("a fanned-out kind's error does not tear down the sibling that delivers", async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const paid = events.onceMintPaid('q', { timeoutMs: 1000 });
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      // A mint that advertises bolt12 but rejects the subscribe must not kill the working bolt11 sub.
+      ws.fail('bolt12_mint_quote', new Error('bolt12 broken'));
+      ws.emit('bolt11_mint_quote', { quote: 'q', amount_paid: 10, amount_issued: 0 });
+
+      await expect(paid).resolves.toMatchObject({ quote: 'q' });
+    });
+
+    it('rejects a fanned-out wait only when every kind has errored', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const paid = events.onceMintPaid('q', { timeoutMs: 1000 });
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      ws.fail('bolt12_mint_quote', new Error('bolt12 broken'));
+      ws.fail('bolt11_mint_quote', new Error('bolt11 broken'));
+
+      await expect(paid).rejects.toThrow('bolt11 broken');
+    });
+
+    // Documents the blind-fan-out tradeoff: with only an id, the wallet can't map a quote to the
+    // kind that owns it, so a subscribe rejection on the *relevant* kind looks identical to one on
+    // an idle sibling. The `alive` policy waits for every kind before surfacing `err` (so it never
+    // false-alarms when the working kind still delivers, see the sibling test above); the cost is
+    // that a lone relevant-kind rejection is masked while an idle sibling keeps the count above 0.
+    it('masks a relevant-kind rejection while an idle sibling stays subscribed', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const cb = vi.fn();
+      const err = vi.fn();
+      await events.mintQuoteUpdates(['q'], cb, err);
+      const ws = mock.mint.webSocketConnection!;
+
+      // 'q' is a bolt11 quote; the mint rejects its subscribe but accepts (then idles) bolt12.
+      ws.fail('bolt11_mint_quote', new Error('bolt11 broken'));
+      await flushMicrotasks();
+
+      // Masked: one kind remains alive, so the rejection is not surfaced.
+      expect(err).not.toHaveBeenCalled();
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('a relevant-kind rejection still terminates a once* wait via timeoutMs', async () => {
+      mock = new MockWallet(['bolt11_mint_quote', 'bolt12_mint_quote', 'proof_state']);
+      // @ts-expect-error only the mocked subset is injected
+      events = new WalletEvents(mock);
+
+      const paid = events.onceMintPaid('q', { timeoutMs: 50 });
+      await flushMicrotasks();
+      const ws = mock.mint.webSocketConnection!;
+      // Relevant kind rejected; sibling idles. The wait is not surfaced as an error, but the
+      // bounded one-shot escape hatch still resolves the hang.
+      ws.fail('bolt11_mint_quote', new Error('bolt11 broken'));
+
+      await expect(paid).rejects.toThrow(/Timeout/);
+    });
+
+    it('mintQuotePaid treats a mintable accounting balance as paid (no state field)', async () => {
+      const cb = vi.fn();
+      await events.mintQuotePaid('x', cb, vi.fn());
+      const ws = mock.mint.webSocketConnection!;
+
+      // amount_paid == amount_issued: nothing left to mint, not paid.
+      ws.emit('mint_quote', { quote: 'x', amount_paid: 5, amount_issued: 5 });
+      expect(cb).not.toHaveBeenCalled();
+
+      // amount_paid > amount_issued: mintable balance, paid.
+      ws.emit('mint_quote', { quote: 'x', amount_paid: 7, amount_issued: 5 });
+      expect(cb).toHaveBeenCalledWith(expect.objectContaining({ quote: 'x' }));
+    });
+
+    it('mintQuotePaid prefers accounting over legacy state when both are present', async () => {
+      const cb = vi.fn();
+      await events.mintQuotePaid('x', cb, vi.fn());
+      const ws = mock.mint.webSocketConnection!;
+
+      // Legacy state says PAID, but everything paid has already been issued: nothing mintable.
+      ws.emit('mint_quote', { quote: 'x', state: 'PAID', amount_paid: 5, amount_issued: 5 });
+      expect(cb).not.toHaveBeenCalled();
+    });
+
+    it('throws when connectWebSocket fails to establish a connection', async () => {
+      mock.mint.connectWebSocket = vi.fn(async () => {});
+      mock.mint.webSocketConnection = undefined;
+      const proofs: Proof[] = [
+        { amount: Amount.from(1), id: '00bd033559de27d0', secret: 's', C: 'c' },
+      ];
+      await expect(events.mintQuoteUpdates(['a'], vi.fn(), vi.fn())).rejects.toThrow(
+        /Failed to establish WebSocket connection/,
+      );
+      await expect(events.meltQuoteUpdates(['m'], vi.fn(), vi.fn())).rejects.toThrow(
+        /Failed to establish WebSocket connection/,
+      );
+      await expect(events.proofStateUpdates(proofs, vi.fn(), vi.fn())).rejects.toThrow(
+        /Failed to establish WebSocket connection/,
+      );
     });
 
     it('proofStateUpdates subscribes and forwards payloads with proof attached', async () => {
@@ -275,7 +487,7 @@ describe('WalletEvents', () => {
       const p = events.onceMintPaid('q1');
       await flushMicrotasks(); // wait for subscription to be created
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_mint_quote', { quote: 'q1', state: 'PAID', amount: 123 });
+      ws.emit('mint_quote', { quote: 'q1', state: 'PAID', amount: 123 });
       const res = await p;
       expect(res).toMatchObject({ quote: 'q1', amount: 123 });
       await flushMicrotasks();
@@ -307,7 +519,7 @@ describe('WalletEvents', () => {
       const p = events.onceMintPaid('q4');
       await flushMicrotasks(); // wait for subscription
       const ws = mock.mint.webSocketConnection!;
-      ws.fail('bolt11_mint_quote', new Error('boom'));
+      ws.fail('mint_quote', new Error('boom'));
       await expect(p).rejects.toThrow('boom');
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalled();
@@ -319,7 +531,7 @@ describe('WalletEvents', () => {
       const p = events.onceAnyMintPaid(['a', 'b', 'c']);
       await flushMicrotasks(); // subs ready
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_mint_quote', { quote: 'b', state: 'PAID', amount: 42 });
+      ws.emit('mint_quote', { quote: 'b', state: 'PAID', amount: 42 });
       const res = await p;
       expect(res).toMatchObject({ id: 'b', quote: expect.objectContaining({ amount: 42 }) });
       await flushMicrotasks();
@@ -355,7 +567,7 @@ describe('WalletEvents', () => {
       const p = events.onceAnyMintPaid(['f1', 'f2', 'f3'], { failOnError: true });
       await flushMicrotasks(); // subs ready
       const ws = mock.mint.webSocketConnection!;
-      ws.fail('bolt11_mint_quote', new Error('bad'));
+      ws.fail('mint_quote', new Error('bad'));
       await expect(p).rejects.toThrow(/bad/);
       await flushMicrotasks();
       expect(ws.cancelSubscription.mock.calls.length).toBeGreaterThanOrEqual(3);
@@ -365,8 +577,8 @@ describe('WalletEvents', () => {
       const p = events.onceAnyMintPaid(['dup', 'dup', 'other']);
       await flushMicrotasks(); // subs ready
       const ws = mock.mint.webSocketConnection!;
-      expect(ws.count('bolt11_mint_quote')).toBe(2); // dup + other
-      ws.emit('bolt11_mint_quote', { quote: 'dup', state: 'PAID' });
+      expect(ws.count('mint_quote')).toBe(2); // dup + other
+      ws.emit('mint_quote', { quote: 'dup', state: 'PAID' });
       const res = await p;
       expect(res.id).toBe('dup');
     });
@@ -378,8 +590,8 @@ describe('WalletEvents', () => {
       const ws = mock.mint.webSocketConnection!;
       // Our WS mock broadcasts the same error to all subs per call; the first call
       // already empties the set. So assert we get *a* JSON-stringified object.
-      ws.fail('bolt11_mint_quote', { code: 1, msg: 'x' } as any);
-      ws.fail('bolt11_mint_quote', { code: 2, msg: 'y' } as any);
+      ws.fail('mint_quote', { code: 1, msg: 'x' } as any);
+      ws.fail('mint_quote', { code: 2, msg: 'y' } as any);
 
       await expect(p).rejects.toThrow(/"code":\s*\d/);
     });
@@ -388,7 +600,7 @@ describe('WalletEvents', () => {
       const p = events.onceMintPaid('bigobj');
       await flushMicrotasks(); // sub ready
       const ws = mock.mint.webSocketConnection!;
-      ws.fail('bolt11_mint_quote', { n: 10n } as any);
+      ws.fail('mint_quote', { n: 10n } as any);
       await expect(p).rejects.toThrow(/\[object Object\]/);
     });
 
@@ -397,7 +609,7 @@ describe('WalletEvents', () => {
       await flushMicrotasks(); // sub ready
 
       const ws = mock.mint.webSocketConnection!;
-      ws.fail('bolt11_mint_quote', 10n);
+      ws.fail('mint_quote', 10n);
 
       // With current normalizeError/safeStringify, primitives fall back to
       // Object.prototype.toString => "[object BigInt]".
@@ -410,7 +622,7 @@ describe('WalletEvents', () => {
       const p = events.onceMeltPaid('m1');
       await flushMicrotasks(); // sub ready
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_melt_quote', { quote: 'm1', state: 'PAID', amount: 7 });
+      ws.emit('melt_quote', { quote: 'm1', state: 'PAID', amount: 7 });
       const res = await p;
       expect(res).toMatchObject({ quote: 'm1', amount: 7 });
       await flushMicrotasks();
@@ -446,7 +658,7 @@ describe('WalletEvents', () => {
       const p = events.onceMeltPaid('m-error');
       await flushMicrotasks(); // sub ready
       const ws = mock.mint.webSocketConnection!;
-      ws.fail('bolt11_melt_quote', new Error('melt-boom'));
+      ws.fail('melt_quote', new Error('melt-boom'));
       await expect(p).rejects.toThrow('melt-boom');
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalled();
@@ -458,7 +670,7 @@ describe('WalletEvents', () => {
       const p = events.onceMeltPaid('m-ok', { signal: ac.signal });
       await flushMicrotasks(); // sub ready
       const ws = mock.mint.webSocketConnection!;
-      ws.emit('bolt11_melt_quote', { quote: 'm-ok', state: 'PAID', amount: 1 });
+      ws.emit('melt_quote', { quote: 'm-ok', state: 'PAID', amount: 1 });
       await expect(p).resolves.toMatchObject({ quote: 'm-ok' });
       await flushMicrotasks();
       expect(ws.cancelSubscription).toHaveBeenCalled();

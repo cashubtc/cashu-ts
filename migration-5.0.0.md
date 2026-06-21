@@ -269,3 +269,21 @@ Two escape hatches keep stored-quote flows working:
 - Quotes reporting `0/0` defer to the mint — a zero snapshot may simply have been fetched before the payment was made, so the create → pay externally → mint flow is unaffected.
 
 The practical change from v4: attempting to re-mint a quote object whose snapshot shows it fully issued (`amount_paid === amount_issued > 0`) now fails fast client-side instead of round-tripping to the mint for a rejection.
+
+---
+
+## Quote subscriptions default to a generic payload type
+
+The `wallet.on` quote helpers (`mintQuoteUpdates`, `mintQuotePaid`, `meltQuoteUpdates`, `meltQuotePaid`, `onceMintPaid`, `onceMeltPaid`, `onceAnyMintPaid`) are now generic over the payload type, defaulting to `MintQuoteGenericResponse` / `MeltQuoteGenericResponse` (previously `MintQuoteBolt11Response` / `MeltQuoteBolt11Response`). Runtime behaviour is unchanged — only the static type widened, so method-specific fields are now `unknown` unless you narrow.
+
+### Migration
+
+Pass the type argument to restore typed fields:
+
+```ts
+// Before — payload typed as MintQuoteBolt11Response
+await wallet.on.onceMintPaid(quoteId);
+
+// After — narrow to keep bolt11 fields typed
+await wallet.on.onceMintPaid<MintQuoteBolt11Response>(quoteId);
+```

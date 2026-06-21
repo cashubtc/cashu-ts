@@ -1793,8 +1793,8 @@ export type RestoreConfig = {
     keysetId?: string;
 };
 
-// @public (undocumented)
-export type RpcSubKinds = 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'proof_state';
+// @public
+export type RpcSubKinds = 'mint_quote' | 'melt_quote' | 'proof_state' | 'bolt11_mint_quote' | 'bolt11_melt_quote' | 'bolt12_mint_quote' | 'bolt12_melt_quote';
 
 // @public
 export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => string;
@@ -2261,26 +2261,26 @@ export class WalletEvents {
         add: (c: CancellerLike) => CancellerLike;
         cancelled: boolean;
     };
-    meltQuotePaid(id: string, cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    meltQuoteUpdates(ids: string[], cb: (p: MeltQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    mintQuotePaid(id: string, cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    mintQuoteUpdates(ids: string[], cb: (p: MintQuoteBolt11Response) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
-    onceAnyMintPaid(ids: string[], opts?: {
+    meltQuotePaid<T extends MeltQuoteGenericResponse = MeltQuoteGenericResponse>(id: string, cb: (p: T) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
+    meltQuoteUpdates<T extends MeltQuoteGenericResponse = MeltQuoteGenericResponse>(ids: string[], cb: (p: T) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
+    mintQuotePaid<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(id: string, cb: (p: T) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
+    mintQuoteUpdates<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(ids: string[], cb: (p: T) => void, err: (e: Error) => void, opts?: SubscribeOpts): Promise<SubscriptionCanceller>;
+    onceAnyMintPaid<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(ids: string[], opts?: {
         signal?: AbortSignal;
         timeoutMs?: number;
         failOnError?: boolean;
     }): Promise<{
         id: string;
-        quote: MintQuoteBolt11Response;
+        quote: T;
     }>;
-    onceMeltPaid(id: string, opts?: {
+    onceMeltPaid<T extends MeltQuoteGenericResponse = MeltQuoteGenericResponse>(id: string, opts?: {
         signal?: AbortSignal;
         timeoutMs?: number;
-    }): Promise<MeltQuoteBolt11Response>;
-    onceMintPaid(id: string, opts?: {
+    }): Promise<T>;
+    onceMintPaid<T extends MintQuoteGenericResponse = MintQuoteGenericResponse>(id: string, opts?: {
         signal?: AbortSignal;
         timeoutMs?: number;
-    }): Promise<MintQuoteBolt11Response>;
+    }): Promise<T>;
     proofStatesStream<P extends ProofLike = Proof>(proofs: P[], opts?: {
         signal?: AbortSignal;
         maxBuffer?: number;
