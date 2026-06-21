@@ -1176,7 +1176,8 @@ class Mint {
    */
   private normalizeMintBaseFields(data: Record<string, unknown>, method: string, op: string): void {
     this.normalizeQuoteMethod(data, method, op);
-    if (data.amount_paid !== undefined && data.amount_issued !== undefined) {
+    // nullish: absent (legacy bolt11) or off-spec null → derive
+    if (data.amount_paid != null && data.amount_issued != null) {
       data.amount_paid = Amount.from(data.amount_paid as AmountLike);
       data.amount_issued = Amount.from(data.amount_issued as AmountLike);
     } else {
@@ -1308,7 +1309,8 @@ class Mint {
       'meltQuote.expiry',
       undefined,
     );
-    if (data.fee_reserve !== undefined) {
+    if (data.fee_reserve != null) {
+      // nullish
       data.fee_reserve = Amount.from(data.fee_reserve as AmountLike);
     }
     if (data.change) {
