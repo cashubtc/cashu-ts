@@ -114,9 +114,12 @@ type WitnessData = {
 };
 
 /**
+ * NUT-11 tag keys that map onto structured {@link P2PKOptions} fields, rather than being carried as
+ * free-form `additionalTags`.
+ *
  * @internal
  */
-const P2PK_KNOWN_TAG_KEYS = new Set([
+export const P2PK_KNOWN_TAG_KEYS = new Set([
   'locktime',
   'pubkeys',
   'n_sigs',

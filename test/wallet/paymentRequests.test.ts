@@ -1,6 +1,7 @@
 import { test, describe, expect } from 'vitest';
 import {
   decodePaymentRequest,
+  OutputData,
   PaymentRequest,
   PaymentRequestTransport,
   PaymentRequestTransportType,
@@ -238,6 +239,105 @@ describe('payment requests', () => {
       expect(decoded.mints).toEqual(pr.mints);
       expect(decoded.transport![0].type).toBe(pr.transport![0].type);
       expect(decoded.transport![0].target).toBe(pr.transport![0].target);
+    });
+  });
+
+  describe('toP2PKOptions', () => {
+    const PUBKEY = '03a16e8557f5a4229212f4df093791c8615c864a387d66fd990e9cdca5dcb5c9aa';
+    const PUBKEY_2 = '02000000000000000000000000000000000000000000000000000000000000000a';
+    const REFUND = '020000000000000000000000000000000000000000000000000000000000000b0b';
+    const HASH = '5d3f2c1b0a99887766554433221100ffeeddccbbaa99887766554433221100ff';
+
+    const prWithNut10 = (nut10?: NUT10Option) =>
+      new PaymentRequest(undefined, 'id', 1, 'sat', undefined, undefined, false, nut10);
+
+    test('returns undefined when there is no nut10 option', () => {
+      expect(prWithNut10(undefined).toP2PKOptions()).toBeUndefined();
+    });
+
+    test('maps a bare P2PK option to a single pubkey', () => {
+      const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [] };
+      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({ pubkey: PUBKEY });
+    });
+
+    test('maps standard NUT-11 tags onto structured P2PK fields', () => {
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['pubkeys', PUBKEY_2],
+          ['locktime', '1700000000'],
+          ['n_sigs', '2'],
+          ['refund', REFUND],
+          ['n_sigs_refund', '1'],
+          ['sigflag', 'SIG_ALL'],
+        ],
+      };
+      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({
+        pubkey: [PUBKEY, PUBKEY_2],
+        locktime: 1700000000,
+        requiredSignatures: 2,
+        refundKeys: [REFUND],
+        requiredRefundSignatures: 1,
+        sigFlag: 'SIG_ALL',
+      });
+    });
+
+    test('preserves non-standard tags as additionalTags', () => {
+      const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['custom', 'value']] };
+      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({
+        pubkey: PUBKEY,
+        additionalTags: [['custom', 'value']],
+      });
+    });
+
+    test('rejects malformed tags rather than dropping invalid lock semantics', () => {
+      // An empty-string tag value is invalid per NUT-10; silently ignoring it
+      // would produce a lock weaker than the payee requested, so it must throw.
+      const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['locktime', '']] };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Invalid NUT-10 tag/);
+    });
+
+    test('maps an HTLC option to a hashlock with signing keys', () => {
+      const nut10: NUT10Option = {
+        kind: 'HTLC',
+        data: HASH,
+        tags: [
+          ['pubkeys', PUBKEY],
+          ['locktime', '1700000000'],
+          ['refund', REFUND],
+        ],
+      };
+      expect(prWithNut10(nut10).toP2PKOptions()).toEqual({
+        hashlock: HASH,
+        pubkey: [PUBKEY],
+        locktime: 1700000000,
+        refundKeys: [REFUND],
+      });
+    });
+
+    test('ignores unknown/future kinds by returning undefined', () => {
+      const nut10: NUT10Option = { kind: 'FUTURE', data: 'abc', tags: [] };
+      expect(prWithNut10(nut10).toP2PKOptions()).toBeUndefined();
+    });
+
+    test('throws when a P2PK/HTLC option is missing its data field', () => {
+      expect(() => prWithNut10({ kind: 'P2PK', data: '', tags: [] }).toP2PKOptions()).toThrow(
+        /missing its data field/,
+      );
+      expect(() => prWithNut10({ kind: 'HTLC', data: '', tags: [] }).toP2PKOptions()).toThrow(
+        /missing its data field/,
+      );
+    });
+
+    test('produced options build a secret locked to exactly the requested condition', () => {
+      const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [] };
+      const options = prWithNut10(nut10).toP2PKOptions()!;
+      const od = OutputData.createSingleP2PKData(options, 1, '00ad268c4d1f5826');
+      const secret = JSON.parse(new TextDecoder().decode(od.secret));
+      expect(secret[0]).toBe('P2PK');
+      expect(secret[1].data).toBe(PUBKEY);
+      expect(secret[1].tags).toEqual([]);
     });
   });
 });
