@@ -1585,6 +1585,7 @@ class PaymentRequest_2 {
     toEncodedCreqB(): string;
     // (undocumented)
     toEncodedRequest(): string;
+    toP2PKOptions(): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
