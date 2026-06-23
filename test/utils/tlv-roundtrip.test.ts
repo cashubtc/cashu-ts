@@ -121,6 +121,35 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const twoParts = new Uint8Array([...onePart, ...onePart]);
       expect(() => decodeTLV(twoParts)).toThrow(/multiple nut10/);
     });
+
+    test('rejects duplicate nut10 data field', () => {
+      // A single nut10 with two NUT10_TAG_DATA tags previously last-wins. Wire
+      // format per part: tag(1) + length(2, big-endian) + value.
+      const malformed = new Uint8Array([
+        0x08,
+        0x00,
+        18, // TAG_NUT10, length 18
+        0x01,
+        0x00,
+        0x01,
+        0x00, // NUT10_TAG_KIND = 0 (P2PK)
+        0x02,
+        0x00,
+        0x05,
+        97,
+        108,
+        105,
+        99,
+        101, // NUT10_TAG_DATA = "alice"
+        0x02,
+        0x00,
+        0x03,
+        98,
+        111,
+        98, // NUT10_TAG_DATA = "bob"
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/multiple nut10 data/);
+    });
   });
 
   describe('HTTP POST Transport (kind=0x01)', () => {

@@ -301,9 +301,17 @@ function parseNut10(value: Uint8Array): Nut10SpendingCondition {
   for (const part of parts) {
     switch (part.tag) {
       case NUT10_TAG_KIND:
+        // kind/data are singular; a duplicate makes the lock ambiguous (last
+        // value silently won before), so reject rather than guess.
+        if (kindNum !== undefined) {
+          throw new CTSError('invalid pr: multiple nut10 kind fields');
+        }
         kindNum = parseU8(part.value);
         break;
       case NUT10_TAG_DATA:
+        if (data !== undefined) {
+          throw new CTSError('invalid pr: multiple nut10 data fields');
+        }
         data = parseString(part.value);
         break;
       case NUT10_TAG_TAG_TUPLE:
