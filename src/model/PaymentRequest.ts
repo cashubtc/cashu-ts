@@ -19,6 +19,7 @@ import { CTSError } from './Errors';
 export class PaymentRequest {
   public amount?: Amount;
   public feeReserve?: Amount;
+  public mintsStrict?: boolean;
 
   constructor(
     public transport?: PaymentRequestTransport[],
@@ -29,12 +30,15 @@ export class PaymentRequest {
     public description?: string,
     public singleUse: boolean = false,
     public nut10?: NUT10Option,
-    public mintsStrict?: boolean,
+    mintsStrict?: boolean,
     feeReserve?: AmountLike,
     public supportedMethods?: string[],
   ) {
     this.amount = amount !== undefined ? Amount.from(amount) : undefined;
     this.feeReserve = feeReserve !== undefined ? Amount.from(feeReserve) : undefined;
+    // Coerce to a real boolean so an untyped falsy CBOR value (`0`/`null`)
+    // can't read strict via the getter yet serialize false over TLV.
+    this.mintsStrict = mintsStrict === undefined ? undefined : Boolean(mintsStrict);
   }
 
   /**

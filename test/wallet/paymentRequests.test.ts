@@ -199,6 +199,34 @@ describe('payment requests', () => {
       expect(fromWire.isMintListStrict).toBe(true);
     });
 
+    test('non-boolean falsy ms is coerced (no cross-format type confusion)', () => {
+      // An untyped CBOR producer might emit `ms: 0`/`ms: null` to mean
+      // "preferred". Coercion must normalize it to a genuine boolean so the
+      // getter and TLV serialization agree rather than diverging.
+      const fromZero = PaymentRequest.fromRawRequest({
+        i: 'zero',
+        a: 100,
+        u: 'sat',
+        m: ['https://mint.example.com'],
+        ms: 0 as unknown as boolean,
+      });
+      expect(fromZero.mintsStrict).toBe(false);
+      expect(fromZero.isMintListStrict).toBe(false);
+      // Round-trips through both formats without flipping strictness.
+      expect(decodePaymentRequest(fromZero.toEncodedCreqA()).isMintListStrict).toBe(false);
+      expect(decodePaymentRequest(fromZero.toEncodedCreqB()).isMintListStrict).toBe(false);
+
+      const fromNull = PaymentRequest.fromRawRequest({
+        i: 'null',
+        a: 100,
+        u: 'sat',
+        m: ['https://mint.example.com'],
+        ms: null as unknown as boolean,
+      });
+      expect(fromNull.mintsStrict).toBe(false);
+      expect(fromNull.isMintListStrict).toBe(false);
+    });
+
     test('ms/fr/sm absent by default (no serialization, no defaults injected)', () => {
       const request = new PaymentRequest(undefined, 'no_prefs', 100, 'sat', [
         'https://mint.example.com',
