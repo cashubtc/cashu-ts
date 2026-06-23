@@ -2800,7 +2800,10 @@ class Wallet {
     this.validateMeltQuote(meltQuote);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved, nut08Change = true } = config || {};
-    const keyset = this.getOutputKeyset(keysetId); // specified or wallet keyset
+    // Plain getKeyset: melting needs no new outputs, so an inactive/legacy keyset must not
+    // block withdrawal. A mint unwinding liabilities deactivates keysets but
+    // keeps melt open; gate output creation below, not the melt itself.
+    let keyset = this.getKeyset(keysetId); // specified or wallet keyset
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
     const sendAmount = sumProofs(normalizedProofs);
     let outputData: OutputDataLike[] = [];
@@ -2827,6 +2830,13 @@ class Wallet {
     // Create NUT-08 blanks for return of melt change (if supported)
     // Note: zero amount + zero denomination passes splitAmount validation
     else if (nut08Change && feeReserve.greaterThan(0)) {
+      // Now we actually create outputs the mint must sign: enforce the output policy.
+      this.failIf(
+        !keyset.isActive,
+        'Melt change keyset is inactive. Use an active keyset or set nut08Change: false to forfeit it',
+        { keyset: keyset.id },
+      );
+      keyset = this.getOutputKeyset(keysetId);
       let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
       if (count < 0) count = 0; // Prevents: -Infinity
       const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
