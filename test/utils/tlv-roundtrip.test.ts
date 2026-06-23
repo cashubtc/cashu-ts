@@ -150,6 +150,29 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       ]);
       expect(() => decodeTLV(malformed)).toThrow(/multiple nut10 data/);
     });
+
+    test('rejects duplicate nut10 kind field', () => {
+      const malformed = new Uint8Array([
+        0x08,
+        0x00,
+        14, // TAG_NUT10, length 14
+        0x01,
+        0x00,
+        0x01,
+        0x00, // NUT10_TAG_KIND = 0 (P2PK)
+        0x01,
+        0x00,
+        0x01,
+        0x01, // NUT10_TAG_KIND = 1 (HTLC)
+        0x02,
+        0x00,
+        0x03,
+        98,
+        111,
+        98, // NUT10_TAG_DATA = "bob"
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/multiple nut10 kind/);
+    });
   });
 
   describe('HTTP POST Transport (kind=0x01)', () => {
