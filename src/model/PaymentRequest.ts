@@ -101,13 +101,11 @@ export class PaymentRequest {
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
-        ? [
-            {
-              kind: this.nut10.kind,
-              data: this.nut10.data,
-              tags: this.nut10.tags,
-            },
-          ]
+        ? {
+            kind: this.nut10.kind,
+            data: this.nut10.data,
+            tags: this.nut10.tags,
+          }
         : undefined,
     };
 
@@ -214,11 +212,11 @@ export class PaymentRequest {
     if (lowerRequest.startsWith('creqb')) {
       const data = decodeBech32mToBytes(lowerRequest);
       const decoded = decodeTLV(data);
-      const nut10 = decoded.nut10?.[0]
+      const nut10 = decoded.nut10
         ? {
-            kind: decoded.nut10[0].kind,
-            data: decoded.nut10[0].data,
-            tags: decoded.nut10[0].tags ?? [],
+            kind: decoded.nut10.kind,
+            data: decoded.nut10.data,
+            tags: decoded.nut10.tags ?? [],
           }
         : undefined;
       return new PaymentRequest(

@@ -24,7 +24,7 @@ export type DecodedTLVPaymentRequest = {
   mints?: string[];
   description?: string;
   transports?: PaymentRequestTransport[];
-  nut10?: Nut10SpendingCondition[];
+  nut10?: Nut10SpendingCondition;
 };
 
 /**
@@ -137,7 +137,7 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         if (result.nut10) {
           throw new CTSError('invalid pr: multiple nut10 spending conditions');
         }
-        result.nut10 = [parseNut10(part.value)];
+        result.nut10 = parseNut10(part.value);
         break;
       default:
         // Ignore unknown tags for forward compatibility
@@ -417,11 +417,9 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     }
   }
 
-  // Repeatable: nut10
-  if (request.nut10 && request.nut10.length > 0) {
-    for (const nut10 of request.nut10) {
-      parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(nut10)));
-    }
+  // Not repeatable: single nut10 spending condition (NUT-26 tag 0x08)
+  if (request.nut10) {
+    parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(request.nut10)));
   }
 
   // Concatenate all parts

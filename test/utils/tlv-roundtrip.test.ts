@@ -102,12 +102,11 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const decoded = decodeTLV(bytes);
 
       expect(decoded.nut10).toBeDefined();
-      expect(decoded.nut10).toHaveLength(1);
-      expect(decoded.nut10![0].kind).toBe('P2PK');
-      expect(decoded.nut10![0].data).toBe(
+      expect(decoded.nut10!.kind).toBe('P2PK');
+      expect(decoded.nut10!.data).toBe(
         '02c3b5bb27e361457c92d93d78dd73d3d53732110b2cfe8b50fbc0abc615e9c331',
       );
-      expect(decoded.nut10![0].tags).toEqual([['timeout', '3600']]);
+      expect(decoded.nut10!.tags).toEqual([['timeout', '3600']]);
 
       const reEncoded = encodeTLV(decoded);
       const finalDecoded = decodeTLV(reEncoded);
@@ -116,15 +115,11 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
     });
 
     test('rejects multiple nut10 spending conditions', () => {
-      // NUT-26 tag 0x08 is not repeatable; a second nut10 is malformed.
-      const req: DecodedTLVPaymentRequest = {
-        id: 'test',
-        nut10: [
-          { kind: 'HTLC', data: 'htlcdata' },
-          { kind: 'P2PK', data: 'p2pkdata' },
-        ],
-      };
-      expect(() => decodeTLV(encodeTLV(req))).toThrow(/multiple nut10/);
+      // NUT-26 tag 0x08 is not repeatable. encodeTLV emits a single nut10, so
+      // hand-build a malformed payload by concatenating two nut10-only streams.
+      const onePart = encodeTLV({ nut10: { kind: 'HTLC', data: 'htlcdata' } });
+      const twoParts = new Uint8Array([...onePart, ...onePart]);
+      expect(() => decodeTLV(twoParts)).toThrow(/multiple nut10/);
     });
   });
 
@@ -298,15 +293,15 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       const decoded = decodeTLV(bytes);
 
       expect(decoded.nut10).toBeDefined();
-      expect(decoded.nut10![0].kind).toBe('HTLC');
-      expect(decoded.nut10![0].tags).toHaveLength(2);
+      expect(decoded.nut10!.kind).toBe('HTLC');
+      expect(decoded.nut10!.tags).toHaveLength(2);
 
       const reEncoded = encodeTLV(decoded);
       const finalDecoded = decodeTLV(reEncoded);
 
-      expect(finalDecoded.nut10![0].kind).toBe(decoded.nut10![0].kind);
-      expect(finalDecoded.nut10![0].data).toBe(decoded.nut10![0].data);
-      expect(finalDecoded.nut10![0].tags).toEqual(decoded.nut10![0].tags);
+      expect(finalDecoded.nut10!.kind).toBe(decoded.nut10!.kind);
+      expect(finalDecoded.nut10!.data).toBe(decoded.nut10!.data);
+      expect(finalDecoded.nut10!.tags).toEqual(decoded.nut10!.tags);
     });
   });
 
@@ -390,16 +385,14 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
         amount: BigInt(250),
         unit: 'sat',
         mints: ['https://mint.com'],
-        nut10: [
-          {
-            kind: 'P2PK',
-            data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
-            tags: [
-              ['timeout', '7200'],
-              ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
-            ],
-          },
-        ],
+        nut10: {
+          kind: 'P2PK',
+          data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
+          tags: [
+            ['timeout', '7200'],
+            ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
+          ],
+        },
       };
 
       const encoded = encodeTLV(request);
@@ -414,7 +407,6 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
         unit: 'sat',
         mints: ['https://mint.com'],
         transports: [], // Empty array should be omitted
-        nut10: [], // Empty array should be omitted
       };
 
       const encoded = encodeTLV(request);
