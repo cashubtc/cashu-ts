@@ -214,6 +214,13 @@ export class PaymentRequest {
     if (lowerRequest.startsWith('creqb')) {
       const data = decodeBech32mToBytes(lowerRequest);
       const decoded = decodeTLV(data);
+      const nut10 = decoded.nut10?.[0]
+        ? {
+            kind: decoded.nut10[0].kind,
+            data: decoded.nut10[0].data,
+            tags: decoded.nut10[0].tags ?? [],
+          }
+        : undefined;
       return new PaymentRequest(
         decoded.transports,
         decoded.id,
@@ -222,7 +229,7 @@ export class PaymentRequest {
         decoded.mints,
         decoded.description,
         decoded.singleUse ?? false,
-        undefined,
+        nut10,
       );
     }
 

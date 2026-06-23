@@ -220,7 +220,15 @@ describe('payment requests', () => {
       expect(decoded.amount?.equals(1000)).toBeTruthy();
       expect(decoded.unit).toBe('sat');
       expect(decoded.description).toBe('Locked payment');
-      // Note: nut10 is decoded from creqB format, but only first entry is stored
+      // nut10 roundtrips on creqB decode (only the first entry is stored)
+      expect(decoded.nut10?.kind).toBe('P2PK');
+      expect(decoded.nut10?.data).toBe(
+        '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
+      );
+      expect(decoded.nut10?.tags).toStrictEqual([
+        ['timeout', '7200'],
+        ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
+      ]);
     });
 
     test('roundtrip from creqB test vector', () => {
