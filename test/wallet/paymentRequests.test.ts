@@ -231,6 +231,29 @@ describe('payment requests', () => {
       ]);
     });
 
+    test('encode and decode payment request with tagless NUT-10', () => {
+      const pr = new PaymentRequest(
+        undefined,
+        'p2pk_test',
+        1000,
+        'sat',
+        undefined,
+        undefined,
+        false,
+        {
+          kind: 'P2PK',
+          data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
+          tags: [],
+        } as NUT10Option,
+      );
+
+      const decoded = PaymentRequest.fromEncodedRequest(pr.toEncodedCreqB());
+
+      // Empty tags decode to undefined and fall back to [] on construction.
+      expect(decoded.nut10?.kind).toBe('P2PK');
+      expect(decoded.nut10?.tags).toStrictEqual([]);
+    });
+
     test('roundtrip from creqB test vector', () => {
       // Use an existing test vector
       const originalEncoded =
