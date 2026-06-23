@@ -1,6 +1,6 @@
-import { parseSecret, getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
+import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
 import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
-import { P2PK_KNOWN_TAG_KEYS } from '../crypto/NUT11';
+import { P2PK_KNOWN_TAG_KEYS, parseP2PKSecret } from '../crypto/NUT11';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
@@ -138,9 +138,10 @@ export class PaymentRequest {
       throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
     }
 
-    // Use the NUT-10/11 accessors the verifier uses. parseSecret rejects malformed
-    // tags (e.g. empty values), so a bad lock condition fails instead of being dropped.
-    const secret = parseSecret([
+    // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
+    // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
+    // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
+    const secret = parseP2PKSecret([
       nut10.kind,
       { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
     ]);
