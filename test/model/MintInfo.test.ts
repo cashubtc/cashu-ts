@@ -515,6 +515,27 @@ describe('MintInfo.isImplementationBelow', () => {
     expect(
       infoWithVersion('cdk-mintd/0.20.1-rc.1').isImplementationBelow('cdk-mintd', '0.20.1'),
     ).toBe(false);
+    // Dot-separated tag (PEP 440 .dev/.post, bare .beta) reads as the base version.
+    expect(
+      infoWithVersion('Nutshell/0.20.1.dev3').isImplementationBelow('nutshell', '0.20.1'),
+    ).toBe(false);
+    expect(
+      infoWithVersion('Nutshell/0.20.1.rc.1').isImplementationBelow('nutshell', '0.20.1'),
+    ).toBe(false);
+  });
+
+  // Regression: a below-threshold version with a dot-separated tag (setuptools_scm dev build,
+  // PEP 440 .post/.beta) must still gate to legacy, else an older mint rejects an already-paid quote.
+  it('gates dot-separated prerelease/build tags below the threshold to legacy', () => {
+    expect(
+      infoWithVersion('Nutshell/0.20.5.dev3+g1a2b3c').isImplementationBelow('nutshell', '0.21.0'),
+    ).toBe(true);
+    expect(
+      infoWithVersion('Nutshell/0.16.5.post1').isImplementationBelow('nutshell', '0.20.1'),
+    ).toBe(true);
+    expect(
+      infoWithVersion('cdk-mintd/0.15.0.beta').isImplementationBelow('cdk-mintd', '0.17.0'),
+    ).toBe(true);
   });
 
   it('zero-pads the minimum version when the advertised version has more segments', () => {

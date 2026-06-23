@@ -414,13 +414,11 @@ export class MintInfo {
   }
 
   /**
-   * Checks whether the mint's advertised `version` (`"<implementation>/<version>"`, e.g.
-   * `"Nutshell/0.20.1"`) identifies the given implementation with a version lower than
-   * `minVersion`. The implementation name is matched case-insensitively; versions compare
-   * numerically per dot-separated segment, ignoring any non-numeric suffix within a segment, so a
-   * prerelease compares equal to its base version (`0.21.0rc1` ≡ `0.21.0-rc.1` ≡ `0.21.0`). Returns
-   * false for other implementations and for missing or unparseable versions, so callers gating a
-   * legacy fallback treat those as current.
+   * Whether the advertised `version` (`"<implementation>/<version>"`) is the given implementation
+   * below `minVersion`. Name matched case-insensitively; versions compared numerically per dot
+   * segment, stopping at the first prerelease/build tag (`rc1`, `.dev3`) so a prerelease compares
+   * as its base. Returns false for other implementations or versions with no leading number, so a
+   * legacy-fallback gate treats those as current.
    */
   isImplementationBelow(implementation: string, minVersion: string): boolean {
     const advertised = this._mintInfo.version;
@@ -439,9 +437,15 @@ export class MintInfo {
     return false;
   }
 
-  // "0.16.4-rc1" → [0, 16, 4]; null when any segment lacks a leading integer.
+  // Leading numeric segments, stopping at the first prerelease/build tag:
+  // "0.16.4-rc1" → [0,16,4], "0.21.0.dev3" → [0,21,0]; null if none (e.g. "" or "x").
   private static parseVersionSegments(version: string): number[] | null {
-    const segments = version.split('.').map((s) => parseInt(s, 10));
-    return segments.every((n) => Number.isSafeInteger(n) && n >= 0) ? segments : null;
+    const segments: number[] = [];
+    for (const s of version.split('.')) {
+      const n = parseInt(s, 10);
+      if (!Number.isSafeInteger(n) || n < 0) break;
+      segments.push(n);
+    }
+    return segments.length > 0 ? segments : null;
   }
 }
