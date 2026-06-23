@@ -114,6 +114,18 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
 
       expect(finalDecoded.nut10).toEqual(decoded.nut10);
     });
+
+    test('rejects multiple nut10 spending conditions', () => {
+      // NUT-26 tag 0x08 is not repeatable; a second nut10 is malformed.
+      const req: DecodedTLVPaymentRequest = {
+        id: 'test',
+        nut10: [
+          { kind: 'HTLC', data: 'htlcdata' },
+          { kind: 'P2PK', data: 'p2pkdata' },
+        ],
+      };
+      expect(() => decodeTLV(encodeTLV(req))).toThrow(/multiple nut10/);
+    });
   });
 
   describe('HTTP POST Transport (kind=0x01)', () => {
