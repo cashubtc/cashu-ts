@@ -329,6 +329,20 @@ describe('payment requests', () => {
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Invalid NUT-10 tag/);
     });
 
+    test('rejects duplicate tag keys (NUT-11 unspendable lock)', () => {
+      // A repeated tag key makes the proof unspendable per NUT-11, so building
+      // the lock must fail rather than silently first-winning one value.
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['locktime', '100'],
+          ['locktime', '200'],
+        ],
+      };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Duplicate P2PK tag "locktime"/);
+    });
+
     test('maps an HTLC option to a hashlock with signing keys', () => {
       const nut10: NUT10Option = {
         kind: 'HTLC',
