@@ -220,7 +220,38 @@ describe('payment requests', () => {
       expect(decoded.amount?.equals(1000)).toBeTruthy();
       expect(decoded.unit).toBe('sat');
       expect(decoded.description).toBe('Locked payment');
-      // Note: nut10 is decoded from creqB format, but only first entry is stored
+      // nut10 roundtrips on creqB decode (only the first entry is stored)
+      expect(decoded.nut10?.kind).toBe('P2PK');
+      expect(decoded.nut10?.data).toBe(
+        '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
+      );
+      expect(decoded.nut10?.tags).toStrictEqual([
+        ['timeout', '7200'],
+        ['refund', '03abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890cd'],
+      ]);
+    });
+
+    test('encode and decode payment request with tagless NUT-10', () => {
+      const pr = new PaymentRequest(
+        undefined,
+        'p2pk_test',
+        1000,
+        'sat',
+        undefined,
+        undefined,
+        false,
+        {
+          kind: 'P2PK',
+          data: '02abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab',
+          tags: [],
+        } as NUT10Option,
+      );
+
+      const decoded = PaymentRequest.fromEncodedRequest(pr.toEncodedCreqB());
+
+      // Empty tags decode to undefined and fall back to [] on construction.
+      expect(decoded.nut10?.kind).toBe('P2PK');
+      expect(decoded.nut10?.tags).toStrictEqual([]);
     });
 
     test('roundtrip from creqB test vector', () => {
@@ -296,6 +327,20 @@ describe('payment requests', () => {
       // would produce a lock weaker than the payee requested, so it must throw.
       const nut10: NUT10Option = { kind: 'P2PK', data: PUBKEY, tags: [['locktime', '']] };
       expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Invalid NUT-10 tag/);
+    });
+
+    test('rejects duplicate tag keys (NUT-11 unspendable lock)', () => {
+      // A repeated tag key makes the proof unspendable per NUT-11, so building
+      // the lock must fail rather than silently first-winning one value.
+      const nut10: NUT10Option = {
+        kind: 'P2PK',
+        data: PUBKEY,
+        tags: [
+          ['locktime', '100'],
+          ['locktime', '200'],
+        ],
+      };
+      expect(() => prWithNut10(nut10).toP2PKOptions()).toThrow(/Duplicate P2PK tag "locktime"/);
     });
 
     test('maps an HTLC option to a hashlock with signing keys', () => {
