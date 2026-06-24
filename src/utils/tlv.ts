@@ -24,7 +24,7 @@ export type DecodedTLVPaymentRequest = {
   mints?: string[];
   description?: string;
   transports?: PaymentRequestTransport[];
-  nut10?: Nut10SpendingCondition[];
+  nut10?: Nut10SpendingCondition;
 };
 
 /**
@@ -132,10 +132,12 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         result.transports.push(parseTransport(part.value));
         break;
       case TAG_NUT10:
-        if (!result.nut10) {
-          result.nut10 = [];
+        // NUT-26 tag 0x08 is not repeatable (unlike mint/transport). A second
+        // nut10 makes the requested lock ambiguous, so reject rather than guess.
+        if (result.nut10) {
+          throw new CTSError('invalid pr: multiple nut10 spending conditions');
         }
-        result.nut10.push(parseNut10(part.value));
+        result.nut10 = parseNut10(part.value);
         break;
       default:
         // Ignore unknown tags for forward compatibility
@@ -299,9 +301,17 @@ function parseNut10(value: Uint8Array): Nut10SpendingCondition {
   for (const part of parts) {
     switch (part.tag) {
       case NUT10_TAG_KIND:
+        // kind/data are singular; a duplicate makes the lock ambiguous (last
+        // value silently won before), so reject rather than guess.
+        if (kindNum !== undefined) {
+          throw new CTSError('invalid pr: multiple nut10 kind fields');
+        }
         kindNum = parseU8(part.value);
         break;
       case NUT10_TAG_DATA:
+        if (data !== undefined) {
+          throw new CTSError('invalid pr: multiple nut10 data fields');
+        }
         data = parseString(part.value);
         break;
       case NUT10_TAG_TAG_TUPLE:
@@ -415,11 +425,9 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     }
   }
 
-  // Repeatable: nut10
-  if (request.nut10 && request.nut10.length > 0) {
-    for (const nut10 of request.nut10) {
-      parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(nut10)));
-    }
+  // Not repeatable: single nut10 spending condition (NUT-26 tag 0x08)
+  if (request.nut10) {
+    parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(request.nut10)));
   }
 
   // Concatenate all parts
