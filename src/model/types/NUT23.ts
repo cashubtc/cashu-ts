@@ -30,13 +30,10 @@ export type MintQuoteBolt11Response = MintQuoteBaseResponse & {
    */
   amount: Amount;
   /**
-   * State of the mint quote.
+   * State of the mint quote. Deprecated in NUT-04 in favour of the accounting fields; cashu-ts
+   * always populates it for bolt11.
    */
   state: MintQuoteState;
-  /**
-   * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
-   */
-  expiry: number | null;
 };
 
 /**
@@ -63,10 +60,6 @@ export type MeltQuoteBolt11Request = MeltQuoteBaseRequest & {
  * for paying Lightning Network offers.
  */
 export type MeltQuoteBolt11Response = MeltQuoteBaseResponse & {
-  /**
-   * Payment request for the melt quote.
-   */
-  request: string; // LN invoice
   /**
    * Fee reserve to be added to the amount.
    */

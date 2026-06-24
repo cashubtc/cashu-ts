@@ -18,21 +18,9 @@ export type MintQuoteOnchainRequest = MintQuoteBaseRequest & {
  */
 export type MintQuoteOnchainResponse = MintQuoteBaseResponse & {
   /**
-   * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
-   */
-  expiry: number | null;
-  /**
    * Public key the quote is locked to.
    */
   pubkey: string;
-  /**
-   * The amount that has been paid to the mint via the onchain transaction.
-   */
-  amount_paid: Amount;
-  /**
-   * The amount of ecash that has been issued for the given mint quote.
-   */
-  amount_issued: Amount;
 };
 
 /**
@@ -71,10 +59,6 @@ export type MeltQuoteOnchainFeeOption = {
  * contains NUT-08 change signatures when the mint returns onchain melt change.
  */
 export type MeltQuoteOnchainResponse = MeltQuoteBaseResponse & {
-  /**
-   * Bitcoin address or destination.
-   */
-  request: string;
   /**
    * Available fee and confirmation estimates for this quote.
    */
