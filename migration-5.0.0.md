@@ -35,9 +35,9 @@ If you were relying on a symbol that is not exported by the package entry point 
 
 ## `signMintQuote` / `verifyMintQuoteSignature` now use the amended NUT-20 message
 
-These functions now produce and verify the hardened mint-quote signature message from cashubtc/nuts#375 — domain-separated, length-framed, and committing to every output's amount and blinded point — shared by NUT-20 single and NUT-29 batch minting. The previous v4 byte format (`quote || B_0 || … || B_(n-1)`) is no longer part of the public API; the `signMintQuoteLegacy`/`verifyMintQuoteSignatureLegacy` pair exists only as an internal transitional fallback and is not exported.
+These functions now produce and verify the hardened mint-quote signature message introduced by cashubtc/nuts#375. Legacy signing is supported as an internal transitional fallback and is not exported.
 
-For most consumers this is transparent: `Wallet` signs the amended message by default and automatically retries with the legacy message if a not-yet-upgraded mint rejects it (NUT error 20008), so wallet-level minting needs no changes.
+For most consumers this is transparent: `Wallet` signs the amended message by default and automatically retries with the legacy message if a legacy mint rejects it (NUT error 20008), so wallet-level minting needs no changes.
 
 ### Migration
 
