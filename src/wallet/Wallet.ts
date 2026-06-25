@@ -8,7 +8,6 @@
 import { type AuthProvider } from '../auth/AuthProvider';
 import {
   signMintQuote,
-  signMintQuoteLegacy,
   findSigningKey,
   signP2PKProofs as cryptoSignP2PKProofs,
   hashToCurve,
@@ -20,6 +19,8 @@ import {
   buildLegacyP2PKSigAllMessage,
   parseSecret,
 } from '../crypto';
+// Internal transitional fallback — not part of crypto/index.ts
+import { signMintQuoteLegacy } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';

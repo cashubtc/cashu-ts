@@ -1979,9 +1979,6 @@ export const SigFlags: {
 // @public (undocumented)
 export function signMintQuote(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
 
-// @public (undocumented)
-export function signMintQuoteLegacy(privkey: string, quote: string, blindedMessages: SerializedBlindedMessage[]): string;
-
 // @public
 export function signP2PKProof(proof: Proof, privateKey: PrivKey, message?: string): Proof;
 
@@ -2110,9 +2107,6 @@ export function verifyHTLCSpendingConditions(proof: Proof, logger?: Logger, mess
 
 // @public (undocumented)
 export function verifyMintQuoteSignature(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
-
-// @public (undocumented)
-export function verifyMintQuoteSignatureLegacy(pubkey: string, quote: string, blindedMessages: SerializedBlindedMessage[], signature: string): boolean;
 
 // @public
 export function verifyP2PKSpendingConditions(proof: Proof, logger?: Logger, message?: string): P2PKVerificationResult;

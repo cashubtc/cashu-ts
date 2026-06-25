@@ -18,7 +18,8 @@ import {
 } from '../../src';
 
 import { Bytes, sumProofs } from '../../src/utils';
-import { verifyMintQuoteSignature, verifyMintQuoteSignatureLegacy } from '../../src/crypto';
+import { verifyMintQuoteSignature } from '../../src/crypto';
+import { verifyMintQuoteSignatureLegacy } from '../../src/crypto/NUT20';
 import { hexToBytes } from '@noble/curves/utils.js';
 import { useTestServer, mint, mintUrl, unit, logger, mintInfoResp } from './_setup';
 
