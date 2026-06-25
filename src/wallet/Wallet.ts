@@ -2203,6 +2203,7 @@ class Wallet {
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { payload, outputData, keysetId, method, legacySignature } = mintPreview;
+    // TODO: Remove legacy message support
     const { signatures } = await this.withLegacyQuoteSigFallback(
       legacySignature !== undefined,
       () => this.mint.mint(method, payload),
@@ -2322,10 +2323,8 @@ class Wallet {
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
     // Each locked quote's pubkey is matched against the provided privkey(s).
-    // Sign the amended (nuts#375) message by default and keep a parallel legacy signature over the
-    // same outputs as a fallback for not-yet-upgraded mints — see completeBatchMint().
     const signatures: Array<string | null> = [];
-    const legacySignatures: Array<string | null> = [];
+    const legacySignatures: Array<string | null> = []; // Temporary legacy message support
     let hasSignatures = false;
     for (const entry of entries) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
@@ -2375,7 +2374,7 @@ class Wallet {
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
     const { method, payload, outputData, keysetId, legacySignatures } = batchPreview;
-
+    // TODO: Remove legacy message support
     const { signatures: sigs } = await this.withLegacyQuoteSigFallback(
       legacySignatures !== undefined,
       () => this.mint.mintBatch(method, payload),
