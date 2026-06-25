@@ -598,8 +598,19 @@ describe('mint quote signature legacy fallback', () => {
   const privkey = '0000000000000000000000000000000000000000000000000000000000000001';
   const pubkey = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 
-  async function makeWallet() {
-    const wallet = new Wallet(mint, { unit });
+  function spyLogger() {
+    return {
+      error: vi.fn(),
+      warn: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      trace: vi.fn(),
+      log: vi.fn(),
+    };
+  }
+
+  async function makeWallet(walletLogger?: ReturnType<typeof spyLogger>) {
+    const wallet = new Wallet(mint, { unit, logger: walletLogger });
     await wallet.loadMint();
     return wallet;
   }
@@ -688,10 +699,11 @@ describe('mint quote signature legacy fallback', () => {
       );
     }
 
-    test('resends the same outputs with the legacy signature', async () => {
+    test('resends the same outputs with the legacy signature and warns', async () => {
       const seen: SeenRequest[] = [];
       legacyOnlyMint(seen);
-      const wallet = await makeWallet();
+      const logger = spyLogger();
+      const wallet = await makeWallet(logger);
 
       const proofs = await wallet.mintProofsBolt11(1, makeLockedQuote(1), { privkey });
 
@@ -705,6 +717,7 @@ describe('mint quote signature legacy fallback', () => {
         verifyMintQuoteSignatureLegacy(pubkey, 'locked-quote', seen[1].outputs, seen[1].signature),
       ).toBe(true);
       expect(seen[1].outputs).toEqual(seen[0].outputs);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('20008'));
     });
 
     test('does not retry when the mint accepts the amended signature', async () => {

@@ -2181,6 +2181,9 @@ class Wallet {
         e instanceof MintOperationError &&
         e.code === MINT_QUOTE_SIGNATURE_INVALID_CODE
       ) {
+        this._logger.warn(
+          'Mint rejected the amended NUT-20 quote signature (20008); retrying with the legacy message.',
+        );
         return retryWithLegacySignature();
       }
       throw e;
