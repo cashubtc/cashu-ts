@@ -197,6 +197,8 @@ export interface AuthProvider {
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
     keysetId: string;
+    // @deprecated (undocumented)
+    legacySignatures?: Array<string | null>;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
@@ -1042,7 +1044,6 @@ export class MintInfo {
     get description(): string | undefined;
     // (undocumented)
     get description_long(): string | undefined;
-    isImplementationBelow(implementation: string, minVersion: string): boolean;
     // (undocumented)
     isSupported(num: 4 | 5): {
         disabled: boolean;
@@ -1189,6 +1190,8 @@ export class MintOperationError extends HttpResponseError {
 // @public
 export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
     keysetId: string;
+    // @deprecated (undocumented)
+    legacySignature?: string;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
