@@ -190,6 +190,8 @@ export interface AuthProvider {
 // @public
 export interface BatchMintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote' | 'pubkey'> = MintQuoteBaseResponse> {
     keysetId: string;
+    // @deprecated (undocumented)
+    legacySignatures?: Array<string | null>;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
@@ -1131,6 +1133,8 @@ export class MintOperationError extends HttpResponseError {
 // @public
 export interface MintPreview<TQuote extends Pick<MintQuoteBaseResponse, 'quote'> = MintQuoteBaseResponse> {
     keysetId: string;
+    // @deprecated (undocumented)
+    legacySignature?: string;
     // (undocumented)
     method: string;
     outputData: OutputDataLike[];
@@ -1720,6 +1724,9 @@ export const schnorrSignDigest: (digest: DigestInput, privateKey: PrivKey) => st
 
 // @public
 export const schnorrSignMessage: (message: string, privateKey: PrivKey) => string;
+
+// @public
+export const schnorrVerifyDigest: (signature: string, digest: DigestInput, pubkey: string, throws?: boolean) => boolean;
 
 // @public
 export const schnorrVerifyMessage: (signature: string, message: string, pubkey: string, throws?: boolean) => boolean;
