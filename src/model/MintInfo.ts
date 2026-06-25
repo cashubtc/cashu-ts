@@ -402,40 +402,4 @@ export class MintInfo {
       (met) => met.method === method && met.unit === unit && met.options?.amountless === true,
     );
   }
-
-  /**
-   * Whether the advertised `version` (`"<implementation>/<version>"`) is the given implementation
-   * below `minVersion`. Name matched case-insensitively; versions compared numerically per dot
-   * segment, stopping at the first prerelease/build tag (`rc1`, `.dev3`) so a prerelease compares
-   * as its base. Returns false for other implementations or versions with no leading number, so a
-   * legacy-fallback gate treats those as current.
-   */
-  isImplementationBelow(implementation: string, minVersion: string): boolean {
-    const advertised = this._mintInfo.version;
-    if (typeof advertised !== 'string') return false;
-    const slash = advertised.indexOf('/');
-    if (slash === -1) return false;
-    if (advertised.slice(0, slash).toLowerCase() !== implementation.toLowerCase()) return false;
-    const version = MintInfo.parseVersionSegments(advertised.slice(slash + 1));
-    const min = MintInfo.parseVersionSegments(minVersion);
-    if (!version || !min) return false;
-    for (let i = 0; i < Math.max(version.length, min.length); i++) {
-      const a = version[i] ?? 0;
-      const b = min[i] ?? 0;
-      if (a !== b) return a < b;
-    }
-    return false;
-  }
-
-  // Leading numeric segments, stopping at the first prerelease/build tag:
-  // "0.16.4-rc1" → [0,16,4], "0.21.0.dev3" → [0,21,0]; null if none (e.g. "" or "x").
-  private static parseVersionSegments(version: string): number[] | null {
-    const segments: number[] = [];
-    for (const s of version.split('.')) {
-      const n = parseInt(s, 10);
-      if (!Number.isSafeInteger(n) || n < 0) break;
-      segments.push(n);
-    }
-    return segments.length > 0 ? segments : null;
-  }
 }

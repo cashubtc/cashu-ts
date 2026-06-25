@@ -44,7 +44,8 @@ function constructMessage(quote: string, blindedMessages: SerializedBlindedMessa
 
 /**
  * Legacy mint-quote signature message: `quote || B_0 || … || B_(n-1)`, hex strings concatenated as
- * UTF-8. Verified only by mints that predate cashubtc/nuts#375 — see `wallet/mintCompat.ts`.
+ * UTF-8. Verified only by mints that predate cashubtc/nuts#375: the wallet signs both messages and
+ * `Wallet.completeMint()` retries with this one if the mint rejects the amended signature.
  */
 function constructLegacyMessage(
   quote: string,

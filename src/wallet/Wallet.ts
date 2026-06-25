@@ -21,7 +21,7 @@ import { signMintQuoteAmended } from '../crypto/NUT20';
 import { type Logger, NULL_LOGGER, fail, failIf, failIfNullish, safeCallback } from '../logger';
 import { Mint } from '../mint';
 import { Amount, type AmountLike } from '../model/Amount';
-import { CTSError } from '../model/Errors';
+import { CTSError, MintOperationError } from '../model/Errors';
 import { MintInfo } from '../model/MintInfo';
 import { OutputData, type OutputDataLike } from '../model/OutputData';
 import { DefaultOutputDataCreator, type OutputDataCreator } from '../model/OutputDataCreator';
@@ -34,6 +34,7 @@ import type {
   MeltQuoteBolt12Response,
   MeltQuoteOnchainResponse,
   MintRequest,
+  MintResponse,
   MintQuoteBaseResponse,
   MintQuoteBolt11Response,
   MintQuoteBolt12Response,
@@ -69,7 +70,6 @@ import {
 } from './CounterSource';
 import { KeyChain } from './KeyChain';
 import { type Keyset } from './Keyset';
-import { requiresLegacyQuoteSignature } from './mintCompat';
 import { selectProofsRGLI, type SelectProofs } from './SelectProofs';
 import {
   type MeltPreview,
@@ -98,6 +98,10 @@ import { WalletOps } from './WalletOps';
 // model helpers
 
 const PENDING_KEYSET_ID = '__PENDING__';
+
+// NUT-20 "Signature for mint request invalid" (cashubtc/nuts error_codes.md). Returned by mints
+// that reject a quote signature — used to trigger the legacy-message fallback in completeMint().
+const MINT_QUOTE_SIGNATURE_INVALID_CODE = 20008;
 
 /**
  * Class that represents a Cashu wallet.
@@ -2130,6 +2134,7 @@ class Wallet {
     }
     // Sign whenever a privkey is provided — quote.pubkey may be absent if only the
     // quote ID was stored, but the caller still needs to produce a NUT-20 signature
+    let legacySignature: string | undefined;
     if (privkey) {
       const quotePubkey = 'pubkey' in quote ? (quote.pubkey as string | undefined) : undefined;
       this.failIf(
@@ -2142,10 +2147,10 @@ class Wallet {
           ? privkey[0]
           : privkey;
       this.failIf(!signingKey, 'prepareMint: privkey is empty or correct privkey not provided');
-      const signQuote = requiresLegacyQuoteSignature(this._mintInfo)
-        ? signMintQuote
-        : signMintQuoteAmended;
-      mintPayload.signature = signQuote(signingKey, quote.quote, blindedMessages);
+      // Sign the amended (nuts#375) message by default and keep a legacy signature over the same
+      // outputs as a fallback for not-yet-upgraded mints — see completeMint().
+      mintPayload.signature = signMintQuoteAmended(signingKey, quote.quote, blindedMessages);
+      legacySignature = signMintQuote(signingKey, quote.quote, blindedMessages);
     }
 
     return {
@@ -2154,7 +2159,35 @@ class Wallet {
       outputData: outputs,
       keysetId: keyset.id,
       quote,
+      legacySignature,
     };
+  }
+
+  /**
+   * Send a mint request, retrying with the legacy NUT-20 signature for legacy mints.
+   *
+   * TODO: Remove this compat shim when legacy message support is dropped.
+   */
+  private async withLegacyQuoteSigFallback(
+    hasLegacySignature: boolean,
+    attempt: () => Promise<MintResponse>,
+    retryWithLegacySignature: () => Promise<MintResponse>,
+  ): Promise<MintResponse> {
+    try {
+      return await attempt();
+    } catch (e) {
+      if (
+        hasLegacySignature &&
+        e instanceof MintOperationError &&
+        e.code === MINT_QUOTE_SIGNATURE_INVALID_CODE
+      ) {
+        this._logger.warn(
+          'Mint rejected the amended NUT-20 quote signature (20008); retrying with the legacy message.',
+        );
+        return retryWithLegacySignature();
+      }
+      throw e;
+    }
   }
 
   /**
@@ -2169,8 +2202,12 @@ class Wallet {
   async completeMint(
     mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { payload, outputData, keysetId, method } = mintPreview;
-    const { signatures } = await this.mint.mint(method, payload);
+    const { payload, outputData, keysetId, method, legacySignature } = mintPreview;
+    const { signatures } = await this.withLegacyQuoteSigFallback(
+      legacySignature !== undefined,
+      () => this.mint.mint(method, payload),
+      () => this.mint.mint(method, { ...payload, signature: legacySignature }),
+    );
     this.failIf(
       signatures.length !== outputData.length,
       `Mint returned ${signatures.length} signatures, expected ${outputData.length}. The mint quote may already be marked issued; if the wallet is seeded, try restoring (NUT-09) to recover.`,
@@ -2282,20 +2319,20 @@ class Wallet {
     const outputs = this.createOutputData(totalAmount, keyset, mintOT);
     const blindedMessages = outputs.map((d) => d.blindedMessage);
 
-    const signQuote = requiresLegacyQuoteSignature(this._mintInfo)
-      ? signMintQuote
-      : signMintQuoteAmended;
-
     // Sign each locked quote over ALL blinded messages (NUT-29).
     // Unlocked quotes get null. If no quotes are locked, omit signatures entirely.
     // Each locked quote's pubkey is matched against the provided privkey(s).
+    // Sign the amended (nuts#375) message by default and keep a parallel legacy signature over the
+    // same outputs as a fallback for not-yet-upgraded mints — see completeBatchMint().
     const signatures: Array<string | null> = [];
+    const legacySignatures: Array<string | null> = [];
     let hasSignatures = false;
     for (const entry of entries) {
       const quotePubkey = 'pubkey' in entry.quote ? entry.quote.pubkey : undefined;
       if (quotePubkey && privkey) {
         const signingKey = findSigningKey(quotePubkey, privkey);
-        signatures.push(signQuote(signingKey, entry.quote.quote, blindedMessages));
+        signatures.push(signMintQuoteAmended(signingKey, entry.quote.quote, blindedMessages));
+        legacySignatures.push(signMintQuote(signingKey, entry.quote.quote, blindedMessages));
         hasSignatures = true;
       } else {
         if (privkey && !quotePubkey) {
@@ -2304,6 +2341,7 @@ class Wallet {
           );
         }
         signatures.push(null);
+        legacySignatures.push(null);
       }
     }
 
@@ -2320,6 +2358,7 @@ class Wallet {
       outputData: outputs,
       keysetId: keyset.id,
       quotes: entries.map((e) => e.quote),
+      ...(hasSignatures ? { legacySignatures } : {}),
     };
   }
 
@@ -2335,9 +2374,13 @@ class Wallet {
   async completeBatchMint(
     batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>,
   ): Promise<Proof[]> {
-    const { method, payload, outputData, keysetId } = batchPreview;
+    const { method, payload, outputData, keysetId, legacySignatures } = batchPreview;
 
-    const { signatures: sigs } = await this.mint.mintBatch(method, payload);
+    const { signatures: sigs } = await this.withLegacyQuoteSigFallback(
+      legacySignatures !== undefined,
+      () => this.mint.mintBatch(method, payload),
+      () => this.mint.mintBatch(method, { ...payload, signatures: legacySignatures! }),
+    );
     this.failIf(
       sigs.length !== outputData.length,
       `Mint returned ${sigs.length} signatures, expected ${outputData.length}. The mint quote may already be marked issued; if the wallet is seeded, try restoring (NUT-09) to recover.`,

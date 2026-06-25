@@ -35,6 +35,10 @@ export interface MintPreview<
    * Mint Quote object.
    */
   quote: TQuote;
+  /**
+   * @deprecated Temporary compatibility for legacy mints.
+   */
+  legacySignature?: string;
 }
 
 /**
@@ -63,6 +67,10 @@ export interface BatchMintPreview<
    * Mint Quote objects included in this batch.
    */
   quotes: TQuote[];
+  /**
+   * @deprecated Temporary compatibility for legacy mints.
+   */
+  legacySignatures?: Array<string | null>;
 }
 
 /**
