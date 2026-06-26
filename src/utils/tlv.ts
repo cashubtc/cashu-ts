@@ -22,7 +22,7 @@ export type DecodedTLVPaymentRequest = {
   unit?: string;
   singleUse?: boolean;
   mints?: string[];
-  mintsStrict?: boolean;
+  mintsPreferred?: boolean;
   feeReserve?: bigint;
   supportedMethods?: string[];
   description?: string;
@@ -43,7 +43,7 @@ export type DecodedTLVPaymentRequest = {
  * | 0x06 | description       | string    | Human-readable description                                                                    |
  * | 0x07 | transport         | sub-TLV   | Transport configuration (repeatable)                                                          |
  * | 0x08 | nut10             | sub-TLV   | NUT-10 spending conditions (not yet implemented)                                              |
- * | 0x09 | mint_strict       | u8        | Mint list strict flag: 0=false, 1=true; if absent, defaults to 1                              |
+ * | 0x09 | mint_preferred    | u8        | Mint list strictness flag: 0=false, 1=true; if absent, defaults to 0 (strict)                 |
  * | 0x0a | fee_reserve       | u64       | Additional fee reserve, in the request unit, when paying from a mint outside `mint` list      |
  * | 0x0b | supported_methods | string    | Payment method the sending mint must support, e.g. "bolt11", "bolt12", "onchain" (repeatable) |
  */
@@ -55,7 +55,7 @@ const TAG_MINT = 0x05;
 const TAG_DESCRIPTION = 0x06;
 const TAG_TRANSPORT = 0x07;
 const TAG_NUT10 = 0x08;
-const TAG_MINT_STRICT = 0x09;
+const TAG_MINT_PREFERRED = 0x09;
 const TAG_FEE_RESERVE = 0x0a;
 const TAG_SUPPORTED_METHODS = 0x0b;
 
@@ -148,8 +148,8 @@ export function decodeTLV(data: Uint8Array): DecodedTLVPaymentRequest {
         }
         result.nut10 = parseNut10(part.value);
         break;
-      case TAG_MINT_STRICT:
-        result.mintsStrict = parseU8(part.value) === 1;
+      case TAG_MINT_PREFERRED:
+        result.mintsPreferred = parseU8(part.value) === 1;
         break;
       case TAG_FEE_RESERVE:
         result.feeReserve = parseU64(part.value);
@@ -451,8 +451,8 @@ export function encodeTLV(request: DecodedTLVPaymentRequest): Uint8Array {
     parts.push(encodeTLVPart(TAG_NUT10, encodeNut10(request.nut10)));
   }
 
-  if (request.mintsStrict !== undefined) {
-    parts.push(encodeTLVPart(TAG_MINT_STRICT, encodeU8(request.mintsStrict ? 1 : 0)));
+  if (request.mintsPreferred !== undefined) {
+    parts.push(encodeTLVPart(TAG_MINT_PREFERRED, encodeU8(request.mintsPreferred ? 1 : 0)));
   }
 
   if (request.feeReserve !== undefined) {

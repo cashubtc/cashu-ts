@@ -1563,7 +1563,7 @@ export function parseSecret(secret: string | Secret): Secret;
 
 // @public (undocumented)
 class PaymentRequest_2 {
-    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, mintsStrict?: boolean, feeReserve?: AmountLike, supportedMethods?: string[] | undefined);
+    constructor(transport?: PaymentRequestTransport[] | undefined, id?: string | undefined, amount?: AmountLike, unit?: string | undefined, mints?: string[] | undefined, description?: string | undefined, singleUse?: boolean, nut10?: NUT10Option | undefined, mintsPreferred?: boolean, feeReserve?: AmountLike, supportedMethods?: string[] | undefined);
     // (undocumented)
     amount?: Amount;
     // (undocumented)
@@ -1581,11 +1581,11 @@ class PaymentRequest_2 {
     // (undocumented)
     mints?: string[] | undefined;
     // (undocumented)
-    mintsStrict?: boolean;
+    mintsPreferred?: boolean;
     // (undocumented)
     nut10?: NUT10Option | undefined;
     // (undocumented)
-    singleUse: boolean;
+    singleUse?: boolean;
     // (undocumented)
     supportedMethods?: string[] | undefined;
     toEncodedCreqA(): string;
@@ -1719,7 +1719,7 @@ export type RawPaymentRequest = {
     u?: string;
     s?: boolean;
     m?: string[];
-    ms?: boolean;
+    mp?: boolean;
     fr?: number | bigint;
     sm?: string[];
     d?: string;

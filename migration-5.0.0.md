@@ -198,3 +198,9 @@ await wallet.completeMelt(meltPreview, privkey, { preferAsync: true });
 ```
 
 Calls that already pass a `CompleteMeltOptions` object (or omit the third argument) need no change.
+
+---
+
+## `PaymentRequest.singleUse` is now optional (tri-state)
+
+`PaymentRequest.singleUse` is now `boolean | undefined` (was a required `boolean` defaulting to `false`), so the flag can round-trip the absent/`false`/`true` distinction instead of always serializing `single_use=0`. Setting `false` or `true` is unchanged; only decoding shifts — a request that omits the flag now yields `singleUse: undefined` instead of `false`. Replace any `pr.singleUse === false` check with `!pr.singleUse` (true for both absent and explicit `false`).
