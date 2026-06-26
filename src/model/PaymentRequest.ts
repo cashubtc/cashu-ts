@@ -18,6 +18,9 @@ import { CTSError } from './Errors';
 
 export class PaymentRequest {
   public amount?: Amount;
+  public feeReserve?: Amount;
+  public singleUse?: boolean;
+  public mintsPreferred?: boolean;
 
   constructor(
     public transport?: PaymentRequestTransport[],
@@ -26,10 +29,33 @@ export class PaymentRequest {
     public unit?: string,
     public mints?: string[],
     public description?: string,
-    public singleUse: boolean = false,
+    singleUse?: boolean,
     public nut10?: NUT10Option,
+    mintsPreferred?: boolean,
+    feeReserve?: AmountLike,
+    public supportedMethods?: string[],
   ) {
     this.amount = amount !== undefined ? Amount.from(amount) : undefined;
+    this.feeReserve = feeReserve !== undefined ? Amount.from(feeReserve) : undefined;
+    // Coerce the optional flags to real booleans (preserving `undefined` for the
+    // absent/tri-state case) so an untyped CBOR value (`0`/`1`/`null`) can't leak a
+    // non-boolean into the getter or get re-serialized verbatim over the wire.
+    this.singleUse = singleUse === undefined ? undefined : Boolean(singleUse);
+    this.mintsPreferred = mintsPreferred === undefined ? undefined : Boolean(mintsPreferred);
+  }
+
+  /**
+   * Resolves the NUT-18 mint list strictness per spec.
+   *
+   * - `undefined` if no mint list is set (`mp` and `fr` SHOULD be ignored)
+   * - `true` if the list is strict (`mp` absent or `false`)
+   * - `false` if the list is preferred/advisory (`mp === true`)
+   */
+  get isMintListStrict(): boolean | undefined {
+    if (!this.mints?.length) {
+      return undefined;
+    }
+    return this.mintsPreferred !== true;
   }
 
   toRawRequest() {
@@ -53,10 +79,19 @@ export class PaymentRequest {
     if (this.mints) {
       rawRequest.m = this.mints;
     }
+    if (this.mintsPreferred !== undefined) {
+      rawRequest.mp = this.mintsPreferred;
+    }
+    if (this.feeReserve) {
+      rawRequest.fr = this.feeReserve.toBigInt();
+    }
+    if (this.supportedMethods && this.supportedMethods.length > 0) {
+      rawRequest.sm = this.supportedMethods;
+    }
     if (this.description) {
       rawRequest.d = this.description;
     }
-    if (this.singleUse) {
+    if (this.singleUse !== undefined) {
       rawRequest.s = this.singleUse;
     }
     if (this.nut10) {
@@ -98,6 +133,9 @@ export class PaymentRequest {
       unit: this.unit,
       singleUse: this.singleUse,
       mints: this.mints,
+      mintsPreferred: this.mintsPreferred,
+      feeReserve: this.feeReserve !== undefined ? this.feeReserve.toBigInt() : undefined,
+      supportedMethods: this.supportedMethods,
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
@@ -203,6 +241,9 @@ export class PaymentRequest {
       rawPaymentRequest.d,
       rawPaymentRequest.s,
       nut10,
+      rawPaymentRequest.mp,
+      rawPaymentRequest.fr,
+      rawPaymentRequest.sm,
     );
   }
 
@@ -227,8 +268,11 @@ export class PaymentRequest {
         decoded.unit,
         decoded.mints,
         decoded.description,
-        decoded.singleUse ?? false,
+        decoded.singleUse,
         nut10,
+        decoded.mintsPreferred,
+        decoded.feeReserve,
+        decoded.supportedMethods,
       );
     }
 

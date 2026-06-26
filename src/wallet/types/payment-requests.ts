@@ -18,6 +18,9 @@ export type RawPaymentRequest = {
   u?: string; // unit
   s?: boolean; // single use
   m?: string[]; // mints
+  mp?: boolean; // mints preferred: strict list when absent or false, advisory list when true
+  fr?: number | bigint; // fee reserve (additional, in request unit, when paying from a mint outside a preferred list)
+  sm?: string[]; // supported payment methods the sending mint must support (e.g. "bolt11", "bolt12", "onchain")
   d?: string; // description
   t?: RawTransport[]; // transports
   nut10?: RawNUT10Option;
