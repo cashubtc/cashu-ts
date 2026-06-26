@@ -138,9 +138,9 @@ describe('MintInfo protected endpoint matching', () => {
     expect(info.nuts['4'].methods[0].max_amount).toBe(2n);
     expect(info.nuts['5'].methods[0].min_amount).toBe(3n);
     expect(info.nuts['5'].methods[0].max_amount).toBe(4n);
-    // method_name (NUT-04/05) passes through; coerced to null on mints that omit it
+    // method_name (NUT-04/05) passes through; derived from `method` on mints that omit it
     expect(info.nuts['4'].methods[0].method_name).toBe('Lightning');
-    expect(info.nuts['5'].methods[0].method_name).toBeNull();
+    expect(info.nuts['5'].methods[0].method_name).toBe('Bolt11');
     // metadata integers (ttl, bat_max_mint) are still normalized to safe numbers
     expect(info.nuts['19']?.ttl).toBe(30);
     expect(info.nuts['22']?.bat_max_mint).toBe(5);
@@ -151,6 +151,42 @@ describe('MintInfo protected endpoint matching', () => {
         cached_endpoints: [{ method: 'GET', path: '/v1/keys' }],
       },
     });
+  });
+
+  it('derives method_name from method per NUT-04/05 when null or omitted', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [
+            // omitted -> derived
+            { method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null },
+            // explicit null -> derived, hyphen split + title-case
+            {
+              method: 'apple-pay',
+              unit: 'usd',
+              method_name: null,
+              min_amount: null,
+              max_amount: null,
+            },
+            // explicit name -> passes through untouched
+            {
+              method: 'bolt12',
+              unit: 'sat',
+              method_name: 'Lightning Offers',
+              min_amount: null,
+              max_amount: null,
+            },
+          ],
+        },
+      },
+    } as any);
+
+    const methods = info.nuts['4'].methods;
+    expect(methods[0].method_name).toBe('Bolt11');
+    expect(methods[1].method_name).toBe('Apple Pay');
+    expect(methods[2].method_name).toBe('Lightning Offers');
   });
 
   it('supportedMethods lists usable methods and returns [] for disabled ops', () => {
