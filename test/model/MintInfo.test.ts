@@ -189,6 +189,27 @@ describe('MintInfo protected endpoint matching', () => {
     expect(methods[2].method_name).toBe('Lightning Offers');
   });
 
+  it('leaves method_name null when method is malformed (non-string or delimiter-only)', () => {
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [
+            // non-string method -> null (no bogus name)
+            { method: 123, unit: 'sat', min_amount: null, max_amount: null },
+            // delimiter-only method -> zero words -> null
+            { method: '-_-', unit: 'sat', method_name: null, min_amount: null, max_amount: null },
+          ],
+        },
+      },
+    } as any);
+
+    const methods = info.nuts['4'].methods;
+    expect(methods[0].method_name).toBeNull();
+    expect(methods[1].method_name).toBeNull();
+  });
+
   it('supportedMethods lists usable methods and returns [] for disabled ops', () => {
     const info = new MintInfo({
       ...MINTINFORESP,
