@@ -210,6 +210,23 @@ describe('MintInfo protected endpoint matching', () => {
     expect(methods[1].method_name).toBeNull();
   });
 
+  it('skips derivation for an over-long method (memory-exhaustion guard)', () => {
+    // A hostile mint could send a multi-megabyte `method`; deriving from it would run unbounded
+    // split/map/join. The length cap short-circuits before any string work.
+    const hugeMethod = 'a-'.repeat(1_000_000); // 2M chars, well past MAX_METHOD_LENGTH
+    const info = new MintInfo({
+      ...MINTINFORESP,
+      nuts: {
+        4: {
+          disabled: false,
+          methods: [{ method: hugeMethod, unit: 'sat', min_amount: null, max_amount: null }],
+        },
+      },
+    } as any);
+
+    expect(info.nuts['4'].methods[0].method_name).toBeNull();
+  });
+
   it('supportedMethods lists usable methods and returns [] for disabled ops', () => {
     const info = new MintInfo({
       ...MINTINFORESP,

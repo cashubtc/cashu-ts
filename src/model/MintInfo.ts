@@ -1,6 +1,6 @@
 import { type Logger, NULL_LOGGER } from '../logger';
 import { nullIfUndefined } from '../utils/core';
-import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT } from '../utils/limits';
+import { ABSOLUTE_MAX_BATCH_SIZE, ABSOLUTE_MAX_PER_MINT, MAX_METHOD_LENGTH } from '../utils/limits';
 import { normalizeSafeIntegerMetadata } from '../utils/normalizeNumbers';
 
 import { CTSError } from './Errors';
@@ -18,10 +18,11 @@ type Endpoint = { method: Method; path: string };
 
 /**
  * Per NUT-04/05, when `method_name` is null or omitted, wallets derive a human-readable name.
- * Returns null for a missing/empty/non-string method so malformed entries stay null.
+ * Returns null for a missing/empty/non-string/over-long method so malformed (or hostile) entries
+ * stay null. The length cap avoids a potential memory-exhaustion DoS vector.
  */
 function deriveMethodName(method: unknown): string | null {
-  if (typeof method !== 'string') return null;
+  if (typeof method !== 'string' || method.length > MAX_METHOD_LENGTH) return null;
   const words = method.split(/[-_]/).filter((w) => w !== '');
   if (words.length === 0) return null;
   return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
