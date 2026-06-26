@@ -30,7 +30,7 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [x] [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md) | Offline ecash signature validation |
 - [x] [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) | Deterministic Secrets |
 - [x] [NUT-14](https://github.com/cashubtc/nuts/blob/main/14.md) | Hashed Timelock Contracts (HTLCs) |
-- [!] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md) | Partial multi-path payments |
+- [x] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md) | Partial multi-path payments |
 - [!] [NUT-16](https://github.com/cashubtc/nuts/blob/main/16.md) | Animated QR codes |
 - [x] [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) | WebSockets |
 - [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) | Payment Requests |
