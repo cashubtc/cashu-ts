@@ -70,6 +70,15 @@ describe('NUT-27 payload', () => {
     // @ts-expect-error testing runtime guard
     expect(() => buildMintBackupPayload([1, 2], 1)).toThrow();
   });
+
+  test('build rejects a non-integer timestamp', () => {
+    expect(() => buildMintBackupPayload([], 1.5)).toThrow();
+  });
+
+  test('parse rejects JSON that is not an object', () => {
+    expect(() => parseMintBackupPayload('42')).toThrow();
+    expect(() => parseMintBackupPayload('null')).toThrow();
+  });
 });
 
 describe('NUT-27 conventions', () => {
