@@ -42,6 +42,7 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [!] [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) | HTTP 402 Payment Required |
 - [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md) | BOLT12 |
 - [x] [NUT-26](https://github.com/cashubtc/nuts/blob/main/26.md) | Bech32m Encoding |
-- [ ] [NUT-27](https://github.com/cashubtc/nuts/blob/main/27.md) | Nostr Mint Backup |
+- [x] [NUT-27](https://github.com/cashubtc/nuts/blob/main/27.md) | Nostr Mint Backup |
 - [x] [NUT-28](https://github.com/cashubtc/nuts/blob/main/28.md) | Pay-to-Blinded-Key (P2BK) |
 - [x] [NUT-29](https://github.com/cashubtc/nuts/blob/main/29.md) | Batched Minting |
+- [x] [NUT-30](https://github.com/cashubtc/nuts/blob/main/30.md) | Onchain |
