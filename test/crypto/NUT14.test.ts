@@ -8,6 +8,7 @@ import {
   parseHTLCSecret,
   signP2PKProof,
   verifyHTLCHash,
+  verifyHTLCSpendingConditions,
 } from '../../src/crypto';
 import { Amount, Proof } from '../../src';
 import { schnorr } from '@noble/curves/secp256k1.js';
@@ -128,6 +129,15 @@ describe('HTLC hashlock-only receiver pathway (no pubkeys)', () => {
       ['refund', PUBKEY],
     ]);
     expect(isHTLCSpendAuthorised(proofFor(secret, PREIMAGE))).toBe(true);
+  });
+
+  test('expired with no refund keys is anyone-can-spend, no preimage needed', () => {
+    // Keyless HTLC, locktime in the past, no refund tag: the P2PK pathway already
+    // unlocks it, so the spend succeeds as-is — the hashlock check is skipped.
+    const secret = createHTLCsecret(HASH, [['locktime', '1']]);
+    const result = verifyHTLCSpendingConditions(proofFor(secret)); // no preimage
+    expect(result.success).toBe(true);
+    expect(result.path).toBe('UNLOCKED');
   });
 });
 
