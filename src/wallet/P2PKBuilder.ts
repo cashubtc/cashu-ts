@@ -98,8 +98,14 @@ export class P2PKBuilder {
       pubkey,
       ...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
       ...(refunds.length ? { refundKeys: refunds } : {}),
-      ...(this.nSigs && this.nSigs > 1 ? { requiredSignatures: this.nSigs } : {}),
-      ...(this.nSigsRefund && this.nSigsRefund > 1
+      // Drop a redundant default threshold of 1 (1-of-N is implied), but pass an
+      // explicit threshold through when its key set is empty — a keyless HTLC with
+      // n_sigs, or n_sigs_refund with no refund keys, is contradictory and must be
+      // rejected by the smoke test below, not silently weakened to preimage-only.
+      ...(this.nSigs !== undefined && (this.nSigs > 1 || locks.length === 0)
+        ? { requiredSignatures: this.nSigs }
+        : {}),
+      ...(this.nSigsRefund !== undefined && (this.nSigsRefund > 1 || refunds.length === 0)
         ? { requiredRefundSignatures: this.nSigsRefund }
         : {}),
       ...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
