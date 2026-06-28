@@ -105,15 +105,33 @@ export function verifyHTLCSpendingConditions(
   let result: P2PKVerificationResult;
   message = message ?? proof.secret; // default message is proof secret
 
-  // Check P2PK locking conditions are satisfied first
-  // We are only interested in 'MAIN' pathway spends on HTLC proofs
+  // Verify the underlying P2PK conditions first. Only the hashlock (receiver)
+  // pathway is HTLC-specific; the refund and unlocked outcomes are plain P2PK
+  // verdicts and pass straight through.
   const secret = parseSecret(proof.secret); // no assert
   const p2pkResult = verifyP2PKSpendingConditions(proof, logger, message);
-  if (p2pkResult.path != 'MAIN' || getSecretKind(secret) !== 'HTLC') {
-    return p2pkResult; // not an hashlock spend
+  if (getSecretKind(secret) !== 'HTLC') {
+    return p2pkResult; // not an HTLC proof
   }
 
-  // Ensure proof has a preimage
+  // Receiver pathway (NUT-14): always available to receivers — even during an
+  // active locktime or with refund keys present — given the preimage plus, when
+  // main pubkeys exist, their signature threshold. A hashlock-only HTLC has no
+  // main keys and so no threshold, so the preimage alone authorises it.
+  const hashlockOnly = p2pkResult.main.pubkeys.length === 0;
+
+  // Keyed HTLC: the main signatures must meet the threshold (a 'MAIN' verdict).
+  if (!hashlockOnly && p2pkResult.path !== 'MAIN') {
+    return p2pkResult; // threshold not met: defer to the P2PK verdict
+  }
+  // Keyless HTLC never yields 'MAIN' (no keys to sign), so the guard above can't
+  // gate it. If another pathway already authorised the spend (e.g. expired with
+  // no refund keys = anyone-can-spend), keep that verdict; no preimage needed.
+  if (hashlockOnly && p2pkResult.success) {
+    return p2pkResult;
+  }
+
+  // From here, the spend depends solely on a valid preimage.
   const preimage = getHTLCWitnessPreimage(proof.witness);
   if (!preimage) {
     result = { ...p2pkResult, success: false, path: 'FAILED' };
@@ -121,18 +139,20 @@ export function verifyHTLCSpendingConditions(
     return result;
   }
 
-  // Check preimage and hash correspond if main pathway was used
+  // Confirm the preimage hashes to the lock in Secret.data.
   const hash = getDataField(secret);
   if (verifyHTLCHash(preimage, hash)) {
-    result = p2pkResult;
+    // Authorised via the receiver pathway. A keyless HTLC carries a FAILED P2PK
+    // verdict (no keys to meet a threshold), so stamp the successful MAIN result.
+    result = { ...p2pkResult, success: true, path: 'MAIN' };
     logger.debug('Spending condition satisfied via hashlock (receiver) pathway', { result });
-    return result; // success, MAIN pathway
+    return result;
   }
 
-  // Still here? Bad news...
+  // Preimage present but does not match the hash lock.
   result = { ...p2pkResult, success: false, path: 'FAILED' };
   logger.debug('Hashlock spend failed, wrong preimage for hash', { result });
-  return result; // failed, wrong preimage
+  return result;
 }
 
 /**

@@ -1406,6 +1406,13 @@ describe('normalizeP2PKOptions', () => {
     );
   });
 
+  test('allows an empty pubkey array for a hashlock-only HTLC (NUT-14)', () => {
+    // An HTLC carries its lock in the hashlock, so a pubkeys list is optional.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const normalized = normalizeP2PKOptions({ pubkey: [], hashlock });
+    expect(normalized).toEqual({ pubkey: [], hashlock });
+  });
+
   test('throws when pubkey contains an empty string', () => {
     expect(() => normalizeP2PKOptions({ pubkey: [pk, ''] })).toThrow(/invalid pubkey/i);
   });

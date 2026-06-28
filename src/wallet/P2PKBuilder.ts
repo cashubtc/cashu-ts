@@ -86,7 +86,11 @@ export class P2PKBuilder {
     const locks = this.lockKeys;
     const refunds = this.refundKeys;
 
-    if (locks.length === 0) throw new CTSError('At least one lock pubkey is required');
+    // HTLC (NUT-14) locks to a hashlock, so lock pubkeys are optional there; a
+    // plain P2PK always needs at least one.
+    if (locks.length === 0 && !this.hashlock) {
+      throw new CTSError('At least one lock pubkey is required');
+    }
 
     const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
 
