@@ -361,6 +361,19 @@ describe('payment requests', () => {
       });
     });
 
+    test('maps a pubkey-less HTLC option to a hashlock-only lock', () => {
+      // NUT-14 allows an HTLC with no `pubkeys` tag: anyone with the preimage
+      // can spend. This must produce a buildable lock, not a poison-pill option.
+      const nut10: NUT10Option = { kind: 'HTLC', data: HASH, tags: [] };
+      const options = prWithNut10(nut10).toP2PKOptions()!;
+      expect(options).toEqual({ hashlock: HASH, pubkey: [] });
+      const od = OutputData.createSingleP2PKData(options, 1, '00ad268c4d1f5826');
+      const secret = JSON.parse(new TextDecoder().decode(od.secret));
+      expect(secret[0]).toBe('HTLC');
+      expect(secret[1].data).toBe(HASH);
+      expect(secret[1].tags.find((t: string[]) => t[0] === 'pubkeys')).toBeUndefined();
+    });
+
     test('ignores unknown/future kinds by returning undefined', () => {
       const nut10: NUT10Option = { kind: 'FUTURE', data: 'abc', tags: [] };
       expect(prWithNut10(nut10).toP2PKOptions()).toBeUndefined();
