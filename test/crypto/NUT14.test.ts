@@ -93,6 +93,44 @@ describe('verifyHTLCSpendingConditions and isHTLCSpendAuthorised', () => {
   });
 });
 
+describe('HTLC hashlock-only receiver pathway (no pubkeys)', () => {
+  // NUT-14: with no `pubkeys` tag, possession of the preimage alone spends the
+  // proof. The receiver pathway is ALWAYS available, with no signature needed.
+  const HASH = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+  const PREIMAGE = '0000000000000000000000000000000000000000000000000000000000000001';
+
+  const proofFor = (secret: string, preimage?: string): Proof => ({
+    amount: Amount.from(2),
+    id: '00bfa73302d12ffd',
+    secret,
+    C: '03ff6567e2e6c31db5cb7189dab2b5121930086791c93899e4eff3dda61cb57273',
+    witness: preimage ? JSON.stringify({ preimage }) : undefined,
+  });
+
+  test('correct preimage authorises with no signature', () => {
+    expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, []), PREIMAGE))).toBe(true);
+  });
+
+  test('wrong preimage fails', () => {
+    const wrong = '1000000000000000000000000000000000000000000000000000000000000001';
+    expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, []), wrong))).toBe(false);
+  });
+
+  test('no preimage fails', () => {
+    expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, [])))).toBe(false);
+  });
+
+  test('receiver pathway remains available after locktime with refund keys present', () => {
+    // Expired locktime + refund key: the sender refund path opens, but the
+    // receiver can still claim with the preimage (no refund signature needed).
+    const secret = createHTLCsecret(HASH, [
+      ['locktime', '1'],
+      ['refund', PUBKEY],
+    ]);
+    expect(isHTLCSpendAuthorised(proofFor(secret, PREIMAGE))).toBe(true);
+  });
+});
+
 describe('getHTLCWitnessPreimage', () => {
   test('returns undefined when witness is undefined', () => {
     expect(getHTLCWitnessPreimage(undefined)).toBeUndefined();

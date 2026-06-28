@@ -220,7 +220,11 @@ export function dedupeP2PKPubkeys(keys: string[]): string[] {
 export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   const pubkeys = dedupeP2PKPubkeys(Array.isArray(p2pk.pubkey) ? p2pk.pubkey : [p2pk.pubkey]);
   const refundKeys = dedupeP2PKPubkeys(p2pk.refundKeys ?? []);
-  if (pubkeys.length === 0) {
+  // HTLC (NUT-14) locks the proof to a hashlock in Secret.data, so its pubkeys
+  // list is optional: with none, possession of the preimage alone spends. P2PK
+  // has no hashlock and so always needs at least one main key.
+  const isHTLC = typeof p2pk.hashlock === 'string' && p2pk.hashlock.length > 0;
+  if (pubkeys.length === 0 && !isHTLC) {
     throw new CTSError('P2PK requires at least one pubkey');
   }
   const totalKeys = pubkeys.length + refundKeys.length;
@@ -229,7 +233,9 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
-  const requiredSignatures = p2pk.requiredSignatures ?? 1;
+  // With no main pubkeys (hashlock-only HTLC) there is no main-signature
+  // threshold to satisfy, so leave it undefined rather than defaulting to 1.
+  const requiredSignatures = pubkeys.length > 0 ? (p2pk.requiredSignatures ?? 1) : undefined;
   const requiredRefundSignatures = p2pk.requiredRefundSignatures;
 
   // Shared semantic validation
@@ -245,7 +251,7 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
     pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys,
     ...(p2pk.locktime !== undefined ? { locktime: p2pk.locktime } : {}),
     ...(refundKeys.length > 0 ? { refundKeys } : {}),
-    ...(requiredSignatures > 1 ? { requiredSignatures } : {}),
+    ...(requiredSignatures !== undefined && requiredSignatures > 1 ? { requiredSignatures } : {}),
     ...(requiredRefundSignatures !== undefined && requiredRefundSignatures > 1
       ? { requiredRefundSignatures }
       : {}),
