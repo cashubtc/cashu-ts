@@ -1406,6 +1406,25 @@ describe('normalizeP2PKOptions', () => {
     );
   });
 
+  test('allows an empty pubkey array for a hashlock-only HTLC (NUT-14)', () => {
+    // An HTLC carries its lock in the hashlock, so a pubkeys list is optional.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    const normalized = normalizeP2PKOptions({ pubkey: [], hashlock });
+    expect(normalized).toEqual({ pubkey: [], hashlock });
+  });
+
+  test('rejects an explicit n_sigs on a hashlock-only HTLC (no pubkeys to sign)', () => {
+    // Skipping the *default* n_sigs is fine, but an explicit threshold with zero
+    // pubkeys is impossible and must fail loudly, not silently weaken the lock.
+    const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
+    expect(() => normalizeP2PKOptions({ pubkey: [], hashlock, requiredSignatures: 2 })).toThrow(
+      /exceeds available pubkeys/i,
+    );
+    expect(() => normalizeP2PKOptions({ pubkey: [], hashlock, requiredSignatures: 0 })).toThrow(
+      /positive integer/i,
+    );
+  });
+
   test('throws when pubkey contains an empty string', () => {
     expect(() => normalizeP2PKOptions({ pubkey: [pk, ''] })).toThrow(/invalid pubkey/i);
   });
