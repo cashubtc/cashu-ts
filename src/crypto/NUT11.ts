@@ -233,9 +233,13 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
   }
   if (p2pk.sigFlag !== undefined) assertSigFlag(p2pk.sigFlag);
 
-  // With no main pubkeys (hashlock-only HTLC) there is no main-signature
-  // threshold to satisfy, so leave it undefined rather than defaulting to 1.
-  const requiredSignatures = pubkeys.length > 0 ? (p2pk.requiredSignatures ?? 1) : undefined;
+  // With no main pubkeys (hashlock-only HTLC) there is no threshold to default,
+  // so skip the implicit `?? 1`. Pass through an *explicit* requiredSignatures
+  // though, so assertSpendingConditionRules rejects an impossible threshold
+  // (n_sigs with zero pubkeys) loudly rather than silently weakening the lock to
+  // preimage-only.
+  const requiredSignatures =
+    pubkeys.length > 0 ? (p2pk.requiredSignatures ?? 1) : p2pk.requiredSignatures;
   const requiredRefundSignatures = p2pk.requiredRefundSignatures;
 
   // Shared semantic validation
