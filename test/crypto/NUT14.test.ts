@@ -112,6 +112,16 @@ describe('HTLC hashlock-only receiver pathway (no pubkeys)', () => {
     expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, []), PREIMAGE))).toBe(true);
   });
 
+  test('successful spend yields an internally consistent result', () => {
+    // With no main pubkeys the receiver path requires zero signatures, so the
+    // result must not claim a signer was required (requiredSigners <= received).
+    const result = verifyHTLCSpendingConditions(proofFor(createHTLCsecret(HASH, []), PREIMAGE));
+    expect(result.success).toBe(true);
+    expect(result.main.pubkeys).toEqual([]);
+    expect(result.main.requiredSigners).toBe(0);
+    expect(result.main.receivedSigners.length).toBeGreaterThanOrEqual(result.main.requiredSigners);
+  });
+
   test('wrong preimage fails', () => {
     const wrong = '1000000000000000000000000000000000000000000000000000000000000001';
     expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, []), wrong))).toBe(false);

@@ -515,7 +515,10 @@ export function verifyP2PKSpendingConditions(
   const signatures = getP2PKWitnessSignatures(proof.witness);
   const locktime = getLocktime(secret);
   const lockState: LockState = deriveLockState(locktime);
-  const nsigs = resolveNSigs(secret, lockState, refundKeys);
+  // A path with no eligible keys requires no signatures (e.g. a keyless HTLC,
+  // spent by preimage alone). The `n_sigs` default of 1 only applies when there
+  // are main keys to satisfy it.
+  const nsigs = mainKeys.length === 0 ? 0 : resolveNSigs(secret, lockState, refundKeys);
   const nSigsRefund = resolveNSigsRefund(secret, lockState, refundKeys);
 
   // Verify signatures against both key sets
