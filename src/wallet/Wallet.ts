@@ -52,6 +52,7 @@ import { CheckStateEnum, type ProofState } from '../model/types/NUT07';
 import { type BatchMintRequest } from '../model/types/NUT29';
 import type { Proof, ProofLike } from '../model/types/proof';
 import type { Token } from '../model/types/token';
+import type { RequestFetch, RequestFn } from '../transport';
 import {
   getDecodedToken,
   invoiceHasAmountInHRP,
@@ -202,6 +203,13 @@ class Wallet {
    * @param options.requireSigDleq Fail mint/swap/melt responses when the mint advertises NUT-12
    *   support but omits DLEQ proofs on returned blinded signatures. This is a fail-fast consistency
    *   check, not protection against a malicious mint already consuming inputs or payments.
+   * @param options.customRequest Custom mint request function. Use this to route all mint HTTP
+   *   requests through runtime-specific transports such as OHTTP, Tor, native HTTP clients, or
+   *   proxies. Only used when `mint` is passed as a URL string; pass a configured `Mint` instance
+   *   when you need full control.
+   * @param options.requestFetch Custom fetch-compatible transport for mint HTTP requests. Use this
+   *   for per-wallet OHTTP, Tor, native HTTP clients, or proxies while preserving the default
+   *   request pipeline. Ignored when `customRequest` is supplied.
    * @param options.logger Logger instance, default null logger.
    */
   constructor(
@@ -218,6 +226,8 @@ class Wallet {
       selectProofs?: SelectProofs; // optional override
       outputDataCreator?: OutputDataCreator;
       requireSigDleq?: boolean;
+      customRequest?: RequestFn;
+      requestFetch?: RequestFetch;
       logger?: Logger;
     },
   ) {
@@ -228,7 +238,12 @@ class Wallet {
     this._outputDataCreator = options?.outputDataCreator ?? new DefaultOutputDataCreator();
     this.mint =
       typeof mint === 'string'
-        ? new Mint(mint, { authProvider: options?.authProvider, logger: this._logger })
+        ? new Mint(mint, {
+            authProvider: options?.authProvider,
+            customRequest: options?.customRequest,
+            requestFetch: options?.requestFetch,
+            logger: this._logger,
+          })
         : mint;
     this._unit = options?.unit ?? this._unit;
     this._boundKeysetId = options?.keysetId ?? this._boundKeysetId;
@@ -462,6 +477,50 @@ class Wallet {
     });
     this.failIf(!keyset.hasKeys, 'Keyset has no keys loaded', { keyset: keyset.id });
     return keyset;
+  }
+
+  /**
+   * Resolves the keyset used to create new proofs, enforcing the output policy.
+   *
+   * @remarks
+   * Legacy (pre-v1, base64-id) keysets may be spent and restored, but never used to create new
+   * proofs. Inactive keysets are rejected per NUT-02, the mint would refuse to sign outputs on
+   * them, so fail fast here. Unknown hex versions are already excluded upstream: their keys fail
+   * verification and `getKeyset` rejects keysets without keys.
+   *
+   * Only the prepare-side ops use this gate. The `complete*` ops use plain `getKeyset` as the mint
+   * will have signed.
+   * @param id Optional keyset id to resolve. If omitted, the wallet's bound keyset is used.
+   * @returns The resolved `Keyset`.
+   * @throws If the keyset fails `getKeyset` validation, has a legacy (non-hex) id, or is inactive.
+   */
+  private getOutputKeyset(id?: string): Keyset {
+    const keyset = this.getKeyset(id);
+    this.failIf(!keyset.hasHexId, 'Legacy keyset cannot be used to create new proofs', {
+      keyset: keyset.id,
+    });
+    this.failIf(!keyset.isActive, 'Inactive keyset cannot be used to create new proofs', {
+      keyset: keyset.id,
+    });
+    return keyset;
+  }
+
+  /**
+   * Asserts the mint has at least one usable (active, hex-id, keyed) keyset for the wallet's unit
+   * before requesting a mint quote — a paid quote could otherwise never be redeemed for proofs.
+   *
+   * @param op Operation name for the error message.
+   * @throws If the keychain is uninitialized or has no usable active keyset for the unit.
+   */
+  private requireMintableKeyset(op: string): void {
+    try {
+      this._keyChain.getCheapestKeyset();
+    } catch (e) {
+      this.fail(
+        `${op}: no active keyset for unit '${this._unit}' — a paid mint quote could not be redeemed`,
+        { reason: (e as Error).message },
+      );
+    }
   }
 
   public get logger(): Logger {
@@ -977,7 +1036,7 @@ class Wallet {
     verifyProofsForReceive(proofs, (id) => this._keyChain.getKeyset(id), { requireDleq });
 
     // Shape receive output type and denominations
-    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    const keyset = this.getOutputKeyset(keysetId); // specified or wallet keyset
     const swapFee = this.getFeesForProofs(proofs);
     const receiveAmount = totalAmount.subtract(swapFee);
     let receiveOT = this.configureOutputs(
@@ -1181,7 +1240,7 @@ class Wallet {
     };
 
     // Fetch keys
-    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    const keyset = this.getOutputKeyset(keysetId); // specified or wallet keyset
 
     // Shape SEND output type and denominations
     let sendOT = this.configureOutputs(
@@ -1306,6 +1365,7 @@ class Wallet {
     this.validateReturnedSignatures(signatures, swapTransaction.outputData);
 
     // Construct proofs
+    // Plain getKeyset: the mint has already signed
     const keyset = this.getKeyset(swapPreview.keysetId);
     const swapProofs = swapTransaction.outputData.map((d, i) => d.toProof(signatures[i], keyset));
     const reorderedProofs = Array(swapProofs.length);
@@ -1662,6 +1722,9 @@ class Wallet {
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
+    // Custom methods are fine, but NUT-04 requires the mint to advertise them
+    this.requireSupport('mint', method);
+    this.requireMintableKeyset('createMintQuote');
     const body = { ...payload, unit: this._unit };
     const res = await this.mint.createMintQuote<TRes>(method, body, {
       normalize: options?.normalize,
@@ -1684,6 +1747,7 @@ class Wallet {
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
+    this.requireMintableKeyset('createMintQuoteBolt11');
     const mintAmount = this.parseAmount(amount, 'createMintQuoteBolt11');
     // Check if mint supports description for bolt11
     if (description) {
@@ -1717,6 +1781,7 @@ class Wallet {
     description?: string,
   ): Promise<MintQuoteBolt11Response> {
     this.requireSupport('mint', 'bolt11');
+    this.requireMintableKeyset('createLockedMintQuote');
     const mintAmount = this.parseAmount(amount, 'createLockedMintQuote');
     const { supported } = this.getMintInfo().isSupported(20);
     this.failIf(!supported, 'Mint does not support NUT-20');
@@ -1751,6 +1816,7 @@ class Wallet {
     },
   ): Promise<MintQuoteBolt12Response> {
     this.requireSupport('mint', 'bolt12');
+    this.requireMintableKeyset('createMintQuoteBolt12');
     // Check if mint supports description for bolt12
     const mintInfo = this.getMintInfo();
     if (options?.description && !mintInfo.supportsNut04Description('bolt12', this._unit)) {
@@ -1782,6 +1848,7 @@ class Wallet {
    */
   async createMintQuoteOnchain(pubkey: string): Promise<MintQuoteOnchainResponse> {
     this.requireSupport('mint', 'onchain');
+    this.requireMintableKeyset('createMintQuoteOnchain');
     const res = await this.mint.createMintQuoteOnchain({ unit: this._unit, pubkey });
     return { ...res, unit: res.unit || this._unit };
   }
@@ -2099,7 +2166,7 @@ class Wallet {
 
     // Shape output type and denominations for our proofs
     // we are receiving, so no includeFees.
-    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    const keyset = this.getOutputKeyset(keysetId); // specified or wallet keyset
     let mintOT = this.configureOutputs(
       requestedAmount,
       keyset,
@@ -2216,6 +2283,7 @@ class Wallet {
     );
     this.validateReturnedSignatures(signatures, outputData);
 
+    // Plain getKeyset: the mint has already signed
     const keyset = this.getKeyset(keysetId);
     this._logger.debug('MINT COMPLETED', {
       amounts: outputData.map((o) => o.blindedMessage.amount.toString()),
@@ -2296,7 +2364,7 @@ class Wallet {
     }
 
     // Parse amounts and determine keyset
-    const keyset = this.getKeyset(keysetId);
+    const keyset = this.getOutputKeyset(keysetId);
     const amounts = entries.map((e) => this.parseAmount(e.amount, `prepareBatchMint: ${method}`));
     const totalAmount = Amount.sum(amounts);
 
@@ -2387,6 +2455,7 @@ class Wallet {
     );
     this.validateReturnedSignatures(sigs, outputData);
 
+    // Plain getKeyset: the mint has already signed
     const keyset = this.getKeyset(keysetId);
     this._logger.debug('BATCH MINT COMPLETED', {
       quotes: payload.quotes.length,
@@ -2419,6 +2488,8 @@ class Wallet {
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
   ): Promise<TRes> {
+    // Custom methods are fine, but NUT-05 requires the mint to advertise them
+    this.requireSupport('melt', method);
     const body = { ...payload, unit: this._unit };
     const res = await this.mint.createMeltQuote<TRes>(method, body, {
       normalize: options?.normalize,
@@ -2780,7 +2851,10 @@ class Wallet {
     this.validateMeltQuote(meltQuote);
     outputType = outputType ?? this.defaultOutputType(); // Fallback to policy
     const { keysetId, onCountersReserved, nut08Change = true } = config || {};
-    const keyset = this.getKeyset(keysetId); // specified or wallet keyset
+    // Plain getKeyset: melting needs no new outputs, so an inactive/legacy keyset must not
+    // block withdrawal. A mint unwinding liabilities deactivates keysets but
+    // keeps melt open; gate output creation below, not the melt itself.
+    let keyset = this.getKeyset(keysetId); // specified or wallet keyset
     const normalizedProofs = normalizeProofAmounts(proofsToSend);
     const sendAmount = sumProofs(normalizedProofs);
     let outputData: OutputDataLike[] = [];
@@ -2807,6 +2881,13 @@ class Wallet {
     // Create NUT-08 blanks for return of melt change (if supported)
     // Note: zero amount + zero denomination passes splitAmount validation
     else if (nut08Change && feeReserve.greaterThan(0)) {
+      // Now we actually create outputs the mint must sign: enforce the output policy.
+      this.failIf(
+        !keyset.isActive,
+        'Melt change keyset is inactive. Use an active keyset or set nut08Change: false to forfeit it',
+        { keyset: keyset.id },
+      );
+      keyset = this.getOutputKeyset(keysetId);
       let count = Math.ceil(Math.log2(feeReserve.toNumberUnsafe())) || 1;
       if (count < 0) count = 0; // Prevents: -Infinity
       const denominations: number[] = count ? new Array<number>(count).fill(0) : [];
@@ -2860,22 +2941,8 @@ class Wallet {
     meltPreview: MeltPreview<TQuote>,
     privkey?: string | string[],
     options?: CompleteMeltOptions,
-  ): Promise<MeltProofsResponse<TQuote>>;
-  /**
-   * @deprecated Pass `{ preferAsync: true }` as the third param, instead of `true`.
-   */
-  async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
-    meltPreview: MeltPreview<TQuote>,
-    privkey?: string | string[],
-    preferAsync?: boolean,
-  ): Promise<MeltProofsResponse<TQuote>>;
-  async completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(
-    meltPreview: MeltPreview<TQuote>,
-    privkey?: string | string[],
-    options?: boolean | CompleteMeltOptions,
   ): Promise<MeltProofsResponse<TQuote>> {
-    const completeOptions: CompleteMeltOptions =
-      typeof options === 'boolean' ? { preferAsync: options } : (options ?? {});
+    const completeOptions: CompleteMeltOptions = options ?? {};
 
     // Extract vars from MeltPreview
     let inputs = meltPreview.inputs;

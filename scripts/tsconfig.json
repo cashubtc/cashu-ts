@@ -7,5 +7,5 @@
     "strict": true,
     "esModuleInterop": true
   },
-  "include": ["./**/*.ts"]
+  "include": ["./UpdateMakefileMintVersion.ts"]
 }

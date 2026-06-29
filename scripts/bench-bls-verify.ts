@@ -1,10 +1,6 @@
 /**
  * Per-proof vs batch BLS pairing verification regression bench.
  *
- * Originally Phase 8 (wire-or-not decision); batch is now wired in `verifyProofsForReceive`. Kept
- * as a regression check — re-run after touching `verifyUnblindedSignatureBls`,
- * `batchVerifyUnblindedSignatureBls`, or upgrading `@noble/curves`.
- *
  * Run: `npx tsx scripts/bench-bls-verify.ts`
  */
 import { bls12_381 } from '@noble/curves/bls12-381.js';
@@ -18,7 +14,7 @@ import {
   unblindSignatureBls,
   verifyUnblindedSignatureBls,
   batchVerifyUnblindedSignatureBls,
-} from '../src/crypto/bls';
+} from '../src/crypto/curve_bls';
 
 type Item = { K2: G2Point; C: G1Point; secret: Uint8Array };
 

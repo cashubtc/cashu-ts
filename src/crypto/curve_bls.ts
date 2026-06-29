@@ -131,8 +131,14 @@ export function getG2PubKeyFromPrivKey(privKey: Uint8Array): Uint8Array<ArrayBuf
 }
 
 function randomScalar(): bigint {
-  // bls12_381's Fr.fromBytes accepts 32 bytes BE and reduces mod ORDER.
-  return Fr.fromBytes(randomBytes(32));
+  // Rejection-sample, not Fr.fromBytes' mod-reduction, which biases small scalars (BLS_FR_ORDER ~ 0.45·2^256).
+  for (let ctr = 0; ctr < 1 << 16; ctr++) {
+    const x = bytesToNumberBE(randomBytes(32));
+    if (x === 0n || x >= BLS_FR_ORDER) continue;
+    return x;
+  }
+  /* c8 ignore next */
+  throw new CTSError('BLS random scalar generation failed');
 }
 
 /**

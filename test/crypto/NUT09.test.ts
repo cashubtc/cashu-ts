@@ -1,8 +1,12 @@
 import { bytesToHex } from '@noble/curves/utils.js';
 import { HDKey } from '@scure/bip32';
 import { describe, expect, test } from 'vitest';
-import { deriveSecret, getKeysetIdInt } from '../../src/crypto';
+import { deriveSecretAndBlindingFactor, getKeysetIdInt } from '../../src/crypto';
 import { Bytes } from '../../src/utils';
+
+// The standalone deriveSecret() helper was removed in v5; derive it locally for these tests.
+const deriveSecret = (seed: Uint8Array, keysetId: string, counter: number): Uint8Array =>
+  deriveSecretAndBlindingFactor(seed, keysetId, counter).secret;
 
 const seed = Uint8Array.from(
   Bytes.fromHex(

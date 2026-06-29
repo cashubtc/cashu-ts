@@ -11,6 +11,8 @@ import {
   MintInfo,
   Amount,
   setGlobalRequestOptions,
+  type RequestFetch,
+  type RequestFn,
 } from '../../src';
 
 import { NULL_LOGGER } from '../../src/logger';
@@ -103,6 +105,66 @@ describe('test wallet init', () => {
     // Verify specific keyset retrieval
     const specificKeys = wallet.keyChain.getKeyset('00bd033559de27d0').keys;
     expect(specificKeys).toEqual(dummyKeysResp.keysets[0].keys);
+  });
+
+  test('should pass customRequest from wallet URL options to the mint', async () => {
+    const endpoints: string[] = [];
+    const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
+      endpoints.push(endpoint);
+      let payload: unknown;
+      if (endpoint.endsWith('/v1/info')) {
+        payload = mintInfoResp;
+      } else if (endpoint.endsWith('/v1/keysets')) {
+        payload = dummyKeysetResp;
+      } else if (endpoint.endsWith('/v1/keys')) {
+        payload = dummyKeysResp;
+      } else {
+        throw new Error(`Unexpected endpoint: ${endpoint}`);
+      }
+      return payload as T;
+    }) as RequestFn;
+
+    const wallet = new Wallet(mintUrl, { unit, customRequest });
+    await wallet.loadMint();
+
+    expect(wallet.mint.mintUrl).toBe(mintUrl);
+    expect(endpoints).toEqual([
+      `${mintUrl}/v1/info`,
+      `${mintUrl}/v1/keysets`,
+      `${mintUrl}/v1/keys`,
+    ]);
+  });
+
+  test('should pass requestFetch from wallet URL options through the default request pipeline', async () => {
+    const endpoints: string[] = [];
+    const requestFetch = (async (input: Parameters<RequestFetch>[0]) => {
+      const endpoint = String(input);
+      endpoints.push(endpoint);
+      let payload: unknown;
+      if (endpoint.endsWith('/v1/info')) {
+        payload = mintInfoResp;
+      } else if (endpoint.endsWith('/v1/keysets')) {
+        payload = dummyKeysetResp;
+      } else if (endpoint.endsWith('/v1/keys')) {
+        payload = dummyKeysResp;
+      } else {
+        throw new Error(`Unexpected endpoint: ${endpoint}`);
+      }
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    const wallet = new Wallet(mintUrl, { unit, requestFetch });
+    await wallet.loadMint();
+
+    expect(wallet.mint.mintUrl).toBe(mintUrl);
+    expect(endpoints).toEqual([
+      `${mintUrl}/v1/info`,
+      `${mintUrl}/v1/keysets`,
+      `${mintUrl}/v1/keys`,
+    ]);
   });
 
   test('should resolve NUT-19 support lazily from mint info when unsupported', async () => {
@@ -313,11 +375,41 @@ describe('test info', () => {
     expect(info.isSupported(5)).toEqual({
       disabled: false,
       params: [
-        { method: 'bolt11', unit: 'sat', min_amount: null, max_amount: null },
-        { method: 'bolt11', unit: 'usd', min_amount: null, max_amount: null },
-        { method: 'bolt11', unit: 'eur', min_amount: null, max_amount: null },
-        { method: 'bolt12', unit: 'sat', min_amount: null, max_amount: null },
-        { method: 'onchain', unit: 'sat', min_amount: null, max_amount: null },
+        {
+          method: 'bolt11',
+          unit: 'sat',
+          method_name: 'Bolt11',
+          min_amount: null,
+          max_amount: null,
+        },
+        {
+          method: 'bolt11',
+          unit: 'usd',
+          method_name: 'Bolt11',
+          min_amount: null,
+          max_amount: null,
+        },
+        {
+          method: 'bolt11',
+          unit: 'eur',
+          method_name: 'Bolt11',
+          min_amount: null,
+          max_amount: null,
+        },
+        {
+          method: 'bolt12',
+          unit: 'sat',
+          method_name: 'Bolt12',
+          min_amount: null,
+          max_amount: null,
+        },
+        {
+          method: 'onchain',
+          unit: 'sat',
+          method_name: 'Onchain',
+          min_amount: null,
+          max_amount: null,
+        },
       ],
     });
     expect(info.isSupported(17)).toEqual({
@@ -459,7 +551,7 @@ describe('test info', () => {
           ],
         },
       },
-    });
+    } as any);
 
     expect(info.supportsAmountless('bolt11', 'sat')).toBe(true);
 
@@ -488,7 +580,7 @@ describe('test info', () => {
           ],
         },
       },
-    });
+    } as any);
 
     expect(info2.supportsAmountless('bolt11', 'sat')).toBe(false);
   });

@@ -100,6 +100,7 @@ export type MintContactInfo = {
 export type SwapMethod = {
   method: string;
   unit: string;
+  method_name: string | null;
   min_amount: AmountLike | null;
   max_amount: AmountLike | null;
   description?: boolean; //added this for Nutshell =>0.16.4 compatibility, see https://github.com/cashubtc/nutshell/pull/783

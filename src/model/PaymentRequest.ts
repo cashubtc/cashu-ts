@@ -1,3 +1,6 @@
+import { getTag, getTagInt, getTagScalar } from '../crypto/NUT10';
+import type { P2PKOptions, P2PKTag } from '../crypto/NUT11';
+import { P2PK_KNOWN_TAG_KEYS, parseP2PKSecret } from '../crypto/NUT11';
 import { encodeBase64toUint8, decodeCBOR, encodeCBOR, Bytes } from '../utils';
 import { decodeBech32mToBytes, encodeBech32m } from '../utils/bech32m';
 import { decodeTLV, encodeTLV } from '../utils/tlv';
@@ -98,13 +101,11 @@ export class PaymentRequest {
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
-        ? [
-            {
-              kind: this.nut10.kind,
-              data: this.nut10.data,
-              tags: this.nut10.tags,
-            },
-          ]
+        ? {
+            kind: this.nut10.kind,
+            data: this.nut10.data,
+            tags: this.nut10.tags,
+          }
         : undefined,
     };
 
@@ -114,6 +115,61 @@ export class PaymentRequest {
 
   getTransport(type: PaymentRequestTransportType) {
     return this.transport?.find((t: PaymentRequestTransport) => t.type === type);
+  }
+
+  /**
+   * Converts this request's `nut10` locking option into the {@link P2PKOptions} accepted by the
+   * `.asP2PK()` builder, so a payer can produce proofs locked to exactly the spending condition the
+   * payee requested.
+   *
+   * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only. Returns `undefined` when there is no `nut10`
+   * option or its kind is not one we can build.
+   *
+   * @throws If the option is missing its `data` field, or carries malformed NUT-10 tags — invalid
+   *   lock semantics must not be silently dropped.
+   */
+  toP2PKOptions(): P2PKOptions | undefined {
+    const nut10 = this.nut10;
+    const isHTLC = nut10?.kind === 'HTLC';
+    if (!nut10 || (nut10.kind !== 'P2PK' && !isHTLC)) {
+      return undefined;
+    }
+    if (!nut10.data) {
+      throw new CTSError(`NUT-10 ${nut10.kind} option is missing its data field`);
+    }
+
+    // Use parseP2PKSecret (the parser the verifier uses): it rejects malformed
+    // tags, duplicate tag keys and bad sigflags — all of which NUT-11 says make a
+    // proof unspendable — so a bad lock fails loudly instead of silently first-winning.
+    const secret = parseP2PKSecret([
+      nut10.kind,
+      { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
+    ]);
+    const taggedPubkeys = getTag(secret, 'pubkeys') ?? [];
+    const pubkeys = [nut10.data, ...taggedPubkeys];
+    const options: P2PKOptions = isHTLC
+      ? { hashlock: nut10.data, pubkey: taggedPubkeys }
+      : { pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys };
+
+    // Optional fields pass straight through: the accessors return undefined when
+    // absent, and the builder ignores undefined options. getTag never yields [].
+    options.locktime = getTagInt(secret, 'locktime');
+    options.refundKeys = getTag(secret, 'refund');
+    options.requiredSignatures = getTagInt(secret, 'n_sigs');
+    options.requiredRefundSignatures = getTagInt(secret, 'n_sigs_refund');
+    if (getTagScalar(secret, 'sigflag') === 'SIG_ALL') {
+      options.sigFlag = 'SIG_ALL';
+    }
+
+    // Forward any non-standard tags verbatim.
+    const additionalTags = (nut10.tags ?? []).filter(
+      (t) => t.length > 0 && !P2PK_KNOWN_TAG_KEYS.has(t[0]),
+    ) as P2PKTag[];
+    if (additionalTags.length > 0) {
+      options.additionalTags = additionalTags;
+    }
+
+    return options;
   }
 
   /**
@@ -157,6 +213,13 @@ export class PaymentRequest {
     if (lowerRequest.startsWith('creqb')) {
       const data = decodeBech32mToBytes(lowerRequest);
       const decoded = decodeTLV(data);
+      const nut10 = decoded.nut10
+        ? {
+            kind: decoded.nut10.kind,
+            data: decoded.nut10.data,
+            tags: decoded.nut10.tags ?? [],
+          }
+        : undefined;
       return new PaymentRequest(
         decoded.transports,
         decoded.id,
@@ -165,7 +228,7 @@ export class PaymentRequest {
         decoded.mints,
         decoded.description,
         decoded.singleUse ?? false,
-        undefined,
+        nut10,
       );
     }
 

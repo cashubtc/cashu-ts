@@ -79,7 +79,7 @@ runs:
 
     - name: Upload integration coverage to Codecov
       if: ${{ inputs.upload_coverage == 'true' }}
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ env.CODECOV_TOKEN }}
         flags: integration

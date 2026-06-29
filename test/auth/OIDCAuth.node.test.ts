@@ -53,6 +53,23 @@ describe('OIDCAuth: discovery & caching', () => {
     expect(calls).toBe(1);
   });
 
+  test('loadConfig uses the injected fetch implementation', async () => {
+    const calls: string[] = [];
+    const customFetch = (async (input: Parameters<typeof fetch>[0]) => {
+      calls.push(String(input));
+      return new Response(JSON.stringify(goodDiscovery), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const oidc = new OIDCAuth(DISCOVERY, { fetch: customFetch });
+    const cfg = await oidc.loadConfig();
+
+    expect(cfg.token_endpoint).toBe(TOKEN_EP);
+    expect(calls).toEqual([DISCOVERY]);
+  });
+
   test('loadConfig throws on invalid discovery (no token_endpoint)', async () => {
     server.use(http.get(DISCOVERY, () => HttpResponse.json({ issuer: ISSUER })));
     const oidc = new OIDCAuth(DISCOVERY);
@@ -136,6 +153,39 @@ describe('OIDCAuth: PKCE + auth code', () => {
         '&client_id=cashu-client' +
         '&code_verifier=verifier_123',
     );
+  });
+
+  test('token requests use the injected fetch implementation', async () => {
+    const calls: Array<{ endpoint: string; body?: string }> = [];
+    const customFetch = (async (
+      input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      const endpoint = String(input);
+      calls.push({ endpoint, body: init?.body?.toString() });
+      if (endpoint === DISCOVERY) {
+        return new Response(JSON.stringify(goodDiscovery), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify(accessOk), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch;
+
+    const oidc = new OIDCAuth(DISCOVERY, { clientId: 'cashu-client', fetch: customFetch });
+    const tok = await oidc.passwordGrant('user', 'pass');
+
+    expect(tok.access_token).toBe('access.ok');
+    expect(calls).toEqual([
+      { endpoint: DISCOVERY, body: undefined },
+      {
+        endpoint: TOKEN_EP,
+        body: 'grant_type=password&client_id=cashu-client&username=user&password=pass&scope=openid',
+      },
+    ]);
   });
 
   test('exchangeAuthCode throws if provider returns 400 (strict)', async () => {

@@ -330,11 +330,18 @@ Any version containing `-rc`, `-beta`, or `-alpha` publishes to the `next` dist-
 
 release-please only watches `main`, so prior-major maintenance releases are cut manually:
 
-1. Commit or cherry-pick the fix to the `vN-dev` branch.
-2. Bump `package.json` to the next patch version (e.g. `4.5.1`).
-3. Tag and push: `git tag v4.5.1 && git push origin v4-dev --tags`
-4. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
-5. `version.yml` maps the major version to the correct dist-tag (see below).
+1. Open a release PR targeting `vN-dev`.
+2. Commit or cherry-pick the fix to the `vN-dev` branch.
+3. Bump `package.json` to the next patch version (e.g. `4.5.1`).
+4. Merge the PR into `v4-dev`.
+5. Tag the merged `v4-dev` commit that contains the version bump:
+   ```bash
+   git fetch origin v4-dev --tags
+   git tag -a v4.5.1 origin/v4-dev -m "v4.5.1"
+   git push origin v4.5.1
+   ```
+6. Create a GitHub Release from the tag (or use `workflow_dispatch` on the publish workflow with the tag).
+7. The publish workflow detects major version 4 and publishes to npm with the `v4-lts` dist-tag.
 
 ### npm dist-tags
 

@@ -242,6 +242,9 @@ export const BLS_G2_GENERATOR: WeierstrassPoint<Fp2>;
 // @public
 export const BLS_HASH_TO_CURVE_DST = "CASHU_BLS12_381_G1_XMD:SHA-256_SSWU_RO_";
 
+// @public
+export function buildMintBackupPayload(mints: string[], timestamp: number): string;
+
 // @public (undocumented)
 export type CancellerLike = SubscriptionCanceller | Promise<SubscriptionCanceller>;
 
@@ -323,6 +326,8 @@ export interface CounterSource {
 export function createAuthWallet(mintUrl: string, options?: {
     authPool?: number;
     oidc?: OIDCAuthOptions;
+    customRequest?: RequestFn;
+    requestFetch?: RequestFetch;
     logger?: Logger;
 }): Promise<{
     mint: Mint;
@@ -393,9 +398,6 @@ export type CurvePoint = {
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
 
-// @public @deprecated (undocumented)
-export const deriveBlindingFactor: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
-
 // @public
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
 
@@ -409,6 +411,12 @@ export type DeriveKeysetIdOptions = {
 };
 
 // @public
+export function deriveMintBackupKeys(seed: Uint8Array): {
+    privkey: string;
+    pubkey: string;
+};
+
+// @public
 export function deriveP2BKBlindedPubkeys(pubkeys: string[], eBytes?: Uint8Array): {
     blinded: string[];
     Ehex: string;
@@ -419,9 +427,6 @@ export function deriveP2BKSecretKey(privkey: string | bigint, rBlind: string | b
 
 // @public
 export function deriveP2BKSecretKeys(Ehex: string, privateKey: string | string[], blindPubKey: string | string[]): string[];
-
-// @public @deprecated (undocumented)
-export const deriveSecret: (seed: Uint8Array, keysetId: string, counter: number) => Uint8Array;
 
 // @public
 export function deriveSecretAndBlindingFactor(seed: Uint8Array, keysetId: string, counter: number): {
@@ -936,6 +941,7 @@ export type MeltRequest = {
 export class Mint {
     constructor(mintUrl: string, options?: {
         customRequest?: RequestFn;
+        requestFetch?: RequestFetch;
         authProvider?: AuthProvider;
         logger?: Logger;
     });
@@ -1009,6 +1015,20 @@ export class Mint {
     swap(swapPayload: SwapRequest, customRequest?: RequestFn): Promise<SwapResponse>;
     // (undocumented)
     get webSocketConnection(): WSConnection | undefined;
+}
+
+// @public
+export const MINT_BACKUP_D_TAG = "mint-list";
+
+// @public
+export const MINT_BACKUP_KIND = 30078;
+
+// @public
+export interface MintBackupPayload {
+    // (undocumented)
+    mints: string[];
+    // (undocumented)
+    timestamp: number;
 }
 
 // @public
@@ -1374,6 +1394,7 @@ export type OIDCAuthOptions = {
     clientId?: string;
     scope?: string;
     logger?: Logger;
+    fetch?: OIDCFetch;
     onTokens?: (t: TokenResponse) => void | Promise<void>;
 };
 
@@ -1384,6 +1405,9 @@ export type OIDCConfig = {
     token_endpoint: string;
     device_authorization_endpoint?: string;
 };
+
+// @public
+export type OIDCFetch = typeof fetch;
 
 // @public (undocumented)
 export type OnCountersReserved = (info: OperationCounters) => void;
@@ -1559,6 +1583,9 @@ export type P2PKWitness = {
 export function parseHTLCSecret(secret: string | Secret): Secret;
 
 // @public
+export function parseMintBackupPayload(json: string): MintBackupPayload;
+
+// @public
 export function parseP2PKSecret(secret: string | Secret): Secret;
 
 // @public
@@ -1588,6 +1615,7 @@ class PaymentRequest_2 {
     toEncodedCreqB(): string;
     // (undocumented)
     toEncodedRequest(): string;
+    toP2PKOptions(): P2PKOptions | undefined;
     // (undocumented)
     toRawRequest(): RawPaymentRequest;
     // (undocumented)
@@ -1760,6 +1788,9 @@ export type RequestArgs = {
     logger?: Logger;
 };
 
+// @public
+export type RequestFetch = typeof fetch;
+
 // @public (undocumented)
 export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 
@@ -1767,6 +1798,7 @@ export type RequestFn = <T = unknown>(args: RequestOptions) => Promise<T>;
 export type RequestOptions = RequestArgs & Omit<RequestInit, 'body' | 'headers'> & Partial<Nut19Policy> & {
     requestTimeout?: number;
     onResponseMeta?: (meta: ResponseMeta) => void;
+    fetch?: RequestFetch;
 };
 
 // @public
@@ -2009,6 +2041,7 @@ export function sumProofs(proofs: Array<Pick<ProofLike, 'amount'>>): Amount;
 export type SwapMethod = {
     method: string;
     unit: string;
+    method_name: string | null;
     min_amount: AmountLike | null;
     max_amount: AmountLike | null;
     description?: boolean;
@@ -2136,6 +2169,8 @@ export class Wallet {
         selectProofs?: SelectProofs;
         outputDataCreator?: OutputDataCreator;
         requireSigDleq?: boolean;
+        customRequest?: RequestFn;
+        requestFetch?: RequestFetch;
         logger?: Logger;
     });
     batchRestore(gapLimit?: number, batchSize?: number, counter?: number, keysetId?: string): Promise<{
@@ -2158,8 +2193,6 @@ export class Wallet {
     checkProofsStates(proofs: Array<Pick<ProofLike, 'secret' | 'id'>>): Promise<ProofState[]>;
     completeBatchMint(batchPreview: BatchMintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], options?: CompleteMeltOptions): Promise<MeltProofsResponse<TQuote>>;
-    // @deprecated (undocumented)
-    completeMelt<TQuote extends Pick<MeltQuoteBaseResponse, 'quote'> = MeltQuoteBaseResponse>(meltPreview: MeltPreview<TQuote>, privkey?: string | string[], preferAsync?: boolean): Promise<MeltProofsResponse<TQuote>>;
     completeMint(mintPreview: MintPreview<Pick<MintQuoteBaseResponse, 'quote'>>): Promise<Proof[]>;
     completeSwap(swapPreview: SwapPreview, privkey?: string | string[]): Promise<SendResponse>;
     readonly counters: WalletCounters;

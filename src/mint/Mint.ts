@@ -42,6 +42,7 @@ import request, {
   WSConnection,
   setRequestLogger,
   type RequestFn,
+  type RequestFetch,
   type RequestOptions,
   type ResponseMeta,
 } from '../transport';
@@ -83,6 +84,8 @@ class Mint {
   /**
    * @param mintUrl Requires mint URL to create this object.
    * @param customRequest Optional, for custom network communication with the mint.
+   * @param requestFetch Optional fetch-compatible transport for the default mint request pipeline.
+   *   Ignored when `customRequest` is supplied.
    * @param authTokenGetter Optional. Function to obtain a NUT-22 BlindedAuthToken (e.g. from a
    *   database or localstorage)
    */
@@ -90,12 +93,21 @@ class Mint {
     mintUrl: string,
     options?: {
       customRequest?: RequestFn;
+      requestFetch?: RequestFetch;
       authProvider?: AuthProvider;
       logger?: Logger;
     },
   ) {
     this._mintUrl = normalizeUrl(mintUrl);
-    this._request = options?.customRequest ?? request;
+    if (options?.customRequest) {
+      this._request = options.customRequest;
+    } else if (options?.requestFetch) {
+      const requestFetch = options.requestFetch;
+      this._request = <T>(args: RequestOptions): Promise<T> =>
+        request<T>({ ...args, fetch: requestFetch });
+    } else {
+      this._request = request;
+    }
     this._authProvider = options?.authProvider;
     this._logger = options?.logger ?? NULL_LOGGER;
     setRequestLogger(this._logger);

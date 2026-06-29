@@ -28,6 +28,29 @@ const mintInfoRespWithNut12 = {
   ...mintInfoResp,
   nuts: { ...mintInfoResp.nuts, 12: { supported: true } },
 };
+// NUT-04/05 require mints to advertise every supported method, custom ones included
+const mintInfoRespWithBacs = {
+  ...mintInfoResp,
+  nuts: {
+    ...mintInfoResp.nuts,
+    4: {
+      methods: [
+        ...mintInfoResp.nuts['4'].methods,
+        { method: 'bacs', unit: 'sat' },
+        { method: 'swift', unit: 'sat' },
+      ],
+      disabled: false,
+    },
+    5: {
+      methods: [
+        ...mintInfoResp.nuts['5'].methods,
+        { method: 'bacs', unit: 'sat' },
+        { method: 'swift', unit: 'sat' },
+      ],
+      disabled: false,
+    },
+  },
+};
 
 function normalizeProofsForTest(proofs: Parameters<Wallet['signP2PKProofs']>[0]): Proof[] {
   return proofs.map((proof) => ({ ...proof, amount: Amount.from(proof.amount) }));
@@ -909,6 +932,7 @@ describe('generic mint/melt methods', () => {
   describe('wallet.createMintQuote / checkMintQuote', () => {
     test('createMintQuote with custom method hits /v1/mint/quote/{method}', async () => {
       server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
         http.post(mintUrl + '/v1/mint/quote/bacs', () =>
           HttpResponse.json({
             quote: 'bacs-quote-1',
@@ -953,6 +977,7 @@ describe('generic mint/melt methods', () => {
 
     test('createMintQuote forces wallet unit over payload unit', async () => {
       server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
         http.post(mintUrl + '/v1/mint/quote/bacs', async ({ request }) => {
           const body = (await request.json()) as { unit: string };
           return HttpResponse.json({
@@ -1366,6 +1391,7 @@ describe('generic mint/melt methods', () => {
   describe('wallet.createMeltQuote / checkMeltQuote', () => {
     test('createMeltQuote with custom method hits /v1/melt/quote/{method}', async () => {
       server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
         http.post(mintUrl + '/v1/melt/quote/bacs', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
@@ -1410,6 +1436,7 @@ describe('generic mint/melt methods', () => {
 
     test('createMeltQuote forces wallet unit over payload unit', async () => {
       server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
         http.post(mintUrl + '/v1/melt/quote/bacs', async ({ request }) => {
           const body = (await request.json()) as { unit: string };
           return HttpResponse.json({
@@ -1851,16 +1878,18 @@ describe('generic mint/melt methods', () => {
       const wallet = new Wallet(mint, { unit });
       await wallet.loadMint();
 
+      // Malformed methods can never be advertised, so the NUT-04/05 support
+      // gate rejects them before the Mint-level format validation is reached.
       await expect(wallet.createMintQuote('INVALID', { amount: 1n })).rejects.toThrow(
-        'Invalid mint quote method',
+        "Mint does not support INVALID mint for unit 'sat'",
       );
 
       await expect(wallet.createMintQuote('has spaces', { amount: 1n })).rejects.toThrow(
-        'Invalid mint quote method',
+        "Mint does not support has spaces mint for unit 'sat'",
       );
 
       await expect(wallet.createMeltQuote('has/slash', { request: 'x' })).rejects.toThrow(
-        'Invalid melt quote method',
+        "Mint does not support has/slash melt for unit 'sat'",
       );
     });
   });
@@ -1923,6 +1952,7 @@ describe('generic mint/melt methods', () => {
 
     test('custom normalize runs after base normalization', async () => {
       server.use(
+        http.get(mintUrl + '/v1/info', () => HttpResponse.json(mintInfoRespWithBacs)),
         http.post(mintUrl + '/v1/melt/quote/swift', () =>
           HttpResponse.json({
             quote: 'swift-1',

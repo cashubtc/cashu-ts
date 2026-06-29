@@ -3,6 +3,7 @@ import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
 import { beforeAll, beforeEach, afterEach, afterAll, test, describe, expect } from 'vitest';
 import { createAuthWallet } from '../../src/auth/createAuthWallet';
+import type { RequestFetch, RequestFn } from '../../src';
 
 // ---- Constants
 const mintUrl = 'http://localhost:3338';
@@ -125,6 +126,66 @@ describe('createAuthWallet wiring', () => {
     expect(auth.poolTarget).toBe(7);
     // KeyChain and wallet should be initialized by helper
     expect(wallet.mint).toBe(mint);
+  });
+
+  test('wires customRequest through mint and wallet hydration', async () => {
+    const endpoints: string[] = [];
+    const customRequest = (async <T>({ endpoint }: Parameters<RequestFn>[0]): Promise<T> => {
+      endpoints.push(endpoint);
+      let payload: unknown;
+      if (endpoint.endsWith('/v1/info')) {
+        payload = infoResp;
+      } else if (endpoint.endsWith('/v1/keysets')) {
+        payload = dummyKeysetResp;
+      } else if (endpoint.endsWith('/v1/keys')) {
+        payload = dummyKeysResp;
+      } else {
+        throw new Error(`Unexpected endpoint: ${endpoint}`);
+      }
+      return payload as T;
+    }) as RequestFn;
+
+    const { wallet } = await createAuthWallet(mintUrl, { customRequest });
+
+    expect(wallet.mint.mintUrl).toBe(mintUrl);
+    expect(endpoints).toEqual([
+      `${mintUrl}/v1/info`,
+      `${mintUrl}/v1/info`,
+      `${mintUrl}/v1/keysets`,
+      `${mintUrl}/v1/keys`,
+    ]);
+  });
+
+  test('wires requestFetch through mint and wallet hydration', async () => {
+    const endpoints: string[] = [];
+    const requestFetch = (async (input: Parameters<RequestFetch>[0]) => {
+      const endpoint = String(input);
+      endpoints.push(endpoint);
+      let payload: unknown;
+      if (endpoint.endsWith('/v1/info')) {
+        payload = infoResp;
+      } else if (endpoint.endsWith('/v1/keysets')) {
+        payload = dummyKeysetResp;
+      } else if (endpoint.endsWith('/v1/keys')) {
+        payload = dummyKeysResp;
+      } else {
+        throw new Error(`Unexpected endpoint: ${endpoint}`);
+      }
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as RequestFetch;
+
+    const { wallet } = await createAuthWallet(mintUrl, { requestFetch });
+
+    expect(wallet.mint.mintUrl).toBe(mintUrl);
+    expect(endpoints).toEqual([
+      `${mintUrl}/v1/info`,
+      `${mintUrl}/v1/info`,
+      `${mintUrl}/v1/keysets`,
+      `${mintUrl}/v1/keys`,
+    ]);
   });
 
   test('authPool sets both desiredPoolSize and maxPerMint', async () => {

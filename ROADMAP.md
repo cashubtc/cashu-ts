@@ -30,7 +30,7 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [x] [NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md) | Offline ecash signature validation |
 - [x] [NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md) | Deterministic Secrets |
 - [x] [NUT-14](https://github.com/cashubtc/nuts/blob/main/14.md) | Hashed Timelock Contracts (HTLCs) |
-- [!] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md) | Partial multi-path payments |
+- [x] [NUT-15](https://github.com/cashubtc/nuts/blob/main/15.md) | Partial multi-path payments |
 - [!] [NUT-16](https://github.com/cashubtc/nuts/blob/main/16.md) | Animated QR codes |
 - [x] [NUT-17](https://github.com/cashubtc/nuts/blob/main/17.md) | WebSockets |
 - [x] [NUT-18](https://github.com/cashubtc/nuts/blob/main/18.md) | Payment Requests |
@@ -42,6 +42,7 @@ We are also tracking the project [here](https://github.com/orgs/cashubtc/project
 - [!] [NUT-24](https://github.com/cashubtc/nuts/blob/main/24.md) | HTTP 402 Payment Required |
 - [x] [NUT-25](https://github.com/cashubtc/nuts/blob/main/25.md) | BOLT12 |
 - [x] [NUT-26](https://github.com/cashubtc/nuts/blob/main/26.md) | Bech32m Encoding |
-- [ ] [NUT-27](https://github.com/cashubtc/nuts/blob/main/27.md) | Nostr Mint Backup |
+- [x] [NUT-27](https://github.com/cashubtc/nuts/blob/main/27.md) | Nostr Mint Backup |
 - [x] [NUT-28](https://github.com/cashubtc/nuts/blob/main/28.md) | Pay-to-Blinded-Key (P2BK) |
 - [x] [NUT-29](https://github.com/cashubtc/nuts/blob/main/29.md) | Batched Minting |
+- [x] [NUT-30](https://github.com/cashubtc/nuts/blob/main/30.md) | Onchain |

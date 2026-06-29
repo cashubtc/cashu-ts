@@ -30,6 +30,41 @@ After `loadMint()`, use `wallet.getMintInfo()` to inspect what the mint supports
 
 > ⚠️ **Server-side usage:** If you construct a `Wallet` (or `Mint`) using a URL from untrusted input (e.g. a received token), validate the mint URL against your own trusted-mint allowlist **before** passing it in. The library validates URL structure but cannot know which mints your application trusts.
 
+## Custom mint transport
+
+Pass `requestFetch` when one wallet or mint needs a runtime-specific transport, for example OHTTP, Tor, a native mobile HTTP client, or an application proxy. This keeps the default cashu-ts request behavior for JSON parsing, timeouts, errors, and NUT-19 retries while replacing only the network primitive.
+
+```typescript
+import { Wallet, type RequestFetch } from '@cashu/cashu-ts';
+
+const ohttpFetch: RequestFetch = async (input, init) => {
+  return fetchThroughOhttp(input, init); // your OHTTP relay client
+};
+
+const wallet = new Wallet('http://localhost:3338', {
+  unit: 'sat',
+  requestFetch: ohttpFetch,
+});
+await wallet.loadMint();
+```
+
+Use `setGlobalRequestOptions({ fetch })` when your whole app uses the same mint transport policy.
+
+Use `customRequest` when you need to replace the entire request pipeline instead of only the fetch-compatible transport.
+
+`requestFetch` only applies to Cashu mint HTTP requests. OIDC discovery and token requests use `oidc.fetch` because they target the identity provider and use OAuth/OIDC request and error semantics.
+
+```typescript
+import { createAuthWallet } from '@cashu/cashu-ts';
+
+const { wallet, oidc } = await createAuthWallet('http://localhost:3338', {
+  requestFetch: ohttpFetch,
+  oidc: {
+    fetch: ohttpFetch,
+  },
+});
+```
+
 ## Custom output generation
 
 Pass `outputDataCreator` when you need to replace the default output generation logic, for

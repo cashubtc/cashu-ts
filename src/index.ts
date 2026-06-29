@@ -38,6 +38,7 @@ export {
   type TokenResponse,
   type DeviceStartResponse,
   type OIDCConfig,
+  type OIDCFetch,
   type OIDCAuthOptions,
 } from './auth';
 
@@ -110,7 +111,13 @@ export type { OutputDataLike, OutputDataFactory, SerializedOutputData } from './
 export type { OutputDataCreator } from './model/OutputDataCreator';
 export { MintInfo } from './model/MintInfo';
 export { WSConnection, injectWebSocketImpl, setGlobalRequestOptions } from './transport';
-export type { RequestFn, RequestArgs, RequestOptions, ResponseMeta } from './transport';
+export type {
+  RequestFn,
+  RequestFetch,
+  RequestArgs,
+  RequestOptions,
+  ResponseMeta,
+} from './transport';
 export {
   SigAll,
   type SigAllApi,
