@@ -1,5 +1,6 @@
 import {
   dedupeP2PKPubkeys,
+  normalizeHashlock,
   type LockConditions,
   type P2PKTag,
   type SigFlag,
@@ -82,9 +83,14 @@ export class P2PKBuilder {
 
   /**
    * Converts a `P2PK` output into a NUT-14 `HTLC` kind output.
+   *
+   * @throws If the hashlock is not a 64-character hex string (SHA-256).
    */
   addHashlock(hashlock: string) {
-    this.hashlock = hashlock;
+    // Validate at the setter (like addLockPubkey) so a bad hashlock fails here, not
+    // silently: an empty/invalid value must never be mistaken for "no hashlock" and
+    // degrade the intended HTLC into a plain P2PK lock.
+    this.hashlock = normalizeHashlock(hashlock);
     return this;
   }
 
@@ -94,14 +100,15 @@ export class P2PKBuilder {
 
     // HTLC (NUT-14) locks to a hashlock, so lock pubkeys are optional there; a
     // plain P2PK always needs at least one.
-    if (locks.length === 0 && !this.hashlock) {
+    if (locks.length === 0 && this.hashlock === undefined) {
       throw new CTSError('At least one lock pubkey is required');
     }
 
     // The first lock key is the P2PK `data` slot; the rest ride the `pubkeys` tag.
     // For an HTLC the hashlock is the `data` slot, so every lock key is a `pubkeys`
-    // (receiver) key.
-    const tagPubkeys = this.hashlock ? locks : locks.slice(1);
+    // (receiver) key. Branch on set-ness, not truthiness: addHashlock already rejects
+    // empty/invalid values, so this only distinguishes "hashlock set" from "unset".
+    const tagPubkeys = this.hashlock !== undefined ? locks : locks.slice(1);
 
     const conditions: LockConditions = {
       ...(tagPubkeys.length ? { pubkeys: tagPubkeys } : {}),
@@ -120,9 +127,10 @@ export class P2PKBuilder {
       ...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
     };
 
-    const p2pk: P2PKOptions = this.hashlock
-      ? { kind: 'HTLC', data: this.hashlock, ...conditions }
-      : { kind: 'P2PK', data: locks[0], ...conditions };
+    const p2pk: P2PKOptions =
+      this.hashlock !== undefined
+        ? { kind: 'HTLC', data: this.hashlock, ...conditions }
+        : { kind: 'P2PK', data: locks[0], ...conditions };
 
     // Ensure the secret is valid (not too long etc); also validates options
     const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');

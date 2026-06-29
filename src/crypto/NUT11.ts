@@ -199,6 +199,23 @@ function normalizePubkey(pk: string): string {
 }
 
 /**
+ * Validate and canonicalise an HTLC hashlock (a SHA-256 digest).
+ *
+ * @remarks
+ * Lowercases so the stored hashlock byte-matches the lowercase output of createHTLCHash() /
+ * verifyHTLCHash().
+ * @param hashlock - Expected 64-char hex string.
+ * @throws If not a 64-character hex string.
+ * @internal
+ */
+export function normalizeHashlock(hashlock: string): string {
+  if (typeof hashlock !== 'string' || !/^[0-9a-f]{64}$/i.test(hashlock)) {
+    throw new CTSError('HTLC hashlock must be a 64-character hex string (SHA-256)');
+  }
+  return hashlock.toLowerCase();
+}
+
+/**
  * Dedupes pubkeys by their x-only portion (last 64 chars).
  *
  * @remarks
@@ -247,13 +264,9 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
     data = all[0];
     pubkeys = all.slice(1);
   } else {
-    // data is a hashlock (SHA-256), not a key; only the (optional) pubkeys tag carries
-    // signers. Enforce the 64-char hex shape and lowercase it so the stored hashlock
-    // byte-matches the lowercase output of createHTLCHash() / verifyHTLCHash().
-    if (!/^[0-9a-f]{64}$/i.test(data)) {
-      throw new CTSError('HTLC hashlock must be a 64-character hex string (SHA-256)');
-    }
-    data = data.toLowerCase();
+    // data is a hashlock (SHA-256), not a key; validate + canonicalise it. Only the
+    // (optional) pubkeys tag carries signers.
+    data = normalizeHashlock(data);
     pubkeys = dedupeP2PKPubkeys(p2pk.pubkeys ?? []);
   }
 

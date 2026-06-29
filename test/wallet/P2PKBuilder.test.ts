@@ -155,6 +155,26 @@ describe('P2PKBuilder.toOptions()', () => {
     expect('requiredRefundSignatures' in o2).toBe(false);
   });
 
+  it('rejects an empty or malformed hashlock at addHashlock, not silently', () => {
+    // An empty hashlock must NOT be treated as "no hashlock" and degrade the intended
+    // HTLC into a plain P2PK lock (spendable with a signature, no preimage).
+    expect(() => new P2PKBuilder().addHashlock('')).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    expect(() => new P2PKBuilder().addHashlock('not-a-hash')).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    // Regression: empty hashlock + a lock key previously yielded { kind: 'P2PK' }.
+    expect(() =>
+      new P2PKBuilder().addHashlock('').addLockPubkey(comp('a', '02')).toOptions(),
+    ).toThrow(/HTLC hashlock must be a 64-character hex string/i);
+  });
+
+  it('lowercases the hashlock so it matches createHTLCHash output', () => {
+    const opts = new P2PKBuilder().addHashlock(hashlock.toUpperCase()).toOptions();
+    expect(opts).toEqual({ kind: 'HTLC', data: hashlock });
+  });
+
   it('rejects an explicit n_sigs on a keyless HTLC (no lock keys to sign)', () => {
     // The <=1 omission above is a redundant default *when keys back it*. With zero
     // lock keys (hashlock-only HTLC) an explicit n_sigs=1 is contradictory and must
