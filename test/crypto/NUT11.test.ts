@@ -1423,6 +1423,31 @@ describe('normalizeP2PKOptions', () => {
     );
   });
 
+  test('throws when HTLC hashlock is not 64-char hex', () => {
+    // A malformed hashlock yields an unspendable lock (no preimage can hash to it),
+    // so reject it at construction rather than minting a dead token.
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: 'invalid_hashlock' })).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    // Right length, non-hex char.
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: 'z'.repeat(64) })).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+    // Valid hex, wrong length (32 bytes expected).
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: 'ab'.repeat(20) })).toThrow(
+      /HTLC hashlock must be a 64-character hex string/i,
+    );
+  });
+
+  test('lowercases the HTLC hashlock so it matches createHTLCHash output', () => {
+    // verifyHTLCHash compares against lowercase bytesToHex(sha256(preimage)); an
+    // uppercase hashlock passes the hex check but must be canonicalised to match.
+    expect(normalizeP2PKOptions({ kind: 'HTLC', data: hashlock.toUpperCase() })).toEqual({
+      kind: 'HTLC',
+      data: hashlock,
+    });
+  });
+
   test('splits a P2PK lock into canonical data slot + pubkeys tag', () => {
     // `data` is the NUT-10 data slot; extra keys ride the `pubkeys` tag. Empty key
     // sets are dropped from the canonical result.

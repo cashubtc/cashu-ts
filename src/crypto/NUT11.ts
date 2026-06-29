@@ -247,7 +247,13 @@ export function normalizeP2PKOptions(p2pk: P2PKOptions): P2PKOptions {
     data = all[0];
     pubkeys = all.slice(1);
   } else {
-    // data is a hashlock, not a key; only the (optional) pubkeys tag carries signers.
+    // data is a hashlock (SHA-256), not a key; only the (optional) pubkeys tag carries
+    // signers. Enforce the 64-char hex shape and lowercase it so the stored hashlock
+    // byte-matches the lowercase output of createHTLCHash() / verifyHTLCHash().
+    if (!/^[0-9a-f]{64}$/i.test(data)) {
+      throw new CTSError('HTLC hashlock must be a 64-character hex string (SHA-256)');
+    }
+    data = data.toLowerCase();
     pubkeys = dedupeP2PKPubkeys(p2pk.pubkeys ?? []);
   }
 

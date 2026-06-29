@@ -4,6 +4,8 @@ import { P2PKBuilder, type P2PKOptions } from '../../src/';
 // helpers to make valid hex keys
 const xonly = (ch: string) => ch.repeat(64); // 32-byte X-only
 const comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(64)}`;
+// a valid 64-char hex hashlock (SHA-256 output shape)
+const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
 
 describe('P2PKBuilder.toOptions()', () => {
   it('returns single lock key as a string', () => {
@@ -159,13 +161,13 @@ describe('P2PKBuilder.toOptions()', () => {
     // surface, not be dropped into a spendable preimage-only lock. n_sigs>1 already
     // survives the filter; n_sigs=1 is the value that previously slipped through.
     expect(() =>
-      new P2PKBuilder().addHashlock('deadbeef').requireLockSignatures(1).toOptions(),
+      new P2PKBuilder().addHashlock(hashlock).requireLockSignatures(1).toOptions(),
     ).toThrow(/exceeds available pubkeys/i);
     expect(() =>
-      new P2PKBuilder().addHashlock('deadbeef').requireLockSignatures(2).toOptions(),
+      new P2PKBuilder().addHashlock(hashlock).requireLockSignatures(2).toOptions(),
     ).toThrow(/exceeds available pubkeys/i);
     // No explicit threshold => keyless HTLC builds fine.
-    const ok = new P2PKBuilder().addHashlock('deadbeef').toOptions();
+    const ok = new P2PKBuilder().addHashlock(hashlock).toOptions();
     expect('requiredSignatures' in ok).toBe(false);
   });
 
@@ -198,7 +200,7 @@ describe('P2PKBuilder.toOptions()', () => {
       .requireLockSignatures(2)
       .requireRefundSignatures(1)
       .sigAll()
-      .addHashlock('foo')
+      .addHashlock(hashlock)
       .toOptions();
 
     const rebuilt = P2PKBuilder.fromOptions(original).toOptions();
@@ -206,7 +208,7 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('round-trips a keyless HTLC via fromOptions (no pubkeys)', () => {
-    const lock = { kind: 'HTLC', data: 'deadbeef' } as const;
+    const lock = { kind: 'HTLC', data: hashlock } as const;
     expect(P2PKBuilder.fromOptions(lock).toOptions()).toEqual(lock);
   });
 
