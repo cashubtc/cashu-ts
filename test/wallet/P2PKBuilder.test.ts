@@ -205,6 +205,11 @@ describe('P2PKBuilder.toOptions()', () => {
     expect(rebuilt).toEqual(original);
   });
 
+  it('round-trips a keyless HTLC via fromOptions (no pubkeys)', () => {
+    const lock = { kind: 'HTLC', data: 'deadbeef' } as const;
+    expect(P2PKBuilder.fromOptions(lock).toOptions()).toEqual(lock);
+  });
+
   it('fromOptions with minimal shape leaves required* undefined', () => {
     const minimal = { kind: 'P2PK', data: '02' + 'b'.repeat(64) } as const;
     const round = P2PKBuilder.fromOptions(minimal).toOptions();

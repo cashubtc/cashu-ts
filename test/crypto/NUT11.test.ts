@@ -1402,6 +1402,27 @@ describe('normalizeP2PKOptions', () => {
   const refundPk = _comp('b', '02');
   const hashlock = 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5';
 
+  test('throws on an unknown lock kind', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'FOO', data: pk } as any)).toThrow(
+      /unknown lock kind: FOO/i,
+    );
+  });
+
+  test('throws when P2PK data is missing or empty', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: '' })).toThrow(
+      /P2PK requires a pubkey in data/i,
+    );
+    expect(() => normalizeP2PKOptions({ kind: 'P2PK', data: undefined } as any)).toThrow(
+      /P2PK requires a pubkey in data/i,
+    );
+  });
+
+  test('throws when HTLC data is empty', () => {
+    expect(() => normalizeP2PKOptions({ kind: 'HTLC', data: '' })).toThrow(
+      /HTLC requires a hashlock in data/i,
+    );
+  });
+
   test('splits a P2PK lock into canonical data slot + pubkeys tag', () => {
     // `data` is the NUT-10 data slot; extra keys ride the `pubkeys` tag. Empty key
     // sets are dropped from the canonical result.
