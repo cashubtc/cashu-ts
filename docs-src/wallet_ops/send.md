@@ -33,7 +33,7 @@ const { keep, send } = await wallet.ops
 ```ts
 const { keep, send } = await wallet.ops
   .send(10, myProofs)
-  .asP2PK({ pubkey, locktime: 1712345678 })
+  .asP2PK({ kind: 'P2PK', data: pubkey, locktime: 1712345678 })
   .includeFees(true) // sender covers receiver’s future spend fee
   .run();
 ```

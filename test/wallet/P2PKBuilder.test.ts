@@ -8,19 +8,20 @@ const comp = (ch: string, prefix: '02' | '03' = '02') => `${prefix}${ch.repeat(6
 describe('P2PKBuilder.toOptions()', () => {
   it('returns single lock key as a string', () => {
     const opts = new P2PKBuilder().addLockPubkey(comp('a', '02')).toOptions();
-    expect(typeof opts.pubkey).toBe('string');
-    expect(opts.pubkey).toBe(comp('a', '02'));
+    expect(typeof opts.data).toBe('string');
+    expect(opts.data).toBe(comp('a', '02'));
   });
 
-  it('returns multiple lock keys as an array and preserves insertion order', () => {
+  it('splits multiple lock keys into a single data key + pubkeys tag, preserving order', () => {
     const k1 = comp('a', '02');
     const k2 = comp('b', '03');
     const k3 = comp('c', '02');
 
     const opts = new P2PKBuilder().addLockPubkey([k1, k2]).addLockPubkey(k3).toOptions();
 
-    expect(Array.isArray(opts.pubkey)).toBe(true);
-    expect(opts.pubkey).toEqual([k1, k2, k3]);
+    // First key is the NUT-10 data slot; the rest ride the optional pubkeys tag.
+    expect(opts.data).toBe(k1);
+    expect(opts.pubkeys).toEqual([k2, k3]);
   });
 
   it('normalizes x-only lock keys to 02-prefixed compressed', () => {
@@ -28,7 +29,7 @@ describe('P2PKBuilder.toOptions()', () => {
     const expected = comp('1', '02'); // normalized
 
     const opts = new P2PKBuilder().addLockPubkey(x).toOptions();
-    expect(opts.pubkey).toBe(expected);
+    expect(opts.data).toBe(expected);
   });
 
   it('normalizes x-only refund keys to 02-prefixed compressed', () => {
@@ -54,8 +55,9 @@ describe('P2PKBuilder.toOptions()', () => {
       .addRefundPubkey([kA, kA, kB])
       .toOptions();
 
-    // pubkey is array because >1
-    expect(opts.pubkey).toEqual([kA, kB]);
+    // data slot holds the first key; the deduped remainder rides the pubkeys tag.
+    expect(opts.data).toBe(kA);
+    expect(opts.pubkeys).toEqual([kB]);
     expect(opts.refundKeys).toEqual([kA, kB]);
   });
 
@@ -204,7 +206,7 @@ describe('P2PKBuilder.toOptions()', () => {
   });
 
   it('fromOptions with minimal shape leaves required* undefined', () => {
-    const minimal = { pubkey: '02' + 'b'.repeat(64) } as const;
+    const minimal = { kind: 'P2PK', data: '02' + 'b'.repeat(64) } as const;
     const round = P2PKBuilder.fromOptions(minimal).toOptions();
     expect(round).toEqual(minimal); // no extra props added
     expect('requiredSignatures' in round).toBe(false);
@@ -221,7 +223,8 @@ describe('P2PKBuilder.toOptions()', () => {
     const now = Math.floor(Date.now() / 1000) + 300;
 
     const src = {
-      pubkey: lock,
+      kind: 'P2PK',
+      data: lock,
       locktime: now,
       refundKeys: [r1, r2] as string[],
       requiredRefundSignatures: 2,
@@ -259,11 +262,11 @@ describe('P2PKBuilder, simple fuzzish case', () => {
       .sigAll()
       .toOptions();
 
-    const expLocks = ['02' + 'a'.repeat(64), '02' + 'b'.repeat(64)];
     const expRefunds = ['03' + 'c'.repeat(64)];
 
-    expect(Array.isArray(opts.pubkey)).toBe(true);
-    expect(opts.pubkey).toEqual(expLocks);
+    // Two unique lock keys: first is the data slot, second rides the pubkeys tag.
+    expect(opts.data).toBe('02' + 'a'.repeat(64));
+    expect(opts.pubkeys).toEqual(['02' + 'b'.repeat(64)]);
     expect(opts.refundKeys).toEqual(expRefunds);
     expect(opts.locktime).toBe(ms / 1000);
     expect(opts.sigFlag).toEqual('SIG_ALL');
@@ -377,7 +380,8 @@ describe('P2PKBuilder addTag and addTags', () => {
 
   it('fromOptions accepts options with additionalTags only and leaves shape untouched', () => {
     const minimalWithTags: P2PKOptions = {
-      pubkey: comp('a', '02'),
+      kind: 'P2PK',
+      data: comp('a', '02'),
       additionalTags: [['x'], ['y', '1'], ['z', 'a', 'b']],
     };
 

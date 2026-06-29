@@ -118,13 +118,12 @@ export class PaymentRequest {
   }
 
   /**
-   * Converts this request's `nut10` locking option into the {@link P2PKOptions} accepted by the
-   * `.asP2PK()` builder, so a payer can produce proofs locked to exactly the spending condition the
-   * payee requested.
+   * Converts this request's `nut10` locking option into a {@link P2PKOptions} for the wallet's
+   * `.asP2PK()` gate, so a payer can lock proofs to exactly the condition the payee requested.
    *
-   * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only. Returns `undefined` when there is no `nut10`
-   * option or its kind is not one we can build.
-   *
+   * @remarks
+   * Supports `P2PK` (NUT-11) and `HTLC` (NUT-14) only; returns `undefined` for no `nut10` or an
+   * unbuildable kind.
    * @throws If the option is missing its `data` field, or carries malformed NUT-10 tags — invalid
    *   lock semantics must not be silently dropped.
    */
@@ -145,11 +144,14 @@ export class PaymentRequest {
       nut10.kind,
       { nonce: '', data: nut10.data, tags: nut10.tags ?? [] },
     ]);
+    // `data` is the NUT-10 data slot (hashlock for HTLC, primary pubkey for P2PK);
+    // the `pubkeys` tag carries the optional additional / receiver keys for either kind.
     const taggedPubkeys = getTag(secret, 'pubkeys') ?? [];
-    const pubkeys = [nut10.data, ...taggedPubkeys];
-    const options: P2PKOptions = isHTLC
-      ? { hashlock: nut10.data, pubkey: taggedPubkeys }
-      : { pubkey: pubkeys.length === 1 ? pubkeys[0] : pubkeys };
+    const options: P2PKOptions = {
+      kind: isHTLC ? 'HTLC' : 'P2PK',
+      data: nut10.data,
+      ...(taggedPubkeys.length ? { pubkeys: taggedPubkeys } : {}),
+    };
 
     // Optional fields pass straight through: the accessors return undefined when
     // absent, and the builder ignores undefined options. getTag never yields [].

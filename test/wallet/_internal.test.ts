@@ -71,13 +71,13 @@ describe('stringifyOutputTypeForLog', () => {
   test('formats p2pk denominations as strings', () => {
     const result = stringifyOutputTypeForLog({
       type: 'p2pk',
-      options: { pubkey: '02'.padEnd(66, '1') },
+      options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
       denominations: [1, Amount.from(2)],
     });
     expect(result).toBe(
       JSON.stringify({
         type: 'p2pk',
-        options: { pubkey: '02'.padEnd(66, '1') },
+        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
         denominations: ['1', '2'],
       }),
     );
@@ -116,12 +116,12 @@ describe('stringifyOutputTypeForLog', () => {
     expect(
       stringifyOutputTypeForLog({
         type: 'p2pk',
-        options: { pubkey: '02'.padEnd(66, '1') },
+        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
       }),
     ).toBe(
       JSON.stringify({
         type: 'p2pk',
-        options: { pubkey: '02'.padEnd(66, '1') },
+        options: { kind: 'P2PK', data: '02'.padEnd(66, '1') },
         denominations: [],
       }),
     );

@@ -376,16 +376,20 @@ describe('WalletOps builders', () => {
     it('supports sendP2PK and keepP2PK OutputTypes', async () => {
       await ops
         .send(7, proofs)
-        .asP2PK({ pubkey: 'pub', locktime: 123 }, [7])
-        .keepAsP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
+        .asP2PK({ kind: 'P2PK', data: 'pub', locktime: 123 }, [7])
+        .keepAsP2PK({ kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 }, [])
         .run();
 
       const [, , , outputConfig] = wallet.send.mock.calls[0];
       expect(outputConfig).toEqual({
-        send: { type: 'p2pk', options: { pubkey: 'pub', locktime: 123 }, denominations: [7] },
+        send: {
+          type: 'p2pk',
+          options: { kind: 'P2PK', data: 'pub', locktime: 123 },
+          denominations: [7],
+        },
         keep: {
           type: 'p2pk',
-          options: { pubkey: ['a', 'b'], requiredSignatures: 2 },
+          options: { kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 },
           denominations: [],
         },
       });
@@ -402,16 +406,20 @@ describe('WalletOps builders', () => {
     it('supports prepareSwapToSend', async () => {
       await ops
         .send(7, proofs)
-        .asP2PK({ pubkey: 'pub', locktime: 123 }, [7])
-        .keepAsP2PK({ pubkey: ['a', 'b'], requiredSignatures: 2 }, [])
+        .asP2PK({ kind: 'P2PK', data: 'pub', locktime: 123 }, [7])
+        .keepAsP2PK({ kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 }, [])
         .prepare();
 
       const [, , , outputConfig] = wallet.prepareSwapToSend.mock.calls[0];
       expect(outputConfig).toEqual({
-        send: { type: 'p2pk', options: { pubkey: 'pub', locktime: 123 }, denominations: [7] },
+        send: {
+          type: 'p2pk',
+          options: { kind: 'P2PK', data: 'pub', locktime: 123 },
+          denominations: [7],
+        },
         keep: {
           type: 'p2pk',
-          options: { pubkey: ['a', 'b'], requiredSignatures: 2 },
+          options: { kind: 'P2PK', data: 'a', pubkeys: ['b'], requiredSignatures: 2 },
           denominations: [],
         },
       });
@@ -547,12 +555,12 @@ describe('WalletOps builders', () => {
     });
 
     it('p2pk() OutputType for receive', async () => {
-      await ops.receive(token).asP2PK({ pubkey: 'PUB', locktime: 42 }, [7]).run();
+      await ops.receive(token).asP2PK({ kind: 'P2PK', data: 'PUB', locktime: 42 }, [7]).run();
 
       const [, , outputType] = wallet.receive.mock.calls[0];
       expect(outputType).toEqual({
         type: 'p2pk',
-        options: { pubkey: 'PUB', locktime: 42 },
+        options: { kind: 'P2PK', data: 'PUB', locktime: 42 },
         denominations: [7],
       });
     });
@@ -599,7 +607,7 @@ describe('WalletOps builders', () => {
     it('calls wallet.prepareMint with custom OutputType and config', async () => {
       await ops
         .mintBolt11(10, quote)
-        .asP2PK({ pubkey: 'P' }, [10])
+        .asP2PK({ kind: 'P2PK', data: 'P' }, [10])
         .privkey('sk')
         .onCountersReserved(() => {})
         .prepare();
@@ -611,7 +619,11 @@ describe('WalletOps builders', () => {
       expect(Amount.from(amount).equals(10)).toBeTruthy();
       // MintBuilder resolves string quote IDs via checkMintQuoteBolt11 before calling prepareMint
       expect(q.quote).toBe(quote);
-      expect(outputType).toEqual({ type: 'p2pk', options: { pubkey: 'P' }, denominations: [10] });
+      expect(outputType).toEqual({
+        type: 'p2pk',
+        options: { kind: 'P2PK', data: 'P' },
+        denominations: [10],
+      });
 
       expect(config).toBeDefined();
       const cfg = config!;
@@ -933,7 +945,10 @@ describe('WalletOps builders', () => {
     });
 
     it('bolt11: supports P2PK OutputType', async () => {
-      await ops.meltBolt11(melt11, proofs).asP2PK({ pubkey: 'X', locktime: 99 }, []).run();
+      await ops
+        .meltBolt11(melt11, proofs)
+        .asP2PK({ kind: 'P2PK', data: 'X', locktime: 99 }, [])
+        .run();
 
       expect(wallet.prepareMelt).toHaveBeenCalledTimes(1);
       expect(wallet.completeMelt).toHaveBeenCalledTimes(1);
@@ -941,7 +956,7 @@ describe('WalletOps builders', () => {
       const [, , , , ot] = wallet.prepareMelt.mock.calls[0];
       expect(ot).toEqual({
         type: 'p2pk',
-        options: { pubkey: 'X', locktime: 99 },
+        options: { kind: 'P2PK', data: 'X', locktime: 99 },
         denominations: [],
       });
     });

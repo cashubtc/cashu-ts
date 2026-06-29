@@ -103,7 +103,8 @@ describe('OutputData helpers', () => {
     const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
-        pubkey,
+        kind: 'P2PK',
+        data: pubkey,
         blindKeys: true,
       },
       1,
@@ -120,8 +121,9 @@ describe('OutputData helpers', () => {
     const pubkey = Bytes.toHex(getPubKeyFromPrivKey(privkey));
     const output = OutputData.createSingleP2PKData(
       {
-        pubkey,
-        hashlock: 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5',
+        kind: 'HTLC',
+        data: 'ec4916dd28fc4c10d78e287ca5d9cc51ee1ae73cbfde08c6b37324cbfaac8bc5',
+        pubkeys: [pubkey],
         blindKeys: true,
       },
       1,

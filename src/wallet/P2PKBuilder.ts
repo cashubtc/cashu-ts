@@ -1,4 +1,10 @@
-import { dedupeP2PKPubkeys, type P2PKOptions, type P2PKTag, type SigFlag } from '../crypto';
+import {
+  dedupeP2PKPubkeys,
+  type LockConditions,
+  type P2PKTag,
+  type SigFlag,
+  type P2PKOptions,
+} from '../crypto';
 import { CTSError } from '../model/Errors';
 import { assertValidTagKey, OutputData } from '../model/OutputData';
 
@@ -92,16 +98,17 @@ export class P2PKBuilder {
       throw new CTSError('At least one lock pubkey is required');
     }
 
-    const pubkey: string | string[] = locks.length === 1 ? locks[0] : locks;
+    // The first lock key is the P2PK `data` slot; the rest ride the `pubkeys` tag.
+    // For an HTLC the hashlock is the `data` slot, so every lock key is a `pubkeys`
+    // (receiver) key.
+    const tagPubkeys = this.hashlock ? locks : locks.slice(1);
 
-    const p2pk: P2PKOptions = {
-      pubkey,
+    const conditions: LockConditions = {
+      ...(tagPubkeys.length ? { pubkeys: tagPubkeys } : {}),
       ...(this.locktime !== undefined ? { locktime: this.locktime } : {}),
       ...(refunds.length ? { refundKeys: refunds } : {}),
-      // Drop a redundant default threshold of 1 (1-of-N is implied), but pass an
-      // explicit threshold through when its key set is empty — a keyless HTLC with
-      // n_sigs, or n_sigs_refund with no refund keys, is contradictory and must be
-      // rejected by the smoke test below, not silently weakened to preimage-only.
+      // Drop a redundant default of 1, but keep an explicit threshold when its key set is
+      // empty (keyless HTLC / no refund keys) so the smoke test rejects the impossible lock.
       ...(this.nSigs !== undefined && (this.nSigs > 1 || locks.length === 0)
         ? { requiredSignatures: this.nSigs }
         : {}),
@@ -111,8 +118,11 @@ export class P2PKBuilder {
       ...(this.extraTags.length ? { additionalTags: this.extraTags.slice() } : {}),
       ...(this._blindKeys ? { blindKeys: true } : {}),
       ...(this.sigFlag == 'SIG_ALL' ? { sigFlag: 'SIG_ALL' } : {}),
-      ...(this.hashlock ? { hashlock: this.hashlock } : {}),
     };
+
+    const p2pk: P2PKOptions = this.hashlock
+      ? { kind: 'HTLC', data: this.hashlock, ...conditions }
+      : { kind: 'P2PK', data: locks[0], ...conditions };
 
     // Ensure the secret is valid (not too long etc); also validates options
     const smokeTest = OutputData.createSingleP2PKData(p2pk, 1, 'deedbeef');
@@ -121,19 +131,22 @@ export class P2PKBuilder {
     return p2pk;
   }
 
-  static fromOptions(opts: P2PKOptions): P2PKBuilder {
+  static fromOptions(p2pk: P2PKOptions): P2PKBuilder {
     const b = new P2PKBuilder();
-    const locks = Array.isArray(opts.pubkey) ? opts.pubkey : [opts.pubkey];
-    b.addLockPubkey(locks);
-    if (opts.locktime !== undefined) b.lockUntil(opts.locktime);
-    if (opts.refundKeys?.length) b.addRefundPubkey(opts.refundKeys);
-    if (opts.requiredSignatures !== undefined) b.requireLockSignatures(opts.requiredSignatures);
-    if (opts.requiredRefundSignatures !== undefined)
-      b.requireRefundSignatures(opts.requiredRefundSignatures);
-    if (opts.additionalTags?.length) b.addTags(opts.additionalTags);
-    if (opts.blindKeys) b.blindKeys();
-    if (opts.sigFlag == 'SIG_ALL') b.sigAll();
-    if (opts.hashlock) b.addHashlock(opts.hashlock);
+    if (p2pk.kind === 'HTLC') {
+      b.addHashlock(p2pk.data);
+      if (p2pk.pubkeys?.length) b.addLockPubkey(p2pk.pubkeys);
+    } else {
+      b.addLockPubkey([p2pk.data, ...(p2pk.pubkeys ?? [])]);
+    }
+    if (p2pk.locktime !== undefined) b.lockUntil(p2pk.locktime);
+    if (p2pk.refundKeys?.length) b.addRefundPubkey(p2pk.refundKeys);
+    if (p2pk.requiredSignatures !== undefined) b.requireLockSignatures(p2pk.requiredSignatures);
+    if (p2pk.requiredRefundSignatures !== undefined)
+      b.requireRefundSignatures(p2pk.requiredRefundSignatures);
+    if (p2pk.additionalTags?.length) b.addTags(p2pk.additionalTags);
+    if (p2pk.blindKeys) b.blindKeys();
+    if (p2pk.sigFlag == 'SIG_ALL') b.sigAll();
     return b;
   }
 }
