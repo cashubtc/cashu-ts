@@ -79,7 +79,7 @@ export const ecashPayment = onRequest(async (req, res) => {
 
   let receiveProofs;
   try {
-    receiveProofs = await wallet.ops.receive(token).asP2PK({ pubkey: p2pkLock }).run();
+    receiveProofs = await wallet.ops.receive(token).asP2PK({ kind: 'P2PK', data: p2pkLock }).run();
   } catch (error) {
     if (error.code === 11001) {
       res.json({
