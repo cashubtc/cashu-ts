@@ -55,6 +55,13 @@ describe('NUT14 module core functions', () => {
     const pre = '00'.repeat(32);
     expect(verifyHTLCHash(pre, 'ff'.repeat(32))).toBe(false);
   });
+
+  test('verifyHTLCHash returns false for a malformed preimage (no throw)', () => {
+    // A non-hex or wrong-length preimage must return false, not throw.
+    for (const bad of ['not-hex', 'zz', '', 'abc', 'g'.repeat(64)]) {
+      expect(verifyHTLCHash(bad, 'ff'.repeat(32))).toBe(false);
+    }
+  });
 });
 
 describe('verifyHTLCSpendingConditions and isHTLCSpendAuthorised', () => {
@@ -129,6 +136,14 @@ describe('HTLC hashlock-only receiver pathway (no pubkeys)', () => {
 
   test('no preimage fails', () => {
     expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, [])))).toBe(false);
+  });
+
+  test('malformed preimage fails without throwing', () => {
+    // A keyless HTLC reaches the preimage check with no signature, so a malformed
+    // preimage must return false rather than throw.
+    for (const bad of ['not-hex', 'zz', 'abc', 'g'.repeat(64)]) {
+      expect(isHTLCSpendAuthorised(proofFor(createHTLCsecret(HASH, []), bad))).toBe(false);
+    }
   });
 
   test('receiver pathway remains available after locktime with refund keys present', () => {
