@@ -97,6 +97,10 @@ export function deriveKeyPair(
  * single non-hardened child derivation. This is ~5x faster than re-traversing the full path per
  * counter, so it is the path to use for restore loops scanning many counters. Each call returns a
  * ready-to-use hex keypair; for a single counter use {@link deriveKeyPair}.
+ *
+ * The counter child is non-hardened so the parent xpub can derive counter pubkeys for watch-only
+ * use. Consequently, never export the parent xpub alongside any counter's private key: with both,
+ * the parent private key (and thus every counter's key) can be recovered.
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose, which selects the path's purpose index.
  * @returns A function mapping a non-hardened counter to its hex keypair.
