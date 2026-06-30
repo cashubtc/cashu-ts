@@ -27,25 +27,12 @@ export type MintQuoteBolt12Response = MintQuoteBaseResponse & {
    */
   amount: Amount | null;
   /**
-   * Timestamp of when the quote expires. `null` when the mint does not set an expiry.
-   */
-  expiry: number | null;
-  /**
    * Public key the quote is locked to.
    *
    * @remarks
    * Required for bolt12.
    */
   pubkey: string;
-  /**
-   * The amount that has been paid to the mint via the bolt12 offer. The difference between this and
-   * `amount_issued` can be minted.
-   */
-  amount_paid: Amount;
-  /**
-   * The amount of ecash that has been issued for the given mint quote.
-   */
-  amount_issued: Amount;
 };
 
 /**

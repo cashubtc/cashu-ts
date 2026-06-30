@@ -30,12 +30,14 @@ import type {
   GetInfoResponse,
   MeltRequest,
   MeltQuoteBaseResponse,
+  MeltQuoteGenericResponse,
   MeltQuoteBolt11Request,
   MeltQuoteBolt11Response,
   MeltQuoteBolt12Response,
   MeltQuoteOnchainResponse,
   MintRequest,
   MintQuoteBaseResponse,
+  MintQuoteGenericResponse,
   MintQuoteBolt11Response,
   MintQuoteBolt12Response,
   MintQuoteOnchainResponse,
@@ -1711,7 +1713,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async createMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -1865,7 +1867,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The mint quote response.
    */
-  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteBaseResponse>(
+  async checkMintQuote<TRes extends MintQuoteBaseResponse = MintQuoteGenericResponse>(
     method: string,
     quote: string | Pick<TRes, 'quote'>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -1953,14 +1955,16 @@ class Wallet {
     quote: Pick<MintQuoteBaseResponse, 'quote'>,
     requestedAmount: Amount,
   ): void {
-    if (method !== 'bolt12' && method !== 'onchain') {
-      return;
-    }
     if (!('amount_paid' in quote) || !('amount_issued' in quote)) {
       return;
     }
     const amountPaid = Amount.from(quote.amount_paid as AmountLike);
     const amountIssued = Amount.from(quote.amount_issued as AmountLike);
+    // A 0/0 snapshot may simply have been fetched before the payment was made (create -> pay
+    // externally -> mint with the original object); the mint is the source of truth.
+    if (amountPaid.isZero() && amountIssued.isZero()) {
+      return;
+    }
     const availableAmount = amountPaid.subtract(amountIssued);
     this.failIf(
       requestedAmount.greaterThan(availableAmount),
@@ -2432,7 +2436,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async createMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     payload: Record<string, unknown>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },
@@ -2599,7 +2603,7 @@ class Wallet {
    * @param options.normalize Optional callback to normalize method-specific response fields.
    * @returns The melt quote response.
    */
-  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteBaseResponse>(
+  async checkMeltQuote<TRes extends MeltQuoteBaseResponse = MeltQuoteGenericResponse>(
     method: string,
     quote: string | Pick<TRes, 'quote'>,
     options?: { normalize?: (raw: Record<string, unknown>) => TRes },

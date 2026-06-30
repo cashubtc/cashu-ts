@@ -808,6 +808,8 @@ describe('generic mint/melt methods', () => {
             quote: 'bacs-quote-unit',
             request: 'CASHU-REF-UNIT',
             unit: body.unit,
+            amount_paid: 0,
+            amount_issued: 0,
           });
         }),
       );
@@ -1131,6 +1133,39 @@ describe('generic mint/melt methods', () => {
       ).rejects.toThrow('Mint quote bolt12-partial has only 2 available to mint; requested 3');
     });
 
+    test('prepareMint rejects amounts above paid minus issued for custom methods', async () => {
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      await expect(
+        wallet.prepareMint('bacs', 3, {
+          quote: 'bacs-partial',
+          request: 'CASHU-REF',
+          unit: 'sat',
+          amount_paid: Amount.from(5),
+          amount_issued: Amount.from(3),
+        }),
+      ).rejects.toThrow('Mint quote bacs-partial has only 2 available to mint; requested 3');
+    });
+
+    test('prepareMint defers to the mint when the quote reports no payment activity', async () => {
+      // create -> pay externally -> mint with the original quote object is the
+      // canonical bolt11 flow; a 0/0 accounting snapshot may simply predate the
+      // payment and must not fail fast.
+      const wallet = new Wallet(mint, { unit: 'sat' });
+      await wallet.loadMint();
+
+      const preview = await wallet.prepareMint('bolt11', 3, {
+        quote: 'stale-unpaid',
+        request: 'lnbc1...',
+        unit: 'sat',
+        amount_paid: Amount.from(0),
+        amount_issued: Amount.from(0),
+      });
+
+      expect(preview.payload.quote).toBe('stale-unpaid');
+    });
+
     test('prepareMint keeps string-only quote support without available amount fields', async () => {
       const wallet = new Wallet(mint, { unit: 'sat' });
       await wallet.loadMint();
@@ -1219,6 +1254,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/quote/bacs', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: 'gbp',
             state: MeltQuoteState.UNPAID,
@@ -1265,6 +1301,7 @@ describe('generic mint/melt methods', () => {
           const body = (await request.json()) as { unit: string };
           return HttpResponse.json({
             quote: 'bacs-melt-unit',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: body.unit,
             state: MeltQuoteState.UNPAID,
@@ -1289,6 +1326,7 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/melt/quote/bacs/bacs-melt-1', () =>
           HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 5000,
             unit: 'gbp',
             state: MeltQuoteState.PAID,
@@ -1343,6 +1381,7 @@ describe('generic mint/melt methods', () => {
         http.get(mintUrl + '/v1/melt/quote/bacs/bacs-melt-2', () =>
           HttpResponse.json({
             quote: 'bacs-melt-2',
+            request: 'GB29NWBK60161331926819',
             amount: 100,
             unit: 'gbp',
             state: MeltQuoteState.UNPAID,
@@ -1426,6 +1465,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/bacs', () => {
           return HttpResponse.json({
             quote: 'bacs-melt-1',
+            request: 'GB29NWBK60161331926819',
             amount: 10,
             unit: 'sat',
             state: MeltQuoteState.PAID,
@@ -1780,6 +1820,7 @@ describe('generic mint/melt methods', () => {
         http.post(mintUrl + '/v1/melt/quote/swift', () =>
           HttpResponse.json({
             quote: 'swift-1',
+            request: 'SWIFT-REF',
             amount: 200,
             unit: 'usd',
             state: MeltQuoteState.UNPAID,
