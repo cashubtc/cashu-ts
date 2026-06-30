@@ -67,13 +67,18 @@ export function createHTLCHash(preimage?: string): { hash: string; preimage: str
 /**
  * Verify an HTLC hash/preimage pair.
  *
- * @param preimage - As a 64-character lowercase hexadecimal string.
+ * @param preimage - A 64-character hexadecimal string. A malformed value returns `false`.
  * @param hash - As a 64-character lowercase hexadecimal string.
  * @returns True if preimage calculates the same hash, False otherwise.
  */
 export function verifyHTLCHash(preimage: string, hash: string): boolean {
-  const { hash: valid } = createHTLCHash(preimage);
-  return hash === valid;
+  try {
+    return createHTLCHash(preimage).hash === hash;
+  } catch {
+    // A malformed preimage can't match; return false rather than letting
+    // createHTLCHash throw (it still validates input on the creation path).
+    return false;
+  }
 }
 
 /**
