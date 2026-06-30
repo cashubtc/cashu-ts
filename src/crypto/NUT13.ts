@@ -74,6 +74,10 @@ export function deriveSecretAndBlindingFactor(
  * Used for NUT-11 P2PK keys and NUT-20 quote locking keys. Both fields are hex: `pubkey` drops into
  * the lock/quote APIs and `privkey` into `signP2PKProofs`. To scan many counters from the same
  * seed, prefer {@link createKeyPairDeriver}, which caches the shared parent.
+ *
+ * The counter child is non-hardened so the parent xpub can derive counter pubkeys for watch-only
+ * use. Consequently, never export the parent xpub alongside any counter's private key: with both,
+ * the parent private key (and thus every counter's key) can be recovered.
  * @param seed - Wallet seed used for deterministic derivation.
  * @param purpose - Key purpose (`'P2PK'` or `'QuoteLock'`), which selects the path's purpose index.
  * @param counter - Non-hardened BIP-32 child index.
