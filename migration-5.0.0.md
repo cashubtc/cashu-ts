@@ -228,3 +228,9 @@ asP2PK({ kind: 'HTLC', data: h, pubkeys: [a] });
 ```
 
 `PaymentRequest.toP2PKOptions()` already returns the new shape, so pass its result straight to `asP2PK()`.
+
+---
+
+## `PaymentRequest.singleUse` is now optional (tri-state)
+
+`PaymentRequest.singleUse` is now `boolean | undefined` (was a required `boolean` defaulting to `false`), so the flag can round-trip the absent/`false`/`true` distinction instead of always serializing `single_use=0`. Setting `false` or `true` is unchanged; only decoding shifts — a request that omits the flag now yields `singleUse: undefined` instead of `false`. Replace any `pr.singleUse === false` check with `!pr.singleUse` (true for both absent and explicit `false`).

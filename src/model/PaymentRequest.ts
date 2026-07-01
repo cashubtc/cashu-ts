@@ -11,6 +11,7 @@ import type {
   NUT10Option,
   PaymentRequestTransport,
   PaymentRequestTransportType,
+  SupportedMethod,
 } from '../wallet/types';
 
 import { Amount, type AmountLike } from './Amount';
@@ -18,6 +19,10 @@ import { CTSError } from './Errors';
 
 export class PaymentRequest {
   public amount?: Amount;
+  public feeReserve?: Amount;
+  public singleUse?: boolean;
+  public mintsPreferred?: boolean;
+  public supportedMethods?: SupportedMethod[];
 
   constructor(
     public transport?: PaymentRequestTransport[],
@@ -26,10 +31,90 @@ export class PaymentRequest {
     public unit?: string,
     public mints?: string[],
     public description?: string,
-    public singleUse: boolean = false,
+    singleUse?: boolean,
     public nut10?: NUT10Option,
+    mintsPreferred?: boolean,
+    feeReserve?: AmountLike,
+    supportedMethods?: Array<{ method: string; fee?: AmountLike }>,
   ) {
     this.amount = amount !== undefined ? Amount.from(amount) : undefined;
+    this.feeReserve = feeReserve !== undefined ? Amount.from(feeReserve) : undefined;
+    this.supportedMethods = supportedMethods?.map((m) => ({
+      method: m.method,
+      fee: m.fee !== undefined ? Amount.from(m.fee) : undefined,
+    }));
+    // Coerce the optional flags to real booleans (preserving `undefined` for the
+    // absent/tri-state case) so an untyped CBOR value (`0`/`1`/`null`) can't leak a
+    // non-boolean into the getter or get re-serialized verbatim over the wire.
+    this.singleUse = singleUse === undefined ? undefined : Boolean(singleUse);
+    this.mintsPreferred = mintsPreferred === undefined ? undefined : Boolean(mintsPreferred);
+  }
+
+  /**
+   * Resolves the NUT-18 mint list strictness per spec.
+   *
+   * - `undefined` if no mint list is set (`mp` and `fr` SHOULD be ignored)
+   * - `true` if the list is strict (`mp` absent or `false`)
+   * - `false` if the list is preferred/advisory (`mp === true`)
+   */
+  get isMintListStrict(): boolean | undefined {
+    if (!this.mints?.length) {
+      return undefined;
+    }
+    return this.mintsPreferred !== true;
+  }
+
+  /**
+   * The additional fees the payer must add when paying from `mint` using `method`: the
+   * non-preferred-mint fee (`fr`) when `mint` is outside a preferred (`mp = true`) mint list, plus
+   * the per-method fee (`mf`) of the chosen `sm` method. The two stack additively (NUT-18); returns
+   * `0` when none apply.
+   *
+   * Use this for amountless requests (where the payer chooses the amount): add the result to the
+   * chosen amount. This sums only the fees that apply; it does NOT validate admissibility (e.g. a
+   * strict mint list, or a `method` absent from `sm`) — callers that must reject disallowed
+   * mints/methods check that separately.
+   *
+   * @param mint - The mint URL the payer will send from.
+   * @param method - The payment method the payer relies on (matched against `sm`); omit if none.
+   */
+  feesFor(mint: string, method?: string): Amount {
+    let fees = Amount.from(0);
+    // fr applies only to a preferred list (mp = true) when paying from a mint outside it.
+    if (
+      this.feeReserve &&
+      this.mintsPreferred === true &&
+      this.mints?.length &&
+      !this.mints.includes(mint)
+    ) {
+      fees = fees.add(this.feeReserve);
+    }
+    // mf applies for the chosen method if that sm entry carries a fee.
+    if (method) {
+      const fee = this.supportedMethods?.find((m) => m.method === method)?.fee;
+      if (fee) {
+        fees = fees.add(fee);
+      }
+    }
+    return fees;
+  }
+
+  /**
+   * The total amount to send from `mint` using `method`: the requested amount plus
+   * {@link PaymentRequest.feesFor | feesFor}.
+   *
+   * @param mint - The mint URL the payer will send from.
+   * @param method - The payment method the payer relies on (matched against `sm`); omit if none.
+   * @throws If the request has no amount. Amountless requests have no base to add fees to; use
+   *   {@link PaymentRequest.feesFor | feesFor} and add it to the amount the payer chooses.
+   */
+  amountToSend(mint: string, method?: string): Amount {
+    if (!this.amount) {
+      throw new CTSError(
+        'cannot compute amount to send: request has no amount; use feesFor() and add the payer-chosen amount',
+      );
+    }
+    return this.amount.add(this.feesFor(mint, method));
   }
 
   toRawRequest() {
@@ -53,10 +138,21 @@ export class PaymentRequest {
     if (this.mints) {
       rawRequest.m = this.mints;
     }
+    if (this.mintsPreferred !== undefined) {
+      rawRequest.mp = this.mintsPreferred;
+    }
+    if (this.feeReserve) {
+      rawRequest.fr = this.feeReserve.toBigInt();
+    }
+    if (this.supportedMethods && this.supportedMethods.length > 0) {
+      rawRequest.sm = this.supportedMethods.map((m) =>
+        m.fee !== undefined ? { mn: m.method, mf: m.fee.toBigInt() } : { mn: m.method },
+      );
+    }
     if (this.description) {
       rawRequest.d = this.description;
     }
-    if (this.singleUse) {
+    if (this.singleUse !== undefined) {
       rawRequest.s = this.singleUse;
     }
     if (this.nut10) {
@@ -98,6 +194,12 @@ export class PaymentRequest {
       unit: this.unit,
       singleUse: this.singleUse,
       mints: this.mints,
+      mintsPreferred: this.mintsPreferred,
+      feeReserve: this.feeReserve !== undefined ? this.feeReserve.toBigInt() : undefined,
+      supportedMethods: this.supportedMethods?.map((m) => ({
+        method: m.method,
+        fee: m.fee !== undefined ? m.fee.toBigInt() : undefined,
+      })),
       description: this.description,
       transports: this.transport,
       nut10: this.nut10
@@ -196,6 +298,7 @@ export class PaymentRequest {
           tags: rawPaymentRequest.nut10.t,
         }
       : undefined;
+    const supportedMethods = rawPaymentRequest.sm?.map((m) => ({ method: m.mn, fee: m.mf }));
     return new PaymentRequest(
       transports,
       rawPaymentRequest.i,
@@ -205,6 +308,9 @@ export class PaymentRequest {
       rawPaymentRequest.d,
       rawPaymentRequest.s,
       nut10,
+      rawPaymentRequest.mp,
+      rawPaymentRequest.fr,
+      supportedMethods,
     );
   }
 
@@ -229,8 +335,11 @@ export class PaymentRequest {
         decoded.unit,
         decoded.mints,
         decoded.description,
-        decoded.singleUse ?? false,
+        decoded.singleUse,
         nut10,
+        decoded.mintsPreferred,
+        decoded.feeReserve,
+        decoded.supportedMethods,
       );
     }
 

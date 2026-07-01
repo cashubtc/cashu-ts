@@ -175,6 +175,82 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
     });
   });
 
+  describe('Supported Method sub-TLV (malformed)', () => {
+    // supported_method (tag 0x0b) is a sub-TLV: 0x01 method (string), 0x02 fee (u64).
+    // Duplicate singular sub-tags and a missing method must be rejected, not last-wins.
+    test('rejects duplicate method sub-tag', () => {
+      const malformed = new Uint8Array([
+        0x0b,
+        0x00,
+        0x08, // TAG_SUPPORTED_METHODS, length 8
+        0x01,
+        0x00,
+        0x01,
+        0x61, // method = "a"
+        0x01,
+        0x00,
+        0x01,
+        0x62, // method = "b" (duplicate 0x01)
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/multiple supported_method method/);
+    });
+
+    test('rejects duplicate fee sub-tag', () => {
+      const malformed = new Uint8Array([
+        0x0b,
+        0x00,
+        26, // TAG_SUPPORTED_METHODS, length 26
+        0x01,
+        0x00,
+        0x01,
+        0x61, // method = "a"
+        0x02,
+        0x00,
+        0x08,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5, // fee = 5 (u64)
+        0x02,
+        0x00,
+        0x08,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        6, // fee = 6 (duplicate 0x02)
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/multiple supported_method fee/);
+    });
+
+    test('rejects supported_method missing its method field', () => {
+      const malformed = new Uint8Array([
+        0x0b,
+        0x00,
+        0x0b, // TAG_SUPPORTED_METHODS, length 11
+        0x02,
+        0x00,
+        0x08,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5, // fee only, no method sub-tag
+      ]);
+      expect(() => decodeTLV(malformed)).toThrow(/supported_method missing required method/);
+    });
+  });
+
   describe('HTTP POST Transport (kind=0x01)', () => {
     const encoded =
       'CREQB1QYQQJ6R5W3C97AR9WD6QYQQGQQQQQQQQQQQ05QCQQYQQ2QQCDP68GURN8GHJ7MTFDE6ZUETCV9KHQMR99E3K7MG8QPQSZQQPQYPQQGNGW368QUE69UHKZURF9EJHSCTDWPKX2TNRDAKJ7A339ACXZ7TDV4H8GQCQZ5RXXATNW3HK6PNKV9K82EF3QEMXZMR4V5EQ9X3SJM';
@@ -354,6 +430,44 @@ describe('TLV Encoding/Decoding Roundtrip Tests', () => {
       expect(finalDecoded.nut10!.kind).toBe(decoded.nut10!.kind);
       expect(finalDecoded.nut10!.data).toBe(decoded.nut10!.data);
       expect(finalDecoded.nut10!.tags).toEqual(decoded.nut10!.tags);
+    });
+  });
+
+  describe('Preferred Mint List with Fee Reserve and Supported Methods', () => {
+    // NUT-26 spec test vector — payment request with mp=true (preferred/advisory
+    // mint list), a fee required for non-preferred mints, and supported methods
+    // where bolt12 carries a per-method fee (mf=5) that stacks with fr.
+    const encoded =
+      'CREQB1QYQP2URJV4NX2UNJV4J97EN9V40K6ET5DPHKGUCZQQYQQQQQQQQQQQRYQVQQZQQ9QQVXSAR5WPEN5TE0D45KUAPWV4UXZMTSD3JJUCM0D5YSQQGPPGQQSQQQQQQQQQQQQG9SQZGPQQRXYMMVWSCNZZCQZSQSQPNZDAK8GVFJQGQQSQQQQQQQQQQQQ5SX95HX';
+
+    test('roundtrip preferred mint list with fee reserve and supported methods', () => {
+      testRoundtrip(encoded, 'NUT-26 spec vector: mp=true, fr=2, sm=[bolt11, bolt12(mf=5)]');
+    });
+
+    test('verify mp, fr, sm fields', () => {
+      const bytes = decodeBech32mToBytes(encoded.toLowerCase());
+      const decoded = decodeTLV(bytes);
+
+      expect(decoded.id).toBe('preferred_fee_methods');
+      expect(decoded.amount).toBe(BigInt(100));
+      expect(decoded.unit).toBe('sat');
+      expect(decoded.mints).toEqual(['https://mint.example.com']);
+      expect(decoded.mintsPreferred).toBe(true);
+      expect(decoded.feeReserve).toBe(BigInt(2));
+      expect(decoded.supportedMethods).toEqual([
+        { method: 'bolt11' },
+        { method: 'bolt12', fee: BigInt(5) },
+      ]);
+
+      const reEncoded = encodeTLV(decoded);
+      const finalDecoded = decodeTLV(reEncoded);
+
+      expect(finalDecoded.mintsPreferred).toBe(true);
+      expect(finalDecoded.feeReserve).toBe(BigInt(2));
+      expect(finalDecoded.supportedMethods).toEqual([
+        { method: 'bolt11' },
+        { method: 'bolt12', fee: BigInt(5) },
+      ]);
     });
   });
 
