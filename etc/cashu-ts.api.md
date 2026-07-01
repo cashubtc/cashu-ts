@@ -220,6 +220,9 @@ export function batchVerifyUnblindedSignatureBls(items: Array<{
 }>): boolean;
 
 // @public
+export type Bip32KeyPurpose = 'P2PK' | 'QuoteLock';
+
+// @public
 export function blindMessage(secret: Uint8Array, r?: bigint): RawBlindedMessage;
 
 // @public
@@ -356,6 +359,12 @@ export function createHTLCHash(preimage?: string): {
 export function createHTLCsecret(hash: string, tags?: string[][]): string;
 
 // @public
+export function createKeyPairDeriver(seed: Uint8Array, purpose: Bip32KeyPurpose): (counter: number) => {
+    pubkey: string;
+    privkey: string;
+};
+
+// @public
 export function createNewMintKeys(pow2height: IntRange<0, 65>, seed?: Uint8Array, options?: {
     expiry?: number;
     input_fee_ppk?: number;
@@ -395,6 +404,12 @@ export type CurvePoint = {
 
 // @public
 export function decodePaymentRequest(paymentRequest: string): PaymentRequest_2;
+
+// @public
+export function deriveKeyPair(seed: Uint8Array, purpose: Bip32KeyPurpose, counter: number): {
+    pubkey: string;
+    privkey: string;
+};
 
 // @public
 export function deriveKeysetId(keys: Keys, options?: DeriveKeysetIdOptions): string;
