@@ -65,24 +65,21 @@ export class PaymentRequest {
   }
 
   /**
-   * Computes the total amount the payer must send from `mint` using `method`, including the
-   * additional fees the request requires: the non-preferred-mint fee (`fr`) when `mint` is outside
-   * a preferred (`mp = true`) mint list, plus the per-method fee (`mf`) of the chosen `sm` method.
-   * The two fees stack additively (NUT-18).
+   * The additional fees the payer must add when paying from `mint` using `method`: the
+   * non-preferred-mint fee (`fr`) when `mint` is outside a preferred (`mp = true`) mint list, plus
+   * the per-method fee (`mf`) of the chosen `sm` method. The two stack additively (NUT-18); returns
+   * `0` when none apply.
    *
-   * This sums only the fees that apply; it does NOT validate admissibility (e.g. a strict mint
-   * list, or a `method` absent from `sm`). Callers that must reject disallowed mints/methods check
-   * that separately.
+   * Use this for amountless requests (where the payer chooses the amount): add the result to the
+   * chosen amount. This sums only the fees that apply; it does NOT validate admissibility (e.g. a
+   * strict mint list, or a `method` absent from `sm`) — callers that must reject disallowed
+   * mints/methods check that separately.
    *
    * @param mint - The mint URL the payer will send from.
    * @param method - The payment method the payer relies on (matched against `sm`); omit if none.
-   * @throws If the request has no amount (there is no base to add fees to).
    */
-  amountToSend(mint: string, method?: string): Amount {
-    if (!this.amount) {
-      throw new CTSError('cannot compute amount to send: request has no amount');
-    }
-    let total = this.amount;
+  feesFor(mint: string, method?: string): Amount {
+    let fees = Amount.from(0);
     // fr applies only to a preferred list (mp = true) when paying from a mint outside it.
     if (
       this.feeReserve &&
@@ -90,16 +87,33 @@ export class PaymentRequest {
       this.mints?.length &&
       !this.mints.includes(mint)
     ) {
-      total = total.add(this.feeReserve);
+      fees = fees.add(this.feeReserve);
     }
     // mf applies for the chosen method if that sm entry carries a fee.
     if (method) {
       const fee = this.supportedMethods?.find((m) => m.method === method)?.fee;
       if (fee) {
-        total = total.add(fee);
+        fees = fees.add(fee);
       }
     }
-    return total;
+    return fees;
+  }
+
+  /**
+   * The total amount to send from `mint` using `method`: the requested amount plus {@link feesFor}.
+   *
+   * @param mint - The mint URL the payer will send from.
+   * @param method - The payment method the payer relies on (matched against `sm`); omit if none.
+   * @throws If the request has no amount. Amountless requests have no base to add fees to; use
+   *   {@link feesFor} and add it to the amount the payer chooses.
+   */
+  amountToSend(mint: string, method?: string): Amount {
+    if (!this.amount) {
+      throw new CTSError(
+        'cannot compute amount to send: request has no amount; use feesFor() and add the payer-chosen amount',
+      );
+    }
+    return this.amount.add(this.feesFor(mint, method));
   }
 
   toRawRequest() {

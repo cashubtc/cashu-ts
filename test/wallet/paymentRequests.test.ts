@@ -211,9 +211,30 @@ describe('payment requests', () => {
       );
       expect(strict.amountToSend('https://out.example.com').equals(100)).toBeTruthy();
 
-      // No amount: cannot compute.
-      const noAmount = new PaymentRequest(undefined, 'noamt', undefined, 'sat');
+      // feesFor returns the surcharge alone (0 when none applies).
+      expect(pr.feesFor('https://in.example.com').equals(0)).toBeTruthy();
+      expect(pr.feesFor('https://out.example.com', 'bolt12').equals(7)).toBeTruthy();
+
+      // Amountless request: amountToSend throws, but feesFor still prices the surcharge so the
+      // payer can add it to their chosen amount.
+      const noAmount = new PaymentRequest(undefined, 'noamt', undefined, 'sat', [
+        'https://in.example.com',
+      ]);
       expect(() => noAmount.amountToSend('https://x.example.com')).toThrow();
+      const mp = new PaymentRequest(
+        undefined,
+        'noamt_mp',
+        undefined,
+        'sat',
+        ['https://in.example.com'],
+        undefined,
+        undefined,
+        undefined,
+        true,
+        2,
+        [{ method: 'bolt12', fee: 5 }],
+      );
+      expect(mp.feesFor('https://out.example.com', 'bolt12').equals(7)).toBeTruthy();
     });
 
     test('isMintListStrict resolves NUT-18 default-to-strict semantic', () => {
