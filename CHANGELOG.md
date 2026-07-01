@@ -1,5 +1,34 @@
 # Changelog
 
+## [5.0.0-rc.2](https://github.com/cashubtc/cashu-ts/compare/v5.0.0-rc.1...v5.0.0-rc.2) (2026-07-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* **p2pk:** model P2PK/HTLC locks as kind+data spending conditions ([#712](https://github.com/cashubtc/cashu-ts/issues/712))
+
+### Features
+
+* add NUT-27 Nostr mint backup helpers ([#709](https://github.com/cashubtc/cashu-ts/issues/709)) ([1332fcb](https://github.com/cashubtc/cashu-ts/commit/1332fcbc5507d0ce1abe9849b835d3e21dc547fb))
+* **mint-info:** derive default method_name per NUT-04/05 ([#707](https://github.com/cashubtc/cashu-ts/issues/707)) ([7494881](https://github.com/cashubtc/cashu-ts/commit/749488151a2efcc09671ba145349d8b0683f2cef))
+* **payment-request:** add PaymentRequest.toP2PKOptions() ([#700](https://github.com/cashubtc/cashu-ts/issues/700)) ([13e8aa1](https://github.com/cashubtc/cashu-ts/commit/13e8aa14142b6c137ac4dded789819b38ba1e4b4))
+* **wallet:** gate proof creation to active prefixed keysets ([#691](https://github.com/cashubtc/cashu-ts/issues/691)) ([3af343e](https://github.com/cashubtc/cashu-ts/commit/3af343e62c1a83a9a1c09e60862eaa705cea1e36))
+
+
+### Bug Fixes
+
+* **dleq:** use rejection sampling for deterministic DLEQ nonce ([#696](https://github.com/cashubtc/cashu-ts/issues/696)) ([e54c7d1](https://github.com/cashubtc/cashu-ts/commit/e54c7d1426b804ce4bd78a551b16aeb3f8ea54c3))
+* **htlc:** return false for a malformed preimage instead of throwing ([#713](https://github.com/cashubtc/cashu-ts/issues/713)) ([1d1fe5b](https://github.com/cashubtc/cashu-ts/commit/1d1fe5b432f53041bb8aa3813b29564eeace0a83))
+* **htlc:** support hashlock-only (pubkey-less) HTLC locks ([#710](https://github.com/cashubtc/cashu-ts/issues/710)) ([9546f23](https://github.com/cashubtc/cashu-ts/commit/9546f23dc2cc47942dedc08577388b10fafb3bf4))
+* **nut-17:** replace Math.random() subId with CSPRNG-backed UUID v7 ([#685](https://github.com/cashubtc/cashu-ts/issues/685)) ([92e87ba](https://github.com/cashubtc/cashu-ts/commit/92e87ba016ea5ab6f4755e258dbba3b7cb90819d))
+* **payment-request:** forward and harden nut10 on creqB decode ([#703](https://github.com/cashubtc/cashu-ts/issues/703)) ([fb64615](https://github.com/cashubtc/cashu-ts/commit/fb64615f007cd1dc557a4704c115997d13bcd23c))
+* **wallet:** allow melt on inactive keyset when no change is created ([#705](https://github.com/cashubtc/cashu-ts/issues/705)) ([15f9ff1](https://github.com/cashubtc/cashu-ts/commit/15f9ff1ce9557092303f62c1ef55563464d20741))
+
+
+### Code Refactoring
+
+* **p2pk:** model P2PK/HTLC locks as kind+data spending conditions ([#712](https://github.com/cashubtc/cashu-ts/issues/712)) ([76b090c](https://github.com/cashubtc/cashu-ts/commit/76b090cffdf541aff15d9f5580f4cc9e85bb0b34))
+
 ## [5.0.0-rc.1](https://github.com/cashubtc/cashu-ts/compare/v4.5.0...v5.0.0-rc.1) (2026-05-23)
 
 
